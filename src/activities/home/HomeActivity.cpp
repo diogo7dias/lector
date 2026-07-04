@@ -10,6 +10,7 @@
 #include <Xtc.h>
 
 #include <cstring>
+#include <memory>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -17,6 +18,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -217,6 +219,16 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
+  // Back on a selected recent book removes it from the list (list home only).
+  if (listLayout && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      selectorIndex < static_cast<int>(recentBooks.size())) {
+    const std::string path = recentBooks[selectorIndex].path;
+    if (!path.empty()) {
+      promptRemoveBook(path, recentBooks[selectorIndex].title);
+      return;
+    }
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selectorIndex < recentBooks.size()) {
       onSelectBook(recentBooks[selectorIndex].path);
@@ -290,7 +302,10 @@ void HomeActivity::render(RenderLock&&) {
         [&menuItems](int index) { return std::string(menuItems[index]); },
         [&menuIcons](int index) { return menuIcons[index]; });
 
-    const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    const bool bookSelected =
+        selectorIndex < static_cast<int>(recentBooks.size()) && !recentBooks[selectorIndex].path.empty();
+    const char* backLabel = bookSelected ? tr(STR_REMOVE_BUTTON) : "";
+    const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
     pendingFullRefresh = false;
@@ -372,6 +387,33 @@ void HomeActivity::onSelectBook(const std::string& path) {
   renderer.displayBuffer();
 
   activityManager.goToReader(path);
+}
+
+void HomeActivity::promptRemoveBook(const std::string& path, const std::string& title) {
+  auto handler = [this, path](const ActivityResult& res) {
+    if (res.isCancelled) {
+      return;
+    }
+    if (RECENT_BOOKS.removeByPath(path)) {
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      const int loadCount = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? kHomeListMaxBooks
+                                                                                          : metrics.homeRecentBooksCount;
+      loadRecentBooks(loadCount);
+      const int menuCount = getMenuItemCount();
+      if (selectorIndex >= menuCount) {
+        selectorIndex = std::max(0, menuCount - 1);
+      }
+      const int maxOffset = std::max(0, static_cast<int>(recentBooks.size()) - 1);
+      if (scrollOffset > maxOffset) {
+        scrollOffset = maxOffset;
+      }
+      pendingFullRefresh = true;  // clear the removed row's ghost
+      requestUpdate();
+    }
+  };
+
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
+                         std::move(handler));
 }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }

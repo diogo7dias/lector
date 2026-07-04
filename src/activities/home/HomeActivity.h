@@ -66,6 +66,7 @@ class HomeActivity final : public Activity {
     return HomeMenuItem::NONE;
   }
   void onSelectBook(const std::string& path);
+  void promptRemoveBook(const std::string& path, const std::string& title);
   void onFileBrowserOpen();
   void onRecentsOpen();
   void onSettingsOpen();
