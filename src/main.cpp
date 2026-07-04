@@ -43,56 +43,129 @@ FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts
 static unsigned long allowSleepAt = 0;
 
 // Fonts
-EpdFont notoserif14RegularFont(&notoserif_14_regular);
-EpdFont notoserif14BoldFont(&notoserif_14_bold);
-EpdFont notoserif14ItalicFont(&notoserif_14_italic);
-EpdFont notoserif14BoldItalicFont(&notoserif_14_bolditalic);
-EpdFontFamily notoserif14FontFamily(&notoserif14RegularFont, &notoserif14BoldFont, &notoserif14ItalicFont,
-                                    &notoserif14BoldItalicFont);
+// Default reader font (always compiled in): Bookerly 14. All other
+// families/sizes live under OMIT_FONTS so slim builds can drop them.
+// The three sans/serif families with no dedicated bold-italic face
+// (bookerly/georgia/verdana) reuse their bold face in the bold-italic slot;
+// merriweather ships a real bold-italic.
+EpdFont bookerly14RegularFont(&bookerly_14_regular);
+EpdFont bookerly14BoldFont(&bookerly_14_bold);
+EpdFont bookerly14ItalicFont(&bookerly_14_italic);
+EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
+                                   &bookerly14BoldFont);
 #ifndef OMIT_FONTS
-EpdFont notoserif12RegularFont(&notoserif_12_regular);
-EpdFont notoserif12BoldFont(&notoserif_12_bold);
-EpdFont notoserif12ItalicFont(&notoserif_12_italic);
-EpdFont notoserif12BoldItalicFont(&notoserif_12_bolditalic);
-EpdFontFamily notoserif12FontFamily(&notoserif12RegularFont, &notoserif12BoldFont, &notoserif12ItalicFont,
-                                    &notoserif12BoldItalicFont);
-EpdFont notoserif16RegularFont(&notoserif_16_regular);
-EpdFont notoserif16BoldFont(&notoserif_16_bold);
-EpdFont notoserif16ItalicFont(&notoserif_16_italic);
-EpdFont notoserif16BoldItalicFont(&notoserif_16_bolditalic);
-EpdFontFamily notoserif16FontFamily(&notoserif16RegularFont, &notoserif16BoldFont, &notoserif16ItalicFont,
-                                    &notoserif16BoldItalicFont);
-EpdFont notoserif18RegularFont(&notoserif_18_regular);
-EpdFont notoserif18BoldFont(&notoserif_18_bold);
-EpdFont notoserif18ItalicFont(&notoserif_18_italic);
-EpdFont notoserif18BoldItalicFont(&notoserif_18_bolditalic);
-EpdFontFamily notoserif18FontFamily(&notoserif18RegularFont, &notoserif18BoldFont, &notoserif18ItalicFont,
-                                    &notoserif18BoldItalicFont);
+EpdFont bookerly11RegularFont(&bookerly_11_regular);
+EpdFont bookerly11BoldFont(&bookerly_11_bold);
+EpdFont bookerly11ItalicFont(&bookerly_11_italic);
+EpdFontFamily bookerly11FontFamily(&bookerly11RegularFont, &bookerly11BoldFont, &bookerly11ItalicFont,
+                                   &bookerly11BoldFont);
+EpdFont bookerly12RegularFont(&bookerly_12_regular);
+EpdFont bookerly12BoldFont(&bookerly_12_bold);
+EpdFont bookerly12ItalicFont(&bookerly_12_italic);
+EpdFontFamily bookerly12FontFamily(&bookerly12RegularFont, &bookerly12BoldFont, &bookerly12ItalicFont,
+                                   &bookerly12BoldFont);
+EpdFont bookerly13RegularFont(&bookerly_13_regular);
+EpdFont bookerly13BoldFont(&bookerly_13_bold);
+EpdFont bookerly13ItalicFont(&bookerly_13_italic);
+EpdFontFamily bookerly13FontFamily(&bookerly13RegularFont, &bookerly13BoldFont, &bookerly13ItalicFont,
+                                   &bookerly13BoldFont);
+EpdFont bookerly15RegularFont(&bookerly_15_regular);
+EpdFont bookerly15BoldFont(&bookerly_15_bold);
+EpdFont bookerly15ItalicFont(&bookerly_15_italic);
+EpdFontFamily bookerly15FontFamily(&bookerly15RegularFont, &bookerly15BoldFont, &bookerly15ItalicFont,
+                                   &bookerly15BoldFont);
+EpdFont bookerly16RegularFont(&bookerly_16_regular);
+EpdFont bookerly16BoldFont(&bookerly_16_bold);
+EpdFont bookerly16ItalicFont(&bookerly_16_italic);
+EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
+                                   &bookerly16BoldFont);
 
-EpdFont notosans12RegularFont(&notosans_12_regular);
-EpdFont notosans12BoldFont(&notosans_12_bold);
-EpdFont notosans12ItalicFont(&notosans_12_italic);
-EpdFont notosans12BoldItalicFont(&notosans_12_bolditalic);
-EpdFontFamily notosans12FontFamily(&notosans12RegularFont, &notosans12BoldFont, &notosans12ItalicFont,
-                                   &notosans12BoldItalicFont);
-EpdFont notosans14RegularFont(&notosans_14_regular);
-EpdFont notosans14BoldFont(&notosans_14_bold);
-EpdFont notosans14ItalicFont(&notosans_14_italic);
-EpdFont notosans14BoldItalicFont(&notosans_14_bolditalic);
-EpdFontFamily notosans14FontFamily(&notosans14RegularFont, &notosans14BoldFont, &notosans14ItalicFont,
-                                   &notosans14BoldItalicFont);
-EpdFont notosans16RegularFont(&notosans_16_regular);
-EpdFont notosans16BoldFont(&notosans_16_bold);
-EpdFont notosans16ItalicFont(&notosans_16_italic);
-EpdFont notosans16BoldItalicFont(&notosans_16_bolditalic);
-EpdFontFamily notosans16FontFamily(&notosans16RegularFont, &notosans16BoldFont, &notosans16ItalicFont,
-                                   &notosans16BoldItalicFont);
-EpdFont notosans18RegularFont(&notosans_18_regular);
-EpdFont notosans18BoldFont(&notosans_18_bold);
-EpdFont notosans18ItalicFont(&notosans_18_italic);
-EpdFont notosans18BoldItalicFont(&notosans_18_bolditalic);
-EpdFontFamily notosans18FontFamily(&notosans18RegularFont, &notosans18BoldFont, &notosans18ItalicFont,
-                                   &notosans18BoldItalicFont);
+EpdFont georgia11RegularFont(&georgia_11_regular);
+EpdFont georgia11BoldFont(&georgia_11_bold);
+EpdFont georgia11ItalicFont(&georgia_11_italic);
+EpdFontFamily georgia11FontFamily(&georgia11RegularFont, &georgia11BoldFont, &georgia11ItalicFont, &georgia11BoldFont);
+EpdFont georgia12RegularFont(&georgia_12_regular);
+EpdFont georgia12BoldFont(&georgia_12_bold);
+EpdFont georgia12ItalicFont(&georgia_12_italic);
+EpdFontFamily georgia12FontFamily(&georgia12RegularFont, &georgia12BoldFont, &georgia12ItalicFont, &georgia12BoldFont);
+EpdFont georgia13RegularFont(&georgia_13_regular);
+EpdFont georgia13BoldFont(&georgia_13_bold);
+EpdFont georgia13ItalicFont(&georgia_13_italic);
+EpdFontFamily georgia13FontFamily(&georgia13RegularFont, &georgia13BoldFont, &georgia13ItalicFont, &georgia13BoldFont);
+EpdFont georgia14RegularFont(&georgia_14_regular);
+EpdFont georgia14BoldFont(&georgia_14_bold);
+EpdFont georgia14ItalicFont(&georgia_14_italic);
+EpdFontFamily georgia14FontFamily(&georgia14RegularFont, &georgia14BoldFont, &georgia14ItalicFont, &georgia14BoldFont);
+EpdFont georgia15RegularFont(&georgia_15_regular);
+EpdFont georgia15BoldFont(&georgia_15_bold);
+EpdFont georgia15ItalicFont(&georgia_15_italic);
+EpdFontFamily georgia15FontFamily(&georgia15RegularFont, &georgia15BoldFont, &georgia15ItalicFont, &georgia15BoldFont);
+EpdFont georgia16RegularFont(&georgia_16_regular);
+EpdFont georgia16BoldFont(&georgia_16_bold);
+EpdFont georgia16ItalicFont(&georgia_16_italic);
+EpdFontFamily georgia16FontFamily(&georgia16RegularFont, &georgia16BoldFont, &georgia16ItalicFont, &georgia16BoldFont);
+
+EpdFont verdana11RegularFont(&verdana_11_regular);
+EpdFont verdana11BoldFont(&verdana_11_bold);
+EpdFont verdana11ItalicFont(&verdana_11_italic);
+EpdFontFamily verdana11FontFamily(&verdana11RegularFont, &verdana11BoldFont, &verdana11ItalicFont, &verdana11BoldFont);
+EpdFont verdana12RegularFont(&verdana_12_regular);
+EpdFont verdana12BoldFont(&verdana_12_bold);
+EpdFont verdana12ItalicFont(&verdana_12_italic);
+EpdFontFamily verdana12FontFamily(&verdana12RegularFont, &verdana12BoldFont, &verdana12ItalicFont, &verdana12BoldFont);
+EpdFont verdana13RegularFont(&verdana_13_regular);
+EpdFont verdana13BoldFont(&verdana_13_bold);
+EpdFont verdana13ItalicFont(&verdana_13_italic);
+EpdFontFamily verdana13FontFamily(&verdana13RegularFont, &verdana13BoldFont, &verdana13ItalicFont, &verdana13BoldFont);
+EpdFont verdana14RegularFont(&verdana_14_regular);
+EpdFont verdana14BoldFont(&verdana_14_bold);
+EpdFont verdana14ItalicFont(&verdana_14_italic);
+EpdFontFamily verdana14FontFamily(&verdana14RegularFont, &verdana14BoldFont, &verdana14ItalicFont, &verdana14BoldFont);
+EpdFont verdana15RegularFont(&verdana_15_regular);
+EpdFont verdana15BoldFont(&verdana_15_bold);
+EpdFont verdana15ItalicFont(&verdana_15_italic);
+EpdFontFamily verdana15FontFamily(&verdana15RegularFont, &verdana15BoldFont, &verdana15ItalicFont, &verdana15BoldFont);
+EpdFont verdana16RegularFont(&verdana_16_regular);
+EpdFont verdana16BoldFont(&verdana_16_bold);
+EpdFont verdana16ItalicFont(&verdana_16_italic);
+EpdFontFamily verdana16FontFamily(&verdana16RegularFont, &verdana16BoldFont, &verdana16ItalicFont, &verdana16BoldFont);
+
+EpdFont merriweather11RegularFont(&merriweather_11_regular);
+EpdFont merriweather11BoldFont(&merriweather_11_bold);
+EpdFont merriweather11ItalicFont(&merriweather_11_italic);
+EpdFont merriweather11BoldItalicFont(&merriweather_11_bolditalic);
+EpdFontFamily merriweather11FontFamily(&merriweather11RegularFont, &merriweather11BoldFont, &merriweather11ItalicFont,
+                                       &merriweather11BoldItalicFont);
+EpdFont merriweather12RegularFont(&merriweather_12_regular);
+EpdFont merriweather12BoldFont(&merriweather_12_bold);
+EpdFont merriweather12ItalicFont(&merriweather_12_italic);
+EpdFont merriweather12BoldItalicFont(&merriweather_12_bolditalic);
+EpdFontFamily merriweather12FontFamily(&merriweather12RegularFont, &merriweather12BoldFont, &merriweather12ItalicFont,
+                                       &merriweather12BoldItalicFont);
+EpdFont merriweather13RegularFont(&merriweather_13_regular);
+EpdFont merriweather13BoldFont(&merriweather_13_bold);
+EpdFont merriweather13ItalicFont(&merriweather_13_italic);
+EpdFont merriweather13BoldItalicFont(&merriweather_13_bolditalic);
+EpdFontFamily merriweather13FontFamily(&merriweather13RegularFont, &merriweather13BoldFont, &merriweather13ItalicFont,
+                                       &merriweather13BoldItalicFont);
+EpdFont merriweather14RegularFont(&merriweather_14_regular);
+EpdFont merriweather14BoldFont(&merriweather_14_bold);
+EpdFont merriweather14ItalicFont(&merriweather_14_italic);
+EpdFont merriweather14BoldItalicFont(&merriweather_14_bolditalic);
+EpdFontFamily merriweather14FontFamily(&merriweather14RegularFont, &merriweather14BoldFont, &merriweather14ItalicFont,
+                                       &merriweather14BoldItalicFont);
+EpdFont merriweather15RegularFont(&merriweather_15_regular);
+EpdFont merriweather15BoldFont(&merriweather_15_bold);
+EpdFont merriweather15ItalicFont(&merriweather_15_italic);
+EpdFont merriweather15BoldItalicFont(&merriweather_15_bolditalic);
+EpdFontFamily merriweather15FontFamily(&merriweather15RegularFont, &merriweather15BoldFont, &merriweather15ItalicFont,
+                                       &merriweather15BoldItalicFont);
+EpdFont merriweather16RegularFont(&merriweather_16_regular);
+EpdFont merriweather16BoldFont(&merriweather_16_bold);
+EpdFont merriweather16ItalicFont(&merriweather_16_italic);
+EpdFont merriweather16BoldItalicFont(&merriweather_16_bolditalic);
+EpdFontFamily merriweather16FontFamily(&merriweather16RegularFont, &merriweather16BoldFont, &merriweather16ItalicFont,
+                                       &merriweather16BoldItalicFont);
 
 #endif  // OMIT_FONTS
 
@@ -281,16 +354,34 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(NOTOSERIF_14_FONT_ID, notoserif14FontFamily);
+  renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
-  renderer.insertFont(NOTOSERIF_12_FONT_ID, notoserif12FontFamily);
-  renderer.insertFont(NOTOSERIF_16_FONT_ID, notoserif16FontFamily);
-  renderer.insertFont(NOTOSERIF_18_FONT_ID, notoserif18FontFamily);
+  renderer.insertFont(BOOKERLY_11_FONT_ID, bookerly11FontFamily);
+  renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
+  renderer.insertFont(BOOKERLY_13_FONT_ID, bookerly13FontFamily);
+  renderer.insertFont(BOOKERLY_15_FONT_ID, bookerly15FontFamily);
+  renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
 
-  renderer.insertFont(NOTOSANS_12_FONT_ID, notosans12FontFamily);
-  renderer.insertFont(NOTOSANS_14_FONT_ID, notosans14FontFamily);
-  renderer.insertFont(NOTOSANS_16_FONT_ID, notosans16FontFamily);
-  renderer.insertFont(NOTOSANS_18_FONT_ID, notosans18FontFamily);
+  renderer.insertFont(GEORGIA_11_FONT_ID, georgia11FontFamily);
+  renderer.insertFont(GEORGIA_12_FONT_ID, georgia12FontFamily);
+  renderer.insertFont(GEORGIA_13_FONT_ID, georgia13FontFamily);
+  renderer.insertFont(GEORGIA_14_FONT_ID, georgia14FontFamily);
+  renderer.insertFont(GEORGIA_15_FONT_ID, georgia15FontFamily);
+  renderer.insertFont(GEORGIA_16_FONT_ID, georgia16FontFamily);
+
+  renderer.insertFont(VERDANA_11_FONT_ID, verdana11FontFamily);
+  renderer.insertFont(VERDANA_12_FONT_ID, verdana12FontFamily);
+  renderer.insertFont(VERDANA_13_FONT_ID, verdana13FontFamily);
+  renderer.insertFont(VERDANA_14_FONT_ID, verdana14FontFamily);
+  renderer.insertFont(VERDANA_15_FONT_ID, verdana15FontFamily);
+  renderer.insertFont(VERDANA_16_FONT_ID, verdana16FontFamily);
+
+  renderer.insertFont(MERRIWEATHER_11_FONT_ID, merriweather11FontFamily);
+  renderer.insertFont(MERRIWEATHER_12_FONT_ID, merriweather12FontFamily);
+  renderer.insertFont(MERRIWEATHER_13_FONT_ID, merriweather13FontFamily);
+  renderer.insertFont(MERRIWEATHER_14_FONT_ID, merriweather14FontFamily);
+  renderer.insertFont(MERRIWEATHER_15_FONT_ID, merriweather15FontFamily);
+  renderer.insertFont(MERRIWEATHER_16_FONT_ID, merriweather16FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);

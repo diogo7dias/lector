@@ -52,8 +52,10 @@ void FontSelectionActivity::onEnter() {
   fonts_.clear();
   fonts_.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + (registry_ ? registry_->getFamilyCount() : 0));
 
-  fonts_.push_back({I18N.get(StrId::STR_NOTO_SERIF), true, static_cast<uint8_t>(CrossPointSettings::NOTOSERIF)});
-  fonts_.push_back({I18N.get(StrId::STR_NOTO_SANS), true, static_cast<uint8_t>(CrossPointSettings::NOTOSANS)});
+  fonts_.push_back({I18N.get(StrId::STR_BOOKERLY), true, static_cast<uint8_t>(CrossPointSettings::BOOKERLY)});
+  fonts_.push_back({I18N.get(StrId::STR_GEORGIA), true, static_cast<uint8_t>(CrossPointSettings::GEORGIA)});
+  fonts_.push_back({I18N.get(StrId::STR_VERDANA), true, static_cast<uint8_t>(CrossPointSettings::VERDANA)});
+  fonts_.push_back({I18N.get(StrId::STR_MERRIWEATHER), true, static_cast<uint8_t>(CrossPointSettings::MERRIWEATHER)});
 
   if (registry_) {
     const auto& families = registry_->getFamilies();

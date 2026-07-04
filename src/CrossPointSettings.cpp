@@ -195,15 +195,9 @@ bool CrossPointSettings::loadFromBinaryFile() {
     readAndValidate(inputFile, sideButtonLayout, SIDE_BUTTON_LAYOUT_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
     {
-      uint8_t legacyFontFamily;
-      serialization::readPod(inputFile, legacyFontFamily);
-      if (legacyFontFamily < BUILTIN_FONT_COUNT) {
-        fontFamily = legacyFontFamily;
-      } else if (legacyFontFamily == LEGACY_OPENDYSLEXIC) {
-        fontFamily = NOTOSERIF;
-        strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
-        sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
-      }
+      uint8_t storedFontFamily;
+      serialization::readPod(inputFile, storedFontFamily);
+      fontFamily = storedFontFamily < BUILTIN_FONT_COUNT ? storedFontFamily : BOOKERLY;
     }
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, fontSize, FONT_SIZE_COUNT);
@@ -297,7 +291,10 @@ float CrossPointSettings::getReaderLineCompression() const {
   }
 
   switch (fontFamily) {
-    case NOTOSERIF:
+    // Serif families share the neutral NotoSerif-derived compression curve.
+    case BOOKERLY:
+    case GEORGIA:
+    case MERRIWEATHER:
     default:
       switch (lineSpacing) {
         case TIGHT:
@@ -308,7 +305,8 @@ float CrossPointSettings::getReaderLineCompression() const {
         case WIDE:
           return 1.1f;
       }
-    case NOTOSANS:
+    // Verdana (sans) reads tighter, matching the old NotoSans curve.
+    case VERDANA:
       switch (lineSpacing) {
         case TIGHT:
           return 0.90f;
@@ -353,30 +351,70 @@ int CrossPointSettings::getReaderFontId() const {
   }
 
   switch (fontFamily) {
-    case NOTOSERIF:
+    case BOOKERLY:
     default:
       switch (fontSize) {
-        case SMALL:
-          return NOTOSERIF_12_FONT_ID;
-        case MEDIUM:
+        case SIZE_11:
+          return BOOKERLY_11_FONT_ID;
+        case SIZE_12:
+          return BOOKERLY_12_FONT_ID;
+        case SIZE_13:
+          return BOOKERLY_13_FONT_ID;
+        case SIZE_14:
         default:
-          return NOTOSERIF_14_FONT_ID;
-        case LARGE:
-          return NOTOSERIF_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSERIF_18_FONT_ID;
+          return BOOKERLY_14_FONT_ID;
+        case SIZE_15:
+          return BOOKERLY_15_FONT_ID;
+        case SIZE_16:
+          return BOOKERLY_16_FONT_ID;
       }
-    case NOTOSANS:
+    case GEORGIA:
       switch (fontSize) {
-        case SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case MEDIUM:
+        case SIZE_11:
+          return GEORGIA_11_FONT_ID;
+        case SIZE_12:
+          return GEORGIA_12_FONT_ID;
+        case SIZE_13:
+          return GEORGIA_13_FONT_ID;
+        case SIZE_14:
         default:
-          return NOTOSANS_14_FONT_ID;
-        case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
+          return GEORGIA_14_FONT_ID;
+        case SIZE_15:
+          return GEORGIA_15_FONT_ID;
+        case SIZE_16:
+          return GEORGIA_16_FONT_ID;
+      }
+    case VERDANA:
+      switch (fontSize) {
+        case SIZE_11:
+          return VERDANA_11_FONT_ID;
+        case SIZE_12:
+          return VERDANA_12_FONT_ID;
+        case SIZE_13:
+          return VERDANA_13_FONT_ID;
+        case SIZE_14:
+        default:
+          return VERDANA_14_FONT_ID;
+        case SIZE_15:
+          return VERDANA_15_FONT_ID;
+        case SIZE_16:
+          return VERDANA_16_FONT_ID;
+      }
+    case MERRIWEATHER:
+      switch (fontSize) {
+        case SIZE_11:
+          return MERRIWEATHER_11_FONT_ID;
+        case SIZE_12:
+          return MERRIWEATHER_12_FONT_ID;
+        case SIZE_13:
+          return MERRIWEATHER_13_FONT_ID;
+        case SIZE_14:
+        default:
+          return MERRIWEATHER_14_FONT_ID;
+        case SIZE_15:
+          return MERRIWEATHER_15_FONT_ID;
+        case SIZE_16:
+          return MERRIWEATHER_16_FONT_ID;
       }
   }
 }

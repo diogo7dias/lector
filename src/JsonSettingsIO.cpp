@@ -245,17 +245,14 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
 
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
-  s.fontFamily = clamp(storedFontFamily, CrossPointSettings::BUILTIN_FONT_COUNT, 0);
+  s.fontFamily = clamp(storedFontFamily, CrossPointSettings::BUILTIN_FONT_COUNT, CrossPointSettings::BOOKERLY);
   // SD card font family name — not in SettingsList, load manually
   const char* sfn = doc["sdFontFamilyName"] | "";
   strncpy(s.sdFontFamilyName, sfn, sizeof(s.sdFontFamilyName) - 1);
   s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
-  if (storedFontFamily == CrossPointSettings::LEGACY_OPENDYSLEXIC && s.sdFontFamilyName[0] == '\0') {
-    s.fontFamily = CrossPointSettings::NOTOSERIF;
-    strncpy(s.sdFontFamilyName, "OpenDyslexic", sizeof(s.sdFontFamilyName) - 1);
-    s.sdFontFamilyName[sizeof(s.sdFontFamilyName) - 1] = '\0';
-    if (needsResave) *needsResave = true;
-  } else if (storedFontFamily >= CrossPointSettings::BUILTIN_FONT_COUNT) {
+  // Any out-of-range persisted family (e.g. legacy OpenDyslexic index) clamps to
+  // BOOKERLY above; flag a resave so the file is rewritten with a valid value.
+  if (storedFontFamily >= CrossPointSettings::BUILTIN_FONT_COUNT) {
     if (needsResave) *needsResave = true;
   }
 
