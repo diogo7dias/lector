@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -22,7 +23,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasBookmarks) {
   std::vector<MenuItem> items;
-  items.reserve(12);
+  items.reserve(14);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -31,6 +32,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
   items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
+  // Paperback Look toggles — in-book pop-up menu only (not in global Settings/web).
+  items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
+  items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -72,6 +76,23 @@ void EpubReaderMenuActivity::loop() {
 
     if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
       selectedPageTurnOption = (selectedPageTurnOption + 1) % pageTurnLabels.size();
+      requestUpdate();
+      return;
+    }
+
+    // Paperback Look toggles: flip in place (like the orientation/auto-turn rows
+    // above), persist immediately, and keep the menu open so the ON/OFF label
+    // updates like a checkbox. The reader auto-re-renders on menu close and picks
+    // up the new SETTINGS value, so the ink weight changes as soon as you exit.
+    if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
+      SETTINGS.paperbackLookBody = SETTINGS.paperbackLookBody ? 0 : 1;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      return;
+    }
+    if (selectedAction == MenuAction::TOGGLE_PAPERBACK_STATUS) {
+      SETTINGS.paperbackLookStatus = SETTINGS.paperbackLookStatus ? 0 : 1;
+      SETTINGS.saveToFile();
       requestUpdate();
       return;
     }
@@ -125,6 +146,11 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         } else if (value == MenuAction::AUTO_PAGE_TURN) {
           // Render current page turn value on the right edge of the content area.
           return pageTurnLabels[selectedPageTurnOption];
+        } else if (value == MenuAction::TOGGLE_PAPERBACK_LOOK) {
+          // Show current ON/OFF state so the row reads like a checkbox.
+          return I18N.get(SETTINGS.paperbackLookBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
+          return I18N.get(SETTINGS.paperbackLookStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else {
           return "";
         }

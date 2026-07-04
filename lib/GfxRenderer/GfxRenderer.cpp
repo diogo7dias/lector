@@ -284,6 +284,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
           if (renderMode == GfxRenderer::BW && bmpVal < 3) {
             // Black (also paints over the grays in BW mode)
             renderer.drawPixel(screenX, screenY, pixelState);
+            // Paperback Look: smear the drawn pixel +1 right and +1 down for
+            // heavier ink. Body/status only — flag is off for menus/other UI.
+            if (renderer.getPaperbackLook()) {
+              renderer.drawPixel(screenX + 1, screenY, pixelState);
+              renderer.drawPixel(screenX, screenY + 1, pixelState);
+            }
           } else if (renderMode == GfxRenderer::GRAYSCALE_MSB && (bmpVal == 1 || bmpVal == 2)) {
             // Light gray (also mark the MSB if it's going to be a dark gray too)
             // Dedicated X3 gray LUTs now provide proper 4-level gray on both devices
@@ -314,6 +320,12 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 
           if ((byte >> bit_index) & 1) {
             renderer.drawPixel(screenX, screenY, pixelState);
+            // Paperback Look: smear +1 right/+1 down on the BW (base-frame) path
+            // only, so grayscale plane passes stay untouched. Body/status only.
+            if (renderMode == GfxRenderer::BW && renderer.getPaperbackLook()) {
+              renderer.drawPixel(screenX + 1, screenY, pixelState);
+              renderer.drawPixel(screenX, screenY + 1, pixelState);
+            }
           }
         }
       }

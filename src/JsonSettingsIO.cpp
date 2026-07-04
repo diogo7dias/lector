@@ -157,6 +157,12 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   // Stored as ISO code string ("EN", "DE", ...) for stability across enum reorders.
   doc["language"] = (s.language < getLanguageCount()) ? LANGUAGE_CODES[s.language] : "EN";
 
+  // Paperback Look — deliberately NOT in SettingsList (it is an in-book pop-up
+  // menu toggle only, hidden from the global Settings screen and the web UI), so
+  // the generic SettingsList loop above skips it. Persist both flags manually.
+  doc["paperbackLookBody"] = s.paperbackLookBody;
+  doc["paperbackLookStatus"] = s.paperbackLookStatus;
+
   String json;
   serializeJson(doc, json);
   return Storage.writeFile(path, json);
@@ -260,6 +266,11 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   if (doc["language"].is<const char*>()) {
     s.language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
   }
+
+  // Paperback Look — not in SettingsList (in-book menu only), so read manually.
+  // Absent key => default ON (1). Clamp any stray value to a valid 0/1 boolean.
+  s.paperbackLookBody = clamp(doc["paperbackLookBody"] | (uint8_t)1, (uint8_t)2, (uint8_t)1);
+  s.paperbackLookStatus = clamp(doc["paperbackLookStatus"] | (uint8_t)1, (uint8_t)2, (uint8_t)1);
 
   LOG_DBG("CPS", "Settings loaded from file");
 

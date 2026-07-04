@@ -202,6 +202,11 @@ class CrossPointSettings {
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
+  // Paperback Look: smear drawn glyph pixels +1px right/+1px down for heavier
+  // ink. Two independent toggles, both default ON: body = reader page content
+  // (EPUB + TXT), status = the reading-screen status bar. Menus/other UI unaffected.
+  uint8_t paperbackLookBody = 1;
+  uint8_t paperbackLookStatus = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings

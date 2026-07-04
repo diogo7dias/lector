@@ -44,6 +44,10 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  // "Paperback Look": when set, drawn body/status glyph pixels are smeared +1px
+  // right and +1px down to fake heavier paperback ink. Plain bool owned by the
+  // renderer (lib/ must not depend on src/); callers bracket it per region.
+  bool paperbackLook_ = false;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -130,6 +134,11 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+
+  // Paperback Look control (heavier ink smear on drawn glyph pixels). Owned as a
+  // plain bool; reader activities set it around the body/status regions only.
+  void setPaperbackLook(const bool v) { paperbackLook_ = v; }
+  bool getPaperbackLook() const { return paperbackLook_; }
 
   // Screen ops
   int getScreenWidth() const;

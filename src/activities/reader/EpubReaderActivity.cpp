@@ -654,6 +654,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       addBookmark();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_LOOK:
+    case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_STATUS:
+      // Handled in-place inside EpubReaderMenuActivity::loop() (flip + persist),
+      // so the menu never returns these as a confirmed action. Listed here only
+      // to keep the switch exhaustive.
+      break;
   }
 }
 
@@ -1019,6 +1025,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto t0 = millis();
   const int fontId = SETTINGS.getReaderFontId();
 
+  // Paperback Look (body): thicken the reader page glyphs while this frame's
+  // body text is drawn. Reset to false at the end so the status bar (own flag)
+  // and any following menu/overlay render thin. The scan pass draws nothing.
+  renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
+
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
@@ -1139,6 +1150,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         const auto tEnd = millis();
         LOG_DBG("ERS", "Page render: prewarm=%lums bw_render=%lums display=%lums total=%lums", tPrewarm - t0,
                 tBwRender - tPrewarm, tDisplay - tBwRender, tEnd - t0);
+        renderer.setPaperbackLook(false);
         return;
       }
       const auto tBwStore = millis();
@@ -1177,6 +1189,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
               tBwRender - tPrewarm, tDisplay - tBwRender, tEnd - t0);
     }
   }
+
+  // Clear the body flag so any following menu/overlay renders thin. (The status
+  // bar draw above already left it false via renderStatusBar; this covers all
+  // exit paths.)
+  renderer.setPaperbackLook(false);
 }
 
 void EpubReaderActivity::renderStatusBar() const {
@@ -1213,7 +1230,11 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
+  // Paperback Look (status bar): thicken only the status-bar glyphs, then reset
+  // so nothing drawn afterwards inherits the smear.
+  renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked);
+  renderer.setPaperbackLook(false);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

@@ -264,6 +264,12 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     serialization::readPod(inputFile, frontButtonFollowOrientation);
     if (++settingsRead >= fileSettingsCount) break;
+    // Appended fields: absent in older binary files (loop breaks above before
+    // reaching them), leaving the struct defaults (both 1 = ON).
+    serialization::readPod(inputFile, paperbackLookBody);
+    if (++settingsRead >= fileSettingsCount) break;
+    serialization::readPod(inputFile, paperbackLookStatus);
+    if (++settingsRead >= fileSettingsCount) break;
   } while (false);
 
   if (frontButtonMappingRead) {

@@ -400,8 +400,11 @@ void TxtReaderActivity::renderPage() {
   renderLines();  // scan pass — text accumulated, no drawing
   scope.endScanAndPrewarm();
 
-  // BW rendering
+  // BW rendering. Paperback Look (body) thickens only the page glyphs; reset
+  // before the status bar (own flag) and the grayscale AA pass below.
+  renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
   renderLines();
+  renderer.setPaperbackLook(false);
   renderStatusBar();
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
@@ -418,7 +421,10 @@ void TxtReaderActivity::renderStatusBar() const {
   if (SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE) {
     title = txt->getTitle();
   }
+  // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
+  renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
   GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
+  renderer.setPaperbackLook(false);
 }
 
 void TxtReaderActivity::saveProgress() const {
