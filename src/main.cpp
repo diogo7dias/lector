@@ -169,16 +169,17 @@ EpdFontFamily merriweather16FontFamily(&merriweather16RegularFont, &merriweather
 
 #endif  // OMIT_FONTS
 
-EpdFont smallFont(&notosans_8_regular);
+// UI face = Cozette (regular only; no bold cut). The regular Cozette is passed
+// into the family's bold slot so a BOLD request (e.g. Lyra card titles) resolves
+// to regular Cozette rather than nullptr. UI weight hierarchy comes from size.
+EpdFont smallFont(&cozette_10);
 EpdFontFamily smallFontFamily(&smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
-EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
+EpdFont ui10RegularFont(&cozette_12);
+EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10RegularFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
-EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+EpdFont ui12RegularFont(&cozette_14);
+EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12RegularFont);
 
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;

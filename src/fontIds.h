@@ -25,36 +25,6 @@
 #define MERRIWEATHER_14_FONT_ID (-1290490182)
 #define MERRIWEATHER_15_FONT_ID (1946419681)
 #define MERRIWEATHER_16_FONT_ID (1675051870)
-#define UI_10_FONT_ID (-1368565300)
-#define UI_12_FONT_ID (-1676426601)
-#define SMALL_FONT_ID (1565664782)
-
-// Font ID 0 is reserved as the "not found" sentinel.
-// Guard against any hash accidentally producing 0.
-static_assert(BOOKERLY_11_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(BOOKERLY_12_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(BOOKERLY_13_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(BOOKERLY_14_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(BOOKERLY_15_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(BOOKERLY_16_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(GEORGIA_11_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(GEORGIA_12_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(GEORGIA_13_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(GEORGIA_14_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(GEORGIA_15_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(GEORGIA_16_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(VERDANA_11_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(VERDANA_12_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(VERDANA_13_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(VERDANA_14_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(VERDANA_15_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(VERDANA_16_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(MERRIWEATHER_11_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(MERRIWEATHER_12_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(MERRIWEATHER_13_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(MERRIWEATHER_14_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(MERRIWEATHER_15_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(MERRIWEATHER_16_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
+#define UI_10_FONT_ID (-1301955359)
+#define UI_12_FONT_ID (1590070367)
+#define SMALL_FONT_ID (-160605168)

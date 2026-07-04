@@ -78,8 +78,6 @@
 #include <builtinFonts/merriweather_16_italic.h>
 #include <builtinFonts/merriweather_16_bold.h>
 #include <builtinFonts/merriweather_16_bolditalic.h>
-#include <builtinFonts/notosans_8_regular.h>
-#include <builtinFonts/ubuntu_10_bold.h>
-#include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_12_bold.h>
-#include <builtinFonts/ubuntu_12_regular.h>
+#include <builtinFonts/cozette_10.h>
+#include <builtinFonts/cozette_12.h>
+#include <builtinFonts/cozette_14.h>

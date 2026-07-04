@@ -23,6 +23,7 @@ parser.add_argument("--additional-intervals", dest="additional_intervals", actio
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
+parser.add_argument("--bw-threshold", dest="bw_threshold", type=int, default=2, help="1-bit binarization cutoff on the 4-bit grey value (1-15): a pixel becomes black when its anti-aliased coverage grey >= this value. Higher = thinner strokes. Only affects the 1-bit path (no --2bit). Default 2 (historic 'any coverage = black', fattens AA halos -> bold look on smooth outline fonts). Use 8 for ~50%% coverage = true regular weight.")
 args = parser.parse_args()
 
 import freetype
@@ -32,6 +33,7 @@ GlyphProps = namedtuple("GlyphProps", ["width", "height", "advance_x", "left", "
 
 font_stack = [freetype.Face(f) for f in args.fontstack]
 is2Bit = args.is2Bit
+bw_threshold = max(1, min(15, args.bw_threshold))
 size = args.size
 font_name = args.name
 load_flags = freetype.FT_LOAD_RENDER
@@ -328,7 +330,12 @@ for i_start, i_end in intervals:
             #     print(line)
             # print('')
         else:
-            # Downsample to 1-bit bitmap - treat any 2+ as black
+            # Downsample to 1-bit bitmap. A pixel goes black when its 4-bit
+            # anti-aliased coverage grey >= bw_threshold. pixels4g packs two
+            # greys per byte: even x in the low nibble, odd x in the high nibble.
+            # Low threshold (2) turns faint AA edge pixels black -> strokes
+            # fatten -> smooth outline fonts look bold. ~8 (50% coverage) keeps
+            # true regular weight. See --bw-threshold.
             pixelsbw = []
             px = 0
             pitch = (bitmap.width // 2) + (bitmap.width % 2)
@@ -336,7 +343,8 @@ for i_start, i_end in intervals:
                 for x in range(bitmap.width):
                     px = px << 1
                     bm = pixels4g[y * pitch + (x // 2)]
-                    px += 1 if ((x & 1) == 0 and bm & 0xE > 0) or ((x & 1) == 1 and bm & 0xE0 > 0) else 0
+                    grey = (bm & 0xF) if (x & 1) == 0 else ((bm >> 4) & 0xF)
+                    px += 1 if grey >= bw_threshold else 0
 
                     if (y * bitmap.width + x) % 8 == 7:
                         pixelsbw.append(px)
