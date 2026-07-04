@@ -21,6 +21,10 @@ class HomeActivity final : public Activity {
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;
+  // First paint after (re)entering Home does a FULL refresh to clear e-ink
+  // ghosting left by the reader/menus; in-Home up/down nav stays on FAST_REFRESH
+  // so it remains snappy. Set on every onEnter, cleared after the first paint.
+  bool pendingFullRefresh = true;
   bool hasOpdsServers = false;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored

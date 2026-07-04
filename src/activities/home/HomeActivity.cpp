@@ -127,6 +127,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
 
+  pendingFullRefresh = true;  // clear ghosting on the first paint back at Home
   hasOpdsServers = OPDS_STORE.hasServers();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -291,12 +292,8 @@ void HomeActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-
-    if (!firstRenderDone) {
-      firstRenderDone = true;
-      requestUpdate();
-    }
+    renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+    pendingFullRefresh = false;
     return;
   }
 
@@ -347,7 +344,8 @@ void HomeActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  pendingFullRefresh = false;
 
   if (!firstRenderDone) {
     firstRenderDone = true;
@@ -358,7 +356,23 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
+void HomeActivity::onSelectBook(const std::string& path) {
+  // Paint a full-width "Opening..." banner over the current frame so the book
+  // parse/layout delay has immediate feedback. The panel holds this frame until
+  // the reader's first paint lands.
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const char* msg = tr(STR_OPENING);
+  const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
+  const int bannerH = lineH + 28;
+  const int bannerY = (pageHeight - bannerH) / 2;
+  renderer.fillRect(0, bannerY, pageWidth, bannerH, true);
+  const int textW = renderer.getTextWidth(UI_12_FONT_ID, msg);
+  renderer.drawText(UI_12_FONT_ID, (pageWidth - textW) / 2, bannerY + (bannerH - lineH) / 2, msg, false);
+  renderer.displayBuffer();
+
+  activityManager.goToReader(path);
+}
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
