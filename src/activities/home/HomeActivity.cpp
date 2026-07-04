@@ -372,20 +372,10 @@ void HomeActivity::render(RenderLock&&) {
 }
 
 void HomeActivity::onSelectBook(const std::string& path) {
-  // Paint a full-width "Opening..." banner over the current frame so the book
-  // parse/layout delay has immediate feedback. The panel holds this frame until
-  // the reader's first paint lands.
-  const int pageWidth = renderer.getScreenWidth();
-  const int pageHeight = renderer.getScreenHeight();
-  const char* msg = tr(STR_OPENING);
-  const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
-  const int bannerH = lineH + 28;
-  const int bannerY = (pageHeight - bannerH) / 2;
-  renderer.fillRect(0, bannerY, pageWidth, bannerH, true);
-  const int textW = renderer.getTextWidth(UI_12_FONT_ID, msg);
-  renderer.drawText(UI_12_FONT_ID, (pageWidth - textW) / 2, bannerY + (bannerH - lineH) / 2, msg, false);
-  renderer.displayBuffer();
-
+  // Book parse/layout takes a moment; show the "Opening..." banner (the same
+  // full-width popup style as every other popup) so the tap has immediate
+  // feedback. The panel holds this frame until the reader's first paint lands.
+  GUI.drawPopup(renderer, tr(STR_OPENING));
   activityManager.goToReader(path);
 }
 

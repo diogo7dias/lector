@@ -959,34 +959,24 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
+  // Lector popup = a full-width black banner with white centered text, matching
+  // the book-open "Opening..." banner. Height keeps the popup's top+bottom
+  // margin so fillPopupProgress still has room to draw a progress bar in the
+  // lower margin. Vertically centered on screen.
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int marginX = metrics.popupMarginX;
   const int marginY = metrics.popupMarginY;
-  const int frameThickness = metrics.popupFrameThickness;
-  const EpdFontFamily::Style popupFontFamily = metrics.popupTextBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-  // Scale y position proportionally to screen height
-  const int y = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, popupFontFamily);
+  const int pageWidth = renderer.getScreenWidth();
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int w = textWidth + marginX * 2;
   const int h = textHeight + marginY * 2;
-  const int x = (renderer.getScreenWidth() - w) / 2;
+  const int y = (renderer.getScreenHeight() - h) / 2;
 
-  const bool useRoundedPopup = metrics.popupCornerRadius > 0;
-  if (useRoundedPopup) {
-    renderer.fillRoundedRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2,
-                             metrics.popupCornerRadius + frameThickness, Color::White);
-    renderer.fillRoundedRect(x, y, w, h, metrics.popupCornerRadius, Color::Black);
-  } else {
-    renderer.fillRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2, true);
-    renderer.fillRect(x, y, w, h, false);
-  }
-
-  const int textX = x + (w - textWidth) / 2;
-  const int textY = y + marginY + metrics.popupTextBaselineOffsetY;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, metrics.popupTextInverted, popupFontFamily);
+  renderer.fillRect(0, y, pageWidth, h, true);  // black banner
+  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message);
+  const int textX = (pageWidth - textWidth) / 2;
+  const int textY = y + (h - textHeight) / 2;
+  renderer.drawText(UI_12_FONT_ID, textX, textY, message, false);  // white text
   renderer.displayBuffer();
-  return Rect{x, y, w, h};
+  return Rect{0, y, pageWidth, h};
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
