@@ -162,8 +162,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             "orientation", StrId::STR_CAT_READER),
         SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
                             "extraParagraphSpacing", StrId::STR_CAT_READER),
-        SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
-                            StrId::STR_CAT_READER),
+        // Text Anti-Aliasing removed from the UI on purpose — permanently off
+        // (see needsTextGrayscale in EpubReaderActivity: the greyscale text pass
+        // is imperceptible here but causes a fading grey refresh every page).
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),

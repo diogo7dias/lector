@@ -1038,7 +1038,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto tPrewarm = millis();
 
   const bool pageHasImages = page->hasImages();
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  // Text Anti-Aliasing is permanently OFF. On this e-ink panel the greyscale
+  // glyph-edge pass is imperceptible, yet it forces a fading grey refresh after
+  // every page (very visible on the X3: crisp black text lightens ~0.5s later).
+  // Images still use greyscale via pageHasImages below. The setting is removed
+  // from the UI and this is hardcoded so it can never be re-enabled.
+  const bool needsTextGrayscale = false;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   auto renderGrayscalePass = [&]() {
     if (needsTextGrayscale) {

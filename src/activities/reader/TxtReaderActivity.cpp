@@ -409,9 +409,8 @@ void TxtReaderActivity::renderPage() {
 
   ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
 
-  if (SETTINGS.textAntiAliasing) {
-    ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
-  }
+  // Text Anti-Aliasing permanently disabled (imperceptible on e-ink, and it
+  // forces a fading grey refresh every page). No AA pass for TXT.
   // scope destructor clears font cache via FontCacheManager
 }
 
