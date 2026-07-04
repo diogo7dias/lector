@@ -23,6 +23,14 @@ struct TabInfo {
   bool selected;
 };
 
+// Result of rendering the home recent-books LIST: which book indices ended up
+// on-screen (used by HomeActivity to keep the selector inside the visible band).
+struct BookListVisibility {
+  int firstVisible;  // Index of first fully-rendered book
+  int lastVisible;   // Index of last fully-rendered book (inclusive)
+  int totalCount;
+};
+
 struct ThemeMetrics {
   int batteryWidth;
   int batteryHeight;
@@ -203,6 +211,13 @@ class BaseTheme {
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
+  // Home LIST layout (Lector): draws recent books as a scrolling vertical list
+  // of title-by-author rows instead of a single big cover. Returns which book
+  // indices are on-screen so the caller can clamp its scroll/selector. Ported
+  // from the DX34 Lector home.
+  virtual BookListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect,
+                                                const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                                                int scrollOffset) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
