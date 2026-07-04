@@ -12,6 +12,12 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  // List-home (HOME_LAYOUT_LIST) scroll state: scrollOffset is the topmost book
+  // index the renderer may start from; first/lastVisibleBookIdx are fed back by
+  // drawRecentBookList so loop() can keep the selected row on-screen.
+  int scrollOffset = 0;
+  int firstVisibleBookIdx = 0;
+  int lastVisibleBookIdx = 0;
   bool recentsLoading = false;
   bool recentsLoaded = false;
   bool firstRenderDone = false;

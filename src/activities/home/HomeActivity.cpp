@@ -20,6 +20,22 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+// Recent books loaded for the LIST home. The renderer scrolls through them one
+// row at a time; more than a couple dozen is never realistically scrolled to.
+constexpr int kHomeListMaxBooks = 20;
+
+// "Lector [semver]" for the list-home header, mirroring the DX34 Lector home.
+// CROSSPOINT_VERSION is "…-<branch>-<semver>"; take the trailing semver.
+std::string getHomeHeaderVersionLabel() {
+  const std::string rawVersion = CROSSPOINT_VERSION;
+  const size_t dashPos = rawVersion.find_last_of('-');
+  const std::string semver =
+      (dashPos != std::string::npos && dashPos + 1 < rawVersion.size()) ? rawVersion.substr(dashPos + 1) : rawVersion;
+  return "Lector [" + semver + "]";
+}
+}  // namespace
+
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
   if (!recentBooks.empty()) {
@@ -114,7 +130,9 @@ void HomeActivity::onEnter() {
   hasOpdsServers = OPDS_STORE.hasServers();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  loadRecentBooks(metrics.homeRecentBooksCount);
+  const int loadCount = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? kHomeListMaxBooks
+                                                                                      : metrics.homeRecentBooksCount;
+  loadRecentBooks(loadCount);
 
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
@@ -168,14 +186,33 @@ void HomeActivity::freeCoverBuffer() {
 
 void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
+  const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
 
-  buttonNavigator.onNext([this, menuCount] {
+  buttonNavigator.onNext([this, menuCount, listLayout] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    if (listLayout) {
+      // Books occupy selector slots [0, bookCount). Keep the selected row inside
+      // the renderer's visible band by nudging scrollOffset. The renderer
+      // auto-adjusts downward, but a wrap back to the top must be handled here.
+      const int bookCount = static_cast<int>(recentBooks.size());
+      if (selectorIndex < bookCount) {
+        if (selectorIndex > lastVisibleBookIdx) scrollOffset++;
+        if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
+        scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
+      }
+    }
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, menuCount] {
+  buttonNavigator.onPrevious([this, menuCount, listLayout] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    if (listLayout) {
+      const int bookCount = static_cast<int>(recentBooks.size());
+      if (selectorIndex < bookCount) {
+        if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
+        scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
+      }
+    }
     requestUpdate();
   });
 
@@ -213,6 +250,57 @@ void HomeActivity::render(RenderLock&&) {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
+
+  // ---- LIST home (Lector): scrolling recent-books list + bottom menu ----
+  if (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) {
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+    const std::string versionLabel = getHomeHeaderVersionLabel();
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, versionLabel.c_str());
+
+    // Menu items (no per-book "Continue Reading" — the list itself is that).
+    std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
+                                          tr(STR_SETTINGS_TITLE)};
+    std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+    if (hasOpdsServers) {
+      menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
+      menuIcons.insert(menuIcons.begin() + 2, Library);
+    }
+
+    // Menu block is pinned to the bottom; the list fills the band above it.
+    const int menuCount = static_cast<int>(menuItems.size());
+    const int menuBlockHeight = metrics.verticalSpacing + menuCount * metrics.menuRowHeight +
+                                (menuCount > 0 ? (menuCount - 1) * metrics.menuSpacing : 0);
+    constexpr int menuBottomGap = 8;
+    const int menuY = pageHeight - metrics.buttonHintsHeight - menuBottomGap - menuBlockHeight;
+
+    const int recentAreaY = metrics.topPadding + metrics.homeTopPadding;
+    constexpr int recentAreaBottomGap = 8;
+    const int recentAreaHeight = std::max(0, menuY - recentAreaBottomGap - recentAreaY);
+
+    const auto vis = GUI.drawRecentBookList(renderer, Rect{0, recentAreaY, pageWidth, recentAreaHeight}, recentBooks,
+                                            selectorIndex, scrollOffset);
+    firstVisibleBookIdx = vis.firstVisible;
+    lastVisibleBookIdx = vis.lastVisible;
+    scrollOffset = vis.firstVisible;
+
+    const int menuSelected = selectorIndex - static_cast<int>(recentBooks.size());
+    GUI.drawButtonMenu(
+        renderer, Rect{0, menuY, pageWidth, menuBlockHeight}, menuCount, menuSelected,
+        [&menuItems](int index) { return std::string(menuItems[index]); },
+        [&menuIcons](int index) { return menuIcons[index]; });
+
+    const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    renderer.displayBuffer();
+
+    if (!firstRenderDone) {
+      firstRenderDone = true;
+      requestUpdate();
+    }
+    return;
+  }
+
+  // ---- SINGLE_COVER home (upstream CrossPoint): one big current-book cover ----
   bool bufferRestored = coverBufferStored && restoreCoverBuffer();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},

@@ -157,7 +157,10 @@ void drawMoreIndicator(const GfxRenderer& renderer, int count, StrId formatKey, 
 BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
                                                  const std::vector<RecentBook>& recentBooks, int selectorIndex,
                                                  int scrollOffset) const {
-  const int maxRowsCap = std::max(1, BaseMetrics::values.homeRecentBooksCount);
+  // Hard ceiling on total rows; the caller (HomeActivity) decides how many
+  // recent books to actually load for the list, so this is decoupled from the
+  // single-cover homeRecentBooksCount metric.
+  constexpr int maxRowsCap = 30;
   const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
   constexpr int maxVisibleBooks = 8;
   // Clamp scrollOffset to valid range
