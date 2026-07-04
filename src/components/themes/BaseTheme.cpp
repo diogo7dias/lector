@@ -70,10 +70,13 @@ std::string buildAuthorInitials(const std::string& author) {
   return initials;
 }
 
-// Greedy word-wrap of input to lines no wider than maxWidth in the UI_10 font,
-// breaking an over-long single word by character and truncating as a last
-// resort. Ported from DX34.
-std::vector<std::string> wrapText(const GfxRenderer& renderer, const std::string& input, const int maxWidth) {
+// Greedy word-wrap of input in the UI_10 font. Line 0 is wrapped to
+// firstLineMaxWidth (leaving room for an inline [NN%] badge), later lines to
+// restMaxWidth. An over-long single word is broken by character; a line that
+// still won't fit is truncated. Ported from DX34, extended with the first-line
+// indent.
+std::vector<std::string> wrapText(const GfxRenderer& renderer, const std::string& input, int firstLineMaxWidth,
+                                  int restMaxWidth) {
   std::vector<std::string> lines;
   if (input.empty()) {
     lines.push_back("");
@@ -89,6 +92,7 @@ std::vector<std::string> wrapText(const GfxRenderer& renderer, const std::string
       break;
     }
 
+    const int maxWidth = lines.empty() ? firstLineMaxWidth : restMaxWidth;
     std::string line;
     size_t lineEndPos = i;
     while (lineEndPos < input.size()) {
@@ -130,7 +134,7 @@ std::vector<std::string> wrapText(const GfxRenderer& renderer, const std::string
   }
 
   if (lines.empty()) {
-    lines.push_back(renderer.truncatedText(UI_10_FONT_ID, input.c_str(), maxWidth));
+    lines.push_back(renderer.truncatedText(UI_10_FONT_ID, input.c_str(), firstLineMaxWidth));
   }
   return lines;
 }
@@ -163,11 +167,10 @@ BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rec
   constexpr int maxRowsCap = 30;
   const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
   constexpr int maxVisibleBooks = 8;
-  // Clamp scrollOffset to valid range
   const int clampedOffset = std::max(0, std::min(scrollOffset, std::max(0, count - 1)));
   constexpr int rowGap = 4;
   const int rowLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  constexpr int rowsTopInset = 18;
+  constexpr int rowsTopInset = 10;
   constexpr int rowsBottomInset = 6;
   const int rowsTopMinY = rect.y + rowsTopInset;
   const int rowsBottomY = rect.y + rect.height - rowsBottomInset;
@@ -176,40 +179,48 @@ BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rec
   constexpr int maxRowW = 520;
   const int rowW = std::min(availableRowW, maxRowW);
   const int rowX = rect.x + (rect.width - rowW) / 2;
-  const int contentX = rowX + 12;
-  const int contentW = std::max(1, rowW - 24);
+  const int contentX = rowX + 10;
+  const int contentW = std::max(1, rowW - 20);
 
-  // Indicator zone height (always reserved when list can scroll)
+  // Indicator zone height (reserved when the list can scroll)
   const int indicatorH = rowLineHeight + 8;
   const bool reserveIndicators = count > 1;
-  const int aboveIndicatorH = reserveIndicators ? indicatorH : 0;
-  const int belowIndicatorH = reserveIndicators ? indicatorH : 0;
-
-  // Content zone: fixed area between the two indicator zones
-  const int effectiveTopY = rowsTopMinY + aboveIndicatorH;
-  const int effectiveBottomY = rowsBottomY - belowIndicatorH;
+  const int effectiveTopY = rowsTopMinY + (reserveIndicators ? indicatorH : 0);
+  const int effectiveBottomY = rowsBottomY - (reserveIndicators ? indicatorH : 0);
   const int contentHeight = effectiveBottomY - effectiveTopY;
 
   if (rowsAvailableHeight <= 0 || contentHeight <= 0 || count == 0) {
     return {0, 0, count};
   }
 
-  // Helper: measure a book's wrapped text and height
+  // A book row: the full title+author wrapped across as many lines as it needs.
+  // When a [NN%] badge is present it sits inline on line 0, so line 0 wraps to a
+  // narrower width (leaving room for the badge) and the rest hang at full width.
   struct BookEntry {
     int bookIdx;
     std::vector<std::string> lines;
     int height;
+    int badgeW;  // 0 = no badge
+    std::string badgeText;
   };
   auto measureBook = [&](int idx) -> BookEntry {
+    int badgeW = 0;
+    std::string badgeText;
+    if (recentBooks[idx].progressPercent >= 0) {
+      char pctBuf[8];
+      std::snprintf(pctBuf, sizeof(pctBuf), "[%d%%]", recentBooks[idx].progressPercent);
+      badgeText = pctBuf;
+      badgeW = renderer.getTextWidth(UI_10_FONT_ID, pctBuf) + 8;  // chip padding
+    }
+    const int firstLineW = badgeW > 0 ? std::max(1, contentW - (badgeW + 6)) : contentW;
     const std::string initials = buildAuthorInitials(recentBooks[idx].author);
     const std::string rowText =
         initials.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + initials);
-    auto lines = wrapText(renderer, rowText, contentW);
+    auto lines = wrapText(renderer, rowText, firstLineW, contentW);
     const int h = static_cast<int>(lines.size()) * rowLineHeight + 6;
-    return {idx, std::move(lines), h};
+    return {idx, std::move(lines), h, badgeW, std::move(badgeText)};
   };
 
-  // Helper: build visible entries from a start offset
   auto buildVisibleEntries = [&](int startIdx) {
     std::vector<BookEntry> entries;
     int accumulated = 0;
@@ -223,20 +234,14 @@ BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rec
     return entries;
   };
 
-  // Phase 1: Build visible entries from scrollOffset
   std::vector<BookEntry> visibleEntries = buildVisibleEntries(clampedOffset);
 
-  // Phase 2: If the selected book isn't visible, adjust scroll offset.
-  // This handles the case where the next book is taller than the space
-  // freed by scrolling one book off the top.
+  // If the selected book is below the visible range, walk back from it to find
+  // the start offset that lands it at the bottom with as many above as fit.
   if (selectorIndex >= 0 && selectorIndex < count && !visibleEntries.empty()) {
     const int lastVisibleIdx = visibleEntries.back().bookIdx;
     if (selectorIndex > lastVisibleIdx) {
-      // Selected book is below visible range. Work backwards from the selected
-      // book to find the best start offset so it appears at the bottom with as
-      // many above as fit.
-      auto selectedEntry = measureBook(selectorIndex);
-      int totalH = selectedEntry.height;
+      int totalH = measureBook(selectorIndex).height;
       int newOffset = selectorIndex;
       for (int i = selectorIndex - 1; i >= 0; i--) {
         const int h = measureBook(i).height;
@@ -248,7 +253,6 @@ BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rec
     }
   }
 
-  // Edge case: if zero books fit (very tall title), force-include the first one
   if (visibleEntries.empty() && clampedOffset < count) {
     visibleEntries.push_back(measureBook(clampedOffset));
   }
@@ -258,45 +262,48 @@ BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rec
   const bool hasMoreAbove = firstVisible > 0;
   const bool hasMoreBelow = lastVisible < count - 1;
 
-  // Phase 3: Draw
-
-  // Compute total height of visible entries for centering
   int totalVisibleHeight = 0;
   for (size_t i = 0; i < visibleEntries.size(); i++) {
     totalVisibleHeight += visibleEntries[i].height;
     if (i > 0) totalVisibleHeight += rowGap;
   }
-
-  // Center content vertically within the content zone
   int rowY = effectiveTopY;
   if (totalVisibleHeight < contentHeight) {
     rowY += (contentHeight - totalVisibleHeight) / 2;
   }
 
-  // Draw "N more above" indicator
   if (hasMoreAbove) {
     drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rowX, rowW, rowsTopMinY, rowLineHeight);
   }
 
-  // Draw visible books
   for (const auto& entry : visibleEntries) {
     const bool selected = (selectorIndex == entry.bookIdx);
-    const bool textBlack = !selected;
-
     if (selected) {
-      renderer.fillRect(rowX, rowY, rowW, entry.height, true);
+      renderer.fillRect(rowX, rowY, rowW, entry.height, true);  // whole row inverted
+    }
+
+    // [NN%] badge on line 0: an inverted chip that flips with row selection so
+    // it stays legible on both grounds.
+    int firstLineX = contentX;
+    if (entry.badgeW > 0) {
+      const int badgeH = rowLineHeight + 2;
+      const int badgeY = rowY + 3 + (rowLineHeight - badgeH) / 2;
+      renderer.fillRect(contentX, badgeY, entry.badgeW, badgeH, !selected);
+      renderer.drawText(UI_10_FONT_ID, contentX + 4, badgeY + (badgeH - rowLineHeight) / 2, entry.badgeText.c_str(),
+                        selected);
+      firstLineX = contentX + entry.badgeW + 6;
     }
 
     int baselineY = rowY + 3;
-    for (const auto& line : entry.lines) {
-      renderer.drawText(UI_10_FONT_ID, contentX, baselineY, line.c_str(), textBlack);
+    for (size_t li = 0; li < entry.lines.size(); li++) {
+      const int lineX = (li == 0) ? firstLineX : contentX;
+      renderer.drawText(UI_10_FONT_ID, lineX, baselineY, entry.lines[li].c_str(), !selected);
       baselineY += rowLineHeight;
     }
 
     rowY += entry.height + rowGap;
   }
 
-  // Draw "N more below" indicator
   if (hasMoreBelow) {
     drawMoreIndicator(renderer, count - lastVisible - 1, StrId::STR_MORE_BELOW, rowX, rowW, effectiveBottomY + 2,
                       rowLineHeight);

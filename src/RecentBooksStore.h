@@ -7,6 +7,7 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  int progressPercent = -1;  // last-read progress 0-100; -1 = unknown (never opened) -> no badge
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -36,6 +37,11 @@ class RecentBooksStore {
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
+
+  // Record last-read progress (0-100) for the entry with this path and persist it.
+  // No-op if no entry matches. Fed by the reader on exit; shown as a [NN%] badge
+  // on the Home list.
+  void setProgress(const std::string& path, int percent);
 
   // Remove the entry whose path matches (used when a book is removed from recents or finished/read).
   // Returns true if an entry was found and removed (no-op + false otherwise).

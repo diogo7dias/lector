@@ -26,15 +26,20 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
-  // Remove existing entry if present
+  // Remove existing entry if present, carrying its reading progress across the
+  // move-to-front so reopening a book doesn't wipe its [NN%] badge.
+  int preservedProgress = -1;
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
+    preservedProgress = it->progressPercent;
     recentBooks.erase(it);
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  RecentBook book{path, title, author, coverBmpPath};
+  book.progressPercent = preservedProgress;
+  recentBooks.insert(recentBooks.begin(), book);
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -55,6 +60,20 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+void RecentBooksStore::setProgress(const std::string& path, int percent) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) {
+    return;
+  }
+  const int clamped = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+  if (it->progressPercent == clamped) {
+    return;  // unchanged — skip the SD write
+  }
+  it->progressPercent = clamped;
+  saveToFile();
 }
 
 bool RecentBooksStore::removeByPath(const std::string& path) {

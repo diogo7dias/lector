@@ -212,6 +212,16 @@ void EpubReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
 
+  // Cache last-read progress so the Home recent-books list can show a [NN%]
+  // badge without reopening the book. Computed here while epub/section are still
+  // live (both are reset below).
+  if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
+    const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+    const int pct =
+        clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+    RECENT_BOOKS.setProgress(epub->getPath(), pct);
+  }
+
   // Leaving mid-footnote loses the in-RAM return stack on deep sleep; persist the
   // pre-footnote position so the book reopens at the link origin, not the footnote.
   if (footnoteDepth > 0 && epub) {
