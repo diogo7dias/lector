@@ -16,6 +16,10 @@ class CrossPointState {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
+  // Running tally of pages turned forward, shown on the home header. Reset from
+  // the in-book menu. Incremented in memory on each forward page turn and
+  // persisted opportunistically with the rest of the state (no per-page SD write).
+  uint32_t sessionPagesRead = 0;
 
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.

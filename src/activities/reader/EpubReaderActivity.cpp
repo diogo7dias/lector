@@ -665,6 +665,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       addBookmark();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::RESET_PAGES_READ: {
+      // Zero the home "pages read" tally and persist immediately so a reset
+      // survives even if the device is powered off before the next state save.
+      APP_STATE.sessionPagesRead = 0;
+      APP_STATE.saveToFile();
+      requestUpdate();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_LOOK:
     case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_STATUS:
       // Handled in-place inside EpubReaderMenuActivity::loop() (flip + persist),
@@ -776,6 +784,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   if (isForwardTurn) {
+    APP_STATE.sessionPagesRead++;  // home "pages read" tally; persisted with the rest of the state
     if (section->currentPage < section->pageCount - 1) {
       section->currentPage++;
     } else {

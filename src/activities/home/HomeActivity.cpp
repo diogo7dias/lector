@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
@@ -269,6 +270,24 @@ void HomeActivity::render(RenderLock&&) {
     GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
     const std::string versionLabel = getHomeHeaderVersionLabel();
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, versionLabel.c_str());
+
+    // Running "pages read" tally, top-left just after the version label (reset from
+    // the in-book menu). Reset to 0 via the reader menu's "Reset Pages Read" entry.
+    const int versionLabelWidth = renderer.getTextWidth(UI_10_FONT_ID, versionLabel.c_str());
+    const std::string pagesReadLabel =
+        std::string(tr(STR_HOME_PAGES_PREFIX)) + std::to_string(APP_STATE.sessionPagesRead);
+    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + versionLabelWidth + 14, metrics.topPadding + 5,
+                      pagesReadLabel.c_str());
+
+    // Clock, centered in the header row — same row and font size as the battery
+    // (drawn top-right by drawHeader). X3-only: DS3231 RTC, inert on X4.
+    if (halClock.isAvailable()) {
+      char timeBuf[9];
+      if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+        const int clockWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
+        renderer.drawText(SMALL_FONT_ID, (pageWidth - clockWidth) / 2, metrics.topPadding + 5, timeBuf);
+      }
+    }
 
     // Menu items (no per-book "Continue Reading" — the list itself is that).
     std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),

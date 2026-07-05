@@ -83,6 +83,7 @@ void TxtReaderActivity::loop() {
     requestUpdate();
   } else if (nextTriggered) {
     if (currentPage < totalPages - 1) {
+      APP_STATE.sessionPagesRead++;  // home "pages read" tally
       currentPage++;
       requestUpdate();
     } else {

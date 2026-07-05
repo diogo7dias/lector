@@ -108,6 +108,7 @@ void XtcReaderActivity::loop() {
     }
     requestUpdate();
   } else if (nextTriggered) {
+    APP_STATE.sessionPagesRead++;  // home "pages read" tally
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
