@@ -133,8 +133,8 @@ void HomeActivity::onEnter() {
   hasOpdsServers = OPDS_STORE.hasServers();
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int loadCount = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? kHomeListMaxBooks
-                                                                                      : metrics.homeRecentBooksCount;
+  const int loadCount =
+      (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? kHomeListMaxBooks : metrics.homeRecentBooksCount;
   loadRecentBooks(loadCount);
 
   const auto base = static_cast<int>(recentBooks.size());
@@ -386,8 +386,9 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
     }
     if (RECENT_BOOKS.removeByPath(path)) {
       const auto& metrics = UITheme::getInstance().getMetrics();
-      const int loadCount = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? kHomeListMaxBooks
-                                                                                          : metrics.homeRecentBooksCount;
+      const int loadCount = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST)
+                                ? kHomeListMaxBooks
+                                : metrics.homeRecentBooksCount;
       loadRecentBooks(loadCount);
       const int menuCount = getMenuItemCount();
       if (selectorIndex >= menuCount) {
@@ -402,8 +403,9 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
     }
   };
 
-  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
-                         std::move(handler));
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
+      std::move(handler));
 }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
