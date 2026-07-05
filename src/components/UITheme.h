@@ -30,6 +30,11 @@ class UITheme {
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();
   static int getProgressBarHeight();
+  // v2 status bar: pixels to reserve at the top / bottom edge for the text band(s)
+  // plus any progress bars on that edge. hasChapters filters chapter-only items,
+  // which don't render on chapterless books (TXT, flat XTC).
+  static int getStatusBarV2TopHeight(bool hasChapters);
+  static int getStatusBarV2BottomHeight(bool hasChapters);
 
  private:
   const ThemeMetrics* currentMetrics;

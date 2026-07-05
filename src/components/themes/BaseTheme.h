@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "components/StatusBar.h"
+
 class GfxRenderer;
 struct RecentBook;
 
@@ -226,6 +228,10 @@ class BaseTheme {
   void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
                      std::string title, const int paddingBottom = 0, const int textYOffset = 0,
                      const bool fillMargin = true, const bool isPageBookmarked = false) const;
+  // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
+  // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
+  // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
+  void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const;
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;

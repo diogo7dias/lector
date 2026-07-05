@@ -2,12 +2,14 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <Logging.h>
 
 #include <memory>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "components/StatusBar.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
@@ -146,6 +148,69 @@ int UITheme::getProgressBarHeight() {
   const bool showProgressBar =
       SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
   return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+}
+
+namespace {
+bool sbAnchorTop(uint8_t a) {
+  return a == CrossPointSettings::SB_ANCHOR_TL || a == CrossPointSettings::SB_ANCHOR_TC ||
+         a == CrossPointSettings::SB_ANCHOR_TR;
+}
+bool sbAnchorBottom(uint8_t a) {
+  return a == CrossPointSettings::SB_ANCHOR_BL || a == CrossPointSettings::SB_ANCHOR_BC ||
+         a == CrossPointSettings::SB_ANCHOR_BR;
+}
+bool sbItemOn(uint8_t anchor, bool chapterOnly, bool hasChapters) {
+  return anchor != CrossPointSettings::SB_ANCHOR_OFF && (!chapterOnly || hasChapters);
+}
+// Whether any enabled text item lands on the requested band (top=true / bottom).
+// NOTE: this is the *native* anchor assignment; the rare title-driven reflow that
+// pushes a top item down to the bottom band is not reflected here (device-tuned
+// later), so a reserved band never disappears — at worst a bumped item may draw in
+// a band that was already reserved for its native residents.
+bool sbBandHasText(bool top, bool hasChapters) {
+  const bool clockAvailable = halClock.isAvailable();
+  const struct {
+    uint8_t anchor;
+    bool chapterOnly;
+    bool applicable;
+  } items[] = {
+      {SETTINGS.sbBatteryPos, false, true},
+      {SETTINGS.sbClockPos, false, clockAvailable},
+      {SETTINGS.sbTitlePos, SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER, true},
+      {SETTINGS.sbPagePos, true, true},
+      {SETTINGS.sbBookPctPos, false, true},
+      {SETTINGS.sbChapterPctPos, true, true},
+      {SETTINGS.sbChapterNumPos, true, true},
+  };
+  for (const auto& it : items) {
+    if (!it.applicable) continue;
+    if (!sbItemOn(it.anchor, it.chapterOnly, hasChapters)) continue;
+    if (top ? sbAnchorTop(it.anchor) : sbAnchorBottom(it.anchor)) return true;
+  }
+  return false;
+}
+}  // namespace
+
+int UITheme::getStatusBarV2TopHeight(bool hasChapters) {
+  if (!SETTINGS.sbEnabled) return 0;
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  int bars = 0;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
+  const int text = sbBandHasText(true, hasChapters) ? metrics.statusBarVerticalMargin : 0;
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
+}
+
+int UITheme::getStatusBarV2BottomHeight(bool hasChapters) {
+  if (!SETTINGS.sbEnabled) return 0;
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  int bars = 0;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
+  const int text = sbBandHasText(false, hasChapters) ? metrics.statusBarVerticalMargin : 0;
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
 // Centered text implementation that takes the safe area into account

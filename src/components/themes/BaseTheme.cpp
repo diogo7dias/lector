@@ -1152,6 +1152,162 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
   }
 }
 
+void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {
+  if (!SETTINGS.sbEnabled) return;
+
+  const int f = UI_10_FONT_ID;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int mt, mr, mb, ml;
+  renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+
+  const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
+  const int rightEdge = screenW - metrics.statusBarHorizontalMargin - mr;
+  const int bandWidth = rightEdge - leftEdge;
+  const int sepW = renderer.getTextWidth(f, " | ");
+  const int lineH = renderer.getLineHeight(f);
+  const bool showBattery = SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_NEVER;
+
+  // --- Build one segment list per anchor from the sb* settings + reader data ---
+  std::array<std::vector<StatusSegment>, 6> buckets;
+  auto add = [&](uint8_t anchor, bool chapterOnly, StatusSegment seg) {
+    if (anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
+    if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
+    buckets[StatusBarAnchor::index(anchor)].push_back(std::move(seg));
+  };
+  auto textSeg = [&](const std::string& t, bool greedy = false) {
+    StatusSegment s;
+    s.type = StatusSegment::TEXT;
+    s.text = t;
+    s.width = renderer.getTextWidth(f, t.c_str());
+    s.greedy = greedy;
+    return s;
+  };
+
+  // Battery (icon + optional %)
+  {
+    StatusSegment s;
+    s.type = StatusSegment::BATTERY;
+    int w = metrics.batteryWidth;
+    if (showBattery) {
+      s.text = std::to_string(powerManager.getBatteryPercentage()) + "%";
+      w += batteryPercentSpacing + renderer.getTextWidth(f, s.text.c_str());
+    }
+    s.width = w;
+    add(SETTINGS.sbBatteryPos, false, std::move(s));
+  }
+  // Clock (X3 RTC only)
+  if (halClock.isAvailable()) {
+    char timeBuf[9];
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+      add(SETTINGS.sbClockPos, false, textSeg(timeBuf));
+    }
+  }
+  // Title (book or chapter, greedy when truncate is off so reflow can bump others)
+  {
+    const bool chapterSrc = SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER;
+    const std::string& t = chapterSrc ? data.chapterTitle : data.bookTitle;
+    if (!t.empty()) add(SETTINGS.sbTitlePos, chapterSrc, textSeg(t, SETTINGS.sbTitleTruncate == 0));
+  }
+  // Page in chapter ("3/40" or "8 left")
+  {
+    std::string t;
+    if (SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT) {
+      const int remaining = data.chapterPages - data.chapterPage;
+      t = std::to_string(remaining > 0 ? remaining : 0) + " left";
+    } else {
+      t = std::to_string(data.chapterPage) + "/" + std::to_string(data.chapterPages);
+    }
+    add(SETTINGS.sbPagePos, true, textSeg(t));
+  }
+  // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
+  add(SETTINGS.sbBookPctPos, false, textSeg("B:" + std::to_string(data.bookPercent) + "%"));
+  add(SETTINGS.sbChapterPctPos, true, textSeg("C:" + std::to_string(data.chapterPercent) + "%"));
+  add(SETTINGS.sbChapterNumPos, true,
+      textSeg("Ch " + std::to_string(data.chapterNum) + "/" + std::to_string(data.chapterTotal)));
+
+  ResolvedStatusBar bar = composeStatusBar(std::move(buckets), bandWidth, sepW);
+
+  // --- Progress bars (full width, flush to the edge) ------------------------
+  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  const int barLeft = ml;
+  const int barMaxW = screenW - ml - mr;
+  auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
+  auto drawEdgeBar = [&](int y, int pct) {
+    const int w = barMaxW * clampPct(pct) / 100;
+    if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
+  };
+
+  // Top edge: book bar then chapter bar flush to the top; text band below them.
+  int topStack = mt;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) {
+    drawEdgeBar(topStack, data.bookPercent);
+    topStack += barPx;
+  }
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
+    drawEdgeBar(topStack, data.chapterPercent);
+    topStack += barPx;
+  }
+  const int topTextY = topStack + 2;
+
+  // Bottom edge: bars flush to the bottom; text band above them.
+  int bottomStack = screenH - mb;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
+    bottomStack -= barPx;
+    drawEdgeBar(bottomStack, data.bookPercent);
+  }
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters) {
+    bottomStack -= barPx;
+    drawEdgeBar(bottomStack, data.chapterPercent);
+  }
+  const int bottomTextY = bottomStack - lineH - 2;
+
+  // --- Draw each resolved cluster (align: 0 left edge, 1 centered, 2 right edge) ---
+  auto drawCluster = [&](int anchorIdx, int align, int y) {
+    const auto& segs = bar.anchor[anchorIdx];
+    if (segs.empty()) return;
+    const int total = statusClusterWidth(segs, sepW);
+
+    // A centre cluster that is still too wide (a greedy title after reflow) clips
+    // against the space the left/right clusters of its band leave free.
+    if (align == 1 && segs.size() == 1) {
+      const bool top = StatusBarAnchor::isTop(anchorIdx);
+      const int lw = statusClusterWidth(bar.anchor[top ? 0 : 3], sepW);
+      const int rw = statusClusterWidth(bar.anchor[top ? 2 : 5], sepW);
+      const int avail = bandWidth - lw - rw - 20;
+      if (avail > 0 && total > avail) {
+        std::string clipped = renderer.truncatedText(f, segs[0].text.c_str(), avail);
+        const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
+        renderer.drawText(f, cx, y, clipped.c_str());
+        return;
+      }
+    }
+
+    int x = (align == 0) ? leftEdge : (align == 2) ? (rightEdge - total) : (leftEdge + (bandWidth - total) / 2);
+    for (size_t i = 0; i < segs.size(); ++i) {
+      if (i > 0) {
+        renderer.drawText(f, x, y, " | ");
+        x += sepW;
+      }
+      const auto& s = segs[i];
+      if (s.type == StatusSegment::BATTERY) {
+        drawBatteryLeft(renderer, Rect{x, y, metrics.batteryWidth, metrics.batteryHeight}, showBattery, f);
+      } else {
+        renderer.drawText(f, x, y, s.text.c_str());
+      }
+      x += s.width;
+    }
+  };
+
+  drawCluster(0, 0, topTextY);     // TL
+  drawCluster(1, 1, topTextY);     // TC
+  drawCluster(2, 2, topTextY);     // TR
+  drawCluster(3, 0, bottomTextY);  // BL
+  drawCluster(4, 1, bottomTextY);  // BC
+  drawCluster(5, 2, bottomTextY);  // BR
+}
+
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   auto truncatedLabel =
