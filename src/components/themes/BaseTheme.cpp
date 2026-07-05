@@ -974,7 +974,11 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message);
   const int textX = (pageWidth - textWidth) / 2;
   const int textY = y + (h - textHeight) / 2;
+  // Smear the white text +1px ("dark"/paperback look) so it reads heavier on the
+  // black banner, then restore so nothing else is affected.
+  renderer.setPaperbackLook(true);
   renderer.drawText(UI_12_FONT_ID, textX, textY, message, false);  // white text
+  renderer.setPaperbackLook(false);
   renderer.displayBuffer();
   return Rect{0, y, pageWidth, h};
 }
