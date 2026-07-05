@@ -19,6 +19,7 @@
 #include "OtaUpdateActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
+#include "SettingSelectActivity.h"
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -197,16 +198,18 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
+  if (setting.nameId == StrId::STR_LINE_SPACING) {
+    openLineSpacingPicker();
+    return;
+  }
+
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
-  } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-    const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
-    SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
-  } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
-    if (setting.nameId == StrId::STR_FONT_FAMILY) {
-      // Launch font selection submenu instead of cycling
+  } else if (setting.type == SettingType::ENUM) {
+    // Font family keeps its dedicated preview picker.
+    if (setting.nameId == StrId::STR_FONT_FAMILY && setting.valueGetter && setting.valueSetter) {
       startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                              [this](const ActivityResult&) {
                                SETTINGS.saveToFile();
@@ -214,17 +217,51 @@ void SettingsActivity::toggleCurrentSetting() {
                              });
       return;
     }
-    const uint8_t totalValues = setting.enumStringValues.empty()
-                                    ? static_cast<uint8_t>(setting.enumValues.size())
-                                    : static_cast<uint8_t>(setting.enumStringValues.size());
-    const uint8_t cur = setting.valueGetter();
-    setting.valueSetter((cur + 1) % totalValues);
+
+    // Every other multi-option setting opens the scroll-and-select list picker
+    // (up/down to move, Confirm to select) instead of tap-to-cycle. Build the
+    // labels + current index + a setter, then hand them to SettingSelectActivity.
+    std::vector<std::string> options;
+    int current = 0;
+    std::function<void(uint8_t)> apply;
+    if (setting.valuePtr != nullptr) {
+      options.reserve(setting.enumValues.size());
+      for (const auto id : setting.enumValues) options.emplace_back(I18N.get(id));
+      current = SETTINGS.*(setting.valuePtr);
+      const auto ptr = setting.valuePtr;
+      apply = [ptr](uint8_t idx) { SETTINGS.*ptr = idx; };
+    } else if (setting.valueGetter && setting.valueSetter) {
+      if (!setting.enumStringValues.empty()) {
+        options = setting.enumStringValues;
+      } else {
+        options.reserve(setting.enumValues.size());
+        for (const auto id : setting.enumValues) options.emplace_back(I18N.get(id));
+      }
+      current = setting.valueGetter();
+      const auto setter = setting.valueSetter;
+      apply = [setter](uint8_t idx) { setter(idx); };
+    } else {
+      return;
+    }
+
+    startActivityForResult(
+        std::make_unique<SettingSelectActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)),
+                                                std::move(options), current, std::move(apply)),
+        [this, sleepScreenChanged, quickResumeTimeoutChanged](const ActivityResult&) {
+          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
+          SETTINGS.saveToFile();
+          rebuildSettingsLists();
+          selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
+        });
+    return;
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
+    // Tap-to-increment (wraps at max) for numeric settings edited in place.
+    // Use int, not int8_t, so ranges above 127 stay correct.
+    const int currentValue = SETTINGS.*(setting.valuePtr);
     if (currentValue + setting.valueRange.step > setting.valueRange.max) {
       SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
     } else {
-      SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
+      SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>(currentValue + setting.valueRange.step);
     }
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
@@ -318,6 +355,24 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openLineSpacingPicker() {
+  // Reader line spacing is a percentage (100% = the font's natural spacing).
+  // A slider (like the sleep timer) is nicer than tap-to-increment for a wide,
+  // bidirectional range: up/down adjusts by 5%, page jump by 25%.
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "LineSpacingInterval", StrId::STR_LINE_SPACING, StrId::STR_LINE_SPACING_STEP_HINT,
+          SETTINGS.lineSpacingPercent, CrossPointSettings::MIN_LINE_SPACING_PERCENT,
+          CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5, 25, StrId::STR_LINE_SPACING_VALUE_FORMAT, false, true),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.lineSpacingPercent = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
 void SettingsActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -371,6 +426,8 @@ void SettingsActivity::render(RenderLock&&) {
                        static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
               valueText = valueBuffer;
             }
+          } else if (setting.nameId == StrId::STR_LINE_SPACING) {
+            valueText = std::to_string(SETTINGS.*(setting.valuePtr)) + "%";
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }
@@ -379,13 +436,17 @@ void SettingsActivity::render(RenderLock&&) {
       },
       true);
 
-  // Draw help text
-  const auto confirmLabel =
-      (selectedSettingIndex == 0)
-          ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-          : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
-                 ? tr(STR_SELECT)
-                 : tr(STR_TOGGLE));
+  // Draw help text. Settings that open a sub-picker (enums, line spacing, sleep
+  // timer) say "Select"; in-place toggles/values say "Toggle".
+  const char* confirmLabel;
+  if (selectedSettingIndex == 0) {
+    confirmLabel = I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount]);
+  } else {
+    const auto& sel = (*currentSettings)[selectedSettingIndex - 1];
+    const bool opensPicker = sel.type == SettingType::ENUM || sel.nameId == StrId::STR_TIME_TO_SLEEP ||
+                             sel.nameId == StrId::STR_LINE_SPACING;
+    confirmLabel = opensPicker ? tr(STR_SELECT) : tr(STR_TOGGLE);
+  }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 

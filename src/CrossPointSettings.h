@@ -229,7 +229,14 @@ class CrossPointSettings {
   // Reader font settings
   uint8_t fontFamily = BOOKERLY;
   uint8_t fontSize = SIZE_14;
+  // Legacy line-spacing enum (TIGHT/NORMAL/WIDE). Superseded by lineSpacingPercent;
+  // retained only so the positional binary-settings reader stays aligned.
   uint8_t lineSpacing = NORMAL;
+  // Reader line spacing as a percentage of the font's natural line height.
+  // 100 = natural spacing; adjustable MIN..MAX_LINE_SPACING_PERCENT. Old configs
+  // without this key default to 100 (== the old NORMAL), so existing readers are
+  // unchanged; users who had picked Tight/Wide re-pick.
+  uint8_t lineSpacingPercent = 100;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
@@ -254,6 +261,10 @@ class CrossPointSettings {
   uint8_t uiTheme = LYRA;
   // Home screen layout (see HOME_LAYOUT). Default = recent-books list.
   uint8_t homeLayout = HOME_LAYOUT_LIST;
+  // Open a random book from the Recent Books list on boot instead of the home
+  // screen (0 = off, 1 = on). Fresh boot-to-home only; waking from sleep still
+  // resumes the book you were reading.
+  uint8_t openRandomRecentOnBoot = 0;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
@@ -287,6 +298,10 @@ class CrossPointSettings {
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;
+
+  // Reader line-spacing percentage bounds (100 == the font's natural spacing).
+  static constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
+  static constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
 
   // Callback to resolve SD card font IDs. Set by SdCardFontSystem::begin().
   // Returns font ID or 0 if not found.

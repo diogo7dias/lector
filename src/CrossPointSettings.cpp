@@ -283,46 +283,23 @@ bool CrossPointSettings::loadFromBinaryFile() {
 }
 
 float CrossPointSettings::getReaderLineCompression() const {
-  // SD card fonts use same compression as Bookerly (the most neutral values)
+  // Each font has a natural (== 100%) line-height multiplier; the user's
+  // lineSpacingPercent scales around it. 100% reproduces the old NORMAL spacing
+  // exactly, so existing readers are unchanged unless they move the slider.
+  float base;
   if (sdFontFamilyName[0] != '\0') {
-    switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.1f;
-    }
+    // SD card fonts share Bookerly's neutral curve.
+    base = 1.0f;
+  } else if (fontFamily == VERDANA) {
+    // Verdana (sans) reads tighter, matching the old NotoSans curve.
+    base = 0.95f;
+  } else {
+    // Serif families (Bookerly/Georgia/Merriweather) + fallback.
+    base = 1.0f;
   }
 
-  switch (fontFamily) {
-    // Serif families share the neutral NotoSerif-derived compression curve.
-    case BOOKERLY:
-    case GEORGIA:
-    case MERRIWEATHER:
-    default:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.95f;
-        case NORMAL:
-        default:
-          return 1.0f;
-        case WIDE:
-          return 1.1f;
-      }
-    // Verdana (sans) reads tighter, matching the old NotoSans curve.
-    case VERDANA:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
-      }
-  }
+  const uint8_t percent = std::clamp(lineSpacingPercent, MIN_LINE_SPACING_PERCENT, MAX_LINE_SPACING_PERCENT);
+  return base * (static_cast<float>(percent) / 100.0f);
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {

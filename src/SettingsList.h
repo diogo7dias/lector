@@ -132,6 +132,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_HOME_LAYOUT, &CrossPointSettings::homeLayout,
                           {StrId::STR_HOME_LAYOUT_LIST, StrId::STR_HOME_LAYOUT_SINGLE_COVER}, "homeLayout",
                           StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_OPEN_RANDOM_ON_BOOT, &CrossPointSettings::openRandomRecentOnBoot,
+                            "openRandomRecentOnBoot", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 
@@ -145,8 +147,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_FONT_SIZE_11, StrId::STR_FONT_SIZE_12, StrId::STR_FONT_SIZE_13,
                            StrId::STR_FONT_SIZE_14, StrId::STR_FONT_SIZE_15, StrId::STR_FONT_SIZE_16},
                           "fontSize", StrId::STR_CAT_READER),
-        SettingInfo::Enum(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacing,
-                          {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE}, "lineSpacing", StrId::STR_CAT_READER),
+        SettingInfo::Value(
+            StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,
+            {CrossPointSettings::MIN_LINE_SPACING_PERCENT, CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5},
+            "lineSpacingPercent", StrId::STR_CAT_READER),
         SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin, {5, 40, 5}, "screenMargin",
                            StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
