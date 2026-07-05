@@ -279,13 +279,18 @@ void HomeActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + versionLabelWidth + 14, metrics.topPadding + 5,
                       pagesReadLabel.c_str());
 
-    // Clock, centered in the header row — same row and font size as the battery
-    // (drawn top-right by drawHeader). X3-only: DS3231 RTC, inert on X4.
+    // Clock sits just left of the battery cluster (icon + "%"), sharing the
+    // battery's row and font size (UI_10). X3-only: DS3231 RTC, inert on X4.
+    // drawHeader draws the battery at the right edge; mirror its geometry here
+    // and reserve "100%" width so the clock never overlaps the percentage.
     if (halClock.isAvailable()) {
       char timeBuf[9];
       if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-        const int clockWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
-        renderer.drawText(SMALL_FONT_ID, (pageWidth - clockWidth) / 2, metrics.topPadding + 5, timeBuf);
+        const int batteryIconLeft = pageWidth - 12 - metrics.batteryWidth;
+        const int batteryTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "100%");
+        const int batteryClusterLeft = batteryIconLeft - batteryTextWidth - 4;
+        const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
+        renderer.drawText(UI_10_FONT_ID, batteryClusterLeft - 12 - clockWidth, metrics.topPadding + 5, timeBuf);
       }
     }
 
