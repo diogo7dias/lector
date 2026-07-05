@@ -9,12 +9,14 @@
 #include "fontIds.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                               const std::string& title, const int currentPage, const int totalPages,
+                                               const std::string& title, const std::string& author,
+                                               const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks)),
       title(title),
+      author(author),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
@@ -23,7 +25,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasBookmarks) {
   std::vector<MenuItem> items;
-  items.reserve(14);
+  items.reserve(12);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -31,12 +33,13 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   if (hasBookmarks) {
     items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
-  items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
+  // Toggle Bookmark intentionally hidden from the in-book menu — a bookmark can
+  // still be dropped via the long-press Confirm function (SETTINGS.longPressMenuFunction).
   // Paperback Look toggles — in-book pop-up menu only (not in global Settings/web).
   items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
   items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+  // Auto Turn (Pages Per Minute) intentionally hidden from the in-book menu.
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
@@ -119,6 +122,18 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
                  title.c_str());
 
+  // "by {author}" line stacked just under the title (DX34-style header). Only
+  // occupies vertical space when an author is known.
+  int authorBandHeight = 0;
+  if (!author.empty()) {
+    const std::string byLine = std::string(tr(STR_BY_AUTHOR_PREFIX)) + author;
+    const std::string truncatedByLine =
+        renderer.truncatedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, screen.y + metrics.topPadding + metrics.headerHeight,
+                              truncatedByLine.c_str());
+    authorBandHeight = renderer.getLineHeight(UI_10_FONT_ID) + 2;
+  }
+
   // Progress summary
   std::string progressLine;
   if (totalPages > 0) {
@@ -126,13 +141,13 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
                    std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  GUI.drawSubHeader(
-      renderer,
-      Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight, screen.width, metrics.tabBarHeight},
-      progressLine.c_str());
+  GUI.drawSubHeader(renderer,
+                    Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight + authorBandHeight,
+                         screen.width, metrics.tabBarHeight},
+                    progressLine.c_str());
 
-  const int contentTop =
-      screen.y + metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
+  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + authorBandHeight +
+                         metrics.tabBarHeight + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
   GUI.drawList(
