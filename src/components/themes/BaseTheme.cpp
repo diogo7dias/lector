@@ -1169,65 +1169,67 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int lineH = renderer.getLineHeight(f);
   const bool showBattery = SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_NEVER;
 
-  // --- Build one segment list per anchor from the sb* settings + reader data ---
-  std::array<std::vector<StatusSegment>, 6> buckets;
-  auto add = [&](uint8_t anchor, bool chapterOnly, StatusSegment seg) {
+  // --- Build the bar on the STACK: one fixed segment array per anchor. No heap in
+  // this render path (it runs on the lock-holding, stack-tight render task). Short
+  // items format into local char buffers; the title points at the caller's string. ---
+  struct Seg {
+    const char* text;
+    int width;
+    bool isBattery;
+  };
+  Seg buckets[6][7];  // anchor idx 0..5 (TL..BR), up to 7 co-located items
+  int counts[6] = {0, 0, 0, 0, 0, 0};
+  auto push = [&](uint8_t anchor, bool chapterOnly, const char* text, int width, bool isBattery) {
     if (anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
-    buckets[StatusBarAnchor::index(anchor)].push_back(std::move(seg));
+    const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
+    if (idx < 0 || idx > 5 || counts[idx] >= 7) return;
+    buckets[idx][counts[idx]++] = Seg{text, width, isBattery};
   };
-  auto textSeg = [&](const std::string& t, bool greedy = false) {
-    StatusSegment s;
-    s.type = StatusSegment::TEXT;
-    s.text = t;
-    s.width = renderer.getTextWidth(f, t.c_str());
-    s.greedy = greedy;
-    return s;
-  };
+
+  char batBuf[8] = "";
+  char clkBuf[12] = "";
+  char pageBuf[20] = "";
+  char bookPctBuf[10] = "";
+  char chapPctBuf[10] = "";
+  char chapNumBuf[24] = "";
 
   // Battery (icon + optional %)
   {
-    StatusSegment s;
-    s.type = StatusSegment::BATTERY;
     int w = metrics.batteryWidth;
     if (showBattery) {
-      s.text = std::to_string(powerManager.getBatteryPercentage()) + "%";
-      w += batteryPercentSpacing + renderer.getTextWidth(f, s.text.c_str());
+      snprintf(batBuf, sizeof(batBuf), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
+      w += batteryPercentSpacing + renderer.getTextWidth(f, batBuf);
     }
-    s.width = w;
-    add(SETTINGS.sbBatteryPos, false, std::move(s));
+    push(SETTINGS.sbBatteryPos, false, batBuf, w, true);
   }
-  // Clock (X3 RTC only)
-  if (halClock.isAvailable()) {
-    char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-      add(SETTINGS.sbClockPos, false, textSeg(timeBuf));
-    }
+  // Clock (X3 RTC only). Only read the RTC when the clock is actually placed, so a
+  // clock-off config doesn't do an I2C transaction every frame.
+  if (SETTINGS.sbClockPos != CrossPointSettings::SB_ANCHOR_OFF && halClock.isAvailable() &&
+      halClock.formatTime(clkBuf, sizeof(clkBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+    push(SETTINGS.sbClockPos, false, clkBuf, renderer.getTextWidth(f, clkBuf), false);
   }
-  // Title (book or chapter, greedy when truncate is off so reflow can bump others)
+  // Title (points at the caller's string; truncated at draw time if it overflows)
   {
     const bool chapterSrc = SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER;
-    const std::string& t = chapterSrc ? data.chapterTitle : data.bookTitle;
-    if (!t.empty()) add(SETTINGS.sbTitlePos, chapterSrc, textSeg(t, SETTINGS.sbTitleTruncate == 0));
+    const char* title = chapterSrc ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    if (title[0] != '\0') push(SETTINGS.sbTitlePos, chapterSrc, title, renderer.getTextWidth(f, title), false);
   }
   // Page in chapter ("3/40" or "8 left")
-  {
-    std::string t;
-    if (SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT) {
-      const int remaining = data.chapterPages - data.chapterPage;
-      t = std::to_string(remaining > 0 ? remaining : 0) + " left";
-    } else {
-      t = std::to_string(data.chapterPage) + "/" + std::to_string(data.chapterPages);
-    }
-    add(SETTINGS.sbPagePos, true, textSeg(t));
+  if (SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT) {
+    const int remaining = data.chapterPages - data.chapterPage;
+    snprintf(pageBuf, sizeof(pageBuf), "%d left", remaining > 0 ? remaining : 0);
+  } else {
+    snprintf(pageBuf, sizeof(pageBuf), "%d/%d", data.chapterPage, data.chapterPages);
   }
+  push(SETTINGS.sbPagePos, true, pageBuf, renderer.getTextWidth(f, pageBuf), false);
   // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
-  add(SETTINGS.sbBookPctPos, false, textSeg("B:" + std::to_string(data.bookPercent) + "%"));
-  add(SETTINGS.sbChapterPctPos, true, textSeg("C:" + std::to_string(data.chapterPercent) + "%"));
-  add(SETTINGS.sbChapterNumPos, true,
-      textSeg("Ch " + std::to_string(data.chapterNum) + "/" + std::to_string(data.chapterTotal)));
-
-  ResolvedStatusBar bar = composeStatusBar(std::move(buckets), bandWidth, sepW);
+  snprintf(bookPctBuf, sizeof(bookPctBuf), "B:%d%%", data.bookPercent);
+  push(SETTINGS.sbBookPctPos, false, bookPctBuf, renderer.getTextWidth(f, bookPctBuf), false);
+  snprintf(chapPctBuf, sizeof(chapPctBuf), "C:%d%%", data.chapterPercent);
+  push(SETTINGS.sbChapterPctPos, true, chapPctBuf, renderer.getTextWidth(f, chapPctBuf), false);
+  snprintf(chapNumBuf, sizeof(chapNumBuf), "Ch %d/%d", data.chapterNum, data.chapterTotal);
+  push(SETTINGS.sbChapterNumPos, true, chapNumBuf, renderer.getTextWidth(f, chapNumBuf), false);
 
   // --- Progress bars (full width, flush to the edge) ------------------------
   const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
@@ -1263,21 +1265,27 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
   const int bottomTextY = bottomStack - lineH - 2;
 
-  // --- Draw each resolved cluster (align: 0 left edge, 1 centered, 2 right edge) ---
-  auto drawCluster = [&](int anchorIdx, int align, int y) {
-    const auto& segs = bar.anchor[anchorIdx];
-    if (segs.empty()) return;
-    const int total = statusClusterWidth(segs, sepW);
+  auto clusterW = [&](int idx) {
+    int w = 0;
+    for (int i = 0; i < counts[idx]; i++) w += buckets[idx][i].width;
+    if (counts[idx] > 1) w += sepW * (counts[idx] - 1);
+    return w;
+  };
 
-    // A centre cluster that is still too wide (a greedy title after reflow) clips
-    // against the space the left/right clusters of its band leave free.
-    if (align == 1 && segs.size() == 1) {
-      const bool top = StatusBarAnchor::isTop(anchorIdx);
-      const int lw = statusClusterWidth(bar.anchor[top ? 0 : 3], sepW);
-      const int rw = statusClusterWidth(bar.anchor[top ? 2 : 5], sepW);
+  // --- Draw one anchor cluster (align: 0 left edge, 1 centered, 2 right edge) ---
+  auto drawAnchor = [&](int idx, int align, int y) {
+    if (counts[idx] == 0) return;
+    const int total = clusterW(idx);
+
+    // A lone centre segment (the title) that overflows clips to the space the
+    // left/right clusters of its band leave free.
+    if (align == 1 && counts[idx] == 1) {
+      const bool top = idx < 3;
+      const int lw = clusterW(top ? 0 : 3);
+      const int rw = clusterW(top ? 2 : 5);
       const int avail = bandWidth - lw - rw - 20;
       if (avail > 0 && total > avail) {
-        std::string clipped = renderer.truncatedText(f, segs[0].text.c_str(), avail);
+        std::string clipped = renderer.truncatedText(f, buckets[idx][0].text, avail);
         const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
         renderer.drawText(f, cx, y, clipped.c_str());
         return;
@@ -1285,27 +1293,27 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     }
 
     int x = (align == 0) ? leftEdge : (align == 2) ? (rightEdge - total) : (leftEdge + (bandWidth - total) / 2);
-    for (size_t i = 0; i < segs.size(); ++i) {
+    for (int i = 0; i < counts[idx]; i++) {
       if (i > 0) {
         renderer.drawText(f, x, y, " | ");
         x += sepW;
       }
-      const auto& s = segs[i];
-      if (s.type == StatusSegment::BATTERY) {
+      const Seg& s = buckets[idx][i];
+      if (s.isBattery) {
         drawBatteryLeft(renderer, Rect{x, y, metrics.batteryWidth, metrics.batteryHeight}, showBattery, f);
       } else {
-        renderer.drawText(f, x, y, s.text.c_str());
+        renderer.drawText(f, x, y, s.text);
       }
       x += s.width;
     }
   };
 
-  drawCluster(0, 0, topTextY);     // TL
-  drawCluster(1, 1, topTextY);     // TC
-  drawCluster(2, 2, topTextY);     // TR
-  drawCluster(3, 0, bottomTextY);  // BL
-  drawCluster(4, 1, bottomTextY);  // BC
-  drawCluster(5, 2, bottomTextY);  // BR
+  drawAnchor(0, 0, topTextY);     // TL
+  drawAnchor(1, 1, topTextY);     // TC
+  drawAnchor(2, 2, topTextY);     // TR
+  drawAnchor(3, 0, bottomTextY);  // BL
+  drawAnchor(4, 1, bottomTextY);  // BC
+  drawAnchor(5, 2, bottomTextY);  // BR
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {

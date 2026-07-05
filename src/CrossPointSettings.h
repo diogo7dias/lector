@@ -219,14 +219,14 @@ class CrossPointSettings {
   // --- New per-item status bar model (v2). Migrated from the legacy fields above
   // via applyStatusBarV2Migration(); defaults below approximate the legacy look. ---
   uint8_t sbEnabled = 1;                     // master on/off
-  uint8_t sbBatteryPos = SB_ANCHOR_TL;       // battery anchor
+  uint8_t sbBatteryPos = SB_ANCHOR_BL;       // battery anchor
   uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
-  uint8_t sbTitlePos = SB_ANCHOR_TC;         // title anchor
+  uint8_t sbTitlePos = SB_ANCHOR_BC;         // title anchor
   uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
   uint8_t sbTitleTruncate = 1;               // 1 = clip with …, 0 = greedy (drives reflow)
   uint8_t sbPagePos = SB_ANCHOR_BR;          // page-in-chapter anchor
   uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
-  uint8_t sbBookPctPos = SB_ANCHOR_OFF;      // book % (B:NN%) anchor
+  uint8_t sbBookPctPos = SB_ANCHOR_BR;       // book % (B:NN%) anchor
   uint8_t sbChapterPctPos = SB_ANCHOR_OFF;   // chapter % (C:NN%) anchor
   uint8_t sbChapterNumPos = SB_ANCHOR_OFF;   // chapter #/total (Ch N/M) anchor
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge

@@ -78,14 +78,14 @@ void applyStatusBarV2Migration(CrossPointSettings& s) {
                            s.statusBarClock != CP::STATUS_BAR_CLOCK_HIDE;
   s.sbEnabled = anyLegacyOn ? 1 : 0;
 
-  s.sbBatteryPos = s.statusBarBattery ? CP::SB_ANCHOR_TL : CP::SB_ANCHOR_OFF;
+  s.sbBatteryPos = s.statusBarBattery ? CP::SB_ANCHOR_BL : CP::SB_ANCHOR_OFF;
 
   switch (s.statusBarClock) {
     case CP::STATUS_BAR_CLOCK_RIGHT:
-      s.sbClockPos = CP::SB_ANCHOR_TR;
+      s.sbClockPos = CP::SB_ANCHOR_BR;
       break;
     case CP::STATUS_BAR_CLOCK_LEFT:
-      s.sbClockPos = CP::SB_ANCHOR_TL;
+      s.sbClockPos = CP::SB_ANCHOR_BL;
       break;
     default:
       s.sbClockPos = CP::SB_ANCHOR_OFF;
@@ -95,7 +95,7 @@ void applyStatusBarV2Migration(CrossPointSettings& s) {
   if (s.statusBarTitle == CP::HIDE_TITLE) {
     s.sbTitlePos = CP::SB_ANCHOR_OFF;
   } else {
-    s.sbTitlePos = CP::SB_ANCHOR_TC;
+    s.sbTitlePos = CP::SB_ANCHOR_BC;
     s.sbTitleSource = (s.statusBarTitle == CP::BOOK_TITLE) ? CP::SB_TITLE_BOOK : CP::SB_TITLE_CHAPTER;
   }
   s.sbTitleTruncate = 1;

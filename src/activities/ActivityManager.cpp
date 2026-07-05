@@ -21,7 +21,9 @@
 
 void ActivityManager::begin() {
   xTaskCreate(&renderTaskTrampoline, "ActivityManagerRender",
-              8192,              // Stack size
+              16384,             // Stack size (was 8192; the v2 status-bar composer
+                                 // pushed the deep reader-render chain over the 8K
+                                 // canary → boot-loop panic. RAM headroom is ample.)
               this,              // Parameters
               1,                 // Priority
               &renderTaskHandle  // Task handle

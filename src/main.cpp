@@ -546,7 +546,22 @@ void setup() {
     activityManager.goToCrashReport();
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
-    activityManager.goToReader(APP_STATE.openEpubPath);
+    // Crash guard: a render/load fault here silent-reboots straight back into the
+    // same book. readerActivityLoadCount is bumped on each such open and cleared
+    // only by a clean reader exit (onExit), so once it has climbed the book is
+    // wedging boot — fall back to Home instead of looping forever. The >= 2
+    // threshold tolerates a single legitimate silent restart (e.g. a fragmentation
+    // reboot mid-read) still resuming the book.
+    if (APP_STATE.readerActivityLoadCount >= 2) {
+      APP_STATE.readerActivityLoadCount = 0;
+      APP_STATE.openEpubPath = "";
+      APP_STATE.saveToFile();
+      activityManager.goHome();
+    } else {
+      APP_STATE.readerActivityLoadCount++;
+      APP_STATE.saveToFile();
+      activityManager.goToReader(APP_STATE.openEpubPath);
+    }
   } else if (resume == BootResume::Silent) {
     // target == home (or reader with no open book): land on home — don't fall
     // through to the sleep-wake "resume reader" logic, which fires on stale
