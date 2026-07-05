@@ -728,11 +728,15 @@ void loop() {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(20);
+      delay(50);
     } else {
       // Short delay to prevent tight loop while still being responsive.
-      // 2ms (DX34 snappy baseline) keeps button polling tight during active use.
-      delay(2);
+      // NOTE: keep this at 10ms. The render task shares priority 1 with this
+      // loop, so a shorter delay makes the loop wake often enough to preempt the
+      // render task mid e-ink waveform, which corrupts the refresh and ghosts
+      // every screen. The isAnyPressed() keepalive above is what actually makes
+      // hold-to-scroll snappy; the loop delay must not be dropped for it.
+      delay(10);
     }
   }
 }
