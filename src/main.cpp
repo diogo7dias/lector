@@ -37,6 +37,13 @@
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
+// getSettingsList() builds its ~60-entry SettingInfo list from a single braced
+// initializer-list; that backing array (all entries at once, each ~130 B with four
+// std::functions + vectors) lands on the loop task's stack during setup()'s settings
+// load. The Arduino default of 8 KB left almost no margin, and the status-bar v2
+// settings tipped it into a boot-time stack overflow. Give the loop task room.
+SET_LOOP_TASK_STACK_SIZE(16 * 1024);
+
 GfxRenderer renderer(display);
 MappedInputManager mappedInputManager(gpio, renderer);
 ActivityManager activityManager(renderer, mappedInputManager);
