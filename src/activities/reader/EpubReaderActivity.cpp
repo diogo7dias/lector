@@ -54,6 +54,18 @@ int clampPercent(int percent) {
   return percent;
 }
 
+// First-line indent in pixels for the current settings + text-column width.
+// Returns -1 in "book" mode so the parser keeps the publisher/CSS indent;
+// otherwise maps the indent percentage onto 0..viewportWidth/2 (100% = the
+// column's horizontal middle). Fed into the Section cache key so a change
+// re-indexes the chapter.
+int firstLineIndentPxFor(const int viewportWidth) {
+  if (SETTINGS.firstLineIndentMode != CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
+    return -1;
+  }
+  return viewportWidth * SETTINGS.firstLineIndentPercent / 200;
+}
+
 // SD card folder finished books are moved into. Single source of truth for the path.
 // constexpr ⇒ lives in flash .rodata, no DRAM cost.
 constexpr char READ_FOLDER[] = "/read";
@@ -881,7 +893,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                                  firstLineIndentPxFor(viewportWidth))) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       GUI.drawPopup(renderer, tr(STR_INDEXING));
@@ -891,7 +904,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                       SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                       viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                      SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, popupFn)) {
+                                      SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                                      firstLineIndentPxFor(viewportWidth), popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
         showPendingSyncSaveError();
@@ -1028,7 +1042,8 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                   SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                   viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                                  firstLineIndentPxFor(viewportWidth))) {
     return;
   }
 
@@ -1036,7 +1051,8 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                     SETTINGS.imageRendering, SETTINGS.focusReadingEnabled)) {
+                                     SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                                     firstLineIndentPxFor(viewportWidth))) {
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
   }
 }

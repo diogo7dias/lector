@@ -24,6 +24,11 @@ class ParsedText {
   bool focusReadingEnabled;
   bool isNaturalAlign;
   bool hasRtlWord;
+  // Explicit first-line indent in pixels. -1 = "book mode" (use the publisher/CSS
+  // text-indent or the default fallback). >= 0 overrides it: 0 = flush, larger =
+  // wider first-line indent. Pre-computed by the caller from the indent-percent
+  // setting and the viewport width, so no percentage math happens here.
+  int firstLineIndentPx;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -50,13 +55,15 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle())
+                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
+                      const int firstLineIndentPx = -1)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         isNaturalAlign(false),
-        hasRtlWord(false) {}
+        hasRtlWord(false),
+        firstLineIndentPx(firstLineIndentPx) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);

@@ -255,6 +255,14 @@ class CrossPointSettings {
   uint8_t uniformMargins = 1;  // 1 = all sides use screenMargin; 0 = separate H / Top / Bottom
   static constexpr uint8_t MIN_SCREEN_MARGIN = 0;
   static constexpr uint8_t MAX_SCREEN_MARGIN = 60;
+
+  // First-line paragraph indent. BOOK = use the publisher/CSS indent (default);
+  // PERCENT = custom, where 0% is flush with the other lines and 100% starts the
+  // first line at the horizontal middle of the text column.
+  enum FIRST_LINE_INDENT_MODE : uint8_t { FIRST_LINE_INDENT_BOOK = 0, FIRST_LINE_INDENT_PERCENT = 1 };
+  uint8_t firstLineIndentMode = FIRST_LINE_INDENT_BOOK;
+  uint8_t firstLineIndentPercent = 0;
+  static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";

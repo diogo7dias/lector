@@ -50,6 +50,11 @@ void SettingsActivity::rebuildSettingsLists() {
           SETTINGS.uniformMargins) {
         continue;
       }
+      // The first-line indent percentage only shows in custom (non-book) mode.
+      if (setting.nameId == StrId::STR_FIRST_LINE_INDENT_PERCENT &&
+          SETTINGS.firstLineIndentMode != CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
+        continue;
+      }
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
@@ -218,6 +223,10 @@ void SettingsActivity::toggleCurrentSetting() {
   }
   if (setting.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM) {
     openMarginPicker(&CrossPointSettings::screenMarginBottom, StrId::STR_SCREEN_MARGIN_BOTTOM);
+    return;
+  }
+  if (setting.nameId == StrId::STR_FIRST_LINE_INDENT_PERCENT) {
+    openFirstLineIndentPicker();
     return;
   }
 
@@ -396,6 +405,24 @@ void SettingsActivity::openMarginPicker(uint8_t CrossPointSettings::* field, Str
                          });
 }
 
+void SettingsActivity::openFirstLineIndentPicker() {
+  // Custom first-line indent as a percentage (0% = flush with the body text,
+  // 100% = the first line starts at the horizontal middle of the column).
+  // Slider: up/down adjusts by 5%, page jump by 25%.
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "FirstLineIndentInterval", StrId::STR_FIRST_LINE_INDENT_PERCENT,
+          StrId::STR_INDENT_STEP_HINT, SETTINGS.firstLineIndentPercent, 0,
+          CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5, 25, StrId::STR_INDENT_VALUE_FORMAT, false, true),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
 void SettingsActivity::openLineSpacingPicker() {
   // Reader line spacing is a percentage (100% = the font's natural spacing).
   // A slider (like the sleep timer) is nicer than tap-to-increment for a wide,
@@ -467,7 +494,8 @@ void SettingsActivity::render(RenderLock&&) {
                        static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
               valueText = valueBuffer;
             }
-          } else if (setting.nameId == StrId::STR_LINE_SPACING) {
+          } else if (setting.nameId == StrId::STR_LINE_SPACING ||
+                     setting.nameId == StrId::STR_FIRST_LINE_INDENT_PERCENT) {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr)) + "%";
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
@@ -487,7 +515,8 @@ void SettingsActivity::render(RenderLock&&) {
     const bool opensPicker = sel.type == SettingType::ENUM || sel.nameId == StrId::STR_TIME_TO_SLEEP ||
                              sel.nameId == StrId::STR_LINE_SPACING || sel.nameId == StrId::STR_SCREEN_MARGIN ||
                              sel.nameId == StrId::STR_SCREEN_MARGIN_TOP ||
-                             sel.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM;
+                             sel.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM ||
+                             sel.nameId == StrId::STR_FIRST_LINE_INDENT_PERCENT;
     confirmLabel = opensPicker ? tr(STR_SELECT) : tr(STR_TOGGLE);
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));

@@ -451,6 +451,11 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
   if (!isFirstLine || !isNaturalAlign) {
     return 0;
   }
+  // Explicit percentage indent (>= 0, pre-computed from the setting + viewport)
+  // overrides the book/CSS behavior: 0 px = flush with the other lines.
+  if (firstLineIndentPx >= 0) {
+    return firstLineIndentPx;
+  }
   if (blockStyle.textIndentDefined) {
     if (blockStyle.textIndent < 0 || !extraParagraphSpacing) {
       return blockStyle.textIndent;
