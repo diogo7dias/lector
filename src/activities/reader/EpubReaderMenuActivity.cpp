@@ -10,13 +10,15 @@
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                const std::string& title, const std::string& author,
-                                               const int currentPage, const int totalPages,
-                                               const int bookProgressPercent, const uint8_t currentOrientation,
-                                               const bool hasFootnotes, const bool hasBookmarks)
+                                               const std::string& chapterName, const int currentPage,
+                                               const int totalPages, const int bookProgressPercent,
+                                               const uint8_t currentOrientation, const bool hasFootnotes,
+                                               const bool hasBookmarks)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks)),
       title(title),
       author(author),
+      chapterName(chapterName),
       pendingOrientation(currentOrientation),
       currentPage(currentPage),
       totalPages(totalPages),
@@ -120,35 +122,54 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   auto metrics = UITheme::getInstance().getMetrics();
   Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 title.c_str());
+  // Battery cluster only (top-right); the title is drawn (wrapped) below so it can
+  // span as many lines as it needs instead of being truncated to one.
+  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight}, nullptr);
 
-  // "by {author}" line stacked just under the title (DX34-style header). Only
-  // occupies vertical space when an author is known.
-  int authorBandHeight = 0;
+  // Wrap the book title over multiple centered lines. Reserve space on both sides
+  // symmetrically so the first line never runs under the battery cluster (mirrors
+  // the battery geometry drawHeader uses on the right edge).
+  const int batteryReserve = 12 + metrics.batteryWidth + renderer.getTextWidth(UI_10_FONT_ID, "100%") + 12;
+  const int titleMaxWidth = screen.width - 2 * batteryReserve;
+  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::BOLD);
+  int y = screen.y + metrics.topPadding + 5;
+  for (const auto& line : titleLines) {
+    renderer.drawCenteredText(UI_12_FONT_ID, y, line.c_str(), true, EpdFontFamily::BOLD);
+    y += titleLineHeight;
+  }
+  y += 2;
+
+  const int subLineHeight = renderer.getLineHeight(UI_10_FONT_ID) + 2;
+
+  // "by {author}" — centered, only when an author is known.
   if (!author.empty()) {
     const std::string byLine = std::string(tr(STR_BY_AUTHOR_PREFIX)) + author;
     const std::string truncatedByLine =
         renderer.truncatedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40, EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, screen.y + metrics.topPadding + metrics.headerHeight,
-                              truncatedByLine.c_str());
-    authorBandHeight = renderer.getLineHeight(UI_10_FONT_ID) + 2;
+    renderer.drawCenteredText(UI_10_FONT_ID, y, truncatedByLine.c_str());
+    y += subLineHeight;
   }
 
-  // Progress summary
+  // Current chapter name — centered (falls back to "Unnamed" at the launch site).
+  if (!chapterName.empty()) {
+    const std::string truncatedChapter =
+        renderer.truncatedText(UI_10_FONT_ID, chapterName.c_str(), screen.width - 40, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, y, truncatedChapter.c_str());
+    y += subLineHeight;
+  }
+
+  // Progress summary — centered, same font/size as the chapter line:
+  // "<page>/<pages>  |  Book: <pct>%".
   std::string progressLine;
   if (totalPages > 0) {
-    progressLine = std::string(tr(STR_CHAPTER_PREFIX)) + std::to_string(currentPage) + "/" +
-                   std::to_string(totalPages) + std::string(tr(STR_PAGES_SEPARATOR));
+    progressLine = std::to_string(currentPage) + "/" + std::to_string(totalPages) + "  |  ";
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  GUI.drawSubHeader(renderer,
-                    Rect{screen.x, screen.y + metrics.topPadding + metrics.headerHeight + authorBandHeight,
-                         screen.width, metrics.tabBarHeight},
-                    progressLine.c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());
+  y += subLineHeight;
 
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + authorBandHeight +
-                         metrics.tabBarHeight + metrics.verticalSpacing;
+  const int contentTop = y + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
   GUI.drawList(
