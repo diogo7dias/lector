@@ -211,9 +211,17 @@ void FileBrowserActivity::loop() {
       lockNextConfirmRelease = false;
       return;
     }
-    if (files.empty()) return;
+    const int shortcutCount = hasRecentShortcut() ? 1 : 0;
+    if (static_cast<int>(files.size()) + shortcutCount == 0) return;
 
-    const std::string& entry = files[selectorIndex];
+    // Recent Books shortcut row (root of the book browser): open the recents list.
+    if (shortcutCount && selectorIndex == 0) {
+      activityManager.goToRecentBooks();
+      return;
+    }
+
+    const size_t fileIndex = selectorIndex - shortcutCount;
+    const std::string& entry = files[fileIndex];
     bool isDirectory = (entry.back() == '/');
 
     // Firmware picker: select file -> return path; navigate into directories normally.
@@ -239,11 +247,14 @@ void FileBrowserActivity::loop() {
           if (removeDirFile(fullPath)) {
             LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
-            if (files.empty()) {
+            // Clamp against the full row count (files + the Recent Books shortcut
+            // row, if present) so deleting the last file lands on a valid row.
+            const int postRowCount = static_cast<int>(files.size()) + (hasRecentShortcut() ? 1 : 0);
+            if (postRowCount == 0) {
               selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
+            } else if (selectorIndex >= static_cast<size_t>(postRowCount)) {
               // Move selection to the new "last" item
-              selectorIndex = files.size() - 1;
+              selectorIndex = postRowCount - 1;
             }
 
             requestUpdate(true);
@@ -302,7 +313,7 @@ void FileBrowserActivity::loop() {
     }
   }
 
-  int listSize = static_cast<int>(files.size());
+  int listSize = static_cast<int>(files.size()) + (hasRecentShortcut() ? 1 : 0);
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
@@ -362,15 +373,30 @@ void FileBrowserActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
-  if (files.empty()) {
+  // A "Recent Books" shortcut row is pinned at the top only at the SD root of the
+  // book browser; it occupies row 0 and shifts the real files down by one.
+  const int shortcutCount = hasRecentShortcut() ? 1 : 0;
+  const size_t rowCount = files.size() + shortcutCount;
+  if (rowCount == 0) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
     GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); }, false);
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, rowCount, selectorIndex,
+        [this, shortcutCount](int index) -> std::string {
+          if (shortcutCount && index == 0) return tr(STR_MENU_RECENT_BOOKS);
+          return getFileName(files[index - shortcutCount]);
+        },
+        nullptr,
+        [this, shortcutCount](int index) {
+          if (shortcutCount && index == 0) return Recent;
+          return UITheme::getFileIcon(files[index - shortcutCount]);
+        },
+        [this, shortcutCount](int index) -> std::string {
+          if (shortcutCount && index == 0) return "";
+          return getFileExtension(files[index - shortcutCount]);
+        },
+        false);
   }
 
   // Full path display
@@ -401,20 +427,24 @@ void FileBrowserActivity::render(RenderLock&&) {
   }
 
   // Help text
+  const bool emptyList = rowCount == 0;
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
-                                            files.empty() ? "" : tr(STR_DIR_DOWN));
+  const char* confirmLabel = emptyList ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, emptyList ? "" : tr(STR_DIR_UP),
+                                            emptyList ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
 
 size_t FileBrowserActivity::findEntry(const std::string& name) const {
+  // Returned value is a selector row index, so offset past the pinned Recent
+  // Books shortcut row when it is present (SD root of the book browser).
+  const size_t shortcutCount = hasRecentShortcut() ? 1 : 0;
   for (size_t i = 0; i < files.size(); i++)
-    if (files[i] == name) return i;
+    if (files[i] == name) return i + shortcutCount;
   return 0;
 }

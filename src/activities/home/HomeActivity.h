@@ -40,12 +40,12 @@ class HomeActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
 
-  // Convert HomeMenuItem to menu index (used in onEnter)
+  // Convert HomeMenuItem to menu index (used in onEnter). Recent Books no longer
+  // lives on the home menu — it is reached from the top of the file browser — so
+  // it is intentionally absent here; a RECENTS request falls through to index 0.
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
     int i = 0;
     if (item == HomeMenuItem::FILE_BROWSER) return i;
-    ++i;
-    if (item == HomeMenuItem::RECENTS) return i;
     ++i;
     if (item == HomeMenuItem::OPDS_BROWSER) return hasOpdsUrl ? i : 0;
     if (hasOpdsUrl) ++i;
@@ -59,7 +59,6 @@ class HomeActivity final : public Activity {
   static HomeMenuItem indexToMenuItem(int idx, bool hasOpdsUrl) {
     int i = 0;
     if (idx == i++) return HomeMenuItem::FILE_BROWSER;
-    if (idx == i++) return HomeMenuItem::RECENTS;
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
@@ -68,7 +67,6 @@ class HomeActivity final : public Activity {
   void onSelectBook(const std::string& path);
   void promptRemoveBook(const std::string& path, const std::string& title);
   void onFileBrowserOpen();
-  void onRecentsOpen();
   void onSettingsOpen();
   void onFileTransferOpen();
   void onOpdsBrowserOpen();

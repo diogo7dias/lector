@@ -40,7 +40,7 @@ std::string getHomeHeaderVersionLabel() {
 }  // namespace
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 3;  // File Browser, File transfer, Settings (Recent Books moved into the file browser)
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -239,9 +239,6 @@ void HomeActivity::loop() {
         case HomeMenuItem::FILE_BROWSER:
           onFileBrowserOpen();
           break;
-        case HomeMenuItem::RECENTS:
-          onRecentsOpen();
-          break;
         case HomeMenuItem::OPDS_BROWSER:
           onOpdsBrowserOpen();
           break;
@@ -295,12 +292,12 @@ void HomeActivity::render(RenderLock&&) {
     }
 
     // Menu items (no per-book "Continue Reading" — the list itself is that).
-    std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                          tr(STR_SETTINGS_TITLE)};
-    std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+    // Recent Books is reached from the top of the file browser, not from here.
+    std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+    std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
     if (hasOpdsServers) {
-      menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-      menuIcons.insert(menuIcons.begin() + 2, Library);
+      menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
+      menuIcons.insert(menuIcons.begin() + 1, Library);
     }
 
     // Menu block is pinned to the bottom; the list fills the band above it.
@@ -354,14 +351,13 @@ void HomeActivity::render(RenderLock&&) {
                           recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
-  // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+  // Build menu items dynamically (Recent Books now lives in the file browser).
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -433,8 +429,6 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
 }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
-
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

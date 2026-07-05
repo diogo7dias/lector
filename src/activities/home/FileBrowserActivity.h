@@ -38,6 +38,11 @@ class FileBrowserActivity final : public Activity {
   void loadFiles();
   size_t findEntry(const std::string& name) const;
 
+  // A "Recent Books" shortcut row is pinned to the top of the list only at the SD
+  // root in the normal book browser (never in the firmware picker or subfolders).
+  // When present it occupies selector index 0 and shifts the real files down by one.
+  bool hasRecentShortcut() const { return mode == Mode::Books && basepath == "/"; }
+
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
                                Mode mode = Mode::Books)

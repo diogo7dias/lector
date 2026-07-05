@@ -214,7 +214,9 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
     if (activityName == "FileBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
     } else if (activityName == "RecentBooks") {
-      initialMenuItem = HomeMenuItem::RECENTS;
+      // Recent Books is entered from the top of the file browser, so returning
+      // Home from it lands on the Browse Files tile (Recents is no longer a tile).
+      initialMenuItem = HomeMenuItem::FILE_BROWSER;
     } else if (activityName == "OpdsBookBrowser") {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
     } else if (activityName == "CrossPointWebServer") {
