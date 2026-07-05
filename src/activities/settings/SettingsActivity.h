@@ -166,6 +166,7 @@ class SettingsActivity final : public Activity {
   void toggleCurrentSetting();
   void openSleepTimeoutPicker();
   void openLineSpacingPicker();
+  void openMarginPicker(uint8_t CrossPointSettings::* field, StrId titleId);
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 

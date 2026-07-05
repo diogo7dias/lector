@@ -45,6 +45,11 @@ void SettingsActivity::rebuildSettingsLists() {
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       displaySettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_READER) {
+      // Top/Bottom margins only apply, and only show, when uniform margins are off.
+      if ((setting.nameId == StrId::STR_SCREEN_MARGIN_TOP || setting.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM) &&
+          SETTINGS.uniformMargins) {
+        continue;
+      }
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
@@ -203,10 +208,29 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
+  if (setting.nameId == StrId::STR_SCREEN_MARGIN) {
+    openMarginPicker(&CrossPointSettings::screenMargin, StrId::STR_SCREEN_MARGIN);
+    return;
+  }
+  if (setting.nameId == StrId::STR_SCREEN_MARGIN_TOP) {
+    openMarginPicker(&CrossPointSettings::screenMarginTop, StrId::STR_SCREEN_MARGIN_TOP);
+    return;
+  }
+  if (setting.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM) {
+    openMarginPicker(&CrossPointSettings::screenMarginBottom, StrId::STR_SCREEN_MARGIN_BOTTOM);
+    return;
+  }
+
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+    // Turning uniform margins on seeds top/bottom from the horizontal value so
+    // toggling back off inherits it instead of snapping to a stale value.
+    if (setting.valuePtr == &CrossPointSettings::uniformMargins && SETTINGS.uniformMargins) {
+      SETTINGS.screenMarginTop = SETTINGS.screenMargin;
+      SETTINGS.screenMarginBottom = SETTINGS.screenMargin;
+    }
   } else if (setting.type == SettingType::ENUM) {
     // Font family keeps its dedicated preview picker.
     if (setting.nameId == StrId::STR_FONT_FAMILY && setting.valueGetter && setting.valueSetter) {
@@ -355,6 +379,23 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
+void SettingsActivity::openMarginPicker(uint8_t CrossPointSettings::* field, StrId titleId) {
+  // Reader margins are a fine 0..60 range, so a slider (up/down = 1, page = 10)
+  // beats tap-to-increment. Shared by the uniform/horizontal, top and bottom
+  // margin rows; the caller passes which field to edit and its title.
+  startActivityForResult(std::make_unique<IntervalSelectionActivity>(
+                             renderer, mappedInput, "MarginInterval", titleId, StrId::STR_MARGIN_STEP_HINT,
+                             SETTINGS.*field, CrossPointSettings::MIN_SCREEN_MARGIN,
+                             CrossPointSettings::MAX_SCREEN_MARGIN, 1, 10, StrId::STR_MARGIN_VALUE_FORMAT, false, true),
+                         [this, field](const ActivityResult& result) {
+                           if (!result.isCancelled) {
+                             SETTINGS.*field = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+                             SETTINGS.saveToFile();
+                           }
+                           requestUpdate();
+                         });
+}
+
 void SettingsActivity::openLineSpacingPicker() {
   // Reader line spacing is a percentage (100% = the font's natural spacing).
   // A slider (like the sleep timer) is nicer than tap-to-increment for a wide,
@@ -444,7 +485,9 @@ void SettingsActivity::render(RenderLock&&) {
   } else {
     const auto& sel = (*currentSettings)[selectedSettingIndex - 1];
     const bool opensPicker = sel.type == SettingType::ENUM || sel.nameId == StrId::STR_TIME_TO_SLEEP ||
-                             sel.nameId == StrId::STR_LINE_SPACING;
+                             sel.nameId == StrId::STR_LINE_SPACING || sel.nameId == StrId::STR_SCREEN_MARGIN ||
+                             sel.nameId == StrId::STR_SCREEN_MARGIN_TOP ||
+                             sel.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM;
     confirmLabel = opensPicker ? tr(STR_SELECT) : tr(STR_TOGGLE);
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
