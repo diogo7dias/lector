@@ -86,6 +86,11 @@ class FontDownloadActivity : public Activity {
   int downloadingFamilyIndex_ = 0;
   std::string errorMessage_;
   bool cancelRequested_ = false;
+  // Throttle download repaints to once per whole-percent change (the chunk
+  // callback fires far more often), and clean-wipe the first download frame so
+  // the prior keyboard screen doesn't ghost through the many FAST refreshes.
+  int lastRenderedPercent_ = -1;
+  bool downloadFrameClean_ = false;
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();

@@ -272,6 +272,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     fileProgress_ = 0;
     fileTotal_ = 0;
     cancelRequested_ = false;
+    downloadFrameClean_ = false;  // first download frame does a clean wipe of the prior screen
   }
   requestUpdateAndWait();
 
@@ -289,6 +290,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       RenderLock lock(*this);
       fileProgress_ = 0;
       fileTotal_ = file.size;
+      lastRenderedPercent_ = -1;
     }
     requestUpdateAndWait();
 
@@ -307,7 +309,13 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
               mappedInput.wasPressed(MappedInputManager::Button::Back)) {
             cancelRequested_ = true;
           }
-          requestUpdate(true);
+          // Only repaint when the visible whole-percent changes (or on cancel);
+          // the callback fires per chunk, which would ghost the panel to noise.
+          const int pct = total > 0 ? static_cast<int>(downloaded * 100 / total) : 0;
+          if (pct != lastRenderedPercent_ || cancelRequested_) {
+            lastRenderedPercent_ = pct;
+            requestUpdate(true);
+          }
         },
         &cancelRequested_);
 
@@ -595,7 +603,51 @@ void FontDownloadActivity::render(RenderLock&&) {
 
     std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + family.name + " (" +
                              std::to_string(currentFileIndex_ + 1) + "/" + std::to_string(currentFileTotal_) + ")";
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, statusText.c_str());
+
+    // Word-wrap to the content width (long font names clip off both edges
+    // otherwise), breaking an over-long single word by character. Draw the lines
+    // centered as a block ending just above the progress bar.
+    const int maxTextW = pageWidth - metrics.contentSidePadding * 2;
+    std::vector<std::string> statusLines;
+    std::string line;
+    size_t i = 0;
+    while (i < statusText.size()) {
+      while (i < statusText.size() && statusText[i] == ' ') i++;
+      if (i >= statusText.size()) break;
+      size_t wordEnd = i;
+      while (wordEnd < statusText.size() && statusText[wordEnd] != ' ') wordEnd++;
+      const std::string word = statusText.substr(i, wordEnd - i);
+      const std::string candidate = line.empty() ? word : line + " " + word;
+      if (renderer.getTextWidth(UI_10_FONT_ID, candidate.c_str()) <= maxTextW) {
+        line = candidate;
+      } else {
+        if (!line.empty()) {
+          statusLines.push_back(line);
+          line.clear();
+        }
+        if (renderer.getTextWidth(UI_10_FONT_ID, word.c_str()) > maxTextW) {
+          std::string chunk;
+          for (char c : word) {
+            if (!chunk.empty() && renderer.getTextWidth(UI_10_FONT_ID, (chunk + c).c_str()) > maxTextW) {
+              statusLines.push_back(chunk);
+              chunk.clear();
+            }
+            chunk += c;
+          }
+          line = chunk;
+        } else {
+          line = word;
+        }
+      }
+      i = wordEnd;
+    }
+    if (!line.empty()) statusLines.push_back(line);
+
+    int statusY = centerY - lineHeight - static_cast<int>(statusLines.size() - 1) * lineHeight;
+    for (const auto& statusLine : statusLines) {
+      renderer.drawCenteredText(UI_10_FONT_ID, statusY, statusLine.c_str());
+      statusY += lineHeight;
+    }
 
     float progress = 0;
     if (fileTotal_ > 0) {
@@ -624,5 +676,13 @@ void FontDownloadActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
-  renderer.displayBuffer();
+  // The download screen follows the keyboard/list, which ghosts through FAST
+  // refreshes. Do one clean HALF_REFRESH the first time it paints to wipe that,
+  // then FAST for the throttled per-percent bar updates.
+  HalDisplay::RefreshMode mode = HalDisplay::FAST_REFRESH;
+  if (state_ == DOWNLOADING && !downloadFrameClean_) {
+    mode = HalDisplay::HALF_REFRESH;
+    downloadFrameClean_ = true;
+  }
+  renderer.displayBuffer(mode);
 }
