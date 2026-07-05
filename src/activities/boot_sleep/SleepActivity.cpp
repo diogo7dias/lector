@@ -7,6 +7,7 @@
 #include <I18n.h>
 #include <Txt.h>
 #include <Xtc.h>
+#include <esp_random.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -15,6 +16,11 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "images/bootlogo0.h"
+#include "images/bootlogo1.h"
+#include "images/bootlogo2.h"
+#include "images/bootlogo3.h"
+#include "images/bootlogo4.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -50,9 +56,28 @@ void SleepActivity::onEnter() {
       } else {
         return renderCustomSleepScreen();
       }
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::UNTIL_DEATH):
+      return renderUntilDeathSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
+}
+
+void SleepActivity::renderUntilDeathSleepScreen() const {
+  // "Until Death": show one of the "READ TILL YOU DIE" skull-crest boot logos at
+  // random, full-frame and centered, with no moon/text indicator — just the image
+  // the user sees on unlock. A fresh random pick every lock (hardware RNG).
+  static const uint8_t* const kSleepLogos[] = {BootLogo0, BootLogo1, BootLogo2, BootLogo3, BootLogo4};
+  constexpr int kSleepLogoCount = 5;
+  constexpr int kLogoSize = 384;  // multiple of 8: drawImage packs rows at width/8 bytes
+
+  const auto pageWidth = renderer.getScreenWidth();
+  const auto pageHeight = renderer.getScreenHeight();
+  const uint8_t* logo = kSleepLogos[esp_random() % kSleepLogoCount];
+
+  renderer.clearScreen();
+  renderer.drawImage(logo, (pageWidth - kLogoSize) / 2, (pageHeight - kLogoSize) / 2, kLogoSize, kLogoSize);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
