@@ -20,6 +20,10 @@ class CrossPointState {
   // the in-book menu. Incremented in memory on each forward page turn and
   // persisted opportunistically with the rest of the state (no per-page SD write).
   uint32_t sessionPagesRead = 0;
+  // Index (0..4) of the skull crest the "Until Death" sleep screen picked at
+  // lock time. Reused as the wake boot logo so an unlock reveals the same
+  // wallpaper instead of a fresh random crest.
+  uint8_t lastUntilDeathLogo = 0;
 
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.

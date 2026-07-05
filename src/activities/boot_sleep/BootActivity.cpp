@@ -4,6 +4,8 @@
 #include <I18n.h>
 #include <esp_random.h>
 
+#include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "fontIds.h"
 #include "images/bootlogo0.h"
 #include "images/bootlogo1.h"
@@ -22,7 +24,12 @@ void BootActivity::onEnter() {
   static const uint8_t* const kBootLogos[] = {BootLogo0, BootLogo1, BootLogo2, BootLogo3, BootLogo4};
   constexpr int kBootLogoCount = 5;
   constexpr int kLogoSize = 384;  // multiple of 8: drawImage packs rows at width/8 bytes
-  const uint8_t* logo = kBootLogos[esp_random() % kBootLogoCount];
+  // With the "Until Death" sleep screen the panel is already showing the crest it
+  // picked at lock time; reuse that exact one so unlocking reveals the current
+  // wallpaper instead of a fresh random crest. Any other sleep mode: random.
+  const uint8_t* logo = (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::UNTIL_DEATH)
+                            ? kBootLogos[APP_STATE.lastUntilDeathLogo % kBootLogoCount]
+                            : kBootLogos[esp_random() % kBootLogoCount];
   const int logoX = (pageWidth - kLogoSize) / 2;
   const int logoY = (pageHeight - kLogoSize) / 2 - 50;
 

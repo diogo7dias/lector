@@ -73,7 +73,14 @@ void SleepActivity::renderUntilDeathSleepScreen() const {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  const uint8_t* logo = kSleepLogos[esp_random() % kSleepLogoCount];
+
+  // Remember which crest we picked so the wake boot logo (BootActivity) can show
+  // the very same one — an unlock then reveals the current wallpaper, not a
+  // fresh random crest.
+  const uint8_t logoIndex = static_cast<uint8_t>(esp_random() % kSleepLogoCount);
+  APP_STATE.lastUntilDeathLogo = logoIndex;
+  APP_STATE.saveToFile();
+  const uint8_t* logo = kSleepLogos[logoIndex];
 
   renderer.clearScreen();
   renderer.drawImage(logo, (pageWidth - kLogoSize) / 2, (pageHeight - kLogoSize) / 2, kLogoSize, kLogoSize);
