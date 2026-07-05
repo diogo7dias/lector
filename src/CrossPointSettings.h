@@ -68,6 +68,29 @@ class CrossPointSettings {
 
   enum STATUS_BAR_CLOCK_MODE { STATUS_BAR_CLOCK_HIDE = 0, STATUS_BAR_CLOCK_RIGHT = 1, STATUS_BAR_CLOCK_LEFT = 2 };
 
+  // --- New per-item status bar model (v2). Each text item is parked at one of six
+  // anchors (or Off). The legacy statusBar* fields above are kept only to migrate
+  // old configs into these; they will be removed once the new renderer is the only
+  // path. ---
+  enum STATUS_BAR_ANCHOR {
+    SB_ANCHOR_OFF = 0,
+    SB_ANCHOR_TL = 1,  // top-left
+    SB_ANCHOR_TC = 2,  // top-center
+    SB_ANCHOR_TR = 3,  // top-right
+    SB_ANCHOR_BL = 4,  // bottom-left
+    SB_ANCHOR_BC = 5,  // bottom-center
+    SB_ANCHOR_BR = 6,  // bottom-right
+    STATUS_BAR_ANCHOR_COUNT
+  };
+  enum STATUS_BAR_TITLE_SOURCE { SB_TITLE_BOOK = 0, SB_TITLE_CHAPTER = 1, STATUS_BAR_TITLE_SOURCE_COUNT };
+  enum STATUS_BAR_PAGE_FORMAT {
+    SB_PAGE_FRACTION = 0,  // "3/40"
+    SB_PAGE_LEFT = 1,      // "8 left"
+    STATUS_BAR_PAGE_FORMAT_COUNT
+  };
+  enum STATUS_BAR_EDGE { SB_EDGE_OFF = 0, SB_EDGE_TOP = 1, SB_EDGE_BOTTOM = 2, STATUS_BAR_EDGE_COUNT };
+  enum STATUS_BAR_BAR_THICKNESS { SB_BAR_SLIM = 0, SB_BAR_MEDIUM = 1, SB_BAR_FAT = 2, STATUS_BAR_BAR_THICKNESS_COUNT };
+
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
     LANDSCAPE_CW = 1,   // 800x480 logical coordinates, rotated 180° (swap top/bottom)
@@ -193,6 +216,22 @@ class CrossPointSettings {
   uint8_t statusBarTitle = CHAPTER_TITLE;
   uint8_t statusBarBattery = 1;
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
+  // --- New per-item status bar model (v2). Migrated from the legacy fields above
+  // via applyStatusBarV2Migration(); defaults below approximate the legacy look. ---
+  uint8_t sbEnabled = 1;                     // master on/off
+  uint8_t sbBatteryPos = SB_ANCHOR_TL;       // battery anchor
+  uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
+  uint8_t sbTitlePos = SB_ANCHOR_TC;         // title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
+  uint8_t sbTitleTruncate = 1;               // 1 = clip with …, 0 = greedy (drives reflow)
+  uint8_t sbPagePos = SB_ANCHOR_BR;          // page-in-chapter anchor
+  uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
+  uint8_t sbBookPctPos = SB_ANCHOR_OFF;      // book % (B:NN%) anchor
+  uint8_t sbChapterPctPos = SB_ANCHOR_OFF;   // chapter % (C:NN%) anchor
+  uint8_t sbChapterNumPos = SB_ANCHOR_OFF;   // chapter #/total (Ch N/M) anchor
+  uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge
+  uint8_t sbChapterBar = SB_EDGE_OFF;        // chapter progress bar edge
+  uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
   // Clock display in status bar (X3 only, requires DS3231 RTC)
   uint8_t statusBarClock = STATUS_BAR_CLOCK_HIDE;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.

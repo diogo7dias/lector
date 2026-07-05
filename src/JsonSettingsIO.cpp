@@ -65,6 +65,63 @@ void applyLegacyStatusBarSettings(CrossPointSettings& settings) {
   }
 }
 
+// Migrate the legacy fixed-slot status bar fields into the new per-item (v2) model.
+// Called after the generic load loop (so the legacy statusBar* fields already hold
+// the user's real values) and only when the file predates the v2 model (no sbEnabled
+// key). The chosen anchors approximate the legacy layout: battery top-left, clock
+// top-right/left, title top-center, page-in-chapter + book% bottom-right (joined),
+// progress bar on the bottom edge.
+void applyStatusBarV2Migration(CrossPointSettings& s) {
+  using CP = CrossPointSettings;
+  const bool anyLegacyOn = s.statusBarBattery || s.statusBarChapterPageCount || s.statusBarBookProgressPercentage ||
+                           s.statusBarTitle != CP::HIDE_TITLE || s.statusBarProgressBar != CP::HIDE_PROGRESS ||
+                           s.statusBarClock != CP::STATUS_BAR_CLOCK_HIDE;
+  s.sbEnabled = anyLegacyOn ? 1 : 0;
+
+  s.sbBatteryPos = s.statusBarBattery ? CP::SB_ANCHOR_TL : CP::SB_ANCHOR_OFF;
+
+  switch (s.statusBarClock) {
+    case CP::STATUS_BAR_CLOCK_RIGHT:
+      s.sbClockPos = CP::SB_ANCHOR_TR;
+      break;
+    case CP::STATUS_BAR_CLOCK_LEFT:
+      s.sbClockPos = CP::SB_ANCHOR_TL;
+      break;
+    default:
+      s.sbClockPos = CP::SB_ANCHOR_OFF;
+      break;
+  }
+
+  if (s.statusBarTitle == CP::HIDE_TITLE) {
+    s.sbTitlePos = CP::SB_ANCHOR_OFF;
+  } else {
+    s.sbTitlePos = CP::SB_ANCHOR_TC;
+    s.sbTitleSource = (s.statusBarTitle == CP::BOOK_TITLE) ? CP::SB_TITLE_BOOK : CP::SB_TITLE_CHAPTER;
+  }
+  s.sbTitleTruncate = 1;
+
+  s.sbPagePos = s.statusBarChapterPageCount ? CP::SB_ANCHOR_BR : CP::SB_ANCHOR_OFF;
+  s.sbPageFormat = CP::SB_PAGE_FRACTION;
+  s.sbBookPctPos = s.statusBarBookProgressPercentage ? CP::SB_ANCHOR_BR : CP::SB_ANCHOR_OFF;
+  s.sbChapterPctPos = CP::SB_ANCHOR_OFF;
+  s.sbChapterNumPos = CP::SB_ANCHOR_OFF;
+
+  s.sbBookBar = (s.statusBarProgressBar == CP::BOOK_PROGRESS) ? CP::SB_EDGE_BOTTOM : CP::SB_EDGE_OFF;
+  s.sbChapterBar = (s.statusBarProgressBar == CP::CHAPTER_PROGRESS) ? CP::SB_EDGE_BOTTOM : CP::SB_EDGE_OFF;
+
+  switch (s.statusBarProgressBarThickness) {
+    case CP::PROGRESS_BAR_THIN:
+      s.sbBarThickness = CP::SB_BAR_SLIM;
+      break;
+    case CP::PROGRESS_BAR_THICK:
+      s.sbBarThickness = CP::SB_BAR_FAT;
+      break;
+    default:
+      s.sbBarThickness = CP::SB_BAR_MEDIUM;
+      break;
+  }
+}
+
 // ---- CrossPointState ----
 
 bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
@@ -189,6 +246,10 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
     applyLegacyStatusBarSettings(s);
   }
 
+  // Detect a pre-v2-status-bar file (no per-item anchors yet). The migration itself
+  // runs *after* the generic loop, once the legacy statusBar* fields hold real values.
+  const bool preV2StatusBar = doc["sbEnabled"].isNull();
+
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
     // Dynamic entries (KOReader etc.) are stored in their own files — skip.
@@ -232,6 +293,14 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
       }
       s.*(info.valuePtr) = v;
     }
+  }
+
+  // Map the legacy fixed-slot status bar into the new per-item anchor model. Done
+  // after the loop so the legacy fields hold the user's real values; resave so the
+  // migrated anchors persist and this only runs once.
+  if (preV2StatusBar) {
+    applyStatusBarV2Migration(s);
+    if (needsResave) *needsResave = true;
   }
 
   if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
