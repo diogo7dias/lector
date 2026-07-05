@@ -67,6 +67,10 @@ class HalGPIO {
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;
+  // True while any button is physically held down (edge-independent). Used by the
+  // main loop to keep the CPU at full speed during a held button (hold-to-scroll)
+  // instead of throttling mid-press.
+  bool isAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;

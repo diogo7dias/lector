@@ -638,9 +638,12 @@ void loop() {
     }
   }
 
-  // Check for any user activity (button press or release) or active background work
+  // Check for any user activity (button press or release), a button still held
+  // down (hold-to-scroll), or active background work. isAnyPressed() keeps the
+  // inactivity timer fresh for the whole duration of a hold so the CPU never
+  // throttles mid-press and page-turns stay snappy.
   static unsigned long lastActivityTime = millis();
-  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || halTiltSensor.hadActivity() ||
+  if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.isAnyPressed() || halTiltSensor.hadActivity() ||
       activityManager.preventAutoSleep()) {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
@@ -725,10 +728,11 @@ void loop() {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(50);
+      delay(20);
     } else {
-      // Short delay to prevent tight loop while still being responsive
-      delay(10);
+      // Short delay to prevent tight loop while still being responsive.
+      // 2ms (DX34 snappy baseline) keeps button polling tight during active use.
+      delay(2);
     }
   }
 }
