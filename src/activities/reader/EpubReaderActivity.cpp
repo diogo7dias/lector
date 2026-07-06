@@ -261,6 +261,13 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Grab-quote / highlight mode intercepts ALL input while active. Placed before
+  // the end-of-book / recents / page-turn logic so selection fully owns the reader.
+  if (highlights_.state() != crosspoint::reader::HighlightController::State::NONE) {
+    loopHighlightMode();
+    return;
+  }
+
   // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
   // finished. Two independent finished-book features key off this same condition.
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
@@ -578,6 +585,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   };
 
   switch (action) {
+    case EpubReaderMenuActivity::MenuAction::HIGHLIGHT_QUOTE: {
+      enterHighlightMode();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
@@ -898,8 +909,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true, sbTitleTop ? sbTitleExtraPx : 0);
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true, sbTitleTop ? 0 : sbTitleExtraPx);
   const int autoTurnBand = automaticPageTurnActive ? UITheme::getInstance().getMetrics().statusBarVerticalMargin : 0;
-  orientedMarginTop += std::max<int>(topMargin, std::max(sbTop, autoTurnBand));
-  orientedMarginBottom += std::max<int>(bottomMargin, sbBottom);
+  // The user's top/bottom margin is ADDED on top of the status-bar band (a real
+  // gap between the bar and the text), mirroring the direct add for left/right.
+  // Previously this was max(margin, band), so any side holding status-bar items
+  // swallowed that side's margin until it exceeded the band (~19px+), making
+  // top/bottom feel unenforced and asymmetric with the horizontal margins. On an
+  // edge with no bar items the band is 0, so the margin applies straight from the
+  // screen edge. Margin changes shift the viewport, which re-paginates the cache.
+  orientedMarginTop += std::max<int>(sbTop, autoTurnBand) + topMargin;
+  orientedMarginBottom += sbBottom + bottomMargin;
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -909,22 +927,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
 
-    if (!section->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-                                  firstLineIndentPxFor(viewportWidth))) {
+    if (!section->loadSectionFile(
+            SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+            SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
+            SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+            firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
       LOG_DBG("ERS", "Cache not found, building...");
 
       GUI.drawPopup(renderer, tr(STR_INDEXING));
 
       const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
 
-      if (!section->createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                      SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                      viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                      SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-                                      firstLineIndentPxFor(viewportWidth), popupFn)) {
+      if (!section->createSectionFile(
+              SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+              SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
+              SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+              firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
         showPendingSyncSaveError();
@@ -1058,20 +1076,20 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
   }
 
   Section nextSection(epub, nextSpineIndex, renderer);
-  if (nextSection.loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                  SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                  viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-                                  firstLineIndentPxFor(viewportWidth))) {
+  if (nextSection.loadSectionFile(
+          SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+          SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
+          SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+          firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
     return;
   }
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d", nextSpineIndex);
-  if (!nextSection.createSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                                     SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                                     viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                                     SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-                                     firstLineIndentPxFor(viewportWidth))) {
+  if (!nextSection.createSectionFile(
+          SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
+          SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
+          SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+          firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
     LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
   }
 }
@@ -1079,11 +1097,420 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
 }
+
+// ── Grab-quote / highlight selection (ported from DX34) ──────────────────────
+// State machine + word-position cache live in HighlightController. This activity
+// owns rendering (solid frame + inverted word cursor + black quote splash),
+// input routing, quote extraction and the atomic SD save.
+
+std::vector<EpubReaderActivity::WordInfo> EpubReaderActivity::buildWordList(const Page& page, const int xOffset,
+                                                                            const int yOffset, const int fontId) const {
+  std::vector<WordInfo> result;
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const auto& tb = line.getBlock();
+    if (!tb) continue;
+    const auto& words = tb->getWords();
+    const auto& xpos = tb->getWordXpos();
+    const auto& styles = tb->getWordStyles();
+    for (size_t i = 0; i < words.size(); i++) {
+      WordInfo wi;
+      wi.x = static_cast<int>(xpos[i]) + line.xPos + xOffset;
+      wi.y = line.yPos + yOffset;
+      wi.style = styles[i];
+      wi.width = renderer.getTextWidth(fontId, words[i].c_str(), wi.style);
+      wi.text = words[i];
+      result.push_back(std::move(wi));
+    }
+  }
+  return result;
+}
+
+void EpubReaderActivity::rebuildHighlightWordCache(const int xOffset, const int yOffset) {
+  std::vector<crosspoint::reader::WordPos> words;
+  auto page = section ? section->loadPageFromSectionFile() : nullptr;
+  if (page) {
+    const int fontId = SETTINGS.getReaderFontId();
+    for (const auto& el : page->elements) {
+      if (el->getTag() != TAG_PageLine) continue;
+      const auto& line = static_cast<const PageLine&>(*el);
+      const auto& tb = line.getBlock();
+      if (!tb) continue;
+      const auto& wordsRef = tb->getWords();
+      const auto& xpos = tb->getWordXpos();
+      const auto& styles = tb->getWordStyles();
+      for (size_t i = 0; i < wordsRef.size(); i++) {
+        crosspoint::reader::WordPos wp;
+        wp.x = static_cast<int16_t>(static_cast<int>(xpos[i]) + line.xPos + xOffset);
+        wp.y = static_cast<int16_t>(line.yPos + yOffset);
+        wp.width = static_cast<int16_t>(renderer.getTextWidth(fontId, wordsRef[i].c_str(), styles[i]));
+        words.push_back(wp);
+      }
+    }
+  }
+  highlights_.setWordsForPage(section ? section->currentPage : 0, std::move(words));
+}
+
+void EpubReaderActivity::enterHighlightMode() {
+  if (!section || section->pageCount == 0) return;
+  highlights_.enter();
+  requestUpdate();
+}
+
+void EpubReaderActivity::exitHighlightMode() {
+  highlights_.exit();
+  requestUpdate();
+}
+
+void EpubReaderActivity::highlightMoveCursor(const int direction) {
+  if (!section) return;
+  const crosspoint::reader::PageContext ctx{section->currentPage, section->pageCount, highlights_.wordCount()};
+  const auto r = highlights_.moveCursor(direction, ctx);
+  if (r.pageDelta != 0) section->currentPage += r.pageDelta;
+  if (r.stateChanged) requestUpdate();
+}
+
+void EpubReaderActivity::highlightMoveCursorLine(const int direction) {
+  if (!section) return;
+  const crosspoint::reader::PageContext ctx{section->currentPage, section->pageCount, highlights_.wordCount()};
+  const auto r = highlights_.moveCursorLine(direction, ctx);
+  if (r.pageDelta != 0) section->currentPage += r.pageDelta;
+  if (r.stateChanged) requestUpdate();
+}
+
+void EpubReaderActivity::highlightConfirmSelection() {
+  if (!section) return;
+  const auto r = highlights_.confirm(currentSpineIndex, section->currentPage, millis());
+  if (r.pageDelta != 0) section->currentPage += r.pageDelta;
+  // Quote text is NOT extracted here — it is deferred to the save (after the 3s
+  // hold) so the inverted highlight appears instantly on Confirm with no
+  // SD-page-load stall. The overlay is drawn from cached word geometry.
+  if (r.stateChanged) requestUpdate();
+}
+
+void EpubReaderActivity::handleHighlightInput() {
+  using Button = MappedInputManager::Button;
+  if (!section) {
+    exitHighlightMode();
+    return;
+  }
+  // Back cancels selection.
+  if (mappedInput.wasReleased(Button::Back)) {
+    exitHighlightMode();
+    return;
+  }
+  // Confirm (release) advances the selection state machine.
+  if (mappedInput.wasReleased(Button::Confirm)) {
+    highlightConfirmSelection();
+    return;
+  }
+  // Up/Down = move cursor by line.
+  if (mappedInput.wasPressed(Button::Up)) {
+    highlightMoveCursorLine(-1);
+    return;
+  }
+  if (mappedInput.wasPressed(Button::Down)) {
+    highlightMoveCursorLine(+1);
+    return;
+  }
+  // Left / page-back = previous word.
+  if (mappedInput.wasPressed(Button::PageBack) || mappedInput.wasPressed(Button::Left)) {
+    highlightMoveCursor(-1);
+    return;
+  }
+  // Right / page-forward = next word.
+  if (mappedInput.wasPressed(Button::PageForward) || mappedInput.wasPressed(Button::Right)) {
+    highlightMoveCursor(+1);
+    return;
+  }
+}
+
+void EpubReaderActivity::loopHighlightMode() {
+  using State = crosspoint::reader::HighlightController::State;
+  // SHOW_UNDERLINE: hold the inverted selection for kUnderlineTimeoutMs, then
+  // extract + save the quote and exit (extraction deferred to here so Confirm
+  // shows the highlight instantly).
+  if (highlights_.state() == State::SHOW_UNDERLINE) {
+    if (highlights_.underlineTimedOut(millis())) {
+      const std::string quote = extractQuoteText();
+      if (!quote.empty()) saveQuoteToFile(quote);
+      exitHighlightMode();
+    }
+    return;
+  }
+  handleHighlightInput();
+}
+
+void EpubReaderActivity::renderHighlights(const Page& page, const int fontId, const int xOffset, const int yOffset) {
+  using State = crosspoint::reader::HighlightController::State;
+  if (!section) return;
+  // Rebuild the word cache if the page changed since the last selection render.
+  if (!highlights_.wordCacheValidFor(section->currentPage)) {
+    rebuildHighlightWordCache(xOffset, yOffset);
+  }
+  const auto& wordList = highlights_.words();
+  if (wordList.empty()) return;
+
+  const int wordCount = static_cast<int>(wordList.size());
+  const int textHeight = renderer.getTextHeight(fontId);
+
+  // Inverted cursor: solid black box behind the word, white glyph on top.
+  const auto drawCursor = [&](const crosspoint::reader::WordPos& cw, const WordInfo* wi) {
+    constexpr int pad = 2;
+    const int bx = (cw.x > pad) ? cw.x - pad : 0;
+    const int by = (cw.y > pad) ? cw.y - pad : 0;
+    const int bw = cw.width + (cw.x - bx) + pad;
+    const int bh = textHeight + (cw.y - by) + pad;
+    renderer.fillRect(bx, by, bw, bh, true);
+    if (wi != nullptr && !wi->text.empty()) {
+      renderer.drawText(fontId, wi->x, wi->y, wi->text.c_str(), false, wi->style);
+    }
+  };
+
+  const auto state = highlights_.state();
+  std::vector<WordInfo> infoList = buildWordList(page, xOffset, yOffset, fontId);
+  const auto wordInfoAt = [&](int idx) -> const WordInfo* {
+    if (idx < 0 || idx >= static_cast<int>(infoList.size())) return nullptr;
+    return &infoList[idx];
+  };
+
+  if (state == State::SELECT_START) {
+    const int cursorIdx = highlights_.cursorIndex() >= wordCount ? wordCount - 1 : highlights_.cursorIndex();
+    if (cursorIdx >= 0 && cursorIdx < wordCount) {
+      drawCursor(wordList[cursorIdx], wordInfoAt(cursorIdx));
+    }
+  } else if (state == State::SELECT_END) {
+    const int endIdx = highlights_.endWordIndex();
+    if (section->currentPage == highlights_.endPage() && endIdx >= 0 && endIdx < wordCount) {
+      drawCursor(wordList[endIdx], wordInfoAt(endIdx));
+    }
+  } else if (state == State::SHOW_UNDERLINE) {
+    // Final confirm hold: invert the whole selected run on this page (black box,
+    // white glyph) for kUnderlineTimeoutMs, then loopHighlightMode() saves.
+    const int startPage = highlights_.startPage();
+    const int endPage = highlights_.endPage();
+    const int startWord = highlights_.startWordIndex();
+    const int endWord = highlights_.endWordIndex();
+    int selStart = -1;
+    int selEnd = -1;
+    if (section->currentPage == startPage && section->currentPage == endPage) {
+      selStart = startWord;
+      selEnd = endWord;
+    } else if (section->currentPage == startPage) {
+      selStart = startWord;
+      selEnd = wordCount - 1;
+    } else if (section->currentPage == endPage) {
+      selStart = 0;
+      selEnd = endWord;
+    } else if (section->currentPage > startPage && section->currentPage < endPage) {
+      selStart = 0;
+      selEnd = wordCount - 1;
+    }
+    if (selStart >= 0 && selEnd >= 0) {
+      if (selStart >= wordCount) selStart = wordCount - 1;
+      if (selEnd >= wordCount) selEnd = wordCount - 1;
+      // Fill a CONTINUOUS black bar per line (first word's left to last word's
+      // right, inter-word spaces included), then redraw the words in white on
+      // top. Words on a line share y and are ordered left-to-right in wordList.
+      constexpr int pad = 2;
+      int i = selStart;
+      while (i <= selEnd) {
+        const int lineY = wordList[i].y;
+        int j = i;
+        int minX = wordList[i].x;
+        int maxX = wordList[i].x + wordList[i].width;
+        while (j <= selEnd && wordList[j].y == lineY) {
+          if (wordList[j].x < minX) minX = wordList[j].x;
+          if (wordList[j].x + wordList[j].width > maxX) maxX = wordList[j].x + wordList[j].width;
+          j++;
+        }
+        const int bx = (minX > pad) ? minX - pad : 0;
+        const int by = (lineY > pad) ? lineY - pad : 0;
+        const int bw = (maxX - bx) + pad;
+        const int bh = textHeight + (lineY - by) + pad;
+        renderer.fillRect(bx, by, bw, bh, true);
+        for (int k = i; k < j; k++) {
+          const WordInfo* wi = wordInfoAt(k);
+          if (wi != nullptr && !wi->text.empty()) {
+            renderer.drawText(fontId, wi->x, wi->y, wi->text.c_str(), false, wi->style);
+          }
+        }
+        i = j;
+      }
+    }
+  }
+}
+
+std::string EpubReaderActivity::extractQuoteText() {
+  const int startPage = highlights_.startPage();
+  const int endPage = highlights_.endPage();
+  const int startWord = highlights_.startWordIndex();
+  const int endWord = highlights_.endWordIndex();
+  if (startPage < 0 || endPage < 0 || !section) return "";
+  if (startWord < 0 || endWord < 0) return "";
+
+  constexpr size_t kMaxQuoteLength = 8192;
+  std::string result;
+  const int fontId = SETTINGS.getReaderFontId();
+
+  // loadPageFromSectionFile() keys off section->currentPage; drive it across the
+  // selected range and restore afterwards. Offsets don't affect the extracted
+  // string (geometry unused here), so pass 0/0.
+  const int savedPage = section->currentPage;
+  for (int pg = startPage; pg <= endPage; pg++) {
+    section->currentPage = pg;
+    auto page = section->loadPageFromSectionFile();
+    if (!page) continue;
+    auto wordList = buildWordList(*page, 0, 0, fontId);
+    if (wordList.empty()) continue;
+
+    int startIdx = (pg == startPage) ? startWord : 0;
+    int endIdx = (pg == endPage) ? endWord : static_cast<int>(wordList.size()) - 1;
+    if (startIdx < 0) startIdx = 0;
+    if (endIdx >= static_cast<int>(wordList.size())) endIdx = static_cast<int>(wordList.size()) - 1;
+
+    for (int i = startIdx; i <= endIdx; i++) {
+      if (!result.empty()) {
+        const char first = wordList[i].text.empty() ? '\0' : wordList[i].text[0];
+        if (first != ',' && first != '.' && first != ';' && first != ':' && first != '!' && first != '?' &&
+            first != ')' && first != '"') {
+          result += ' ';
+        }
+      }
+      result += wordList[i].text;
+      if (result.size() >= kMaxQuoteLength) break;
+    }
+    if (result.size() >= kMaxQuoteLength) break;
+  }
+  section->currentPage = savedPage;
+  return result;
+}
+
+std::string EpubReaderActivity::getChapterTitle() const {
+  if (!epub) return "";
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (tocIndex != -1) {
+    return epub->getTocItem(tocIndex).title;
+  }
+  return "Chapter " + std::to_string(currentSpineIndex + 1);
+}
+
+std::string EpubReaderActivity::getQuotesFilePath() const {
+  if (!epub) return "";
+  const std::string bookPath = epub->getPath();
+  const auto dotPos = bookPath.rfind('.');
+  const std::string basePath = (dotPos != std::string::npos) ? bookPath.substr(0, dotPos) : bookPath;
+  return basePath + "_QUOTES.txt";
+}
+
+void EpubReaderActivity::saveQuoteToFile(const std::string& quote) {
+  if (!epub || quote.empty()) return;
+
+  const std::string quotesPath = getQuotesFilePath();
+  const std::string tmpPath = quotesPath + ".tmp";
+  const std::string bakPath = quotesPath + ".bak";
+
+  // Atomic read-modify-write: copy existing primary into .tmp, append the new
+  // entry, then rotate primary -> .bak and .tmp -> primary. A torn write leaves
+  // .bak as the prior good state.
+  if (Storage.exists(tmpPath.c_str())) {
+    Storage.remove(tmpPath.c_str());
+  }
+
+  HalFile dst;
+  if (!Storage.openFileForWrite("HLT", tmpPath, dst)) {
+    LOG_ERR("HLT", "Failed to open quotes tmp for writing: %s", tmpPath.c_str());
+    return;
+  }
+
+  if (Storage.exists(quotesPath.c_str())) {
+    HalFile src;
+    if (Storage.openFileForRead("HLT", quotesPath, src)) {
+      uint8_t buffer[512];
+      while (src.available()) {
+        const int rd = src.read(buffer, sizeof(buffer));
+        if (rd <= 0) break;
+        if (dst.write(buffer, rd) != static_cast<size_t>(rd)) {
+          LOG_ERR("HLT", "Failed to copy existing quotes into tmp");
+          src.close();
+          dst.close();
+          Storage.remove(tmpPath.c_str());
+          return;
+        }
+      }
+      src.close();
+    }
+  }
+
+  const std::string chapterTitle = getChapterTitle();
+  const std::string entry = "[" + chapterTitle + "]\n" + quote + "\n---\n\n";
+  if (dst.write(entry.c_str(), entry.size()) != entry.size()) {
+    LOG_ERR("HLT", "Failed to append new quote to tmp");
+    dst.close();
+    Storage.remove(tmpPath.c_str());
+    return;
+  }
+  dst.flush();
+  dst.close();
+
+  if (Storage.exists(bakPath.c_str())) {
+    Storage.remove(bakPath.c_str());
+  }
+  if (Storage.exists(quotesPath.c_str())) {
+    if (!Storage.rename(quotesPath.c_str(), bakPath.c_str())) {
+      LOG_ERR("HLT", "Failed to rotate %s -> %s", quotesPath.c_str(), bakPath.c_str());
+      Storage.remove(tmpPath.c_str());
+      return;
+    }
+  }
+  if (!Storage.rename(tmpPath.c_str(), quotesPath.c_str())) {
+    LOG_ERR("HLT", "Failed to promote quotes tmp to %s", quotesPath.c_str());
+    if (Storage.exists(bakPath.c_str())) {
+      if (Storage.rename(bakPath.c_str(), quotesPath.c_str())) {
+        LOG_INF("HLT", "Restored quotes from .bak after promote failure");
+      }
+    }
+    return;
+  }
+  LOG_DBG("HLT", "Quote saved to %s", quotesPath.c_str());
+}
+// ── End grab-quote / highlight selection ─────────────────────────────────────
 void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int orientedMarginTop,
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
   const int fontId = SETTINGS.getReaderFontId();
+
+  // Grab-quote / highlight mode renders on an isolated BW path so the normal
+  // image/grayscale/refresh machinery below is untouched (snappy + ghosting laws).
+  // All states (cursor pick + final 3s confirm) render the page + solid frame +
+  // an inverted overlay (black box, white glyph) on the relevant words — no
+  // separate full-screen splash (that stalled on SD page-loads + full black refresh).
+  if (highlights_.state() != crosspoint::reader::HighlightController::State::NONE) {
+    renderer.setPaperbackLook(false);
+    renderer.setRenderMode(GfxRenderer::BW);
+    auto* hlFcm = renderer.getFontCacheManager();
+    auto hlScope = hlFcm->createPrewarmScope();
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
+    hlScope.endScanAndPrewarm();
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // real render
+    // Solid frame marking selection mode.
+    constexpr int frameOffset = 6;
+    constexpr int frameThickness = 5;
+    const int vpH = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+    const int bx = orientedMarginLeft - frameOffset;
+    const int by = orientedMarginTop - frameOffset;
+    const int bw = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight + 2 * frameOffset;
+    const int bh = vpH + 2 * frameOffset;
+    for (int t = 0; t < frameThickness; ++t) {
+      renderer.drawRect(bx + t, by + t, bw - 2 * t, bh - 2 * t, true);
+    }
+    renderHighlights(*page, fontId, orientedMarginLeft, orientedMarginTop);
+    renderer.displayBuffer(HalDisplay::FAST_REFRESH);  // snappy cursor moves + instant confirm
+    renderer.setPaperbackLook(false);
+    return;
+  }
 
   // Paperback Look (body): thicken the reader page glyphs while this frame's
   // body text is drawn. Reset to false at the end so the status bar (own flag)

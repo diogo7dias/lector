@@ -293,7 +293,7 @@ class CrossPointSettings {
   uint8_t screenMarginBottom = 5;
   uint8_t uniformMargins = 1;  // 1 = all sides use screenMargin; 0 = separate H / Top / Bottom
   static constexpr uint8_t MIN_SCREEN_MARGIN = 0;
-  static constexpr uint8_t MAX_SCREEN_MARGIN = 60;
+  static constexpr uint8_t MAX_SCREEN_MARGIN = 100;
 
   // First-line paragraph indent. BOOK = use the publisher/CSS indent (default);
   // PERCENT = custom, where 0% is flush with the other lines and 100% starts the
@@ -302,6 +302,23 @@ class CrossPointSettings {
   uint8_t firstLineIndentMode = FIRST_LINE_INDENT_BOOK;
   uint8_t firstLineIndentPercent = 0;
   static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
+  // Reader spacing (EPUB layout). Changing either re-paginates the section cache
+  // (bumped SECTION_FILE_VERSION). wordSpacing is stored as a 10%-step count so a
+  // signed -30..+300% range fits a uint8_t (3 = 0%); paragraphSpacing is stored
+  // directly as a 0..150 percentage of the line height (block gap; 0 = off).
+  static constexpr uint8_t WORD_SPACING_ZERO = 3;        // stored step that means 0%
+  static constexpr uint8_t MAX_WORD_SPACING = 33;        // +300%
+  static constexpr uint8_t MAX_PARAGRAPH_SPACING = 150;  // 150%
+  static constexpr int MIN_WORD_SPACING_PERCENT = -30;
+  static constexpr int MAX_WORD_SPACING_PERCENT = 300;
+  uint8_t wordSpacing = WORD_SPACING_ZERO;
+  uint8_t paragraphSpacing = 0;
+  // Signed word-spacing percentage (-30..+300) from the stored 10%-step value.
+  int wordSpacingPercent() const { return (static_cast<int>(wordSpacing) - WORD_SPACING_ZERO) * 10; }
+  // Convert a signed percentage back to the stored 10%-step value.
+  static uint8_t wordSpacingStepFromPercent(int percent) {
+    return static_cast<uint8_t>(percent / 10 + WORD_SPACING_ZERO);
+  }
   // OPDS browser settings
   char opdsServerUrl[128] = "";
   char opdsUsername[64] = "";

@@ -1,14 +1,20 @@
 #pragma once
+#include <EpdFontFamily.h>
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "BookmarkEntry.h"
 #include "EpubReaderMenuActivity.h"
+#include "HighlightController.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
+
+class Page;
 
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
@@ -77,6 +83,33 @@ class EpubReaderActivity final : public Activity {
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);
   void restoreSavedPosition();
+
+  // ── Grab-quote / highlight selection (ported from DX34) ──────────────────
+  // Per-word geometry + text for the selection overlay. y is per-line (shared
+  // by all words on the line); x/width are per-word.
+  struct WordInfo {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    std::string text;
+    EpdFontFamily::Style style = EpdFontFamily::REGULAR;
+  };
+  crosspoint::reader::HighlightController highlights_;
+
+  std::vector<WordInfo> buildWordList(const Page& page, int xOffset, int yOffset, int fontId) const;
+  void rebuildHighlightWordCache(int xOffset, int yOffset);
+  void enterHighlightMode();
+  void exitHighlightMode();
+  void highlightMoveCursor(int direction);
+  void highlightMoveCursorLine(int direction);
+  void highlightConfirmSelection();
+  void handleHighlightInput();
+  void loopHighlightMode();
+  void renderHighlights(const Page& page, int fontId, int xOffset, int yOffset);
+  std::string extractQuoteText();
+  std::string getChapterTitle() const;
+  std::string getQuotesFilePath() const;
+  void saveQuoteToFile(const std::string& quote);
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub)
