@@ -42,6 +42,11 @@ class TextBlock final : public Block {
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   const BlockStyle& getBlockStyle() const { return blockStyle; }
   const std::vector<std::string>& getWords() const { return words; }
+  // Per-word pixel x-offset within the block, parallel to getWords(). Needed by the
+  // grab-quote selection overlay to box/underline individual words (HighlightController).
+  const std::vector<int16_t>& getWordXpos() const { return wordXpos; }
+  // Per-word font style, parallel to getWords(). Used to redraw the selected word inverted.
+  const std::vector<EpdFontFamily::Style>& getWordStyles() const { return wordStyles; }
   bool isEmpty() override { return words.empty(); }
   size_t wordCount() const { return words.size(); }
   // given a renderer works out where to break the words into lines
