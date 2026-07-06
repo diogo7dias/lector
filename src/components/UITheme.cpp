@@ -175,12 +175,10 @@ bool sbBandHasText(bool top, bool hasChapters) {
     bool chapterOnly;
     bool applicable;
   } items[] = {
-      {SETTINGS.sbBatteryPos, false, true},
-      {SETTINGS.sbClockPos, false, clockAvailable},
-      {SETTINGS.sbTitlePos, SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER, true},
-      {SETTINGS.sbPagePos, true, true},
-      {SETTINGS.sbBookPctPos, false, true},
-      {SETTINGS.sbChapterPctPos, true, true},
+      {SETTINGS.sbBatteryPos, false, true},   {SETTINGS.sbClockPos, false, clockAvailable},
+      {SETTINGS.sbTitlePos, false, true},  // title falls back to book title on chapterless books
+      {SETTINGS.sbPagePos, false, true},   // page falls back to book pages on chapterless books
+      {SETTINGS.sbBookPctPos, false, true},   {SETTINGS.sbChapterPctPos, true, true},
       {SETTINGS.sbChapterNumPos, true, true},
   };
   for (const auto& it : items) {

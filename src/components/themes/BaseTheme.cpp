@@ -1211,15 +1211,17 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       halClock.formatTime(clkBuf, sizeof(clkBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
     push(SETTINGS.sbClockPos, false, clkBuf, renderer.getTextWidth(f, clkBuf), false);
   }
-  // Title (points at the caller's string; truncated at draw time if it overflows)
+  // Title (points at the caller's string; truncated at draw time if it overflows).
+  // Chapter source falls back to the book title on a chapterless book (TXT, flat
+  // XTC) so the title never silently vanishes there; hence the item is not
+  // chapter-only.
   {
     const bool chapterSrc = SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER;
-    const char* title = chapterSrc ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
     if (title[0] != '\0') {
-      push(SETTINGS.sbTitlePos, chapterSrc, title, renderer.getTextWidth(f, title), false);
+      push(SETTINGS.sbTitlePos, false, title, renderer.getTextWidth(f, title), false);
       const int idx = static_cast<int>(SETTINGS.sbTitlePos) - 1;
-      if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && (!chapterSrc || data.hasChapters) && idx >= 0 &&
-          idx < statusbar::kAnchorCount)
+      if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && idx >= 0 && idx < statusbar::kAnchorCount)
         titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
     }
   }
@@ -1230,7 +1232,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   } else {
     snprintf(pageBuf, sizeof(pageBuf), "%d/%d", data.chapterPage, data.chapterPages);
   }
-  push(SETTINGS.sbPagePos, true, pageBuf, renderer.getTextWidth(f, pageBuf), false);
+  // Page item is NOT chapter-only: on a chapterless book (TXT, flat XTC) the
+  // reader fills chapterPage/chapterPages with BOOK page/total so it still shows.
+  push(SETTINGS.sbPagePos, false, pageBuf, renderer.getTextWidth(f, pageBuf), false);
   // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
   snprintf(bookPctBuf, sizeof(bookPctBuf), "B:%d%%", data.bookPercent);
   push(SETTINGS.sbBookPctPos, false, bookPctBuf, renderer.getTextWidth(f, bookPctBuf), false);
