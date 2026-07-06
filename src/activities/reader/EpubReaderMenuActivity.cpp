@@ -13,9 +13,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& chapterName, const int currentPage,
                                                const int totalPages, const int bookProgressPercent,
                                                const uint8_t currentOrientation, const bool hasFootnotes,
-                                               const bool hasBookmarks)
+                                               const bool hasBookmarks, const bool hasQuotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -25,11 +25,15 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                     bool hasBookmarks) {
+                                                                                     bool hasBookmarks,
+                                                                                     bool hasQuotes) {
   std::vector<MenuItem> items;
-  items.reserve(14);
+  items.reserve(15);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   items.push_back({MenuAction::HIGHLIGHT_QUOTE, StrId::STR_GRAB_QUOTE});
+  if (hasQuotes) {
+    items.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
+  }
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
   }

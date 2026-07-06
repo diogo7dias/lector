@@ -30,6 +30,7 @@
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "QuotesViewerActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "components/StatusBar.h"
@@ -350,19 +351,21 @@ void EpubReaderActivity::loop() {
       if (menuTocIndex != -1) {
         chapterName = epub->getTocItem(menuTocIndex).title;
       }
-      startActivityForResult(
-          std::make_unique<EpubReaderMenuActivity>(
-              renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
-              bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
-          [this](const ActivityResult& result) {
-            // Always apply orientation change even if the menu was cancelled
-            const auto& menu = std::get<MenuResult>(result.data);
-            applyOrientation(menu.orientation);
-            toggleAutoPageTurn(menu.pageTurnOption);
-            if (!result.isCancelled) {
-              onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-            }
-          });
+      const std::string quotesPath = getQuotesFilePath();
+      const bool hasQuotes = !quotesPath.empty() && Storage.exists(quotesPath.c_str());
+      startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
+                                 renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage,
+                                 totalPages, bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
+                                 !cachedBookmarks.empty(), hasQuotes),
+                             [this](const ActivityResult& result) {
+                               // Always apply orientation change even if the menu was cancelled
+                               const auto& menu = std::get<MenuResult>(result.data);
+                               applyOrientation(menu.orientation);
+                               toggleAutoPageTurn(menu.pageTurnOption);
+                               if (!result.isCancelled) {
+                                 onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                               }
+                             });
     }
   }
 
@@ -587,6 +590,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   switch (action) {
     case EpubReaderMenuActivity::MenuAction::HIGHLIGHT_QUOTE: {
       enterHighlightMode();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::VIEW_QUOTES: {
+      startActivityForResult(std::make_unique<QuotesViewerActivity>(renderer, mappedInput, getQuotesFilePath()),
+                             [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
