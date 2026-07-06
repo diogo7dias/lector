@@ -1176,20 +1176,17 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
 
   // --- Build the bar on the STACK: one fixed segment array per anchor. No heap in
   // this render path (it runs on the lock-holding, stack-tight render task). Short
-  // items format into local char buffers; the title points at the caller's string. ---
-  struct Seg {
-    const char* text;
-    int width;
-    bool isBattery;
-  };
-  Seg buckets[6][7];  // anchor idx 0..5 (TL..BR), up to 7 co-located items
-  int counts[6] = {0, 0, 0, 0, 0, 0};
+  // items format into local char buffers; the title points at the caller's string.
+  // The layout + reflow live in the pure, host-tested `statusbar` module. ---
+  using statusbar::Seg;
+  statusbar::BarLayout L{};
+  int titleAnchorIdx = -1;  // set when the title item is actually placed
   auto push = [&](uint8_t anchor, bool chapterOnly, const char* text, int width, bool isBattery) {
     if (anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
     const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
-    if (idx < 0 || idx > 5 || counts[idx] >= 7) return;
-    buckets[idx][counts[idx]++] = Seg{text, width, isBattery};
+    if (idx < 0 || idx >= statusbar::kAnchorCount || L.counts[idx] >= statusbar::kMaxPerAnchor) return;
+    L.buckets[idx][L.counts[idx]++] = Seg{text, width, isBattery};
   };
 
   char batBuf[8] = "";
@@ -1218,7 +1215,13 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   {
     const bool chapterSrc = SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER;
     const char* title = chapterSrc ? data.chapterTitle.c_str() : data.bookTitle.c_str();
-    if (title[0] != '\0') push(SETTINGS.sbTitlePos, chapterSrc, title, renderer.getTextWidth(f, title), false);
+    if (title[0] != '\0') {
+      push(SETTINGS.sbTitlePos, chapterSrc, title, renderer.getTextWidth(f, title), false);
+      const int idx = static_cast<int>(SETTINGS.sbTitlePos) - 1;
+      if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && (!chapterSrc || data.hasChapters) && idx >= 0 &&
+          idx < statusbar::kAnchorCount)
+        titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
+    }
   }
   // Page in chapter ("3/40" or "8 left")
   if (SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT) {
@@ -1235,6 +1238,17 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   push(SETTINGS.sbChapterPctPos, true, chapPctBuf, renderer.getTextWidth(f, chapPctBuf), false);
   snprintf(chapNumBuf, sizeof(chapNumBuf), "Ch %d/%d", data.chapterNum, data.chapterTotal);
   push(SETTINGS.sbChapterNumPos, true, chapNumBuf, renderer.getTextWidth(f, chapNumBuf), false);
+
+  // --- Reflow: a greedy (truncate-OFF) title bumps overlapping same-band
+  // neighbours into the opposite band. Pure + allocation-free (see StatusBar.cpp).
+  // The opposite band may only *receive* bumped items when it already reserves
+  // height (has native text) — the band heights are computed pre-reflow from native
+  // anchors, so a bump into an unreserved band would draw over the reading text.
+  if (titleAnchorIdx >= 0 && SETTINGS.sbTitleTruncate == 0) {
+    const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
+    const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
+    statusbar::reflowTitle(L, titleAnchorIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
+  }
 
   // --- Progress bars (full width, flush to the edge) ------------------------
   const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
@@ -1270,27 +1284,22 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
   const int bottomTextY = bottomStack - lineH - 2;
 
-  auto clusterW = [&](int idx) {
-    int w = 0;
-    for (int i = 0; i < counts[idx]; i++) w += buckets[idx][i].width;
-    if (counts[idx] > 1) w += sepW * (counts[idx] - 1);
-    return w;
-  };
+  auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };
 
   // --- Draw one anchor cluster (align: 0 left edge, 1 centered, 2 right edge) ---
   auto drawAnchor = [&](int idx, int align, int y) {
-    if (counts[idx] == 0) return;
+    if (L.counts[idx] == 0) return;
     const int total = clusterW(idx);
 
     // A lone centre segment (the title) that overflows clips to the space the
     // left/right clusters of its band leave free.
-    if (align == 1 && counts[idx] == 1) {
+    if (align == 1 && L.counts[idx] == 1) {
       const bool top = idx < 3;
       const int lw = clusterW(top ? 0 : 3);
       const int rw = clusterW(top ? 2 : 5);
       const int avail = bandWidth - lw - rw - 20;
       if (avail > 0 && total > avail) {
-        std::string clipped = renderer.truncatedText(f, buckets[idx][0].text, avail);
+        std::string clipped = renderer.truncatedText(f, L.buckets[idx][0].text, avail);
         const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
         renderer.drawText(f, cx, y, clipped.c_str());
         return;
@@ -1298,14 +1307,14 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     }
 
     int x = (align == 0) ? leftEdge : (align == 2) ? (rightEdge - total) : (leftEdge + (bandWidth - total) / 2);
-    for (int i = 0; i < counts[idx]; i++) {
+    for (int i = 0; i < L.counts[idx]; i++) {
       if (i > 0) {
         // Vertical bar centred in the separator advance, equal gap each side.
         x += sepGap;
         renderer.drawLine(x, y + 2, x, y + lineH - 3, true);
         x += sepBarW + sepGap;
       }
-      const Seg& s = buckets[idx][i];
+      const Seg& s = L.buckets[idx][i];
       if (s.isBattery) {
         drawBatteryLeft(renderer, Rect{x, y, metrics.batteryWidth, metrics.batteryHeight}, showBattery, f);
       } else {
