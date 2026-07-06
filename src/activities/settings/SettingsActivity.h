@@ -167,6 +167,8 @@ class SettingsActivity final : public Activity {
   void openSleepTimeoutPicker();
   void openLineSpacingPicker();
   void openFirstLineIndentPicker();
+  void openWordSpacingPicker();
+  void openParagraphSpacingPicker();
   void openMarginPicker(uint8_t CrossPointSettings::* field, StrId titleId);
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);

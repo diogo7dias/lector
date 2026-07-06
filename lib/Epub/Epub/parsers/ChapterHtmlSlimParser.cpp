@@ -213,8 +213,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(
-      new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle, firstLineIndentPx));
+  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle,
+                                        firstLineIndentPx, wordSpacing));
   wordsExtractedInBlock = 0;
 }
 
@@ -1440,5 +1440,11 @@ void ChapterHtmlSlimParser::makePages() {
   // Extra paragraph spacing if enabled (default behavior)
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
+  }
+
+  // Configurable "Paragraph Spacing" setting: a vertical gap between blocks sized
+  // as a percentage of the line height (0 = off), stacked on top of the above.
+  if (paragraphSpacing > 0) {
+    currentPageNextY += lineHeight * paragraphSpacing / 100;
   }
 }

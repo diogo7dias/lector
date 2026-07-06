@@ -168,6 +168,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
                            {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
                            StrId::STR_CAT_READER),
+        // Both open custom % pickers on device (intercepted by nameId); the ranges
+        // here drive persistence + the web form. wordSpacing is a 10%-step count.
+        SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
+                           {0, CrossPointSettings::MAX_WORD_SPACING, 1}, "wordSpacing", StrId::STR_CAT_READER),
+        SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
+                           {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
+                           StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
                           {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                            StrId::STR_BOOK_S_STYLE},

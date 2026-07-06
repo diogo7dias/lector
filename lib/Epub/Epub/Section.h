@@ -19,7 +19,7 @@ class Section {
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled,
-                              int firstLineIndentPx);
+                              int firstLineIndentPx, uint8_t wordSpacing, uint8_t paragraphSpacing);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
 
  public:
@@ -34,12 +34,13 @@ class Section {
   ~Section() = default;
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx);
+                       uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
+                       uint8_t paragraphSpacing);
   bool clearCache() const;
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx,
-                         const std::function<void()>& popupFn = nullptr);
+                         uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
+                         uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
   std::string getTextFromSectionFile();
 

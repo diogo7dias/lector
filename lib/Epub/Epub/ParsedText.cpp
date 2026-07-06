@@ -447,6 +447,15 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 }
 
+int ParsedText::wordSpacingDeltaPx(const GfxRenderer& renderer, const int fontId) const {
+  // wordSpacing is a 10%-step count with 3 == 0%. The delta is that percentage of
+  // the regular space width, applied to every real inter-word gap. Signed: values
+  // below 3 tighten the spacing, above 3 loosen it.
+  const int steps = static_cast<int>(wordSpacing) - 3;  // -3..+30 -> -30%..+300%
+  if (steps == 0) return 0;
+  return steps * static_cast<int>(renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR)) / 10;
+}
+
 int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {
   if (!isFirstLine || !isNaturalAlign) {
     return 0;
@@ -557,6 +566,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   }
 
   const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
+  const int wsDelta = wordSpacingDeltaPx(renderer, fontId);
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -594,7 +604,8 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         gap = 0;
       } else if (j > static_cast<size_t>(i) && !continuesVec[j]) {
         gap =
-            renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
+            renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]) +
+            wsDelta;
       } else if (j > static_cast<size_t>(i) && continuesVec[j]) {
         // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
         gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
@@ -670,6 +681,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
                                                             std::vector<bool>& continuesVec,
                                                             std::vector<bool>& noSpaceBeforeVec) {
   const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
+  const int wsDelta = wordSpacingDeltaPx(renderer, fontId);
 
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
@@ -690,7 +702,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
         spacing = 0;
       } else if (!isFirstWord && !continuesVec[currentIndex]) {
         spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
-                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]) +
+                  wsDelta;
       } else if (!isFirstWord && continuesVec[currentIndex]) {
         // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
         spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
@@ -853,6 +866,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     lineWordStyles.push_back(wordStyles[lastBreakAt + i]);
   }
 
+  // Word-spacing delta applied to every real inter-word gap (0 at the default).
+  const int wsDelta = wordSpacingDeltaPx(renderer, fontId);
+
   // Calculate total word width for this line, count actual word gaps,
   // and accumulate total natural gap widths (including space kerning adjustments).
   int lineWordWidthSum = 0;
@@ -869,7 +885,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     } else if (wordIdx > 0 && !continuesVec[lastBreakAt + wordIdx]) {
       actualGapCount++;
       totalNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
-                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]) +
+                          wsDelta;
     } else if (wordIdx > 0 && continuesVec[lastBreakAt + wordIdx]) {
       // Non-breaking space tokens (" " with continues=true) are visible, stretchable spaces —
       // count them as justifiable gaps so justifyExtra is distributed to them too.
@@ -964,7 +981,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         reorderedGapCount++;
         reorderedNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
                                                          firstCodepoint(reorderedWordsScratch[wordIdx]),
-                                                         reorderedStylesScratch[wordIdx - 1]);
+                                                         reorderedStylesScratch[wordIdx - 1]) +
+                                wsDelta;
       } else if (wordIdx > 0 && reorderedContinuesScratch[wordIdx]) {
         if (reorderedWordsScratch[wordIdx] == " ") {
           reorderedGapCount++;
@@ -1024,7 +1042,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         int gap = nextNoSpace ? 0
                               : renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
                                                          firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
-                                                         reorderedStylesScratch[wordIdx]);
+                                                         reorderedStylesScratch[wordIdx]) +
+                                    wsDelta;
         if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
           gap += reorderedJustifyExtra;
         }
@@ -1070,7 +1089,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = nextNoSpace
                       ? 0
                       : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]) +
+                            wsDelta;
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra;
@@ -1111,7 +1131,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
             gap = nextNoSpace
                       ? 0
                       : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]) +
+                            wsDelta;
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifyExtra;

@@ -29,6 +29,9 @@ class ParsedText {
   // wider first-line indent. Pre-computed by the caller from the indent-percent
   // setting and the viewport width, so no percentage math happens here.
   int firstLineIndentPx;
+  // Word spacing as a 10%-step count (3 = 0%). Adds a signed delta to every real
+  // inter-word gap so line-breaking, justification and drawing stay consistent.
+  uint8_t wordSpacing;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -38,6 +41,8 @@ class ParsedText {
   std::vector<uint16_t> visualOrderScratch;
 
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
+  // Signed pixels to add to each real inter-word gap for the word-spacing setting.
+  int wordSpacingDeltaPx(const GfxRenderer& renderer, int fontId) const;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                         std::vector<bool>& noSpaceBeforeVec);
@@ -56,14 +61,15 @@ class ParsedText {
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
                       const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
-                      const int firstLineIndentPx = -1)
+                      const int firstLineIndentPx = -1, const uint8_t wordSpacing = 3)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         isNaturalAlign(false),
         hasRtlWord(false),
-        firstLineIndentPx(firstLineIndentPx) {}
+        firstLineIndentPx(firstLineIndentPx),
+        wordSpacing(wordSpacing) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);

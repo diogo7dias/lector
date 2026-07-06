@@ -229,6 +229,14 @@ void SettingsActivity::toggleCurrentSetting() {
     openFirstLineIndentPicker();
     return;
   }
+  if (setting.nameId == StrId::STR_WORD_SPACING) {
+    openWordSpacingPicker();
+    return;
+  }
+  if (setting.nameId == StrId::STR_PARAGRAPH_SPACING) {
+    openParagraphSpacingPicker();
+    return;
+  }
 
   if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
     // Toggle the boolean value using the member pointer
@@ -382,6 +390,41 @@ void SettingsActivity::openSleepTimeoutPicker() {
       [this](const ActivityResult& result) {
         if (!result.isCancelled) {
           SETTINGS.sleepTimeoutMinutes = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
+void SettingsActivity::openWordSpacingPicker() {
+  // Word spacing as a signed percentage of the inter-word space width: -30% (tight)
+  // to +300% (loose), 0% = the font's natural spacing. Stored as a 10%-step count.
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "WordSpacingInterval", StrId::STR_WORD_SPACING, StrId::STR_SPACING_STEP_HINT,
+          SETTINGS.wordSpacingPercent(), CrossPointSettings::MIN_WORD_SPACING_PERCENT,
+          CrossPointSettings::MAX_WORD_SPACING_PERCENT, 10, 50, StrId::STR_SPACING_VALUE_FORMAT, false, true),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.wordSpacing =
+              CrossPointSettings::wordSpacingStepFromPercent(std::get<IntervalResult>(result.data).value);
+          SETTINGS.saveToFile();
+        }
+        requestUpdate();
+      });
+}
+
+void SettingsActivity::openParagraphSpacingPicker() {
+  // Paragraph spacing as a percentage of the line height, injected as a vertical
+  // gap between blocks: 0% = off, up to 150%. Stored directly as the percentage.
+  startActivityForResult(
+      std::make_unique<IntervalSelectionActivity>(
+          renderer, mappedInput, "ParagraphSpacingInterval", StrId::STR_PARAGRAPH_SPACING, StrId::STR_SPACING_STEP_HINT,
+          SETTINGS.paragraphSpacing, 0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10, 50,
+          StrId::STR_SPACING_VALUE_FORMAT, false, true),
+      [this](const ActivityResult& result) {
+        if (!result.isCancelled) {
+          SETTINGS.paragraphSpacing = static_cast<uint8_t>(std::get<IntervalResult>(result.data).value);
           SETTINGS.saveToFile();
         }
         requestUpdate();
