@@ -14,6 +14,7 @@
 #include "components/themes/lyra/Lyra3CoversTheme.h"
 #include "components/themes/lyra/LyraTheme.h"
 #include "components/themes/roundedraff/RoundedRaffTheme.h"
+#include "fontIds.h"
 
 UITheme UITheme::instance;
 
@@ -191,26 +192,50 @@ bool sbBandHasText(bool top, bool hasChapters) {
 }
 }  // namespace
 
-int UITheme::getStatusBarV2TopHeight(bool hasChapters) {
+int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
   if (!SETTINGS.sbEnabled) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
   int bars = 0;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
-  const int text = sbBandHasText(true, hasChapters) ? metrics.statusBarVerticalMargin : 0;
+  const bool hasText = sbBandHasText(true, hasChapters);
+  const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
-int UITheme::getStatusBarV2BottomHeight(bool hasChapters) {
+int UITheme::getStatusBarV2BottomHeight(bool hasChapters, int extraTitleHeightPx) {
   if (!SETTINGS.sbEnabled) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
   int bars = 0;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
-  const int text = sbBandHasText(false, hasChapters) ? metrics.statusBarVerticalMargin : 0;
+  const bool hasText = sbBandHasText(false, hasChapters);
+  const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
+}
+
+int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  int mt, mr, mb, ml;
+  renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
+  const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
+  const int rightEdge = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - mr;
+  return rightEdge - leftEdge;
+}
+
+int UITheme::getStatusBarV2TitleLines(const GfxRenderer& renderer, const char* title) {
+  if (!SETTINGS.sbEnabled || SETTINGS.sbTitlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
+  if (SETTINGS.sbTitleTruncate != 0) return 1;  // a clipping title stays one line
+  if (!title || title[0] == '\0') return 1;
+  const int bandWidth = getStatusBarV2BandWidth(renderer);
+  if (bandWidth <= 0) return 1;
+  // Safety ceiling: real book/chapter titles never approach this many UI_10 lines,
+  // but it bounds the reserved band (and the render loop) for a pathological title.
+  constexpr int kMaxTitleLines = 6;
+  const int lines = static_cast<int>(renderer.wrappedText(UI_10_FONT_ID, title, bandWidth, kMaxTitleLines).size());
+  return lines < 1 ? 1 : lines;
 }
 
 // Centered text implementation that takes the safe area into account

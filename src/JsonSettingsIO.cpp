@@ -98,7 +98,7 @@ void applyStatusBarV2Migration(CrossPointSettings& s) {
     s.sbTitlePos = CP::SB_ANCHOR_BC;
     s.sbTitleSource = (s.statusBarTitle == CP::BOOK_TITLE) ? CP::SB_TITLE_BOOK : CP::SB_TITLE_CHAPTER;
   }
-  s.sbTitleTruncate = 1;
+  s.sbTitleTruncate = 0;  // default: greedy title (reflow, no ellipsis)
 
   s.sbPagePos = s.statusBarChapterPageCount ? CP::SB_ANCHOR_BR : CP::SB_ANCHOR_OFF;
   s.sbPageFormat = CP::SB_PAGE_FRACTION;

@@ -223,7 +223,7 @@ class CrossPointSettings {
   uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
   uint8_t sbTitlePos = SB_ANCHOR_BC;         // title anchor
   uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
-  uint8_t sbTitleTruncate = 1;               // 1 = clip with …, 0 = greedy (drives reflow)
+  uint8_t sbTitleTruncate = 0;               // 0 = greedy, no … (drives reflow); 1 = clip with …
   uint8_t sbPagePos = SB_ANCHOR_BR;          // page-in-chapter anchor
   uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
   uint8_t sbBookPctPos = SB_ANCHOR_BR;       // book % (B:NN%) anchor

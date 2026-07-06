@@ -875,8 +875,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // change. EPUB always has chapters. When auto page turn is on, the countdown is
   // drawn in the title slot, so reserve at least a top band for it if the title is
   // otherwise hidden there.
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true);
+  // A greedy (truncate-off) title can wrap to several lines; reserve the extra
+  // band height in whichever edge holds the title so the reading text is pushed
+  // clear of it. Auto page turn shows a short countdown in the title slot (one
+  // line), so skip the wrap reservation then.
+  int sbTitleExtraPx = 0;
+  if (!automaticPageTurnActive && SETTINGS.sbEnabled && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
+      SETTINGS.sbTitleTruncate == 0) {
+    std::string sbTitle;
+    if (SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
+      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+      if (tocIndex != -1) sbTitle = epub->getTocItem(tocIndex).title;
+      if (sbTitle.empty()) sbTitle = tr(STR_UNNAMED);
+    } else {
+      sbTitle = epub->getTitle();
+    }
+    const int lines = UITheme::getStatusBarV2TitleLines(renderer, sbTitle.c_str());
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+  }
+  const bool sbTitleTop = SETTINGS.sbTitlePos >= CrossPointSettings::SB_ANCHOR_TL &&
+                          SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true, sbTitleTop ? sbTitleExtraPx : 0);
+  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true, sbTitleTop ? 0 : sbTitleExtraPx);
   const int autoTurnBand = automaticPageTurnActive ? UITheme::getInstance().getMetrics().statusBarVerticalMargin : 0;
   orientedMarginTop += std::max<int>(topMargin, std::max(sbTop, autoTurnBand));
   orientedMarginBottom += std::max<int>(bottomMargin, sbBottom);

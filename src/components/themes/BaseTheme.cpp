@@ -1299,6 +1299,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       const int rw = clusterW(top ? 2 : 5);
       const int avail = bandWidth - lw - rw - 20;
       if (avail > 0 && total > avail) {
+        // Only reached by a truncate-ON title (the greedy truncate-OFF title is
+        // drawn wrapped above and its bucket emptied) -> clip with an ellipsis.
         std::string clipped = renderer.truncatedText(f, L.buckets[idx][0].text, avail);
         const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
         renderer.drawText(f, cx, y, clipped.c_str());
@@ -1323,6 +1325,25 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       x += s.width;
     }
   };
+
+  // A greedy (truncate-off) lone title wraps across as many lines as it needs and
+  // is drawn here, aligned to its anchor column (left/centre/right). The band's
+  // extra height was reserved by getStatusBarV2TitleLines at inset time. We empty
+  // its bucket so the generic pass below skips it. A truncate-ON title (or one
+  // sharing its anchor) falls through to drawAnchor's single-line ellipsis clip.
+  if (titleAnchorIdx >= 0 && SETTINGS.sbTitleTruncate == 0 && L.counts[titleAnchorIdx] == 1) {
+    const int col = titleAnchorIdx % 3;
+    const bool top = titleAnchorIdx < 3;
+    const auto lines = renderer.wrappedText(f, L.buckets[titleAnchorIdx][0].text, bandWidth, 6);
+    const int n = static_cast<int>(lines.size());
+    for (int i = 0; i < n; i++) {
+      const int lw = renderer.getTextWidth(f, lines[i].c_str());
+      const int x = (col == 0) ? leftEdge : (col == 2) ? (rightEdge - lw) : (leftEdge + (bandWidth - lw) / 2);
+      const int y = top ? (topTextY + i * lineH) : (bottomTextY - (n - 1 - i) * lineH);
+      renderer.drawText(f, x, y, lines[i].c_str());
+    }
+    L.counts[titleAnchorIdx] = 0;  // consumed; skip in the generic pass
+  }
 
   drawAnchor(0, 0, topTextY);     // TL
   drawAnchor(1, 1, topTextY);     // TC
