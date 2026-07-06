@@ -26,6 +26,13 @@ class StatusBarSettingsActivity final : public Activity {
   // The item ids that apply to this device (clock is X3-only), in display order.
   std::vector<int> visibleItems;
 
+  // Every render is a fast refresh except every Nth, which is a full refresh. Fast
+  // refreshes accumulate charge ("bloom") on the X3 panel; without a periodic full
+  // refresh the leftover charge outlives the single full refresh Home does on
+  // return, leaving ghosting. Bounding accumulation here keeps Home clean.
+  int renderCount = 0;
+  static constexpr int kFullRefreshEvery = 6;
+
   // In-place anchor picker overlay. When active, up/down move pickerIndex over the
   // seven anchor choices (Off, TL, TC, TR, BL, BC, BR) and Confirm commits it to
   // *pickerTarget; Back cancels.
