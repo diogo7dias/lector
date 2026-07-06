@@ -1165,8 +1165,13 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
   const int rightEdge = screenW - metrics.statusBarHorizontalMargin - mr;
   const int bandWidth = rightEdge - leftEdge;
-  const int sepW = renderer.getTextWidth(f, " | ");
   const int lineH = renderer.getLineHeight(f);
+  // Separator between co-anchored items: a drawn vertical bar with equal gaps on
+  // each side. A " | " string looked lopsided because the '|' glyph sits
+  // off-centre in its monospace cell (wide gap before, tight after).
+  const int sepGap = 4;   // even gap each side of the bar
+  const int sepBarW = 1;  // bar thickness
+  const int sepW = sepGap + sepBarW + sepGap;
   const bool showBattery = SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_NEVER;
 
   // --- Build the bar on the STACK: one fixed segment array per anchor. No heap in
@@ -1295,8 +1300,10 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     int x = (align == 0) ? leftEdge : (align == 2) ? (rightEdge - total) : (leftEdge + (bandWidth - total) / 2);
     for (int i = 0; i < counts[idx]; i++) {
       if (i > 0) {
-        renderer.drawText(f, x, y, " | ");
-        x += sepW;
+        // Vertical bar centred in the separator advance, equal gap each side.
+        x += sepGap;
+        renderer.drawLine(x, y + 2, x, y + lineH - 3, true);
+        x += sepBarW + sepGap;
       }
       const Seg& s = buckets[idx][i];
       if (s.isBattery) {
