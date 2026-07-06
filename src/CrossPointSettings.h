@@ -37,28 +37,8 @@ class CrossPointSettings {
   };
 
   // Status bar enum - legacy
-  enum STATUS_BAR_MODE {
-    NONE = 0,
-    NO_PROGRESS = 1,
-    FULL = 2,
-    BOOK_PROGRESS_BAR = 3,
-    ONLY_BOOK_PROGRESS_BAR = 4,
-    CHAPTER_PROGRESS_BAR = 5,
-    STATUS_BAR_MODE_COUNT
-  };
-  enum STATUS_BAR_PROGRESS_BAR {
-    BOOK_PROGRESS = 0,
-    CHAPTER_PROGRESS = 1,
-    HIDE_PROGRESS = 2,
-    STATUS_BAR_PROGRESS_BAR_COUNT
-  };
-  enum STATUS_BAR_PROGRESS_BAR_THICKNESS {
-    PROGRESS_BAR_THIN = 0,
-    PROGRESS_BAR_NORMAL = 1,
-    PROGRESS_BAR_THICK = 2,
-    STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
-  };
-  enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
+  // Legacy status-bar enums (STATUS_BAR_MODE / _PROGRESS_BAR / _THICKNESS / _TITLE /
+  // _CLOCK_MODE) were removed with the v1 fixed-slot renderer. XTC keeps its own mode.
   enum XTC_STATUS_BAR_MODE {
     XTC_STATUS_BAR_HIDE = 0,
     XTC_STATUS_BAR_BOTTOM = 1,
@@ -66,12 +46,9 @@ class CrossPointSettings {
     XTC_STATUS_BAR_MODE_COUNT
   };
 
-  enum STATUS_BAR_CLOCK_MODE { STATUS_BAR_CLOCK_HIDE = 0, STATUS_BAR_CLOCK_RIGHT = 1, STATUS_BAR_CLOCK_LEFT = 2 };
-
-  // --- New per-item status bar model (v2). Each text item is parked at one of six
-  // anchors (or Off). The legacy statusBar* fields above are kept only to migrate
-  // old configs into these; they will be removed once the new renderer is the only
-  // path. ---
+  // --- Per-item status bar model (v2). Each text item is parked at one of six
+  // anchors (or Off). This is the only status-bar model; the legacy fixed-slot
+  // fields and their v1 renderer were removed. ---
   enum STATUS_BAR_ANCHOR {
     SB_ANCHOR_OFF = 0,
     SB_ANCHOR_TL = 1,  // top-left
@@ -207,14 +184,8 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
-  // Status bar settings (statusBar retained for migration only)
-  uint8_t statusBar = FULL;
-  uint8_t statusBarChapterPageCount = 1;
-  uint8_t statusBarBookProgressPercentage = 1;
-  uint8_t statusBarProgressBar = HIDE_PROGRESS;
-  uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
-  uint8_t statusBarTitle = CHAPTER_TITLE;
-  uint8_t statusBarBattery = 1;
+  // Status bar: the legacy fixed-slot fields (statusBar / statusBar*) were removed
+  // in favour of the per-item v2 model below. XTC keeps its own top/bottom overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
   // --- New per-item status bar model (v2). Migrated from the legacy fields above
   // via applyStatusBarV2Migration(); defaults below approximate the legacy look. ---
@@ -232,8 +203,6 @@ class CrossPointSettings {
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge
   uint8_t sbChapterBar = SB_EDGE_OFF;        // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
-  // Clock display in status bar (X3 only, requires DS3231 RTC)
-  uint8_t statusBarClock = STATUS_BAR_CLOCK_HIDE;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).

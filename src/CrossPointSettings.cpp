@@ -186,7 +186,10 @@ bool CrossPointSettings::loadFromBinaryFile() {
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, shortPwrBtn, SHORT_PWRBTN_COUNT);
     if (++settingsRead >= fileSettingsCount) break;
-    readAndValidate(inputFile, statusBar, STATUS_BAR_MODE_COUNT);  // legacy
+    // Legacy status-bar mode field (removed): still read one byte here to keep the
+    // positional binary layout intact for old .bin settings files, then discard it.
+    uint8_t legacyStatusBarModeDiscard = 0;
+    readAndValidate(inputFile, legacyStatusBarModeDiscard, 255);
     if (++settingsRead >= fileSettingsCount) break;
     readAndValidate(inputFile, orientation, ORIENTATION_COUNT);
     if (++settingsRead >= fileSettingsCount) break;

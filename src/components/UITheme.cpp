@@ -130,25 +130,22 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   return File;
 }
 
+// Legacy height helpers, now expressed over the v2 per-item model. Still used by
+// the EPUB auto-page-turn logic to decide whether a text lane exists (vs only a
+// progress bar / nothing) so it can reserve space for the countdown indicator.
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-
-  // Add status bar margin
-  const bool showStatusBar =
-      SETTINGS.statusBarChapterPageCount || SETTINGS.statusBarBookProgressPercentage ||
-      SETTINGS.statusBarTitle != CrossPointSettings::STATUS_BAR_TITLE::HIDE_TITLE || SETTINGS.statusBarBattery ||
-      SETTINGS.statusBarClock != CrossPointSettings::STATUS_BAR_CLOCK_MODE::STATUS_BAR_CLOCK_HIDE;
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  return (showStatusBar ? (metrics.statusBarVerticalMargin) : 0) +
-         (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+  const bool showText = SETTINGS.sbEnabled &&
+                        (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
+                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos);
+  return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
 }
 
 int UITheme::getProgressBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const bool showProgressBar =
-      SETTINGS.statusBarProgressBar != CrossPointSettings::STATUS_BAR_PROGRESS_BAR::HIDE_PROGRESS;
-  return (showProgressBar ? (((SETTINGS.statusBarProgressBarThickness + 1) * 2) + metrics.progressBarMarginTop) : 0);
+  const bool showProgressBar = SETTINGS.sbEnabled && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
+                                                      SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
+  return showProgressBar ? (statusBarThicknessPx(SETTINGS.sbBarThickness) + metrics.progressBarMarginTop) : 0;
 }
 
 namespace {

@@ -225,9 +225,6 @@ class BaseTheme {
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
-  void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
-                     std::string title, const int paddingBottom = 0, const int textYOffset = 0,
-                     const bool fillMargin = true, const bool isPageBookmarked = false) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
