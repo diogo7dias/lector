@@ -2,6 +2,8 @@
 
 A personal fork of [CrossPoint](https://github.com/crosspoint-reader) e-reader firmware for the ESP32C3-based Xteink X4/X3, branched from CrossPoint **1.4.1**.
 
+> 🖼️ **[Wallpaper Converter](https://diogo7dias.github.io/lector-wallpaper-converter/)** — turn any image into an X3/X4 sleep wallpaper (`.pxc` or `.bmp`), in your browser. ([source](https://github.com/diogo7dias/lector-wallpaper-converter))
+
 Everything CrossPoint does still works here — see the [upstream project](https://github.com/crosspoint-reader) for the full feature set and docs. This file only lists what Lector changes on top of it.
 
 ## Differences from CrossPoint main
