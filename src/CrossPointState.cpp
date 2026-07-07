@@ -16,21 +16,6 @@ constexpr char STATE_FILE_BAK[] = "/.crosspoint/state.bin.bak";
 
 CrossPointState CrossPointState::instance;
 
-bool CrossPointState::isRecentSleep(uint16_t idx, uint8_t checkCount) const {
-  const uint8_t effectiveCount = std::min(checkCount, recentSleepFill);
-  for (uint8_t i = 0; i < effectiveCount; i++) {
-    const uint8_t slot = (recentSleepPos + SLEEP_RECENT_COUNT - 1 - i) % SLEEP_RECENT_COUNT;
-    if (recentSleepImages[slot] == idx) return true;
-  }
-  return false;
-}
-
-void CrossPointState::pushRecentSleep(uint16_t idx) {
-  recentSleepImages[recentSleepPos] = idx;
-  recentSleepPos = (recentSleepPos + 1) % SLEEP_RECENT_COUNT;
-  if (recentSleepFill < SLEEP_RECENT_COUNT) recentSleepFill++;
-}
-
 bool CrossPointState::saveToFile() const {
   Storage.mkdir("/.crosspoint");
   return JsonSettingsIO::saveState(*this, STATE_FILE_JSON);
@@ -77,11 +62,11 @@ bool CrossPointState::loadFromBinaryFile() {
 
   serialization::readString(inputFile, openEpubPath);
   if (version >= 2) {
+    // Legacy single "last sleep image" index. The recent-sleep buffer it seeded
+    // was removed (WallpaperPlaylistV2 replaces it), but the byte is still read
+    // so the following fields stay aligned in the binary layout.
     uint8_t legacyLastSleep = UINT8_MAX;
     serialization::readPod(inputFile, legacyLastSleep);
-    if (legacyLastSleep != UINT8_MAX) {
-      pushRecentSleep(static_cast<uint16_t>(legacyLastSleep));
-    }
   }
 
   if (version >= 3) {
