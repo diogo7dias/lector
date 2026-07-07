@@ -19,6 +19,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/reader/ReaderUtils.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -138,14 +139,20 @@ void HomeActivity::onEnter() {
       (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? kHomeListMaxBooks : metrics.homeRecentBooksCount;
   loadRecentBooks(loadCount);
 
-  // The list home reserves selector 0 for the pages button. Default entry lands on
-  // the first book (or the first menu item when there are no books) — never the
-  // pages tally, which the user reaches by pressing up from the top book.
-  const int pagesSlot = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? 1 : 0;
-  const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = (initialMenuItem == HomeMenuItem::NONE)
-                      ? pagesSlot
-                      : pagesSlot + base + menuItemToIndex(initialMenuItem, hasOpdsServers);
+  // Both layouts reserve selector 0 for the pages tally. LIST slots: 1..bookCount =
+  // books, then menu. SINGLE_COVER slots: 1 = centre cover, 2.. = menu. Default entry
+  // lands on the first book / the cover (or the first menu item when there are none).
+  const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
+  const int bookCount = static_cast<int>(recentBooks.size());
+  coverflowIndex = 0;
+  if (initialMenuItem != HomeMenuItem::NONE) {
+    const int menuIdx = menuItemToIndex(initialMenuItem, hasOpdsServers);
+    selectorIndex = listLayout ? (1 + bookCount + menuIdx) : (2 + menuIdx);
+  } else if (listLayout) {
+    selectorIndex = 1;  // first book (or first menu item when there are no books)
+  } else {
+    selectorIndex = (bookCount > 0) ? 1 : 2;  // cover slot, else first menu item
+  }
 
   // Trigger first update
   requestUpdate();
@@ -196,20 +203,33 @@ void HomeActivity::freeCoverBuffer() {
 
 void HomeActivity::loop() {
   const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
-  // The list home reserves selector 0 for the "pages read" button; the cover home
-  // has no such button, so books/menu start at selector 0 there.
-  const int pagesSlot = listLayout ? 1 : 0;
-  const int menuCount = getMenuItemCount() + pagesSlot;
+  const int bookCount = static_cast<int>(recentBooks.size());
+  // Both layouts reserve selector 0 for the pages tally.
+  //  LIST:         [pages][book 0..N-1][menu 0..]  -> 1 + bookCount + menuItemsOnly
+  //  SINGLE_COVER: [pages][cover][menu 0..]        -> 2 + menuItemsOnly
+  const int menuItemsOnly = getMenuItemCount() - bookCount;  // Browse/Transfer/Settings (+OPDS)
+  const int navSlots = listLayout ? (1 + bookCount + menuItemsOnly) : (2 + menuItemsOnly);
 
-  buttonNavigator.onNext([this, menuCount, listLayout, pagesSlot] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+  // SINGLE_COVER: the side (X3) / page-turn (X4) buttons flip the centered book.
+  // Kept ahead of the front-button nav so it never fights the menu selector.
+  if (!listLayout && bookCount > 1) {
+    const auto pt = ReaderUtils::detectPageTurn(mappedInput);
+    if (pt.next) {
+      coverflowIndex = std::min(coverflowIndex + 1, bookCount - 1);
+      requestUpdate();
+      return;
+    }
+    if (pt.prev) {
+      coverflowIndex = std::max(coverflowIndex - 1, 0);
+      requestUpdate();
+      return;
+    }
+  }
+
+  buttonNavigator.onNext([this, navSlots, listLayout, bookCount] {
+    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, navSlots);
     if (listLayout) {
-      // Books occupy selector slots [pagesSlot, pagesSlot + bookCount). Keep the
-      // selected row inside the renderer's visible band by nudging scrollOffset.
-      // The renderer auto-adjusts downward, but a wrap back to the top must be
-      // handled here.
-      const int bookCount = static_cast<int>(recentBooks.size());
-      const int bookSel = selectorIndex - pagesSlot;
+      const int bookSel = selectorIndex - 1;
       if (bookSel >= 0 && bookSel < bookCount) {
         if (bookSel > lastVisibleBookIdx) scrollOffset++;
         if (bookSel < firstVisibleBookIdx) scrollOffset = bookSel;
@@ -219,11 +239,10 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, menuCount, listLayout, pagesSlot] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+  buttonNavigator.onPrevious([this, navSlots, listLayout, bookCount] {
+    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, navSlots);
     if (listLayout) {
-      const int bookCount = static_cast<int>(recentBooks.size());
-      const int bookSel = selectorIndex - pagesSlot;
+      const int bookSel = selectorIndex - 1;
       if (bookSel >= 0 && bookSel < bookCount) {
         if (bookSel < firstVisibleBookIdx) scrollOffset = bookSel;
         scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
@@ -232,48 +251,106 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
-  // Back on a selected recent book removes it from the list (list home only).
-  if (listLayout && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    const int bookSel = selectorIndex - pagesSlot;
-    if (bookSel >= 0 && bookSel < static_cast<int>(recentBooks.size())) {
-      const std::string path = recentBooks[bookSel].path;
-      if (!path.empty()) {
-        promptRemoveBook(path, recentBooks[bookSel].title);
+  // Back removes the focused book from recents.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (listLayout) {
+      const int bookSel = selectorIndex - 1;
+      if (bookSel >= 0 && bookSel < bookCount && !recentBooks[bookSel].path.empty()) {
+        promptRemoveBook(recentBooks[bookSel].path, recentBooks[bookSel].title);
         return;
       }
+    } else if (selectorIndex == 1 && bookCount > 0 && !recentBooks[coverflowIndex].path.empty()) {
+      promptRemoveBook(recentBooks[coverflowIndex].path, recentBooks[coverflowIndex].title);
+      return;
     }
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    // Pages button (list home, selector 0): zero the tally and persist immediately
-    // so a reset survives a power-off before the next state save.
-    if (listLayout && selectorIndex == 0) {
+    // Pages tile (selector 0, both layouts): zero the tally and persist now so a
+    // reset survives a power-off before the next state save.
+    if (selectorIndex == 0) {
       APP_STATE.sessionPagesRead = 0;
       APP_STATE.saveToFile();
       requestUpdate();
       return;
     }
-    const int bookSel = selectorIndex - pagesSlot;
-    if (bookSel >= 0 && bookSel < static_cast<int>(recentBooks.size())) {
-      onSelectBook(recentBooks[bookSel].path);
-    } else {
-      const int menuIndex = bookSel - static_cast<int>(recentBooks.size());
-      switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
-        case HomeMenuItem::FILE_BROWSER:
-          onFileBrowserOpen();
-          break;
-        case HomeMenuItem::OPDS_BROWSER:
-          onOpdsBrowserOpen();
-          break;
-        case HomeMenuItem::FILE_TRANSFER:
-          onFileTransferOpen();
-          break;
-        case HomeMenuItem::SETTINGS_MENU:
-          onSettingsOpen();
-          break;
-        default:
-          break;
+    int menuIndex;
+    if (listLayout) {
+      const int bookSel = selectorIndex - 1;
+      if (bookSel >= 0 && bookSel < bookCount) {
+        onSelectBook(recentBooks[bookSel].path);
+        return;
       }
+      menuIndex = bookSel - bookCount;
+    } else {
+      if (selectorIndex == 1) {
+        if (bookCount > 0) onSelectBook(recentBooks[coverflowIndex].path);
+        return;
+      }
+      menuIndex = selectorIndex - 2;
+    }
+    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+      case HomeMenuItem::FILE_BROWSER:
+        onFileBrowserOpen();
+        break;
+      case HomeMenuItem::OPDS_BROWSER:
+        onOpdsBrowserOpen();
+        break;
+      case HomeMenuItem::FILE_TRANSFER:
+        onFileTransferOpen();
+        break;
+      case HomeMenuItem::SETTINGS_MENU:
+        onSettingsOpen();
+        break;
+      default:
+        break;
+    }
+  }
+}
+
+void HomeActivity::drawHomeTopLine(int pageWidth, bool pagesSelected) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  const std::string versionLabel = getHomeHeaderVersionLabel();
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, versionLabel.c_str());
+
+  // Running "pages read" tally: a thin bordered "Pages" label tile + an inverted
+  // count chip. Selectable (selector 0) — Confirm resets it to 0.
+  const int versionLabelWidth = renderer.getTextWidth(UI_10_FONT_ID, versionLabel.c_str());
+  std::string pagesLabel = tr(STR_HOME_PAGES_PREFIX);  // "Pages: " — drop trailing space for the tile.
+  while (!pagesLabel.empty() && pagesLabel.back() == ' ') pagesLabel.pop_back();
+  const std::string countText = std::to_string(APP_STATE.sessionPagesRead);
+  const int tileTextY = metrics.topPadding + 5;
+  const int tilePad = 6;
+  const int tileGap = 5;
+  const int tileH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
+  const int tileY = tileTextY - 3;
+  const int fillH = tileH + 1;
+  const int labelTileX = metrics.contentSidePadding + versionLabelWidth + 14;
+  const int labelTextW = renderer.getTextWidth(UI_10_FONT_ID, pagesLabel.c_str());
+  const int labelTileW = labelTextW + tilePad * 2;
+  if (pagesSelected) {
+    renderer.fillRect(labelTileX, tileY, labelTileW, fillH, true);
+  } else {
+    renderer.drawRect(labelTileX, tileY, labelTileW, tileH, 2, true);
+  }
+  renderer.drawText(UI_10_FONT_ID, labelTileX + tilePad, tileTextY, pagesLabel.c_str(), !pagesSelected);
+
+  const int countTileX = labelTileX + labelTileW + tileGap;
+  const int countTextW = renderer.getTextWidth(UI_10_FONT_ID, countText.c_str());
+  const int countTileW = countTextW + tilePad * 2;
+  renderer.fillRect(countTileX, tileY, countTileW, fillH, true);
+  renderer.drawText(UI_10_FONT_ID, countTileX + (countTileW - countTextW) / 2, tileTextY, countText.c_str(), false);
+
+  // Clock just left of the battery cluster (X3 DS3231; inert on X4).
+  if (halClock.isAvailable()) {
+    char timeBuf[9];
+    if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+      const int batteryIconLeft = pageWidth - 12 - metrics.batteryWidth;
+      const int batteryTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "100%");
+      const int batteryClusterLeft = batteryIconLeft - batteryTextWidth - 4;
+      const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
+      renderer.drawText(UI_10_FONT_ID, batteryClusterLeft - 12 - clockWidth, metrics.topPadding + 5, timeBuf);
     }
   }
 }
@@ -287,62 +364,7 @@ void HomeActivity::render(RenderLock&&) {
 
   // ---- LIST home (Lector): scrolling recent-books list + bottom menu ----
   if (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) {
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
-    const std::string versionLabel = getHomeHeaderVersionLabel();
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, versionLabel.c_str());
-
-    // Running "pages read" tally as a focusable button (selector 0), inline just
-    // after the version label. Confirm on it resets the tally to 0. DX34 styling: a
-    // thin bordered "Pages:" label tile plus an inverted (black background, white
-    // text) count tile — the same look as the [NN%] badge in the recent-book list.
-    // When selected the label tile fills solid black too so the whole pill reads as
-    // one highlighted block.
-    const int versionLabelWidth = renderer.getTextWidth(UI_10_FONT_ID, versionLabel.c_str());
-    const bool pagesSelected = selectorIndex == 0;
-    std::string pagesLabel = tr(STR_HOME_PAGES_PREFIX);  // "Pages: " — drop the trailing space for the tile.
-    while (!pagesLabel.empty() && pagesLabel.back() == ' ') pagesLabel.pop_back();
-    const std::string countText = std::to_string(APP_STATE.sessionPagesRead);
-    const int tileTextY = metrics.topPadding + 5;
-    const int tilePad = 6;
-    const int tileGap = 5;
-    const int tileH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
-    const int tileY = tileTextY - 3;
-
-    // drawRect(lineWidth) paints its outer bottom border at tileY + tileH (an
-    // inclusive tileH+1-tall box), whereas fillRect covers only tileH rows. Fill
-    // one row taller so the filled tiles' bottoms align with the bordered tile.
-    const int fillH = tileH + 1;
-    const int labelTileX = metrics.contentSidePadding + versionLabelWidth + 14;
-    const int labelTextW = renderer.getTextWidth(UI_10_FONT_ID, pagesLabel.c_str());
-    const int labelTileW = labelTextW + tilePad * 2;
-    if (pagesSelected) {
-      renderer.fillRect(labelTileX, tileY, labelTileW, fillH, true);
-    } else {
-      renderer.drawRect(labelTileX, tileY, labelTileW, tileH, 2, true);
-    }
-    renderer.drawText(UI_10_FONT_ID, labelTileX + tilePad, tileTextY, pagesLabel.c_str(), !pagesSelected);
-
-    // Count tile: always an inverted chip (black fill, white text), centered.
-    const int countTileX = labelTileX + labelTileW + tileGap;
-    const int countTextW = renderer.getTextWidth(UI_10_FONT_ID, countText.c_str());
-    const int countTileW = countTextW + tilePad * 2;
-    renderer.fillRect(countTileX, tileY, countTileW, fillH, true);
-    renderer.drawText(UI_10_FONT_ID, countTileX + (countTileW - countTextW) / 2, tileTextY, countText.c_str(), false);
-
-    // Clock sits just left of the battery cluster (icon + "%"), sharing the
-    // battery's row and font size (UI_10). X3-only: DS3231 RTC, inert on X4.
-    // drawHeader draws the battery at the right edge; mirror its geometry here
-    // and reserve "100%" width so the clock never overlaps the percentage.
-    if (halClock.isAvailable()) {
-      char timeBuf[9];
-      if (halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-        const int batteryIconLeft = pageWidth - 12 - metrics.batteryWidth;
-        const int batteryTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "100%");
-        const int batteryClusterLeft = batteryIconLeft - batteryTextWidth - 4;
-        const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
-        renderer.drawText(UI_10_FONT_ID, batteryClusterLeft - 12 - clockWidth, metrics.topPadding + 5, timeBuf);
-      }
-    }
+    drawHomeTopLine(pageWidth, /*pagesSelected=*/selectorIndex == 0);
 
     // Menu items (no per-book "Continue Reading" — the list itself is that).
     // Recent Books is reached from the top of the file browser, not from here.
@@ -390,50 +412,43 @@ void HomeActivity::render(RenderLock&&) {
     return;
   }
 
-  // ---- SINGLE_COVER home (upstream CrossPoint): one big current-book cover ----
-  bool bufferRestored = coverBufferStored && restoreCoverBuffer();
+  // ---- SINGLE_COVER home (Lector coverflow): centre book cover + peeking neighbours ----
+  // Shares the LIST home's chrome (top line + bottom menu); only the centre changes.
+  // Selection slots: 0 = pages tile, 1 = centre cover, 2.. = menu items. The centre
+  // book (coverflowIndex) is switched with the side / page-turn buttons in loop().
+  drawHomeTopLine(pageWidth, /*pagesSelected=*/selectorIndex == 0);
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding},
-                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+  const int bookCount = static_cast<int>(recentBooks.size());
+  if (coverflowIndex >= bookCount) coverflowIndex = std::max(0, bookCount - 1);
 
-  // Record the tile rect so storeCoverBuffer (called from the theme) knows
-  // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
-  // instead of the 48 KB full framebuffer the previous bind captured.
-  coverRectX = 0;
-  coverRectY = metrics.homeTopPadding;
-  coverRectW = pageWidth;
-  coverRectH = metrics.homeCoverTileHeight;
-
-  GUI.drawRecentBookCover(renderer, Rect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight},
-                          recentBooks, selectorIndex, coverRendered, coverBufferStored, bufferRestored,
-                          std::bind(&HomeActivity::storeCoverBuffer, this));
-
-  // Build menu items dynamically (Recent Books now lives in the file browser).
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
-
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 1, Library);
   }
+  const int menuCount = static_cast<int>(menuItems.size());
+  const int menuBlockHeight = metrics.verticalSpacing + menuCount * metrics.menuRowHeight +
+                              (menuCount > 0 ? (menuCount - 1) * metrics.menuSpacing : 0);
+  constexpr int menuBottomGap = 8;
+  const int menuY = pageHeight - metrics.buttonHintsHeight - menuBottomGap - menuBlockHeight;
 
-  if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
-    // Insert Continue Reading at the top if enabled in theme
-    menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
-    menuIcons.insert(menuIcons.begin(), Book);
-  }
+  // Cover area fills the band between the top line and the pinned bottom menu.
+  const int coverAreaY = metrics.topPadding + metrics.homeTopPadding;
+  constexpr int coverAreaBottomGap = 8;
+  const int coverAreaHeight = std::max(0, menuY - coverAreaBottomGap - coverAreaY);
+  GUI.drawRecentBookCoverflow(renderer, Rect{0, coverAreaY, pageWidth, coverAreaHeight}, recentBooks, coverflowIndex,
+                              /*coverSelected=*/selectorIndex == 1);
 
+  const int menuSelected = selectorIndex - 2;  // slots 0 (pages) and 1 (cover) fall below the menu range
   GUI.drawButtonMenu(
-      renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
-      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
+      renderer, Rect{0, menuY, pageWidth, menuBlockHeight}, menuCount, menuSelected,
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
-  const auto labels = mappedInput.mapLabels("", tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const bool coverBookSelected = selectorIndex == 1 && bookCount > 0 && !recentBooks[coverflowIndex].path.empty();
+  const char* backLabel = coverBookSelected ? tr(STR_REMOVE_BUTTON) : "";
+  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);

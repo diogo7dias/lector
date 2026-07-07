@@ -910,6 +910,138 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   }
 }
 
+void BaseTheme::drawRecentBookCoverflow(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
+                                        int centreIndex, bool coverSelected) const {
+  const int count = static_cast<int>(recentBooks.size());
+  if (count == 0) {
+    renderer.drawCenteredText(UI_12_FONT_ID, rect.y + rect.height / 2 - renderer.getLineHeight(UI_12_FONT_ID) / 2,
+                              tr(STR_NO_OPEN_BOOK));
+    return;
+  }
+  if (centreIndex < 0) centreIndex = 0;
+  if (centreIndex >= count) centreIndex = count - 1;
+
+  const int sidePad = BaseMetrics::values.contentSidePadding;
+  const int lineH = renderer.getLineHeight(UI_10_FONT_ID);
+  const int authorH = renderer.getLineHeight(SMALL_FONT_ID);
+
+  // Reserve a band at the TOP for the [NN%] badge (drawn ABOVE the cover, outside
+  // the art) and a band at the BOTTOM for the title + author. The cover fills what
+  // is left; it may render smaller so the badge has its own space.
+  const int badgeH = lineH + 4;
+  const int topBandH = badgeH + 6;
+  const int bottomBandH = lineH + authorH + 8;
+  const int coverMaxH = std::max(40, rect.height - topBandH - bottomBandH);
+  const int coverMaxW = std::max(20, rect.width - 2 * sidePad);
+  const int coverBandY = rect.y + topBandH;
+  const int peekVisible = 32;
+
+  // Load a cover thumbnail's native dimensions. Returns false + empty when absent.
+  auto loadDims = [&](const RecentBook& b, std::string& thumbOut, int& iw, int& ih) -> bool {
+    iw = 0;
+    ih = 0;
+    if (b.coverBmpPath.empty()) return false;
+    thumbOut = UITheme::getCoverThumbPath(b.coverBmpPath, BaseMetrics::values.homeCoverHeight);
+    HalFile f;
+    if (!Storage.openFileForRead("HOME", thumbOut, f)) return false;
+    Bitmap bm(f);
+    if (bm.parseHeaders() != BmpReaderError::Ok) return false;
+    iw = bm.getWidth();
+    ih = bm.getHeight();
+    return iw > 0 && ih > 0;
+  };
+
+  // drawBitmap only DOWNSCALES (never upscales) and keeps aspect, so mirror that to
+  // get the cover's ACTUAL rendered size — then the border/box we draw matches the
+  // art exactly (no empty frame) and neighbours line up.
+  auto drawnSize = [](int iw, int ih, int maxW, int maxH, int& ow, int& oh) {
+    if (iw <= 0 || ih <= 0) {
+      oh = maxH;
+      ow = std::min(maxW, maxH * 2 / 3);
+      return;
+    }
+    float s = std::min(static_cast<float>(maxW) / iw, static_cast<float>(maxH) / ih);
+    if (s > 1.0f) s = 1.0f;
+    ow = static_cast<int>(iw * s);
+    oh = static_cast<int>(ih * s);
+  };
+
+  // Draw a cover into the exact box (leftX,topY,boxW,boxH). Border matches the art.
+  auto drawCover = [&](const RecentBook& b, int leftX, int topY, int boxW, int boxH, bool selected) {
+    std::string thumb;
+    int iw = 0, ih = 0;
+    if (loadDims(b, thumb, iw, ih)) {
+      HalFile f;
+      if (Storage.openFileForRead("HOME", thumb, f)) {
+        Bitmap bm(f);
+        if (bm.parseHeaders() == BmpReaderError::Ok) renderer.drawBitmap(bm, leftX, topY, boxW, boxH);
+      }
+    } else {
+      renderer.fillRectDither(leftX, topY, boxW, boxH, Color::LightGray);
+    }
+    renderer.drawRect(leftX, topY, boxW, boxH);
+    if (selected) {
+      renderer.drawRect(leftX + 1, topY + 1, boxW - 2, boxH - 2);
+      renderer.drawRect(leftX + 2, topY + 2, boxW - 4, boxH - 4);
+    }
+  };
+
+  // Draw a neighbour peeking at a screen edge — its own real size, only ~peekVisible
+  // px showing at the edge, vertically aligned with the centre band.
+  auto drawPeek = [&](const RecentBook& b, bool leftSide) {
+    std::string thumb;
+    int iw = 0, ih = 0;
+    loadDims(b, thumb, iw, ih);
+    int w = 0, h = 0;
+    drawnSize(iw, ih, coverMaxW, coverMaxH, w, h);
+    const int topY = coverBandY + (coverMaxH - h) / 2;
+    const int leftX = leftSide ? (rect.x + peekVisible - w) : (rect.x + rect.width - peekVisible);
+    drawCover(b, leftX, topY, w, h, false);  // drawBitmap clips the off-screen part
+  };
+
+  const RecentBook& book = recentBooks[centreIndex];
+  std::string cThumb;
+  int cIw = 0, cIh = 0;
+  loadDims(book, cThumb, cIw, cIh);
+  int cW = 0, cH = 0;
+  drawnSize(cIw, cIh, coverMaxW, coverMaxH, cW, cH);
+  const int cX = rect.x + (rect.width - cW) / 2;
+  const int cY = coverBandY + (coverMaxH - cH) / 2;
+
+  // Peeks first (behind the centre).
+  if (count > 1 && centreIndex > 0) drawPeek(recentBooks[centreIndex - 1], true);
+  if (count > 1 && centreIndex < count - 1) drawPeek(recentBooks[centreIndex + 1], false);
+
+  // Centre cover on top.
+  drawCover(book, cX, cY, cW, cH, coverSelected);
+
+  // [NN%] badge ABOVE the cover (top band, outside the art), centered.
+  if (book.progressPercent >= 0) {
+    const std::string pct = "[" + std::to_string(book.progressPercent) + "%]";
+    const int tw = renderer.getTextWidth(UI_10_FONT_ID, pct.c_str());
+    const int bw = tw + 12;
+    const int bx = rect.x + (rect.width - bw) / 2;
+    const int by = rect.y + (topBandH - badgeH) / 2;
+    renderer.fillRect(bx, by, bw, badgeH, true);
+    renderer.drawText(UI_10_FONT_ID, bx + (bw - tw) / 2, by + 2, pct.c_str(), false);
+  }
+
+  // Title + author below the cover band.
+  const int textMaxW = rect.width - 2 * sidePad;
+  int ty = coverBandY + coverMaxH + 4;
+  {
+    const std::string t = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), textMaxW, EpdFontFamily::BOLD);
+    const int tw = renderer.getTextWidth(UI_10_FONT_ID, t.c_str(), EpdFontFamily::BOLD);
+    renderer.drawText(UI_10_FONT_ID, rect.x + (rect.width - tw) / 2, ty, t.c_str(), true, EpdFontFamily::BOLD);
+    ty += lineH + 2;
+  }
+  if (!book.author.empty()) {
+    const std::string a = renderer.truncatedText(SMALL_FONT_ID, book.author.c_str(), textMaxW);
+    const int aw = renderer.getTextWidth(SMALL_FONT_ID, a.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x + (rect.width - aw) / 2, ty, a.c_str(), true);
+  }
+}
+
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {

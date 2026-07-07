@@ -213,6 +213,13 @@ class BaseTheme {
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
+  // Home SINGLE_COVER layout (Lector coverflow): the centre book's cover, big and
+  // centered, with an inverted [NN%] badge, bold title and smaller author below.
+  // When there is more than one recent book, the previous/next covers peek in at
+  // the left/right screen edges at the same height as the centre (clipped, not
+  // shrunk). The caller switches centreIndex with the side / page-turn buttons.
+  void drawRecentBookCoverflow(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
+                               int centreIndex, bool coverSelected) const;
   // Home LIST layout (Lector): draws recent books as a scrolling vertical list
   // of title-by-author rows instead of a single big cover. Returns which book
   // indices are on-screen so the caller can clamp its scroll/selector. Ported

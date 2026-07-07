@@ -12,6 +12,10 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  // SINGLE_COVER (coverflow) home: which recent book is centered. Switched with the
+  // side / page-turn buttons. Independent of selectorIndex (which picks pages tile /
+  // cover slot / menu row).
+  int coverflowIndex = 0;
   // List-home (HOME_LAYOUT_LIST) scroll state: scrollOffset is the topmost book
   // index the renderer may start from; first/lastVisibleBookIdx are fed back by
   // drawRecentBookList so loop() can keep the selected row on-screen.
@@ -72,6 +76,9 @@ class HomeActivity final : public Activity {
   void onOpdsBrowserOpen();
 
   int getMenuItemCount() const;
+  // Shared home top line (version label + Pages tally pill + clock + battery header),
+  // drawn identically by both the LIST and SINGLE_COVER layouts.
+  void drawHomeTopLine(int pageWidth, bool pagesSelected);
   bool storeCoverBuffer();    // Store frame buffer for cover image
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
