@@ -74,6 +74,10 @@ class HalFile : public Print {
 
   void flush();
   size_t getName(char* name, size_t len);
+  // FAT modify date/time (packed FAT fields), forwarded from the underlying
+  // FsFile. Used to order sleep wallpapers newest-first. Returns false if the
+  // timestamp is unavailable.
+  bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime);
   size_t size();
   size_t fileSize();
   uint64_t fileSize64();
