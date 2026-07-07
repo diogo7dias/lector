@@ -160,8 +160,10 @@ class CrossPointSettings {
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
-  // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
+  // UI Theme. Lector is the only theme (the former "Classic"/BaseTheme look, renamed).
+  // Value 0 is preserved so existing configs (all were Classic=0) map straight to it;
+  // any stale higher value from a removed theme clamps back to LECTOR.
+  enum UI_THEME { LECTOR = 0 };
 
   // Home screen layout: LIST = scrolling recent-books list (Lector home),
   // SINGLE_COVER = one big cover of the current book (upstream CrossPoint home).
@@ -300,7 +302,7 @@ class CrossPointSettings {
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
   // UI Theme
-  uint8_t uiTheme = LYRA;
+  uint8_t uiTheme = LECTOR;
   // Home screen layout (see HOME_LAYOUT). Default = recent-books list.
   uint8_t homeLayout = HOME_LAYOUT_LIST;
   // Open a random book from the Recent Books list on boot instead of the home
