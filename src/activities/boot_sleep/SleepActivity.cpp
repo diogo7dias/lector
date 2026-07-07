@@ -8,9 +8,11 @@
 #include <Txt.h>
 #include <Xtc.h>
 #include <esp_random.h>
+#include <strings.h>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "PxcSleepRenderer.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -21,6 +23,7 @@
 #include "images/bootlogo2.h"
 #include "images/bootlogo3.h"
 #include "images/bootlogo4.h"
+#include "sleep/Wallpaper.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -88,97 +91,37 @@ void SleepActivity::renderUntilDeathSleepScreen() const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // Check if we have a /.sleep (preferred) or /sleep directory
-  const char* sleepDir = nullptr;
-  auto dir = Storage.open("/.sleep");
-
-  // Look for sleep.bmp on the root of the sd card to determine if we should
-  // render a custom sleep screen instead of the default.
-  // This takes priority over the /sleep folder.
-  HalFile file;
-  if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
-    if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-      LOG_DBG("SLP", "Loading: /sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
-      file.close();
-      if (dir) dir.close();
-      return;
+  // V2 wallpaper rotation (WallpaperPlaylistV2 via the wallpaper facade). The
+  // playlist is filtered to the chosen wallpaperFormat, ordered newest-first,
+  // honours pause + the /sleep pause overflow, and falls back to /sleep.{pxc,bmp}
+  // at the SD root. The facade picks the next candidate and drives this probe,
+  // retrying another file if a render fails transiently.
+  //
+  // The probe renders by extension: .pxc through the grayscale pxc path,
+  // everything else through the existing bitmap path. Returning false on an
+  // open/parse failure lets the facade try the next candidate.
+  crosspoint::sleep::wallpaper::RenderProbe probe =
+      [this](const crosspoint::sleep::wallpaper::SleepPick& pick) -> bool {
+    const std::string& p = pick.fullPath;
+    if (p.size() >= 4 && strcasecmp(p.c_str() + p.size() - 4, ".pxc") == 0) {
+      return renderPxcSleepScreen(renderer, p);
     }
-    file.close();
+    HalFile f;
+    if (!Storage.openFileForRead("SLP", p, f)) return false;
+    Bitmap bitmap(f, true);
+    if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+      f.close();
+      return false;
+    }
+    renderBitmapSleepScreen(bitmap);
+    f.close();
+    return true;
+  };
+
+  const auto pick = crosspoint::sleep::wallpaper::nextSleepFile(probe);
+  if (!pick.hasImage()) {
+    renderDefaultSleepScreen();
   }
-
-  if (dir && dir.isDirectory()) {
-    sleepDir = "/.sleep";
-  } else {
-    dir = Storage.open("/sleep");
-    if (dir && dir.isDirectory()) {
-      sleepDir = "/sleep";
-    }
-  }
-
-  if (sleepDir) {
-    std::vector<std::string> files;
-    char name[500];
-    // collect all valid BMP files
-    for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
-      if (dirFile.isDirectory()) {
-        dirFile.close();
-        continue;
-      }
-      dirFile.getName(name, sizeof(name));
-      auto filename = std::string(name);
-      if (filename[0] == '.') {
-        dirFile.close();
-        continue;
-      }
-
-      if (!FsHelpers::hasBmpExtension(filename)) {
-        LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name);
-        dirFile.close();
-        continue;
-      }
-      Bitmap bitmap(dirFile);
-      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-        dirFile.close();
-        continue;
-      }
-      files.emplace_back(filename);
-      dirFile.close();
-    }
-    const auto numFiles = files.size();
-    if (numFiles > 0) {
-      // Pick a random wallpaper, excluding recently shown ones.
-      // Window: up to SLEEP_RECENT_COUNT entries, capped at numFiles-1.
-      const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
-      const uint8_t window =
-          static_cast<uint8_t>(std::min(static_cast<size_t>(APP_STATE.recentSleepFill), numFiles - 1));
-      auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
-      for (uint8_t attempt = 0; attempt < 20 && APP_STATE.isRecentSleep(randomFileIndex, window); attempt++) {
-        randomFileIndex = static_cast<uint16_t>(random(fileCount));
-      }
-      APP_STATE.pushRecentSleep(randomFileIndex);
-      APP_STATE.saveToFile();
-      const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
-      HalFile randFile;
-      if (Storage.openFileForRead("SLP", filename, randFile)) {
-        LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
-        delay(100);
-        Bitmap bitmap(randFile, true);
-        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
-          randFile.close();
-          dir.close();
-          return;
-        }
-        randFile.close();
-      }
-    }
-  }
-  if (dir) dir.close();
-
-  renderDefaultSleepScreen();
 }
 
 void SleepActivity::renderDefaultSleepScreen() const {
