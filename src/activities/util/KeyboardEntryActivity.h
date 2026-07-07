@@ -5,6 +5,7 @@
 #include <functional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
@@ -20,6 +21,15 @@ enum class InputType { Text, Password, Url };
 
 class KeyboardEntryActivity : public Activity {
  public:
+  // Optional live-preview: when set, the band between the text field and the (bottom-
+  // pinned) keyboard shows results that re-rank on every keystroke instead of the tips.
+  // Provider returns the total match count + up to maxRows display labels for `query`.
+  struct KbPreviewResult {
+    int total = 0;
+    std::vector<std::string> rows;
+  };
+  using LivePreviewProvider = std::function<KbPreviewResult(const std::string& query, int maxRows)>;
+
   explicit KeyboardEntryActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                  std::string title = "Enter Text", std::string initialText = "",
                                  const size_t maxLength = 0, InputType inputType = InputType::Text)
@@ -29,12 +39,17 @@ class KeyboardEntryActivity : public Activity {
         maxLength(maxLength),
         inputType(inputType) {}
 
+  // Configure before handing the activity to startActivityForResult. When unset the
+  // keyboard renders exactly as before (used by Wi-Fi / OPDS / sync entry).
+  void setLivePreview(LivePreviewProvider provider) { livePreviewProvider_ = std::move(provider); }
+
   void onEnter() override;
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
 
  private:
+  LivePreviewProvider livePreviewProvider_;
   std::string title;
   std::string text;
   size_t maxLength;

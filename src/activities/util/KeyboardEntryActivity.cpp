@@ -579,7 +579,29 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     tipCount = 1 + (inputType == InputType::Url ? 1 : 0) + (!text.empty() ? 1 : 0);
   }
 
-  if (tipCount > 0) {
+  if (livePreviewProvider_) {
+    // Live results band (re-ranked every keystroke) in place of the tips.
+    const int bandTop = underlineBottom + 4;
+    const int bandBottom = keyboardStartY;
+    const int previewRowLh = renderer.getLineHeight(SMALL_FONT_ID);
+    const int headerLh = renderer.getLineHeight(UI_10_FONT_ID);
+    int maxPreviewRows = (previewRowLh > 0) ? (bandBottom - bandTop - headerLh - 4) / previewRowLh : 0;
+    if (maxPreviewRows < 0) maxPreviewRows = 0;
+    if (maxPreviewRows > 8) maxPreviewRows = 8;
+    const KbPreviewResult pv = livePreviewProvider_(text, maxPreviewRows);
+    int py = bandTop;
+    const std::string countStr =
+        text.empty() ? std::string(tr(STR_TYPE_TO_SEARCH)) : (std::to_string(pv.total) + " " + tr(STR_MATCHES));
+    renderer.drawCenteredText(UI_10_FONT_ID, py, countStr.c_str(), true);
+    py += headerLh + 4;
+    const int previewSideMargin = metrics.contentSidePadding;
+    for (const auto& r : pv.rows) {
+      if (py + previewRowLh > bandBottom) break;
+      const std::string truncated = renderer.truncatedText(SMALL_FONT_ID, r.c_str(), pageWidth - 2 * previewSideMargin);
+      renderer.drawText(SMALL_FONT_ID, previewSideMargin, py, truncated.c_str(), true);
+      py += previewRowLh;
+    }
+  } else if (tipCount > 0) {
     int y = (underlineBottom + keyboardStartY) / 2 - (tipCount + 1) * tipsLh / 2;
     drawTip(tr(STR_KB_TIPS), y);
     y += tipsLh;

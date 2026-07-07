@@ -34,6 +34,33 @@ class FileBrowserActivity final : public Activity {
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
 
+  // ── Fuzzy search (ported from DX34) ──────────────────────────────────────
+  // Active query for the current folder; empty = no search. filteredIndexes holds
+  // the ranked indices into `files` while a search is active. folderHasBooks_ gates
+  // whether the "Search current folder" row is offered (Books mode, folder has a book).
+  std::string activeSearchQuery;
+  std::vector<size_t> filteredIndexes;
+  bool folderHasBooks_ = false;
+
+  bool searchActive() const { return !activeSearchQuery.empty(); }
+  int searchRowCount() const { return folderHasBooks_ ? 1 : 0; }
+  int clearRowCount() const { return searchActive() ? 1 : 0; }
+  // Synthetic rows pinned above the file rows: Recent Books + Search + Clear.
+  int headerRowCount() const { return (hasRecentShortcut() ? 1 : 0) + searchRowCount() + clearRowCount(); }
+  size_t fileRowCount() const { return searchActive() ? filteredIndexes.size() : files.size(); }
+  size_t totalRowCount() const { return static_cast<size_t>(headerRowCount()) + fileRowCount(); }
+
+  enum class RowKind { Recent, Search, Clear, File };
+  struct RowRef {
+    RowKind kind;
+    size_t fileIndex = 0;  // valid when kind == File; index into `files`
+  };
+  RowRef rowAt(size_t rowIndex) const;
+
+  void openSearch();
+  void rebuildFilter();
+  void clearSearch();
+
   // Data loading
   void loadFiles();
   size_t findEntry(const std::string& name) const;
