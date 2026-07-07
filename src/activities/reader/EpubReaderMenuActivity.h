@@ -27,13 +27,20 @@ class EpubReaderMenuActivity final : public Activity {
     SYNC,
     DELETE_CACHE,
     HIGHLIGHT_QUOTE,
-    VIEW_QUOTES
+    VIEW_QUOTES,
+    // Sleep-wallpaper triage (only shown when a last-shown wallpaper exists).
+    WALLPAPER_FAVORITE,
+    WALLPAPER_PAUSE_ROTATION,
+    WALLPAPER_MOVE_PAUSE,
+    WALLPAPER_DELETE
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const std::string& author, const std::string& chapterName, const int currentPage,
                                   const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
-                                  const bool hasFootnotes, bool hasBookmarks, bool hasQuotes);
+                                  const bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
+                                  bool hasSleepWallpaper = false, bool wallpaperPaused = false,
+                                  bool wallpaperFavorited = false);
 
   void onEnter() override;
   void onExit() override;
@@ -46,7 +53,8 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasQuotes);
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
+                                              bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;

@@ -13,9 +13,11 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& chapterName, const int currentPage,
                                                const int totalPages, const int bookProgressPercent,
                                                const uint8_t currentOrientation, const bool hasFootnotes,
-                                               const bool hasBookmarks, const bool hasQuotes)
+                                               const bool hasBookmarks, const bool hasQuotes, bool hasSleepWallpaper,
+                                               bool wallpaperPaused, bool wallpaperFavorited)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused,
+                               wallpaperFavorited)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -25,8 +27,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       bookProgressPercent(bookProgressPercent) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                     bool hasBookmarks,
-                                                                                     bool hasQuotes) {
+                                                                                     bool hasBookmarks, bool hasQuotes,
+                                                                                     bool hasSleepWallpaper,
+                                                                                     bool wallpaperPaused,
+                                                                                     bool wallpaperFavorited) {
   std::vector<MenuItem> items;
   items.reserve(15);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
@@ -54,6 +58,16 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   // "Reset Pages Read" moved to the home screen's pages button (Confirm resets).
+
+  // Sleep-wallpaper triage — only when the device knows which wallpaper was last
+  // shown (so the actions have a concrete target). Labels reflect current state.
+  if (hasSleepWallpaper) {
+    items.push_back({MenuAction::WALLPAPER_FAVORITE, wallpaperFavorited ? StrId::STR_UNFAVORITE : StrId::STR_FAVORITE});
+    items.push_back(
+        {MenuAction::WALLPAPER_PAUSE_ROTATION, wallpaperPaused ? StrId::STR_TRIAGE_UNPAUSE : StrId::STR_TRIAGE_PAUSE});
+    items.push_back({MenuAction::WALLPAPER_MOVE_PAUSE, StrId::STR_MOVE_TO_SLEEP_PAUSE});
+    items.push_back({MenuAction::WALLPAPER_DELETE, StrId::STR_TRIAGE_DELETE});
+  }
   return items;
 }
 
