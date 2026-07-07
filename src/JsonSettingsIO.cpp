@@ -30,6 +30,12 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["showBootScreen"] = s.showBootScreen;
   doc["sessionPagesRead"] = s.sessionPagesRead;
   doc["lastUntilDeathLogo"] = s.lastUntilDeathLogo;
+  // Sleep wallpaper V2 rotation state.
+  doc["lastShownSleepFilename"] = s.lastShownSleepFilename;
+  doc["lastSleepWallpaperPath"] = s.lastSleepWallpaperPath;
+  doc["wallpaperRotationPaused"] = s.wallpaperRotationPaused;
+  doc["sleepFavoritesCapReached"] = s.sleepFavoritesCapReached;
+  doc["pendingSleepWallpapersMovedToPause"] = s.pendingSleepWallpapersMovedToPause;
 
   String json;
   serializeJson(doc, json);
@@ -67,6 +73,12 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.showBootScreen = doc["showBootScreen"] | true;
   s.sessionPagesRead = doc["sessionPagesRead"] | static_cast<uint32_t>(0);
   s.lastUntilDeathLogo = doc["lastUntilDeathLogo"] | static_cast<uint8_t>(0);
+  // Sleep wallpaper V2 rotation state (missing keys default; tolerant of legacy).
+  s.lastShownSleepFilename = doc["lastShownSleepFilename"] | std::string("");
+  s.lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
+  s.wallpaperRotationPaused = doc["wallpaperRotationPaused"] | false;
+  s.sleepFavoritesCapReached = doc["sleepFavoritesCapReached"] | false;
+  s.pendingSleepWallpapersMovedToPause = doc["pendingSleepWallpapersMovedToPause"] | static_cast<uint16_t>(0);
   return true;
 }
 
