@@ -57,10 +57,17 @@ void FileBrowserActivity::loadFiles() {
         if (FsHelpers::checkFileExtension(filename, ".bin")) {
           files.emplace_back(filename);
         }
-      } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-                 FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename)) {
-        files.emplace_back(filename);
+      } else {
+        // Wallpaper files are shown filtered by the chosen format, so /sleep and
+        // /sleep pause list exactly the files the sleep rotation will use (only
+        // .pxc in PXC mode, only .bmp in BMP mode) instead of always .bmp.
+        const bool wallpaper = SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC
+                                   ? FsHelpers::checkFileExtension(filename, ".pxc")
+                                   : FsHelpers::hasBmpExtension(filename);
+        if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+            FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) || wallpaper) {
+          files.emplace_back(filename);
+        }
       }
     }
   }
