@@ -99,6 +99,9 @@ bool JsonSettingsIO::saveSettings(const CrossPointSettings& s, const char* path)
   doc["frontButtonRight"] = s.frontButtonRight;
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   doc["fontFamily"] = s.fontFamily;
+  // Marks that fontSize is already stored in the post-size-11 index space, so the
+  // one-shot remap in loadSettings does not run again.
+  doc["fontSizeSchemaV2"] = true;
   // SD card font family name — not in SettingsList, save manually
   if (s.sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = s.sdFontFamilyName;
@@ -133,6 +136,16 @@ bool JsonSettingsIO::loadSettings(CrossPointSettings& s, const char* json, bool*
   }
 
   auto clamp = [](uint8_t val, uint8_t maxVal, uint8_t def) -> uint8_t { return val < maxVal ? val : def; };
+
+  // fontSize schema v2: baked point size 11 was removed and the FONT_SIZE enum
+  // reindexed (SIZE_12 is now 0; old files stored 0..5 for 11..16). Remap the
+  // stored index ONCE so an existing choice keeps its point size instead of
+  // shifting up a notch. Runs before the generic loop reads doc["fontSize"].
+  if (doc["fontSizeSchemaV2"].isNull() && !doc["fontSize"].isNull()) {
+    const int oldIdx = doc["fontSize"] | 3;              // old SIZE_14 default was index 3
+    doc["fontSize"] = (oldIdx <= 1) ? 0 : (oldIdx - 1);  // 11&12->12(0); 13->1; 14->2; 15->3; 16->4
+    if (needsResave) *needsResave = true;
+  }
 
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;

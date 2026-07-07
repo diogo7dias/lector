@@ -142,8 +142,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_BOOKERLY, StrId::STR_GEORGIA, StrId::STR_VERDANA, StrId::STR_MERRIWEATHER},
                           "fontFamily", StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
-                          {StrId::STR_FONT_SIZE_11, StrId::STR_FONT_SIZE_12, StrId::STR_FONT_SIZE_13,
-                           StrId::STR_FONT_SIZE_14, StrId::STR_FONT_SIZE_15, StrId::STR_FONT_SIZE_16},
+                          {StrId::STR_FONT_SIZE_12, StrId::STR_FONT_SIZE_13, StrId::STR_FONT_SIZE_14,
+                           StrId::STR_FONT_SIZE_15, StrId::STR_FONT_SIZE_16},
                           "fontSize", StrId::STR_CAT_READER),
         SettingInfo::Value(
             StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,

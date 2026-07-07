@@ -64,11 +64,6 @@ EpdFont bookerly14ItalicFont(&bookerly_14_italic);
 EpdFontFamily bookerly14FontFamily(&bookerly14RegularFont, &bookerly14BoldFont, &bookerly14ItalicFont,
                                    &bookerly14BoldFont);
 #ifndef OMIT_FONTS
-EpdFont bookerly11RegularFont(&bookerly_11_regular);
-EpdFont bookerly11BoldFont(&bookerly_11_bold);
-EpdFont bookerly11ItalicFont(&bookerly_11_italic);
-EpdFontFamily bookerly11FontFamily(&bookerly11RegularFont, &bookerly11BoldFont, &bookerly11ItalicFont,
-                                   &bookerly11BoldFont);
 EpdFont bookerly12RegularFont(&bookerly_12_regular);
 EpdFont bookerly12BoldFont(&bookerly_12_bold);
 EpdFont bookerly12ItalicFont(&bookerly_12_italic);
@@ -90,10 +85,6 @@ EpdFont bookerly16ItalicFont(&bookerly_16_italic);
 EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
                                    &bookerly16BoldFont);
 
-EpdFont georgia11RegularFont(&georgia_11_regular);
-EpdFont georgia11BoldFont(&georgia_11_bold);
-EpdFont georgia11ItalicFont(&georgia_11_italic);
-EpdFontFamily georgia11FontFamily(&georgia11RegularFont, &georgia11BoldFont, &georgia11ItalicFont, &georgia11BoldFont);
 EpdFont georgia12RegularFont(&georgia_12_regular);
 EpdFont georgia12BoldFont(&georgia_12_bold);
 EpdFont georgia12ItalicFont(&georgia_12_italic);
@@ -115,10 +106,6 @@ EpdFont georgia16BoldFont(&georgia_16_bold);
 EpdFont georgia16ItalicFont(&georgia_16_italic);
 EpdFontFamily georgia16FontFamily(&georgia16RegularFont, &georgia16BoldFont, &georgia16ItalicFont, &georgia16BoldFont);
 
-EpdFont verdana11RegularFont(&verdana_11_regular);
-EpdFont verdana11BoldFont(&verdana_11_bold);
-EpdFont verdana11ItalicFont(&verdana_11_italic);
-EpdFontFamily verdana11FontFamily(&verdana11RegularFont, &verdana11BoldFont, &verdana11ItalicFont, &verdana11BoldFont);
 EpdFont verdana12RegularFont(&verdana_12_regular);
 EpdFont verdana12BoldFont(&verdana_12_bold);
 EpdFont verdana12ItalicFont(&verdana_12_italic);
@@ -140,12 +127,6 @@ EpdFont verdana16BoldFont(&verdana_16_bold);
 EpdFont verdana16ItalicFont(&verdana_16_italic);
 EpdFontFamily verdana16FontFamily(&verdana16RegularFont, &verdana16BoldFont, &verdana16ItalicFont, &verdana16BoldFont);
 
-EpdFont merriweather11RegularFont(&merriweather_11_regular);
-EpdFont merriweather11BoldFont(&merriweather_11_bold);
-EpdFont merriweather11ItalicFont(&merriweather_11_italic);
-EpdFont merriweather11BoldItalicFont(&merriweather_11_bolditalic);
-EpdFontFamily merriweather11FontFamily(&merriweather11RegularFont, &merriweather11BoldFont, &merriweather11ItalicFont,
-                                       &merriweather11BoldItalicFont);
 EpdFont merriweather12RegularFont(&merriweather_12_regular);
 EpdFont merriweather12BoldFont(&merriweather_12_bold);
 EpdFont merriweather12ItalicFont(&merriweather_12_italic);
@@ -367,27 +348,23 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(BOOKERLY_14_FONT_ID, bookerly14FontFamily);
 #ifndef OMIT_FONTS
-  renderer.insertFont(BOOKERLY_11_FONT_ID, bookerly11FontFamily);
   renderer.insertFont(BOOKERLY_12_FONT_ID, bookerly12FontFamily);
   renderer.insertFont(BOOKERLY_13_FONT_ID, bookerly13FontFamily);
   renderer.insertFont(BOOKERLY_15_FONT_ID, bookerly15FontFamily);
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
 
-  renderer.insertFont(GEORGIA_11_FONT_ID, georgia11FontFamily);
   renderer.insertFont(GEORGIA_12_FONT_ID, georgia12FontFamily);
   renderer.insertFont(GEORGIA_13_FONT_ID, georgia13FontFamily);
   renderer.insertFont(GEORGIA_14_FONT_ID, georgia14FontFamily);
   renderer.insertFont(GEORGIA_15_FONT_ID, georgia15FontFamily);
   renderer.insertFont(GEORGIA_16_FONT_ID, georgia16FontFamily);
 
-  renderer.insertFont(VERDANA_11_FONT_ID, verdana11FontFamily);
   renderer.insertFont(VERDANA_12_FONT_ID, verdana12FontFamily);
   renderer.insertFont(VERDANA_13_FONT_ID, verdana13FontFamily);
   renderer.insertFont(VERDANA_14_FONT_ID, verdana14FontFamily);
   renderer.insertFont(VERDANA_15_FONT_ID, verdana15FontFamily);
   renderer.insertFont(VERDANA_16_FONT_ID, verdana16FontFamily);
 
-  renderer.insertFont(MERRIWEATHER_11_FONT_ID, merriweather11FontFamily);
   renderer.insertFont(MERRIWEATHER_12_FONT_ID, merriweather12FontFamily);
   renderer.insertFont(MERRIWEATHER_13_FONT_ID, merriweather13FontFamily);
   renderer.insertFont(MERRIWEATHER_14_FONT_ID, merriweather14FontFamily);

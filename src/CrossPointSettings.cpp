@@ -340,8 +340,6 @@ int CrossPointSettings::getReaderFontId() const {
     case BOOKERLY:
     default:
       switch (fontSize) {
-        case SIZE_11:
-          return BOOKERLY_11_FONT_ID;
         case SIZE_12:
           return BOOKERLY_12_FONT_ID;
         case SIZE_13:
@@ -356,8 +354,6 @@ int CrossPointSettings::getReaderFontId() const {
       }
     case GEORGIA:
       switch (fontSize) {
-        case SIZE_11:
-          return GEORGIA_11_FONT_ID;
         case SIZE_12:
           return GEORGIA_12_FONT_ID;
         case SIZE_13:
@@ -372,8 +368,6 @@ int CrossPointSettings::getReaderFontId() const {
       }
     case VERDANA:
       switch (fontSize) {
-        case SIZE_11:
-          return VERDANA_11_FONT_ID;
         case SIZE_12:
           return VERDANA_12_FONT_ID;
         case SIZE_13:
@@ -388,8 +382,6 @@ int CrossPointSettings::getReaderFontId() const {
       }
     case MERRIWEATHER:
       switch (fontSize) {
-        case SIZE_11:
-          return MERRIWEATHER_11_FONT_ID;
         case SIZE_12:
           return MERRIWEATHER_12_FONT_ID;
         case SIZE_13:

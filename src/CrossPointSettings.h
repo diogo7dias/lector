@@ -103,8 +103,10 @@ class CrossPointSettings {
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
   enum FONT_FAMILY { BOOKERLY = 0, GEORGIA = 1, VERDANA = 2, MERRIWEATHER = 3, FONT_FAMILY_COUNT };
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
-  // Font size options (point sizes 11-16)
-  enum FONT_SIZE { SIZE_11 = 0, SIZE_12 = 1, SIZE_13 = 2, SIZE_14 = 3, SIZE_15 = 4, SIZE_16 = 5, FONT_SIZE_COUNT };
+  // Font size options (point sizes 12-16). Size 11 was dropped to reclaim flash;
+  // the enum was reindexed (SIZE_12 is now 0). JsonSettingsIO migrates old
+  // persisted indices once (see the fontSizeSchemaV2 remap in loadSettings).
+  enum FONT_SIZE { SIZE_12 = 0, SIZE_13 = 1, SIZE_14 = 2, SIZE_15 = 3, SIZE_16 = 4, FONT_SIZE_COUNT };
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
