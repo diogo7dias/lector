@@ -25,6 +25,22 @@ class CrossPointState {
   // wallpaper instead of a fresh random crest.
   uint8_t lastUntilDeathLogo = 0;
 
+  // --- Sleep wallpaper V2 (WallpaperPlaylistV2 rotation engine) ---
+  // NOTE: JSON persistence for these is added in a later commit; here they are
+  // in-memory fields so the engine + FavoriteImage shim compile.
+  // Basename of the last wallpaper shown (rotation dedup + direct-pick cursor).
+  std::string lastShownSleepFilename;
+  // Full path of the last wallpaper rendered (paused-rotation re-show).
+  std::string lastSleepWallpaperPath;
+  // Rotation paused via the in-book triage menu: re-show the current wallpaper.
+  bool wallpaperRotationPaused = false;
+  // Sticky: favorites alone saturate the /sleep cap, new uploads blocked.
+  bool sleepFavoritesCapReached = false;
+  // Transient: wallpapers demoted to "/sleep pause" pending a home-screen notice.
+  uint16_t pendingSleepWallpapersMovedToPause = 0;
+  // Hard cap on /sleep contents; mirrors crosspoint::sleep::v2::kSleepFolderCap.
+  static constexpr uint16_t SLEEP_FAVORITES_MAX = 500;
+
   // Returns true if idx was shown within the last checkCount picks.
   // Walks backwards from the most recently written slot.
   bool isRecentSleep(uint16_t idx, uint8_t checkCount) const;
