@@ -26,6 +26,7 @@
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sleep/Wallpaper.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -77,6 +78,10 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
+  // Sleep-wallpaper "shuffle now" lives in the Display category next to the
+  // other sleep-screen settings.
+  displaySettings.push_back(
+      SettingInfo::Action(StrId::STR_RANDOMIZE_SLEEP_IMAGES, SettingAction::RandomizeSleepImages));
   // Insert "Manage Fonts" right after the font family setting so users discover it naturally
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
@@ -342,6 +347,13 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::Language:
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::RandomizeSleepImages: {
+        // Inline: one-shot reshuffle of the sleep wallpaper rotation, then a
+        // confirmation banner. reshuffle() persists the new order itself.
+        const bool shuffled = crosspoint::sleep::wallpaper::reshuffle();
+        GUI.drawPopup(renderer, shuffled ? tr(STR_SLEEP_SHUFFLED) : tr(STR_SLEEP_SHUFFLE_EMPTY));
+        break;
+      }
       case SettingAction::None:
         // Do nothing
         break;

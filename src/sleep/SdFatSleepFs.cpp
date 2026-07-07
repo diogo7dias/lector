@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <cstring>
 
+#include "../CrossPointSettings.h"
+
 namespace crosspoint {
 namespace sleep {
 namespace {
@@ -23,9 +25,13 @@ bool isBmpName(const char* name) {
   const size_t len = std::strlen(name);
   if (len < 4) return false;
   const char* ext = name + len - 4;
-  // TODO(commit 7): filter by SETTINGS.wallpaperFormat so the playlist shows
-  // only BMP or only PXC. For now accept both extensions (matches DX34).
-  return strcasecmp(ext, ".bmp") == 0 || strcasecmp(ext, ".pxc") == 0;
+  // The /sleep folder may hold both types, but the playlist is filtered to the
+  // one chosen in Settings (wallpaperFormat) so switching BMP<->PXC is instant
+  // and the whole order buffer stays single-format.
+  if (SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC) {
+    return strcasecmp(ext, ".pxc") == 0;
+  }
+  return strcasecmp(ext, ".bmp") == 0;
 }
 
 }  // namespace

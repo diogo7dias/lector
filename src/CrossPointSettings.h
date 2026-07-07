@@ -36,6 +36,10 @@ class CrossPointSettings {
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
 
+  // Which file type the sleep wallpaper playlist shows. The /sleep folder can
+  // hold both, but the rotation is filtered to one so switching is instant.
+  enum WALLPAPER_FORMAT { WALLPAPER_BMP = 0, WALLPAPER_PXC = 1, WALLPAPER_FORMAT_COUNT };
+
   // Status bar enum - legacy
   // Legacy status-bar enums (STATUS_BAR_MODE / _PROGRESS_BAR / _THICKNESS / _TITLE /
   // _CLOCK_MODE) were removed with the v1 fixed-slot renderer. XTC keeps its own mode.
@@ -188,6 +192,9 @@ class CrossPointSettings {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Sleep wallpaper file type shown by the rotation (see WALLPAPER_FORMAT).
+  // Defaults to PXC (pre-dithered 2bpp, the recommended format).
+  uint8_t wallpaperFormat = WALLPAPER_PXC;
   // Status bar: the legacy fixed-slot fields (statusBar / statusBar*) were removed
   // in favour of the per-item v2 model below. XTC keeps its own top/bottom overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
