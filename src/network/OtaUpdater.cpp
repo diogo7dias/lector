@@ -17,7 +17,11 @@
 #include <string>
 
 namespace {
-constexpr char latestReleaseUrl[] = "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+// Lector's own releases, NOT upstream crosspoint-reader: upstream tags (1.4.x)
+// compare newer than this fork's versioning (0.x), so pointing at upstream
+// offered an "update" that would flash upstream firmware over the fork.
+// Lector releases attach firmware.bin as an asset, so OTA works end-to-end.
+constexpr char latestReleaseUrl[] = "https://api.github.com/repos/diogo7dias/lector/releases/latest";
 
 esp_err_t http_client_set_header_cb(esp_http_client_handle_t http_client) {
   return esp_http_client_set_header(http_client, "User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
