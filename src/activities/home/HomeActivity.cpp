@@ -564,8 +564,13 @@ void HomeActivity::maybeShowWallpaperPauseToast() {
 
 void HomeActivity::openSleepMoveKeypad() {
   // Text keyboard as a numeric entry: the user types how many wallpapers to move
-  // at random from /sleep to /sleep pause. Parsed and clamped to the folder count.
-  const long maxN = sleepImageCount;
+  // at random from /sleep to /sleep pause. Parsed and clamped to the folder count
+  // AND a per-action cap: the reservoir sampler holds all N picked names in RAM
+  // (vector reserve + N strings), so an unbounded N on a ~160 KB fragmented heap
+  // is a guaranteed bad_alloc abort under -fno-exceptions. 256 names ≈ 10 KB —
+  // safe; bigger cleanups just take a couple of keypad rounds.
+  constexpr long kMaxMovePerAction = 256;
+  const long maxN = std::min(sleepImageCount, kMaxMovePerAction);
   auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_MOVE_SLEEP_HOW_MANY),
                                                           std::string(), /*maxLength=*/5, InputType::Text);
   startActivityForResult(std::move(keyboard), [this, maxN](const ActivityResult& res) {
