@@ -8,6 +8,7 @@
 #include <esp_task_wdt.h>
 #include <qrcode.h>
 
+#include "CrossPointState.h"
 #include "SilentRestart.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -68,8 +69,20 @@ void QRShareActivity::onEnter() {
 void QRShareActivity::onWifiSelectionComplete(const bool connected) {
   if (connected) {
     startServerAndShowQR();
+    return;
+  }
+  // User cancelled the picker: no connection was made and no server ran, so a
+  // full reboot to reclaim WiFi heap is overkill — power the radio down (DX34
+  // did the same) and return straight to the book. onExit then sees
+  // WIFI_MODE_NULL and skips the silent restart.
+  WiFi.disconnect(false);
+  delay(30);
+  WiFi.mode(WIFI_OFF);
+  delay(30);
+  if (!APP_STATE.openEpubPath.empty()) {
+    activityManager.goToReader(APP_STATE.openEpubPath);
   } else {
-    onGoHome();  // user cancelled — leave (onExit tears WiFi down)
+    onGoHome();
   }
 }
 
@@ -138,7 +151,9 @@ void QRShareActivity::render(RenderLock&&) {
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
+  // HALF (ghost-cleanup) instead of the FAST default: this frame follows the
+  // WiFi picker screens and the QR modules need crisp black/white for scanning.
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 bool QRShareActivity::startServer() {
