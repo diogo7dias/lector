@@ -24,7 +24,14 @@ void PxcViewerActivity::render() {
     const auto pageHeight = renderer.getScreenHeight();
     renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    // The move action stays available on the error frame (a wrong-size file is
+    // exactly one you might want out of /sleep) — label it so Confirm isn't a
+    // hidden action here.
+    const char* moveLabel =
+        crosspoint::sleep::isUnderSleepDirs(filePath)
+            ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE))
+            : "";
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
@@ -50,9 +57,15 @@ void PxcViewerActivity::loop() {
   // Confirm moves the wallpaper to the other folder and immediately returns to the
   // browser at this file's old slot (the next image is then selected). Passing the
   // original path lets the browser land there even though the file is now gone.
+  // A same-named file in the destination makes the rename fail (SdFat never
+  // overwrites) — surface that and stay put instead of pretending it moved.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && crosspoint::sleep::isUnderSleepDirs(filePath)) {
     const std::string original = filePath;
-    crosspoint::sleep::toggleSleepPause(filePath);
+    const auto res = crosspoint::sleep::toggleSleepPause(filePath);
+    if (!res.ok) {
+      GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
+      return;
+    }
     activityManager.goToFileBrowser(original);
     return;
   }

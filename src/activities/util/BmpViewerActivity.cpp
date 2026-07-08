@@ -187,8 +187,14 @@ void BmpViewerActivity::moveSleepPause() {
   // Move to the other folder and immediately return to the browser at this file's
   // old slot (the next image is then selected). Passing the original path lets the
   // browser land there even though the file is now gone from this folder.
+  // A same-named file in the destination makes SdFat's rename fail (it never
+  // overwrites) — surface that and stay put instead of pretending it moved.
   const std::string original = filePath;
-  crosspoint::sleep::toggleSleepPause(filePath);
+  const auto res = crosspoint::sleep::toggleSleepPause(filePath);
+  if (!res.ok) {
+    GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
+    return;
+  }
   activityManager.goToFileBrowser(original);
 }
 
