@@ -170,8 +170,11 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
   if (!probe) return SleepPick{};
 
   // Paused-rotation branch: re-show the previously rendered wallpaper without
-  // advancing the playlist cursor.
-  if (APP_STATE.wallpaperRotationPaused && !APP_STATE.lastSleepWallpaperPath.empty() &&
+  // advancing the playlist cursor. The "/sleep/" prefix guard covers a paused
+  // wallpaper demoted to /sleep pause (trim, quick-move): the reference fixup
+  // repoints lastSleepWallpaperPath to the pause folder, and re-showing from
+  // there would defeat the move — fall through to normal rotation instead.
+  if (APP_STATE.wallpaperRotationPaused && APP_STATE.lastSleepWallpaperPath.rfind("/sleep/", 0) == 0 &&
       Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str())) {
     SleepPick paused;
     paused.fullPath = APP_STATE.lastSleepWallpaperPath;

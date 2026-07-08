@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include "CrossPointState.h"
 #include "util/FavoriteImage.h"
 
 namespace crosspoint {
@@ -43,6 +44,14 @@ SleepPauseToggleResult toggleSleepPause(const std::string& path) {
     return r;
   }
   FavoriteImage::replacePathReferences(path, dst);
+  // Moving a wallpaper OUT of /sleep means "stop showing this one" — clear the
+  // paused-rotation flag so the sleep screen doesn't keep re-showing the file
+  // from its new /sleep pause home (the reference fixup above repointed
+  // lastSleepWallpaperPath there). Mirrors the reader triage move behavior.
+  if (r.toPause && APP_STATE.wallpaperRotationPaused) {
+    APP_STATE.wallpaperRotationPaused = false;
+    APP_STATE.saveToFile();
+  }
   r.ok = true;
   r.newPath = dst;
   return r;
