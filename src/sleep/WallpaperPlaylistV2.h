@@ -141,6 +141,12 @@ class WallpaperPlaylistV2 {
   bool nameIsInBuffer(const char* name, size_t len) const;
   bool nameIsInBuffer(const std::string& name) const;
 
+  // Remove `name`'s whole line from buffer_ in place (string::erase — shrink
+  // only, zero extra allocation). Returns true if a line was removed. Used by
+  // trimToCap so demoted files don't linger as stale queue entries that
+  // advance() would otherwise prune one order-file rewrite at a time.
+  bool removeNameFromBuffer(const std::string& name);
+
   // Replace a whole-line entry `oldName` with `newName` in place, preserving
   // its rotation slot and adjusting cursor_ for the length change if the entry
   // sits before the cursor. Used by reconcile() to fold a favorite/unfavorite

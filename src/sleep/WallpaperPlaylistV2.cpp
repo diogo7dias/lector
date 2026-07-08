@@ -222,6 +222,9 @@ uint16_t WallpaperPlaylistV2::trimToCap(std::vector<SleepBmpEntry>& entries, boo
       const std::string to = makePausePath(entries[i].name);
       if (deps_.fs && deps_.fs->rename(from, to)) {
         if (deps_.onPathRenamed) deps_.onPathRenamed(from, to);
+        // Purge the demoted name from the queue now — a stale entry would
+        // otherwise cost advance() a skip iteration on a later wake.
+        removeNameFromBuffer(entries[i].name);
         ++moved;
       }
     }
@@ -242,6 +245,8 @@ uint16_t WallpaperPlaylistV2::trimToCap(std::vector<SleepBmpEntry>& entries, boo
     const std::string to = makePausePath(entries[i].name);
     if (deps_.fs && deps_.fs->rename(from, to)) {
       if (deps_.onPathRenamed) deps_.onPathRenamed(from, to);
+      // Purge from the queue immediately (see favorites branch above).
+      removeNameFromBuffer(entries[i].name);
       ++moved;
     }
   }
@@ -283,6 +288,28 @@ bool WallpaperPlaylistV2::nameIsInBuffer(const char* name, size_t len) const {
 
 bool WallpaperPlaylistV2::nameIsInBuffer(const std::string& name) const {
   return nameIsInBuffer(name.data(), name.size());
+}
+
+bool WallpaperPlaylistV2::removeNameFromBuffer(const std::string& name) {
+  if (buffer_.empty() || name.empty()) return false;
+  const char* data = buffer_.data();
+  const size_t bsize = buffer_.size();
+  size_t start = 0;
+  while (start < bsize) {
+    size_t nl = buffer_.find('\n', start);
+    const size_t lineEnd = (nl == std::string::npos) ? bsize : nl;
+    if (lineEnd - start == name.size() && std::memcmp(data + start, name.data(), name.size()) == 0) {
+      // Erase the line including its '\n' (or to the end when it's the last,
+      // unterminated line). erase() only shrinks — no allocation.
+      buffer_.erase(start, (nl == std::string::npos) ? (bsize - start) : (lineEnd - start + 1));
+      // cursor_ is pinned to 0 by the queue model, so no offset fix-up is
+      // needed; a stale >0 cursor from an old order file is reset by advance().
+      return true;
+    }
+    if (nl == std::string::npos) break;
+    start = nl + 1;
+  }
+  return false;
 }
 
 bool WallpaperPlaylistV2::renameInBuffer(const std::string& oldName, const std::string& newName) {
@@ -421,7 +448,10 @@ void WallpaperPlaylistV2::reconcile() {
     }
     newFiles = std::move(genuinelyNew);
   }
-  if (renamedAny) saveToDisk();
+  // Persist in-place buffer surgery (favorite renames and/or trim purges) even
+  // when no splice follows — otherwise the purge lives only in RAM and the
+  // stale names resurface from the old order file on the next boot.
+  if (renamedAny || moved > 0) saveToDisk();
 
   if (newFiles.empty()) {
     // Either nothing new this pass, or every "new" file was an in-place rename.
@@ -515,9 +545,13 @@ std::string WallpaperPlaylistV2::advance() {
   // already-queued entries. Position is the buffer order itself — cursor_ is
   // pinned to 0 (front) for on-disk format compatibility only.
   cursor_ = 0;
+  bool droppedAny = false;  // vanished entries pruned this call — persist even on failure
   for (int skipBudget = 0; skipBudget < 16; ++skipBudget) {
     if (buffer_.empty()) {
-      if (!rebuildSequential()) return {};
+      if (!rebuildSequential()) {
+        if (droppedAny) saveToDisk();
+        return {};
+      }
     }
     // Split off the front line (the next candidate) and remove it from the queue.
     const size_t nl = buffer_.find('\n');
@@ -530,20 +564,25 @@ std::string WallpaperPlaylistV2::advance() {
     }
     if (deps_.fs->exists(makeSleepPath(candidate))) {
       // Move it to the back (erase above freed exactly this many bytes, so the
-      // append reuses that capacity — no reallocation) and commit.
+      // append reuses that capacity — no reallocation) and commit ONCE — this
+      // save also persists any vanished-entry drops from earlier iterations
+      // (previously each drop was its own atomic order-file rewrite, up to 16
+      // back-to-back right before deep sleep).
       buffer_.append(candidate);
       buffer_.push_back('\n');
       saveToDisk();
+      // lastShownFilename is persisted by the caller's rememberRendered()
+      // (one state.json write per pick instead of two).
       if (deps_.lastShownFilename && *deps_.lastShownFilename != candidate) {
         *deps_.lastShownFilename = candidate;
-        if (deps_.saveAppState) deps_.saveAppState();
       }
       return candidate;
     }
     // File vanished (moved to /sleep pause, deleted): it stays dropped, pruning
-    // the queue so it is never picked again.
-    saveToDisk();
+    // the queue so it is never picked again. Persisted in one batch above/below.
+    droppedAny = true;
   }
+  if (droppedAny) saveToDisk();
   return {};
 }
 
