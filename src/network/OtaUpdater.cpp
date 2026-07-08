@@ -76,9 +76,22 @@ bool OtaUpdater::isUpdateNewer() const {
 
   const auto currentVersion = CROSSPOINT_VERSION;
 
-  // semantic version check (only match on 3 segments)
-  sscanf(latestVersion.c_str(), "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch);
-  sscanf(currentVersion, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch);
+  // Semantic version check (only match on 3 segments). Tolerate a leading 'v'
+  // ("v0.5.0"-style release tags) and REQUIRE all three fields to parse — an
+  // unchecked sscanf on a non-numeric tag left these ints uninitialized and
+  // made the comparison undefined behavior.
+  const char* latestStr = latestVersion.c_str();
+  if (*latestStr == 'v' || *latestStr == 'V') latestStr++;
+  const char* currentStr = currentVersion;
+  if (*currentStr == 'v' || *currentStr == 'V') currentStr++;
+  if (sscanf(latestStr, "%d.%d.%d", &latestMajor, &latestMinor, &latestPatch) != 3) {
+    LOG_ERR("OTA", "Unparseable latest version tag '%s'", latestVersion.c_str());
+    return false;
+  }
+  if (sscanf(currentStr, "%d.%d.%d", &currentMajor, &currentMinor, &currentPatch) != 3) {
+    LOG_ERR("OTA", "Unparseable current version '%s'", currentVersion);
+    return false;
+  }
 
   /*
    * Compare major versions.
