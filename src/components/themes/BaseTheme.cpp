@@ -22,7 +22,9 @@
 namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
-constexpr int subtitleY = 738;
+// Version footer, lifted clear of the bottom button-hints band (it sat too low
+// at 738 and the up/down hint boxes overlapped it on the 792-tall X3 panel).
+constexpr int subtitleY = 715;
 
 // Collapse an author string to up to 4 leading-letter initials ("Ursula K. Le
 // Guin" -> "UKLG"). Used by the home recent-books list rows. Ported from DX34.
