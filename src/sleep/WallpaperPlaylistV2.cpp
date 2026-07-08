@@ -436,10 +436,11 @@ void WallpaperPlaylistV2::reconcile() {
   std::sort(newFiles.begin(), newFiles.end(),
             [](const SleepBmpEntry& a, const SleepBmpEntry& b) { return a.mtime > b.mtime; });
 
-  // Splice insertion: build a single contiguous payload and inject at the
-  // FRONT of buffer_. Cursor resets to 0 so the next advance() returns the
-  // newest file. "New wallpapers on top" semantics: any fresh upload is the
-  // next one shown, ahead of whatever the previous lap was on.
+  // Splice insertion: build a single contiguous payload and inject it at the
+  // FRONT of the queue. advance() is a move-to-back queue (front = next shown,
+  // then moved to the back), so new uploads / wallpapers moved back into /sleep
+  // are shown next, ahead of the already-queued entries — which keep their
+  // relative order and simply wait their turn behind the new arrivals.
   std::string insertion;
   size_t insLen = 0;
   for (const auto& nf : newFiles) insLen += nf.name.size() + 1;
@@ -480,10 +481,10 @@ void WallpaperPlaylistV2::reconcile() {
     }
     std::string newBuffer;
     newBuffer.reserve(newSize);
-    newBuffer.append(insertion);
-    newBuffer.append(buffer_);
+    newBuffer.append(insertion);  // new files at the FRONT of the queue (shown next)
+    newBuffer.append(buffer_);    // existing entries keep their order behind them
     buffer_ = std::move(newBuffer);
-    cursor_ = 0;
+    cursor_ = 0;  // queue model: the front is always the next to show
     saveToDisk();
   }
 
@@ -508,23 +509,30 @@ std::string WallpaperPlaylistV2::advance() {
     if (!rebuildSequential()) return {};
   }
 
+  // Move-to-back queue: the next wallpaper is always the FRONT entry; once shown
+  // it is moved to the BACK, so the whole list cycles before anything repeats.
+  // New uploads (spliced to the front by reconcile) are shown next, ahead of the
+  // already-queued entries. Position is the buffer order itself — cursor_ is
+  // pinned to 0 (front) for on-disk format compatibility only.
+  cursor_ = 0;
   for (int skipBudget = 0; skipBudget < 16; ++skipBudget) {
-    if (cursor_ >= buffer_.size()) {
-      // End of lap: restart from the top in the same sequential order. NEVER
-      // auto-shuffle here — only the user-initiated reshuffle() randomizes.
-      cursor_ = 0;
-      saveToDisk();
-      if (buffer_.empty()) {
-        if (!rebuildSequential()) return {};
-      }
-    }
-    const std::string candidate = peekAtCursor();
-    if (candidate.empty()) {
+    if (buffer_.empty()) {
       if (!rebuildSequential()) return {};
-      continue;
+    }
+    // Split off the front line (the next candidate) and remove it from the queue.
+    const size_t nl = buffer_.find('\n');
+    const size_t lineLen = (nl == std::string::npos) ? buffer_.size() : nl;
+    std::string candidate = buffer_.substr(0, lineLen);
+    buffer_.erase(0, (nl == std::string::npos) ? buffer_.size() : nl + 1);
+
+    if (candidate.empty()) {
+      continue;  // stray blank line — already dropped, try the next
     }
     if (deps_.fs->exists(makeSleepPath(candidate))) {
-      advanceCursor();
+      // Move it to the back (erase above freed exactly this many bytes, so the
+      // append reuses that capacity — no reallocation) and commit.
+      buffer_.append(candidate);
+      buffer_.push_back('\n');
       saveToDisk();
       if (deps_.lastShownFilename && *deps_.lastShownFilename != candidate) {
         *deps_.lastShownFilename = candidate;
@@ -532,7 +540,9 @@ std::string WallpaperPlaylistV2::advance() {
       }
       return candidate;
     }
-    advanceCursor();
+    // File vanished (moved to /sleep pause, deleted): it stays dropped, pruning
+    // the queue so it is never picked again.
+    saveToDisk();
   }
   return {};
 }
