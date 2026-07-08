@@ -551,14 +551,17 @@ void setup() {
     // through to the sleep-wake "resume reader" logic, which fires on stale
     // openEpubPath + lastSleepFromReader from a prior session.
     activityManager.goHome();
-  } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
+  } else if (SETTINGS.openRandomRecentOnBoot || APP_STATE.openEpubPath.empty() ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
-    // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
-    // crashed (indicated by readerActivityLoadCount > 0).
+    // On wake/boot, always resume the last-read book (the else branch) unless one
+    // of these forces a different landing: the "open random book" setting is on, no
+    // book has ever been opened, Back is held (the user wants home), or the reader
+    // crashed (readerActivityLoadCount > 0). The last-sleep-from-reader gate was
+    // dropped so waking from Home/Browser still drops straight back into the book.
     //
-    // "Open random book on boot": on a genuine boot-to-home, jump straight into a
-    // random ongoing book instead. Skipped when Back is held (the user wants home)
-    // or after a reader crash (readerActivityLoadCount > 0), so it can't wedge boot.
+    // "Open random book on boot": jump straight into a random ongoing book instead.
+    // Skipped when Back is held (the user wants home) or after a reader crash
+    // (readerActivityLoadCount > 0), so it can't wedge boot.
     const bool backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
     std::string randomBookPath;
     if (SETTINGS.openRandomRecentOnBoot && !backHeld && APP_STATE.readerActivityLoadCount == 0) {
