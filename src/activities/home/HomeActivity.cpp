@@ -488,7 +488,12 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
   pendingFullRefresh = false;
-  drawSleepToasts();
+  // Toasts only once the forced first re-render is behind us: the
+  // !firstRenderDone branch below immediately repaints, which would wipe a
+  // toast one frame after it appeared (it is one-shot — cleared when drawn).
+  if (firstRenderDone) {
+    drawSleepToasts();
+  }
 
   if (!firstRenderDone) {
     firstRenderDone = true;
