@@ -68,6 +68,7 @@ class PageHorizontalRule final : public PageElement {
   bool serialize(HalFile& file) override;
   PageElementTag getTag() const override { return TAG_PageHorizontalRule; }
   static std::unique_ptr<PageHorizontalRule> deserialize(HalFile& file);
+  uint8_t getThickness() const { return thickness; }
 };
 
 class Page {
@@ -91,6 +92,14 @@ class Page {
   void renderImages(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) const;
   bool serialize(HalFile& file) const;
   static std::unique_ptr<Page> deserialize(HalFile& file);
+
+  // Used vertical extent of this page's content, in page-relative pixels: the
+  // largest (yPos + element height) across all elements. Lines advance by the
+  // reader's line height (getLineHeight * lineCompression, matching pagination),
+  // images by their pixel height, rules by their thickness. Lets the reader
+  // distribute the leftover vertical space evenly so a full page's text isn't
+  // top-heavy against the status bar.
+  int usedHeightPx(GfxRenderer& renderer, int fontId, float lineCompression) const;
 
   // Check if page contains any images (used to force full refresh)
   bool hasImages() const {

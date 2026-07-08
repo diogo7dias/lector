@@ -1565,6 +1565,20 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const auto t0 = millis();
   const int fontId = SETTINGS.getReaderFontId();
 
+  // Vertically distribute the page's leftover space so a full page of text isn't
+  // pinned against the top status bar with all the slack pooling at the bottom
+  // (uniform top/bottom margins otherwise look asymmetric because pagination
+  // leaves the sub-line remainder at the bottom). Shift the whole page down by
+  // half the leftover, capped at half a line so a short chapter-end page is only
+  // nudged, never floated to the middle. Only the text/image content moves; the
+  // reserved margins, status bars and grab-quote frame stay put.
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  const int lineHeightPx = static_cast<int>(renderer.getLineHeight(fontId) * lineCompression);
+  const int viewportHeightPx = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+  const int contentHeightPx = page->usedHeightPx(renderer, fontId, lineCompression);
+  const int verticalSlack = std::max(0, viewportHeightPx - contentHeightPx);
+  const int contentTop = orientedMarginTop + std::min(verticalSlack, lineHeightPx) / 2;
+
   // Grab-quote / highlight mode renders on an isolated BW path so the normal
   // image/grayscale/refresh machinery below is untouched (snappy + ghosting laws).
   // All states (cursor pick + final 3s confirm) render the page + solid frame +
@@ -1575,9 +1589,9 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.setRenderMode(GfxRenderer::BW);
     auto* hlFcm = renderer.getFontCacheManager();
     auto hlScope = hlFcm->createPrewarmScope();
-    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
+    page->render(renderer, fontId, orientedMarginLeft, contentTop);  // scan pass
     hlScope.endScanAndPrewarm();
-    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // real render
+    page->render(renderer, fontId, orientedMarginLeft, contentTop);  // real render
     // Solid frame marking selection mode.
     constexpr int frameOffset = 6;
     constexpr int frameThickness = 5;
@@ -1589,7 +1603,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     for (int t = 0; t < frameThickness; ++t) {
       renderer.drawRect(bx + t, by + t, bw - 2 * t, bh - 2 * t, true);
     }
-    renderHighlights(*page, fontId, orientedMarginLeft, orientedMarginTop);
+    renderHighlights(*page, fontId, orientedMarginLeft, contentTop);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);  // snappy cursor moves + instant confirm
     renderer.setPaperbackLook(false);
     return;
@@ -1603,7 +1617,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);  // scan pass
+  page->render(renderer, fontId, orientedMarginLeft, contentTop);  // scan pass
   scope.endScanAndPrewarm();
   const auto tPrewarm = millis();
 
@@ -1617,13 +1631,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   auto renderGrayscalePass = [&]() {
     if (needsTextGrayscale) {
-      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      page->render(renderer, fontId, orientedMarginLeft, contentTop);
     } else {
-      page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      page->renderImages(renderer, fontId, orientedMarginLeft, contentTop);
     }
   };
 
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  page->render(renderer, fontId, orientedMarginLeft, contentTop);
   renderStatusBar();
   const auto tBwRender = millis();
 
@@ -1635,12 +1649,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // Step 2: Re-render with images and display again (images appear clean)
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
-      renderer.fillRect(imgX + orientedMarginLeft, imgY + orientedMarginTop, imgW, imgH, false);
+      renderer.fillRect(imgX + orientedMarginLeft, imgY + contentTop, imgW, imgH, false);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
-      page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+      page->render(renderer, fontId, orientedMarginLeft, contentTop);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);

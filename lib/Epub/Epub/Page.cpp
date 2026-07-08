@@ -115,6 +115,27 @@ void Page::renderImages(GfxRenderer& renderer, const int fontId, const int xOffs
                              [](const PageElement& element) { return element.getTag() == TAG_PageImage; });
 }
 
+int Page::usedHeightPx(GfxRenderer& renderer, const int fontId, const float lineCompression) const {
+  const int lineHeight = static_cast<int>(renderer.getLineHeight(fontId) * lineCompression);
+  int bottom = 0;
+  for (const auto& el : elements) {
+    int elementHeight = 0;
+    switch (el->getTag()) {
+      case TAG_PageLine:
+        elementHeight = lineHeight;
+        break;
+      case TAG_PageImage:
+        elementHeight = static_cast<const PageImage&>(*el).getImageBlock().getHeight();
+        break;
+      case TAG_PageHorizontalRule:
+        elementHeight = static_cast<const PageHorizontalRule&>(*el).getThickness();
+        break;
+    }
+    bottom = std::max<int>(bottom, el->yPos + elementHeight);
+  }
+  return bottom;
+}
+
 bool Page::serialize(HalFile& file) const {
   const uint16_t count = elements.size();
   serialization::writePod(file, count);
