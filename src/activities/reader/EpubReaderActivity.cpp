@@ -668,6 +668,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::SHARE_QR: {
+      if (epub) {
+        activityManager.goToQRShare(epub->getPath());
+      } else {
+        requestUpdate();
+      }
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();
       return;

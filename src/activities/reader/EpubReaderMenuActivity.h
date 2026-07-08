@@ -23,6 +23,7 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PAPERBACK_STATUS,
     SCREENSHOT,
     DISPLAY_QR,
+    SHARE_QR,
     GO_HOME,
     SYNC,
     DELETE_CACHE,
