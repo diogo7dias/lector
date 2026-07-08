@@ -21,8 +21,10 @@
 #include "RecentBooksStore.h"
 #include "activities/reader/ReaderUtils.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sleep/Wallpaper.h"
 
 namespace {
 // Recent books loaded for the LIST home. The renderer scrolls through them one
@@ -142,14 +144,19 @@ void HomeActivity::onEnter() {
   // Both layouts reserve selector 0 for the pages tally. LIST slots: 1..bookCount =
   // books, then menu. SINGLE_COVER slots: 1 = centre cover, 2.. = menu. Default entry
   // lands on the first book / the cover (or the first menu item when there are none).
+  // Sleep-folder overflow notices: one-shot "moved to pause" toast + the sticky
+  // over-limit state that drives the LIST warning card (and its extra selector slot).
+  maybeShowWallpaperPauseToast();
+  refreshSleepOverLimit();
+
   const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
   const int bookCount = static_cast<int>(recentBooks.size());
   coverflowIndex = 0;
   if (initialMenuItem != HomeMenuItem::NONE) {
     const int menuIdx = menuItemToIndex(initialMenuItem, hasOpdsServers);
-    selectorIndex = listLayout ? (1 + bookCount + menuIdx) : (2 + menuIdx);
+    selectorIndex = listLayout ? (firstBookList() + bookCount + menuIdx) : (2 + menuIdx);
   } else if (listLayout) {
-    selectorIndex = 1;  // first book (or first menu item when there are no books)
+    selectorIndex = firstBookList();  // first book (or first menu item when there are no books)
   } else {
     selectorIndex = (bookCount > 0) ? 1 : 2;  // cover slot, else first menu item
   }
@@ -208,7 +215,8 @@ void HomeActivity::loop() {
   //  LIST:         [pages][book 0..N-1][menu 0..]  -> 1 + bookCount + menuItemsOnly
   //  SINGLE_COVER: [pages][cover][menu 0..]        -> 2 + menuItemsOnly
   const int menuItemsOnly = getMenuItemCount() - bookCount;  // Browse/Transfer/Settings (+OPDS)
-  const int navSlots = listLayout ? (1 + bookCount + menuItemsOnly) : (2 + menuItemsOnly);
+  // LIST reserves slot 0 for pages + an optional warning card before the books.
+  const int navSlots = listLayout ? (firstBookList() + bookCount + menuItemsOnly) : (2 + menuItemsOnly);
 
   // SINGLE_COVER: the side (X3) / page-turn (X4) buttons flip the centered book.
   // Kept ahead of the front-button nav so it never fights the menu selector.
@@ -229,7 +237,7 @@ void HomeActivity::loop() {
   buttonNavigator.onNext([this, navSlots, listLayout, bookCount] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, navSlots);
     if (listLayout) {
-      const int bookSel = selectorIndex - 1;
+      const int bookSel = selectorIndex - firstBookList();
       if (bookSel >= 0 && bookSel < bookCount) {
         if (bookSel > lastVisibleBookIdx) scrollOffset++;
         if (bookSel < firstVisibleBookIdx) scrollOffset = bookSel;
@@ -242,7 +250,7 @@ void HomeActivity::loop() {
   buttonNavigator.onPrevious([this, navSlots, listLayout, bookCount] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, navSlots);
     if (listLayout) {
-      const int bookSel = selectorIndex - 1;
+      const int bookSel = selectorIndex - firstBookList();
       if (bookSel >= 0 && bookSel < bookCount) {
         if (bookSel < firstVisibleBookIdx) scrollOffset = bookSel;
         scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
@@ -254,7 +262,7 @@ void HomeActivity::loop() {
   // Back removes the focused book from recents.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (listLayout) {
-      const int bookSel = selectorIndex - 1;
+      const int bookSel = selectorIndex - firstBookList();
       if (bookSel >= 0 && bookSel < bookCount && !recentBooks[bookSel].path.empty()) {
         promptRemoveBook(recentBooks[bookSel].path, recentBooks[bookSel].title);
         return;
@@ -274,9 +282,14 @@ void HomeActivity::loop() {
       requestUpdate();
       return;
     }
+    // LIST over-limit warning card (slot 1): open the random bulk-move keypad.
+    if (listLayout && sleepOverLimit && selectorIndex == 1) {
+      openSleepMoveKeypad();
+      return;
+    }
     int menuIndex;
     if (listLayout) {
-      const int bookSel = selectorIndex - 1;
+      const int bookSel = selectorIndex - firstBookList();
       if (bookSel >= 0 && bookSel < bookCount) {
         onSelectBook(recentBooks[bookSel].path);
         return;
@@ -382,26 +395,47 @@ void HomeActivity::render(RenderLock&&) {
     constexpr int menuBottomGap = 8;
     const int menuY = pageHeight - metrics.buttonHintsHeight - menuBottomGap - menuBlockHeight;
 
-    const int recentAreaY = metrics.topPadding + metrics.homeTopPadding;
+    int recentAreaY = metrics.topPadding + metrics.homeTopPadding;
     constexpr int recentAreaBottomGap = 8;
+
+    // Over-limit warning card (selector slot 1): the first item in the recents band
+    // when /sleep exceeds the rotation cap. Selecting it opens the bulk-move keypad.
+    if (sleepOverLimit) {
+      const int cardX = metrics.contentSidePadding;
+      const int cardW = pageWidth - metrics.contentSidePadding * 2;
+      const int cardH = metrics.menuRowHeight;
+      const bool cardSelected = (selectorIndex == 1);
+      if (cardSelected) {
+        renderer.fillRect(cardX, recentAreaY, cardW, cardH, true);
+      } else {
+        renderer.drawRect(cardX, recentAreaY, cardW, cardH, 2, true);
+      }
+      const std::string warnText = std::string(tr(STR_SLEEP_OVER_LIMIT)) + ": " + std::to_string(sleepImageCount) +
+                                   " / " + std::to_string(crosspoint::sleep::wallpaper::kSleepFolderCap);
+      const std::string shown = renderer.truncatedText(SMALL_FONT_ID, warnText.c_str(), cardW - 16);
+      const int textY = recentAreaY + (cardH - renderer.getLineHeight(SMALL_FONT_ID)) / 2;
+      renderer.drawText(SMALL_FONT_ID, cardX + 8, textY, shown.c_str(), !cardSelected);
+      recentAreaY += cardH + 6;
+    }
+
     const int recentAreaHeight = std::max(0, menuY - recentAreaBottomGap - recentAreaY);
 
-    // Selector 0 is the pages button, so book rows live at selector [1, 1+count).
-    // Pass a book-based index (selectorIndex - 1); on the pages button this is -1,
-    // which highlights no row.
+    // Book rows live at selector [firstBookList(), firstBookList()+count). Pass a
+    // book-based index (selectorIndex - firstBookList()); on the pages button or the
+    // warning card this is negative, which highlights no row.
     const auto vis = GUI.drawRecentBookList(renderer, Rect{0, recentAreaY, pageWidth, recentAreaHeight}, recentBooks,
-                                            selectorIndex - 1, scrollOffset);
+                                            selectorIndex - firstBookList(), scrollOffset);
     firstVisibleBookIdx = vis.firstVisible;
     lastVisibleBookIdx = vis.lastVisible;
     scrollOffset = vis.firstVisible;
 
-    const int menuSelected = selectorIndex - 1 - static_cast<int>(recentBooks.size());
+    const int menuSelected = selectorIndex - firstBookList() - static_cast<int>(recentBooks.size());
     GUI.drawButtonMenu(
         renderer, Rect{0, menuY, pageWidth, menuBlockHeight}, menuCount, menuSelected,
         [&menuItems](int index) { return std::string(menuItems[index]); },
         [&menuIcons](int index) { return menuIcons[index]; });
 
-    const int bookSel = selectorIndex - 1;  // selector 0 is the pages button
+    const int bookSel = selectorIndex - firstBookList();
     const bool bookSelected =
         bookSel >= 0 && bookSel < static_cast<int>(recentBooks.size()) && !recentBooks[bookSel].path.empty();
     const char* backLabel = bookSelected ? tr(STR_REMOVE_BUTTON) : "";
@@ -409,6 +443,7 @@ void HomeActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
     pendingFullRefresh = false;
+    drawSleepToasts();
     return;
   }
 
@@ -453,6 +488,7 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
   pendingFullRefresh = false;
+  drawSleepToasts();
 
   if (!firstRenderDone) {
     firstRenderDone = true;
@@ -483,9 +519,10 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
                                 : metrics.homeRecentBooksCount;
       loadRecentBooks(loadCount);
       // Removal only happens on the list home, which reserves selector 0 for the
-      // pages button, so include that slot when clamping.
-      const int pagesSlot = (SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST) ? 1 : 0;
-      const int menuCount = getMenuItemCount() + pagesSlot;
+      // pages button (+ the optional warning card), so include those when clamping.
+      const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
+      const int pagesSlot = listLayout ? 1 : 0;
+      const int menuCount = getMenuItemCount() + pagesSlot + (listLayout ? listWarnSlots() : 0);
       if (selectorIndex >= menuCount) {
         selectorIndex = std::max(0, menuCount - 1);
       }
@@ -501,6 +538,74 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
   startActivityForResult(
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
       std::move(handler));
+}
+
+void HomeActivity::refreshSleepOverLimit() {
+  if (!sleepImageCountKnown) {
+    // Scan /sleep once per home instance; cached so the snappy home re-entry path
+    // never rescans a large wallpaper folder.
+    cachedSleepImageCount = static_cast<long>(crosspoint::sleep::wallpaper::countImages(5000));
+    sleepImageCountKnown = true;
+  }
+  sleepImageCount = cachedSleepImageCount;
+  sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepFolderCap);
+}
+
+void HomeActivity::maybeShowWallpaperPauseToast() {
+  // A sleep reconcile may have demoted overflow wallpapers to /sleep pause/ while
+  // the device slept. Surface that once on the next home entry, then clear the
+  // persisted count so the toast does not re-fire.
+  const uint16_t moved = APP_STATE.pendingSleepWallpapersMovedToPause;
+  if (moved == 0) return;
+  APP_STATE.pendingSleepWallpapersMovedToPause = 0;
+  APP_STATE.saveToFile();
+  sleepPauseToast = std::to_string(moved) + " " + tr(STR_MOVED_TO_SLEEP_PAUSE);
+}
+
+void HomeActivity::openSleepMoveKeypad() {
+  // Text keyboard as a numeric entry: the user types how many wallpapers to move
+  // at random from /sleep to /sleep pause. Parsed and clamped to the folder count.
+  const long maxN = sleepImageCount;
+  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_MOVE_SLEEP_HOW_MANY),
+                                                          std::string(), /*maxLength=*/5, InputType::Text);
+  startActivityForResult(std::move(keyboard), [this, maxN](const ActivityResult& res) {
+    if (res.isCancelled) return;
+    const std::string text = std::get<KeyboardResult>(res.data).text;
+    long n = 0;
+    for (const char c : text) {
+      if (c < '0' || c > '9') continue;
+      n = n * 10 + (c - '0');
+      if (n > maxN) {
+        n = maxN;
+        break;
+      }
+    }
+    size_t moved = 0;
+    if (n > 0) moved = crosspoint::sleep::wallpaper::moveRandomToPause(static_cast<size_t>(n));
+    cachedSleepImageCount =
+        (cachedSleepImageCount >= static_cast<long>(moved)) ? cachedSleepImageCount - static_cast<long>(moved) : 0;
+    sleepImageCount = cachedSleepImageCount;
+    sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepFolderCap);
+    moveToast = std::string(tr(STR_MOVED)) + " " + std::to_string(moved);
+    // The warning slot may have just vanished; keep the selector in range.
+    const int bookCount = static_cast<int>(recentBooks.size());
+    const int navSlots = firstBookList() + bookCount + (getMenuItemCount() - bookCount);
+    if (selectorIndex >= navSlots) selectorIndex = std::max(0, navSlots - 1);
+    pendingFullRefresh = true;
+    requestUpdate();
+  });
+}
+
+void HomeActivity::drawSleepToasts() {
+  // Shown over the current home frame; each is one-shot (cleared here) and the next
+  // input's re-render paints the plain home again. The move result takes priority.
+  if (!moveToast.empty()) {
+    GUI.drawPopup(renderer, moveToast.c_str());
+    moveToast.clear();
+  } else if (!sleepPauseToast.empty()) {
+    GUI.drawPopup(renderer, sleepPauseToast.c_str());
+    sleepPauseToast.clear();
+  }
 }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }

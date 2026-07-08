@@ -1,5 +1,6 @@
 #pragma once
 #include <functional>
+#include <string>
 #include <vector>
 
 #include "./FileBrowserActivity.h"
@@ -43,6 +44,26 @@ class HomeActivity final : public Activity {
   int coverRectH = 0;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
+
+  // Sleep-folder overflow (RFC #145 port). When /sleep exceeds kSleepFolderCap the
+  // LIST home shows a selectable warning card (selector slot 1, pushing books down)
+  // that opens a keypad to randomly move N wallpapers to /sleep pause. A separate
+  // one-shot toast reports wallpapers the sleep reconcile auto-moved while asleep.
+  bool sleepOverLimit = false;
+  long sleepImageCount = 0;
+  long cachedSleepImageCount = 0;
+  bool sleepImageCountKnown = false;
+  std::string sleepPauseToast;  // "N moved to /sleep pause/" — shown once on entry
+  std::string moveToast;        // "Moved N" — result popup after a bulk move
+  // The over-limit warning card is a LIST-home-only slot; it sits at selector 1,
+  // between the pages tally (0) and the first book.
+  int listWarnSlots() const { return sleepOverLimit ? 1 : 0; }
+  int firstBookList() const { return 1 + listWarnSlots(); }
+  void refreshSleepOverLimit();
+  void maybeShowWallpaperPauseToast();
+  void openSleepMoveKeypad();
+  // Draw (once) any pending sleep-overflow popup over the just-rendered home frame.
+  void drawSleepToasts();
 
   // Convert HomeMenuItem to menu index (used in onEnter). Recent Books no longer
   // lives on the home menu — it is reached from the top of the file browser — so
