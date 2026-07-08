@@ -2,14 +2,6 @@
 
 #include "images/bootlogo0.h"
 #include "images/bootlogo1.h"
-#include "images/bootlogo2.h"
-#include "images/bootlogo3.h"
-#include "images/bootlogo4.h"
-#include "images/bootlogo5.h"
-#include "images/bootlogo6.h"
-#include "images/bootlogo7.h"
-#include "images/bootlogo8.h"
-#include "images/bootlogo9.h"
 #include "images/bootlogo10.h"
 #include "images/bootlogo11.h"
 #include "images/bootlogo12.h"
@@ -19,10 +11,18 @@
 #include "images/bootlogo16.h"
 #include "images/bootlogo17.h"
 #include "images/bootlogo19.h"
+#include "images/bootlogo2.h"
 #include "images/bootlogo21.h"
 #include "images/bootlogo22.h"
 #include "images/bootlogo23.h"
 #include "images/bootlogo24.h"
+#include "images/bootlogo3.h"
+#include "images/bootlogo4.h"
+#include "images/bootlogo5.h"
+#include "images/bootlogo6.h"
+#include "images/bootlogo7.h"
+#include "images/bootlogo8.h"
+#include "images/bootlogo9.h"
 
 namespace bootlogos {
 // First 5 (BootLogo0..4) are the branded "READ TILL YOU DIE" skull crests; the
