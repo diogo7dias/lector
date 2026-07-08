@@ -51,8 +51,13 @@ class HomeActivity final : public Activity {
   // one-shot toast reports wallpapers the sleep reconcile auto-moved while asleep.
   bool sleepOverLimit = false;
   long sleepImageCount = 0;
-  long cachedSleepImageCount = 0;
-  bool sleepImageCountKnown = false;
+  // Static so the /sleep count survives HomeActivity re-construction: every
+  // goHome() builds a fresh instance, and an instance-member cache made each
+  // home entry re-walk the whole wallpaper folder (up to 5000 SD dir entries)
+  // before the first paint. Invalidated only by the bulk move below; a stale
+  // count self-corrects on the next boot (deep sleep resets statics too).
+  inline static long cachedSleepImageCount = 0;
+  inline static bool sleepImageCountKnown = false;
   std::string sleepPauseToast;  // "N moved to /sleep pause/" — shown once on entry
   std::string moveToast;        // "Moved N" — result popup after a bulk move
   // The over-limit warning card is a LIST-home-only slot; it sits at selector 1,
