@@ -7,11 +7,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "fontIds.h"
-#include "images/bootlogo0.h"
-#include "images/bootlogo1.h"
-#include "images/bootlogo2.h"
-#include "images/bootlogo3.h"
-#include "images/bootlogo4.h"
+#include "images/BootLogos.h"
 
 void BootActivity::onEnter() {
   Activity::onEnter();
@@ -19,17 +15,21 @@ void BootActivity::onEnter() {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  // Boot logo: pick one of the skull crests at random (hardware RNG, no saved
-  // state). Each carries its own "READ TILL YOU DIE" text, so no brand caption.
-  static const uint8_t* const kBootLogos[] = {BootLogo0, BootLogo1, BootLogo2, BootLogo3, BootLogo4};
-  constexpr int kBootLogoCount = 5;
+  // Boot logo: the branded startup crest. Standard sleep modes always show one of
+  // the original "READ TILL YOU DIE" skull crests (hardware RNG) so the startup
+  // keeps its identity. With the "Random Logo" sleep screen the panel is already
+  // showing the image it picked at lock time (any of the full logo table), so
+  // reuse that exact one — unlocking then reveals the current wallpaper instead of
+  // a fresh random pick.
   constexpr int kLogoSize = 384;  // multiple of 8: drawImage packs rows at width/8 bytes
-  // With the "Until Death" sleep screen the panel is already showing the crest it
-  // picked at lock time; reuse that exact one so unlocking reveals the current
-  // wallpaper instead of a fresh random crest. Any other sleep mode: random.
-  const uint8_t* logo = (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::UNTIL_DEATH)
-                            ? kBootLogos[APP_STATE.lastUntilDeathLogo % kBootLogoCount]
-                            : kBootLogos[esp_random() % kBootLogoCount];
+  // Reuse the exact image the sleep screen picked (seamless unlock reveal) whenever
+  // a logo was actually shown at lock: the "Random Logo" mode always shows one, and
+  // "Random Logo + Custom" shows one only when the device slept outside the reader.
+  const bool reuseSleepLogo = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::UNTIL_DEATH ||
+                              (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::RANDOM_LOGO_CUSTOM &&
+                               !APP_STATE.lastSleepFromReader);
+  const uint8_t* logo = reuseSleepLogo ? bootlogos::kAll[APP_STATE.lastUntilDeathLogo % bootlogos::kCount]
+                                       : bootlogos::kAll[esp_random() % bootlogos::kSkullCount];
   const int logoX = (pageWidth - kLogoSize) / 2;
   const int logoY = (pageHeight - kLogoSize) / 2 - 50;
 

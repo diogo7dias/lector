@@ -25,7 +25,8 @@ class CrossPointSettings {
     BLANK = 4,
     COVER_CUSTOM = 5,
     QUICK_RESUME = 6,
-    UNTIL_DEATH = 7,  // random "READ TILL YOU DIE" boot-logo image, no indicator
+    UNTIL_DEATH = 7,         // "Random Logo": random image from the full logo table, no indicator
+    RANDOM_LOGO_CUSTOM = 8,  // slept from reader -> custom wallpaper rotation; slept from elsewhere -> random logo
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };

@@ -13,16 +13,13 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
+#include "SleepInfoOverlay.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "images/BootLogos.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
-#include "images/bootlogo0.h"
-#include "images/bootlogo1.h"
-#include "images/bootlogo2.h"
-#include "images/bootlogo3.h"
-#include "images/bootlogo4.h"
 #include "sleep/Wallpaper.h"
 
 void SleepActivity::onEnter() {
@@ -61,29 +58,34 @@ void SleepActivity::onEnter() {
       }
     case (CrossPointSettings::SLEEP_SCREEN_MODE::UNTIL_DEATH):
       return renderUntilDeathSleepScreen();
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::RANDOM_LOGO_CUSTOM):
+      // Slept from a book -> custom wallpaper rotation; from anywhere else -> random logo.
+      if (APP_STATE.lastSleepFromReader) {
+        return renderCustomSleepScreen();
+      } else {
+        return renderUntilDeathSleepScreen();
+      }
     default:
       return renderDefaultSleepScreen();
   }
 }
 
 void SleepActivity::renderUntilDeathSleepScreen() const {
-  // "Until Death": show one of the "READ TILL YOU DIE" skull-crest boot logos at
-  // random, full-frame and centered, with no moon/text indicator — just the image
-  // the user sees on unlock. A fresh random pick every lock (hardware RNG).
-  static const uint8_t* const kSleepLogos[] = {BootLogo0, BootLogo1, BootLogo2, BootLogo3, BootLogo4};
-  constexpr int kSleepLogoCount = 5;
+  // "Random Logo": show one of the full logo table (skull crests + extra user
+  // logos) at random, full-frame and centered, with no moon/text indicator — just
+  // the image the user sees on unlock. A fresh random pick every lock (hardware RNG).
   constexpr int kLogoSize = 384;  // multiple of 8: drawImage packs rows at width/8 bytes
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  // Remember which crest we picked so the wake boot logo (BootActivity) can show
+  // Remember which image we picked so the wake boot logo (BootActivity) can show
   // the very same one — an unlock then reveals the current wallpaper, not a
-  // fresh random crest.
-  const uint8_t logoIndex = static_cast<uint8_t>(esp_random() % kSleepLogoCount);
+  // fresh random pick.
+  const uint8_t logoIndex = static_cast<uint8_t>(esp_random() % bootlogos::kCount);
   APP_STATE.lastUntilDeathLogo = logoIndex;
   APP_STATE.saveToFile();
-  const uint8_t* logo = kSleepLogos[logoIndex];
+  const uint8_t* logo = bootlogos::kAll[logoIndex];
 
   renderer.clearScreen();
   renderer.drawImage(logo, (pageWidth - kLogoSize) / 2, (pageHeight - kLogoSize) / 2, kLogoSize, kLogoSize);
