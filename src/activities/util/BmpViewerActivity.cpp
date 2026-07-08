@@ -11,6 +11,7 @@
 #include "CrossPointSettings.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sleep/SleepPauseToggle.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
@@ -101,8 +102,14 @@ void BmpViewerActivity::onEnter() {
       bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
 
+      // Confirm is contextual: a wallpaper already living in /sleep or /sleep pause
+      // gets a one-press move to the other folder; anywhere else it sets the cover.
+      const bool inSleepDirs = crosspoint::sleep::isUnderSleepDirs(filePath);
+      const char* confirmLabel = inSleepDirs ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP)
+                                                                                        : tr(STR_SLEEP_MOVE_TO_PAUSE))
+                                             : tr(STR_SET_SLEEP_COVER);
       const auto labels =
-          mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
+          mappedInput.mapLabels(tr(STR_BACK), confirmLabel, (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
@@ -176,6 +183,15 @@ void BmpViewerActivity::doSetSleepCover() {
   onEnter();
 }
 
+void BmpViewerActivity::moveSleepPause() {
+  // Move to the other folder and immediately return to the browser at this file's
+  // old slot (the next image is then selected). Passing the original path lets the
+  // browser land there even though the file is now gone from this folder.
+  const std::string original = filePath;
+  crosspoint::sleep::toggleSleepPause(filePath);
+  activityManager.goToFileBrowser(original);
+}
+
 void BmpViewerActivity::loop() {
   // Keep CPU awake/polling so 1st click works
   Activity::loop();
@@ -186,7 +202,11 @@ void BmpViewerActivity::loop() {
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    doSetSleepCover();
+    if (crosspoint::sleep::isUnderSleepDirs(filePath)) {
+      moveSleepPause();
+    } else {
+      doSetSleepCover();
+    }
     return;
   }
 

@@ -17,5 +17,6 @@ class PxcViewerActivity final : public Activity {
   void loop() override;
 
  private:
+  void render();  // draw the wallpaper exactly like the lock screen
   std::string filePath;
 };

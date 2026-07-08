@@ -17,6 +17,7 @@ class BmpViewerActivity final : public Activity {
  private:
   void loadSiblingImages();
   void doSetSleepCover();
+  void moveSleepPause();  // move the viewed wallpaper between /sleep and /sleep pause
 
   std::string filePath;
   std::vector<std::string> siblingImages;

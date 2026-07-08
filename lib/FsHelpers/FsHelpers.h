@@ -13,6 +13,10 @@ std::string normalisePath(const std::string& path);
 
 void sortFileList(std::vector<std::string>& strs);
 
+// Natural, case-insensitive, directories-first ordering used by sortFileList.
+// Exposed so callers can locate a name's slot in an already-sorted list.
+bool naturalFileLess(const std::string& a, const std::string& b);
+
 /**
  * Check if the given filename ends with the specified extension (case-insensitive).
  */

@@ -187,8 +187,22 @@ void FileBrowserActivity::onEnter() {
 
   auto root = Storage.open(basepath.c_str());
   if (!root) {
-    basepath = "/";
-    loadFiles();
+    // basepath may be a file that was just moved/deleted (e.g. a wallpaper sent to
+    // /sleep pause from the viewer). Re-open its folder and land on the slot it
+    // occupied, instead of jumping all the way back to root.
+    std::string folder = FsHelpers::extractFolderPath(basepath);
+    if (folder.empty()) folder = "/";
+    auto folderRoot = Storage.open(folder.c_str());
+    if (folderRoot && folderRoot.isDirectory()) {
+      const auto pos = basepath.find_last_of('/');
+      const std::string fileName = (pos == std::string::npos) ? basepath : basepath.substr(pos + 1);
+      basepath = folder;
+      loadFiles();
+      selectorIndex = findEntry(fileName);
+    } else {
+      basepath = "/";
+      loadFiles();
+    }
   } else if (!root.isDirectory()) {
     lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
 
@@ -602,5 +616,10 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
   const size_t offset = static_cast<size_t>(headerRowCount());
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i + offset;
-  return 0;
+  // Not found (e.g. the file was just moved/deleted): land on the slot it used to
+  // occupy so whatever shifted up into its place — the "next" file — is selected.
+  // Relies on the list being sorted (sortFileList); harmless approximation otherwise.
+  size_t slot = 0;
+  while (slot < files.size() && FsHelpers::naturalFileLess(files[slot], name)) slot++;
+  return slot + offset;
 }
