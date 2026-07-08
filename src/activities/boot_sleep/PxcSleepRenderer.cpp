@@ -9,6 +9,7 @@
 #include <cstdlib>
 
 #include "Epub/converters/DirectPixelWriter.h"
+#include "SleepInfoOverlay.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
   HalFile file;
@@ -88,9 +89,12 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
 
   // OEM 3-pass grayscale, mirroring SleepActivity::renderBitmapSleepScreen:
   // BW silhouette base, then the LSB and MSB grayscale planes, then composite.
+  // The info overlay (filename / favorite badge) is redrawn in every pass so it
+  // composites solid, exactly like the wallpaper itself.
   renderer.clearScreen();
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
+  drawSleepInfoOverlay(renderer, path);
   renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
 
   renderer.clearScreen(0x00);
@@ -99,6 +103,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
+  drawSleepInfoOverlay(renderer, path);
   renderer.copyGrayscaleLsbBuffers();
 
   renderer.clearScreen(0x00);
@@ -107,6 +112,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
+  drawSleepInfoOverlay(renderer, path);
   renderer.copyGrayscaleMsbBuffers();
 
   renderer.displayGrayBuffer();

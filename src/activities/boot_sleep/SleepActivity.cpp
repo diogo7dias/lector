@@ -115,7 +115,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       f.close();
       return false;
     }
-    renderBitmapSleepScreen(bitmap);
+    renderBitmapSleepScreen(bitmap, p);
     f.close();
     return true;
   };
@@ -143,7 +143,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const std::string& sourcePath) const {
   int x, y;
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -195,6 +195,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
+  // Info overlay (filename / favorite badge), drawn after the invert filter so it
+  // stays readable, and redrawn in every grayscale pass so it composites solid.
+  drawSleepInfoOverlay(renderer, sourcePath);
+
   if (hasGreyscale) {
     // OEM grayscale pipeline base: on X3 this displays the frame with the
     // dedicated "AA-pre-BW(mid)" differential waveform, leaving every pixel
@@ -210,12 +214,14 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    drawSleepInfoOverlay(renderer, sourcePath);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    drawSleepInfoOverlay(renderer, sourcePath);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();

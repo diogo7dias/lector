@@ -196,6 +196,10 @@ class CrossPointSettings {
   // Sleep wallpaper file type shown by the rotation (see WALLPAPER_FORMAT).
   // Defaults to PXC (pre-dithered 2bpp, the recommended format).
   uint8_t wallpaperFormat = WALLPAPER_PXC;
+  // Overlay the wallpaper's filename on the sleep screen (bottom-left box). When
+  // off, showSleepFavoriteBadge instead draws a small "F" badge for favorites.
+  uint8_t showSleepImageFilename = 0;
+  uint8_t showSleepFavoriteBadge = 0;
   // Status bar: the legacy fixed-slot fields (statusBar / statusBar*) were removed
   // in favour of the per-item v2 model below. XTC keeps its own top/bottom overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
