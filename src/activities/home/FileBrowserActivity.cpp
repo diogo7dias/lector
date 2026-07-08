@@ -621,5 +621,8 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
   // Relies on the list being sorted (sortFileList); harmless approximation otherwise.
   size_t slot = 0;
   while (slot < files.size() && FsHelpers::naturalFileLess(files[slot], name)) slot++;
+  // A name sorting after every remaining entry lands one PAST the end — clamp to
+  // the last real row, or the selector would index files[files.size()] on Confirm.
+  if (slot >= files.size() && !files.empty()) slot = files.size() - 1;
   return slot + offset;
 }
