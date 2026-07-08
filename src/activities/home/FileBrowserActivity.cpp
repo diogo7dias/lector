@@ -5,6 +5,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
+#include <esp_random.h>
 
 #include <algorithm>
 
@@ -73,6 +74,21 @@ void FileBrowserActivity::loadFiles() {
   }
   root.close();
   FsHelpers::sortFileList(files);
+
+  // Random book order (Books mode only): reshuffle the file entries so the user
+  // gets a fresh random ordering each time the folder loads, to help pick the next
+  // read. Directories stay grouped and sorted at the top (sortFileList puts them
+  // first) — only the non-directory tail is shuffled (Fisher-Yates via esp_random).
+  if (SETTINGS.bookBrowserRandomOrder && mode == Mode::Books) {
+    size_t firstFile = 0;
+    while (firstFile < files.size() && !files[firstFile].empty() && files[firstFile].back() == '/') {
+      firstFile++;
+    }
+    for (size_t i = files.size(); i > firstFile + 1; i--) {
+      const size_t j = firstFile + esp_random() % (i - firstFile);
+      std::swap(files[i - 1], files[j]);
+    }
+  }
 
   // Gate the "Search current folder" row on the folder actually holding a book
   // (Books mode only). Images/dirs alone don't offer search.

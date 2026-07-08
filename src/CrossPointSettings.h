@@ -314,10 +314,13 @@ class CrossPointSettings {
   uint8_t uiTheme = LECTOR;
   // Home screen layout (see HOME_LAYOUT). Default = recent-books list.
   uint8_t homeLayout = HOME_LAYOUT_LIST;
-  // Open a random book from the Recent Books list on boot instead of the home
-  // screen (0 = off, 1 = on). Fresh boot-to-home only; waking from sleep still
-  // resumes the book you were reading.
+  // Open a random book from the Recent Books list on boot/wake instead of
+  // resuming the last-read book (0 = off, 1 = on).
   uint8_t openRandomRecentOnBoot = 0;
+  // File browser ordering for the books folder (0 = alphabetical, 1 = random).
+  // Random reshuffles the book list on every folder load to help pick the next
+  // read; directories stay grouped and sorted at the top.
+  uint8_t bookBrowserRandomOrder = 0;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
