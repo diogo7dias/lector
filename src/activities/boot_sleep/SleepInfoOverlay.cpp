@@ -30,9 +30,17 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text) {
   const int boxX = safeInset;
   const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
 
+  // The black box must be drawn in EVERY pass: in the grayscale plane passes
+  // fillRect(true) clears the plane bits over the box area, which is what stops
+  // the wallpaper's gray nudges from bleeding through it. The white text and
+  // border must be drawn ONLY in the BW base pass: the 1-bit glyph/rect path
+  // ignores the render mode and would set the LSB+MSB plane bits (the dark-grey
+  // nudge cell), turning the white pixels dark grey on 3-pass wallpapers.
   renderer.fillRect(boxX, boxY, boxWidth, boxHeight, true);
-  renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
-  renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY, shown.c_str(), false, EpdFontFamily::REGULAR);
+  if (renderer.getRenderMode() == GfxRenderer::BW) {
+    renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
+    renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY, shown.c_str(), false, EpdFontFamily::REGULAR);
+  }
 }
 
 }  // namespace
