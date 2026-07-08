@@ -524,7 +524,10 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   }
 
-  if (hintVisible && !text.empty()) {
+  // The live-preview band (search) owns the space below the input and draws its
+  // own header there, so skip the cursor/edit hints — they'd render at the same y
+  // and overlap the match count.
+  if (hintVisible && !text.empty() && !livePreviewProvider_) {
     const int hintLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int underlineY = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing;
     const int hintY = underlineY + 4;
@@ -585,16 +588,20 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const int bandBottom = keyboardStartY;
     const int previewRowLh = renderer.getLineHeight(SMALL_FONT_ID);
     const int headerLh = renderer.getLineHeight(UI_10_FONT_ID);
+    // Fill the whole band down to the keyboard: the row count is derived from the
+    // available height rather than a fixed cap, so no vertical space is wasted.
     int maxPreviewRows = (previewRowLh > 0) ? (bandBottom - bandTop - headerLh - 4) / previewRowLh : 0;
     if (maxPreviewRows < 0) maxPreviewRows = 0;
-    if (maxPreviewRows > 8) maxPreviewRows = 8;
     const KbPreviewResult pv = livePreviewProvider_(text, maxPreviewRows);
     int py = bandTop;
     const std::string countStr =
         text.empty() ? std::string(tr(STR_TYPE_TO_SEARCH)) : (std::to_string(pv.total) + " " + tr(STR_MATCHES));
     renderer.drawCenteredText(UI_10_FONT_ID, py, countStr.c_str(), true);
     py += headerLh + 4;
-    const int previewSideMargin = metrics.contentSidePadding;
+    // Indent the result rows to the input field's left edge (effectiveMargin)
+    // instead of the tighter content padding, so they don't hug the screen edge
+    // and line up under the query text above them.
+    const int previewSideMargin = effectiveMargin;
     for (const auto& r : pv.rows) {
       if (py + previewRowLh > bandBottom) break;
       const std::string truncated = renderer.truncatedText(SMALL_FONT_ID, r.c_str(), pageWidth - 2 * previewSideMargin);
