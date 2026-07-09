@@ -31,8 +31,10 @@ namespace {
 // row at a time; more than a couple dozen is never realistically scrolled to.
 constexpr int kHomeListMaxBooks = 20;
 
-// "Lector [semver]" for the list-home header, mirroring the DX34 Lector home.
-// CROSSPOINT_VERSION is "…-<branch>-<semver>"; take the trailing semver.
+// "Lector [version]" for the list-home header, mirroring the DX34 Lector home.
+// CROSSPOINT_VERSION is now a plain semver (e.g. "0.5.0") for every build env,
+// but keep the trailing-token fallback so any legacy "…-<suffix>" string still
+// renders the meaningful tail rather than the whole raw string.
 std::string getHomeHeaderVersionLabel() {
   const std::string rawVersion = CROSSPOINT_VERSION;
   const size_t dashPos = rawVersion.find_last_of('-');
