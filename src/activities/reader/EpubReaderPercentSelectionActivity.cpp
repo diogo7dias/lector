@@ -1,6 +1,7 @@
 #include "EpubReaderPercentSelectionActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 
 #include "MappedInputManager.h"
@@ -51,8 +52,13 @@ void EpubReaderPercentSelectionActivity::loop() {
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustPercent(-kSmallStep); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustPercent(kSmallStep); });
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { adjustPercent(kLargeStep); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { adjustPercent(-kLargeStep); });
+  // On X3 the side buttons are on the left/right edges (BTN_UP = left, BTN_DOWN = right), not a vertical
+  // rocker (X4). Flip the large-step direction there so left decreases and right increases.
+  const int upDelta = gpio.deviceIsX3() ? -kLargeStep : kLargeStep;
+  const int downDelta = gpio.deviceIsX3() ? kLargeStep : -kLargeStep;
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustPercent(upDelta); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
+                                       [this, downDelta] { adjustPercent(downDelta); });
 }
 
 void EpubReaderPercentSelectionActivity::render(RenderLock&&) {
