@@ -65,6 +65,12 @@ class FileBrowserActivity final : public Activity {
   void loadFiles();
   size_t findEntry(const std::string& name) const;
 
+  // Open a .pxc wallpaper in the viewer without tearing down this browser: launched
+  // via startActivityForResult so we stay alive with `files` resident, then patch the
+  // one affected row in place on return (moved/deleted -> erased; favorite-renamed ->
+  // updated) instead of re-scanning the whole folder. launchName is the row string.
+  void openPxcViewer(const std::string& path, const std::string& launchName);
+
   // A "Recent Books" shortcut row is pinned to the top of the list only at the SD
   // root in the normal book browser (never in the firmware picker or subfolders).
   // When present it occupies selector index 0 and shifts the real files down by one.

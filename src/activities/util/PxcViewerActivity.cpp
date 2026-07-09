@@ -15,8 +15,23 @@
 #include "sleep/SleepPauseToggle.h"
 #include "util/FavoriteImage.h"
 
-PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath)
-    : Activity("PxcViewer", renderer, mappedInput), filePath(std::move(filePath)) {}
+PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
+                                     bool resultMode)
+    : Activity("PxcViewer", renderer, mappedInput), filePath(std::move(filePath)), resultMode(resultMode) {}
+
+void PxcViewerActivity::returnToBrowser(bool removed) {
+  if (resultMode) {
+    // Hand control back to the still-alive browser. Empty path = the file left this
+    // folder (moved/deleted); otherwise the current (possibly renamed) path so the
+    // browser patches that one row in place — no folder rescan.
+    setResult(FilePathResult{removed ? std::string() : filePath});
+    finish();
+  } else {
+    // ReaderActivity-launched path: rebuild the browser (it was replaced away). The
+    // browser's onEnter re-derives the folder and lands on this file's old slot.
+    activityManager.goToFileBrowser(filePath);
+  }
+}
 
 void PxcViewerActivity::render() {
   // Button hints for the viewer: Back / Move (Confirm) / Delete (Left) / Fav (Right).
@@ -58,7 +73,7 @@ void PxcViewerActivity::onExit() {
 void PxcViewerActivity::loop() {
   Activity::loop();
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    activityManager.goToFileBrowser(filePath);
+    returnToBrowser(false);
     return;
   }
   // Left button deletes the wallpaper, behind a confirmation. On confirm+success we
@@ -71,7 +86,7 @@ void PxcViewerActivity::loop() {
         [this](const ActivityResult& res) {
           if (!res.isCancelled) {
             if (Storage.remove(filePath.c_str())) {
-              activityManager.goToFileBrowser(filePath);
+              returnToBrowser(true);
             } else {
               LOG_ERR("PXC", "Failed to delete: %s", filePath.c_str());
             }
@@ -98,13 +113,12 @@ void PxcViewerActivity::loop() {
   // A same-named file in the destination makes the rename fail (SdFat never
   // overwrites) — surface that and stay put instead of pretending it moved.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && crosspoint::sleep::isUnderSleepDirs(filePath)) {
-    const std::string original = filePath;
     const auto res = crosspoint::sleep::toggleSleepPause(filePath);
     if (!res.ok) {
       GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
       return;
     }
-    activityManager.goToFileBrowser(original);
+    returnToBrowser(true);
     return;
   }
 }

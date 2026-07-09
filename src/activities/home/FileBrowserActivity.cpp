@@ -14,6 +14,7 @@
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "activities/util/PxcViewerActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -104,6 +105,41 @@ void FileBrowserActivity::loadFiles() {
       }
     }
   }
+}
+
+void FileBrowserActivity::openPxcViewer(const std::string& path, const std::string& launchName) {
+  auto handler = [this, launchName](const ActivityResult& res) {
+    if (!std::holds_alternative<FilePathResult>(res.data)) return;
+    const std::string& finalPath = std::get<FilePathResult>(res.data).path;
+    if (finalPath.empty()) {
+      // Moved or deleted in the viewer: drop the row in place — no folder rescan.
+      files.erase(std::remove(files.begin(), files.end(), launchName), files.end());
+    } else {
+      // Still present, possibly favorite-renamed (_F): update the row and re-sort
+      // (RAM-only, cheap even at thousands of entries — the SD scan is what's slow).
+      const auto pos = finalPath.find_last_of('/');
+      const std::string finalName = (pos == std::string::npos) ? finalPath : finalPath.substr(pos + 1);
+      if (finalName != launchName) {
+        for (auto& f : files) {
+          if (f == launchName) {
+            f = finalName;
+            break;
+          }
+        }
+        FsHelpers::sortFileList(files);
+      }
+    }
+    rebuildFilter();  // `files` changed — refresh the ranked/search view
+    const int postRowCount = static_cast<int>(totalRowCount());
+    if (postRowCount == 0) {
+      selectorIndex = 0;
+    } else if (selectorIndex >= static_cast<size_t>(postRowCount)) {
+      selectorIndex = postRowCount - 1;
+    }
+    requestUpdate(true);
+  };
+  startActivityForResult(std::make_unique<PxcViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
+                         handler);
 }
 
 // Map a selector row index to what it represents: a synthetic action row (Recent
@@ -415,6 +451,8 @@ void FileBrowserActivity::loop() {
         loadFiles();
         selectorIndex = 0;
         requestUpdate();
+      } else if (FsHelpers::checkFileExtension(entry, ".pxc")) {
+        openPxcViewer(basepath + entry, entry);
       } else {
         onSelectBook(basepath + entry);
       }
