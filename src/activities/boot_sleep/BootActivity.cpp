@@ -1,61 +1,98 @@
 #include "BootActivity.h"
 
 #include <GfxRenderer.h>
-#include <I18n.h>
-#include <esp_random.h>
 
-#include "CrossPointSettings.h"
+#include <cctype>
+#include <string>
+
 #include "CrossPointState.h"
+#include "PxcSleepRenderer.h"
 #include "fontIds.h"
-#include "images/BootLogos.h"
+
+namespace {
+
+// "/books/My Book.epub" -> "My Book". Strips the directory and the extension so
+// the resuming-book banner reads as a plain title.
+std::string bookTitleFromPath(const std::string& path) {
+  const size_t slash = path.find_last_of('/');
+  const size_t start = (slash == std::string::npos) ? 0 : slash + 1;
+  size_t end = path.find_last_of('.');
+  if (end == std::string::npos || end < start) end = path.size();
+  return path.substr(start, end - start);
+}
+
+}  // namespace
+
+void BootActivity::drawUnlockBanners() const {
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const bool bwPass = renderer.getRenderMode() == GfxRenderer::BW;
+
+  const int pad = 10;
+  const int lh12 = renderer.getLineHeight(UI_12_FONT_ID);
+  const int lh10 = renderer.getLineHeight(UI_10_FONT_ID);
+
+  std::string bookLine;
+  if (!APP_STATE.openEpubPath.empty()) {
+    bookLine = bookTitleFromPath(APP_STATE.openEpubPath);
+    for (char& c : bookLine) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+  }
+
+  // --- TOP banner: version (+ resuming book) ---
+  const int topH = bookLine.empty() ? (lh12 + pad * 2) : (lh12 + 4 + lh10 + pad * 2);
+  const int topY = 0;
+  renderer.fillRect(0, topY, pageWidth, topH, true);  // black banner, drawn every pass
+
+  // --- BOTTOM banner: "READ UNTIL YOU DIE." ---
+  const int botH = lh12 + pad * 2;
+  const int botY = pageHeight - botH;
+  renderer.fillRect(0, botY, pageWidth, botH, true);  // black banner, drawn every pass
+
+  // White content (border + text) only in the BW base pass: the 1-bit draw path
+  // ignores the render mode and would set the grayscale plane bits (a dark-grey
+  // nudge) in the LSB/MSB passes, greying the white pixels.
+  if (!bwPass) return;
+
+  renderer.drawRect(0, topY, pageWidth, topH, 2, false);  // 2px white inset border
+  renderer.drawRect(0, botY, pageWidth, botH, 2, false);
+
+  // Dark/paperback text: smear the white glyphs +1px so they read heavier on the
+  // black banners (matches drawPopup). Restored after so nothing else is affected.
+  renderer.setPaperbackLook(true);
+
+  const std::string version = std::string("Lector ") + CROSSPOINT_VERSION;
+  renderer.drawCenteredText(UI_12_FONT_ID, topY + pad, version.c_str(), false);
+  if (!bookLine.empty()) {
+    const std::string shown = renderer.truncatedText(UI_10_FONT_ID, bookLine.c_str(), pageWidth - 24);
+    renderer.drawCenteredText(UI_10_FONT_ID, topY + pad + lh12 + 4, shown.c_str(), false);
+  }
+
+  renderer.drawCenteredText(UI_12_FONT_ID, botY + pad, "READ UNTIL YOU DIE.", false);
+
+  renderer.setPaperbackLook(false);
+}
 
 void BootActivity::onEnter() {
   Activity::onEnter();
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  // Unlock over the wallpaper: redraw the .pxc as a single 1-bit refresh with the
+  // banners composited on top, so wake stays fast (the 3-pass grayscale re-render
+  // is the slow part and X3 has no partial-refresh shortcut). The seamless begin()
+  // in setup() kept the wallpaper physically on the panel until this refresh lands,
+  // so there is no white flash. Falls back to the plain banner screen if the
+  // wallpaper can't be re-rendered (missing / corrupt file).
+  if (!wallpaperPath_.empty()) {
+    if (renderPxcSleepScreen(
+            renderer, wallpaperPath_, [this]() { drawUnlockBanners(); }, /*drawInfoOverlay=*/false,
+            /*grayscale=*/false)) {
+      return;
+    }
+  }
 
-  // Boot logo: the branded startup crest. Standard sleep modes always show one of
-  // the original "READ TILL YOU DIE" skull crests (hardware RNG) so the startup
-  // keeps its identity. With the "Random Logo" sleep screen the panel is already
-  // showing the image it picked at lock time (any of the full logo table), so
-  // reuse that exact one — unlocking then reveals the current wallpaper instead of
-  // a fresh random pick.
-  constexpr int kLogoSize = 384;  // multiple of 8: drawImage packs rows at width/8 bytes
-  // Reuse the exact image the sleep screen picked (seamless unlock reveal) whenever
-  // a logo was actually shown at lock: the "Random Logo" mode always shows one, and
-  // "Random Logo + Custom" shows one only when the device slept outside the reader.
-  const bool reuseSleepLogo = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::UNTIL_DEATH ||
-                              (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::RANDOM_LOGO_CUSTOM &&
-                               !APP_STATE.lastSleepFromReader);
-  const uint8_t* logo = reuseSleepLogo ? bootlogos::kAll[APP_STATE.lastUntilDeathLogo % bootlogos::kCount]
-                                       : bootlogos::kAll[esp_random() % bootlogos::kSkullCount];
-  const int logoX = (pageWidth - kLogoSize) / 2;
-  const int logoY = (pageHeight - kLogoSize) / 2 - 50;
-
-  // 4-block segmented loader below the logo. Each block fills on its own e-ink
-  // refresh, so the panel shows the bar filling one block at a time before Home
-  // takes over. This blocks in onEnter for ~4 refreshes by design (branded boot
-  // animation); the boot routing swaps in Home right after.
-  constexpr int kSegments = 4;
-  constexpr int segW = 44;
-  constexpr int segH = 18;
-  constexpr int segGap = 6;
-  const int totalW = kSegments * segW + (kSegments - 1) * segGap;
-  const int segX0 = (pageWidth - totalW) / 2;
-  const int segY = logoY + kLogoSize + 24;
-
+  // Plain banner screen (cold boot / logo modes / non-pxc wallpaper): white
+  // background with the same two banners. renderMode is BW here so all banner
+  // content draws.
   renderer.clearScreen();
-  renderer.drawImage(logo, logoX, logoY, kLogoSize, kLogoSize);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight - 30, CROSSPOINT_VERSION);
-  for (int i = 0; i < kSegments; i++) {
-    renderer.drawRect(segX0 + i * (segW + segGap), segY, segW, segH, 2, true);  // empty block outlines
-  }
-  renderer.displayBuffer();
-
-  // Fill one block per refresh (the refresh time itself paces the animation).
-  for (int i = 0; i < kSegments; i++) {
-    renderer.fillRect(segX0 + i * (segW + segGap), segY, segW, segH, true);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-  }
+  drawUnlockBanners();
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }

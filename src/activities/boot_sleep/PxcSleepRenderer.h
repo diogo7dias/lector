@@ -21,5 +21,14 @@ class GfxRenderer;
 // right after the sleep info overlay, so anything it draws composites solid over
 // the wallpaper — used by the PXC viewer to bake button hints onto the image.
 // The real sleep screen leaves it null so no buttons appear there.
+//
+// drawInfoOverlay gates the bottom-left filename / favorite badge. The sleep
+// screen and PXC viewer leave it on; the unlock banner screen passes false so its
+// own bottom banner doesn't collide with the filename box.
+//
+// grayscale=false renders a single 1-bit (black/white) refresh of the wallpaper +
+// overlays, skipping the 3-pass grayscale pipeline. The unlock banner screen uses
+// this for a faster wake; the sleep screen and PXC viewer keep the full grayscale.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path,
-                          const std::function<void()>& extraOverlay = nullptr);
+                          const std::function<void()>& extraOverlay = nullptr, bool drawInfoOverlay = true,
+                          bool grayscale = true);

@@ -11,7 +11,8 @@
 #include "Epub/converters/DirectPixelWriter.h"
 #include "SleepInfoOverlay.h"
 
-bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const std::function<void()>& extraOverlay) {
+bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const std::function<void()>& extraOverlay,
+                          bool drawInfoOverlay, bool grayscale) {
   HalFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
@@ -80,7 +81,16 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
       for (int col = colStart; col < colEnd; col++) {
         const int byteIdx = col >> 2;            // col / 4
         const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
-        const uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+        uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+        if (!grayscale && pixelValue != 0 && pixelValue != 3) {
+          // Standalone 1-bit render (unlock screen): the plain BW pass collapses
+          // every non-white level to solid black, which turns a light-background
+          // wallpaper into a black blob that reads as "gone white". Ordered-dither
+          // the two mid levels (85 / 170) with a 2x2 Bayer matrix so tone survives
+          // in pure black & white; pure black (0) and pure white (3) stay solid.
+          static const uint8_t kBayer2[2][2] = {{0, 2}, {3, 1}};
+          pixelValue = (pixelValue > kBayer2[row & 1][col & 1]) ? 3 : 0;
+        }
         pw.writePixel(x + col, pixelValue);
       }
     }
@@ -94,8 +104,18 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   renderer.clearScreen();
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
-  drawSleepInfoOverlay(renderer, path);
+  if (drawInfoOverlay) drawSleepInfoOverlay(renderer, path);
   if (extraOverlay) extraOverlay();
+
+  if (!grayscale) {
+    // 1-bit fast path: a single BW refresh of the silhouette + overlays, skipping
+    // the LSB/MSB grayscale planes and the grayscale composite. Used by the unlock
+    // banner screen, where wake speed matters more than a full grayscale wallpaper
+    // (the sleep screen itself still renders full grayscale).
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    return true;
+  }
+
   renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
 
   renderer.clearScreen(0x00);
@@ -104,7 +124,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
-  drawSleepInfoOverlay(renderer, path);
+  if (drawInfoOverlay) drawSleepInfoOverlay(renderer, path);
   if (extraOverlay) extraOverlay();
   renderer.copyGrayscaleLsbBuffers();
 
@@ -114,7 +134,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
-  drawSleepInfoOverlay(renderer, path);
+  if (drawInfoOverlay) drawSleepInfoOverlay(renderer, path);
   if (extraOverlay) extraOverlay();
   renderer.copyGrayscaleMsbBuffers();
 

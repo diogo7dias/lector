@@ -88,7 +88,7 @@ class ActivityManager {
   void goToBrowser();
   void goToReader(std::string path);
   void goToSleep(bool fromTimeout = false);
-  void goToBoot();
+  void goToBoot(std::string wallpaperPath = {});
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE);

@@ -16,6 +16,7 @@
 #include <WiFi.h>
 #include <builtinFonts/all.h>
 #include <esp_random.h>
+#include <strings.h>
 
 #include <cstring>
 #include <string>
@@ -494,7 +495,29 @@ void setup() {
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
 
-  setupDisplayAndFonts(resume != BootResume::Splash);
+  // Unlock-over-wallpaper: when this is a normal (non-quick-resume) deep-sleep
+  // wake whose sleep screen was a .pxc custom wallpaper, re-render that wallpaper
+  // on the boot screen with the unlock banners on top instead of the logo, so the
+  // wallpaper stays. Needs the seamless begin() below so the panel keeps the
+  // wallpaper (no clearing pass) while the grayscale re-render lands on top.
+  const std::string& lastWallpaper = APP_STATE.lastSleepWallpaperPath;
+  const bool sleepWasCustomWallpaper = [] {
+    switch (SETTINGS.sleepScreen) {
+      case CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM:
+        return true;
+      case CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM:
+        return !APP_STATE.lastSleepFromReader;
+      case CrossPointSettings::SLEEP_SCREEN_MODE::RANDOM_LOGO_CUSTOM:
+        return APP_STATE.lastSleepFromReader;
+      default:
+        return false;
+    }
+  }();
+  const bool wallpaperWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton &&
+                             sleepWasCustomWallpaper && lastWallpaper.size() >= 4 &&
+                             strcasecmp(lastWallpaper.c_str() + lastWallpaper.size() - 4, ".pxc") == 0;
+
+  setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
 
   switch (resume) {
     case BootResume::Silent:
@@ -517,7 +540,7 @@ void setup() {
       }
       break;
     case BootResume::Splash:
-      activityManager.goToBoot();
+      activityManager.goToBoot(wallpaperWake ? APP_STATE.lastSleepWallpaperPath : std::string());
       break;
   }
 
