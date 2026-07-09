@@ -13,18 +13,20 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
+#include "util/FavoriteImage.h"
 
 PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath)
     : Activity("PxcViewer", renderer, mappedInput), filePath(std::move(filePath)) {}
 
 void PxcViewerActivity::render() {
-  // Button hints for the viewer: Back / Move (Confirm) / Delete (Left). The move
-  // label is empty for files outside /sleep so Confirm isn't a hidden action.
+  // Button hints for the viewer: Back / Move (Confirm) / Delete (Left) / Fav (Right).
+  // The move label is empty for files outside /sleep so Confirm isn't a hidden action.
   const char* moveLabel =
       crosspoint::sleep::isUnderSleepDirs(filePath)
           ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE))
           : "";
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, tr(STR_DELETE), "");
+  const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, tr(STR_DELETE), favLabel);
   // Bake the hints into every grayscale pass so they composite solid over the
   // wallpaper. Drawing them AFTER renderPxcSleepScreen's own refresh would need a
   // separate partial refresh, which accumulates charge -> ghosting on X3; passing
@@ -75,6 +77,19 @@ void PxcViewerActivity::loop() {
             }
           }
         });
+    return;
+  }
+  // Right button toggles favorite by renaming the file (adds/strips the _F suffix).
+  // Stays in the viewer and re-renders in place: the hint label flips Fav<->Unfav and
+  // the favorite badge in the sleep info overlay updates. filePath is repointed to the
+  // renamed file so Back/Move/Delete keep working.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
+    std::string updated;
+    if (FavoriteImage::setFavorite(filePath, makeFavorite, &updated) == FavoriteImage::SetFavoriteResult::Success) {
+      filePath = updated;
+    }
+    render();
     return;
   }
   // Confirm moves the wallpaper to the other folder and immediately returns to the
