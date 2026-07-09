@@ -27,6 +27,13 @@ class FileBrowserActivity final : public Activity {
   // release so we don't immediately auto-open the first entry.
   bool lockNextConfirmRelease = false;
 
+  // Forces the NEXT paint onto a FULL_REFRESH instead of the default FAST partial
+  // refresh, then auto-clears. Set it after events that leave e-ink residue a fast
+  // refresh cannot scrub — chiefly returning from the full-page grayscale PXC viewer
+  // (its image ghosts behind the list), plus deletes and folder entry. Plain scrolling
+  // stays on FAST_REFRESH so page-through latency is unchanged. Mirrors HomeActivity.
+  bool pendingFullRefresh = true;
+
   Mode mode = Mode::Books;
 
   // Files state

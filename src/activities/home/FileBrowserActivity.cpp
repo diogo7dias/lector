@@ -136,6 +136,9 @@ void FileBrowserActivity::openPxcViewer(const std::string& path, const std::stri
     } else if (selectorIndex >= static_cast<size_t>(postRowCount)) {
       selectorIndex = postRowCount - 1;
     }
+    // The viewer just painted a full-page grayscale image; scrub it with a full
+    // refresh so it does not ghost behind the list (worst during bulk moves).
+    pendingFullRefresh = true;
     requestUpdate(true);
   };
   startActivityForResult(std::make_unique<PxcViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
@@ -253,6 +256,7 @@ void FileBrowserActivity::onEnter() {
     loadFiles();
   }
 
+  pendingFullRefresh = true;  // clean full paint on entry / resume from a child activity
   requestUpdate();
 }
 
@@ -428,6 +432,7 @@ void FileBrowserActivity::loop() {
               selectorIndex = postRowCount - 1;
             }
 
+            pendingFullRefresh = true;  // clear the deleted row's ghost
             requestUpdate(true);
           } else {
             LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
@@ -647,7 +652,8 @@ void FileBrowserActivity::render(RenderLock&&) {
                                             emptyList ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  pendingFullRefresh = false;
 }
 
 size_t FileBrowserActivity::findEntry(const std::string& name) const {
