@@ -503,6 +503,9 @@ void FileBrowserActivity::render(RenderLock&&) {
       (mode == Mode::PickFirmware)
           ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
           : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
+  // Append the entry count to the header title, e.g. "sleep pause (1287)". The whole
+  // folder is already resident in `files`, so this is a free size() read (no extra scan).
+  folderName += " (" + std::to_string(files.size()) + ")";
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
