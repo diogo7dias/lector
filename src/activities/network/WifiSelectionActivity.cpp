@@ -5,6 +5,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <WiFi.h>
+#include <time.h>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -244,10 +245,14 @@ void WifiSelectionActivity::checkConnectionStatus() {
     connectedIP = ipStr;
     autoConnecting = false;
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    // Sync the clock from NTP whenever the system clock looks unset. The ESP32
+    // system clock resets to 1970 every boot (the DS3231 on X3 stores only H:M,
+    // and the X4 has no RTC), and mbedTLS cert-date validation - used by the OTA
+    // update check and every HTTPS download - rejects all certs at a 1970 clock.
+    // So this can't be a once-ever sync; it must run each boot until the clock is
+    // valid. ~5s, first successful connect of a boot only. On X3 it also refreshes
+    // the RTC display clock. (1700000000 = ~Nov 2023.)
+    if (time(nullptr) < 1700000000) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();

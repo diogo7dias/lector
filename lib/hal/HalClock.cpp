@@ -150,8 +150,10 @@ bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
 }
 
 bool HalClock::syncFromNTP() {
-  if (!_available) return false;
-
+  // NOTE: deliberately NOT gated on _available. SNTP sets the ESP32 *system*
+  // clock (what mbedTLS uses for cert-date validation), which matters on every
+  // device incl. the X4 that has no DS3231. The RTC write below is what needs a
+  // DS3231, so it - and only it - is guarded on _available.
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;
@@ -164,15 +166,17 @@ bool HalClock::syncFromNTP() {
   constexpr int maxAttempts = 50;
   for (int i = 0; i < maxAttempts; i++) {
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-      time_t now = time(nullptr);
-      struct tm timeinfo;
-      gmtime_r(&now, &timeinfo);
-
-      if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
-        LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
-        return true;
+      // System clock is now valid. On X3, also push H:M:S to the DS3231 so the
+      // on-screen display clock survives reboots (the date is not stored there).
+      if (_available) {
+        time_t now = time(nullptr);
+        struct tm timeinfo;
+        gmtime_r(&now, &timeinfo);
+        if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
+          LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        }
       }
-      return false;
+      return true;
     }
     delay(100);
   }
