@@ -940,6 +940,15 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     GUI.drawPopup(renderer, tr(STR_SAVE_PROGRESS_FAILED));
   };
 
+  // A section build failure (e.g. an invalid/corrupt EPUB that fails XML parsing) leaves the
+  // "Indexing" popup on screen with no way forward. Surface an explicit error instead of hanging.
+  // clearScreen first so the error popup doesn't overlay the stale "Indexing" popup.
+  const auto showBuildError = [this]() {
+    renderer.clearScreen();
+    GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
+    automaticPageTurnActive = false;
+  };
+
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
     currentSpineIndex = 0;
@@ -1036,7 +1045,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
               firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
         LOG_ERR("ERS", "Failed to persist page data to SD");
         section.reset();
-        showPendingSyncSaveError();
+        showBuildError();
         return;
       }
     } else {
