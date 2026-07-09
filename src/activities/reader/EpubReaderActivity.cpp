@@ -757,6 +757,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_LOOK:
     case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_STATUS:
+    case EpubReaderMenuActivity::MenuAction::TOGGLE_RANDOM_ON_BOOT:
       // Handled in-place inside EpubReaderMenuActivity::loop() (flip + persist),
       // so the menu never returns these as a confirmed action. Listed here only
       // to keep the switch exhaustive.

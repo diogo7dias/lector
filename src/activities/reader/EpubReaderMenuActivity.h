@@ -21,6 +21,7 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_BOOKMARK,
     TOGGLE_PAPERBACK_LOOK,
     TOGGLE_PAPERBACK_STATUS,
+    TOGGLE_RANDOM_ON_BOOT,
     SCREENSHOT,
     DISPLAY_QR,
     SHARE_QR,

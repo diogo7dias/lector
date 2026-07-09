@@ -49,6 +49,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   // Paperback Look toggles — in-book pop-up menu only (not in global Settings/web).
   items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
   items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+  // Open-random-book-on-boot toggle — surfaced in the in-book menu like the
+  // paperback toggles; flips SETTINGS.openRandomRecentOnBoot in place.
+  items.push_back({MenuAction::TOGGLE_RANDOM_ON_BOOT, StrId::STR_OPEN_RANDOM_ON_BOOT});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   // Auto Turn (Pages Per Minute) intentionally hidden from the in-book menu.
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -118,6 +121,12 @@ void EpubReaderMenuActivity::loop() {
     }
     if (selectedAction == MenuAction::TOGGLE_PAPERBACK_STATUS) {
       SETTINGS.paperbackLookStatus = SETTINGS.paperbackLookStatus ? 0 : 1;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      return;
+    }
+    if (selectedAction == MenuAction::TOGGLE_RANDOM_ON_BOOT) {
+      SETTINGS.openRandomRecentOnBoot = SETTINGS.openRandomRecentOnBoot ? 0 : 1;
       SETTINGS.saveToFile();
       requestUpdate();
       return;
@@ -208,6 +217,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return I18N.get(SETTINGS.paperbackLookBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
           return I18N.get(SETTINGS.paperbackLookStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_RANDOM_ON_BOOT) {
+          return I18N.get(SETTINGS.openRandomRecentOnBoot ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else {
           return "";
         }
