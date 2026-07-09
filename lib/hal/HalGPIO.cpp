@@ -279,11 +279,20 @@ void HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPre
 bool HalGPIO::isUsbConnected() const {
   if (deviceIsX3()) {
     // X3: infer USB/charging via BQ27220 Current() register (0x0C, signed mA).
-    // Positive current means charging.
+    // Positive current means charging. Near full charge the current dithers around
+    // zero, so a bare `currentMa > 0` flips connected/disconnected every few seconds;
+    // on a static screen that drives a fresh partial refresh each flip -> visible
+    // ghosting/bloom (and a flickering battery icon). Apply a deadband: only flip the
+    // reported state when the current is clearly charging (> +DEADBAND) or clearly
+    // discharging (< -DEADBAND); inside the band hold the last known state so noise
+    // around zero can't toggle it. Real plug/unplug events swing well past the band.
+    constexpr int16_t USB_CURRENT_DEADBAND_MA = 20;
     for (uint8_t attempt = 0; attempt < 2; ++attempt) {
       int16_t currentMa = 0;
       if (X3GPIO::readBQ27220CurrentMA(&currentMa)) {
-        return currentMa > 0;
+        if (currentMa > USB_CURRENT_DEADBAND_MA) return true;
+        if (currentMa < -USB_CURRENT_DEADBAND_MA) return false;
+        return lastUsbConnected;  // in the deadband: keep the previous stable state
       }
       delay(2);
     }
