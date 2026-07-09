@@ -1086,6 +1086,8 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   const int y = (renderer.getScreenHeight() - h) / 2;
 
   renderer.fillRect(0, y, pageWidth, h, true);  // black banner
+  renderer.drawRect(0, y, pageWidth, h, 2,
+                    false);  // 2px white inset border — separates the banner from what is behind it (height unchanged)
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message);
   const int textX = (pageWidth - textWidth) / 2;
   const int textY = y + (h - textHeight) / 2;
