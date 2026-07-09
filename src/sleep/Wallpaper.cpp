@@ -224,8 +224,17 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
       // from it, so a buffer-engine pick never moves it. Set before
       // rememberRendered() so its APP_STATE save (fullPath always changes on a
       // new pick) writes this field too — no extra SD write.
+      // Persist the direct-pick cursor advance. rememberRendered() below saves
+      // APP_STATE only when the shown file/path changes; when the SAME file is
+      // re-picked it skips the save, stranding this cursor update in RAM where the
+      // deep-sleep reset loses it — so the walk lands on that same file every wake
+      // (the favorite-successor freeze). Detect the unchanged-render case and force
+      // the save so the cursor always advances across sleep.
+      const bool renderedFileUnchanged =
+          pick.fullPath == APP_STATE.lastSleepWallpaperPath && pick.basename == APP_STATE.lastShownSleepFilename;
       if (pickedDirect) APP_STATE.lastDirectPickFilename = pick.basename;
       v2::WallpaperPlaylistV2::instance().rememberRendered(pick.fullPath, pick.basename);
+      if (pickedDirect && renderedFileUnchanged) APP_STATE.saveToFile();
       return pick;
     }
     // Probe rejected this candidate. Step the direct-pick cursor past it so the
