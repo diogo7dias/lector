@@ -13,7 +13,9 @@ namespace {
 // v27: words NFC-composed at layout time; bump invalidates NFD section caches.
 // v28: first-line indent px added to the header + cache key.
 // v29: word spacing + paragraph spacing added to the header + cache key.
-constexpr uint8_t SECTION_FILE_VERSION = 29;
+// v30: TextBlock word data stored as one flat arena (offset table + NUL-terminated
+//      text blob) instead of length-prefixed strings and per-field arrays.
+constexpr uint8_t SECTION_FILE_VERSION = 30;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) + sizeof(uint8_t) +
@@ -356,10 +358,10 @@ std::string Section::getTextFromSectionFile() {
       if (el->getTag() == TAG_PageLine) {
         const auto& line = static_cast<const PageLine&>(*el);
         if (line.getBlock()) {
-          const auto& words = line.getBlock()->getWords();
-          for (const auto& w : words) {
+          const auto& block = *line.getBlock();
+          for (uint16_t i = 0; i < block.wordCount(); i++) {
             if (!fullText.empty()) fullText += " ";
-            fullText += w;
+            fullText += block.wordText(i);
           }
         }
       }

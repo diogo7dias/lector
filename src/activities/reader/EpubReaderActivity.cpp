@@ -1211,16 +1211,13 @@ std::vector<EpubReaderActivity::WordInfo> EpubReaderActivity::buildWordList(cons
     const auto& line = static_cast<const PageLine&>(*el);
     const auto& tb = line.getBlock();
     if (!tb) continue;
-    const auto& words = tb->getWords();
-    const auto& xpos = tb->getWordXpos();
-    const auto& styles = tb->getWordStyles();
-    for (size_t i = 0; i < words.size(); i++) {
+    for (uint16_t i = 0; i < tb->wordCount(); i++) {
       WordInfo wi;
-      wi.x = static_cast<int>(xpos[i]) + line.xPos + xOffset;
+      wi.x = static_cast<int>(tb->wordXpos(i)) + line.xPos + xOffset;
       wi.y = line.yPos + yOffset;
-      wi.style = styles[i];
-      wi.width = renderer.getTextWidth(fontId, words[i].c_str(), wi.style);
-      wi.text = words[i];
+      wi.style = tb->wordStyle(i);
+      wi.width = renderer.getTextWidth(fontId, tb->wordText(i), wi.style);
+      wi.text = tb->wordText(i);
       result.push_back(std::move(wi));
     }
   }
@@ -1237,14 +1234,11 @@ void EpubReaderActivity::rebuildHighlightWordCache(const int xOffset, const int 
       const auto& line = static_cast<const PageLine&>(*el);
       const auto& tb = line.getBlock();
       if (!tb) continue;
-      const auto& wordsRef = tb->getWords();
-      const auto& xpos = tb->getWordXpos();
-      const auto& styles = tb->getWordStyles();
-      for (size_t i = 0; i < wordsRef.size(); i++) {
+      for (uint16_t i = 0; i < tb->wordCount(); i++) {
         crosspoint::reader::WordPos wp;
-        wp.x = static_cast<int16_t>(static_cast<int>(xpos[i]) + line.xPos + xOffset);
+        wp.x = static_cast<int16_t>(static_cast<int>(tb->wordXpos(i)) + line.xPos + xOffset);
         wp.y = static_cast<int16_t>(line.yPos + yOffset);
-        wp.width = static_cast<int16_t>(renderer.getTextWidth(fontId, wordsRef[i].c_str(), styles[i]));
+        wp.width = static_cast<int16_t>(renderer.getTextWidth(fontId, tb->wordText(i), tb->wordStyle(i)));
         words.push_back(wp);
       }
     }
