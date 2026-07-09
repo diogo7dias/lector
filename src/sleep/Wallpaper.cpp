@@ -192,13 +192,17 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
   // folder; otherwise fall back to the O(1)-heap, anti-repeat direct pick.
   const bool useDirectPick = !sequentialPlaylistAffordable();
 
-  // Sequential cursor for the direct-pick path: starts at the just-shown file
-  // so the first pick is the one after it, and advances past any candidate the
-  // probe rejects so a bad/corrupt file doesn't get re-picked every retry.
-  std::string directAfter = APP_STATE.lastShownSleepFilename;
+  // Sequential cursor for the direct-pick path: its OWN persisted field, NOT
+  // lastShownSleepFilename. The buffer engine writes lastShownSleepFilename on
+  // its picks; sharing it let a buffer wake reset the direct walk to an unrelated
+  // lex position, so at ~400 files (where the heap gate flips wake-to-wake) the
+  // rotation clustered on a shifting few and never cycled the rest. Keeping the
+  // direct cursor separate lets each engine advance its own progress.
+  std::string directAfter = APP_STATE.lastDirectPickFilename;
 
   for (int attempt = 0; attempt < kNextSleepFileRetries; ++attempt) {
     std::string basename;
+    bool pickedDirect = useDirectPick;
     if (useDirectPick) {
       basename = pickDirectBasename(directAfter);
     } else {
@@ -208,6 +212,7 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
       basename = advance();
       if (basename.empty()) {
         basename = pickDirectBasename(directAfter);
+        pickedDirect = true;  // buffer engine bailed — this came from the direct walk
       }
     }
     if (basename.empty()) {
@@ -215,6 +220,11 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
     }
     SleepPick pick = makePickFromBasename(basename);
     if (probe(pick)) {
+      // Persist the direct walk's own cursor only when this pick actually came
+      // from it, so a buffer-engine pick never moves it. Set before
+      // rememberRendered() so its APP_STATE save (fullPath always changes on a
+      // new pick) writes this field too — no extra SD write.
+      if (pickedDirect) APP_STATE.lastDirectPickFilename = pick.basename;
       v2::WallpaperPlaylistV2::instance().rememberRendered(pick.fullPath, pick.basename);
       return pick;
     }

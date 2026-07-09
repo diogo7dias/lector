@@ -23,8 +23,13 @@ class CrossPointState {
   // --- Sleep wallpaper V2 (WallpaperPlaylistV2 rotation engine) ---
   // NOTE: JSON persistence for these is added in a later commit; here they are
   // in-memory fields so the engine + FavoriteImage shim compile.
-  // Basename of the last wallpaper shown (rotation dedup + direct-pick cursor).
+  // Basename of the last wallpaper shown (rotation dedup + paused re-show target).
   std::string lastShownSleepFilename;
+  // Direct-pick engine's OWN lexicographic rotation cursor, kept separate from
+  // lastShownSleepFilename so the buffer engine (which writes lastShownSleepFilename)
+  // can no longer reset the direct walk's progress when the heap gate flips between
+  // the two engines (the ~400-file "same few repeat" bug).
+  std::string lastDirectPickFilename;
   // Full path of the last wallpaper rendered (paused-rotation re-show).
   std::string lastSleepWallpaperPath;
   // Rotation paused via the in-book triage menu: re-show the current wallpaper.

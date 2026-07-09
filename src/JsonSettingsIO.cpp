@@ -29,6 +29,7 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastUntilDeathLogo"] = s.lastUntilDeathLogo;
   // Sleep wallpaper V2 rotation state.
   doc["lastShownSleepFilename"] = s.lastShownSleepFilename;
+  doc["lastDirectPickFilename"] = s.lastDirectPickFilename;
   doc["lastSleepWallpaperPath"] = s.lastSleepWallpaperPath;
   doc["wallpaperRotationPaused"] = s.wallpaperRotationPaused;
   doc["sleepFavoritesCapReached"] = s.sleepFavoritesCapReached;
@@ -55,6 +56,7 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastUntilDeathLogo = doc["lastUntilDeathLogo"] | static_cast<uint8_t>(0);
   // Sleep wallpaper V2 rotation state (missing keys default; tolerant of legacy).
   s.lastShownSleepFilename = doc["lastShownSleepFilename"] | std::string("");
+  s.lastDirectPickFilename = doc["lastDirectPickFilename"] | std::string("");
   s.lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
   s.wallpaperRotationPaused = doc["wallpaperRotationPaused"] | false;
   s.sleepFavoritesCapReached = doc["sleepFavoritesCapReached"] | false;
