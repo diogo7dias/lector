@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <string>
 
 class GfxRenderer;
@@ -15,4 +16,10 @@ class GfxRenderer;
 // with no scaling or cropping and must match the screen within +/-1 px. Returns
 // false on open / header / size-mismatch / allocation / read failure so the
 // caller can fall through to another sleep screen.
-bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path);
+//
+// extraOverlay, when set, is invoked once per grayscale pass (BW base, LSB, MSB)
+// right after the sleep info overlay, so anything it draws composites solid over
+// the wallpaper — used by the PXC viewer to bake button hints onto the image.
+// The real sleep screen leaves it null so no buttons appear there.
+bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path,
+                          const std::function<void()>& extraOverlay = nullptr);

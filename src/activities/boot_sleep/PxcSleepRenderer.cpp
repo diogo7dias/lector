@@ -11,7 +11,7 @@
 #include "Epub/converters/DirectPixelWriter.h"
 #include "SleepInfoOverlay.h"
 
-bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
+bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const std::function<void()>& extraOverlay) {
   HalFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
@@ -95,6 +95,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
   drawSleepInfoOverlay(renderer, path);
+  if (extraOverlay) extraOverlay();
   renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
 
   renderer.clearScreen(0x00);
@@ -104,6 +105,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
     return false;
   }
   drawSleepInfoOverlay(renderer, path);
+  if (extraOverlay) extraOverlay();
   renderer.copyGrayscaleLsbBuffers();
 
   renderer.clearScreen(0x00);
@@ -113,6 +115,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path) {
     return false;
   }
   drawSleepInfoOverlay(renderer, path);
+  if (extraOverlay) extraOverlay();
   renderer.copyGrayscaleMsbBuffers();
 
   renderer.displayGrayBuffer();

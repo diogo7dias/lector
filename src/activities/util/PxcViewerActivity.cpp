@@ -1,10 +1,13 @@
 #include "PxcViewerActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
+#include <Logging.h>
 
 #include <utility>
 
+#include "ConfirmationActivity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "components/UITheme.h"
@@ -15,23 +18,25 @@ PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& 
     : Activity("PxcViewer", renderer, mappedInput), filePath(std::move(filePath)) {}
 
 void PxcViewerActivity::render() {
-  // Render byte-for-byte like the lock screen: renderPxcSleepScreen owns the whole
-  // frame (3-pass grayscale + its own refresh), so nothing is drawn or refreshed on
-  // top of it — the preview then looks exactly as it will when the device sleeps.
-  // It returns false when the .pxc does not match this screen (+/-1 px) or fails to
-  // open; only then do we show an error frame with hints.
-  if (!renderPxcSleepScreen(renderer, filePath)) {
+  // Button hints for the viewer: Back / Move (Confirm) / Delete (Left). The move
+  // label is empty for files outside /sleep so Confirm isn't a hidden action.
+  const char* moveLabel =
+      crosspoint::sleep::isUnderSleepDirs(filePath)
+          ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE))
+          : "";
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, tr(STR_DELETE), "");
+  // Bake the hints into every grayscale pass so they composite solid over the
+  // wallpaper. Drawing them AFTER renderPxcSleepScreen's own refresh would need a
+  // separate partial refresh, which accumulates charge -> ghosting on X3; passing
+  // them as the per-pass overlay avoids that entirely (one grayscale refresh total).
+  const auto drawHints = [&]() { GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4); };
+  // Render byte-for-byte like the lock screen (3-pass grayscale, panel-sized), now
+  // with the hint band baked in. Returns false when the .pxc does not match this
+  // screen (+/-1 px) or fails to open; only then do we show an error frame.
+  if (!renderPxcSleepScreen(renderer, filePath, drawHints)) {
     const auto pageHeight = renderer.getScreenHeight();
     renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));
-    // The move action stays available on the error frame (a wrong-size file is
-    // exactly one you might want out of /sleep) — label it so Confirm isn't a
-    // hidden action here.
-    const char* moveLabel =
-        crosspoint::sleep::isUnderSleepDirs(filePath)
-            ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE))
-            : "";
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
@@ -52,6 +57,24 @@ void PxcViewerActivity::loop() {
   Activity::loop();
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     activityManager.goToFileBrowser(filePath);
+    return;
+  }
+  // Left button deletes the wallpaper, behind a confirmation. On confirm+success we
+  // return to the browser at this file's old slot; on cancel/failure the viewer's
+  // onEnter() re-renders the image (ActivityManager resumes the parent on return).
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    const std::string name = filePath.substr(filePath.rfind('/') + 1);
+    startActivityForResult(
+        std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), name),
+        [this](const ActivityResult& res) {
+          if (!res.isCancelled) {
+            if (Storage.remove(filePath.c_str())) {
+              activityManager.goToFileBrowser(filePath);
+            } else {
+              LOG_ERR("PXC", "Failed to delete: %s", filePath.c_str());
+            }
+          }
+        });
     return;
   }
   // Confirm moves the wallpaper to the other folder and immediately returns to the
