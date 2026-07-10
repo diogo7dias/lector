@@ -221,7 +221,16 @@ bool Section::createSectionFile(const int fontId, const std::array<int, 6>& head
 
   LOG_DBG("SCT", "Streamed temp HTML to %s (%d bytes)", tmpHtmlPath.c_str(), fileSize);
 
-  if (!Storage.openFileForWrite("SCT", filePath, file)) {
+  // Build into a temp path and atomically promote to filePath only after the header
+  // has been patched. filePath therefore only ever names a COMPLETE section: a build
+  // interrupted by power-loss or a crash leaves the ".building" temp behind (cleaned
+  // up on the next attempt), never a half-written cache that would load as an empty
+  // chapter. This also lays the groundwork for lazy pagination reading the temp.
+  const std::string buildPath = filePath + ".building";
+  if (Storage.exists(buildPath.c_str())) {
+    Storage.remove(buildPath.c_str());
+  }
+  if (!Storage.openFileForWrite("SCT", buildPath, file)) {
     return false;
   }
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
@@ -273,7 +282,7 @@ bool Section::createSectionFile(const int fontId, const std::array<int, 6>& head
     LOG_ERR("SCT", "Failed to parse XML and build pages");
     // Explicitly close() file before calling Storage.remove()
     file.close();
-    Storage.remove(filePath.c_str());
+    Storage.remove(buildPath.c_str());
     if (cssParser) {
       cssParser->clear();
     }
@@ -295,7 +304,7 @@ bool Section::createSectionFile(const int fontId, const std::array<int, 6>& head
     LOG_ERR("SCT", "Failed to write LUT due to invalid page positions");
     // Explicitly close() file before calling Storage.remove()
     file.close();
-    Storage.remove(filePath.c_str());
+    Storage.remove(buildPath.c_str());
     return false;
   }
 
@@ -330,6 +339,17 @@ bool Section::createSectionFile(const int fontId, const std::array<int, 6>& head
   file.close();
   if (cssParser) {
     cssParser->clear();
+  }
+
+  // Atomically promote the completed build to the real cache path. Only now does a
+  // reader/loadSectionFile see this section, and it is guaranteed complete.
+  if (Storage.exists(filePath.c_str())) {
+    Storage.remove(filePath.c_str());
+  }
+  if (!Storage.rename(buildPath.c_str(), filePath.c_str())) {
+    LOG_ERR("SCT", "Failed to promote section cache: %s -> %s", buildPath.c_str(), filePath.c_str());
+    Storage.remove(buildPath.c_str());
+    return false;
   }
   return true;
 }
