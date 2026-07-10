@@ -675,19 +675,19 @@ bool WallpaperPlaylistV2::reshuffle() {
     }
   }
   // Anti-repeat: after Fisher-Yates the just-shown name has a 1/N chance of
-  // landing at index 0. With small libraries (4-6 favorites) that produces
-  // visible back-to-back repeats almost every lap. Rotate the just-shown name
-  // to position 0 and start the cursor past it so the next advance() skips
-  // it. Mirrors V1 migrateToSmall (WallpaperPlaylist.cpp).
-  size_t startCursor = 0;
+  // landing at the front. advance() is a move-to-back queue that shows the FRONT
+  // entry next, so a just-shown name at the front repeats on the very next lock
+  // (worst on small 4-6 favorite libraries, and the "shuffle shows the same
+  // wallpaper" complaint). Move the just-shown name to the BACK instead, so a
+  // different wallpaper is at the front (shown next) and the just-shown one
+  // cycles last.
   if (deps_.lastShownFilename && !deps_.lastShownFilename->empty() && names.size() > 1) {
     auto it = std::find(names.begin(), names.end(), *deps_.lastShownFilename);
     if (it != names.end()) {
-      std::rotate(names.begin(), it, it + 1);
-      startCursor = names[0].size() + 1;
+      std::rotate(it, it + 1, names.end());
     }
   }
-  writeBuffer(names, startCursor);
+  writeBuffer(names, 0);
   loaded_ = true;
   // writeBuffer can still bail on its own contiguous probe (heap shrank
   // between the gate above and the reserve); report that honestly so the
