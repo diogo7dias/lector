@@ -107,4 +107,9 @@ class OpdsParser final : public Print {
   bool inId = false;
 
   bool errorOccured = false;
+  static constexpr size_t MAX_ENTRIES = 128;
+  static constexpr size_t MAX_TEXT_BYTES = 1024;
+  static constexpr size_t MAX_URL_BYTES = 2048;
+  static constexpr size_t MAX_RETAINED_TEXT_BYTES = 24 * 1024;
+  size_t retainedTextBytes = 0;
 };

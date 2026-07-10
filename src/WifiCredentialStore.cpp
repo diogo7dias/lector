@@ -82,7 +82,7 @@ bool WifiCredentialStore::loadFromBinaryFile() {
   }
 
   if (version >= 2) {
-    serialization::readString(file, lastConnectedSsid);
+    if (!serialization::readString(file, lastConnectedSsid, 32)) return false;
   } else {
     lastConnectedSsid.clear();
   }
@@ -94,8 +94,10 @@ bool WifiCredentialStore::loadFromBinaryFile() {
   credentials.reserve(std::min<size_t>(count, MAX_NETWORKS));
   for (uint8_t i = 0; i < count && i < MAX_NETWORKS; i++) {
     WifiCredential cred;
-    serialization::readString(file, cred.ssid);
-    serialization::readString(file, cred.password);
+    if (!serialization::readString(file, cred.ssid, 32) || !serialization::readString(file, cred.password, 256)) {
+      credentials.clear();
+      return false;
+    }
     legacyDeobfuscate(cred.password);
     credentials.push_back(cred);
   }

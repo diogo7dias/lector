@@ -1,6 +1,7 @@
 #include "KOReaderSyncClient.h"
 
 #include <ArduinoJson.h>
+#include <GrowthBounds.h>
 #include <Logging.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
@@ -27,16 +28,22 @@ constexpr int HTTP_BUF_SIZE = 2048;
 // failing with MBEDTLS_ERR_X509_ALLOC_FAILED (-0x2880). Check total free heap (not max
 // contiguous block) because the failure mode is aggregate exhaustion, not one large alloc.
 constexpr uint32_t MIN_HEAP_FOR_TLS = 55000;
+constexpr size_t MAX_RESPONSE_BYTES = 8192;
 
 // Response buffer for reading HTTP body
 struct ResponseBuffer {
   char* data = nullptr;
   int len = 0;
   int capacity = 0;
+  bool overflowed = false;
 
   ~ResponseBuffer() { free(data); }
 
   bool ensure(int size) {
+    if (size < 0 || static_cast<size_t>(size) > MAX_RESPONSE_BYTES + 1) {
+      overflowed = true;
+      return false;
+    }
     if (size <= capacity) return true;
     char* newData = (char*)realloc(data, size);
     if (!newData) return false;
@@ -50,12 +57,19 @@ struct ResponseBuffer {
 esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
   auto* buf = static_cast<ResponseBuffer*>(evt->user_data);
   if (evt->event_id == HTTP_EVENT_ON_DATA && buf) {
+    if (evt->data_len < 0 || !memory::canGrowWithinLimit(static_cast<size_t>(buf->len),
+                                                         static_cast<size_t>(evt->data_len), MAX_RESPONSE_BYTES)) {
+      buf->overflowed = true;
+      LOG_ERR("KOSync", "Response exceeds %u byte limit", static_cast<unsigned>(MAX_RESPONSE_BYTES));
+      return ESP_FAIL;
+    }
     if (buf->ensure(buf->len + evt->data_len + 1)) {
       memcpy(buf->data + buf->len, evt->data, evt->data_len);
       buf->len += evt->data_len;
       buf->data[buf->len] = '\0';
     } else {
       LOG_ERR("KOSync", "Response buffer allocation failed (%d bytes)", evt->data_len);
+      return ESP_ERR_NO_MEM;
     }
   }
   return ESP_OK;
@@ -121,6 +135,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::authenticate() {
 
   LOG_DBG("KOSync", "Auth response: %d (err: %d)", httpCode, err);
 
+  if (buf.overflowed) return SERVER_ERROR;
   if (err != ESP_OK) return NETWORK_ERROR;
   if (httpCode == 200) return OK;
   if (httpCode == 401) return AUTH_FAILED;
@@ -154,6 +169,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::getProgress(const std::string& doc
 
   LOG_DBG("KOSync", "Get progress response: %d (err: %d)", httpCode, err);
 
+  if (buf.overflowed) return SERVER_ERROR;
   if (err != ESP_OK) return NETWORK_ERROR;
 
   if (httpCode == 200 && buf.data) {
@@ -227,6 +243,7 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
 
   LOG_DBG("KOSync", "Update progress response: %d (err: %d)", httpCode, err);
 
+  if (buf.overflowed) return SERVER_ERROR;
   if (err != ESP_OK) return NETWORK_ERROR;
   if (httpCode == 200 || httpCode == 202) return OK;
   if (httpCode == 401) return AUTH_FAILED;

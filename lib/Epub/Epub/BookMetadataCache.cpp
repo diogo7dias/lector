@@ -393,12 +393,16 @@ bool BookMetadataCache::load() {
   serialization::readPod(bookFile, spineCount);
   serialization::readPod(bookFile, tocCount);
 
-  serialization::readString(bookFile, coreMetadata.title);
-  serialization::readString(bookFile, coreMetadata.author);
-  serialization::readString(bookFile, coreMetadata.language);
-  serialization::readString(bookFile, coreMetadata.coverItemHref);
-  serialization::readString(bookFile, coreMetadata.textReferenceHref);
-  serialization::readString(bookFile, coreMetadata.description);
+  if (!serialization::readString(bookFile, coreMetadata.title) ||
+      !serialization::readString(bookFile, coreMetadata.author) ||
+      !serialization::readString(bookFile, coreMetadata.language) ||
+      !serialization::readString(bookFile, coreMetadata.coverItemHref) ||
+      !serialization::readString(bookFile, coreMetadata.textReferenceHref) ||
+      !serialization::readString(bookFile, coreMetadata.description)) {
+    LOG_ERR("BMC", "Cache metadata contains an invalid string");
+    bookFile.close();
+    return false;
+  }
 
   loaded = true;
   LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
@@ -445,7 +449,10 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
 
 BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(HalFile& file) const {
   SpineEntry entry;
-  serialization::readString(file, entry.href);
+  if (!serialization::readString(file, entry.href)) {
+    LOG_ERR("BMC", "Invalid spine href in cache");
+    return {};
+  }
   serialization::readPod(file, entry.cumulativeSize);
   serialization::readPod(file, entry.tocIndex);
   return entry;
@@ -453,9 +460,11 @@ BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(HalFile& file) c
 
 BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(HalFile& file) const {
   TocEntry entry;
-  serialization::readString(file, entry.title);
-  serialization::readString(file, entry.href);
-  serialization::readString(file, entry.anchor);
+  if (!serialization::readString(file, entry.title) || !serialization::readString(file, entry.href) ||
+      !serialization::readString(file, entry.anchor)) {
+    LOG_ERR("BMC", "Invalid TOC string in cache");
+    return {};
+  }
   serialization::readPod(file, entry.level);
   serialization::readPod(file, entry.spineIndex);
   return entry;

@@ -4,10 +4,12 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Serialization.h>
 
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "QuoteStorageLimits.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -40,9 +42,19 @@ void QuotesViewerActivity::loadQuotes() {
   const std::string sources[] = {filePath, filePath + ".bak"};
   for (const auto& src : sources) {
     if (!Storage.exists(src.c_str())) continue;
-    const String content = Storage.readFile(src.c_str());
-    if (content.isEmpty()) continue;
-    buf = content.c_str();
+    HalFile file;
+    if (!Storage.openFileForRead("QV", src, file)) continue;
+    const size_t fileSize = file.size();
+    if (fileSize == 0 || fileSize > quote_storage::MAX_FILE_BYTES ||
+        !serialization::hasStringAllocationHeadroom(fileSize * 2)) {
+      LOG_ERR("QV", "Quote file too large for memory-safe load: %u bytes", static_cast<unsigned>(fileSize));
+      continue;
+    }
+    buf.resize(fileSize);
+    if (file.read(buf.data(), fileSize) != static_cast<int>(fileSize)) {
+      buf.clear();
+      continue;
+    }
     break;
   }
   if (buf.empty()) return;

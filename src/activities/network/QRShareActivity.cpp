@@ -157,7 +157,11 @@ void QRShareActivity::render(RenderLock&&) {
 }
 
 bool QRShareActivity::startServer() {
-  server = std::make_unique<WebServer>(80);
+  server = makeUniqueNoThrow<WebServer>(80);
+  if (!server) {
+    LOG_ERR("QRSHARE", "OOM: WebServer");
+    return false;
+  }
   server->on("/", HTTP_GET, [this] { handleDownload(); });
   server->begin();
   serverRunning = true;

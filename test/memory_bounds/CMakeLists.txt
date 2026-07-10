@@ -1,0 +1,3 @@
+add_executable(memory_bounds_tests MemoryBoundsTest.cpp)
+target_link_libraries(memory_bounds_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(memory_bounds_tests)

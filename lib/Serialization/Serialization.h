@@ -3,6 +3,12 @@
 
 #include <iostream>
 
+#if defined(ARDUINO_ARCH_ESP32)
+#include <esp_heap_caps.h>
+#endif
+
+#include "SerializationBounds.h"
+
 namespace serialization {
 template <typename T>
 void writePod(std::ostream& os, const T& value) {
@@ -36,17 +42,66 @@ inline void writeString(HalFile& file, const std::string& s) {
   file.write(reinterpret_cast<const uint8_t*>(s.data()), len);
 }
 
-inline void readString(std::istream& is, std::string& s) {
-  uint32_t len;
-  readPod(is, len);
-  s.resize(len);
-  is.read(&s[0], len);
+inline bool hasStringAllocationHeadroom(const size_t length) {
+#if defined(ARDUINO_ARCH_ESP32)
+  constexpr size_t ALLOCATION_HEADROOM = 2048;
+  const size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+  return hasAllocationHeadroom(length, largestBlock, ALLOCATION_HEADROOM);
+#else
+  (void)length;
+  return true;
+#endif
 }
 
-inline void readString(HalFile& file, std::string& s) {
-  uint32_t len;
-  readPod(file, len);
+inline bool readString(std::istream& is, std::string& s, const size_t maxBytes = DEFAULT_MAX_STRING_BYTES) {
+  uint32_t len = 0;
+  if (!is.read(reinterpret_cast<char*>(&len), sizeof(len))) {
+    s.clear();
+    return false;
+  }
+
+  const auto dataStart = is.tellg();
+  if (dataStart == std::istream::pos_type(-1)) {
+    s.clear();
+    is.setstate(std::ios::failbit);
+    return false;
+  }
+  is.seekg(0, std::ios::end);
+  const auto dataEnd = is.tellg();
+  is.seekg(dataStart);
+  if (dataEnd == std::istream::pos_type(-1) || dataEnd < dataStart ||
+      !isStringLengthValid(len, static_cast<size_t>(dataEnd - dataStart), maxBytes) ||
+      !hasStringAllocationHeadroom(len)) {
+    s.clear();
+    is.setstate(std::ios::failbit);
+    return false;
+  }
+
   s.resize(len);
-  file.read(&s[0], len);
+  return len == 0 || static_cast<bool>(is.read(s.data(), len));
+}
+
+inline bool readString(HalFile& file, std::string& s, const size_t maxBytes = DEFAULT_MAX_STRING_BYTES) {
+  uint32_t len = 0;
+  if (file.read(&len, sizeof(len)) != sizeof(len)) {
+    s.clear();
+    return false;
+  }
+
+  const size_t position = file.position();
+  const size_t fileSize = file.size();
+  const size_t remaining = position <= fileSize ? fileSize - position : 0;
+  if (!isStringLengthValid(len, remaining, maxBytes) || !hasStringAllocationHeadroom(len)) {
+    s.clear();
+    return false;
+  }
+
+  s.resize(len);
+  if (len == 0) return true;
+  if (file.read(s.data(), len) != static_cast<int>(len)) {
+    s.clear();
+    return false;
+  }
+  return true;
 }
 }  // namespace serialization

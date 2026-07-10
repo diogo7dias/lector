@@ -3,6 +3,7 @@
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 
 #include "Epub/converters/DirectPixelWriter.h"
@@ -210,9 +211,16 @@ bool ImageBlock::serialize(HalFile& file) {
 
 std::unique_ptr<ImageBlock> ImageBlock::deserialize(HalFile& file) {
   std::string path;
-  serialization::readString(file, path);
+  if (!serialization::readString(file, path)) {
+    LOG_ERR("IMG", "Invalid image path in section cache");
+    return nullptr;
+  }
   int16_t w, h;
   serialization::readPod(file, w);
   serialization::readPod(file, h);
-  return std::unique_ptr<ImageBlock>(new ImageBlock(path, w, h));
+  if (w <= 0 || h <= 0) {
+    LOG_ERR("IMG", "Invalid image dimensions in section cache: %dx%d", w, h);
+    return nullptr;
+  }
+  return makeUniqueNoThrow<ImageBlock>(path, w, h);
 }

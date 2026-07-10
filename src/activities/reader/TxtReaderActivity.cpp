@@ -557,7 +557,15 @@ bool TxtReaderActivity::loadPageIndexCache() {
   }
 
   uint32_t numPages;
-  serialization::readPod(f, numPages);
+  if (f.read(&numPages, sizeof(numPages)) != sizeof(numPages)) return false;
+
+  constexpr size_t MAX_CACHED_PAGE_OFFSETS = 8192;
+  const size_t position = f.position();
+  const size_t remaining = position <= f.size() ? f.size() - position : 0;
+  if (!serialization::isArrayCountValid(numPages, remaining, sizeof(uint32_t), MAX_CACHED_PAGE_OFFSETS)) {
+    LOG_ERR("TRS", "Invalid cached page count: %u", static_cast<unsigned>(numPages));
+    return false;
+  }
 
   // Read page offsets
   pageOffsets.clear();
@@ -565,7 +573,7 @@ bool TxtReaderActivity::loadPageIndexCache() {
 
   for (uint32_t i = 0; i < numPages; i++) {
     uint32_t offset;
-    serialization::readPod(f, offset);
+    if (f.read(&offset, sizeof(offset)) != sizeof(offset)) return false;
     pageOffsets.push_back(offset);
   }
 

@@ -51,6 +51,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     LOG_ERR("SLP", "pxc row buffer alloc failed");
     return false;
   }
+  uint8_t* const readBufferData = readBuffer.get();
 
   // The image is full-screen, so the origin is (0,0); no centering/scaling.
   const int x = 0, y = 0;
@@ -66,14 +67,14 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
       if (bufferRow >= rowsInBuffer) {
         const int toRead = (pxcHeight - row < rowsPerRead) ? (pxcHeight - row) : rowsPerRead;
         const size_t bytes = static_cast<size_t>(toRead) * bytesPerRow;
-        if (file.read(readBuffer.get(), bytes) != static_cast<int>(bytes)) {
+        if (file.read(readBufferData, bytes) != static_cast<int>(bytes)) {
           LOG_ERR("SLP", "pxc read error at row %d", row);
           return false;
         }
         rowsInBuffer = toRead;
         bufferRow = 0;
       }
-      const uint8_t* rowBuffer = readBuffer.get() + static_cast<size_t>(bufferRow) * bytesPerRow;
+      const uint8_t* rowBuffer = readBufferData + static_cast<size_t>(bufferRow) * bytesPerRow;
       bufferRow++;
       pw.beginRow(y + row);
       int colStart, colEnd;

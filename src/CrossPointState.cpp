@@ -60,7 +60,10 @@ bool CrossPointState::loadFromBinaryFile() {
     return false;
   }
 
-  serialization::readString(inputFile, openEpubPath);
+  if (!serialization::readString(inputFile, openEpubPath)) {
+    LOG_ERR("CPS", "Invalid book path in state.bin");
+    return false;
+  }
   if (version >= 2) {
     // Legacy single "last sleep image" index. The recent-sleep buffer it seeded
     // was removed (WallpaperPlaylistV2 replaces it), but the byte is still read

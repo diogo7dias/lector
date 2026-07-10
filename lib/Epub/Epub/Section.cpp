@@ -407,7 +407,10 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
   for (uint16_t i = 0; i < count; i++) {
     std::string key;
     uint16_t page;
-    serialization::readString(f, key);
+    if (!serialization::readString(f, key)) {
+      LOG_ERR("SCT", "Invalid anchor string in section cache");
+      return std::nullopt;
+    }
     serialization::readPod(f, page);
     if (key == anchor) {
       return page;

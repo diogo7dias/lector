@@ -5,6 +5,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <GrowthBounds.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <JsonSettingsIO.h>
@@ -31,6 +32,7 @@
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "QuoteStorageLimits.h"
 #include "QuotesViewerActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
@@ -665,11 +667,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
+      if (!epub) {
+        LOG_ERR("EPUB", "Cannot show book info without an open EPUB");
+        requestUpdate();
+        break;
+      }
       // Reuse the 1-bit cover thumbnail pipeline (same as the home screen) so the info
       // screen can draw the cover with a single refresh (no grayscale passes needed).
       constexpr int kInfoCoverHeight = 360;
       std::string coverPath;
-      if (epub && epub->generateThumbBmp(kInfoCoverHeight)) {
+      if (epub->generateThumbBmp(kInfoCoverHeight)) {
         const std::string path = epub->getThumbBmpPath(kInfoCoverHeight);
         if (Storage.exists(path.c_str())) {
           coverPath = path;
@@ -1561,6 +1568,22 @@ void EpubReaderActivity::saveQuoteToFile(const std::string& quote) {
   const std::string quotesPath = getQuotesFilePath();
   const std::string tmpPath = quotesPath + ".tmp";
   const std::string bakPath = quotesPath + ".bak";
+  const std::string chapterTitle = getChapterTitle();
+  const std::string entry = "[" + chapterTitle + "]\n" + quote + "\n---\n\n";
+
+  size_t existingSize = 0;
+  if (Storage.exists(quotesPath.c_str())) {
+    HalFile existing;
+    if (!Storage.openFileForRead("HLT", quotesPath, existing)) {
+      LOG_ERR("HLT", "Failed to inspect existing quote file");
+      return;
+    }
+    existingSize = existing.size();
+  }
+  if (!memory::canGrowWithinLimit(existingSize, entry.size(), quote_storage::MAX_FILE_BYTES)) {
+    LOG_ERR("HLT", "Quote file reached %u byte limit", static_cast<unsigned>(quote_storage::MAX_FILE_BYTES));
+    return;
+  }
 
   // Atomic read-modify-write: copy existing primary into .tmp, append the new
   // entry, then rotate primary -> .bak and .tmp -> primary. A torn write leaves
@@ -1594,8 +1617,6 @@ void EpubReaderActivity::saveQuoteToFile(const std::string& quote) {
     }
   }
 
-  const std::string chapterTitle = getChapterTitle();
-  const std::string entry = "[" + chapterTitle + "]\n" + quote + "\n---\n\n";
   if (dst.write(entry.c_str(), entry.size()) != entry.size()) {
     LOG_ERR("HLT", "Failed to append new quote to tmp");
     dst.close();

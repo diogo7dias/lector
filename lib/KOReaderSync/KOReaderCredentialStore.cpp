@@ -86,20 +86,20 @@ bool KOReaderCredentialStore::loadFromBinaryFile() {
   }
 
   if (file.available()) {
-    serialization::readString(file, username);
+    if (!serialization::readString(file, username, 256)) return false;
   } else {
     username.clear();
   }
 
   if (file.available()) {
-    serialization::readString(file, password);
+    if (!serialization::readString(file, password, 512)) return false;
     legacyDeobfuscate(password);
   } else {
     password.clear();
   }
 
   if (file.available()) {
-    serialization::readString(file, serverUrl);
+    if (!serialization::readString(file, serverUrl, 2048)) return false;
   } else {
     serverUrl.clear();
   }

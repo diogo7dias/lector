@@ -178,19 +178,21 @@ bool RecentBooksStore::loadFromBinaryFile() {
     // Old version, just read paths
     uint8_t count;
     serialization::readPod(inputFile, count);
+    const uint8_t safeCount = std::min<uint8_t>(count, MAX_RECENT_BOOKS);
     recentBooks.clear();
-    recentBooks.reserve(count);
-    for (uint8_t i = 0; i < count; i++) {
+    recentBooks.reserve(safeCount);
+    for (uint8_t i = 0; i < safeCount; i++) {
       std::string path;
-      serialization::readString(inputFile, path);
+      if (!serialization::readString(inputFile, path)) return false;
 
       // load book to get missing data
       RecentBook book = getDataFromBook(path);
       if (book.title.empty() && book.author.empty() && version == 2) {
         // Fall back to loading what we can from the store
         std::string title, author;
-        serialization::readString(inputFile, title);
-        serialization::readString(inputFile, author);
+        if (!serialization::readString(inputFile, title) || !serialization::readString(inputFile, author)) {
+          return false;
+        }
         recentBooks.push_back({path, title, author, ""});
       } else {
         recentBooks.push_back(book);
@@ -199,17 +201,18 @@ bool RecentBooksStore::loadFromBinaryFile() {
   } else if (version == 3) {
     uint8_t count;
     serialization::readPod(inputFile, count);
+    const uint8_t safeCount = std::min<uint8_t>(count, MAX_RECENT_BOOKS);
 
     recentBooks.clear();
-    recentBooks.reserve(count);
+    recentBooks.reserve(safeCount);
     uint8_t omitted = 0;
 
-    for (uint8_t i = 0; i < count; i++) {
+    for (uint8_t i = 0; i < safeCount; i++) {
       std::string path, title, author, coverBmpPath;
-      serialization::readString(inputFile, path);
-      serialization::readString(inputFile, title);
-      serialization::readString(inputFile, author);
-      serialization::readString(inputFile, coverBmpPath);
+      if (!serialization::readString(inputFile, path) || !serialization::readString(inputFile, title) ||
+          !serialization::readString(inputFile, author) || !serialization::readString(inputFile, coverBmpPath)) {
+        return false;
+      }
 
       // Omit books with missing title (e.g. saved before metadata was available)
       if (title.empty()) {

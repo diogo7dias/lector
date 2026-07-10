@@ -1,5 +1,6 @@
 #include "OpdsParser.h"
 
+#include <GrowthBounds.h>
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
@@ -70,6 +71,7 @@ void OpdsParser::clear() {
   prevPageUrl.clear();
   currentEntry = OpdsEntry{};
   currentText.clear();
+  retainedTextBytes = 0;
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
 }
 
@@ -94,6 +96,11 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   if (strcmp(name, "link") == 0 || strstr(name, ":link") != nullptr) {
     const char* href = findAttribute(atts, "href");
     if (href) {
+      if (strlen(href) > MAX_URL_BYTES) {
+        self->errorOccured = true;
+        XML_StopParser(self->parser, XML_FALSE);
+        return;
+      }
       const char* rel = findAttribute(atts, "rel");
       const char* type = findAttribute(atts, "type");
 
@@ -158,7 +165,16 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
     if (!self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
-      self->entries.push_back(self->currentEntry);
+      const size_t entryTextBytes = self->currentEntry.title.size() + self->currentEntry.author.size() +
+                                    self->currentEntry.href.size() + self->currentEntry.id.size();
+      if (self->entries.size() >= MAX_ENTRIES ||
+          !memory::canGrowWithinLimit(self->retainedTextBytes, entryTextBytes, MAX_RETAINED_TEXT_BYTES)) {
+        self->errorOccured = true;
+        XML_StopParser(self->parser, XML_FALSE);
+        return;
+      }
+      self->retainedTextBytes += entryTextBytes;
+      self->entries.push_back(std::move(self->currentEntry));
     }
     self->inEntry = false;
   } else if (self->inEntry) {
@@ -180,6 +196,11 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
 void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const int len) {
   auto* self = static_cast<OpdsParser*>(userData);
   if (self->inTitle || self->inAuthorName || self->inId) {
+    if (len < 0 || !memory::canGrowWithinLimit(self->currentText.size(), static_cast<size_t>(len), MAX_TEXT_BYTES)) {
+      self->errorOccured = true;
+      XML_StopParser(self->parser, XML_FALSE);
+      return;
+    }
     self->currentText.append(s, len);
   }
 }
