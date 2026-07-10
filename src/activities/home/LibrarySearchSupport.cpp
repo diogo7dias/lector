@@ -118,19 +118,24 @@ std::string searchLabelForEntry(const std::string& entry) {
 }
 
 std::vector<size_t> rankMatches(const std::vector<std::string>& entries, const std::string& query) {
+  return rankMatches(entries.size(), [&entries](const size_t i) { return entries[i]; }, query);
+}
+
+std::vector<size_t> rankMatches(const size_t count, const std::function<std::string(size_t)>& nameAt,
+                                const std::string& query) {
   if (query.empty()) {
     return {};
   }
 
   const std::string loweredQuery = toLowerAsciiCopy(query);
   std::vector<MatchCandidate> matches;
-  matches.reserve(entries.size());
+  matches.reserve(std::min<size_t>(count, 512));
 
-  for (size_t fileIndex = 0; fileIndex < entries.size(); ++fileIndex) {
+  for (size_t fileIndex = 0; fileIndex < count; ++fileIndex) {
     if (fileIndex % 100 == 0) {
       esp_task_wdt_reset();
     }
-    const std::string label = searchLabelForEntry(entries[fileIndex]);
+    const std::string label = searchLabelForEntry(nameAt(fileIndex));
     const std::string loweredLabel = toLowerAsciiCopy(label);
 
     if (startsWithIgnoreCase(label, query)) {

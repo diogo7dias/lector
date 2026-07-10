@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "SdFileIndex.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -41,6 +42,16 @@ class FileBrowserActivity final : public Activity {
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
 
+  // Very large folders switch to an SD-backed index (names on the SD card, only
+  // 4-byte offsets in RAM) so browsing them cannot exhaust the heap. Small folders
+  // keep the in-RAM `files` path above. Consumers read the listing through
+  // fileCount()/fileNameAt() so they are agnostic to which backing is active.
+  bool sdMode = false;
+  SdFileIndex sdIndex;
+
+  size_t fileCount() const { return sdMode ? sdIndex.count() : files.size(); }
+  std::string fileNameAt(size_t i) const { return sdMode ? sdIndex.nameAt(i) : files[i]; }
+
   // ── Fuzzy search (ported from DX34) ──────────────────────────────────────
   // Active query for the current folder; empty = no search. filteredIndexes holds
   // the ranked indices into `files` while a search is active. folderHasBooks_ gates
@@ -54,7 +65,7 @@ class FileBrowserActivity final : public Activity {
   int clearRowCount() const { return searchActive() ? 1 : 0; }
   // Synthetic rows pinned above the file rows: Recent Books + Search + Clear.
   int headerRowCount() const { return (hasRecentShortcut() ? 1 : 0) + searchRowCount() + clearRowCount(); }
-  size_t fileRowCount() const { return searchActive() ? filteredIndexes.size() : files.size(); }
+  size_t fileRowCount() const { return searchActive() ? filteredIndexes.size() : fileCount(); }
   size_t totalRowCount() const { return static_cast<size_t>(headerRowCount()) + fileRowCount(); }
 
   enum class RowKind { Recent, Search, Clear, File };
