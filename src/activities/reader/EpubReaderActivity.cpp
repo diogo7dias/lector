@@ -17,6 +17,7 @@
 #include <iterator>
 #include <limits>
 
+#include "BookInfoActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -661,6 +662,23 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               section.reset();
             }
           });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
+      // Reuse the 1-bit cover thumbnail pipeline (same as the home screen) so the info
+      // screen can draw the cover with a single refresh (no grayscale passes needed).
+      constexpr int kInfoCoverHeight = 360;
+      std::string coverPath;
+      if (epub && epub->generateThumbBmp(kInfoCoverHeight)) {
+        const std::string path = epub->getThumbBmpPath(kInfoCoverHeight);
+        if (Storage.exists(path.c_str())) {
+          coverPath = path;
+        }
+      }
+      startActivityForResult(
+          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub->getTitle(), epub->getAuthor(),
+                                             epub->getLanguage(), epub->getDescription(), coverPath),
+          [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::FOOTNOTES: {

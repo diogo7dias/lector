@@ -32,8 +32,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                                                                                      bool wallpaperPaused,
                                                                                      bool wallpaperFavorited) {
   std::vector<MenuItem> items;
-  items.reserve(15);
+  items.reserve(16);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
+  items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
   items.push_back({MenuAction::HIGHLIGHT_QUOTE, StrId::STR_GRAB_QUOTE});
   if (hasQuotes) {
     items.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
