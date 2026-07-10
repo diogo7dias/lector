@@ -4,6 +4,9 @@
 #include <HalStorage.h>
 #include <esp_heap_caps.h>
 
+#include <string>
+#include <vector>
+
 #include "../CrossPointState.h"
 #include "../util/FavoriteImage.h"
 #include "SdFatSleepFs.h"
@@ -143,14 +146,175 @@ bool sequentialPlaylistAffordable() {
   return largestFree >= contigNeed && heap_caps_get_free_size(MALLOC_CAP_DEFAULT) >= totalNeed;
 }
 
-// Streaming fragment-safe pick — O(1) heap beyond the returned basename.
-// DETERMINISTIC SEQUENTIAL: returns the lexicographically next .bmp/.pxc
-// strictly after `after`, wrapping to the lex-first at the end of the lap.
-// `after` is the just-shown basename (persisted across deep sleep), so
-// successive wakes walk the folder one file at a time in a fixed order.
+// ── Streaming, O(1)-heap access to the saved order file (sleep_order.txt) ─────
+// The buffer engine owns that file and writes the shuffled / newest-first order
+// there when the heap can afford it. On the fragmented cold-sleep heap the buffer
+// engine is gated off and the direct pick runs — these helpers let the direct
+// pick HONOR the saved order WITHOUT ever loading the whole file. Every allocation
+// here is bounded to one filename or a small fixed cap, so nothing can bad_alloc-
+// abort the way the whole-buffer load did (the lock crash). Read buffers are on
+// the stack; membership/next-after each stream the file one line at a time.
+
+// Longest name we retain while streaming a line (SD long-name cap sits under this).
+constexpr size_t kOrderLineMax = 280;
+// Hard cap on files spliced to the front of the order file in one wake. Each is a
+// short heap std::string; bounding it prevents the "every file is new" batch
+// bad_alloc — the exact failure the buffer engine's kMaxNewFilesPerReconcile guards.
+constexpr size_t kMaxNewOrderSplice = 8;
+
+const std::string& orderFilePath() { return v2::WallpaperPlaylistV2::instance().deps().orderFilePath; }
+
+// Stream the order file, invoking onName(const std::string&) per name line (the
+// "v1 cursor=N" header line is skipped). onName returns true to stop early.
+// O(1) heap: a 512-byte stack read buffer + one bounded line accumulator.
+template <typename Fn>
+bool streamOrderNames(Fn&& onName) {
+  const std::string& path = orderFilePath();
+  if (path.empty()) return false;
+  HalFile f = Storage.open(path.c_str());
+  if (!f || f.isDirectory()) return false;
+  char buf[512];
+  std::string line;
+  line.reserve(kOrderLineMax + 8);  // bounded: pushes are capped at kOrderLineMax, never reallocs
+  bool headerDone = false;
+  bool stop = false;
+  while (!stop) {
+    const int n = f.read(buf, sizeof(buf));
+    if (n <= 0) break;
+    for (int i = 0; i < n; ++i) {
+      const char c = buf[i];
+      if (c == '\r') continue;
+      if (c == '\n') {
+        if (!headerDone) {
+          headerDone = true;  // first line is the header — discard it
+        } else if (!line.empty()) {
+          if (onName(line)) {
+            stop = true;
+            break;
+          }
+        }
+        line.clear();
+      } else if (headerDone && line.size() < kOrderLineMax) {
+        line.push_back(c);
+      }
+    }
+  }
+  if (!stop && headerDone && !line.empty()) onName(line);  // trailing name, no final newline
+  return headerDone;
+}
+
+// Next name strictly after `after` in the saved order, wrapping to the first name
+// (also when `after` is empty or absent). Empty when there is no usable order file.
+std::string orderNextAfter(const std::string& after) {
+  std::string firstName;
+  std::string result;
+  bool prevMatched = after.empty();
+  streamOrderNames([&](const std::string& name) -> bool {
+    if (firstName.empty()) firstName = name;
+    if (prevMatched) {
+      result = name;
+      return true;
+    }
+    if (name == after) prevMatched = true;
+    return false;
+  });
+  return result.empty() ? firstName : result;
+}
+
+size_t orderNameCount() {
+  size_t count = 0;
+  streamOrderNames([&count](const std::string&) -> bool {
+    ++count;
+    return false;
+  });
+  return count;
+}
+
+bool orderContains(const std::string& target) {
+  bool found = false;
+  streamOrderNames([&](const std::string& name) -> bool {
+    if (name == target) {
+      found = true;
+      return true;
+    }
+    return false;
+  });
+  return found;
+}
+
+// Splice newly-added /sleep files to the FRONT of the saved order so fresh uploads
+// show next. Cheap count-compare gate first; the membership scan and the atomic
+// rewrite are all streaming (O(1) heap, bounded to kMaxNewOrderSplice names).
+// Returns how many were spliced. Only meaningful when an order file already exists
+// (a missing one is left for the buffer engine to build).
+int prependNewOrderFiles() {
+  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
+  auto* sfs = deps.fs;
+  auto* io = deps.fileIO;
+  if (!sfs || !io) return 0;
+
+  const size_t orderCount = orderNameCount();
+  if (orderCount == 0) return 0;  // no saved order yet — leave building to the buffer engine
+
+  size_t folderCount = 0;
+  sfs->walkSleepBmps([&folderCount](const char*, size_t, uint32_t) { ++folderCount; });
+  if (folderCount <= orderCount) return 0;  // nothing net-new since the order was written
+
+  std::vector<std::string> newNames;
+  newNames.reserve(kMaxNewOrderSplice);  // bounded: <= 8 short filenames, ~2 KB worst case
+  sfs->walkSleepBmps([&](const char* name, size_t len, uint32_t) {
+    if (newNames.size() >= kMaxNewOrderSplice || len == 0 || len > kOrderLineMax) return;
+    std::string n(name, len);
+    if (!orderContains(n)) newNames.push_back(std::move(n));
+  });
+  if (newNames.empty()) return 0;
+
+  const std::string& path = orderFilePath();
+  const bool ok = io->safeWriteStreamed(path, [&path, &newNames](persist::JsonSink& sink) -> bool {
+    static constexpr char kHeader[] = "v1 cursor=0\n";
+    sink.write(reinterpret_cast<const uint8_t*>(kHeader), sizeof(kHeader) - 1);
+    for (const auto& n : newNames) {
+      sink.write(reinterpret_cast<const uint8_t*>(n.data()), n.size());
+      sink.write(static_cast<uint8_t>('\n'));
+    }
+    // Append the OLD order body (header stripped) after the new front entries.
+    // safeWriteStreamed writes to <path>.tmp and only rotates AFTER this producer
+    // returns, so `path` still holds the old content here.
+    HalFile f = Storage.open(path.c_str());
+    if (f && !f.isDirectory()) {
+      char rbuf[512];
+      bool headerSkipped = false;
+      while (true) {
+        const int n = f.read(rbuf, sizeof(rbuf));
+        if (n <= 0) break;
+        int start = 0;
+        if (!headerSkipped) {
+          for (int i = 0; i < n; ++i) {
+            if (rbuf[i] == '\n') {
+              start = i + 1;
+              headerSkipped = true;
+              break;
+            }
+          }
+          if (!headerSkipped) continue;  // header spans past this chunk
+        }
+        if (start < n) sink.write(reinterpret_cast<const uint8_t*>(rbuf + start), static_cast<size_t>(n - start));
+      }
+    }
+    return true;
+  });
+  return ok ? static_cast<int>(newNames.size()) : 0;
+}
+
+// Fragment-safe pick. Prefers the saved order (shuffle + newest-first), streamed
+// one line at a time; falls back to the deterministic lexicographic walk only when
+// no usable order file exists. `after` is the just-shown basename persisted across
+// deep sleep, so successive wakes advance one entry at a time.
 std::string pickDirectBasename(const std::string& after) {
   auto* sfs = v2::WallpaperPlaylistV2::instance().deps().fs;
   if (!sfs) return {};
+  std::string ordered = orderNextAfter(after);
+  if (!ordered.empty()) return ordered;
   return sfs->nextSleepBmpAfter(after);
 }
 
@@ -199,6 +363,13 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
   // rotation clustered on a shifting few and never cycled the rest. Keeping the
   // direct cursor separate lets each engine advance its own progress.
   std::string directAfter = APP_STATE.lastDirectPickFilename;
+
+  // When the low-heap direct pick is active, fold any newly-added /sleep files into
+  // the FRONT of the saved order (streaming, bounded) so fresh uploads show next.
+  // The buffer path handles new files itself via reconcile(), so only do it here.
+  if (useDirectPick && prependNewOrderFiles() > 0) {
+    directAfter.clear();  // start at the new front so the freshest file is shown next
+  }
 
   for (int attempt = 0; attempt < kNextSleepFileRetries; ++attempt) {
     std::string basename;
