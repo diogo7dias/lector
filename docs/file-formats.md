@@ -96,6 +96,12 @@ if (parsedSize != fileSize) {
 
 ### Version 25
 
+> **Note:** the on-disk `SECTION_FILE_VERSION` is currently **31** (see
+> `lib/Epub/Epub/Section.cpp`). The word-data layout documented below predates the
+> v30 flat-arena rewrite, so the `TextBlock` word section here no longer matches
+> current files; the `BlockStyle` field order is still accurate. v31 appended
+> `blockFontId` (per-block heading font id) to `BlockStyle`.
+
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
@@ -174,6 +180,7 @@ struct BlockStyle {
     bool textIndentDefined;
     bool isRtl;
     bool directionDefined;
+    s32 blockFontId;  // v31+: reader font id for this block (0 = inherit body font); set for headings
 };
 
 struct TextBlock {

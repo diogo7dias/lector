@@ -853,6 +853,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     if (self->embeddedStyle && cssStyle.hasTextAlign()) {
       headerBlockStyle.alignment = cssStyle.textAlign;
     }
+    // Render the heading at its level's (larger) font. name is "h1".."h6" here.
+    const int headingLevel = (name[1] >= '1' && name[1] <= '6') ? (name[1] - '0') : 6;
+    headerBlockStyle.blockFontId = self->headingFontIds[headingLevel - 1];
     const auto accumulated =
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
@@ -1389,7 +1392,10 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
 }
 
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  // Heading lines carry their own larger font id; body lines inherit the chapter font.
+  const int lineBlockFontId = line->getBlockStyle().blockFontId;
+  const int lineFontId = lineBlockFontId != 0 ? lineBlockFontId : fontId;
+  const int lineHeight = renderer.getLineHeight(lineFontId) * lineCompression;
 
   if (!currentPage) {
     currentPage.reset(new Page());
@@ -1429,7 +1435,10 @@ void ChapterHtmlSlimParser::makePages() {
     currentPageNextY = 0;
   }
 
-  const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
+  // A heading block uses its own larger font for line height and word measurement.
+  const int blockFontId = currentTextBlock->getBlockStyle().blockFontId;
+  const int effectiveFontId = blockFontId != 0 ? blockFontId : fontId;
+  const int lineHeight = renderer.getLineHeight(effectiveFontId) * lineCompression;
 
   // Apply top spacing before the paragraph (stored in pixels)
   const BlockStyle& blockStyle = currentTextBlock->getBlockStyle();
@@ -1446,7 +1455,7 @@ void ChapterHtmlSlimParser::makePages() {
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
   currentTextBlock->layoutAndExtractLines(
-      renderer, fontId, effectiveWidth,
+      renderer, effectiveFontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
 
   // Fallback: transfer any remaining pending footnotes to current page.

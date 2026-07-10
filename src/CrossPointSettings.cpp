@@ -328,6 +328,72 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
+namespace {
+// Map a built-in reader family + discrete size (FONT_SIZE enum) to its baked font id.
+// Reader fonts are compiled only at sizes 12-16; callers must clamp `size` to that range.
+int builtinReaderFontId(uint8_t family, uint8_t size) {
+  switch (family) {
+    case CrossPointSettings::BOOKERLY:
+    default:
+      switch (size) {
+        case CrossPointSettings::SIZE_12:
+          return BOOKERLY_12_FONT_ID;
+        case CrossPointSettings::SIZE_13:
+          return BOOKERLY_13_FONT_ID;
+        case CrossPointSettings::SIZE_14:
+        default:
+          return BOOKERLY_14_FONT_ID;
+        case CrossPointSettings::SIZE_15:
+          return BOOKERLY_15_FONT_ID;
+        case CrossPointSettings::SIZE_16:
+          return BOOKERLY_16_FONT_ID;
+      }
+    case CrossPointSettings::GEORGIA:
+      switch (size) {
+        case CrossPointSettings::SIZE_12:
+          return GEORGIA_12_FONT_ID;
+        case CrossPointSettings::SIZE_13:
+          return GEORGIA_13_FONT_ID;
+        case CrossPointSettings::SIZE_14:
+        default:
+          return GEORGIA_14_FONT_ID;
+        case CrossPointSettings::SIZE_15:
+          return GEORGIA_15_FONT_ID;
+        case CrossPointSettings::SIZE_16:
+          return GEORGIA_16_FONT_ID;
+      }
+    case CrossPointSettings::VERDANA:
+      switch (size) {
+        case CrossPointSettings::SIZE_12:
+          return VERDANA_12_FONT_ID;
+        case CrossPointSettings::SIZE_13:
+          return VERDANA_13_FONT_ID;
+        case CrossPointSettings::SIZE_14:
+        default:
+          return VERDANA_14_FONT_ID;
+        case CrossPointSettings::SIZE_15:
+          return VERDANA_15_FONT_ID;
+        case CrossPointSettings::SIZE_16:
+          return VERDANA_16_FONT_ID;
+      }
+    case CrossPointSettings::MERRIWEATHER:
+      switch (size) {
+        case CrossPointSettings::SIZE_12:
+          return MERRIWEATHER_12_FONT_ID;
+        case CrossPointSettings::SIZE_13:
+          return MERRIWEATHER_13_FONT_ID;
+        case CrossPointSettings::SIZE_14:
+        default:
+          return MERRIWEATHER_14_FONT_ID;
+        case CrossPointSettings::SIZE_15:
+          return MERRIWEATHER_15_FONT_ID;
+        case CrossPointSettings::SIZE_16:
+          return MERRIWEATHER_16_FONT_ID;
+      }
+  }
+}
+}  // namespace
+
 int CrossPointSettings::getReaderFontId() const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
@@ -336,63 +402,31 @@ int CrossPointSettings::getReaderFontId() const {
     // Fall through to built-in if SD font not found
   }
 
-  switch (fontFamily) {
-    case BOOKERLY:
-    default:
-      switch (fontSize) {
-        case SIZE_12:
-          return BOOKERLY_12_FONT_ID;
-        case SIZE_13:
-          return BOOKERLY_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return BOOKERLY_14_FONT_ID;
-        case SIZE_15:
-          return BOOKERLY_15_FONT_ID;
-        case SIZE_16:
-          return BOOKERLY_16_FONT_ID;
-      }
-    case GEORGIA:
-      switch (fontSize) {
-        case SIZE_12:
-          return GEORGIA_12_FONT_ID;
-        case SIZE_13:
-          return GEORGIA_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return GEORGIA_14_FONT_ID;
-        case SIZE_15:
-          return GEORGIA_15_FONT_ID;
-        case SIZE_16:
-          return GEORGIA_16_FONT_ID;
-      }
-    case VERDANA:
-      switch (fontSize) {
-        case SIZE_12:
-          return VERDANA_12_FONT_ID;
-        case SIZE_13:
-          return VERDANA_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return VERDANA_14_FONT_ID;
-        case SIZE_15:
-          return VERDANA_15_FONT_ID;
-        case SIZE_16:
-          return VERDANA_16_FONT_ID;
-      }
-    case MERRIWEATHER:
-      switch (fontSize) {
-        case SIZE_12:
-          return MERRIWEATHER_12_FONT_ID;
-        case SIZE_13:
-          return MERRIWEATHER_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return MERRIWEATHER_14_FONT_ID;
-        case SIZE_15:
-          return MERRIWEATHER_15_FONT_ID;
-        case SIZE_16:
-          return MERRIWEATHER_16_FONT_ID;
-      }
+  return builtinReaderFontId(fontFamily, fontSize);
+}
+
+int CrossPointSettings::getReaderFontIdForSizeOffset(int sizeOffset) const {
+  // SD-card fonts load a single size only, so there is no larger glyph set to
+  // scale into — keep the body font for headings in that case.
+  if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
+    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
+    if (id != 0) return id;
   }
+
+  int size = static_cast<int>(fontSize) + sizeOffset;
+  if (size < SIZE_12) size = SIZE_12;
+  if (size > SIZE_16) size = SIZE_16;
+  return builtinReaderFontId(fontFamily, static_cast<uint8_t>(size));
+}
+
+std::array<int, 6> CrossPointSettings::getHeadingFontIds() const {
+  // Size offsets above the body font per heading level (h1 biggest ... h6 = body).
+  // Reader fonts top out at size 16, so on large body sizes higher levels clamp
+  // together — the best achievable hierarchy on discrete baked fonts.
+  static constexpr int kHeadingOffsets[6] = {3, 2, 1, 0, 0, 0};
+  std::array<int, 6> ids{};
+  for (int i = 0; i < 6; i++) {
+    ids[i] = getReaderFontIdForSizeOffset(kHeadingOffsets[i]);
+  }
+  return ids;
 }

@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -37,10 +38,11 @@ class Section {
                        uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
                        uint8_t paragraphSpacing);
   bool clearCache() const;
-  bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                         uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
-                         uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
+  bool createSectionFile(int fontId, const std::array<int, 6>& headingFontIds, float lineCompression,
+                         bool extraParagraphSpacing, uint8_t paragraphAlignment, uint16_t viewportWidth,
+                         uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle, uint8_t imageRendering,
+                         bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing, uint8_t paragraphSpacing,
+                         const std::function<void()>& popupFn = nullptr);
   std::unique_ptr<Page> loadPageFromSectionFile();
   std::string getTextFromSectionFile();
 

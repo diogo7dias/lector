@@ -15,7 +15,9 @@ namespace {
 // v29: word spacing + paragraph spacing added to the header + cache key.
 // v30: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 //      text blob) instead of length-prefixed strings and per-field arrays.
-constexpr uint8_t SECTION_FILE_VERSION = 30;
+// v31: BlockStyle stores a per-block font id (blockFontId) so headings (h1..h6)
+//      render at a larger baked reader font; serialized after directionDefined.
+constexpr uint8_t SECTION_FILE_VERSION = 31;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) + sizeof(uint8_t) +
@@ -167,12 +169,12 @@ bool Section::clearCache() const {
   return true;
 }
 
-bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                                const uint8_t imageRendering, const bool focusReadingEnabled,
-                                const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing,
-                                const std::function<void()>& popupFn) {
+bool Section::createSectionFile(const int fontId, const std::array<int, 6>& headingFontIds, const float lineCompression,
+                                const bool extraParagraphSpacing, const uint8_t paragraphAlignment,
+                                const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
+                                const bool focusReadingEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
+                                const uint8_t paragraphSpacing, const std::function<void()>& popupFn) {
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
 
@@ -256,8 +258,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   }
 
   ChapterHtmlSlimParser visitor(
-      epub, tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-      viewportHeight, hyphenationEnabled, focusReadingEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing,
+      epub, tmpHtmlPath, renderer, fontId, headingFontIds, lineCompression, extraParagraphSpacing, paragraphAlignment,
+      viewportWidth, viewportHeight, hyphenationEnabled, focusReadingEnabled, firstLineIndentPx, wordSpacing,
+      paragraphSpacing,
       [this, &lut](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         lut.push_back({this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
       },

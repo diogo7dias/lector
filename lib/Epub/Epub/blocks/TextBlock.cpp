@@ -108,11 +108,14 @@ TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<in
   }
 }
 
-void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int x, const int y) const {
+void TextBlock::render(const GfxRenderer& renderer, const int bodyFontId, const int x, const int y) const {
   if (!isValid) {
     LOG_ERR("TXB", "Render skipped: invalid block");
     return;
   }
+
+  // Heading blocks carry their own (larger) font id; everything else inherits the body font.
+  const int fontId = blockStyle.blockFontId != 0 ? blockStyle.blockFontId : bodyFontId;
 
   const bool scanning = renderer.isFontCacheScanning();
   const int ascender = renderer.getFontAscenderSize(fontId);
@@ -270,6 +273,7 @@ bool TextBlock::serialize(HalFile& file) const {
   serialization::writePod(file, blockStyle.textIndentDefined);
   serialization::writePod(file, blockStyle.isRtl);
   serialization::writePod(file, blockStyle.directionDefined);
+  serialization::writePod(file, blockStyle.blockFontId);
 
   return true;
 }
@@ -348,6 +352,7 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   serialization::readPod(file, blockStyle.textIndentDefined);
   serialization::readPod(file, blockStyle.isRtl);
   serialization::readPod(file, blockStyle.directionDefined);
+  serialization::readPod(file, blockStyle.blockFontId);
 
   return block;
 }

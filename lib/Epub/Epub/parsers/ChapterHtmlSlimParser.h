@@ -2,6 +2,7 @@
 
 #include <expat.h>
 
+#include <array>
 #include <climits>
 #include <functional>
 #include <memory>
@@ -40,6 +41,7 @@ class ChapterHtmlSlimParser {
   std::unique_ptr<Page> currentPage = nullptr;
   int16_t currentPageNextY = 0;
   int fontId;
+  std::array<int, 6> headingFontIds;  // h1..h6 font ids; 0 entries fall back to the body font
   float lineCompression;
   bool extraParagraphSpacing;
   uint8_t paragraphAlignment;
@@ -117,7 +119,8 @@ class ChapterHtmlSlimParser {
 
  public:
   explicit ChapterHtmlSlimParser(std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer,
-                                 const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                                 const int fontId, const std::array<int, 6>& headingFontIds,
+                                 const float lineCompression, const bool extraParagraphSpacing,
                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
                                  const bool focusReadingEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
@@ -132,6 +135,7 @@ class ChapterHtmlSlimParser {
         filepath(filepath),
         renderer(renderer),
         fontId(fontId),
+        headingFontIds(headingFontIds),
         lineCompression(lineCompression),
         extraParagraphSpacing(extraParagraphSpacing),
         paragraphAlignment(paragraphAlignment),
