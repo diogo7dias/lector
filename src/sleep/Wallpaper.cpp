@@ -104,45 +104,6 @@ namespace {
 // Retry budget for nextSleepFile's probe loop.
 constexpr int kNextSleepFileRetries = 5;
 
-// Slack added on top of the measured sequential-playlist cost before deciding
-// it's affordable. Covers small ancillary allocations during load/reconcile.
-constexpr size_t kSeqGateHeadroom = 12 * 1024;
-
-// Decide whether the sequential playlist (advance/reconcile/rebuild) can be
-// materialized safely this cycle, or whether to fall back to the O(1)-heap
-// direct pick. Measures the REAL cost with a streaming, zero-heap walk (sums
-// filename bytes) and requires both enough contiguous heap (largest single
-// block) and enough total free. Conservative on purpose: under-gating only
-// costs a direct pick; over-gating costs a brick.
-bool sequentialPlaylistAffordable() {
-  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
-  auto* sfs = deps.fs;
-  if (!sfs) return false;
-  size_t count = 0;
-  size_t bufferBytes = 0;  // == order-buffer size: sum of (filename length + 1)
-  sfs->walkSleepBmps([&](const char* /*name*/, size_t len, uint32_t /*mtime*/) {
-    ++count;
-    bufferBytes += len + 1;
-  });
-  if (count == 0) return false;  // empty folder — direct pick returns empty too
-
-  const size_t entryVecBytes = count * sizeof(crosspoint::sleep::SleepBmpEntry);
-  // Largest single contiguous allocation the path makes: the order buffer, or
-  // (on rebuild) the entry vector — whichever is bigger.
-  const size_t contigNeed = (bufferBytes > entryVecBytes ? bufferBytes : entryVecBytes) + kSeqGateHeadroom;
-  // Worst-case coexisting transient peak: order buffer + safeRead's String +
-  // std::string copy (~3x buffer) plus the entry vector and its per-name strings.
-  const size_t totalNeed = bufferBytes * 3 + entryVecBytes * 2 + kSeqGateHeadroom;
-
-  // Use the SAME largest-free-block source the V2 playlist's inner gates use
-  // (deps.largestFreeBlockFn) so the sequential-vs-direct decision stays
-  // consistent. Fall back to the raw heap_caps probe if unset.
-  const size_t largestFree =
-      deps.largestFreeBlockFn ? deps.largestFreeBlockFn() : heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
-
-  return largestFree >= contigNeed && heap_caps_get_free_size(MALLOC_CAP_DEFAULT) >= totalNeed;
-}
-
 // Streaming fragment-safe pick — O(1) heap beyond the returned basename.
 // DETERMINISTIC SEQUENTIAL: returns the lexicographically next .bmp/.pxc
 // strictly after `after`, wrapping to the lex-first at the end of the lap.
@@ -187,10 +148,13 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
     // the normal pick path so the user still sees an image.
   }
 
-  // Sequential-playlist gate: only run the buffer-backed advance()/reconcile()
-  // when the heap can truly afford to materialize the order list for THIS
-  // folder; otherwise fall back to the O(1)-heap, anti-repeat direct pick.
-  const bool useDirectPick = !sequentialPlaylistAffordable();
+  // Always attempt the buffer-backed advance()/reconcile() first: it honors the
+  // shuffled + newest-first order and now heap-gates its own load/rebuild/splice
+  // internally, returning empty (→ direct pick below) if the fragmented heap
+  // can't afford a given step. The former up-front affordability gate assumed a
+  // full rebuild every wake, so it perpetually forced the ordering-blind direct
+  // pick — which is exactly why shuffle and new-on-top appeared to do nothing.
+  const bool useDirectPick = false;
 
   // Sequential cursor for the direct-pick path: its OWN persisted field, NOT
   // lastShownSleepFilename. The buffer engine writes lastShownSleepFilename on

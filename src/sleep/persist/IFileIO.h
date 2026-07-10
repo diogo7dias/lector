@@ -50,6 +50,23 @@ struct IFileIO {
   // empty string if none of the three yielded content.
   virtual std::string safeRead(const std::string& path) = 0;
 
+  // Byte size of the file safeRead() would read (real → `.bak` → `.tmp`), or 0
+  // if none exist. Lets a caller heap-probe BEFORE reading so an -fno-exceptions
+  // bad_alloc inside the read can't abort. Default reads the whole file (host
+  // tests are not heap-constrained); the SD impl overrides with a cheap stat.
+  virtual size_t readableSize(const std::string& path) { return safeRead(path).size(); }
+
+  // Streaming read into `out` (real → `.bak` → `.tmp`), filling it in fixed
+  // chunks with a single reserve — peak heap is 1× the file, not the ~2-3× that
+  // safeRead's Arduino String + std::string copy costs. The CALLER must heap-gate
+  // via readableSize() first (this method reserves `out` and would bad_alloc if
+  // the heap can't afford it). Returns true iff bytes were read. Default forwards
+  // to safeRead so host fakes need no override.
+  virtual bool readStreamed(const std::string& path, std::string& out) {
+    out = safeRead(path);
+    return !out.empty();
+  }
+
   // Existence / management used for sidecar backup + diagnostics.
   virtual bool exists(const std::string& path) = 0;
   virtual bool mkdir(const std::string& path) = 0;

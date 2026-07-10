@@ -89,6 +89,38 @@ std::string SdFatFileIOLite::safeRead(const std::string& path) {
   return readWhole(path + ".tmp");
 }
 
+size_t SdFatFileIOLite::readableSize(const std::string& path) {
+  for (const std::string& p : {path, path + ".bak", path + ".tmp"}) {
+    HalFile f = Storage.open(p.c_str());
+    if (f && !f.isDirectory()) {
+      const size_t s = f.size();
+      if (s > 0) return s;
+    }
+  }
+  return 0;
+}
+
+bool SdFatFileIOLite::readStreamed(const std::string& path, std::string& out) {
+  out.clear();
+  for (const std::string& p : {path, path + ".bak", path + ".tmp"}) {
+    HalFile f = Storage.open(p.c_str());
+    if (!f || f.isDirectory()) continue;
+    const size_t sz = f.size();
+    if (sz == 0) continue;
+    // Caller has already heap-gated via readableSize(); reserve exactly once so
+    // the fixed-chunk appends never reallocate (peak heap = 1x the file).
+    out.reserve(sz);
+    char buf[512];
+    while (true) {
+      const int n = f.read(buf, sizeof(buf));
+      if (n <= 0) break;
+      out.append(buf, static_cast<size_t>(n));
+    }
+    if (!out.empty()) return true;
+  }
+  return false;
+}
+
 bool SdFatFileIOLite::exists(const std::string& path) { return Storage.exists(path.c_str()); }
 
 bool SdFatFileIOLite::mkdir(const std::string& path) { return Storage.mkdir(path.c_str()); }
