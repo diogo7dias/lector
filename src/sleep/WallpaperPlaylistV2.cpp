@@ -94,21 +94,8 @@ bool WallpaperPlaylistV2::ensureLoaded() {
 
 bool WallpaperPlaylistV2::loadFromDisk() {
   if (!deps_.fileIO) return false;
-  // Heap-gate before reading: the order buffer materializes 1x the file via the
-  // streaming reader. On a fragmented cold-sleep heap, bail to an empty buffer
-  // (advance() then falls back to the direct pick this cycle) rather than risk a
-  // bad_alloc abort under -fno-exceptions. Running through the buffer engine is
-  // what makes shuffle + newest-first ordering apply; the former outer
-  // affordability gate over-estimated this cost (assuming a full rebuild every
-  // wake) and so perpetually forced the ordering-blind direct pick.
-  const size_t sz = deps_.fileIO->readableSize(deps_.orderFilePath);
-  if (sz == 0 || !heapHasContiguous(sz)) {
-    buffer_.clear();
-    cursor_ = 0;
-    return false;
-  }
-  std::string blob;
-  if (!deps_.fileIO->readStreamed(deps_.orderFilePath, blob)) {
+  std::string blob = deps_.fileIO->safeRead(deps_.orderFilePath);
+  if (blob.empty()) {
     buffer_.clear();
     cursor_ = 0;
     return false;
