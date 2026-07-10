@@ -79,54 +79,46 @@ std::string normalisePath(const std::string& path) {
   return result;
 }
 
-bool naturalLess(const std::string& str1, const std::string& str2) {
+bool naturalLess(const std::string_view str1, const std::string_view str2) {
   // Naive natural sort: numeric-aware, case-insensitive
-  const char* s1 = str1.c_str();
-  const char* s2 = str2.c_str();
-
   // ctype functions require unsigned char values: passing a negative char (UTF-8
   // bytes above 0x7f with signed char) is undefined behavior
   const auto isDigit = [](const char c) { return isdigit(static_cast<unsigned char>(c)) != 0; };
 
-  // Iterate while both strings have characters
-  while (*s1 && *s2) {
+  size_t pos1 = 0;
+  size_t pos2 = 0;
+  while (pos1 < str1.size() && pos2 < str2.size()) {
     // Check if both are at the start of a number
-    if (isDigit(*s1) && isDigit(*s2)) {
-      // Skip leading zeros and track them
-      while (*s1 == '0') s1++;
-      while (*s2 == '0') s2++;
+    if (isDigit(str1[pos1]) && isDigit(str2[pos2])) {
+      while (pos1 < str1.size() && str1[pos1] == '0') ++pos1;
+      while (pos2 < str2.size() && str2[pos2] == '0') ++pos2;
 
-      // Count digits to compare lengths first
-      int len1 = 0, len2 = 0;
-      while (isDigit(s1[len1])) len1++;
-      while (isDigit(s2[len2])) len2++;
+      size_t end1 = pos1;
+      size_t end2 = pos2;
+      while (end1 < str1.size() && isDigit(str1[end1])) ++end1;
+      while (end2 < str2.size() && isDigit(str2[end2])) ++end2;
+      const size_t len1 = end1 - pos1;
+      const size_t len2 = end2 - pos2;
 
-      // Different length so return smaller integer value
       if (len1 != len2) return len1 < len2;
-
-      // Same length so compare digit by digit
-      for (int i = 0; i < len1; i++) {
-        if (s1[i] != s2[i]) return s1[i] < s2[i];
+      for (size_t i = 0; i < len1; ++i) {
+        if (str1[pos1 + i] != str2[pos2 + i]) return str1[pos1 + i] < str2[pos2 + i];
       }
-
-      // Numbers equal so advance pointers
-      s1 += len1;
-      s2 += len2;
+      pos1 = end1;
+      pos2 = end2;
     } else {
-      // Regular case-insensitive character comparison
-      const int c1 = tolower(static_cast<unsigned char>(*s1));
-      const int c2 = tolower(static_cast<unsigned char>(*s2));
+      const int c1 = tolower(static_cast<unsigned char>(str1[pos1]));
+      const int c2 = tolower(static_cast<unsigned char>(str2[pos2]));
       if (c1 != c2) return c1 < c2;
-      s1++;
-      s2++;
+      ++pos1;
+      ++pos2;
     }
   }
 
-  // One string is prefix of other
-  return *s1 == '\0' && *s2 != '\0';
+  return pos1 == str1.size() && pos2 != str2.size();
 }
 
-bool naturalFileLess(const std::string& str1, const std::string& str2) {
+bool naturalFileLess(const std::string_view str1, const std::string_view str2) {
   // Directories first
   bool isDir1 = !str1.empty() && str1.back() == '/';
   bool isDir2 = !str2.empty() && str2.back() == '/';

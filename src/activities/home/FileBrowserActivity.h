@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "RecentBooksStore.h"
+#include "SdFileIndex.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -40,6 +41,14 @@ class FileBrowserActivity final : public Activity {
   std::string basepath = "/";
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
+  bool sdMode = false;
+  SdFileIndex sdIndex;
+
+  size_t fileCount() const { return sdMode ? sdIndex.count() : files.size(); }
+  std::string fileNameAt(size_t index) const {
+    if (sdMode) return sdIndex.nameAt(index);
+    return index < files.size() ? files[index] : std::string{};
+  }
 
   // ── Fuzzy search (ported from DX34) ──────────────────────────────────────
   // Active query for the current folder; empty = no search. filteredIndexes holds
@@ -54,7 +63,7 @@ class FileBrowserActivity final : public Activity {
   int clearRowCount() const { return searchActive() ? 1 : 0; }
   // Synthetic rows pinned above the file rows: Recent Books + Search + Clear.
   int headerRowCount() const { return (hasRecentShortcut() ? 1 : 0) + searchRowCount() + clearRowCount(); }
-  size_t fileRowCount() const { return searchActive() ? filteredIndexes.size() : files.size(); }
+  size_t fileRowCount() const { return searchActive() ? filteredIndexes.size() : fileCount(); }
   size_t totalRowCount() const { return static_cast<size_t>(headerRowCount()) + fileRowCount(); }
 
   enum class RowKind { Recent, Search, Clear, File };

@@ -118,33 +118,52 @@ std::string searchLabelForEntry(const std::string& entry) {
 }
 
 std::vector<size_t> rankMatches(const std::vector<std::string>& entries, const std::string& query) {
+  return rankMatches(entries.size(), [&entries](const size_t index) { return entries[index]; }, query, entries.size());
+}
+
+std::vector<size_t> rankMatches(const size_t count, const std::function<std::string(size_t)>& nameAt,
+                                const std::string& query, const size_t maxResults) {
   if (query.empty()) {
     return {};
   }
 
   const std::string loweredQuery = toLowerAsciiCopy(query);
   std::vector<MatchCandidate> matches;
-  matches.reserve(entries.size());
+  matches.reserve(std::min(count, maxResults));
 
-  for (size_t fileIndex = 0; fileIndex < entries.size(); ++fileIndex) {
+  const auto scoreLess = [](const MatchCandidate& lhs, const MatchCandidate& rhs) {
+    return std::tie(lhs.category, lhs.start, lhs.span, lhs.gaps, lhs.fileIndex) <
+           std::tie(rhs.category, rhs.start, rhs.span, rhs.gaps, rhs.fileIndex);
+  };
+  auto addCandidate = [&](const MatchCandidate& candidate) {
+    if (maxResults == 0) return;
+    if (matches.size() < maxResults) {
+      matches.push_back(candidate);
+      return;
+    }
+    const auto worst = std::max_element(matches.begin(), matches.end(), scoreLess);
+    if (scoreLess(candidate, *worst)) *worst = candidate;
+  };
+
+  for (size_t fileIndex = 0; fileIndex < count; ++fileIndex) {
     if (fileIndex % 100 == 0) {
       esp_task_wdt_reset();
     }
-    const std::string label = searchLabelForEntry(entries[fileIndex]);
+    const std::string label = searchLabelForEntry(nameAt(fileIndex));
     const std::string loweredLabel = toLowerAsciiCopy(label);
 
     if (startsWithIgnoreCase(label, query)) {
-      matches.push_back({.fileIndex = fileIndex, .category = 0, .start = 0, .span = 0, .gaps = 0});
+      addCandidate({.fileIndex = fileIndex, .category = 0, .start = 0, .span = 0, .gaps = 0});
       continue;
     }
 
     const int boundaryPrefix = findWordBoundaryPrefix(label, query);
     if (boundaryPrefix >= 0) {
-      matches.push_back({.fileIndex = fileIndex,
-                         .category = 1,
-                         .start = boundaryPrefix,
-                         .span = static_cast<int>(query.size()) - 1,
-                         .gaps = 0});
+      addCandidate({.fileIndex = fileIndex,
+                    .category = 1,
+                    .start = boundaryPrefix,
+                    .span = static_cast<int>(query.size()) - 1,
+                    .gaps = 0});
       continue;
     }
 
@@ -153,17 +172,14 @@ std::vector<size_t> rankMatches(const std::vector<std::string>& entries, const s
       continue;
     }
 
-    matches.push_back({.fileIndex = fileIndex,
-                       .category = 2,
-                       .start = subsequence.start,
-                       .span = subsequence.span,
-                       .gaps = subsequence.gaps});
+    addCandidate({.fileIndex = fileIndex,
+                  .category = 2,
+                  .start = subsequence.start,
+                  .span = subsequence.span,
+                  .gaps = subsequence.gaps});
   }
 
-  std::stable_sort(matches.begin(), matches.end(), [](const MatchCandidate& lhs, const MatchCandidate& rhs) {
-    return std::tie(lhs.category, lhs.start, lhs.span, lhs.gaps) <
-           std::tie(rhs.category, rhs.start, rhs.span, rhs.gaps);
-  });
+  std::stable_sort(matches.begin(), matches.end(), scoreLess);
 
   std::vector<size_t> rankedFileIndexes;
   rankedFileIndexes.reserve(matches.size());

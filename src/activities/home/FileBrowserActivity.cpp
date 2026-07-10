@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "LargeFolderIndexPolicy.h"
 #include "LibrarySearchSupport.h"
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -29,51 +30,63 @@ std::string getFileName(std::string filename);
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
-
-  auto root = Storage.open(basepath.c_str());
-  if (!root || !root.isDirectory()) {
-    return;
-  }
-
-  root.rewindDirectory();
+  sdIndex.clear();
+  sdMode = false;
+  folderHasBooks_ = false;
 
   if (!fileNameBuffer) {
     LOG_ERR("FileBrowser", "fileNameBuffer not allocated");
-    root.close();
     return;
   }
 
+  auto accept = [this](const char* name, const bool isDirectory) {
+    if ((!SETTINGS.showHiddenFiles && name[0] == '.') || strcmp(name, "System Volume Information") == 0) return false;
+    if (isDirectory) return true;
+    const std::string_view filename{name};
+    if (mode == Mode::PickFirmware) return FsHelpers::checkFileExtension(filename, ".bin");
+
+    const bool wallpaper = SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC
+                               ? FsHelpers::checkFileExtension(filename, ".pxc")
+                               : FsHelpers::hasBmpExtension(filename);
+    const bool book = FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
+                      FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename);
+    if (book) folderHasBooks_ = true;
+    return book || wallpaper;
+  };
+
+  auto root = Storage.open(basepath.c_str());
+  if (!root || !root.isDirectory()) return;
+
+  root.rewindDirectory();
+  size_t retainedNameBytes = 0;
+  bool needsSdIndex = false;
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
-    if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
-        strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {
-      continue;
-    }
-
-    if (file.isDirectory()) {
-      files.emplace_back(std::string(fileNameBuffer.get()) + "/");
-    } else {
-      std::string_view filename{fileNameBuffer.get()};
-      if (mode == Mode::PickFirmware) {
-        // Firmware picker: only show .bin files.
-        if (FsHelpers::checkFileExtension(filename, ".bin")) {
-          files.emplace_back(filename);
-        }
-      } else {
-        // Wallpaper files are shown filtered by the chosen format, so /sleep and
-        // /sleep pause list exactly the files the sleep rotation will use (only
-        // .pxc in PXC mode, only .bmp in BMP mode) instead of always .bmp.
-        const bool wallpaper = SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC
-                                   ? FsHelpers::checkFileExtension(filename, ".pxc")
-                                   : FsHelpers::hasBmpExtension(filename);
-        if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
-            FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) || wallpaper) {
-          files.emplace_back(filename);
-        }
-      }
+    const bool isDirectory = file.isDirectory();
+    if (!accept(fileNameBuffer.get(), isDirectory)) continue;
+    std::string displayName = fileNameBuffer.get();
+    if (isDirectory) displayName.push_back('/');
+    retainedNameBytes += displayName.size();
+    files.push_back(std::move(displayName));
+    if (large_folder_index::shouldUseSdIndex(files.size(), retainedNameBytes)) {
+      needsSdIndex = true;
+      break;
     }
   }
   root.close();
+
+  if (needsSdIndex) {
+    std::vector<std::string>().swap(files);
+    folderHasBooks_ = false;
+    if (sdIndex.build(basepath, accept)) {
+      sdMode = true;
+      if (SETTINGS.bookBrowserRandomOrder && mode == Mode::Books) sdIndex.shuffleTail();
+      return;
+    }
+    LOG_ERR("FileBrowser", "SD index failed; folder list unavailable");
+    folderHasBooks_ = false;
+  }
+
   FsHelpers::sortFileList(files);
 
   // Random book order (Books mode only): reshuffle the file entries so the user
@@ -90,27 +103,25 @@ void FileBrowserActivity::loadFiles() {
       std::swap(files[i - 1], files[j]);
     }
   }
-
-  // Gate the "Search current folder" row on the folder actually holding a book
-  // (Books mode only). Images/dirs alone don't offer search.
-  folderHasBooks_ = false;
-  if (mode == Mode::Books) {
-    for (const auto& f : files) {
-      if (!f.empty() && f.back() == '/') continue;
-      const std::string_view sv{f};
-      if (FsHelpers::hasEpubExtension(sv) || FsHelpers::hasXtcExtension(sv) || FsHelpers::hasTxtExtension(sv) ||
-          FsHelpers::hasMarkdownExtension(sv)) {
-        folderHasBooks_ = true;
-        break;
-      }
-    }
-  }
 }
 
 void FileBrowserActivity::openPxcViewer(const std::string& path, const std::string& launchName) {
   auto handler = [this, launchName](const ActivityResult& res) {
     if (!std::holds_alternative<FilePathResult>(res.data)) return;
     const std::string& finalPath = std::get<FilePathResult>(res.data).path;
+    if (sdMode) {
+      loadFiles();
+      rebuildFilter();
+      const size_t rows = totalRowCount();
+      if (rows == 0) {
+        selectorIndex = 0;
+      } else if (selectorIndex >= rows) {
+        selectorIndex = rows - 1;
+      }
+      pendingFullRefresh = true;
+      requestUpdate(true);
+      return;
+    }
     if (finalPath.empty()) {
       // Moved or deleted in the viewer: drop the row in place — no folder rescan.
       files.erase(std::remove(files.begin(), files.end(), launchName), files.end());
@@ -174,7 +185,13 @@ void FileBrowserActivity::rebuildFilter() {
     filteredIndexes.clear();
     return;
   }
-  filteredIndexes = LibrarySearchSupport::rankMatches(files, activeSearchQuery);
+  if (sdMode) {
+    filteredIndexes = LibrarySearchSupport::rankMatches(
+        sdIndex.count(), [this](const size_t index) { return sdIndex.nameAt(index); }, activeSearchQuery,
+        large_folder_index::MAX_SEARCH_RESULTS);
+  } else {
+    filteredIndexes = LibrarySearchSupport::rankMatches(files, activeSearchQuery);
+  }
 }
 
 void FileBrowserActivity::clearSearch() {
@@ -194,10 +211,13 @@ void FileBrowserActivity::openSearch() {
   keyboard->setLivePreview([this](const std::string& query, int maxRows) -> KeyboardEntryActivity::KbPreviewResult {
     KeyboardEntryActivity::KbPreviewResult out;
     if (query.empty()) return out;
-    const auto ranked = LibrarySearchSupport::rankMatches(files, query);
+    const auto ranked = sdMode ? LibrarySearchSupport::rankMatches(
+                                     sdIndex.count(), [this](const size_t index) { return sdIndex.nameAt(index); },
+                                     query, large_folder_index::MAX_SEARCH_RESULTS)
+                               : LibrarySearchSupport::rankMatches(files, query);
     out.total = static_cast<int>(ranked.size());
     for (int i = 0; i < static_cast<int>(ranked.size()) && i < maxRows; i++) {
-      out.rows.push_back(getFileName(files[ranked[i]]));
+      out.rows.push_back(getFileName(fileNameAt(ranked[i])));
     }
     return out;
   });
@@ -267,6 +287,7 @@ void FileBrowserActivity::onEnter() {
 void FileBrowserActivity::onExit() {
   Activity::onExit();
   files.clear();
+  sdIndex.clear();
   fileNameBuffer.reset();
 }
 
@@ -399,7 +420,8 @@ void FileBrowserActivity::loop() {
     }
 
     const size_t fileIndex = row.fileIndex;
-    const std::string& entry = files[fileIndex];
+    const std::string entry = fileNameAt(fileIndex);
+    if (entry.empty()) return;
     bool isDirectory = (entry.back() == '/');
 
     // Firmware picker: select file -> return path; navigate into directories normally.
@@ -550,9 +572,7 @@ void FileBrowserActivity::render(RenderLock&&) {
       (mode == Mode::PickFirmware)
           ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
           : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
-  // Append the entry count to the header title, e.g. "sleep pause (1287)". The whole
-  // folder is already resident in `files`, so this is a free size() read (no extra scan).
-  folderName += " (" + std::to_string(files.size()) + ")";
+  folderName += " (" + std::to_string(fileCount()) + ")";
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
@@ -580,7 +600,7 @@ void FileBrowserActivity::render(RenderLock&&) {
             case RowKind::Clear:
               return tr(STR_CLEAR_SEARCH);
             case RowKind::File:
-              return getFileName(files[r.fileIndex]);
+              return getFileName(fileNameAt(r.fileIndex));
           }
           return "";
         },
@@ -595,13 +615,13 @@ void FileBrowserActivity::render(RenderLock&&) {
             case RowKind::Clear:
               return None;
             case RowKind::File:
-              return UITheme::getFileIcon(files[r.fileIndex]);
+              return UITheme::getFileIcon(fileNameAt(r.fileIndex));
           }
           return None;
         },
         [this](int index) -> std::string {
           const RowRef r = rowAt(index);
-          return r.kind == RowKind::File ? getFileExtension(files[r.fileIndex]) : std::string("");
+          return r.kind == RowKind::File ? getFileExtension(fileNameAt(r.fileIndex)) : std::string("");
         },
         false);
   }
@@ -646,8 +666,9 @@ void FileBrowserActivity::render(RenderLock&&) {
       confirmLabel = tr(STR_SEARCH);
     } else if (r.kind == RowKind::Clear) {
       confirmLabel = tr(STR_CLEAR_BUTTON);
-    } else if (r.kind == RowKind::File && mode == Mode::PickFirmware && files[r.fileIndex].back() != '/') {
-      confirmLabel = tr(STR_SELECT);
+    } else if (r.kind == RowKind::File && mode == Mode::PickFirmware) {
+      const std::string name = fileNameAt(r.fileIndex);
+      confirmLabel = !name.empty() && name.back() != '/' ? tr(STR_SELECT) : tr(STR_OPEN);
     } else {
       confirmLabel = tr(STR_OPEN);
     }
@@ -665,6 +686,12 @@ size_t FileBrowserActivity::findEntry(const std::string& name) const {
   // rows (Recent Books shortcut + Search row). Callers use this only after a
   // navigation, where the search is cleared (no Clear row).
   const size_t offset = static_cast<size_t>(headerRowCount());
+  if (sdMode) {
+    size_t slot = sdIndex.lowerBound(name);
+    if (slot < sdIndex.count() && sdIndex.nameAt(slot) == name) return slot + offset;
+    if (slot >= sdIndex.count() && sdIndex.count() > 0) slot = sdIndex.count() - 1;
+    return slot + offset;
+  }
   for (size_t i = 0; i < files.size(); i++)
     if (files[i] == name) return i + offset;
   // Not found (e.g. the file was just moved/deleted): land on the slot it used to
