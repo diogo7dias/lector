@@ -17,12 +17,6 @@ struct BlockStyle {
 
   CssTextAlign alignment = CssTextAlign::Justify;
 
-  // Reader font id to render this block with. 0 means "inherit the body font".
-  // Set for heading blocks (h1..h6) so they render at a larger baked font size.
-  // Copied by getCombinedBlockStyle (result = child) and withoutBottom, so it
-  // propagates to the line blocks emitted by ParsedText::layoutAndExtractLines.
-  int blockFontId = 0;
-
   // Spacing (in pixels)
   int16_t marginTop = 0;
   int16_t marginBottom = 0;

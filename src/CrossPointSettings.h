@@ -1,7 +1,6 @@
 #pragma once
 #include <HalStorage.h>
 
-#include <array>
 #include <cstdint>
 #include <iosfwd>
 
@@ -375,11 +374,6 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
-  // Reader font id at the current family, `sizeOffset` steps above the body size,
-  // clamped to the baked 12-16 range. SD-card fonts (single size) return the body id.
-  int getReaderFontIdForSizeOffset(int sizeOffset) const;
-  // Font ids for headings h1..h6 (index 0 = h1), scaled up from the body size.
-  std::array<int, 6> getHeadingFontIds() const;
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(HalFile& file, bool count_only = false) const;
