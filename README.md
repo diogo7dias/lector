@@ -51,3 +51,11 @@ Everything CrossPoint does still works here — see the [upstream project](https
 **Misc**
 - Open-random-book-on-boot option.
 - CI runs on `main` (the fork's default branch).
+
+## TODO (to implement later)
+
+Ports still wanted from the DX34 fork:
+- **Reading themes** — in-book theme presets + revert.
+- **Poems view** — dedicated poems / quotes browser.
+- **Storage cleanup activity** — dedicated cleanup, separate from clear-cache.
+- **More status bar items** — e.g. quote count, pages-left.
