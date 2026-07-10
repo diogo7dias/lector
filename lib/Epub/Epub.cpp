@@ -13,6 +13,43 @@
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
+namespace {
+// dc:description may hold (double-escaped) HTML and irregular whitespace. Produce a
+// bounded, single-spaced plain-text string safe to store in book.bin and page on screen.
+constexpr size_t MAX_DESCRIPTION_BYTES = 1500;
+std::string sanitizeDescription(const std::string& in) {
+  std::string out;
+  out.reserve(std::min(in.size(), MAX_DESCRIPTION_BYTES));
+  bool inTag = false;
+  bool pendingSpace = false;
+  for (const char c : in) {
+    if (c == '<') {
+      inTag = true;
+      continue;
+    }
+    if (c == '>') {
+      inTag = false;
+      pendingSpace = true;  // a stripped tag acts as a word boundary
+      continue;
+    }
+    if (inTag) continue;
+    const auto uc = static_cast<unsigned char>(c);
+    if (uc <= ' ') {  // collapse runs of whitespace / control bytes
+      pendingSpace = true;
+      continue;
+    }
+    if (pendingSpace && !out.empty()) out.push_back(' ');
+    pendingSpace = false;
+    out.push_back(c);
+    if (out.size() >= MAX_DESCRIPTION_BYTES) break;
+  }
+  // Back off to a UTF-8 boundary if the cap landed mid-sequence.
+  while (!out.empty() && (static_cast<unsigned char>(out.back()) & 0xC0) == 0x80) out.pop_back();
+  if (!out.empty() && (static_cast<unsigned char>(out.back()) & 0x80)) out.pop_back();
+  return out;
+}
+}  // namespace
+
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
   size_t containerSize;
@@ -79,6 +116,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.title = utf8ComposeNfc(opfParser.title);
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
+  bookMetadata.description = utf8ComposeNfc(sanitizeDescription(opfParser.description));
   bookMetadata.coverItemHref = opfParser.coverItemHref;
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
@@ -556,6 +594,15 @@ const std::string& Epub::getLanguage() const {
   }
 
   return bookMetadataCache->coreMetadata.language;
+}
+
+const std::string& Epub::getDescription() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.description;
 }
 
 std::string Epub::getCoverBmpPath(bool cropped) const {

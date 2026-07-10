@@ -14,6 +14,7 @@ class BookMetadataCache {
     std::string language;
     std::string coverItemHref;
     std::string textReferenceHref;
+    std::string description;  // Plain-text book synopsis (dc:description), may be empty
   };
 
   struct SpineEntry {
