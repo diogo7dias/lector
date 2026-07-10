@@ -1,9 +1,17 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 struct BmpHeader;
+
+using DitherRowAllocator = int16_t* (*)(size_t count);
+
+inline int16_t* allocateDitherRow(const size_t count) { return new (std::nothrow) int16_t[count](); }
+
+inline constexpr int MAX_DITHER_WIDTH = 4096;
 
 // Helper functions
 uint8_t quantize(int gray, int x, int y);
@@ -23,10 +31,14 @@ void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder ro
 //     1/8
 class Atkinson1BitDitherer {
  public:
-  explicit Atkinson1BitDitherer(int width) : width(width) {
-    errorRow0 = new int16_t[width + 4]();  // Current row
-    errorRow1 = new int16_t[width + 4]();  // Next row
-    errorRow2 = new int16_t[width + 4]();  // Row after next
+  explicit Atkinson1BitDitherer(const int width, DitherRowAllocator allocator = allocateDitherRow) : width(width) {
+    if (width <= 0 || width > MAX_DITHER_WIDTH || !allocator) return;
+    const size_t rowSize = static_cast<size_t>(width) + 4;
+    errorRow0 = allocator(rowSize);  // Current row
+    if (!errorRow0) return;
+    errorRow1 = allocator(rowSize);  // Next row
+    if (!errorRow1) return;
+    errorRow2 = allocator(rowSize);  // Row after next
   }
 
   ~Atkinson1BitDitherer() {
@@ -40,6 +52,8 @@ class Atkinson1BitDitherer {
 
   // EXPLICITLY DELETE THE COPY ASSIGNMENT OPERATOR
   Atkinson1BitDitherer& operator=(const Atkinson1BitDitherer& other) = delete;
+
+  bool isValid() const { return errorRow0 && errorRow1 && errorRow2; }
 
   uint8_t processPixel(int gray, int x) {
     // Apply brightness/contrast/gamma adjustments
@@ -91,9 +105,9 @@ class Atkinson1BitDitherer {
 
  private:
   int width;
-  int16_t* errorRow0;
-  int16_t* errorRow1;
-  int16_t* errorRow2;
+  int16_t* errorRow0 = nullptr;
+  int16_t* errorRow1 = nullptr;
+  int16_t* errorRow2 = nullptr;
 };
 
 // Atkinson dithering - distributes only 6/8 (75%) of error for cleaner results
@@ -104,10 +118,14 @@ class Atkinson1BitDitherer {
 // Less error buildup = fewer artifacts than Floyd-Steinberg
 class AtkinsonDitherer {
  public:
-  explicit AtkinsonDitherer(int width) : width(width) {
-    errorRow0 = new int16_t[width + 4]();  // Current row
-    errorRow1 = new int16_t[width + 4]();  // Next row
-    errorRow2 = new int16_t[width + 4]();  // Row after next
+  explicit AtkinsonDitherer(const int width, DitherRowAllocator allocator = allocateDitherRow) : width(width) {
+    if (width <= 0 || width > MAX_DITHER_WIDTH || !allocator) return;
+    const size_t rowSize = static_cast<size_t>(width) + 4;
+    errorRow0 = allocator(rowSize);  // Current row
+    if (!errorRow0) return;
+    errorRow1 = allocator(rowSize);  // Next row
+    if (!errorRow1) return;
+    errorRow2 = allocator(rowSize);  // Row after next
   }
 
   ~AtkinsonDitherer() {
@@ -120,6 +138,8 @@ class AtkinsonDitherer {
 
   // **2. EXPLICITLY DELETE THE COPY ASSIGNMENT OPERATOR**
   AtkinsonDitherer& operator=(const AtkinsonDitherer& other) = delete;
+
+  bool isValid() const { return errorRow0 && errorRow1 && errorRow2; }
 
   uint8_t processPixel(int gray, int x) {
     // Add accumulated error
@@ -190,9 +210,9 @@ class AtkinsonDitherer {
 
  private:
   int width;
-  int16_t* errorRow0;
-  int16_t* errorRow1;
-  int16_t* errorRow2;
+  int16_t* errorRow0 = nullptr;
+  int16_t* errorRow1 = nullptr;
+  int16_t* errorRow2 = nullptr;
 };
 
 // Floyd-Steinberg error diffusion dithering with serpentine scanning
@@ -205,9 +225,13 @@ class AtkinsonDitherer {
 //      7/16  X
 class FloydSteinbergDitherer {
  public:
-  explicit FloydSteinbergDitherer(int width) : width(width), rowCount(0) {
-    errorCurRow = new int16_t[width + 2]();  // +2 for boundary handling
-    errorNextRow = new int16_t[width + 2]();
+  explicit FloydSteinbergDitherer(const int width, DitherRowAllocator allocator = allocateDitherRow)
+      : width(width), rowCount(0) {
+    if (width <= 0 || width > MAX_DITHER_WIDTH || !allocator) return;
+    const size_t rowSize = static_cast<size_t>(width) + 2;
+    errorCurRow = allocator(rowSize);  // +2 for boundary handling
+    if (!errorCurRow) return;
+    errorNextRow = allocator(rowSize);
   }
 
   ~FloydSteinbergDitherer() {
@@ -220,6 +244,8 @@ class FloydSteinbergDitherer {
 
   // **2. EXPLICITLY DELETE THE COPY ASSIGNMENT OPERATOR**
   FloydSteinbergDitherer& operator=(const FloydSteinbergDitherer& other) = delete;
+
+  bool isValid() const { return errorCurRow && errorNextRow; }
 
   // Process a single pixel and return quantized 2-bit value
   // x is the logical x position (0 to width-1), direction handled internally
@@ -317,6 +343,6 @@ class FloydSteinbergDitherer {
  private:
   int width;
   int rowCount;
-  int16_t* errorCurRow;
-  int16_t* errorNextRow;
+  int16_t* errorCurRow = nullptr;
+  int16_t* errorNextRow = nullptr;
 };

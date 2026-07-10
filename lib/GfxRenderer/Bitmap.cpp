@@ -1,5 +1,7 @@
 #include "Bitmap.h"
 
+#include <Memory.h>
+
 #include <cstdlib>
 #include <cstring>
 
@@ -16,9 +18,6 @@ constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-
 Bitmap::~Bitmap() {
   delete[] errorCurRow;
   delete[] errorNextRow;
-
-  delete atkinsonDitherer;
-  delete fsDitherer;
 }
 
 uint16_t Bitmap::readLE16(HalFile& f) {
@@ -168,9 +167,17 @@ BmpReaderError Bitmap::parseHeaders() {
   const bool highColor = !nativePalette;
   if (highColor && dithering) {
     if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width);
+      atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(width);
+      if (!atkinsonDitherer || !atkinsonDitherer->isValid()) {
+        atkinsonDitherer.reset();
+        return BmpReaderError::OomRowBuffer;
+      }
     } else {
-      fsDitherer = new FloydSteinbergDitherer(width);
+      fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(width);
+      if (!fsDitherer || !fsDitherer->isValid()) {
+        fsDitherer.reset();
+        return BmpReaderError::OomRowBuffer;
+      }
     }
   }
 
