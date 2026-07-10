@@ -1,5 +1,6 @@
 #pragma once
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cassert>
 #include <memory>

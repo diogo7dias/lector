@@ -36,6 +36,7 @@ class ActivityManager {
   friend class RenderLock;
 
  protected:
+  static constexpr size_t MAX_ACTIVITY_STACK_DEPTH = 10;
   GfxRenderer& renderer;
   MappedInputManager& mappedInput;
   std::vector<std::unique_ptr<Activity>> stackActivities;
@@ -69,7 +70,7 @@ class ActivityManager {
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
       : renderer(renderer), mappedInput(mappedInput), renderingMutex(xSemaphoreCreateMutex()) {
     assert(renderingMutex != nullptr && "Failed to create rendering mutex");
-    stackActivities.reserve(10);
+    stackActivities.reserve(MAX_ACTIVITY_STACK_DEPTH);
   }
   ~ActivityManager() { assert(false); /* should never be called */ };
 

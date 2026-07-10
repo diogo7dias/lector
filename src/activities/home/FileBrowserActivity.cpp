@@ -141,7 +141,7 @@ void FileBrowserActivity::openPxcViewer(const std::string& path, const std::stri
     pendingFullRefresh = true;
     requestUpdate(true);
   };
-  startActivityForResult(std::make_unique<PxcViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
+  startActivityForResult(makeUniqueNoThrow<PxcViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
                          handler);
 }
 
@@ -183,8 +183,12 @@ void FileBrowserActivity::clearSearch() {
 }
 
 void FileBrowserActivity::openSearch() {
-  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH), activeSearchQuery,
-                                                          /*maxLength=*/64, InputType::Text);
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SEARCH), activeSearchQuery,
+                                                           /*maxLength=*/64, InputType::Text);
+  if (!keyboard) {
+    LOG_ERR("FILE", "OOM: search keyboard");
+    return;
+  }
   // Live preview: re-rank `files` on every keystroke and show the top matches on the
   // keyboard screen (same ranker as the applied filter, so preview == result).
   keyboard->setLivePreview([this](const std::string& query, int maxRows) -> KeyboardEntryActivity::KbPreviewResult {
@@ -444,7 +448,7 @@ void FileBrowserActivity::loop() {
 
       std::string heading = tr(STR_DELETE) + std::string("? ");
 
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+      startActivityForResult(makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
       return;
     } else {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---

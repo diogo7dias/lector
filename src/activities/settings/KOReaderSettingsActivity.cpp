@@ -53,7 +53,7 @@ void KOReaderSettingsActivity::loop() {
 void KOReaderSettingsActivity::handleSelection() {
   if (selectedIndex == 0) {
     // Username
-    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_USERNAME),
+    startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_USERNAME),
                                                                    KOREADER_STORE.getUsername(), 64, InputType::Text),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
@@ -65,7 +65,7 @@ void KOReaderSettingsActivity::handleSelection() {
   } else if (selectedIndex == 1) {
     // Password
     startActivityForResult(
-        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_PASSWORD),
+        makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_PASSWORD),
                                                 KOREADER_STORE.getPassword(), 64, InputType::Password),
         [this](const ActivityResult& result) {
           if (!result.isCancelled) {
@@ -78,7 +78,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Sync Server URL - prefill with https:// if empty to save typing
     const std::string currentUrl = KOREADER_STORE.getServerUrl();
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
-    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SYNC_SERVER_URL),
+    startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SYNC_SERVER_URL),
                                                                    prefillUrl, 128, InputType::Url),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
@@ -103,7 +103,7 @@ void KOReaderSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(std::make_unique<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+    startActivityForResult(makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
   }
 }
 

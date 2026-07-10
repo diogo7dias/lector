@@ -252,7 +252,7 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ENUM) {
     // Font family keeps its dedicated preview picker.
     if (setting.nameId == StrId::STR_FONT_FAMILY && setting.valueGetter && setting.valueSetter) {
-      startActivityForResult(std::make_unique<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
+      startActivityForResult(makeUniqueNoThrow<FontSelectionActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                              [this](const ActivityResult&) {
                                SETTINGS.saveToFile();
                                rebuildSettingsLists();
@@ -287,7 +287,7 @@ void SettingsActivity::toggleCurrentSetting() {
     }
 
     startActivityForResult(
-        std::make_unique<SettingSelectActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)),
+        makeUniqueNoThrow<SettingSelectActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)),
                                                 std::move(options), current, std::move(apply)),
         [this, sleepScreenChanged, quickResumeTimeoutChanged](const ActivityResult&) {
           syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
@@ -310,31 +310,31 @@ void SettingsActivity::toggleCurrentSetting() {
 
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
-        startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CustomiseStatusBar:
-        startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
-        startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::OPDSBrowser:
-        startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Network:
-        startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
         break;
       case SettingAction::ClearCache:
-        startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
-        startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::SdFirmwareUpdate:
-        startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::Language:
-        startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(makeUniqueNoThrow<LanguageSelectActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::RandomizeSleepImages: {
         // Inline: one-shot reshuffle of the sleep wallpaper rotation, then a
@@ -383,7 +383,7 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
 
 void SettingsActivity::openSleepTimeoutPicker() {
   startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(
+      makeUniqueNoThrow<IntervalSelectionActivity>(
           renderer, mappedInput, "SleepTimeoutInterval", StrId::STR_TIME_TO_SLEEP, StrId::STR_SLEEP_TIMER_STEP_HINT,
           SETTINGS.sleepTimeoutMinutes, CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES,
           CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1, 5, StrId::STR_SLEEP_TIMER_VALUE_FORMAT, false, true,
@@ -401,7 +401,7 @@ void SettingsActivity::openWordSpacingPicker() {
   // Word spacing as a signed percentage of the inter-word space width: -30% (tight)
   // to +300% (loose), 0% = the font's natural spacing. Stored as a 10%-step count.
   startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(
+      makeUniqueNoThrow<IntervalSelectionActivity>(
           renderer, mappedInput, "WordSpacingInterval", StrId::STR_WORD_SPACING, StrId::STR_SPACING_STEP_HINT,
           SETTINGS.wordSpacingPercent(), CrossPointSettings::MIN_WORD_SPACING_PERCENT,
           CrossPointSettings::MAX_WORD_SPACING_PERCENT, 10, 50, StrId::STR_SPACING_VALUE_FORMAT, false, true),
@@ -419,7 +419,7 @@ void SettingsActivity::openParagraphSpacingPicker() {
   // Paragraph spacing as a percentage of the line height, injected as a vertical
   // gap between blocks: 0% = off, up to 150%. Stored directly as the percentage.
   startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(
+      makeUniqueNoThrow<IntervalSelectionActivity>(
           renderer, mappedInput, "ParagraphSpacingInterval", StrId::STR_PARAGRAPH_SPACING, StrId::STR_SPACING_STEP_HINT,
           SETTINGS.paragraphSpacing, 0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10, 50,
           StrId::STR_SPACING_VALUE_FORMAT, false, true),
@@ -436,7 +436,7 @@ void SettingsActivity::openMarginPicker(uint8_t CrossPointSettings::* field, Str
   // Reader margins are a fine 0..60 range, so a slider (up/down = 1, page = 10)
   // beats tap-to-increment. Shared by the uniform/horizontal, top and bottom
   // margin rows; the caller passes which field to edit and its title.
-  startActivityForResult(std::make_unique<IntervalSelectionActivity>(
+  startActivityForResult(makeUniqueNoThrow<IntervalSelectionActivity>(
                              renderer, mappedInput, "MarginInterval", titleId, StrId::STR_MARGIN_STEP_HINT,
                              SETTINGS.*field, CrossPointSettings::MIN_SCREEN_MARGIN,
                              CrossPointSettings::MAX_SCREEN_MARGIN, 1, 10, StrId::STR_MARGIN_VALUE_FORMAT, false, true),
@@ -454,7 +454,7 @@ void SettingsActivity::openFirstLineIndentPicker() {
   // 100% = the first line starts at the horizontal middle of the column).
   // Slider: up/down adjusts by 5%, page jump by 25%.
   startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(
+      makeUniqueNoThrow<IntervalSelectionActivity>(
           renderer, mappedInput, "FirstLineIndentInterval", StrId::STR_FIRST_LINE_INDENT_PERCENT,
           StrId::STR_INDENT_STEP_HINT, SETTINGS.firstLineIndentPercent, 0,
           CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5, 25, StrId::STR_INDENT_VALUE_FORMAT, false, true),
@@ -472,7 +472,7 @@ void SettingsActivity::openLineSpacingPicker() {
   // A slider (like the sleep timer) is nicer than tap-to-increment for a wide,
   // bidirectional range: up/down adjusts by 5%, page jump by 25%.
   startActivityForResult(
-      std::make_unique<IntervalSelectionActivity>(
+      makeUniqueNoThrow<IntervalSelectionActivity>(
           renderer, mappedInput, "LineSpacingInterval", StrId::STR_LINE_SPACING, StrId::STR_LINE_SPACING_STEP_HINT,
           SETTINGS.lineSpacingPercent, CrossPointSettings::MIN_LINE_SPACING_PERCENT,
           CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5, 25, StrId::STR_LINE_SPACING_VALUE_FORMAT, false, true),

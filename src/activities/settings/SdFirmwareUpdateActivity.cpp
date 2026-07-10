@@ -25,7 +25,7 @@ void SdFirmwareUpdateActivity::onEnter() {
 void SdFirmwareUpdateActivity::launchPicker() {
   // Reuse the standard file browser, restricted to .bin files only.
   startActivityForResult(
-      std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", FileBrowserActivity::Mode::PickFirmware),
+      makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, "/", FileBrowserActivity::Mode::PickFirmware),
       [this](const ActivityResult& result) { onPickerResult(result); });
 }
 
@@ -123,7 +123,7 @@ void SdFirmwareUpdateActivity::promptConfirmation() {
   const auto pos = body.find_last_of('/');
   if (pos != std::string::npos) body = body.substr(pos + 1);
 
-  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, body),
+  startActivityForResult(makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, heading, body),
                          [this](const ActivityResult& result) { onConfirmationResult(result); });
 }
 

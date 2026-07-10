@@ -543,7 +543,7 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
   };
 
   startActivityForResult(
-      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
       std::move(handler));
 }
 
@@ -578,7 +578,7 @@ void HomeActivity::openSleepMoveKeypad() {
   // safe; bigger cleanups just take a couple of keypad rounds.
   constexpr long kMaxMovePerAction = 256;
   const long maxN = std::min(sleepImageCount, kMaxMovePerAction);
-  auto keyboard = std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_MOVE_SLEEP_HOW_MANY),
+  auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_MOVE_SLEEP_HOW_MANY),
                                                           std::string(), /*maxLength=*/5, InputType::Text);
   startActivityForResult(std::move(keyboard), [this, maxN](const ActivityResult& res) {
     if (res.isCancelled) return;

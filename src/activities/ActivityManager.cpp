@@ -157,6 +157,10 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
 }
 
 void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  if (!newActivity) {
+    LOG_ERR("ACT", "OOM: replacement activity was not started");
+    return;
+  }
   // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
@@ -171,48 +175,48 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
 }
 
 void ActivityManager::goToFileTransfer() {
-  replaceActivity(std::make_unique<CrossPointWebServerActivity>(renderer, mappedInput));
+  replaceActivity(makeUniqueNoThrow<CrossPointWebServerActivity>(renderer, mappedInput));
 }
 
-void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
+void ActivityManager::goToSettings() { replaceActivity(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput)); }
 
 void ActivityManager::goToFileBrowser(std::string path) {
-  replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
+  replaceActivity(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
 void ActivityManager::goToQRShare(std::string path) {
-  replaceActivity(std::make_unique<QRShareActivity>(renderer, mappedInput, std::move(path)));
+  replaceActivity(makeUniqueNoThrow<QRShareActivity>(renderer, mappedInput, std::move(path)));
 }
 
 void ActivityManager::goToRecentBooks() {
-  replaceActivity(std::make_unique<RecentBooksActivity>(renderer, mappedInput));
+  replaceActivity(makeUniqueNoThrow<RecentBooksActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToBrowser() {
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
   if (servers.size() == 1) {
-    replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
+    replaceActivity(makeUniqueNoThrow<OpdsBookBrowserActivity>(renderer, mappedInput, servers[0]));
   } else {
-    replaceActivity(std::make_unique<OpdsServerListActivity>(renderer, mappedInput, true));
+    replaceActivity(makeUniqueNoThrow<OpdsServerListActivity>(renderer, mappedInput, true));
   }
 }
 
 void ActivityManager::goToReader(std::string path) {
-  replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path)));
+  replaceActivity(makeUniqueNoThrow<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {
-  replaceActivity(std::make_unique<SleepActivity>(renderer, mappedInput, fromTimeout));
+  replaceActivity(makeUniqueNoThrow<SleepActivity>(renderer, mappedInput, fromTimeout));
   loop();  // Important: sleep screen must be rendered immediately, the caller will go to sleep right after this returns
 }
 
 void ActivityManager::goToBoot(std::string wallpaperPath) {
-  replaceActivity(std::make_unique<BootActivity>(renderer, mappedInput, std::move(wallpaperPath)));
+  replaceActivity(makeUniqueNoThrow<BootActivity>(renderer, mappedInput, std::move(wallpaperPath)));
 }
 
 void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::Style style) {
-  replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
+  replaceActivity(makeUniqueNoThrow<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
@@ -232,11 +236,19 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
-  replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInput, initialMenuItem));
+  replaceActivity(makeUniqueNoThrow<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
-void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
+void ActivityManager::goToCrashReport() { replaceActivity(makeUniqueNoThrow<CrashActivity>(renderer, mappedInput)); }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
+  if (!activity) {
+    LOG_ERR("ACT", "OOM: activity was not pushed");
+    return;
+  }
+  if (stackActivities.size() >= MAX_ACTIVITY_STACK_DEPTH) {
+    LOG_ERR("ACT", "Activity stack depth limit reached: %u", static_cast<unsigned>(MAX_ACTIVITY_STACK_DEPTH));
+    return;
+  }
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");

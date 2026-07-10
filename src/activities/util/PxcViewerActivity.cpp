@@ -82,7 +82,7 @@ void PxcViewerActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     const std::string name = filePath.substr(filePath.rfind('/') + 1);
     startActivityForResult(
-        std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), name),
+        makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "), name),
         [this](const ActivityResult& res) {
           if (!res.isCancelled) {
             if (Storage.remove(filePath.c_str())) {

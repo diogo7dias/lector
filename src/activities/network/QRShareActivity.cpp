@@ -62,7 +62,7 @@ void QRShareActivity::onEnter() {
   // Connect first via the standard WiFi picker, then start the server on return.
   WiFi.mode(WIFI_STA);
   state = State::WIFI_SELECTION;
-  startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
+  startActivityForResult(makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput),
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 

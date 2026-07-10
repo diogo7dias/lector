@@ -117,7 +117,7 @@ void RecentBooksActivity::promptRemoveBook(const std::string& path, const std::s
   };
 
   startActivityForResult(
-      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_REMOVE_FROM_RECENTS), title),
       std::move(handler));
 }
 
