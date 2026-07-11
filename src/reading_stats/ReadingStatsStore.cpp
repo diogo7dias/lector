@@ -12,6 +12,7 @@ DecodeResult ReadingStatsStore::readOne(const std::string& path, ReadingStatsDat
 }
 
 StatsLoadResult ReadingStatsStore::load(const std::string& path, ReadingStatsData& stats) {
+  if (recoveredBackupPath_ == path) recoveredBackupPath_.clear();
   stats = {};
   bool found = false;
   const DecodeResult primary = readOne(path, stats, found);
@@ -27,6 +28,7 @@ StatsLoadResult ReadingStatsStore::load(const std::string& path, ReadingStatsDat
   const DecodeResult backupResult = readOne(path + ".bak", backup, backupFound);
   if (backupResult == DecodeResult::Ok) {
     stats = backup;
+    recoveredBackupPath_ = path;
     return StatsLoadResult::RecoveredBackup;
   }
   if (backupResult == DecodeResult::NewerVersion) {
@@ -53,29 +55,41 @@ bool ReadingStatsStore::save(const std::string& path, const ReadingStatsData& st
     return false;
   }
 
-  if (files_.exists(backupPath) && !files_.remove(backupPath)) {
-    files_.remove(tempPath);
-    return false;
-  }
-  const bool hadOriginal = files_.exists(path);
-  if (hadOriginal && !files_.rename(path, backupPath)) {
-    files_.remove(tempPath);
-    return false;
+  const bool preserveRecoveredBackup = recoveredBackupPath_ == path;
+  bool hadOriginal = files_.exists(path);
+  if (preserveRecoveredBackup) {
+    if (hadOriginal && !files_.remove(path)) {
+      files_.remove(tempPath);
+      return false;
+    }
+    hadOriginal = false;
+  } else {
+    if (files_.exists(backupPath) && !files_.remove(backupPath)) {
+      files_.remove(tempPath);
+      return false;
+    }
+    if (hadOriginal && !files_.rename(path, backupPath)) {
+      files_.remove(tempPath);
+      return false;
+    }
   }
   if (!files_.rename(tempPath, path)) {
     if (hadOriginal && files_.exists(backupPath) && !files_.exists(path)) files_.rename(backupPath, path);
     files_.remove(tempPath);
     return false;
   }
+  recoveredBackupPath_.clear();
   return true;
 }
 
-bool ReadingStatsStore::reset(const std::string& path) {
+bool ReadingStatsStore::reset(const std::string& path, const ReadingStatsData& replacement) {
   if (blockedNewerPath_ == path) return false;
   if (files_.exists(path) && !files_.remove(path)) return false;
   if (files_.exists(path + ".bak") && !files_.remove(path + ".bak")) return false;
   if (files_.exists(path + ".tmp") && !files_.remove(path + ".tmp")) return false;
-  return save(path, {});
+  const bool reset = save(path, replacement);
+  if (reset) recoveredBackupPath_.clear();
+  return reset;
 }
 
 }  // namespace reading_stats

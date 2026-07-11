@@ -70,6 +70,7 @@ class ReadingStatsTracker {
 
 struct ReadingStatsData {
   uint32_t totalSessions = 0;
+  uint32_t resetEpoch = 0;
   uint32_t totalReadingSeconds = 0;
   uint32_t totalPagesTurned = 0;
   uint32_t completedBooks = 0;
@@ -84,6 +85,7 @@ struct ReadingStatsData {
   std::array<uint8_t, kReadingHistoryBytes> readingHistoryBits{};
   uint16_t longestReadingStreak = 0;
   bool completed = false;
+  bool completionCredited = false;
 
   void apply(const SessionResult& result);
   void recordForwardPage(uint32_t seconds);
@@ -97,8 +99,8 @@ enum class DecodeResult : uint8_t { Ok, Invalid, NewerVersion };
 
 class ReadingStatsCodec {
  public:
-  static constexpr size_t kEncodedSize = 176;
-  static constexpr uint8_t version() { return 1; }
+  static constexpr size_t kEncodedSize = 180;
+  static constexpr uint8_t version() { return 2; }
   static constexpr size_t encodedSize() { return kEncodedSize; }
 
   using Encoded = std::array<uint8_t, kEncodedSize>;

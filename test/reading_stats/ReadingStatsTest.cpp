@@ -63,9 +63,10 @@ TEST(ReadingStatsData, AppliesSessionWithSaturatingCounters) {
   EXPECT_EQ(data.totalSessions, std::numeric_limits<uint32_t>::max());
 }
 
-TEST(ReadingStatsCodec, RoundTripsEveryVersionOneField) {
+TEST(ReadingStatsCodec, RoundTripsEveryCurrentVersionField) {
   ReadingStatsData input;
   input.totalSessions = 12;
+  input.resetEpoch = 9;
   input.totalReadingSeconds = 34'567;
   input.totalPagesTurned = 890;
   input.completedBooks = 4;
@@ -80,6 +81,7 @@ TEST(ReadingStatsCodec, RoundTripsEveryVersionOneField) {
   input.readingHistoryBits[0] = 0b10100101;
   input.longestReadingStreak = 8;
   input.completed = true;
+  input.completionCredited = true;
 
   const auto bytes = ReadingStatsCodec::encode(input);
   ReadingStatsData output;
@@ -95,6 +97,33 @@ TEST(ReadingStatsCodec, RejectsCorruptAndNewerFiles) {
   auto newerFile = shortFile;
   newerFile[0] = ReadingStatsCodec::version() + 1;
   EXPECT_EQ(ReadingStatsCodec::decode(newerFile.data(), newerFile.size(), output), DecodeResult::NewerVersion);
+}
+
+TEST(ReadingStatsCodec, MigratesLegacyVersionOneFiles) {
+  std::array<uint8_t, 176> legacy{};
+  legacy[0] = 1;
+  legacy[1] = 1;
+  const auto writeLegacy32 = [&legacy](const size_t offset, const uint32_t value) {
+    legacy[offset] = static_cast<uint8_t>(value);
+    legacy[offset + 1] = static_cast<uint8_t>(value >> 8);
+    legacy[offset + 2] = static_cast<uint8_t>(value >> 16);
+    legacy[offset + 3] = static_cast<uint8_t>(value >> 24);
+  };
+  writeLegacy32(2, 7);
+  writeLegacy32(6, 3'600);
+  writeLegacy32(10, 42);
+  writeLegacy32(14, 3);
+
+  ReadingStatsData migrated;
+  ASSERT_EQ(ReadingStatsCodec::decode(legacy.data(), legacy.size(), migrated), DecodeResult::Ok);
+  EXPECT_EQ(migrated.totalSessions, 7u);
+  EXPECT_EQ(migrated.totalReadingSeconds, 3'600u);
+  EXPECT_EQ(migrated.totalPagesTurned, 42u);
+  EXPECT_EQ(migrated.completedBooks, 3u);
+  EXPECT_TRUE(migrated.completed);
+  EXPECT_TRUE(migrated.completionCredited);
+  EXPECT_EQ(migrated.resetEpoch, 0u);
+  EXPECT_EQ(ReadingStatsCodec::encode(migrated)[0], 2u);
 }
 
 TEST(ReadingStatsData, BuildsStableRunningPagePace) {
@@ -138,6 +167,7 @@ class MemoryStatsFiles final : public StatsFiles {
  public:
   std::unordered_map<std::string, std::vector<uint8_t>> files;
   std::string failNextWritePath;
+  std::string failNextRenameFrom;
 
   bool read(const std::string& path, uint8_t* destination, size_t capacity, size_t& size) override {
     const auto found = files.find(path);
@@ -159,6 +189,10 @@ class MemoryStatsFiles final : public StatsFiles {
   bool exists(const std::string& path) const override { return files.contains(path); }
   bool remove(const std::string& path) override { return files.erase(path) > 0; }
   bool rename(const std::string& from, const std::string& to) override {
+    if (from == failNextRenameFrom) {
+      failNextRenameFrom.clear();
+      return false;
+    }
     auto node = files.extract(from);
     if (node.empty()) return false;
     node.key() = to;
@@ -199,6 +233,27 @@ TEST(ReadingStatsStore, RecoversFromBackupWhenMainIsCorrupt) {
   EXPECT_EQ(loaded.totalReadingSeconds, 1234u);
 }
 
+TEST(ReadingStatsStore, KeepsRecoveredBackupWhenReplacementRenameFails) {
+  MemoryStatsFiles files;
+  ReadingStatsStore store(files);
+  ReadingStatsData expected;
+  expected.totalReadingSeconds = 1234;
+  const auto valid = ReadingStatsCodec::encode(expected);
+  files.files["/stats.bin"] = {1, 2, 3};
+  files.files["/stats.bin.bak"] = {valid.begin(), valid.end()};
+
+  ReadingStatsData recovered;
+  ASSERT_EQ(store.load("/stats.bin", recovered), StatsLoadResult::RecoveredBackup);
+  recovered.totalReadingSeconds = 5678;
+  files.failNextRenameFrom = "/stats.bin.tmp";
+  EXPECT_FALSE(store.save("/stats.bin", recovered));
+
+  ReadingStatsStore reopened(files);
+  ReadingStatsData loaded;
+  EXPECT_EQ(reopened.load("/stats.bin", loaded), StatsLoadResult::RecoveredBackup);
+  EXPECT_EQ(loaded.totalReadingSeconds, 1234u);
+}
+
 TEST(ReadingStatsStore, NeverOverwritesNewerStatsFile) {
   MemoryStatsFiles files;
   ReadingStatsStore store(files);
@@ -230,9 +285,9 @@ TEST(ReaderStatsSession, CommitsSameTruthToBookAndGlobalFiles) {
   ReaderStatsSession session(files);
   const LocalDateTime mondayMorning{.valid = true, .dayIndex = 5'000, .dayOfWeek = 0, .hour = 9};
   session.begin("/book-cache", mondayMorning);
-  session.pageShown(1'000);
+  session.pageShown(1'000, mondayMorning);
   EXPECT_TRUE(session.forwardTurn(31'000));
-  session.pageShown(32'000);
+  session.pageShown(32'000, {.valid = true, .dayIndex = 5'000, .dayOfWeek = 0, .hour = 9, .second = 31});
   session.pause(62'000);
   ASSERT_TRUE(session.finish());
 
@@ -269,11 +324,28 @@ TEST(ReaderStatsSession, CompletesBookAndGlobalCountOnlyOnce) {
   EXPECT_EQ(reopened.globalStats().completedBooks, 1u);
 }
 
+TEST(ReaderStatsSession, ResetBookDoesNotLetCompletionInflateGlobalCount) {
+  MemoryStatsFiles files;
+  ReaderStatsSession first(files);
+  first.begin("/book-cache", {});
+  first.markCompleted(123);
+  ASSERT_TRUE(first.finish());
+
+  ReaderStatsSession reset(files);
+  reset.begin("/book-cache", {});
+  ASSERT_TRUE(reset.resetBook({}));
+  reset.markCompleted(124);
+  ASSERT_TRUE(reset.finish());
+
+  EXPECT_EQ(reset.globalStats().completedBooks, 1u);
+}
+
 TEST(ReaderStatsSession, LiveSnapshotIncludesUnsavedSessionWithoutWriting) {
   MemoryStatsFiles files;
   ReaderStatsSession session(files);
-  session.begin("/book-cache", {.valid = true, .dayIndex = 7000, .dayOfWeek = 2, .hour = 18});
-  session.pageShown(1'000);
+  const LocalDateTime start{.valid = true, .dayIndex = 7000, .dayOfWeek = 2, .hour = 18};
+  session.begin("/book-cache", start);
+  session.pageShown(1'000, start);
   session.pause(121'000);
 
   const auto book = session.bookSnapshot();
@@ -333,6 +405,44 @@ TEST(ReaderStatsSession, ResetAllClearsBookAndGlobalTruth) {
   ASSERT_TRUE(session.resetAll({}));
   EXPECT_EQ(session.bookSnapshot().totalReadingSeconds, 0u);
   EXPECT_EQ(session.globalSnapshot().totalReadingSeconds, 0u);
+}
+
+TEST(ReaderStatsSession, ResetAllInvalidatesStatsForOtherBooks) {
+  MemoryStatsFiles files;
+  ReaderStatsSession other(files);
+  other.begin("/other-cache", {});
+  other.pageShown(1'000);
+  other.pause(61'000);
+  ASSERT_TRUE(other.finish());
+
+  ReaderStatsSession current(files);
+  current.begin("/current-cache", {});
+  ASSERT_TRUE(current.resetAll({}));
+
+  ReaderStatsSession reopenedOther(files);
+  reopenedOther.begin("/other-cache", {});
+  EXPECT_EQ(reopenedOther.bookSnapshot().totalReadingSeconds, 0u);
+  EXPECT_EQ(reopenedOther.globalSnapshot().totalReadingSeconds, 0u);
+}
+
+TEST(ReaderStatsSession, AttributesEachPageDwellToItsRealResumeTime) {
+  MemoryStatsFiles files;
+  ReaderStatsSession session(files);
+  const LocalDateTime mondayMorning{
+      .valid = true, .dayIndex = 5'000, .dayOfWeek = 0, .hour = 11, .minute = 59, .second = 30};
+  const LocalDateTime tuesdayEvening{.valid = true, .dayIndex = 5'001, .dayOfWeek = 1, .hour = 18};
+  session.begin("/book-cache", mondayMorning);
+  session.pageShown(1'000, mondayMorning);
+  session.pause(31'000);
+  session.pageShown(100'000, tuesdayEvening);
+  session.pause(130'000);
+  ASSERT_TRUE(session.finish());
+
+  const auto& stats = session.bookStats();
+  EXPECT_EQ(stats.timeOfDaySeconds[static_cast<size_t>(TimeOfDay::Morning)], 30u);
+  EXPECT_EQ(stats.timeOfDaySeconds[static_cast<size_t>(TimeOfDay::Evening)], 30u);
+  EXPECT_EQ(stats.dayOfWeekSeconds[0], 30u);
+  EXPECT_EQ(stats.dayOfWeekSeconds[1], 30u);
 }
 
 TEST(ReadingStatsCalendar, RoundTripsLeapDayAndComputesMondayIndex) {

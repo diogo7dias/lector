@@ -365,6 +365,7 @@ void TxtReaderActivity::render(RenderLock&&) {
   if (!txt) {
     return;
   }
+  if (statsTrackingActive) statsSession.pause(millis());
 
   // Initialize reader if not done
   if (!initialized) {
@@ -393,7 +394,11 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   // Save progress
   saveProgress();
-  if (statsTrackingActive) statsSession.pageShown(millis());
+  if (statsTrackingActive) {
+    const auto now = reading_stats::currentLocalDateTime();
+    if (currentPage + 1 == totalPages) statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+    statsSession.pageShown(millis(), now);
+  }
 }
 
 void TxtReaderActivity::openReadingStats() {

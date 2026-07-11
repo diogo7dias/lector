@@ -14,27 +14,46 @@ void ReaderStatsSession::begin(const std::string& bookCachePath, const LocalDate
   globalStats_ = {};
   bookStore_.load(bookStatsPath_, bookStats_);
   globalStore_.load(globalPath(), globalStats_);
+  if (bookStats_.resetEpoch != globalStats_.resetEpoch) {
+    bookStats_ = {};
+    bookStats_.resetEpoch = globalStats_.resetEpoch;
+  }
   tracker_ = ReadingStatsTracker(config_);
   begun_ = true;
   finished_ = false;
   sessionApplied_ = false;
   saved_ = false;
+  pageActive_ = false;
 }
 
-void ReaderStatsSession::pageShown(const uint32_t nowMs) {
-  if (begun_ && !finished_) tracker_.startPage(nowMs);
+void ReaderStatsSession::pageShown(const uint32_t nowMs, const LocalDateTime localPageStart) {
+  if (!begun_ || finished_) return;
+  if (!pageActive_) {
+    pageLocalStart_ = localPageStart;
+    pageActive_ = true;
+  }
+  tracker_.startPage(nowMs);
 }
 
 bool ReaderStatsSession::forwardTurn(const uint32_t nowMs) {
   if (!begun_ || finished_) return false;
   const uint32_t before = tracker_.session().readingSeconds;
   const bool accepted = tracker_.forwardTurn(nowMs);
-  if (accepted) bookStats_.recordForwardPage(tracker_.session().readingSeconds - before);
+  pageActive_ = false;
+  if (accepted) {
+    const uint32_t seconds = tracker_.session().readingSeconds - before;
+    bookStats_.recordForwardPage(seconds);
+    recordAcceptedSpan(seconds);
+  }
   return accepted;
 }
 
 void ReaderStatsSession::pause(const uint32_t nowMs) {
-  if (begun_ && !finished_) tracker_.pause(nowMs);
+  if (!begun_ || finished_) return;
+  const uint32_t before = tracker_.session().readingSeconds;
+  tracker_.pause(nowMs);
+  pageActive_ = false;
+  recordAcceptedSpan(tracker_.session().readingSeconds - before);
 }
 
 bool ReaderStatsSession::finish() {
@@ -44,11 +63,6 @@ bool ReaderStatsSession::finish() {
     const SessionResult result = tracker_.finish();
     bookStats_.apply(result);
     globalStats_.apply(result);
-    if (localStart_.valid && result.readingSeconds > 0) {
-      bookStats_.recordReadingSpan(localStart_, result.readingSeconds);
-      globalStats_.recordReadingSpan(localStart_, result.readingSeconds);
-      if (bookStats_.startDay == 0 && result.readingSeconds >= 120) bookStats_.startDay = localStart_.dayIndex;
-    }
     sessionApplied_ = true;
     finished_ = true;
   }
@@ -60,21 +74,33 @@ void ReaderStatsSession::markCompleted(const uint32_t dayIndex) {
   if (!begun_ || bookStats_.completed) return;
   bookStats_.completed = true;
   bookStats_.finishedDay = dayIndex;
-  if (globalStats_.completedBooks != std::numeric_limits<uint32_t>::max()) ++globalStats_.completedBooks;
+  if (!bookStats_.completionCredited) {
+    if (globalStats_.completedBooks != std::numeric_limits<uint32_t>::max()) ++globalStats_.completedBooks;
+    bookStats_.completionCredited = true;
+  }
 }
 
 bool ReaderStatsSession::resetBook(const LocalDateTime newStart) {
-  if (!finish() || !bookStore_.reset(bookStatsPath_)) return false;
-  bookStats_ = {};
+  if (!finish()) return false;
+  ReadingStatsData replacement;
+  replacement.resetEpoch = globalStats_.resetEpoch;
+  replacement.completionCredited = bookStats_.completionCredited || bookStats_.completed;
+  if (!bookStore_.reset(bookStatsPath_, replacement)) return false;
+  bookStats_ = replacement;
   restartTracker(newStart);
   return true;
 }
 
 bool ReaderStatsSession::resetAll(const LocalDateTime newStart) {
   if (!finish()) return false;
-  if (!globalStore_.reset(globalPath()) || !bookStore_.reset(bookStatsPath_)) return false;
-  bookStats_ = {};
-  globalStats_ = {};
+  const uint32_t nextEpoch =
+      globalStats_.resetEpoch == std::numeric_limits<uint32_t>::max() ? 1u : globalStats_.resetEpoch + 1u;
+  ReadingStatsData replacement;
+  replacement.resetEpoch = nextEpoch;
+  if (!globalStore_.reset(globalPath(), replacement)) return false;
+  bookStore_.reset(bookStatsPath_, replacement);
+  bookStats_ = replacement;
+  globalStats_ = replacement;
   restartTracker(newStart);
   return true;
 }
@@ -85,6 +111,16 @@ void ReaderStatsSession::restartTracker(const LocalDateTime newStart) {
   finished_ = false;
   sessionApplied_ = false;
   saved_ = false;
+  pageActive_ = false;
+}
+
+void ReaderStatsSession::recordAcceptedSpan(const uint32_t seconds) {
+  if (seconds == 0 || !pageLocalStart_.valid) return;
+  bookStats_.recordReadingSpan(pageLocalStart_, seconds);
+  globalStats_.recordReadingSpan(pageLocalStart_, seconds);
+  if (bookStats_.startDay == 0 && tracker_.session().readingSeconds >= 120) {
+    bookStats_.startDay = localStart_.valid ? localStart_.dayIndex : pageLocalStart_.dayIndex;
+  }
 }
 
 ReadingStatsData ReaderStatsSession::bookSnapshot() const {
@@ -93,10 +129,6 @@ ReadingStatsData ReaderStatsSession::bookSnapshot() const {
   SessionResult live = tracker_.session();
   live.countsAsSession = live.readingSeconds >= config_.minimumSessionSeconds;
   snapshot.apply(live);
-  if (localStart_.valid && tracker_.session().readingSeconds > 0) {
-    snapshot.recordReadingSpan(localStart_, tracker_.session().readingSeconds);
-    if (snapshot.startDay == 0 && tracker_.session().readingSeconds >= 120) snapshot.startDay = localStart_.dayIndex;
-  }
   return snapshot;
 }
 
@@ -106,9 +138,6 @@ ReadingStatsData ReaderStatsSession::globalSnapshot() const {
   SessionResult live = tracker_.session();
   live.countsAsSession = live.readingSeconds >= config_.minimumSessionSeconds;
   snapshot.apply(live);
-  if (localStart_.valid && tracker_.session().readingSeconds > 0) {
-    snapshot.recordReadingSpan(localStart_, tracker_.session().readingSeconds);
-  }
   return snapshot;
 }
 

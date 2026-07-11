@@ -528,6 +528,7 @@ void EpubReaderActivity::loop() {
   }
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
+    if (statsTrackingActive) statsSession.pause(millis());
     if (!nextTriggered && section && section->currentPage > 0) {
       section->currentPage = 0;
       requestUpdate();
@@ -954,6 +955,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   if (SETTINGS.orientation == orientation) {
     return;
   }
+  if (statsTrackingActive) statsSession.pause(millis());
 
   // Preserve current reading position so we can restore after reflow.
   {
@@ -1051,6 +1053,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
   }
+  if (statsTrackingActive) statsSession.pause(millis());
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;
@@ -1279,7 +1282,14 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
   }
-  if (statsTrackingActive && footnoteDepth == 0) statsSession.pageShown(millis());
+  if (statsTrackingActive && footnoteDepth == 0) {
+    const auto now = reading_stats::currentLocalDateTime();
+    if (section && currentSpineIndex == epub->getSpineItemsCount() - 1 &&
+        section->currentPage == section->pageCount - 1) {
+      statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+    }
+    statsSession.pageShown(millis(), now);
+  }
 }
 
 void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {

@@ -248,8 +248,8 @@ bool HalClock::syncFromNTP() {
   constexpr int maxAttempts = 50;
   for (int i = 0; i < maxAttempts; i++) {
     if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-      // System clock is now valid. On X3, also push H:M:S to the DS3231 so the
-      // on-screen display clock survives reboots (the date is not stored there).
+      // System clock is now valid. On X3, also push the full UTC date and time to
+      // the DS3231 so both the display clock and reading-stat dates survive reboots.
       if (_available) {
         time_t now = time(nullptr);
         struct tm timeinfo;

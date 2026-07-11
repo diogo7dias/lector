@@ -256,8 +256,11 @@ void BookStatsActivity::drawAllBooks(const Rect& screen, const int contentTop, c
   drawMetricGrid(Rect{screen.x, y, screen.width, gridH}, values);
   y += gridH + 4;
 
-  char streak[24];
-  snprintf(streak, sizeof(streak), "%s: %u", tr(STR_STATS_STREAK),
+  const auto now = reading_stats::currentLocalDateTime();
+  const uint32_t today = now.valid ? now.dayIndex : globalStats_.readingHistoryAnchorDay;
+  char streak[40];
+  snprintf(streak, sizeof(streak), "%s: %u | %s: %u", tr(STR_STATS_STREAK),
+           static_cast<unsigned>(globalStats_.currentStreak(today)), tr(STR_STATS_BEST),
            static_cast<unsigned>(globalStats_.longestReadingStreak));
   renderer.drawCenteredText(UI_10_FONT_ID, y, streak, true, EpdFontFamily::BOLD);
   y += renderer.getLineHeight(UI_10_FONT_ID) + 3;

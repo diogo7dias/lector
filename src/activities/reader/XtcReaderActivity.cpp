@@ -192,6 +192,7 @@ void XtcReaderActivity::render(RenderLock&&) {
   if (!xtc) {
     return;
   }
+  if (statsTrackingActive) statsSession.pause(millis());
 
   // Bounds check
   if (currentPage >= xtc->getPageCount()) {
@@ -206,7 +207,11 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   renderPage();
   saveProgress();
-  if (statsTrackingActive) statsSession.pageShown(millis());
+  if (statsTrackingActive) {
+    const auto now = reading_stats::currentLocalDateTime();
+    if (currentPage + 1 == xtc->getPageCount()) statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+    statsSession.pageShown(millis(), now);
+  }
 }
 
 void XtcReaderActivity::openReadingStats() {

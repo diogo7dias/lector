@@ -26,13 +26,14 @@ class ReadingStatsStore {
 
   StatsLoadResult load(const std::string& path, ReadingStatsData& stats);
   bool save(const std::string& path, const ReadingStatsData& stats);
-  bool reset(const std::string& path);
+  bool reset(const std::string& path, const ReadingStatsData& replacement = {});
 
  private:
   DecodeResult readOne(const std::string& path, ReadingStatsData& stats, bool& found);
 
   StatsFiles& files_;
   std::string blockedNewerPath_;
+  std::string recoveredBackupPath_;
 };
 
 }  // namespace reading_stats

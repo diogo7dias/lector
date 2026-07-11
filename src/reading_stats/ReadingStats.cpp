@@ -253,47 +253,73 @@ uint16_t ReadingStatsData::currentStreak(const uint32_t todayDay) const {
 ReadingStatsCodec::Encoded ReadingStatsCodec::encode(const ReadingStatsData& stats) {
   Encoded bytes{};
   bytes[0] = version();
-  bytes[1] = stats.completed ? 1 : 0;
-  write32(bytes.data(), 2, stats.totalSessions);
-  write32(bytes.data(), 6, stats.totalReadingSeconds);
-  write32(bytes.data(), 10, stats.totalPagesTurned);
-  write32(bytes.data(), 14, stats.completedBooks);
-  write16(bytes.data(), 18, stats.averageSecondsPerPage);
-  write16(bytes.data(), 20, stats.paceSampleCount);
-  write32(bytes.data(), 22, stats.estimatedTimeLeftSeconds);
-  write32(bytes.data(), 26, stats.startDay);
-  write32(bytes.data(), 30, stats.finishedDay);
+  bytes[1] = (stats.completed ? 1u : 0u) | (stats.completionCredited ? 2u : 0u);
+  write32(bytes.data(), 2, stats.resetEpoch);
+  write32(bytes.data(), 6, stats.totalSessions);
+  write32(bytes.data(), 10, stats.totalReadingSeconds);
+  write32(bytes.data(), 14, stats.totalPagesTurned);
+  write32(bytes.data(), 18, stats.completedBooks);
+  write16(bytes.data(), 22, stats.averageSecondsPerPage);
+  write16(bytes.data(), 24, stats.paceSampleCount);
+  write32(bytes.data(), 26, stats.estimatedTimeLeftSeconds);
+  write32(bytes.data(), 30, stats.startDay);
+  write32(bytes.data(), 34, stats.finishedDay);
   for (size_t i = 0; i < stats.timeOfDaySeconds.size(); ++i)
-    write32(bytes.data(), 34 + i * 4, stats.timeOfDaySeconds[i]);
+    write32(bytes.data(), 38 + i * 4, stats.timeOfDaySeconds[i]);
   for (size_t i = 0; i < stats.dayOfWeekSeconds.size(); ++i)
-    write32(bytes.data(), 50 + i * 4, stats.dayOfWeekSeconds[i]);
-  write32(bytes.data(), 78, stats.readingHistoryAnchorDay);
-  std::copy(stats.readingHistoryBits.begin(), stats.readingHistoryBits.end(), bytes.begin() + 82);
-  write16(bytes.data(), 174, stats.longestReadingStreak);
+    write32(bytes.data(), 54 + i * 4, stats.dayOfWeekSeconds[i]);
+  write32(bytes.data(), 82, stats.readingHistoryAnchorDay);
+  std::copy(stats.readingHistoryBits.begin(), stats.readingHistoryBits.end(), bytes.begin() + 86);
+  write16(bytes.data(), 178, stats.longestReadingStreak);
   return bytes;
 }
 
 DecodeResult ReadingStatsCodec::decode(const uint8_t* bytes, const size_t size, ReadingStatsData& stats) {
-  if (bytes == nullptr || size != encodedSize()) return DecodeResult::Invalid;
+  if (bytes == nullptr || size == 0) return DecodeResult::Invalid;
   if (bytes[0] > version()) return DecodeResult::NewerVersion;
-  if (bytes[0] != version() || (bytes[1] & ~1u) != 0) return DecodeResult::Invalid;
+  if (bytes[0] == 1) {
+    static constexpr size_t kLegacyEncodedSize = 176;
+    if (size != kLegacyEncodedSize || (bytes[1] & ~1u) != 0) return DecodeResult::Invalid;
+    ReadingStatsData legacy;
+    legacy.completed = (bytes[1] & 1u) != 0;
+    legacy.completionCredited = legacy.completed;
+    legacy.totalSessions = read32(bytes, 2);
+    legacy.totalReadingSeconds = read32(bytes, 6);
+    legacy.totalPagesTurned = read32(bytes, 10);
+    legacy.completedBooks = read32(bytes, 14);
+    legacy.averageSecondsPerPage = read16(bytes, 18);
+    legacy.paceSampleCount = read16(bytes, 20);
+    legacy.estimatedTimeLeftSeconds = read32(bytes, 22);
+    legacy.startDay = read32(bytes, 26);
+    legacy.finishedDay = read32(bytes, 30);
+    for (size_t i = 0; i < legacy.timeOfDaySeconds.size(); ++i) legacy.timeOfDaySeconds[i] = read32(bytes, 34 + i * 4);
+    for (size_t i = 0; i < legacy.dayOfWeekSeconds.size(); ++i) legacy.dayOfWeekSeconds[i] = read32(bytes, 50 + i * 4);
+    legacy.readingHistoryAnchorDay = read32(bytes, 78);
+    std::copy(bytes + 82, bytes + 174, legacy.readingHistoryBits.begin());
+    legacy.longestReadingStreak = read16(bytes, 174);
+    stats = legacy;
+    return DecodeResult::Ok;
+  }
+  if (bytes[0] != version() || size != encodedSize() || (bytes[1] & ~3u) != 0) return DecodeResult::Invalid;
 
   ReadingStatsData decoded;
   decoded.completed = (bytes[1] & 1u) != 0;
-  decoded.totalSessions = read32(bytes, 2);
-  decoded.totalReadingSeconds = read32(bytes, 6);
-  decoded.totalPagesTurned = read32(bytes, 10);
-  decoded.completedBooks = read32(bytes, 14);
-  decoded.averageSecondsPerPage = read16(bytes, 18);
-  decoded.paceSampleCount = read16(bytes, 20);
-  decoded.estimatedTimeLeftSeconds = read32(bytes, 22);
-  decoded.startDay = read32(bytes, 26);
-  decoded.finishedDay = read32(bytes, 30);
-  for (size_t i = 0; i < decoded.timeOfDaySeconds.size(); ++i) decoded.timeOfDaySeconds[i] = read32(bytes, 34 + i * 4);
-  for (size_t i = 0; i < decoded.dayOfWeekSeconds.size(); ++i) decoded.dayOfWeekSeconds[i] = read32(bytes, 50 + i * 4);
-  decoded.readingHistoryAnchorDay = read32(bytes, 78);
-  std::copy(bytes + 82, bytes + 174, decoded.readingHistoryBits.begin());
-  decoded.longestReadingStreak = read16(bytes, 174);
+  decoded.completionCredited = (bytes[1] & 2u) != 0;
+  decoded.resetEpoch = read32(bytes, 2);
+  decoded.totalSessions = read32(bytes, 6);
+  decoded.totalReadingSeconds = read32(bytes, 10);
+  decoded.totalPagesTurned = read32(bytes, 14);
+  decoded.completedBooks = read32(bytes, 18);
+  decoded.averageSecondsPerPage = read16(bytes, 22);
+  decoded.paceSampleCount = read16(bytes, 24);
+  decoded.estimatedTimeLeftSeconds = read32(bytes, 26);
+  decoded.startDay = read32(bytes, 30);
+  decoded.finishedDay = read32(bytes, 34);
+  for (size_t i = 0; i < decoded.timeOfDaySeconds.size(); ++i) decoded.timeOfDaySeconds[i] = read32(bytes, 38 + i * 4);
+  for (size_t i = 0; i < decoded.dayOfWeekSeconds.size(); ++i) decoded.dayOfWeekSeconds[i] = read32(bytes, 54 + i * 4);
+  decoded.readingHistoryAnchorDay = read32(bytes, 82);
+  std::copy(bytes + 86, bytes + 178, decoded.readingHistoryBits.begin());
+  decoded.longestReadingStreak = read16(bytes, 178);
   stats = decoded;
   return DecodeResult::Ok;
 }

@@ -16,7 +16,7 @@ class ReaderStatsSession {
 
   void configure(TrackerConfig config) { config_ = config; }
   void begin(const std::string& bookCachePath, LocalDateTime localStart);
-  void pageShown(uint32_t nowMs);
+  void pageShown(uint32_t nowMs, LocalDateTime localPageStart = {});
   bool forwardTurn(uint32_t nowMs);
   void pause(uint32_t nowMs);
   bool finish();
@@ -32,6 +32,7 @@ class ReaderStatsSession {
 
  private:
   void restartTracker(LocalDateTime newStart);
+  void recordAcceptedSpan(uint32_t seconds);
 
   TrackerConfig config_;
   ReadingStatsStore bookStore_;
@@ -41,10 +42,12 @@ class ReaderStatsSession {
   ReadingStatsData globalStats_;
   std::string bookStatsPath_;
   LocalDateTime localStart_;
+  LocalDateTime pageLocalStart_;
   bool begun_ = false;
   bool finished_ = false;
   bool sessionApplied_ = false;
   bool saved_ = false;
+  bool pageActive_ = false;
 };
 
 }  // namespace reading_stats
