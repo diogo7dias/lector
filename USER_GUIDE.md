@@ -36,6 +36,7 @@ Welcome to the **CrossPoint** firmware. This guide outlines the hardware control
   - [5. Reader Menu](#5-reader-menu)
       - [5.1 Chapter Selection](#51-chapter-selection)
       - [5.2 Bookmarks](#52-bookmarks)
+      - [5.3 Reading Stats](#53-reading-stats)
   - [6. Current Limitations & Roadmap](#6-current-limitations--roadmap)
   - [7. Troubleshooting Issues & Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
 
@@ -290,6 +291,10 @@ The Settings screen allows you to configure the device's behavior. There are a f
 - **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
 
 - **Clear Reading Cache**: Clear the internal SD card cache.
+
+- **Track Reading Stats**: Record reading sessions, valid forward page turns, reading time, pace, and completion. Turning this off stops new tracking but keeps existing history visible.
+
+- **Reading Idle Limit**: Set the longest page dwell that counts as reading, from 30 seconds to 10 minutes. The default is 5 minutes.
 
 - **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
 
@@ -580,6 +585,7 @@ Available options include:
 
 - **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
 - **Footnotes** – Navigate to the footnotes for the current section *(only shown in books that contain footnotes)*.
+- **Reading Stats** – Open current-book stats, then move right to see all-books stats.
 - **Reading Orientation** – Cycle through screen orientations without leaving the reader.
 - **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
 - **Go to %** – Jump to a specific position in the book by percentage.
@@ -610,6 +616,19 @@ To create a bookmark, hold **Confirm** for about half a second while inside a bo
 To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
 
 Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
+
+### 5.3 Reading Stats
+
+Reading Stats has two pages:
+
+- **Current Book** shows progress, sessions, reading time, forward pages turned, average session, pages per minute, time left, start or finish date, time-of-day bars, and weekday activity.
+- **All Books** shows library-wide sessions, reading time, pages turned, average session, pages per minute, completed books, longest streak, time-of-day bars, and weekday activity.
+
+Open stats from an EPUB through **Reader Menu -> Reading Stats**. In an XTC book, hold **Confirm** for about 0.6 seconds. In a TXT book, press **Confirm**.
+
+Use **Right** to move from Current Book to All Books. Use **Left** or **Back** to return. Press **Confirm** on either page to reset that page's stats; a confirmation screen appears before deletion.
+
+Tracking counts only forward page turns after the page has stayed open for at least 2 seconds and no longer than the configured idle limit. A session counts after 1 minute of valid reading. Backward turns, menus, footnotes, sleep, and loading time are excluded. Reaching the real final page marks a book complete.
 
 ## 6. Current Limitations & Roadmap
 

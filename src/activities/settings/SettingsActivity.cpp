@@ -288,7 +288,7 @@ void SettingsActivity::toggleCurrentSetting() {
 
     startActivityForResult(
         makeUniqueNoThrow<SettingSelectActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)),
-                                                std::move(options), current, std::move(apply)),
+                                                 std::move(options), current, std::move(apply)),
         [this, sleepScreenChanged, quickResumeTimeoutChanged](const ActivityResult&) {
           syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
           SETTINGS.saveToFile();
@@ -541,6 +541,17 @@ void SettingsActivity::render(RenderLock&&) {
           } else if (setting.nameId == StrId::STR_LINE_SPACING ||
                      setting.nameId == StrId::STR_FIRST_LINE_INDENT_PERCENT) {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr)) + "%";
+          } else if (setting.nameId == StrId::STR_READING_IDLE_LIMIT) {
+            const unsigned seconds = static_cast<unsigned>(SETTINGS.readingStatsIdleSeconds());
+            char valueBuffer[32];
+            if (seconds < 60) {
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_STATS_SECONDS_VALUE), seconds);
+            } else if (seconds % 60 == 0) {
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_STATS_MINUTES_VALUE), seconds / 60);
+            } else {
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_STATS_MIN_SEC_VALUE), seconds / 60, seconds % 60);
+            }
+            valueText = valueBuffer;
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }

@@ -13,7 +13,23 @@ inline constexpr size_t kReadingHistoryDays = 730;
 
 enum class TimeOfDay : uint8_t { Morning = 0, Afternoon, Evening, Night };
 
+struct CalendarDate {
+  uint16_t year = 0;
+  uint8_t month = 0;
+  uint8_t day = 0;
+  bool operator==(const CalendarDate&) const = default;
+};
+
+struct LocalDateTime;
+
+bool dayIndexFromDate(CalendarDate date, uint32_t& dayIndex);
+bool dateFromDayIndex(uint32_t dayIndex, CalendarDate& date);
+uint8_t dayOfWeekForDayIndex(uint32_t dayIndex);
+bool makeLocalDateTime(CalendarDate utcDate, uint8_t hour, uint8_t minute, uint8_t second, int offsetQuarterHours,
+                       LocalDateTime& local);
+
 struct LocalDateTime {
+  bool valid = false;
   uint32_t dayIndex = 0;
   uint8_t dayOfWeek = 0;  // Monday = 0
   uint8_t hour = 0;

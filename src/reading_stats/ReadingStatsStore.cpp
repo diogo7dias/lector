@@ -71,7 +71,7 @@ bool ReadingStatsStore::save(const std::string& path, const ReadingStatsData& st
 }
 
 bool ReadingStatsStore::reset(const std::string& path) {
-  blockedNewerPath_.clear();
+  if (blockedNewerPath_ == path) return false;
   if (files_.exists(path) && !files_.remove(path)) return false;
   if (files_.exists(path + ".bak") && !files_.remove(path + ".bak")) return false;
   if (files_.exists(path + ".tmp") && !files_.remove(path + ".tmp")) return false;

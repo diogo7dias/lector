@@ -342,6 +342,13 @@ class CrossPointSettings {
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
   uint8_t moveFinishedToReadFolder = 0;
+  // Reading statistics. Idle threshold is stored in 10-second units so the
+  // full 30-second to 10-minute range fits in one persisted byte.
+  uint8_t readingStatsEnabled = 1;
+  uint8_t readingStatsIdleUnits = 30;
+  static constexpr uint8_t MIN_READING_STATS_IDLE_UNITS = 3;
+  static constexpr uint8_t MAX_READING_STATS_IDLE_UNITS = 60;
+  uint16_t readingStatsIdleSeconds() const { return static_cast<uint16_t>(readingStatsIdleUnits) * 10u; }
   // Image rendering mode in EPUB reader
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Tilt-based page turning (X3 only — requires QMI8658 IMU)

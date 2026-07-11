@@ -6,6 +6,8 @@
 
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
+#include "reading_stats/ReaderStatsSession.h"
+#include "reading_stats/SdStatsFiles.h"
 
 class TxtReaderActivity final : public Activity {
   std::unique_ptr<Txt> txt;
@@ -20,6 +22,9 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+  reading_stats::SdStatsFiles statsFiles;
+  reading_stats::ReaderStatsSession statsSession{statsFiles};
+  bool statsTrackingActive = false;
 
   // Cached settings for cache validation (different fonts/margins require re-indexing)
   int cachedFontId = 0;
@@ -40,6 +45,7 @@ class TxtReaderActivity final : public Activity {
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+  void openReadingStats();
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt)

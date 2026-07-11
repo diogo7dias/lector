@@ -14,6 +14,8 @@
 #include "HighlightController.h"
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
+#include "reading_stats/ReaderStatsSession.h"
+#include "reading_stats/SdStatsFiles.h"
 
 class Page;
 
@@ -54,6 +56,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingReadFolderMove = false;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
+  reading_stats::SdStatsFiles statsFiles;
+  reading_stats::ReaderStatsSession statsSession{statsFiles};
+  bool statsTrackingActive = false;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

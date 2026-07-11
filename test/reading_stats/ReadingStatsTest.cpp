@@ -7,7 +7,9 @@
 #include <unordered_map>
 #include <vector>
 
+#include "ReaderStatsSession.h"
 #include "ReadingStats.h"
+#include "ReadingStatsPresentation.h"
 #include "ReadingStatsStore.h"
 
 using namespace reading_stats;
@@ -37,6 +39,14 @@ TEST(ReadingStatsTracker, CountsSessionOnlyAfterOneMinuteOfValidReading) {
   fullSession.pause(61'000);
   EXPECT_TRUE(fullSession.finish().countsAsSession);
   EXPECT_EQ(fullSession.session().readingSeconds, 60u);
+}
+
+TEST(ReadingStatsTracker, SamePageRedrawDoesNotRestartActiveTimer) {
+  ReadingStatsTracker tracker;
+  tracker.startPage(1'000);
+  tracker.startPage(30'000);
+  EXPECT_TRUE(tracker.forwardTurn(61'000));
+  EXPECT_EQ(tracker.session().readingSeconds, 60u);
 }
 
 TEST(ReadingStatsData, AppliesSessionWithSaturatingCounters) {
@@ -99,7 +109,8 @@ TEST(ReadingStatsData, BuildsStableRunningPagePace) {
 
 TEST(ReadingStatsData, SplitsReadingAcrossTimeAndWeekdayBoundaries) {
   ReadingStatsData data;
-  const LocalDateTime sundayNight{.dayIndex = 9'000, .dayOfWeek = 6, .hour = 20, .minute = 59, .second = 30};
+  const LocalDateTime sundayNight{
+      .valid = true, .dayIndex = 9'000, .dayOfWeek = 6, .hour = 20, .minute = 59, .second = 30};
   data.recordReadingSpan(sundayNight, 8 * 3600 + 60);
 
   EXPECT_EQ(data.timeOfDaySeconds[static_cast<size_t>(TimeOfDay::Evening)], 30u);
@@ -126,6 +137,7 @@ TEST(ReadingStatsData, TracksCurrentAndLongestReadingStreak) {
 class MemoryStatsFiles final : public StatsFiles {
  public:
   std::unordered_map<std::string, std::vector<uint8_t>> files;
+  std::string failNextWritePath;
 
   bool read(const std::string& path, uint8_t* destination, size_t capacity, size_t& size) override {
     const auto found = files.find(path);
@@ -136,6 +148,10 @@ class MemoryStatsFiles final : public StatsFiles {
   }
 
   bool write(const std::string& path, const uint8_t* source, size_t size) override {
+    if (path == failNextWritePath) {
+      failNextWritePath.clear();
+      return false;
+    }
     files[path] = std::vector<uint8_t>(source, source + size);
     return true;
   }
@@ -194,4 +210,175 @@ TEST(ReadingStatsStore, NeverOverwritesNewerStatsFile) {
   EXPECT_EQ(store.load("/stats.bin", loaded), StatsLoadResult::NewerVersion);
   EXPECT_FALSE(store.save("/stats.bin", {}));
   EXPECT_EQ(files.files["/stats.bin"][0], ReadingStatsCodec::version() + 1);
+}
+
+TEST(ReadingStatsStore, ResetAlsoRefusesToOverwriteNewerStatsFile) {
+  MemoryStatsFiles files;
+  ReadingStatsStore store(files);
+  auto newer = ReadingStatsCodec::encode({});
+  newer[0] = ReadingStatsCodec::version() + 1;
+  files.files["/stats.bin"] = {newer.begin(), newer.end()};
+
+  ReadingStatsData loaded;
+  ASSERT_EQ(store.load("/stats.bin", loaded), StatsLoadResult::NewerVersion);
+  EXPECT_FALSE(store.reset("/stats.bin"));
+  EXPECT_EQ(files.files["/stats.bin"][0], ReadingStatsCodec::version() + 1);
+}
+
+TEST(ReaderStatsSession, CommitsSameTruthToBookAndGlobalFiles) {
+  MemoryStatsFiles files;
+  ReaderStatsSession session(files);
+  const LocalDateTime mondayMorning{.valid = true, .dayIndex = 5'000, .dayOfWeek = 0, .hour = 9};
+  session.begin("/book-cache", mondayMorning);
+  session.pageShown(1'000);
+  EXPECT_TRUE(session.forwardTurn(31'000));
+  session.pageShown(32'000);
+  session.pause(62'000);
+  ASSERT_TRUE(session.finish());
+
+  ReadingStatsStore store(files);
+  ReadingStatsData book;
+  ReadingStatsData global;
+  ASSERT_EQ(store.load("/book-cache/reading_stats.bin", book), StatsLoadResult::Ok);
+  ASSERT_EQ(store.load(ReaderStatsSession::globalPath(), global), StatsLoadResult::Ok);
+  EXPECT_EQ(book.totalSessions, 1u);
+  EXPECT_EQ(book.totalReadingSeconds, 60u);
+  EXPECT_EQ(book.totalPagesTurned, 1u);
+  EXPECT_EQ(book.averageSecondsPerPage, 30u);
+  EXPECT_EQ(global.totalSessions, 1u);
+  EXPECT_EQ(global.totalReadingSeconds, 60u);
+  EXPECT_EQ(global.totalPagesTurned, 1u);
+  EXPECT_EQ(global.timeOfDaySeconds[static_cast<size_t>(TimeOfDay::Morning)], 60u);
+}
+
+TEST(ReaderStatsSession, CompletesBookAndGlobalCountOnlyOnce) {
+  MemoryStatsFiles files;
+  ReaderStatsSession first(files);
+  first.begin("/book-cache", {});
+  first.markCompleted(123);
+  first.markCompleted(123);
+  ASSERT_TRUE(first.finish());
+
+  ReaderStatsSession reopened(files);
+  reopened.begin("/book-cache", {});
+  reopened.markCompleted(124);
+  ASSERT_TRUE(reopened.finish());
+
+  EXPECT_TRUE(reopened.bookStats().completed);
+  EXPECT_EQ(reopened.bookStats().finishedDay, 123u);
+  EXPECT_EQ(reopened.globalStats().completedBooks, 1u);
+}
+
+TEST(ReaderStatsSession, LiveSnapshotIncludesUnsavedSessionWithoutWriting) {
+  MemoryStatsFiles files;
+  ReaderStatsSession session(files);
+  session.begin("/book-cache", {.valid = true, .dayIndex = 7000, .dayOfWeek = 2, .hour = 18});
+  session.pageShown(1'000);
+  session.pause(121'000);
+
+  const auto book = session.bookSnapshot();
+  EXPECT_EQ(book.totalReadingSeconds, 120u);
+  EXPECT_EQ(book.totalSessions, 1u);
+  EXPECT_EQ(book.startDay, 7000u);
+  EXPECT_FALSE(files.exists("/book-cache/reading_stats.bin"));
+}
+
+TEST(ReaderStatsSession, RetriesFailedSaveWithoutApplyingSessionTwice) {
+  MemoryStatsFiles files;
+  ReaderStatsSession session(files);
+  session.begin("/book-cache", {});
+  session.pageShown(1'000);
+  session.pause(61'000);
+  files.failNextWritePath = std::string(ReaderStatsSession::globalPath()) + ".tmp";
+
+  EXPECT_FALSE(session.finish());
+  ASSERT_TRUE(session.finish());
+
+  ReadingStatsStore store(files);
+  ReadingStatsData book;
+  ReadingStatsData global;
+  ASSERT_EQ(store.load("/book-cache/reading_stats.bin", book), StatsLoadResult::Ok);
+  ASSERT_EQ(store.load(ReaderStatsSession::globalPath(), global), StatsLoadResult::Ok);
+  EXPECT_EQ(book.totalSessions, 1u);
+  EXPECT_EQ(book.totalReadingSeconds, 60u);
+  EXPECT_EQ(global.totalSessions, 1u);
+  EXPECT_EQ(global.totalReadingSeconds, 60u);
+}
+
+TEST(ReaderStatsSession, ResetBookKeepsGlobalTruthAndStartsFreshBookSession) {
+  MemoryStatsFiles files;
+  ReaderStatsSession session(files);
+  session.begin("/book-cache", {});
+  session.pageShown(1'000);
+  session.pause(61'000);
+
+  ASSERT_TRUE(session.resetBook({}));
+  EXPECT_EQ(session.bookSnapshot().totalReadingSeconds, 0u);
+  EXPECT_EQ(session.globalSnapshot().totalReadingSeconds, 60u);
+
+  session.pageShown(100'000);
+  session.pause(160'000);
+  ASSERT_TRUE(session.finish());
+  EXPECT_EQ(session.bookStats().totalReadingSeconds, 60u);
+  EXPECT_EQ(session.globalStats().totalReadingSeconds, 120u);
+}
+
+TEST(ReaderStatsSession, ResetAllClearsBookAndGlobalTruth) {
+  MemoryStatsFiles files;
+  ReaderStatsSession session(files);
+  session.begin("/book-cache", {});
+  session.pageShown(1'000);
+  session.pause(61'000);
+
+  ASSERT_TRUE(session.resetAll({}));
+  EXPECT_EQ(session.bookSnapshot().totalReadingSeconds, 0u);
+  EXPECT_EQ(session.globalSnapshot().totalReadingSeconds, 0u);
+}
+
+TEST(ReadingStatsCalendar, RoundTripsLeapDayAndComputesMondayIndex) {
+  const CalendarDate leapDay{2024, 2, 29};
+  uint32_t dayIndex = 0;
+  ASSERT_TRUE(dayIndexFromDate(leapDay, dayIndex));
+  CalendarDate decoded;
+  ASSERT_TRUE(dateFromDayIndex(dayIndex, decoded));
+  EXPECT_EQ(decoded, leapDay);
+  EXPECT_EQ(dayOfWeekForDayIndex(dayIndex), 3u);  // Thursday, Monday = 0
+}
+
+TEST(ReadingStatsCalendar, RejectsInvalidDates) {
+  uint32_t ignored = 0;
+  EXPECT_FALSE(dayIndexFromDate({2023, 2, 29}, ignored));
+  EXPECT_FALSE(dayIndexFromDate({1999, 12, 31}, ignored));
+  EXPECT_FALSE(dayIndexFromDate({2100, 1, 1}, ignored));
+}
+
+TEST(ReadingStatsCalendar, AppliesQuarterHourOffsetAcrossMidnight) {
+  LocalDateTime local;
+  ASSERT_TRUE(makeLocalDateTime({2026, 7, 11}, 23, 50, 0, 4, local));
+  CalendarDate date;
+  ASSERT_TRUE(dateFromDayIndex(local.dayIndex, date));
+  EXPECT_EQ(date, (CalendarDate{2026, 7, 12}));
+  EXPECT_EQ(local.hour, 0u);
+  EXPECT_EQ(local.minute, 50u);
+  EXPECT_EQ(local.dayOfWeek, dayOfWeekForDayIndex(local.dayIndex));
+}
+
+TEST(ReadingStatsPresentation, FormatsDurationAndRateForSmallScreen) {
+  EXPECT_EQ(formatDuration(0), "0 min");
+  EXPECT_EQ(formatDuration(45), "< 1 min");
+  EXPECT_EQ(formatDuration(45 * 60), "45 min");
+  EXPECT_EQ(formatDuration(2 * 3600 + 30 * 60), "2h 30m");
+  EXPECT_FLOAT_EQ(pagesPerMinute(90, 45 * 60), 2.0f);
+}
+
+TEST(ReadingStatsPresentation, EstimatesTimeLeftFromProgress) {
+  EXPECT_EQ(estimateTimeLeft(3600, 25), 3u * 3600u);
+  EXPECT_EQ(estimateTimeLeft(3600, 0), 0u);
+  EXPECT_EQ(estimateTimeLeft(3600, 100), 0u);
+}
+
+TEST(ReadingStatsPresentation, EstimatesFinishDayFromObservedDailyPace) {
+  EXPECT_EQ(estimateFinishDay(110, 100, 11 * 3600, 3 * 3600), 113u);
+  EXPECT_EQ(estimateFinishDay(110, 0, 11 * 3600, 3 * 3600), 0u);
+  EXPECT_EQ(estimateFinishDay(110, 100, 0, 3 * 3600), 0u);
 }

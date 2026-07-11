@@ -17,6 +17,28 @@ HalClock halClock;  // Singleton instance
 static uint8_t bcdToDec(uint8_t bcd) { return ((bcd >> 4) * 10) + (bcd & 0x0F); }
 static uint8_t decToBcd(uint8_t dec) { return ((dec / 10) << 4) | (dec % 10); }
 
+namespace {
+bool leapYear(const uint16_t year) { return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0; }
+
+uint8_t monthDays(const uint16_t year, const uint8_t month) {
+  static constexpr uint8_t days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  if (month < 1 || month > 12) return 0;
+  return month == 2 && leapYear(year) ? 29 : days[month - 1];
+}
+
+bool validDate(const uint16_t year, const uint8_t month, const uint8_t day) {
+  return year >= 2000 && year <= 2099 && day >= 1 && day <= monthDays(year, month);
+}
+
+uint8_t decodeHour(const uint8_t rawHour) {
+  if ((rawHour & 0x40) == 0) return bcdToDec(rawHour & 0x3F);
+  uint8_t hour = bcdToDec(rawHour & 0x1F);
+  const bool pm = (rawHour & 0x20) != 0;
+  if (hour == 12) hour = 0;
+  return pm ? hour + 12 : hour;
+}
+}  // namespace
+
 void HalClock::begin() {
   if (!gpio.deviceIsX3()) {
     _available = false;
@@ -100,6 +122,55 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   return true;
 }
 
+bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const {
+  if (!_available) {
+    const time_t now = time(nullptr);
+    if (now < 1577836800) return false;  // 2020-01-01, rejects unset Unix clock.
+    struct tm utc;
+    gmtime_r(&now, &utc);
+    year = static_cast<uint16_t>(utc.tm_year + 1900);
+    month = static_cast<uint8_t>(utc.tm_mon + 1);
+    day = static_cast<uint8_t>(utc.tm_mday);
+    hour = static_cast<uint8_t>(utc.tm_hour);
+    minute = static_cast<uint8_t>(utc.tm_min);
+    return validDate(year, month, day);
+  }
+
+  const unsigned long nowMs = millis();
+  if (_lastPollMs != 0 && (nowMs - _lastPollMs) < CLOCK_POLL_MS && _hasCachedDate) {
+    year = _cachedYear;
+    month = _cachedMonth;
+    day = _cachedDay;
+    hour = _cachedHour;
+    minute = _cachedMinute;
+    return true;
+  }
+
+  Wire.beginTransmission(I2C_ADDR_DS3231);
+  Wire.write(DS3231_SEC_REG);
+  if (Wire.endTransmission(false) != 0) return false;
+  Wire.requestFrom(I2C_ADDR_DS3231, static_cast<uint8_t>(7));
+  if (Wire.available() < 7) return false;
+  Wire.read();
+  _cachedMinute = bcdToDec(Wire.read() & 0x7F);
+  _cachedHour = decodeHour(Wire.read());
+  Wire.read();
+  _cachedDay = bcdToDec(Wire.read() & 0x3F);
+  _cachedMonth = bcdToDec(Wire.read() & 0x1F);
+  _cachedYear = static_cast<uint16_t>(2000 + bcdToDec(Wire.read()));
+  _lastPollMs = nowMs;
+  _hasCachedTime = true;
+  _hasCachedDate = validDate(_cachedYear, _cachedMonth, _cachedDay);
+  if (!_hasCachedDate) return false;
+
+  year = _cachedYear;
+  month = _cachedMonth;
+  day = _cachedDay;
+  hour = _cachedHour;
+  minute = _cachedMinute;
+  return true;
+}
+
 bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
   uint8_t h, m;
@@ -127,15 +198,22 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
   return true;
 }
 
-bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
+bool HalClock::writeDateTimeToRTC(uint16_t year, uint8_t month, uint8_t day, uint8_t weekday, uint8_t hour,
+                                  uint8_t minute, uint8_t second) {
   assert(hour < 24);
   assert(minute < 60);
   assert(second < 60);
+  assert(validDate(year, month, day));
+  assert(weekday >= 1 && weekday <= 7);
   Wire.beginTransmission(I2C_ADDR_DS3231);
   Wire.write(DS3231_SEC_REG);    // Start at register 0x00
   Wire.write(decToBcd(second));  // 0x00: Seconds
   Wire.write(decToBcd(minute));  // 0x01: Minutes
   Wire.write(decToBcd(hour));    // 0x02: Hours (24h mode, bit 6 = 0)
+  Wire.write(decToBcd(weekday));
+  Wire.write(decToBcd(day));
+  Wire.write(decToBcd(month));
+  Wire.write(decToBcd(static_cast<uint8_t>(year - 2000)));
   if (Wire.endTransmission() != 0) {
     LOG_ERR("CLK", "Failed to write time to DS3231");
     return false;
@@ -145,7 +223,11 @@ bool HalClock::writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second) {
   _lastPollMs = 0;
   _cachedHour = hour;
   _cachedMinute = minute;
+  _cachedYear = year;
+  _cachedMonth = month;
+  _cachedDay = day;
   _hasCachedTime = true;
+  _hasCachedDate = true;
   return true;
 }
 
@@ -172,7 +254,10 @@ bool HalClock::syncFromNTP() {
         time_t now = time(nullptr);
         struct tm timeinfo;
         gmtime_r(&now, &timeinfo);
-        if (writeTimeToRTC(timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec)) {
+        if (writeDateTimeToRTC(static_cast<uint16_t>(timeinfo.tm_year + 1900),
+                               static_cast<uint8_t>(timeinfo.tm_mon + 1), static_cast<uint8_t>(timeinfo.tm_mday),
+                               static_cast<uint8_t>(timeinfo.tm_wday + 1), timeinfo.tm_hour, timeinfo.tm_min,
+                               timeinfo.tm_sec)) {
           LOG_INF("CLK", "RTC set to %02d:%02d:%02d UTC", timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
         }
       }

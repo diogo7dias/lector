@@ -14,6 +14,7 @@
 
 #include <algorithm>
 
+#include "BookStatsActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -23,6 +24,8 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "reading_stats/ReadingStatsClock.h"
+#include "reading_stats/ReadingStatsPresentation.h"
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -32,6 +35,11 @@ void XtcReaderActivity::onEnter() {
   }
 
   xtc->setupCacheDir();
+  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
+  statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
+                          .minimumPageSeconds = 2,
+                          .minimumSessionSeconds = 60});
+  statsSession.begin(xtc->getCachePath(), reading_stats::currentLocalDateTime());
 
   // Load saved progress
   loadProgress();
@@ -48,6 +56,11 @@ void XtcReaderActivity::onEnter() {
 void XtcReaderActivity::onExit() {
   Activity::onExit();
 
+  if (statsTrackingActive) {
+    statsSession.pause(millis());
+    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save XTC reading stats");
+  }
+
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
   xtc.reset();
@@ -59,6 +72,17 @@ void XtcReaderActivity::loop() {
   }
 
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
+
+  if (statsHoldTriggered && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    statsHoldTriggered = false;
+    return;
+  }
+  if (!statsHoldTriggered && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= 600) {
+    statsHoldTriggered = true;
+    openReadingStats();
+    return;
+  }
 
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
   // input. Anything it doesn't handle (e.g. long-press Back to the file browser) falls
@@ -88,6 +112,7 @@ void XtcReaderActivity::loop() {
   // Enter chapter selection activity
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (xtc && xtc->hasChapters() && !xtc->getChapters().empty()) {
+      if (statsTrackingActive) statsSession.pause(millis());
       startActivityForResult(
           makeUniqueNoThrow<XtcReaderChapterSelectionActivity>(renderer, mappedInput, xtc, currentPage),
           [this](const ActivityResult& result) {
@@ -95,6 +120,7 @@ void XtcReaderActivity::loop() {
               currentPage = std::get<PageResult>(result.data).page;
             }
           });
+      return;
     }
   }
 
@@ -138,6 +164,7 @@ void XtcReaderActivity::loop() {
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
+    if (statsTrackingActive) statsSession.pause(millis());
     if (currentPage >= static_cast<uint32_t>(skipAmount)) {
       currentPage -= skipAmount;
     } else {
@@ -145,6 +172,13 @@ void XtcReaderActivity::loop() {
     }
     requestUpdate();
   } else if (nextTriggered) {
+    if (statsTrackingActive) {
+      statsSession.forwardTurn(millis());
+      if (currentPage + skipAmount >= xtc->getPageCount()) {
+        const auto now = reading_stats::currentLocalDateTime();
+        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+      }
+    }
     APP_STATE.sessionPagesRead++;  // home "pages read" tally
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
@@ -172,6 +206,33 @@ void XtcReaderActivity::render(RenderLock&&) {
 
   renderPage();
   saveProgress();
+  if (statsTrackingActive) statsSession.pageShown(millis());
+}
+
+void XtcReaderActivity::openReadingStats() {
+  if (statsTrackingActive) statsSession.pause(millis());
+  reading_stats::ReadingStatsData book;
+  reading_stats::ReadingStatsData global;
+  book = statsSession.bookSnapshot();
+  global = statsSession.globalSnapshot();
+  const uint8_t progress =
+      xtc && xtc->getPageCount() > 0
+          ? static_cast<uint8_t>(std::min<uint32_t>(100, (currentPage + 1) * 100 / xtc->getPageCount()))
+          : 0;
+  startActivityForResult(makeUniqueNoThrow<BookStatsActivity>(
+                             renderer, mappedInput, xtc ? xtc->getTitle() : std::string{}, book, global, progress,
+                             reading_stats::estimateTimeLeft(book.totalReadingSeconds, progress),
+                             [this](const bool resetAll, reading_stats::ReadingStatsData& nextBook,
+                                    reading_stats::ReadingStatsData& nextGlobal) {
+                               const auto now = reading_stats::currentLocalDateTime();
+                               const bool reset = resetAll ? statsSession.resetAll(now) : statsSession.resetBook(now);
+                               if (reset) {
+                                 nextBook = statsSession.bookSnapshot();
+                                 nextGlobal = statsSession.globalSnapshot();
+                               }
+                               return reset;
+                             }),
+                         [this](const ActivityResult&) { requestUpdate(); });
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {

@@ -8,6 +8,7 @@
 #include <Serialization.h>
 #include <Utf8.h>
 
+#include "BookStatsActivity.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -16,6 +17,8 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "reading_stats/ReadingStatsClock.h"
+#include "reading_stats/ReadingStatsPresentation.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -34,6 +37,11 @@ void TxtReaderActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   txt->setupCacheDir();
+  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
+  statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
+                          .minimumPageSeconds = 2,
+                          .minimumSessionSeconds = 60});
+  statsSession.begin(txt->getCachePath(), reading_stats::currentLocalDateTime());
 
   // Save current txt as last opened file and add to recent books
   auto filePath = txt->getPath();
@@ -49,6 +57,11 @@ void TxtReaderActivity::onEnter() {
 void TxtReaderActivity::onExit() {
   Activity::onExit();
 
+  if (statsTrackingActive) {
+    statsSession.pause(millis());
+    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save TXT reading stats");
+  }
+
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
@@ -60,6 +73,10 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    openReadingStats();
+    return;
+  }
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     activityManager.goToFileBrowser(txt ? txt->getPath() : "");
@@ -79,14 +96,21 @@ void TxtReaderActivity::loop() {
   }
 
   if (prevTriggered && currentPage > 0) {
+    if (statsTrackingActive) statsSession.pause(millis());
     currentPage--;
     requestUpdate();
   } else if (nextTriggered) {
     if (currentPage < totalPages - 1) {
+      if (statsTrackingActive) statsSession.forwardTurn(millis());
       APP_STATE.sessionPagesRead++;  // home "pages read" tally
       currentPage++;
       requestUpdate();
     } else {
+      if (statsTrackingActive) {
+        statsSession.forwardTurn(millis());
+        const auto now = reading_stats::currentLocalDateTime();
+        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+      }
       onGoHome();
     }
   }
@@ -369,6 +393,31 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   // Save progress
   saveProgress();
+  if (statsTrackingActive) statsSession.pageShown(millis());
+}
+
+void TxtReaderActivity::openReadingStats() {
+  if (statsTrackingActive) statsSession.pause(millis());
+  reading_stats::ReadingStatsData book;
+  reading_stats::ReadingStatsData global;
+  book = statsSession.bookSnapshot();
+  global = statsSession.globalSnapshot();
+  const uint8_t progress =
+      totalPages > 0 ? static_cast<uint8_t>(std::min(100, (currentPage + 1) * 100 / totalPages)) : 0;
+  startActivityForResult(makeUniqueNoThrow<BookStatsActivity>(
+                             renderer, mappedInput, txt ? txt->getTitle() : std::string{}, book, global, progress,
+                             reading_stats::estimateTimeLeft(book.totalReadingSeconds, progress),
+                             [this](const bool resetAll, reading_stats::ReadingStatsData& nextBook,
+                                    reading_stats::ReadingStatsData& nextGlobal) {
+                               const auto now = reading_stats::currentLocalDateTime();
+                               const bool reset = resetAll ? statsSession.resetAll(now) : statsSession.resetBook(now);
+                               if (reset) {
+                                 nextBook = statsSession.bookSnapshot();
+                                 nextGlobal = statsSession.globalSnapshot();
+                               }
+                               return reset;
+                             }),
+                         [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void TxtReaderActivity::renderPage() {

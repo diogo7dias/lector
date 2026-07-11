@@ -12,7 +12,11 @@ class HalClock {
   bool _available = false;
   mutable uint8_t _cachedHour = 0;
   mutable uint8_t _cachedMinute = 0;
+  mutable uint16_t _cachedYear = 0;
+  mutable uint8_t _cachedMonth = 0;
+  mutable uint8_t _cachedDay = 0;
   mutable bool _hasCachedTime = false;
+  mutable bool _hasCachedDate = false;
   mutable unsigned long _lastPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds
@@ -27,6 +31,10 @@ class HalClock {
   // Get current hour (0-23) and minute (0-59).
   // Returns false if RTC is not available.
   bool getTime(uint8_t& hour, uint8_t& minute) const;
+
+  // Get current UTC date and time. X3 reads the DS3231. Other devices use the
+  // system clock after an NTP sync. Returns false until a trustworthy date exists.
+  bool getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const;
 
   // Format time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
@@ -44,5 +52,6 @@ class HalClock {
   bool syncFromNTP();
 
  private:
-  bool writeTimeToRTC(uint8_t hour, uint8_t minute, uint8_t second);
+  bool writeDateTimeToRTC(uint16_t year, uint8_t month, uint8_t day, uint8_t weekday, uint8_t hour, uint8_t minute,
+                          uint8_t second);
 };

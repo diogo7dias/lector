@@ -14,6 +14,8 @@
 
 #include "EndOfBookOptions.h"
 #include "activities/Activity.h"
+#include "reading_stats/ReaderStatsSession.h"
+#include "reading_stats/SdStatsFiles.h"
 
 class XtcReaderActivity final : public Activity {
   std::shared_ptr<Xtc> xtc;
@@ -22,6 +24,10 @@ class XtcReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
+  reading_stats::SdStatsFiles statsFiles;
+  reading_stats::ReaderStatsSession statsSession{statsFiles};
+  bool statsTrackingActive = false;
+  bool statsHoldTriggered = false;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {
@@ -35,6 +41,7 @@ class XtcReaderActivity final : public Activity {
   StatusBarInfo getStatusBarInfo() const;
   void saveProgress() const;
   void loadProgress();
+  void openReadingStats();
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc)

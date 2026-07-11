@@ -2,6 +2,8 @@ add_executable(reading_stats_tests
   ReadingStatsTest.cpp
   ${REPO_ROOT}/src/reading_stats/ReadingStats.cpp
   ${REPO_ROOT}/src/reading_stats/ReadingStatsStore.cpp
+  ${REPO_ROOT}/src/reading_stats/ReaderStatsSession.cpp
+  ${REPO_ROOT}/src/reading_stats/ReadingStatsPresentation.cpp
 )
 
 target_include_directories(reading_stats_tests PRIVATE

@@ -31,6 +31,7 @@ class EpubReaderMenuActivity final : public Activity {
     DELETE_CACHE,
     HIGHLIGHT_QUOTE,
     VIEW_QUOTES,
+    READING_STATS,
     // Sleep-wallpaper triage (only shown when a last-shown wallpaper exists).
     WALLPAPER_FAVORITE,
     WALLPAPER_PAUSE_ROTATION,
