@@ -13,6 +13,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
+#include "util/ButtonResponsePolicy.h"
 #include "util/FavoriteImage.h"
 
 PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
@@ -114,7 +115,10 @@ void PxcViewerActivity::loop() {
   // original path lets the browser land there even though the file is now gone.
   // A same-named file in the destination makes the rename fail (SdFat never
   // overwrites) — surface that and stay put instead of pretending it moved.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && crosspoint::sleep::isUnderSleepDirs(filePath)) {
+  const bool moveTriggered = button_response::imageMoveTrigger() == button_response::Trigger::Press
+                                 ? mappedInput.wasPressed(MappedInputManager::Button::Confirm)
+                                 : mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+  if (moveTriggered && crosspoint::sleep::isUnderSleepDirs(filePath)) {
     const auto res = crosspoint::sleep::toggleSleepPause(filePath);
     if (!res.ok) {
       GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));

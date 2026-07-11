@@ -12,6 +12,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
+#include "util/ButtonResponsePolicy.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
                                      bool resultMode)
@@ -219,12 +220,16 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (crosspoint::sleep::isUnderSleepDirs(filePath)) {
+  if (crosspoint::sleep::isUnderSleepDirs(filePath)) {
+    const bool moveTriggered = button_response::imageMoveTrigger() == button_response::Trigger::Press
+                                   ? mappedInput.wasPressed(MappedInputManager::Button::Confirm)
+                                   : mappedInput.wasReleased(MappedInputManager::Button::Confirm);
+    if (moveTriggered) {
       moveSleepPause();
-    } else {
-      doSetSleepCover();
+      return;
     }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    doSetSleepCover();
     return;
   }
 
