@@ -1,0 +1,10 @@
+add_executable(wallpaper_direct_pick_policy_tests
+  WallpaperDirectPickPolicyTest.cpp
+)
+
+target_link_libraries(wallpaper_direct_pick_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(wallpaper_direct_pick_policy_tests PRIVATE
+  ${REPO_ROOT}/src
+)
+
+gtest_discover_tests(wallpaper_direct_pick_policy_tests)

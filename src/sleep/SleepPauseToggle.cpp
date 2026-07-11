@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 
 #include "CrossPointState.h"
+#include "sleep/Wallpaper.h"
+#include "sleep/WallpaperDirectPickPolicy.h"
 #include "util/FavoriteImage.h"
 
 namespace crosspoint {
@@ -54,6 +56,7 @@ SleepPauseToggleResult toggleSleepPause(const std::string& path) {
   }
   r.ok = true;
   r.newPath = dst;
+  if (wallpaper_direct_pick::shouldMarkFolderDirty(r.ok)) wallpaper::markFolderDirty();
   return r;
 }
 

@@ -11,6 +11,7 @@
 #include "../util/FavoriteImage.h"
 #include "SdFatSleepFs.h"
 #include "SleepMoveSelection.h"
+#include "WallpaperDirectPickPolicy.h"
 #include "WallpaperPlaylistV2.h"
 #include "persist/SdFatFileIOLite.h"
 
@@ -314,7 +315,10 @@ std::string pickDirectBasename(const std::string& after) {
   auto* sfs = v2::WallpaperPlaylistV2::instance().deps().fs;
   if (!sfs) return {};
   std::string ordered = orderNextAfter(after);
-  if (!ordered.empty()) return ordered;
+  const bool orderedExists = !ordered.empty() && sfs->exists("/sleep/" + ordered);
+  if (wallpaper_direct_pick::source(!ordered.empty(), orderedExists) == wallpaper_direct_pick::Source::SavedOrder) {
+    return ordered;
+  }
   return sfs->nextSleepBmpAfter(after);
 }
 
