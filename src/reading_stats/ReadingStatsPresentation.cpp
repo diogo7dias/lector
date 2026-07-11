@@ -48,4 +48,9 @@ int chartLabelColumnWidth(const int areaWidth, const int widestLabelWidth) {
   return std::min(widestLabelWidth + kLabelGap, std::max(0, areaWidth - kMinimumBarWidth));
 }
 
+HorizontalLayout insetHorizontal(const int areaX, const int areaWidth, const int sideMargin) {
+  const int inset = std::clamp(sideMargin, 0, std::max(0, areaWidth) / 2);
+  return HorizontalLayout{areaX + inset, std::max(0, areaWidth - inset * 2)};
+}
+
 }  // namespace reading_stats

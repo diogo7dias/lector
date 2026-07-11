@@ -503,3 +503,13 @@ TEST(ReadingStatsPresentation, ReservesLabelWidthBeforeChartBars) {
   EXPECT_EQ(chartLabelColumnWidth(480, 86), 94);
   EXPECT_EQ(chartLabelColumnWidth(100, 86), 76);
 }
+
+TEST(ReadingStatsPresentation, InsetsStatsContentEquallyOnBothSides) {
+  const auto layout = insetHorizontal(0, 480, 10);
+  EXPECT_EQ(layout.x, 10);
+  EXPECT_EQ(layout.width, 460);
+
+  const auto narrow = insetHorizontal(4, 12, 10);
+  EXPECT_EQ(narrow.x, 10);
+  EXPECT_EQ(narrow.width, 0);
+}

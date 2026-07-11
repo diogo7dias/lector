@@ -18,6 +18,8 @@ using reading_stats::ReadingStatsData;
 
 namespace {
 
+constexpr int STATS_SIDE_MARGIN = 10;
+
 std::string formatRate(const ReadingStatsData& stats) {
   char value[16];
   snprintf(value, sizeof(value), "%.1f",
@@ -295,10 +297,12 @@ void BookStatsActivity::render(RenderLock&&) {
                  pageTitle);
   const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentBottom = screen.y + screen.height - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  const auto horizontal = reading_stats::insetHorizontal(screen.x, screen.width, STATS_SIDE_MARGIN);
+  const Rect statsContent{horizontal.x, screen.y, horizontal.width, screen.height};
   if (page_ == Page::CurrentBook) {
-    drawCurrentBook(screen, contentTop, contentBottom);
+    drawCurrentBook(statsContent, contentTop, contentBottom);
   } else {
-    drawAllBooks(screen, contentTop, contentBottom);
+    drawAllBooks(statsContent, contentTop, contentBottom);
   }
 
   const auto labels = page_ == Page::CurrentBook
