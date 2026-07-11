@@ -11,4 +11,8 @@ constexpr bool showUnloadedNavigationHints(const bool resultMode, const bool inS
   return !siblingsLoaded && !loadSiblingsOnEnter(resultMode, inSleepDirectory);
 }
 
+constexpr bool refreshHintsAfterNavigation(const bool siblingsLoadedBeforeAction, const bool navigationMoved) {
+  return !siblingsLoadedBeforeAction && !navigationMoved;
+}
+
 }  // namespace image_viewer_policy

@@ -241,20 +241,26 @@ void BmpViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
       mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    const bool siblingsLoadedBeforeAction = siblingsLoaded;
     if (!siblingsLoaded) loadSiblingImages();
+    bool navigationMoved = false;
     if (siblingImages.size() > 1 && currentImageIndex > 0) {
       currentImageIndex--;
       std::string dirPath = FsHelpers::extractFolderPath(filePath);
       if (dirPath.back() != '/') dirPath += "/";
       filePath = dirPath + siblingImages[currentImageIndex];
       onEnter();
+      navigationMoved = true;
     }
+    if (image_viewer_policy::refreshHintsAfterNavigation(siblingsLoadedBeforeAction, navigationMoved)) onEnter();
     return;
   }
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
       mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    const bool siblingsLoadedBeforeAction = siblingsLoaded;
     if (!siblingsLoaded) loadSiblingImages();
+    bool navigationMoved = false;
     if (siblingImages.size() > 1 && currentImageIndex != -1 &&
         currentImageIndex < static_cast<int>(siblingImages.size()) - 1) {
       currentImageIndex++;
@@ -262,7 +268,9 @@ void BmpViewerActivity::loop() {
       if (dirPath.back() != '/') dirPath += "/";
       filePath = dirPath + siblingImages[currentImageIndex];
       onEnter();
+      navigationMoved = true;
     }
+    if (image_viewer_policy::refreshHintsAfterNavigation(siblingsLoadedBeforeAction, navigationMoved)) onEnter();
     return;
   }
 }
