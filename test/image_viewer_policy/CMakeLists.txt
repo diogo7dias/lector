@@ -1,0 +1,6 @@
+add_executable(image_viewer_policy_tests ImageViewerPolicyTest.cpp)
+target_link_libraries(image_viewer_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(image_viewer_policy_tests PRIVATE
+  ${REPO_ROOT}/src
+)
+gtest_discover_tests(image_viewer_policy_tests)

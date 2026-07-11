@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "ImageViewerPolicy.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
@@ -19,6 +20,9 @@ BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& 
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)), resultMode(resultMode) {}
 
 void BmpViewerActivity::loadSiblingImages() {
+  // Mark the attempt before touching storage. Empty, missing, and single-image
+  // folders must not trigger another full directory scan on the next action.
+  siblingsLoaded = true;
   siblingImages.clear();
   currentImageIndex = -1;
 
@@ -62,7 +66,8 @@ void BmpViewerActivity::loadSiblingImages() {
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
 
-  if (siblingImages.empty() && !filePath.empty()) {
+  const bool inSleepDirs = crosspoint::sleep::isUnderSleepDirs(filePath);
+  if (!siblingsLoaded && !filePath.empty() && image_viewer_policy::loadSiblingsOnEnter(resultMode, inSleepDirs)) {
     loadSiblingImages();
   }
 
@@ -100,13 +105,14 @@ void BmpViewerActivity::onEnter() {
       }
 
       // 4. Prepare Rendering
-      bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
-      bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
-                      currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
+      const bool showLazyHints =
+          image_viewer_policy::showUnloadedNavigationHints(resultMode, inSleepDirs, siblingsLoaded);
+      bool hasPrevious = showLazyHints || (siblingImages.size() > 1 && currentImageIndex > 0);
+      bool hasNext = showLazyHints || (siblingImages.size() > 1 && currentImageIndex != -1 &&
+                                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
 
       // Confirm is contextual: a wallpaper already living in /sleep or /sleep pause
       // gets a one-press move to the other folder; anywhere else it sets the cover.
-      const bool inSleepDirs = crosspoint::sleep::isUnderSleepDirs(filePath);
       const char* confirmLabel = inSleepDirs ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP)
                                                                                         : tr(STR_SLEEP_MOVE_TO_PAUSE))
                                              : tr(STR_SET_SLEEP_COVER);
@@ -235,6 +241,7 @@ void BmpViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
       mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+    if (!siblingsLoaded) loadSiblingImages();
     if (siblingImages.size() > 1 && currentImageIndex > 0) {
       currentImageIndex--;
       std::string dirPath = FsHelpers::extractFolderPath(filePath);
@@ -247,6 +254,7 @@ void BmpViewerActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
       mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+    if (!siblingsLoaded) loadSiblingImages();
     if (siblingImages.size() > 1 && currentImageIndex != -1 &&
         currentImageIndex < static_cast<int>(siblingImages.size()) - 1) {
       currentImageIndex++;

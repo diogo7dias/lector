@@ -24,5 +24,6 @@ class BmpViewerActivity final : public Activity {
   std::string filePath;
   std::vector<std::string> siblingImages;
   int currentImageIndex = -1;
+  bool siblingsLoaded = false;
   bool resultMode;
 };
