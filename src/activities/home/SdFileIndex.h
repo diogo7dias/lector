@@ -5,6 +5,8 @@
 #include <functional>
 #include <string>
 
+#include "VisibleEntryMap.h"
+
 class SdFileIndex {
  public:
   using AcceptFn = std::function<bool(const char* name, bool isDirectory)>;
@@ -18,9 +20,11 @@ class SdFileIndex {
   void clear();
 
   bool valid() const { return valid_; }
-  size_t count() const { return count_; }
+  size_t count() const { return visibleEntries_.count(); }
   size_t firstFileIndex() const { return firstFileIndex_; }
   std::string nameAt(size_t logicalIndex) const;
+  bool eraseAt(size_t visibleIndex);
+  bool renameAt(size_t visibleIndex, const std::string& name);
   void shuffleTail();
   size_t lowerBound(const std::string& name) const;
 
@@ -32,8 +36,9 @@ class SdFileIndex {
   static_assert(sizeof(Record) == NAME_BYTES);
 
   std::string finalPath_;
-  mutable HalFile readFile_;
-  size_t count_ = 0;
+  mutable HalFile indexFile_;
+  VisibleEntryMap visibleEntries_;
+  size_t recordCount_ = 0;
   size_t firstFileIndex_ = 0;
   size_t shuffleMultiplier_ = 1;
   size_t shuffleOffset_ = 0;
@@ -45,5 +50,5 @@ class SdFileIndex {
   static bool readRecord(HalFile& file, size_t index, Record& record);
   static bool writeRecord(HalFile& file, const Record& record);
   static bool mergePass(const char* inputPath, const char* outputPath, size_t count, size_t runWidth);
-  size_t physicalIndex(size_t logicalIndex) const;
+  bool physicalIndex(size_t visibleIndex, size_t& physicalIndex) const;
 };

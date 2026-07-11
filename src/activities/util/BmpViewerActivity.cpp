@@ -157,7 +157,7 @@ void BmpViewerActivity::onExit() {
 
 void BmpViewerActivity::returnToBrowser(const bool removed) {
   if (resultMode) {
-    setResult(FilePathResult{removed ? std::string() : filePath});
+    setResult(FilePathResult{removed ? std::string() : filePath, removed ? filePath : std::string()});
     finish();
   } else {
     activityManager.goToFileBrowser(filePath);

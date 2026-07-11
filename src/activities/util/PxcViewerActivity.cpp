@@ -18,14 +18,18 @@
 
 PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
                                      bool resultMode)
-    : Activity("PxcViewer", renderer, mappedInput), filePath(std::move(filePath)), resultMode(resultMode) {}
+    : Activity("PxcViewer", renderer, mappedInput),
+      filePath(std::move(filePath)),
+      launchPath(this->filePath),
+      resultMode(resultMode) {}
 
 void PxcViewerActivity::returnToBrowser(bool removed) {
   if (resultMode) {
     // Hand control back to the still-alive browser. Empty path = the file left this
     // folder (moved/deleted); otherwise the current (possibly renamed) path so the
     // browser patches that one row in place — no folder rescan.
-    setResult(FilePathResult{removed ? std::string() : filePath});
+    const bool changed = removed || filePath != launchPath;
+    setResult(FilePathResult{removed ? std::string() : filePath, changed ? launchPath : std::string()});
     finish();
   } else {
     // ReaderActivity-launched path: rebuild the browser (it was replaced away). The

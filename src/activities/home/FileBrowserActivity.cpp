@@ -8,14 +8,16 @@
 #include <esp_random.h>
 
 #include <algorithm>
+#include <iterator>
 
 #include "CrossPointSettings.h"
+#include "ImageViewerPatch.h"
 #include "LargeFolderIndexPolicy.h"
 #include "LibrarySearchSupport.h"
 #include "MappedInputManager.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
-#include "activities/util/BmpViewerActivity.h"
 #include "activities/util/PxcViewerActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -106,12 +108,28 @@ void FileBrowserActivity::loadFiles() {
   }
 }
 
-ActivityResultHandler FileBrowserActivity::imageViewerResultHandler(const std::string& launchName) {
-  return [this, launchName](const ActivityResult& res) {
+ActivityResultHandler FileBrowserActivity::imageViewerResultHandler(const std::string& launchName,
+                                                                    const size_t launchFileIndex) {
+  return [this, launchName, launchFileIndex](const ActivityResult& res) {
     if (!std::holds_alternative<FilePathResult>(res.data)) return;
-    const std::string& finalPath = std::get<FilePathResult>(res.data).path;
+    const auto& result = std::get<FilePathResult>(res.data);
+    const auto patch = image_viewer_patch::plan(result.path, result.sourcePath);
     if (sdMode) {
-      loadFiles();
+      bool patched = patch.valid;
+      size_t patchIndex = launchFileIndex;
+      if (patched && patch.action != image_viewer_patch::Action::None && patch.sourceName != launchName) {
+        patchIndex = sdIndex.lowerBound(patch.sourceName);
+        patched = patchIndex < sdIndex.count() && sdIndex.nameAt(patchIndex) == patch.sourceName;
+      }
+      if (patched && patch.action == image_viewer_patch::Action::Erase) {
+        const auto targetRow = image_viewer_patch::selectorForSource(patchIndex, static_cast<size_t>(headerRowCount()),
+                                                                     searchActive() ? &filteredIndexes : nullptr);
+        if (targetRow) selectorIndex = *targetRow;
+        patched = sdIndex.eraseAt(patchIndex);
+      }
+      if (patched && patch.action == image_viewer_patch::Action::Rename)
+        patched = sdIndex.renameAt(patchIndex, patch.finalName);
+      if (!patched) loadFiles();
       rebuildFilter();
       const size_t rows = totalRowCount();
       if (rows == 0) {
@@ -123,23 +141,26 @@ ActivityResultHandler FileBrowserActivity::imageViewerResultHandler(const std::s
       requestUpdate(true);
       return;
     }
-    if (finalPath.empty()) {
+    if (patch.action == image_viewer_patch::Action::Erase) {
       // Moved or deleted in the viewer: drop the row in place — no folder rescan.
-      files.erase(std::remove(files.begin(), files.end(), launchName), files.end());
-    } else {
+      const auto source = std::find(files.begin(), files.end(), patch.sourceName);
+      if (source != files.end()) {
+        const size_t sourceIndex = static_cast<size_t>(std::distance(files.begin(), source));
+        const auto targetRow = image_viewer_patch::selectorForSource(sourceIndex, static_cast<size_t>(headerRowCount()),
+                                                                     searchActive() ? &filteredIndexes : nullptr);
+        if (targetRow) selectorIndex = *targetRow;
+        files.erase(source);
+      }
+    } else if (patch.action == image_viewer_patch::Action::Rename) {
       // Still present, possibly favorite-renamed (_F): update the row and re-sort
       // (RAM-only, cheap even at thousands of entries — the SD scan is what's slow).
-      const auto pos = finalPath.find_last_of('/');
-      const std::string finalName = (pos == std::string::npos) ? finalPath : finalPath.substr(pos + 1);
-      if (finalName != launchName) {
-        for (auto& f : files) {
-          if (f == launchName) {
-            f = finalName;
-            break;
-          }
+      for (auto& f : files) {
+        if (f == patch.sourceName) {
+          f = patch.finalName;
+          break;
         }
-        FsHelpers::sortFileList(files);
       }
+      FsHelpers::sortFileList(files);
     }
     rebuildFilter();  // `files` changed — refresh the ranked/search view
     const int postRowCount = static_cast<int>(totalRowCount());
@@ -155,14 +176,16 @@ ActivityResultHandler FileBrowserActivity::imageViewerResultHandler(const std::s
   };
 }
 
-void FileBrowserActivity::openPxcViewer(const std::string& path, const std::string& launchName) {
+void FileBrowserActivity::openPxcViewer(const std::string& path, const std::string& launchName,
+                                        const size_t launchFileIndex) {
   startActivityForResult(makeUniqueNoThrow<PxcViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
-                         imageViewerResultHandler(launchName));
+                         imageViewerResultHandler(launchName, launchFileIndex));
 }
 
-void FileBrowserActivity::openBmpViewer(const std::string& path, const std::string& launchName) {
+void FileBrowserActivity::openBmpViewer(const std::string& path, const std::string& launchName,
+                                        const size_t launchFileIndex) {
   startActivityForResult(makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
-                         imageViewerResultHandler(launchName));
+                         imageViewerResultHandler(launchName, launchFileIndex));
 }
 
 // Map a selector row index to what it represents: a synthetic action row (Recent
@@ -492,9 +515,9 @@ void FileBrowserActivity::loop() {
         selectorIndex = 0;
         requestUpdate();
       } else if (FsHelpers::checkFileExtension(entry, ".pxc")) {
-        openPxcViewer(basepath + entry, entry);
+        openPxcViewer(basepath + entry, entry, fileIndex);
       } else if (FsHelpers::hasBmpExtension(entry)) {
-        openBmpViewer(basepath + entry, entry);
+        openBmpViewer(basepath + entry, entry, fileIndex);
       } else {
         onSelectBook(basepath + entry);
       }

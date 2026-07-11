@@ -57,6 +57,9 @@ struct FootnoteResult {
 
 struct FilePathResult {
   std::string path;
+  // Viewer results set this to the pre-mutation path of the row that changed.
+  // Empty means no row mutation, even if the viewer browsed to another sibling.
+  std::string sourcePath;
 };
 
 using ResultVariant =

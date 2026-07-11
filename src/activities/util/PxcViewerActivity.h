@@ -29,5 +29,6 @@ class PxcViewerActivity final : public Activity {
   // removed=true means the file left this folder (moved/deleted).
   void returnToBrowser(bool removed);
   std::string filePath;
+  std::string launchPath;
   bool resultMode;
 };

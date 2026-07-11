@@ -125,7 +125,7 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
     entry.getName(nameBuffer, sizeof(nameBuffer));
     const bool isDirectory = entry.isDirectory();
     if (!accept(nameBuffer, isDirectory)) continue;
-    if (!large_folder_index::canAddEntry(count_)) {
+    if (!large_folder_index::canAddEntry(recordCount_)) {
       LOG_ERR("SDIDX", "Folder exceeds %u entry index limit",
               static_cast<unsigned>(large_folder_index::MAX_INDEX_ENTRIES));
       return abortBuild();
@@ -140,7 +140,7 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
       record.name[length] = '/';
       ++directoryCount;
     }
-    ++count_;
+    ++recordCount_;
     if (runCount == large_folder_index::SORT_RUN_RECORDS && !flushRun()) {
       return abortBuild();
     }
@@ -156,8 +156,8 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
 
   const char* inputPath = INDEX_PATH_A;
   const char* outputPath = INDEX_PATH_B;
-  for (size_t width = large_folder_index::SORT_RUN_RECORDS; width < count_; width *= 2) {
-    if (!mergePass(inputPath, outputPath, count_, width)) {
+  for (size_t width = large_folder_index::SORT_RUN_RECORDS; width < recordCount_; width *= 2) {
+    if (!mergePass(inputPath, outputPath, recordCount_, width)) {
       clear();
       return false;
     }
@@ -166,30 +166,59 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
 
   finalPath_ = inputPath;
   firstFileIndex_ = directoryCount;
-  if (!Storage.openFileForRead("SDIDX", finalPath_, readFile_)) {
+  if (!visibleEntries_.reset(recordCount_)) {
+    clear();
+    return false;
+  }
+  indexFile_ = Storage.open(finalPath_.c_str(), O_RDWR);
+  if (!indexFile_) {
     clear();
     return false;
   }
   valid_ = true;
-  LOG_DBG("SDIDX", "Built fixed-record SD index: %u entries", static_cast<unsigned>(count_));
+  LOG_DBG("SDIDX", "Built fixed-record SD index: %u entries", static_cast<unsigned>(recordCount_));
   return true;
 }
 
-size_t SdFileIndex::physicalIndex(const size_t logicalIndex) const {
-  if (!shuffled_) return logicalIndex;
-  return large_folder_index::mapShuffledIndex(logicalIndex, count_, firstFileIndex_, shuffleMultiplier_,
-                                              shuffleOffset_);
+bool SdFileIndex::physicalIndex(const size_t visibleIndex, size_t& physicalIndex) const {
+  size_t sourceIndex = 0;
+  if (!visibleEntries_.sourceIndexAt(visibleIndex, sourceIndex)) return false;
+  physicalIndex = shuffled_ ? large_folder_index::mapShuffledIndex(sourceIndex, recordCount_, firstFileIndex_,
+                                                                   shuffleMultiplier_, shuffleOffset_)
+                            : sourceIndex;
+  return true;
 }
 
 std::string SdFileIndex::nameAt(const size_t logicalIndex) const {
-  if (!valid_ || logicalIndex >= count_) return {};
+  if (!valid_) return {};
+  size_t recordIndex = 0;
+  if (!physicalIndex(logicalIndex, recordIndex)) return {};
   Record record{};
-  if (!readRecord(readFile_, physicalIndex(logicalIndex), record)) return {};
+  if (!readRecord(indexFile_, recordIndex, record)) return {};
   return record.name;
 }
 
+bool SdFileIndex::eraseAt(const size_t visibleIndex) {
+  if (!valid_) return false;
+  return visibleEntries_.eraseAt(visibleIndex);
+}
+
+bool SdFileIndex::renameAt(const size_t visibleIndex, const std::string& name) {
+  if (!valid_ || name.empty() || name.size() >= NAME_BYTES || name.find('\0') != std::string::npos) return false;
+
+  size_t recordIndex = 0;
+  if (!physicalIndex(visibleIndex, recordIndex)) return false;
+  Record record{};
+  std::memcpy(record.name, name.data(), name.size());
+  if (!recordValid(record)) return false;
+
+  if (!indexFile_.seek(recordIndex * sizeof(Record)) || !writeRecord(indexFile_, record)) return false;
+  indexFile_.flush();
+  return true;
+}
+
 void SdFileIndex::shuffleTail() {
-  const size_t fileCount = count_ > firstFileIndex_ ? count_ - firstFileIndex_ : 0;
+  const size_t fileCount = recordCount_ > firstFileIndex_ ? recordCount_ - firstFileIndex_ : 0;
   if (fileCount <= 1) return;
   shuffleMultiplier_ = large_folder_index::coprimeMultiplier(esp_random(), fileCount);
   shuffleOffset_ = esp_random() % fileCount;
@@ -198,13 +227,13 @@ void SdFileIndex::shuffleTail() {
 
 size_t SdFileIndex::lowerBound(const std::string& name) const {
   if (shuffled_) {
-    for (size_t i = 0; i < count_; ++i) {
+    for (size_t i = 0; i < count(); ++i) {
       if (nameAt(i) == name) return i;
     }
-    return count_;
+    return count();
   }
   size_t low = 0;
-  size_t high = count_;
+  size_t high = count();
   while (low < high) {
     const size_t middle = low + (high - low) / 2;
     if (FsHelpers::naturalFileLess(nameAt(middle), name)) {
@@ -217,11 +246,12 @@ size_t SdFileIndex::lowerBound(const std::string& name) const {
 }
 
 void SdFileIndex::clear() {
-  if (readFile_) readFile_.close();
+  if (indexFile_) indexFile_.close();
   Storage.remove(INDEX_PATH_A);
   Storage.remove(INDEX_PATH_B);
   finalPath_.clear();
-  count_ = 0;
+  visibleEntries_.reset(0);
+  recordCount_ = 0;
   firstFileIndex_ = 0;
   shuffleMultiplier_ = 1;
   shuffleOffset_ = 0;
