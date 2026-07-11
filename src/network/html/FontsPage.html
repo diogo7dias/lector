@@ -139,7 +139,10 @@
     </div>
 
     <div class="card">
-      <h2>Upload Font</h2>
+      <h2>Upload Font Folder</h2>
+      <p class="family-meta" style="margin: 0 0 12px;">
+        Select one folder containing all .cpfont files for one font family. Individual files cannot be selected.
+      </p>
       <form class="upload-form" id="uploadForm">
         <input type="file" id="fontFiles" webkitdirectory directory multiple required />
         <button type="submit" class="btn btn-primary">Upload</button>
@@ -269,7 +272,7 @@
       if (files.length === 0) {
         status.className = 'status-err';
         status.style.display = 'block';
-        status.textContent = 'No .cpfont files selected.';
+        status.textContent = 'Choose a folder containing .cpfont files.';
         return;
       }
 
