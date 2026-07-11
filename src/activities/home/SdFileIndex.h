@@ -43,6 +43,7 @@ class SdFileIndex {
   size_t shuffleMultiplier_ = 1;
   size_t shuffleOffset_ = 0;
   bool shuffled_ = false;
+  bool renamedInPlace_ = false;
   bool valid_ = false;
 
   static bool recordValid(const Record& record);

@@ -5,6 +5,7 @@
 
 #include "activities/home/LargeFolderIndexPolicy.h"
 #include "activities/home/LibrarySearchSupport.h"
+#include "activities/home/SdFileIndexLookupPolicy.h"
 
 TEST(LargeFolderIndexPolicy, SwitchesBeforeNameStorageCanBecomeLarge) {
   EXPECT_FALSE(large_folder_index::shouldUseSdIndex(469));
@@ -48,4 +49,13 @@ TEST(LargeFolderIndexPolicy, NaturalSortHandlesBoundedViewsAndNumbers) {
   EXPECT_TRUE(FsHelpers::naturalFileLess(std::string_view("folder 2/"), std::string_view("folder 10/")));
   EXPECT_TRUE(FsHelpers::naturalFileLess(std::string_view("dir/"), std::string_view("book.epub")));
   EXPECT_FALSE(FsHelpers::naturalFileLess(std::string_view("book 10.epub"), std::string_view("book 2.epub")));
+}
+
+TEST(SdFileIndexLookupPolicy, InPlaceRenameRequiresLinearLookupWithoutShuffle) {
+  EXPECT_EQ(sd_file_index_lookup::mode(/*shuffled=*/false, /*renamedInPlace=*/false),
+            sd_file_index_lookup::Mode::Binary);
+  EXPECT_EQ(sd_file_index_lookup::mode(/*shuffled=*/true, /*renamedInPlace=*/false),
+            sd_file_index_lookup::Mode::Linear);
+  EXPECT_EQ(sd_file_index_lookup::mode(/*shuffled=*/false, /*renamedInPlace=*/true),
+            sd_file_index_lookup::Mode::Linear);
 }

@@ -11,6 +11,7 @@
 #include <string_view>
 
 #include "LargeFolderIndexPolicy.h"
+#include "SdFileIndexLookupPolicy.h"
 
 namespace {
 constexpr char INDEX_DIR[] = "/.crosspoint";
@@ -214,6 +215,7 @@ bool SdFileIndex::renameAt(const size_t visibleIndex, const std::string& name) {
 
   if (!indexFile_.seek(recordIndex * sizeof(Record)) || !writeRecord(indexFile_, record)) return false;
   indexFile_.flush();
+  renamedInPlace_ = true;
   return true;
 }
 
@@ -226,7 +228,7 @@ void SdFileIndex::shuffleTail() {
 }
 
 size_t SdFileIndex::lowerBound(const std::string& name) const {
-  if (shuffled_) {
+  if (sd_file_index_lookup::mode(shuffled_, renamedInPlace_) == sd_file_index_lookup::Mode::Linear) {
     for (size_t i = 0; i < count(); ++i) {
       if (nameAt(i) == name) return i;
     }
@@ -256,5 +258,6 @@ void SdFileIndex::clear() {
   shuffleMultiplier_ = 1;
   shuffleOffset_ = 0;
   shuffled_ = false;
+  renamedInPlace_ = false;
   valid_ = false;
 }
