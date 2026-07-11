@@ -1,0 +1,4 @@
+add_executable(font_upload_policy_tests FontUploadPolicyTest.cpp)
+target_link_libraries(font_upload_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(font_upload_policy_tests PRIVATE ${REPO_ROOT}/src)
+gtest_discover_tests(font_upload_policy_tests)

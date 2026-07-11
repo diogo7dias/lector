@@ -94,6 +94,45 @@ std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
 
 // --- SdCardFontRegistry ---
 
+namespace {
+void recoverInterruptedUploads(const char* dirPath) {
+  HalFile dir = Storage.open(dirPath);
+  if (!dir || !dir.isDirectory()) return;
+  static constexpr char BACKUP_SUFFIX[] = ".upload.bak";
+  char name[160];
+  while (true) {
+    HalFile entry = dir.openNextFile();
+    if (!entry) break;
+    if (entry.isDirectory()) {
+      entry.close();
+      continue;
+    }
+    entry.getName(name, sizeof(name));
+    entry.close();
+    const size_t nameLen = strlen(name);
+    const bool isBackup = nameLen > sizeof(BACKUP_SUFFIX) - 1 &&
+                          strcmp(name + nameLen - (sizeof(BACKUP_SUFFIX) - 1), BACKUP_SUFFIX) == 0;
+    if (!isBackup) continue;
+
+    char artifactPath[256];
+    const int artifactLength = snprintf(artifactPath, sizeof(artifactPath), "%s/%s", dirPath, name);
+    if (artifactLength <= 0 || static_cast<size_t>(artifactLength) >= sizeof(artifactPath)) continue;
+    name[nameLen - (sizeof(BACKUP_SUFFIX) - 1)] = '\0';
+    char finalPath[256];
+    const int finalLength = snprintf(finalPath, sizeof(finalPath), "%s/%s", dirPath, name);
+    if (finalLength <= 0 || static_cast<size_t>(finalLength) >= sizeof(finalPath)) continue;
+    if (Storage.exists(finalPath)) {
+      Storage.remove(artifactPath);
+    } else if (!Storage.rename(artifactPath, finalPath)) {
+      LOG_ERR("SDREG", "Could not recover interrupted font upload: %s", artifactPath);
+    } else {
+      LOG_DBG("SDREG", "Recovered interrupted font upload: %s", finalPath);
+    }
+  }
+  dir.close();
+}
+}  // namespace
+
 bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint8_t& style) {
   // V4 naming: <name>_<size>.cpfont (e.g. Bookerly-SD_14.cpfont)
   // Use an ends-with check rather than strstr() so that in-progress downloads
@@ -131,6 +170,7 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
 }
 
 void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family) {
+  recoverInterruptedUploads(dirPath);
   HalFile dir = Storage.open(dirPath);
   if (!dir || !dir.isDirectory()) return;
 

@@ -24,7 +24,7 @@ class FontInstaller {
 
   /// Validate a .cpfont filename: ends with ".cpfont", no path separators or
   /// traversal sequences, basename uses only alphanumeric + hyphen + underscore
-  /// + dot (only as the extension separator). Rejects "../foo.cpfont" and
+  /// (the only dot is the extension separator). Rejects "../foo.cpfont" and
   /// "evil/foo.cpfont".
   static bool isValidCpfontFilename(const char* name);
 
@@ -33,13 +33,13 @@ class FontInstaller {
   /// creates it under SdCardFontRegistry::defaultWriteRoot().
   bool ensureFamilyDir(const char* familyName);
 
-  /// Validate a .cpfont file on disk (check magic bytes).
+  /// Stream and validate a complete v4 .cpfont file on disk without loading it into RAM.
   bool validateCpfontFile(const char* path);
 
   /// Build the full SD path for a font file.
   /// Writes "/<root>/<family>/<filename>" to outBuf, choosing <root> the same
   /// way ensureFamilyDir does (existing install dir, else default-write root).
-  static void buildFontPath(const char* family, const char* filename, char* outBuf, size_t outBufSize);
+  static bool buildFontPath(const char* family, const char* filename, char* outBuf, size_t outBufSize);
 
   /// Delete a family directory and all .cpfont files in it.
   /// If the deleted family is the active reader font, clears the setting.
@@ -53,7 +53,4 @@ class FontInstaller {
 
  private:
   SdCardFontRegistry& registry_;
-
-  static constexpr const char* CPFONT_MAGIC = "CPFONT\0";
-  static constexpr size_t CPFONT_MAGIC_LEN = 8;
 };

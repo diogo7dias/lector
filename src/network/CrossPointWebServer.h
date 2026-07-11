@@ -1,13 +1,15 @@
 #pragma once
 
-#include <HalStorage.h>
 #include <FixedBuffer.h>
+#include <HalStorage.h>
 #include <NetworkUdp.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
 
 #include <memory>
 #include <string>
+
+#include "FontUploadPolicy.h"
 
 // Structure to hold file information
 struct FileInfo {
@@ -117,9 +119,13 @@ class CrossPointWebServer {
   struct FontUploadState {
     HalFile file;
     std::string familyName;
-    std::string filePath;
+    std::string finalPath;
+    std::string tempPath;
+    std::string backupPath;
+    std::string error;
+    FontUploadPolicy policy;
     bool valid = false;
-    bool magicChecked = false;
+    bool committed = false;
     size_t bytesWritten = 0;
     static constexpr size_t BUFFER_SIZE = 4096;
     FixedBuffer<uint8_t, BUFFER_SIZE> buffer;

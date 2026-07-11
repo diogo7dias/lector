@@ -52,6 +52,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   // when the wanted family/size still maps to the same point size — the file
   // contents on disk may have changed (e.g. user re-uploaded a new build).
   const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
+  const bool reloadWasDirty = reloadDirty_.exchange(false, std::memory_order_acquire);
   if (registryWasDirty) {
     LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
     registry_.discover();
@@ -83,9 +84,9 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     }
     const auto* selected = family->findClosestReaderSize(sizeEnum);
     const uint8_t wantedPt = selected ? selected->pointSize : 0;
-    if (!registryWasDirty && wantedPt == manager_.currentPointSize()) return;
+    if (!reloadWasDirty && wantedPt == manager_.currentPointSize()) return;
     LOG_DBG("SDFS", "Reloading %s: size %u -> %u (enum %u)%s", wantedFamily, manager_.currentPointSize(), wantedPt,
-            sizeEnum, registryWasDirty ? " [registry dirty]" : "");
+            sizeEnum, reloadWasDirty ? " [font changed]" : "");
   }
 
   if (!currentFamily.empty()) {
