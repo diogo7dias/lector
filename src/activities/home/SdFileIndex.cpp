@@ -38,7 +38,8 @@ bool SdFileIndex::writeRecord(HalFile& file, const Record& record) {
   return file.write(&record, sizeof(record)) == sizeof(record);
 }
 
-bool SdFileIndex::mergePass(const char* inputPath, const char* outputPath, const size_t count, const size_t runWidth) {
+bool SdFileIndex::mergePass(const char* inputPath, const char* outputPath, const size_t count, const size_t runWidth,
+                            const CancelFn& cancel) {
   HalFile leftFile;
   HalFile rightFile;
   HalFile outputFile;
@@ -62,6 +63,7 @@ bool SdFileIndex::mergePass(const char* inputPath, const char* outputPath, const
     if ((leftIndex < leftEnd && !hasLeft) || (rightIndex < rightEnd && !hasRight)) return false;
 
     while (hasLeft || hasRight) {
+      if (cancel && cancel()) return false;
       const bool takeLeft = hasLeft && (!hasRight || !recordLess(right, left));
       if (!writeRecord(outputFile, takeLeft ? left : right)) return false;
       if (takeLeft) {
@@ -80,7 +82,7 @@ bool SdFileIndex::mergePass(const char* inputPath, const char* outputPath, const
   return written == count;
 }
 
-bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept) {
+bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept, const CancelFn& cancel) {
   clear();
   Storage.mkdir(INDEX_DIR);
   Storage.remove(INDEX_PATH_A);
@@ -123,6 +125,7 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
 
   directory.rewindDirectory();
   for (auto entry = directory.openNextFile(); entry; entry = directory.openNextFile()) {
+    if (cancel && cancel()) return abortBuild();
     entry.getName(nameBuffer, sizeof(nameBuffer));
     const bool isDirectory = entry.isDirectory();
     if (!accept(nameBuffer, isDirectory)) continue;
@@ -158,7 +161,7 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
   const char* inputPath = INDEX_PATH_A;
   const char* outputPath = INDEX_PATH_B;
   for (size_t width = large_folder_index::SORT_RUN_RECORDS; width < recordCount_; width *= 2) {
-    if (!mergePass(inputPath, outputPath, recordCount_, width)) {
+    if (!mergePass(inputPath, outputPath, recordCount_, width, cancel)) {
       clear();
       return false;
     }

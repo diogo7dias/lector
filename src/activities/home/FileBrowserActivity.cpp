@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "ImageViewerPatch.h"
 #include "LargeFolderIndexPolicy.h"
+#include "LargeFolderLoadPolicy.h"
 #include "LibrarySearchSupport.h"
 #include "MappedInputManager.h"
 #include "activities/util/BmpViewerActivity.h"
@@ -31,15 +32,21 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 // Defined below; forward-declared so openSearch()'s preview lambda can use it.
 std::string getFileName(std::string filename);
 
-void FileBrowserActivity::loadFiles() {
+bool FileBrowserActivity::loadFiles(const SdFileIndex::CancelFn& cancel) {
   files.clear();
   sdIndex.clear();
   sdMode = false;
   folderHasBooks_ = false;
+  bool cancelled = false;
+  const auto cancelRequested = [&] {
+    if (!cancel || !cancel()) return false;
+    cancelled = true;
+    return true;
+  };
 
   if (!fileNameBuffer) {
     LOG_ERR("FileBrowser", "fileNameBuffer not allocated");
-    return;
+    return true;
   }
 
   auto accept = [this](const char* name, const bool isDirectory) {
@@ -58,12 +65,17 @@ void FileBrowserActivity::loadFiles() {
   };
 
   auto root = Storage.open(basepath.c_str());
-  if (!root || !root.isDirectory()) return;
+  if (!root || !root.isDirectory()) return true;
 
   root.rewindDirectory();
   size_t retainedNameBytes = 0;
   bool needsSdIndex = false;
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    if (cancelRequested()) {
+      root.close();
+      files.clear();
+      return false;
+    }
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     const bool isDirectory = file.isDirectory();
     if (!accept(fileNameBuffer.get(), isDirectory)) continue;
@@ -81,11 +93,12 @@ void FileBrowserActivity::loadFiles() {
   if (needsSdIndex) {
     std::vector<std::string>().swap(files);
     folderHasBooks_ = false;
-    if (sdIndex.build(basepath, accept)) {
+    if (sdIndex.build(basepath, accept, cancelRequested)) {
       sdMode = true;
       if (SETTINGS.bookBrowserRandomOrder && mode == Mode::Books) sdIndex.shuffleTail();
-      return;
+      return true;
     }
+    if (cancelled) return false;
     LOG_ERR("FileBrowser", "SD index failed; folder list unavailable");
     folderHasBooks_ = false;
   }
@@ -106,6 +119,7 @@ void FileBrowserActivity::loadFiles() {
       std::swap(files[i - 1], files[j]);
     }
   }
+  return true;
 }
 
 ActivityResultHandler FileBrowserActivity::imageViewerResultHandler(const std::string& launchName,
@@ -509,9 +523,24 @@ void FileBrowserActivity::loop() {
       if (basepath.back() != '/') basepath += "/";
 
       if (isDirectory) {
+        const std::string parentPath = large_folder_load::restoredParentPath(basepath);
         basepath += entry.substr(0, entry.length() - 1);
         clearSearch();  // search is scoped to the folder you're standing in
-        loadFiles();
+        const auto cancelForBack = [this] {
+          mappedInput.update();
+          return large_folder_load::shouldCancel(mappedInput.isPressed(MappedInputManager::Button::Back),
+                                                 mappedInput.wasReleased(MappedInputManager::Button::Back));
+        };
+        if (!loadFiles(cancelForBack)) {
+          LOG_DBG("FileBrowser", "Folder load cancelled by Back");
+          basepath = parentPath;
+          loadFiles();
+          selectorIndex = findEntry(entry);
+          lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
+          pendingFullRefresh = true;
+          requestUpdate(true);
+          return;
+        }
         selectorIndex = 0;
         requestUpdate();
       } else if (FsHelpers::checkFileExtension(entry, ".pxc")) {

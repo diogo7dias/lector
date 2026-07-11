@@ -10,13 +10,14 @@
 class SdFileIndex {
  public:
   using AcceptFn = std::function<bool(const char* name, bool isDirectory)>;
+  using CancelFn = std::function<bool()>;
 
   SdFileIndex() = default;
   ~SdFileIndex() { clear(); }
   SdFileIndex(const SdFileIndex&) = delete;
   SdFileIndex& operator=(const SdFileIndex&) = delete;
 
-  bool build(const std::string& directoryPath, const AcceptFn& accept);
+  bool build(const std::string& directoryPath, const AcceptFn& accept, const CancelFn& cancel = {});
   void clear();
 
   bool valid() const { return valid_; }
@@ -50,6 +51,7 @@ class SdFileIndex {
   static bool recordLess(const Record& left, const Record& right);
   static bool readRecord(HalFile& file, size_t index, Record& record);
   static bool writeRecord(HalFile& file, const Record& record);
-  static bool mergePass(const char* inputPath, const char* outputPath, size_t count, size_t runWidth);
+  static bool mergePass(const char* inputPath, const char* outputPath, size_t count, size_t runWidth,
+                        const CancelFn& cancel);
   bool physicalIndex(size_t visibleIndex, size_t& physicalIndex) const;
 };

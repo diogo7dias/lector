@@ -78,7 +78,7 @@ class FileBrowserActivity final : public Activity {
   void clearSearch();
 
   // Data loading
-  void loadFiles();
+  bool loadFiles(const SdFileIndex::CancelFn& cancel = {});
   size_t findEntry(const std::string& name) const;
 
   // Open a .pxc wallpaper in the viewer without tearing down this browser: launched

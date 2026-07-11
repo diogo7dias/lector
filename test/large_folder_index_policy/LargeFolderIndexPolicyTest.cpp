@@ -4,6 +4,7 @@
 #include <set>
 
 #include "activities/home/LargeFolderIndexPolicy.h"
+#include "activities/home/LargeFolderLoadPolicy.h"
 #include "activities/home/LibrarySearchSupport.h"
 #include "activities/home/SdFileIndexLookupPolicy.h"
 
@@ -49,6 +50,18 @@ TEST(LargeFolderIndexPolicy, NaturalSortHandlesBoundedViewsAndNumbers) {
   EXPECT_TRUE(FsHelpers::naturalFileLess(std::string_view("folder 2/"), std::string_view("folder 10/")));
   EXPECT_TRUE(FsHelpers::naturalFileLess(std::string_view("dir/"), std::string_view("book.epub")));
   EXPECT_FALSE(FsHelpers::naturalFileLess(std::string_view("book 10.epub"), std::string_view("book 2.epub")));
+}
+
+TEST(LargeFolderLoadPolicy, BackPressOrReleaseCancelsBlockingFolderLoad) {
+  EXPECT_FALSE(large_folder_load::shouldCancel(/*backPressed=*/false, /*backReleased=*/false));
+  EXPECT_TRUE(large_folder_load::shouldCancel(/*backPressed=*/true, /*backReleased=*/false));
+  EXPECT_TRUE(large_folder_load::shouldCancel(/*backPressed=*/false, /*backReleased=*/true));
+}
+
+TEST(LargeFolderLoadPolicy, CancelRestoresParentWithoutTrailingSlash) {
+  EXPECT_EQ(large_folder_load::restoredParentPath("/"), "/");
+  EXPECT_EQ(large_folder_load::restoredParentPath("/sleep/"), "/sleep");
+  EXPECT_EQ(large_folder_load::restoredParentPath("/sleep"), "/sleep");
 }
 
 TEST(SdFileIndexLookupPolicy, InPlaceRenameRequiresLinearLookupWithoutShuffle) {
