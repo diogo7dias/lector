@@ -18,12 +18,12 @@ bool VisibleEntryMap::removed(const size_t sourceIndex) const {
 }
 
 size_t VisibleEntryMap::removedCount(uint32_t bits) {
-  size_t count = 0;
+  size_t total = 0;
   while (bits != 0) {
     bits &= bits - 1;
-    ++count;
+    ++total;
   }
-  return count;
+  return total;
 }
 
 bool VisibleEntryMap::sourceIndexAt(const size_t visibleIndex, size_t& sourceIndex) const {
