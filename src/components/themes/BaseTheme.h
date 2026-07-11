@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "components/PopupRefreshMode.h"
 #include "components/StatusBar.h"
 
 class GfxRenderer;
@@ -230,7 +231,8 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
-  virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
+  virtual Rect drawPopup(const GfxRenderer& renderer, const char* message,
+                         PopupRefresh refresh = PopupRefresh::Clean) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the

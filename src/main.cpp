@@ -54,11 +54,9 @@ FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts
 static unsigned long allowSleepAt = 0;
 
 // Fonts
-// Default reader font (always compiled in): Bookerly 14. All other
-// families/sizes live under OMIT_FONTS so slim builds can drop them.
-// The three sans/serif families with no dedicated bold-italic face
-// (bookerly/georgia/verdana) reuse their bold face in the bold-italic slot;
-// merriweather ships a real bold-italic.
+// Bookerly is the sole built-in reader family. Size 14 is always present;
+// sizes 12, 13, 15, and 16 live under OMIT_FONTS so slim builds can drop them.
+// Bookerly has no dedicated bold-italic face, so that slot reuses bold.
 EpdFont bookerly14RegularFont(&bookerly_14_regular);
 EpdFont bookerly14BoldFont(&bookerly_14_bold);
 EpdFont bookerly14ItalicFont(&bookerly_14_italic);
@@ -85,80 +83,6 @@ EpdFont bookerly16BoldFont(&bookerly_16_bold);
 EpdFont bookerly16ItalicFont(&bookerly_16_italic);
 EpdFontFamily bookerly16FontFamily(&bookerly16RegularFont, &bookerly16BoldFont, &bookerly16ItalicFont,
                                    &bookerly16BoldFont);
-
-EpdFont georgia12RegularFont(&georgia_12_regular);
-EpdFont georgia12BoldFont(&georgia_12_bold);
-EpdFont georgia12ItalicFont(&georgia_12_italic);
-EpdFontFamily georgia12FontFamily(&georgia12RegularFont, &georgia12BoldFont, &georgia12ItalicFont, &georgia12BoldFont);
-EpdFont georgia13RegularFont(&georgia_13_regular);
-EpdFont georgia13BoldFont(&georgia_13_bold);
-EpdFont georgia13ItalicFont(&georgia_13_italic);
-EpdFontFamily georgia13FontFamily(&georgia13RegularFont, &georgia13BoldFont, &georgia13ItalicFont, &georgia13BoldFont);
-EpdFont georgia14RegularFont(&georgia_14_regular);
-EpdFont georgia14BoldFont(&georgia_14_bold);
-EpdFont georgia14ItalicFont(&georgia_14_italic);
-EpdFontFamily georgia14FontFamily(&georgia14RegularFont, &georgia14BoldFont, &georgia14ItalicFont, &georgia14BoldFont);
-EpdFont georgia15RegularFont(&georgia_15_regular);
-EpdFont georgia15BoldFont(&georgia_15_bold);
-EpdFont georgia15ItalicFont(&georgia_15_italic);
-EpdFontFamily georgia15FontFamily(&georgia15RegularFont, &georgia15BoldFont, &georgia15ItalicFont, &georgia15BoldFont);
-EpdFont georgia16RegularFont(&georgia_16_regular);
-EpdFont georgia16BoldFont(&georgia_16_bold);
-EpdFont georgia16ItalicFont(&georgia_16_italic);
-EpdFontFamily georgia16FontFamily(&georgia16RegularFont, &georgia16BoldFont, &georgia16ItalicFont, &georgia16BoldFont);
-
-EpdFont verdana12RegularFont(&verdana_12_regular);
-EpdFont verdana12BoldFont(&verdana_12_bold);
-EpdFont verdana12ItalicFont(&verdana_12_italic);
-EpdFontFamily verdana12FontFamily(&verdana12RegularFont, &verdana12BoldFont, &verdana12ItalicFont, &verdana12BoldFont);
-EpdFont verdana13RegularFont(&verdana_13_regular);
-EpdFont verdana13BoldFont(&verdana_13_bold);
-EpdFont verdana13ItalicFont(&verdana_13_italic);
-EpdFontFamily verdana13FontFamily(&verdana13RegularFont, &verdana13BoldFont, &verdana13ItalicFont, &verdana13BoldFont);
-EpdFont verdana14RegularFont(&verdana_14_regular);
-EpdFont verdana14BoldFont(&verdana_14_bold);
-EpdFont verdana14ItalicFont(&verdana_14_italic);
-EpdFontFamily verdana14FontFamily(&verdana14RegularFont, &verdana14BoldFont, &verdana14ItalicFont, &verdana14BoldFont);
-EpdFont verdana15RegularFont(&verdana_15_regular);
-EpdFont verdana15BoldFont(&verdana_15_bold);
-EpdFont verdana15ItalicFont(&verdana_15_italic);
-EpdFontFamily verdana15FontFamily(&verdana15RegularFont, &verdana15BoldFont, &verdana15ItalicFont, &verdana15BoldFont);
-EpdFont verdana16RegularFont(&verdana_16_regular);
-EpdFont verdana16BoldFont(&verdana_16_bold);
-EpdFont verdana16ItalicFont(&verdana_16_italic);
-EpdFontFamily verdana16FontFamily(&verdana16RegularFont, &verdana16BoldFont, &verdana16ItalicFont, &verdana16BoldFont);
-
-EpdFont merriweather12RegularFont(&merriweather_12_regular);
-EpdFont merriweather12BoldFont(&merriweather_12_bold);
-EpdFont merriweather12ItalicFont(&merriweather_12_italic);
-EpdFont merriweather12BoldItalicFont(&merriweather_12_bolditalic);
-EpdFontFamily merriweather12FontFamily(&merriweather12RegularFont, &merriweather12BoldFont, &merriweather12ItalicFont,
-                                       &merriweather12BoldItalicFont);
-EpdFont merriweather13RegularFont(&merriweather_13_regular);
-EpdFont merriweather13BoldFont(&merriweather_13_bold);
-EpdFont merriweather13ItalicFont(&merriweather_13_italic);
-EpdFont merriweather13BoldItalicFont(&merriweather_13_bolditalic);
-EpdFontFamily merriweather13FontFamily(&merriweather13RegularFont, &merriweather13BoldFont, &merriweather13ItalicFont,
-                                       &merriweather13BoldItalicFont);
-EpdFont merriweather14RegularFont(&merriweather_14_regular);
-EpdFont merriweather14BoldFont(&merriweather_14_bold);
-EpdFont merriweather14ItalicFont(&merriweather_14_italic);
-EpdFont merriweather14BoldItalicFont(&merriweather_14_bolditalic);
-EpdFontFamily merriweather14FontFamily(&merriweather14RegularFont, &merriweather14BoldFont, &merriweather14ItalicFont,
-                                       &merriweather14BoldItalicFont);
-EpdFont merriweather15RegularFont(&merriweather_15_regular);
-EpdFont merriweather15BoldFont(&merriweather_15_bold);
-EpdFont merriweather15ItalicFont(&merriweather_15_italic);
-EpdFont merriweather15BoldItalicFont(&merriweather_15_bolditalic);
-EpdFontFamily merriweather15FontFamily(&merriweather15RegularFont, &merriweather15BoldFont, &merriweather15ItalicFont,
-                                       &merriweather15BoldItalicFont);
-EpdFont merriweather16RegularFont(&merriweather_16_regular);
-EpdFont merriweather16BoldFont(&merriweather_16_bold);
-EpdFont merriweather16ItalicFont(&merriweather_16_italic);
-EpdFont merriweather16BoldItalicFont(&merriweather_16_bolditalic);
-EpdFontFamily merriweather16FontFamily(&merriweather16RegularFont, &merriweather16BoldFont, &merriweather16ItalicFont,
-                                       &merriweather16BoldItalicFont);
-
 #endif  // OMIT_FONTS
 
 // UI face = Cozette (regular only; no bold cut). The regular Cozette is passed
@@ -353,24 +277,6 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(BOOKERLY_13_FONT_ID, bookerly13FontFamily);
   renderer.insertFont(BOOKERLY_15_FONT_ID, bookerly15FontFamily);
   renderer.insertFont(BOOKERLY_16_FONT_ID, bookerly16FontFamily);
-
-  renderer.insertFont(GEORGIA_12_FONT_ID, georgia12FontFamily);
-  renderer.insertFont(GEORGIA_13_FONT_ID, georgia13FontFamily);
-  renderer.insertFont(GEORGIA_14_FONT_ID, georgia14FontFamily);
-  renderer.insertFont(GEORGIA_15_FONT_ID, georgia15FontFamily);
-  renderer.insertFont(GEORGIA_16_FONT_ID, georgia16FontFamily);
-
-  renderer.insertFont(VERDANA_12_FONT_ID, verdana12FontFamily);
-  renderer.insertFont(VERDANA_13_FONT_ID, verdana13FontFamily);
-  renderer.insertFont(VERDANA_14_FONT_ID, verdana14FontFamily);
-  renderer.insertFont(VERDANA_15_FONT_ID, verdana15FontFamily);
-  renderer.insertFont(VERDANA_16_FONT_ID, verdana16FontFamily);
-
-  renderer.insertFont(MERRIWEATHER_12_FONT_ID, merriweather12FontFamily);
-  renderer.insertFont(MERRIWEATHER_13_FONT_ID, merriweather13FontFamily);
-  renderer.insertFont(MERRIWEATHER_14_FONT_ID, merriweather14FontFamily);
-  renderer.insertFont(MERRIWEATHER_15_FONT_ID, merriweather15FontFamily);
-  renderer.insertFont(MERRIWEATHER_16_FONT_ID, merriweather16FontFamily);
 #endif  // OMIT_FONTS
   renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
   renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
@@ -420,9 +326,14 @@ void setup() {
   silentRebootTarget = 0;
 
   gpio.begin();
+  const unsigned long gpioSamplingStartedAt = millis();
+  // Prime debounce immediately. Later samples are spread across real startup
+  // work, replacing the dedicated 500 ms recovery-button wait below.
+  gpio.update();
   powerManager.begin();
   halTiltSensor.begin();
   halClock.begin();
+  gpio.update();
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
@@ -434,6 +345,7 @@ void setup() {
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
   }
+  gpio.update();
 
   HalSystem::checkPanic();
 
@@ -445,6 +357,7 @@ void setup() {
   OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+  gpio.update();
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
@@ -470,14 +383,16 @@ void setup() {
   // flashing has been locked down (e.g. recent X3 firmware).
   bool recoveryFirmwareMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
-    // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
-    // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
-    // settle window even if the loop body takes longer than expected on slow boots.
-    const unsigned long settleStart = millis();
-    while (millis() - settleStart < 500) {
+    // Debounce was sampled during hardware, SD, and settings startup above, so
+    // recovery detection waits only for any settle time that startup did not
+    // already consume. This preserves the recovery chord on unusually fast
+    // boots without charging every wake a fresh fixed half-second.
+    constexpr unsigned long RECOVERY_BUTTON_SETTLE_MS = 500;
+    while (millis() - gpioSamplingStartedAt < RECOVERY_BUTTON_SETTLE_MS) {
       gpio.update();
       delay(10);
     }
+    gpio.update();
     if (gpio.isPressed(HalGPIO::BTN_UP)) {
       recoveryFirmwareMode = true;
       LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");

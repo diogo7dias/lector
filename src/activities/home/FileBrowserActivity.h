@@ -86,6 +86,8 @@ class FileBrowserActivity final : public Activity {
   // one affected row in place on return (moved/deleted -> erased; favorite-renamed ->
   // updated) instead of re-scanning the whole folder. launchName is the row string.
   void openPxcViewer(const std::string& path, const std::string& launchName);
+  void openBmpViewer(const std::string& path, const std::string& launchName);
+  ActivityResultHandler imageViewerResultHandler(const std::string& launchName);
 
   // A "Recent Books" shortcut row is pinned to the top of the list only at the SD
   // root in the normal book browser (never in the firmware picker or subfolders).

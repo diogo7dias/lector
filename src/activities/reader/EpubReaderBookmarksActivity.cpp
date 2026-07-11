@@ -128,12 +128,12 @@ void EpubReaderBookmarksActivity::loop() {
     requestUpdate();
   }
 
-  buttonNavigator.onNextRelease([this] {
+  buttonNavigator.onNextPress([this] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, bookmarks.size());
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this] {
+  buttonNavigator.onPreviousPress([this] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, bookmarks.size());
     requestUpdate();
   });

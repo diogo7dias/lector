@@ -1073,7 +1073,7 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   }
 }
 
-Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
+Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const PopupRefresh refresh) const {
   // Lector popup = a full-width black banner with white centered text, matching
   // the book-open "Opening..." banner. Height keeps the popup's top+bottom
   // margin so fillPopupProgress still has room to draw a progress bar in the
@@ -1096,7 +1096,10 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   renderer.setPaperbackLook(true);
   renderer.drawText(UI_12_FONT_ID, textX, textY, message, false);  // white text
   renderer.setPaperbackLook(false);
-  renderer.displayBuffer();
+  // Result and warning banners default to a clean first paint. Short-lived
+  // loading banners may opt into FAST because the following content replaces
+  // them immediately; cleaning those banners only adds panel latency.
+  renderer.displayBuffer(refresh == PopupRefresh::Temporary ? HalDisplay::FAST_REFRESH : HalDisplay::HALF_REFRESH);
   return Rect{0, y, pageWidth, h};
 }
 

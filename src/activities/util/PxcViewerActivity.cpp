@@ -42,15 +42,14 @@ void PxcViewerActivity::render() {
           : "";
   const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, tr(STR_DELETE), favLabel);
-  // Bake the hints into every grayscale pass so they composite solid over the
-  // wallpaper. Drawing them AFTER renderPxcSleepScreen's own refresh would need a
-  // separate partial refresh, which accumulates charge -> ghosting on X3; passing
-  // them as the per-pass overlay avoids that entirely (one grayscale refresh total).
+  // Solid black and white controls must be present in the visible BW base. The
+  // later grayscale planes can shade existing pixels but cannot create new BW
+  // controls, so use the reliable every-pass path.
   const auto drawHints = [&]() { GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4); };
   // Render byte-for-byte like the lock screen (3-pass grayscale, panel-sized), now
   // with the hint band baked in. Returns false when the .pxc does not match this
   // screen (+/-1 px) or fails to open; only then do we show an error frame.
-  if (!renderPxcSleepScreen(renderer, filePath, drawHints)) {
+  if (!renderPxcSleepScreen(renderer, filePath, drawHints, true, true, pxcViewerOverlayTiming())) {
     const auto pageHeight = renderer.getScreenHeight();
     renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));
@@ -66,6 +65,9 @@ void PxcViewerActivity::onEnter() {
 
 void PxcViewerActivity::onExit() {
   Activity::onExit();
+  // The still-alive browser performs the one required cleanup paint. Skipping
+  // this intermediate blank frame makes review-and-move a single panel update.
+  if (resultMode) return;
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
@@ -112,7 +114,7 @@ void PxcViewerActivity::loop() {
   // original path lets the browser land there even though the file is now gone.
   // A same-named file in the destination makes the rename fail (SdFat never
   // overwrites) — surface that and stay put instead of pretending it moved.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && crosspoint::sleep::isUnderSleepDirs(filePath)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && crosspoint::sleep::isUnderSleepDirs(filePath)) {
     const auto res = crosspoint::sleep::toggleSleepPause(filePath);
     if (!res.ok) {
       GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));

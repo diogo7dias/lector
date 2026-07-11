@@ -7,8 +7,9 @@
 #include "activities/home/LibrarySearchSupport.h"
 
 TEST(LargeFolderIndexPolicy, SwitchesBeforeNameStorageCanBecomeLarge) {
-  EXPECT_TRUE(large_folder_index::shouldUseSdIndex(257));
-  EXPECT_FALSE(large_folder_index::shouldUseSdIndex(256));
+  EXPECT_FALSE(large_folder_index::shouldUseSdIndex(469));
+  EXPECT_FALSE(large_folder_index::shouldUseSdIndex(1024));
+  EXPECT_TRUE(large_folder_index::shouldUseSdIndex(1025));
   EXPECT_TRUE(large_folder_index::shouldUseSdIndex(20, large_folder_index::IN_MEMORY_NAME_BYTES_LIMIT + 1));
 }
 

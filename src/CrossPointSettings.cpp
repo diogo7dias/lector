@@ -289,20 +289,8 @@ float CrossPointSettings::getReaderLineCompression() const {
   // Each font has a natural (== 100%) line-height multiplier; the user's
   // lineSpacingPercent scales around it. 100% reproduces the old NORMAL spacing
   // exactly, so existing readers are unchanged unless they move the slider.
-  float base;
-  if (sdFontFamilyName[0] != '\0') {
-    // SD card fonts share Bookerly's neutral curve.
-    base = 1.0f;
-  } else if (fontFamily == VERDANA) {
-    // Verdana (sans) reads tighter, matching the old NotoSans curve.
-    base = 0.95f;
-  } else {
-    // Serif families (Bookerly/Georgia/Merriweather) + fallback.
-    base = 1.0f;
-  }
-
   const uint8_t percent = std::clamp(lineSpacingPercent, MIN_LINE_SPACING_PERCENT, MAX_LINE_SPACING_PERCENT);
-  return base * (static_cast<float>(percent) / 100.0f);
+  return static_cast<float>(percent) / 100.0f;
 }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
@@ -336,63 +324,17 @@ int CrossPointSettings::getReaderFontId() const {
     // Fall through to built-in if SD font not found
   }
 
-  switch (fontFamily) {
-    case BOOKERLY:
+  switch (fontSize) {
+    case SIZE_12:
+      return BOOKERLY_12_FONT_ID;
+    case SIZE_13:
+      return BOOKERLY_13_FONT_ID;
+    case SIZE_14:
     default:
-      switch (fontSize) {
-        case SIZE_12:
-          return BOOKERLY_12_FONT_ID;
-        case SIZE_13:
-          return BOOKERLY_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return BOOKERLY_14_FONT_ID;
-        case SIZE_15:
-          return BOOKERLY_15_FONT_ID;
-        case SIZE_16:
-          return BOOKERLY_16_FONT_ID;
-      }
-    case GEORGIA:
-      switch (fontSize) {
-        case SIZE_12:
-          return GEORGIA_12_FONT_ID;
-        case SIZE_13:
-          return GEORGIA_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return GEORGIA_14_FONT_ID;
-        case SIZE_15:
-          return GEORGIA_15_FONT_ID;
-        case SIZE_16:
-          return GEORGIA_16_FONT_ID;
-      }
-    case VERDANA:
-      switch (fontSize) {
-        case SIZE_12:
-          return VERDANA_12_FONT_ID;
-        case SIZE_13:
-          return VERDANA_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return VERDANA_14_FONT_ID;
-        case SIZE_15:
-          return VERDANA_15_FONT_ID;
-        case SIZE_16:
-          return VERDANA_16_FONT_ID;
-      }
-    case MERRIWEATHER:
-      switch (fontSize) {
-        case SIZE_12:
-          return MERRIWEATHER_12_FONT_ID;
-        case SIZE_13:
-          return MERRIWEATHER_13_FONT_ID;
-        case SIZE_14:
-        default:
-          return MERRIWEATHER_14_FONT_ID;
-        case SIZE_15:
-          return MERRIWEATHER_15_FONT_ID;
-        case SIZE_16:
-          return MERRIWEATHER_16_FONT_ID;
-      }
+      return BOOKERLY_14_FONT_ID;
+    case SIZE_15:
+      return BOOKERLY_15_FONT_ID;
+    case SIZE_16:
+      return BOOKERLY_16_FONT_ID;
   }
 }

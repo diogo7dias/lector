@@ -1,0 +1,3 @@
+add_executable(pxc_overlay_timing_tests PxcOverlayTimingTest.cpp)
+target_link_libraries(pxc_overlay_timing_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(pxc_overlay_timing_tests)

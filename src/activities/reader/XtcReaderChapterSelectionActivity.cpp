@@ -69,12 +69,12 @@ void XtcReaderChapterSelectionActivity::loop() {
     finish();
   }
 
-  buttonNavigator.onNextRelease([this, totalItems] {
+  buttonNavigator.onNextPress([this, totalItems] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, totalItems] {
+  buttonNavigator.onPreviousPress([this, totalItems] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
     requestUpdate();
   });

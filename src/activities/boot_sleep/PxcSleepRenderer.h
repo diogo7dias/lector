@@ -2,6 +2,8 @@
 #include <functional>
 #include <string>
 
+#include "PxcOverlayTiming.h"
+
 class GfxRenderer;
 
 // Renders a full-screen (panel-sized, e.g. 480x800) pre-dithered 2-bits-per-pixel
@@ -17,10 +19,9 @@ class GfxRenderer;
 // false on open / header / size-mismatch / allocation / read failure so the
 // caller can fall through to another sleep screen.
 //
-// extraOverlay, when set, is invoked once per grayscale pass (BW base, LSB, MSB)
-// right after the sleep info overlay, so anything it draws composites solid over
-// the wallpaper — used by the PXC viewer to bake button hints onto the image.
-// The real sleep screen leaves it null so no buttons appear there.
+// extraOverlay defaults to every pass. FinalComposite skips the visible BW base
+// and draws only into the two off-screen grayscale planes, so viewer controls
+// appear together with the completed image without an extra panel refresh.
 //
 // drawInfoOverlay gates the bottom-left filename / favorite badge. The sleep
 // screen and PXC viewer leave it on; the unlock banner screen passes false so its
@@ -31,4 +32,4 @@ class GfxRenderer;
 // this for a faster wake; the sleep screen and PXC viewer keep the full grayscale.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path,
                           const std::function<void()>& extraOverlay = nullptr, bool drawInfoOverlay = true,
-                          bool grayscale = true);
+                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass);

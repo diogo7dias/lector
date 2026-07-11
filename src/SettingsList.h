@@ -18,8 +18,7 @@
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
 inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   // Built-in font labels (StrId)
-  std::vector<StrId> enumValues = {StrId::STR_BOOKERLY, StrId::STR_GEORGIA, StrId::STR_VERDANA,
-                                   StrId::STR_MERRIWEATHER};
+  std::vector<StrId> enumValues = {StrId::STR_BOOKERLY};
   // Runtime string labels for SD card fonts
   std::vector<std::string> enumStringValues;
 
@@ -41,9 +40,6 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   std::vector<std::string> allStringValues;
   if (sdFontCount > 0) {
     allStringValues.push_back(I18N.get(StrId::STR_BOOKERLY));
-    allStringValues.push_back(I18N.get(StrId::STR_GEORGIA));
-    allStringValues.push_back(I18N.get(StrId::STR_VERDANA));
-    allStringValues.push_back(I18N.get(StrId::STR_MERRIWEATHER));
     allStringValues.insert(allStringValues.end(), enumStringValues.begin(), enumStringValues.end());
   }
 
@@ -150,8 +146,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // Built-in font-family entry. Replaced per-call with a registry-aware
         // version when SD fonts are installed.
         SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                          {StrId::STR_BOOKERLY, StrId::STR_GEORGIA, StrId::STR_VERDANA, StrId::STR_MERRIWEATHER},
-                          "fontFamily", StrId::STR_CAT_READER),
+                          {StrId::STR_BOOKERLY}, "fontFamily", StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_FONT_SIZE, &CrossPointSettings::fontSize,
                           {StrId::STR_FONT_SIZE_12, StrId::STR_FONT_SIZE_13, StrId::STR_FONT_SIZE_14,
                            StrId::STR_FONT_SIZE_15, StrId::STR_FONT_SIZE_16},

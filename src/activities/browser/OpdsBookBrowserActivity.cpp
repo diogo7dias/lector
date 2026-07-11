@@ -103,11 +103,11 @@ void OpdsBookBrowserActivity::loop() {
     }
 
     if (!entries.empty()) {
-      buttonNavigator.onNextRelease([this] {
+      buttonNavigator.onNextPress([this] {
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
         requestUpdate();
       });
-      buttonNavigator.onPreviousRelease([this] {
+      buttonNavigator.onPreviousPress([this] {
         selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
         requestUpdate();
       });

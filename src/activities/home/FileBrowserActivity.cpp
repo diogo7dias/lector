@@ -15,6 +15,7 @@
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "activities/util/BmpViewerActivity.h"
 #include "activities/util/PxcViewerActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -105,8 +106,8 @@ void FileBrowserActivity::loadFiles() {
   }
 }
 
-void FileBrowserActivity::openPxcViewer(const std::string& path, const std::string& launchName) {
-  auto handler = [this, launchName](const ActivityResult& res) {
+ActivityResultHandler FileBrowserActivity::imageViewerResultHandler(const std::string& launchName) {
+  return [this, launchName](const ActivityResult& res) {
     if (!std::holds_alternative<FilePathResult>(res.data)) return;
     const std::string& finalPath = std::get<FilePathResult>(res.data).path;
     if (sdMode) {
@@ -152,8 +153,16 @@ void FileBrowserActivity::openPxcViewer(const std::string& path, const std::stri
     pendingFullRefresh = true;
     requestUpdate(true);
   };
+}
+
+void FileBrowserActivity::openPxcViewer(const std::string& path, const std::string& launchName) {
   startActivityForResult(makeUniqueNoThrow<PxcViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
-                         handler);
+                         imageViewerResultHandler(launchName));
+}
+
+void FileBrowserActivity::openBmpViewer(const std::string& path, const std::string& launchName) {
+  startActivityForResult(makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, path, /*resultMode=*/true),
+                         imageViewerResultHandler(launchName));
 }
 
 // Map a selector row index to what it represents: a synthetic action row (Recent
@@ -484,6 +493,8 @@ void FileBrowserActivity::loop() {
         requestUpdate();
       } else if (FsHelpers::checkFileExtension(entry, ".pxc")) {
         openPxcViewer(basepath + entry, entry);
+      } else if (FsHelpers::hasBmpExtension(entry)) {
+        openBmpViewer(basepath + entry, entry);
       } else {
         onSelectBook(basepath + entry);
       }
@@ -520,12 +531,12 @@ void FileBrowserActivity::loop() {
   }
 
   int listSize = static_cast<int>(totalRowCount());
-  buttonNavigator.onNextRelease([this, listSize] {
+  buttonNavigator.onNextPress([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, listSize] {
+  buttonNavigator.onPreviousPress([this, listSize] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     requestUpdate();
   });

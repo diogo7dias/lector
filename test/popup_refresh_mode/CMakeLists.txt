@@ -1,0 +1,3 @@
+add_executable(popup_refresh_mode_tests PopupRefreshModeTest.cpp)
+target_link_libraries(popup_refresh_mode_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(popup_refresh_mode_tests)

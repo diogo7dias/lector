@@ -156,11 +156,11 @@ void StatusBarSettingsActivity::loop() {
       requestUpdate();
       return;
     }
-    buttonNavigator.onNextRelease([this] {
+    buttonNavigator.onNextPress([this] {
       pickerIndex = ButtonNavigator::nextIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
       requestUpdate();
     });
-    buttonNavigator.onPreviousRelease([this] {
+    buttonNavigator.onPreviousPress([this] {
       pickerIndex = ButtonNavigator::previousIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
       requestUpdate();
     });
@@ -187,11 +187,11 @@ void StatusBarSettingsActivity::loop() {
   }
 
   const int count = static_cast<int>(visibleItems.size());
-  buttonNavigator.onNextRelease([this, count] {
+  buttonNavigator.onNextPress([this, count] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, count);
     requestUpdate();
   });
-  buttonNavigator.onPreviousRelease([this, count] {
+  buttonNavigator.onPreviousPress([this, count] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, count);
     requestUpdate();
   });

@@ -37,12 +37,12 @@ void SettingSelectActivity::loop() {
   const int total = static_cast<int>(options_.size());
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-  buttonNavigator_.onNextRelease([this, total] {
+  buttonNavigator_.onNextPress([this, total] {
     selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, total);
     requestUpdate();
   });
 
-  buttonNavigator_.onPreviousRelease([this, total] {
+  buttonNavigator_.onPreviousPress([this, total] {
     selectedIndex_ = ButtonNavigator::previousIndex(selectedIndex_, total);
     requestUpdate();
   });

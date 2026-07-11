@@ -12,7 +12,7 @@
 #include "SleepInfoOverlay.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const std::function<void()>& extraOverlay,
-                          bool drawInfoOverlay, bool grayscale) {
+                          bool drawInfoOverlay, bool grayscale, const PxcOverlayTiming overlayTiming) {
   HalFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
@@ -106,7 +106,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
   if (drawInfoOverlay) drawSleepInfoOverlay(renderer, path);
-  if (extraOverlay) extraOverlay();
+  if (extraOverlay && shouldDrawPxcOverlay(overlayTiming, PxcOverlayStage::Base, grayscale)) extraOverlay();
 
   if (!grayscale) {
     // 1-bit fast path: a single BW refresh of the silhouette + overlays, skipping
@@ -126,7 +126,12 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     return false;
   }
   if (drawInfoOverlay) drawSleepInfoOverlay(renderer, path);
-  if (extraOverlay) extraOverlay();
+  if (extraOverlay && shouldDrawPxcOverlay(overlayTiming, PxcOverlayStage::Lsb, grayscale)) {
+    const bool forceBw = shouldForceBwPxcOverlay(overlayTiming, PxcOverlayStage::Lsb, grayscale);
+    if (forceBw) renderer.setRenderMode(GfxRenderer::BW);
+    extraOverlay();
+    if (forceBw) renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  }
   renderer.copyGrayscaleLsbBuffers();
 
   renderer.clearScreen(0x00);
@@ -136,7 +141,12 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     return false;
   }
   if (drawInfoOverlay) drawSleepInfoOverlay(renderer, path);
-  if (extraOverlay) extraOverlay();
+  if (extraOverlay && shouldDrawPxcOverlay(overlayTiming, PxcOverlayStage::Msb, grayscale)) {
+    const bool forceBw = shouldForceBwPxcOverlay(overlayTiming, PxcOverlayStage::Msb, grayscale);
+    if (forceBw) renderer.setRenderMode(GfxRenderer::BW);
+    extraOverlay();
+    if (forceBw) renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  }
   renderer.copyGrayscaleMsbBuffers();
 
   renderer.displayGrayBuffer();

@@ -57,7 +57,27 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
+HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested) {
+  DisplayRefreshPolicy::Mode policyMode = DisplayRefreshPolicy::Mode::Fast;
+  if (requested == RefreshMode::HALF_REFRESH) {
+    policyMode = DisplayRefreshPolicy::Mode::Clean;
+  } else if (requested == RefreshMode::FULL_REFRESH) {
+    policyMode = DisplayRefreshPolicy::Mode::Full;
+  }
+
+  switch (refreshPolicy.choose(policyMode, millis())) {
+    case DisplayRefreshPolicy::Mode::Clean:
+      return RefreshMode::HALF_REFRESH;
+    case DisplayRefreshPolicy::Mode::Full:
+      return RefreshMode::FULL_REFRESH;
+    case DisplayRefreshPolicy::Mode::Fast:
+    default:
+      return RefreshMode::FAST_REFRESH;
+  }
+}
+
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
@@ -66,6 +86,7 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
@@ -73,7 +94,10 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
-void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
+void HalDisplay::deepSleep() {
+  refreshPolicy.reset();
+  einkDisplay.deepSleep();
+}
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
@@ -82,6 +106,7 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* m
 }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
+  fallback = applyRefreshPolicy(fallback);
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior

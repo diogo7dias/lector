@@ -106,7 +106,7 @@ class CrossPointSettings {
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName)
-  enum FONT_FAMILY { BOOKERLY = 0, GEORGIA = 1, VERDANA = 2, MERRIWEATHER = 3, FONT_FAMILY_COUNT };
+  enum FONT_FAMILY { BOOKERLY = 0, FONT_FAMILY_COUNT };
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Font size options (point sizes 12-16). Size 11 was dropped to reclaim flash;
   // the enum was reindexed (SIZE_12 is now 0). JsonSettingsIO migrates old

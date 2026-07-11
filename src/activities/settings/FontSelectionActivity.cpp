@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "FontPreviewLayout.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "components/UITheme.h"
@@ -53,9 +54,6 @@ void FontSelectionActivity::onEnter() {
   fonts_.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + (registry_ ? registry_->getFamilyCount() : 0));
 
   fonts_.push_back({I18N.get(StrId::STR_BOOKERLY), true, static_cast<uint8_t>(CrossPointSettings::BOOKERLY)});
-  fonts_.push_back({I18N.get(StrId::STR_GEORGIA), true, static_cast<uint8_t>(CrossPointSettings::GEORGIA)});
-  fonts_.push_back({I18N.get(StrId::STR_VERDANA), true, static_cast<uint8_t>(CrossPointSettings::VERDANA)});
-  fonts_.push_back({I18N.get(StrId::STR_MERRIWEATHER), true, static_cast<uint8_t>(CrossPointSettings::MERRIWEATHER)});
 
   if (registry_) {
     const auto& families = registry_->getFamilies();
@@ -109,12 +107,12 @@ void FontSelectionActivity::loop() {
   const int pageItems =
       UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, previewHeight + metrics_.verticalSpacing);
 
-  buttonNavigator_.onNextRelease([this, listSize] {
+  buttonNavigator_.onNextPress([this, listSize] {
     selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
     requestUpdate();
   });
 
-  buttonNavigator_.onPreviousRelease([this, listSize] {
+  buttonNavigator_.onPreviousPress([this, listSize] {
     selectedIndex_ = ButtonNavigator::previousIndex(selectedIndex_, listSize);
     requestUpdate();
   });
@@ -154,20 +152,15 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, c
   const int labelFontId = UI_10_FONT_ID;
   const int labelH = renderer.getTextHeight(labelFontId);
   const int labelGap = 4;
-  const int labelReserved = labelH + labelGap + metrics_.previewPadding;
+  const int rowGap = 6;
+  const auto layout =
+      calculateFontPreviewLayout(top, height, metrics_.previewPadding, labelH, labelGap, rowGap);
 
-  char labelBuf[128];
-  snprintf(labelBuf, sizeof(labelBuf), "%s \"%s\"", tr(STR_PREVIEW), fontName ? fontName : "");
-  const int labelY = top + height - metrics_.previewPadding - labelH;
-  renderer.drawText(labelFontId, left, labelY, labelBuf);
-
+  renderer.setPaperbackLook(false);
   if (fontId == 0) return;
 
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
-
-  const int innerHeight = height - metrics_.previewPadding - labelReserved;
-  const int maxLines = std::max(1, innerHeight / (lineH + 2));
 
   const char* previewText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
   if (auto* fcm = renderer.getFontCacheManager()) {
@@ -176,15 +169,26 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, c
     fcm->prewarmCache(fontId, prewarmBuf, 0x01);
   }
 
-  const auto lines = renderer.wrappedText(fontId, previewText, width, maxLines);
+  const auto drawRow = [&](const FontPreviewRowLayout& row, const char* modeLabel, const bool paperback) {
+    char labelBuf[128];
+    snprintf(labelBuf, sizeof(labelBuf), "%s: %s", modeLabel, fontName ? fontName : "");
+    const std::string label = renderer.truncatedText(labelFontId, labelBuf, width);
+    renderer.drawText(labelFontId, left, row.labelY, label.c_str());
 
-  int y = top + metrics_.previewPadding;
-  const int textBottomLimit = top + height - labelReserved;
-  for (const auto& line : lines) {
-    if (y + lineH > textBottomLimit) break;
-    renderer.drawText(fontId, left, y, line.c_str());
-    y += lineH + 2;
-  }
+    const int maxLines = std::max(1, (row.textBottom - row.textTop) / (lineH + 2));
+    const auto lines = renderer.wrappedText(fontId, previewText, width, maxLines);
+    renderer.setPaperbackLook(paperback);
+    int y = row.textTop;
+    for (const auto& line : lines) {
+      if (y + lineH > row.textBottom) break;
+      renderer.drawText(fontId, left, y, line.c_str());
+      y += lineH + 2;
+    }
+    renderer.setPaperbackLook(false);
+  };
+
+  drawRow(layout.normal, tr(STR_NORMAL), false);
+  drawRow(layout.paperback, tr(STR_PAPERBACK_LOOK), true);
 }
 
 void FontSelectionActivity::render(RenderLock&&) {

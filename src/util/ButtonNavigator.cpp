@@ -1,5 +1,9 @@
 #include "ButtonNavigator.h"
 
+#include "ButtonResponsePolicy.h"
+
+static_assert(button_response::navigationTrigger() == button_response::Trigger::Press);
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 void ButtonNavigator::onNext(const Callback& callback) {

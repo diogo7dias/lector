@@ -13,8 +13,9 @@
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
 
-BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
-    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
+BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path,
+                                     bool resultMode)
+    : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)), resultMode(resultMode) {}
 
 void BmpViewerActivity::loadSiblingImages() {
   siblingImages.clear();
@@ -68,7 +69,7 @@ void BmpViewerActivity::onEnter() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary);
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
   // 1. Open the file
   if (Storage.openFileForRead("BMP", filePath, file)) {
@@ -146,12 +147,24 @@ void BmpViewerActivity::onEnter() {
 
 void BmpViewerActivity::onExit() {
   Activity::onExit();
+  // The live browser paints one clean list frame when this child returns. Avoid
+  // an extra blank cleanup pass before that frame, which doubled move latency.
+  if (resultMode) return;
   renderer.clearScreen();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
+void BmpViewerActivity::returnToBrowser(const bool removed) {
+  if (resultMode) {
+    setResult(FilePathResult{removed ? std::string() : filePath});
+    finish();
+  } else {
+    activityManager.goToFileBrowser(filePath);
+  }
+}
+
 void BmpViewerActivity::doSetSleepCover() {
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary);
 
   bool success = false;
   HalFile inFile, outFile;
@@ -189,13 +202,12 @@ void BmpViewerActivity::moveSleepPause() {
   // browser land there even though the file is now gone from this folder.
   // A same-named file in the destination makes SdFat's rename fail (it never
   // overwrites) — surface that and stay put instead of pretending it moved.
-  const std::string original = filePath;
   const auto res = crosspoint::sleep::toggleSleepPause(filePath);
   if (!res.ok) {
     GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
     return;
   }
-  activityManager.goToFileBrowser(original);
+  returnToBrowser(true);
 }
 
 void BmpViewerActivity::loop() {
@@ -203,11 +215,11 @@ void BmpViewerActivity::loop() {
   Activity::loop();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    activityManager.goToFileBrowser(filePath);
+    returnToBrowser(false);
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (crosspoint::sleep::isUnderSleepDirs(filePath)) {
       moveSleepPause();
     } else {

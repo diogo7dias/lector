@@ -4,8 +4,11 @@
 #include <numeric>
 
 namespace large_folder_index {
-inline constexpr size_t IN_MEMORY_ENTRY_LIMIT = 256;
-inline constexpr size_t IN_MEMORY_NAME_BYTES_LIMIT = 16 * 1024;
+// Medium wallpaper folders are faster and comfortably small in RAM. The SD
+// index is intentionally reserved for genuinely large libraries because it
+// rescans the directory and performs several fixed-record merge passes.
+inline constexpr size_t IN_MEMORY_ENTRY_LIMIT = 1024;
+inline constexpr size_t IN_MEMORY_NAME_BYTES_LIMIT = 64 * 1024;
 inline constexpr size_t MAX_INDEX_ENTRIES = 20000;
 inline constexpr size_t MAX_SEARCH_RESULTS = 512;
 inline constexpr size_t SORT_RUN_RECORDS = 32;

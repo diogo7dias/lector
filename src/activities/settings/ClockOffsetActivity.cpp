@@ -120,11 +120,11 @@ void ClockOffsetActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextRelease([this] {
+  buttonNavigator.onNextPress([this] {
     adjustActiveField(+1);
     requestUpdate();
   });
-  buttonNavigator.onPreviousRelease([this] {
+  buttonNavigator.onPreviousPress([this] {
     adjustActiveField(-1);
     requestUpdate();
   });

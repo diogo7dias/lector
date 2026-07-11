@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <DisplayRefreshPolicy.h>
 #include <EInkDisplay.h>
 
 class HalDisplay {
@@ -80,7 +81,10 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
+  RefreshMode applyRefreshPolicy(RefreshMode requested);
+
   EInkDisplay einkDisplay;
+  DisplayRefreshPolicy refreshPolicy;
 };
 
 extern HalDisplay display;

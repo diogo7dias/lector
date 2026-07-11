@@ -1,0 +1,3 @@
+add_executable(button_response_policy_tests ButtonResponsePolicyTest.cpp)
+target_link_libraries(button_response_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(button_response_policy_tests)
