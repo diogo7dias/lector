@@ -38,4 +38,14 @@ uint32_t estimateFinishDay(const uint32_t todayDay, const uint32_t startDay, con
   return todayDay + daysLeft;
 }
 
+int centeredTextX(const int areaX, const int areaWidth, const int textWidth) {
+  return areaX + std::max(0, (areaWidth - textWidth) / 2);
+}
+
+int chartLabelColumnWidth(const int areaWidth, const int widestLabelWidth) {
+  constexpr int kLabelGap = 8;
+  constexpr int kMinimumBarWidth = 24;
+  return std::min(widestLabelWidth + kLabelGap, std::max(0, areaWidth - kMinimumBarWidth));
+}
+
 }  // namespace reading_stats

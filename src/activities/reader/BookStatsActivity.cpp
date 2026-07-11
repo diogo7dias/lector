@@ -128,9 +128,13 @@ void BookStatsActivity::drawMetricGrid(const Rect& area,
     renderer.drawRect(cell.x, cell.y, cell.width, cell.height);
     const std::string value =
         renderer.truncatedText(UI_12_FONT_ID, metrics[index].first.c_str(), cell.width - 6, EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_12_FONT_ID, cell.y + 5, value.c_str(), true, EpdFontFamily::BOLD);
+    const int valueX = reading_stats::centeredTextX(
+        cell.x, cell.width, renderer.getTextWidth(UI_12_FONT_ID, value.c_str(), EpdFontFamily::BOLD));
+    renderer.drawText(UI_12_FONT_ID, valueX, cell.y + 5, value.c_str(), true, EpdFontFamily::BOLD);
     const std::string label = renderer.truncatedText(SMALL_FONT_ID, metrics[index].second, cell.width - 4);
-    renderer.drawCenteredText(SMALL_FONT_ID, cell.y + cellH / 2 + 4, label.c_str());
+    const int labelX =
+        reading_stats::centeredTextX(cell.x, cell.width, renderer.getTextWidth(SMALL_FONT_ID, label.c_str()));
+    renderer.drawText(SMALL_FONT_ID, labelX, cell.y + cellH / 2 + 4, label.c_str());
   }
 }
 
@@ -140,11 +144,14 @@ void BookStatsActivity::drawTimeOfDayChart(const Rect& area, const ReadingStatsD
                                              tr(STR_STATS_NIGHT)};
   const int top = area.y + renderer.getLineHeight(UI_10_FONT_ID) + 2;
   const int rowH = std::max(8, (area.height - (top - area.y)) / 4);
-  const int labelW = std::min(75, area.width / 4);
+  int widestLabel = 0;
+  for (const char* label : labels) widestLabel = std::max(widestLabel, renderer.getTextWidth(SMALL_FONT_ID, label));
+  const int labelW = reading_stats::chartLabelColumnWidth(area.width, widestLabel);
   const uint32_t maxValue = maximum(stats.timeOfDaySeconds);
   for (int index = 0; index < 4; ++index) {
     const int y = top + index * rowH;
-    renderer.drawText(SMALL_FONT_ID, area.x, y, labels[index]);
+    const std::string label = renderer.truncatedText(SMALL_FONT_ID, labels[index], std::max(1, labelW - 4));
+    renderer.drawText(SMALL_FONT_ID, area.x, y, label.c_str());
     const int barX = area.x + labelW;
     const int barW = area.width - labelW;
     renderer.drawRect(barX, y + 2, barW, std::max(4, rowH - 5));
@@ -222,15 +229,22 @@ void BookStatsActivity::drawCurrentBook(const Rect& screen, const int contentTop
   const char* endLabel = bookStats_.completed ? tr(STR_STATS_FINISHED) : tr(STR_STATS_EST_FINISH);
   renderer.drawRect(screen.x, y, halfW, dateH);
   renderer.drawRect(screen.x + halfW, y, screen.width - halfW, dateH);
-  renderer.drawCenteredText(UI_10_FONT_ID, y + 2, startDate.c_str(), true, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(SMALL_FONT_ID, y + renderer.getLineHeight(UI_10_FONT_ID), tr(STR_STATS_STARTED));
+  renderer.drawText(UI_10_FONT_ID,
+                    reading_stats::centeredTextX(
+                        screen.x, halfW, renderer.getTextWidth(UI_10_FONT_ID, startDate.c_str(), EpdFontFamily::BOLD)),
+                    y + 2, startDate.c_str(), true, EpdFontFamily::BOLD);
+  renderer.drawText(
+      SMALL_FONT_ID,
+      reading_stats::centeredTextX(screen.x, halfW, renderer.getTextWidth(SMALL_FONT_ID, tr(STR_STATS_STARTED))),
+      y + renderer.getLineHeight(UI_10_FONT_ID), tr(STR_STATS_STARTED));
   renderer.drawText(
       UI_10_FONT_ID,
-      screen.x + halfW +
-          (screen.width - halfW - renderer.getTextWidth(UI_10_FONT_ID, endDate.c_str(), EpdFontFamily::BOLD)) / 2,
+      reading_stats::centeredTextX(screen.x + halfW, screen.width - halfW,
+                                   renderer.getTextWidth(UI_10_FONT_ID, endDate.c_str(), EpdFontFamily::BOLD)),
       y + 2, endDate.c_str(), true, EpdFontFamily::BOLD);
   renderer.drawText(SMALL_FONT_ID,
-                    screen.x + halfW + (screen.width - halfW - renderer.getTextWidth(SMALL_FONT_ID, endLabel)) / 2,
+                    reading_stats::centeredTextX(screen.x + halfW, screen.width - halfW,
+                                                 renderer.getTextWidth(SMALL_FONT_ID, endLabel)),
                     y + renderer.getLineHeight(UI_10_FONT_ID), endLabel);
   y += dateH + 4;
 

@@ -492,3 +492,14 @@ TEST(ReadingStatsPresentation, EstimatesFinishDayFromObservedDailyPace) {
   EXPECT_EQ(estimateFinishDay(110, 0, 11 * 3600, 3 * 3600), 0u);
   EXPECT_EQ(estimateFinishDay(110, 100, 0, 3 * 3600), 0u);
 }
+
+TEST(ReadingStatsPresentation, CentersTextInsideEachMetricCell) {
+  EXPECT_EQ(centeredTextX(0, 160, 40), 60);
+  EXPECT_EQ(centeredTextX(160, 160, 40), 220);
+  EXPECT_EQ(centeredTextX(320, 160, 40), 380);
+}
+
+TEST(ReadingStatsPresentation, ReservesLabelWidthBeforeChartBars) {
+  EXPECT_EQ(chartLabelColumnWidth(480, 86), 94);
+  EXPECT_EQ(chartLabelColumnWidth(100, 86), 76);
+}
