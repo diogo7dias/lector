@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ArenaVector.h>
 #include <EpdFontFamily.h>
 
 #include <functional>
@@ -11,6 +12,7 @@
 #include "blocks/TextBlock.h"
 
 class GfxRenderer;
+struct Arena;
 
 class ParsedText {
   std::vector<std::string> words;
@@ -43,20 +45,24 @@ class ParsedText {
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   // Signed pixels to add to each real inter-word gap for the word-spacing setting.
   int wordSpacingDeltaPx(const GfxRenderer& renderer, int fontId) const;
-  std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
-                                        std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
-                                        std::vector<bool>& noSpaceBeforeVec);
-  std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
-                                                  std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
-                                                  std::vector<bool>& noSpaceBeforeVec);
+  // Line-breaking scratch (word widths, cost tables, break indices) is backed by
+  // a per-paragraph Arena instead of std::vector so the heap sees one slab
+  // alloc/free per paragraph rather than several churning allocations. Returns
+  // false only on arena OOM; the caller drops the paragraph rather than abort().
+  bool computeLineBreaks(Arena& scratch, const GfxRenderer& renderer, int fontId, int pageWidth,
+                         ArenaVector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                         std::vector<bool>& noSpaceBeforeVec, ArenaVector<size_t>& lineBreakIndices);
+  bool computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
+                                   ArenaVector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                   std::vector<bool>& noSpaceBeforeVec, ArenaVector<size_t>& lineBreakIndices);
   bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
-                            std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
-  void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
+                            ArenaVector<uint16_t>& wordWidths, bool allowFallbackBreaks);
+  void extractLine(size_t breakIndex, int pageWidth, const ArenaVector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
-                   const std::vector<size_t>& lineBreakIndices,
+                   const ArenaVector<size_t>& lineBreakIndices,
                    const std::function<void(std::shared_ptr<TextBlock>)>& processLine, const GfxRenderer& renderer,
                    int fontId);
-  std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
+  bool calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const GfxRenderer& renderer, int fontId);
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
