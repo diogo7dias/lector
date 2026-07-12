@@ -41,6 +41,18 @@ class ParsedText {
   std::vector<bool> reorderedNoSpaceBeforeScratch;
   std::vector<bool> reorderedFocusSuffixScratch;
   std::vector<uint16_t> visualOrderScratch;
+  // Per-line scratch reused across extractLine() calls: cleared (not reallocated)
+  // each line so a page of ~25-30 lines reuses one set of buffers instead of
+  // allocating fresh vectors per line. lineWords/lineStyles/lineXPos build the
+  // line; the out* buffers hold the focus-merged result on the slow path.
+  std::vector<std::string> lineWordsScratch;
+  std::vector<EpdFontFamily::Style> lineStylesScratch;
+  std::vector<int16_t> lineXPosScratch;
+  std::vector<std::string> outWordsScratch;
+  std::vector<int16_t> outXPosScratch;
+  std::vector<EpdFontFamily::Style> outStylesScratch;
+  std::vector<uint8_t> outBoundaryScratch;
+  std::vector<uint16_t> outSuffixXScratch;
 
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   // Signed pixels to add to each real inter-word gap for the word-spacing setting.

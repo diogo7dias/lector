@@ -892,10 +892,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 
-  // Build line data by moving from the original vectors using index range
-  std::vector<std::string> lineWords;
+  // Build line data by moving from the original vectors using index range. These
+  // are reused member buffers: clear() keeps their capacity so the same storage
+  // serves every line on the page instead of a fresh allocation per line.
+  auto& lineWords = lineWordsScratch;
+  auto& lineWordStyles = lineStylesScratch;
+  lineWords.clear();
+  lineWordStyles.clear();
   lineWords.reserve(lineWordCount);
-  std::vector<EpdFontFamily::Style> lineWordStyles;
   lineWordStyles.reserve(lineWordCount);
 
   for (size_t i = 0; i < lineWordCount; ++i) {
@@ -965,7 +969,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const bool willReorder =
       shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
 
-  std::vector<int16_t> lineXPos;
+  auto& lineXPos = lineXPosScratch;
+  lineXPos.clear();
   lineXPos.reserve(lineWordCount);
 
   if (willReorder) {
@@ -1214,11 +1219,16 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Slow path: merge focus suffix tokens back into their preceding word entry so each
   // original word occupies one TextBlock slot. Splits are recorded as per-word annotations
   // applied at render time, cutting the token count significantly when the feature is active.
-  std::vector<std::string> outWords;
-  std::vector<int16_t> outXPos;
-  std::vector<EpdFontFamily::Style> outStyles;
-  std::vector<uint8_t> outBoundaries;
-  std::vector<uint16_t> outSuffixX;
+  auto& outWords = outWordsScratch;
+  auto& outXPos = outXPosScratch;
+  auto& outStyles = outStylesScratch;
+  auto& outBoundaries = outBoundaryScratch;
+  auto& outSuffixX = outSuffixXScratch;
+  outWords.clear();
+  outXPos.clear();
+  outStyles.clear();
+  outBoundaries.clear();
+  outSuffixX.clear();
   outWords.reserve(lineWordCount);
   outXPos.reserve(lineWordCount);
   outStyles.reserve(lineWordCount);
