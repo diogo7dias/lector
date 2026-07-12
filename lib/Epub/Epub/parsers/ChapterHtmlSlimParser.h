@@ -1,5 +1,6 @@
 #pragma once
 
+#include <HalStorage.h>
 #include <expat.h>
 
 #include <climits>
@@ -99,6 +100,14 @@ class ChapterHtmlSlimParser {
   std::vector<std::pair<int, FootnoteEntry>> pendingFootnotes;  // <wordIndex, entry>
   int wordsExtractedInBlock = 0;
 
+  // Incremental parse state (pause/resume seam). Between beginParse() and finishParse()/abortParse()
+  // these hold the live expat parser and the open chapter HTML file so the parse can advance one
+  // chunk at a time via parseStep() instead of running to completion in a single blocking loop.
+  XML_Parser xmlParser_ = nullptr;
+  HalFile parseFile_;
+  uint32_t parseStartTime_ = 0;
+  uint32_t parseTotalBytes_ = 0;  // parseFile_.size() captured at begin (size() is non-const)
+
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
@@ -151,8 +160,25 @@ class ChapterHtmlSlimParser {
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {}
 
-  ~ChapterHtmlSlimParser() = default;
+  ~ChapterHtmlSlimParser() { abortParse(); }
+
+  // One-shot layout of the whole chapter. Retained as a thin wrapper over the
+  // beginParse()/parseStep()/finishParse() seam below so existing callers are unaffected.
   bool parseAndBuildPages();
+
+  // Pause/resume seam. beginParse() sets up expat + opens the HTML; parseStep() advances one
+  // PARSE_BUFFER_SIZE chunk (emitting any completed pages via completePageFn) and reports whether
+  // more remains; finishParse() flushes the trailing page and tears down; abortParse() tears down
+  // without flushing (error/abandon path, also called by the destructor).
+  enum class ParseStatus { More, Done, Error };
+  bool beginParse();
+  ParseStatus parseStep();
+  bool finishParse();
+  void abortParse();
+  // Byte progress of the active parse (valid between beginParse() and finishParse()).
+  size_t parseBytesConsumed() const { return parseFile_.position(); }
+  size_t parseTotalBytes() const { return parseTotalBytes_; }
+
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
 };
