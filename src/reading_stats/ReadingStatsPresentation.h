@@ -1,13 +1,25 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <string>
+
+#include "ReadingStats.h"
 
 namespace reading_stats {
 
 struct HorizontalLayout {
   int x;
   int width;
+};
+
+struct DashboardLayout {
+  int coverX;
+  int coverY;
+  int coverWidth;
+  int coverHeight;
+  int statsRightX;
+  int footerY;
 };
 
 std::string formatDuration(uint32_t seconds);
@@ -17,5 +29,9 @@ uint32_t estimateFinishDay(uint32_t todayDay, uint32_t startDay, uint32_t readin
 int centeredTextX(int areaX, int areaWidth, int textWidth);
 int chartLabelColumnWidth(int areaWidth, int widestLabelWidth);
 HorizontalLayout insetHorizontal(int areaX, int areaWidth, int sideMargin);
+DashboardLayout dashboardLayout(int screenWidth, int screenHeight);
+TimeOfDay dominantTimeOfDay(const std::array<uint32_t, kTimeOfDayBucketCount>& buckets);
+std::string formatShortDate(uint32_t dayIndex);
+uint32_t averagePerObservedDay(uint32_t seconds, uint32_t startDay, uint32_t endDay);
 
 }  // namespace reading_stats

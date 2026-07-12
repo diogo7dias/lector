@@ -513,3 +513,37 @@ TEST(ReadingStatsPresentation, InsetsStatsContentEquallyOnBothSides) {
   EXPECT_EQ(narrow.x, 10);
   EXPECT_EQ(narrow.width, 0);
 }
+
+TEST(ReadingStatsDashboard, MatchesCrossInkPortraitLayout) {
+  const auto x4 = dashboardLayout(480, 800);
+  EXPECT_EQ(x4.coverX, 20);
+  EXPECT_EQ(x4.coverY, 70);
+  EXPECT_EQ(x4.coverWidth, 296);
+  EXPECT_EQ(x4.coverHeight, 444);
+  EXPECT_EQ(x4.statsRightX, 460);
+
+  const auto x3 = dashboardLayout(600, 792);
+  EXPECT_EQ(x3.coverX, 90);
+  EXPECT_EQ(x3.coverY, 70);
+  EXPECT_EQ(x3.coverWidth, 296);
+  EXPECT_EQ(x3.coverHeight, 444);
+  EXPECT_EQ(x3.statsRightX, 510);
+  EXPECT_LT(x3.footerY, 792);
+}
+
+TEST(ReadingStatsDashboard, PicksReaderTypeFromGlobalReadingTime) {
+  std::array<uint32_t, kTimeOfDayBucketCount> buckets = {120, 600, 300, 60};
+  EXPECT_EQ(dominantTimeOfDay(buckets), TimeOfDay::Afternoon);
+
+  buckets = {};
+  EXPECT_EQ(dominantTimeOfDay(buckets), TimeOfDay::Morning);
+}
+
+TEST(ReadingStatsDashboard, FormatsDatesAndDailyAverage) {
+  EXPECT_EQ(formatShortDate(0), "-");
+  uint32_t day = 0;
+  ASSERT_TRUE(dayIndexFromDate({2026, 7, 12}, day));
+  EXPECT_EQ(formatShortDate(day), "Jul 12");
+  EXPECT_EQ(averagePerObservedDay(3600, day - 2, day), 1200u);
+  EXPECT_EQ(averagePerObservedDay(3600, 0, day), 0u);
+}
