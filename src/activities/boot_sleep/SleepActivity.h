@@ -17,6 +17,7 @@ class SleepActivity final : public Activity {
   void renderLastScreenSleepScreen() const;
   void renderBlankSleepScreen() const;
   void renderUntilDeathSleepScreen() const;
+  void renderStatsDashboardSleepScreen(bool wallpaper) const;
 
   bool fromTimeout = false;
 };
