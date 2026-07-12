@@ -81,6 +81,9 @@ void SettingsActivity::rebuildSettingsLists() {
   // other sleep-screen settings.
   displaySettings.push_back(
       SettingInfo::Action(StrId::STR_RANDOMIZE_SLEEP_IMAGES, SettingAction::RandomizeSleepImages));
+  displaySettings.push_back(
+      SettingInfo::Action(StrId::STR_MOVE_NONFAV_TO_PAUSE, SettingAction::MoveNonFavoritesToPause));
+  displaySettings.push_back(SettingInfo::Action(StrId::STR_MOVE_FAV_TO_PAUSE, SettingAction::MoveFavoritesToPause));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Update currentSettings pointer and count for the active category
@@ -341,6 +344,21 @@ void SettingsActivity::toggleCurrentSetting() {
         // confirmation banner. reshuffle() persists the new order itself.
         const bool shuffled = crosspoint::sleep::wallpaper::reshuffle();
         GUI.drawPopup(renderer, shuffled ? tr(STR_SLEEP_SHUFFLED) : tr(STR_SLEEP_SHUFFLE_EMPTY));
+        break;
+      }
+      case SettingAction::MoveNonFavoritesToPause: {
+        // Move all non-favorite wallpapers out of /sleep into /sleep pause. The
+        // move can touch hundreds of files, so show a working banner first (the
+        // draw displays synchronously) then the moved count.
+        GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
+        const size_t moved = crosspoint::sleep::wallpaper::moveToPauseByFavorite(/*favorites=*/false);
+        GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
+        break;
+      }
+      case SettingAction::MoveFavoritesToPause: {
+        GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
+        const size_t moved = crosspoint::sleep::wallpaper::moveToPauseByFavorite(/*favorites=*/true);
+        GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
         break;
       }
       case SettingAction::None:

@@ -1,0 +1,148 @@
+#include <gtest/gtest.h>
+
+#include <algorithm>
+#include <set>
+#include <string>
+#include <vector>
+
+#include "sleep/SleepFavoriteMove.h"
+
+using crosspoint::sleep::countSleepImagesByFavorite;
+using crosspoint::sleep::ISleepFs;
+using crosspoint::sleep::moveSleepImagesByFavorite;
+
+namespace {
+
+// In-memory /sleep + /sleep pause. rename() moves a basename between the two
+// name sets, mirroring the SD behavior the mover relies on (and the fact that a
+// moved file no longer appears in the next /sleep walk).
+class FakeSleepFs : public ISleepFs {
+ public:
+  std::vector<std::string> sleepNames;  // basenames under /sleep
+  std::set<std::string> pausePaths;     // full paths under /sleep pause
+  bool pauseDirMade = false;
+  int renameCalls = 0;
+
+  size_t countSleepBmps(size_t scanCap) override { return std::min(sleepNames.size(), scanCap); }
+  std::vector<std::string> listSleepBmps(size_t maxEntries) override {
+    std::vector<std::string> out(sleepNames.begin(), sleepNames.begin() + std::min(maxEntries, sleepNames.size()));
+    return out;
+  }
+  std::string nextSleepBmpAfter(const std::string&) override { return {}; }
+  std::string nthSleepBmp(size_t) override { return {}; }
+  bool exists(const std::string& path) override { return pausePaths.count(path) > 0; }
+  bool mkdir(const std::string&) override {
+    pauseDirMade = true;
+    return true;
+  }
+  bool rename(const std::string& from, const std::string& to) override {
+    ++renameCalls;
+    const std::string prefix = "/sleep/";
+    if (from.rfind(prefix, 0) != 0) return false;
+    const std::string base = from.substr(prefix.size());
+    auto it = std::find(sleepNames.begin(), sleepNames.end(), base);
+    if (it == sleepNames.end()) return false;
+    if (pausePaths.count(to)) return false;  // no overwrite, like SdFat
+    sleepNames.erase(it);
+    pausePaths.insert(to);
+    return true;
+  }
+};
+
+// Favorite iff the basename carries the _F suffix before its extension.
+bool isFavBySuffix(const std::string& name) {
+  const auto dot = name.find_last_of('.');
+  const std::string stem = (dot == std::string::npos) ? name : name.substr(0, dot);
+  return stem.size() >= 2 && stem.compare(stem.size() - 2, 2, "_F") == 0;
+}
+
+}  // namespace
+
+TEST(SleepFavoriteMove, MovesOnlyNonFavoritesLeavingFavorites) {
+  FakeSleepFs fs;
+  fs.sleepNames = {"a.bmp", "b_F.bmp", "c.pxc", "d_F.pxc", "e.bmp"};
+
+  const size_t moved = moveSleepImagesByFavorite(fs, isFavBySuffix, nullptr, /*moveFavorites=*/false,
+                                                 /*batchSize=*/2, /*yieldEvery=*/0, nullptr);
+
+  EXPECT_EQ(moved, 3u);  // a, c, e
+  EXPECT_TRUE(fs.pauseDirMade);
+  // Only favorites remain in /sleep.
+  std::vector<std::string> remaining = fs.sleepNames;
+  std::sort(remaining.begin(), remaining.end());
+  EXPECT_EQ(remaining, (std::vector<std::string>{"b_F.bmp", "d_F.pxc"}));
+  EXPECT_EQ(fs.pausePaths.count("/sleep pause/a.bmp"), 1u);
+  EXPECT_EQ(fs.pausePaths.count("/sleep pause/c.pxc"), 1u);
+  EXPECT_EQ(fs.pausePaths.count("/sleep pause/e.bmp"), 1u);
+}
+
+TEST(SleepFavoriteMove, MovesOnlyFavorites) {
+  FakeSleepFs fs;
+  fs.sleepNames = {"a.bmp", "b_F.bmp", "c.pxc", "d_F.pxc"};
+
+  const size_t moved = moveSleepImagesByFavorite(fs, isFavBySuffix, nullptr, /*moveFavorites=*/true,
+                                                 /*batchSize=*/8, /*yieldEvery=*/0, nullptr);
+
+  EXPECT_EQ(moved, 2u);  // b_F, d_F
+  std::vector<std::string> remaining = fs.sleepNames;
+  std::sort(remaining.begin(), remaining.end());
+  EXPECT_EQ(remaining, (std::vector<std::string>{"a.bmp", "c.pxc"}));
+}
+
+TEST(SleepFavoriteMove, BatchingMovesEverythingAndFiresCallbackPerMove) {
+  FakeSleepFs fs;
+  for (int i = 0; i < 10; ++i) fs.sleepNames.push_back("img" + std::to_string(i) + ".bmp");  // all non-fav
+
+  int callbacks = 0;
+  const size_t moved = moveSleepImagesByFavorite(
+      fs, isFavBySuffix, [&](const std::string&, const std::string&) { ++callbacks; }, /*moveFavorites=*/false,
+      /*batchSize=*/3, /*yieldEvery=*/0, nullptr);
+
+  EXPECT_EQ(moved, 10u);
+  EXPECT_EQ(callbacks, 10);
+  EXPECT_TRUE(fs.sleepNames.empty());
+}
+
+TEST(SleepFavoriteMove, StopsWhenNoMatches) {
+  FakeSleepFs fs;
+  fs.sleepNames = {"a_F.bmp", "b_F.bmp"};  // all favorites; moving non-favorites is a no-op
+
+  const size_t moved = moveSleepImagesByFavorite(fs, isFavBySuffix, nullptr, /*moveFavorites=*/false,
+                                                 /*batchSize=*/4, /*yieldEvery=*/0, nullptr);
+
+  EXPECT_EQ(moved, 0u);
+  EXPECT_FALSE(fs.pauseDirMade);  // never created the folder when nothing moves
+  EXPECT_EQ(fs.sleepNames.size(), 2u);
+}
+
+TEST(SleepFavoriteMove, NameCollisionDoesNotLoopForever) {
+  FakeSleepFs fs;
+  fs.sleepNames = {"dup.bmp"};
+  fs.pausePaths.insert("/sleep pause/dup.bmp");  // destination already taken -> rename fails
+
+  const size_t moved = moveSleepImagesByFavorite(fs, isFavBySuffix, nullptr, /*moveFavorites=*/false,
+                                                 /*batchSize=*/4, /*yieldEvery=*/0, nullptr);
+
+  EXPECT_EQ(moved, 0u);
+  EXPECT_EQ(fs.sleepNames.size(), 1u);  // still there, but the loop terminated
+}
+
+TEST(SleepFavoriteMove, YieldFiresOnCadence) {
+  FakeSleepFs fs;
+  for (int i = 0; i < 7; ++i) fs.sleepNames.push_back("n" + std::to_string(i) + ".bmp");
+
+  int yields = 0;
+  moveSleepImagesByFavorite(fs, isFavBySuffix, nullptr, /*moveFavorites=*/false, /*batchSize=*/16,
+                            /*yieldEvery=*/2, [&] { ++yields; });
+
+  EXPECT_EQ(yields, 3);  // fired at 2, 4, 6 of 7 moves
+}
+
+TEST(SleepFavoriteMove, CountByFavoriteRespectsCap) {
+  FakeSleepFs fs;
+  fs.sleepNames = {"a.bmp", "b_F.bmp", "c.bmp", "d.bmp", "e_F.bmp"};
+
+  EXPECT_EQ(countSleepImagesByFavorite(fs, isFavBySuffix, /*favorites=*/false, /*scanCap=*/100), 3u);
+  EXPECT_EQ(countSleepImagesByFavorite(fs, isFavBySuffix, /*favorites=*/true, /*scanCap=*/100), 2u);
+  EXPECT_EQ(countSleepImagesByFavorite(fs, isFavBySuffix, /*favorites=*/false, /*scanCap=*/2), 2u);
+}
