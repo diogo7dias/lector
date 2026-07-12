@@ -23,6 +23,8 @@ enum class SettingAction {
   SdFirmwareUpdate,
   Language,
   RandomizeSleepImages,
+  MoveNonFavoritesToPause,
+  MoveFavoritesToPause,
 };
 
 struct SettingInfo {
