@@ -666,9 +666,14 @@ void loop() {
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // If we've been inactive for a while, increase the delay to save power
+      // Inactive for a while: throttle the CPU to save power. The screen is static in
+      // this state (no e-ink refresh in flight), so — unlike the active branch below —
+      // a short poll here cannot preempt a refresh mid-waveform. Keep it short (20ms,
+      // was 50ms) so the first page-turn press after a reading pause is noticed
+      // promptly; on user activity the top-of-loop handler restores full CPU speed
+      // before the page is drawn. Negligible extra draw (brief wake at 10 MHz).
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(50);
+      delay(20);
     } else {
       // Short delay to prevent tight loop while still being responsive.
       // NOTE: keep this at 10ms. The render task shares priority 1 with this
