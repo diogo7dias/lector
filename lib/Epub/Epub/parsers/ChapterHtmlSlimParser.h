@@ -107,6 +107,10 @@ class ChapterHtmlSlimParser {
   HalFile parseFile_;
   uint32_t parseStartTime_ = 0;
   uint32_t parseTotalBytes_ = 0;  // parseFile_.size() captured at begin (size() is non-const)
+  // Set by parseStep() when it stops the build because the heap is critically low
+  // (see LayoutHeapGate.h). Lets the caller distinguish an out-of-memory abort from
+  // other parse errors so it can degrade quality and retry rather than give up.
+  bool lowMemoryAbort_ = false;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);
@@ -178,6 +182,9 @@ class ChapterHtmlSlimParser {
   // Byte progress of the active parse (valid between beginParse() and finishParse()).
   size_t parseBytesConsumed() const { return parseFile_.position(); }
   size_t parseTotalBytes() const { return parseTotalBytes_; }
+  // True when the most recent parseStep() returned Error specifically because the
+  // heap was critically low, rather than for a parse/IO error.
+  bool wasLowMemoryAbort() const { return lowMemoryAbort_; }
 
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
