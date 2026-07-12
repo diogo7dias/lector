@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <HalStorage.h>
 #include <esp_heap_caps.h>
+#include <esp_task_wdt.h>
 
 #include <string>
 #include <vector>
@@ -10,6 +11,7 @@
 #include "../CrossPointState.h"
 #include "../util/FavoriteImage.h"
 #include "SdFatSleepFs.h"
+#include "SleepFavoriteMove.h"
 #include "SleepMoveSelection.h"
 #include "WallpaperDirectPickPolicy.h"
 #include "WallpaperPlaylistV2.h"
@@ -488,8 +490,41 @@ size_t moveRandomToPause(size_t n) {
     if (sfs->rename(from, to)) {
       if (deps.onPathRenamed) deps.onPathRenamed(from, to);
       ++moved;
+      // Feed the watchdog / yield during a long move so a large batch never
+      // trips the task WDT or fully stalls the UI task.
+      if (moved % 16 == 0) {
+        esp_task_wdt_reset();
+        yield();
+      }
     }
   }
+  if (moved > 0) v2::WallpaperPlaylistV2::instance().markFolderDirty();
+  return moved;
+}
+
+size_t countByFavorite(bool favorites, size_t scanCap) {
+  ensureConfigured();
+  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
+  ISleepFs* sfs = deps.fs;
+  if (!sfs) return 0;
+  return countSleepImagesByFavorite(*sfs, deps.isFavorite, favorites, scanCap);
+}
+
+size_t moveToPauseByFavorite(bool favorites) {
+  ensureConfigured();
+  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
+  ISleepFs* sfs = deps.fs;
+  if (!sfs) return 0;
+
+  // Bounded batches keep peak heap at kBatch names regardless of folder size;
+  // yield every kYieldEvery renames so a large sweep stays watchdog-safe.
+  constexpr size_t kBatch = 128;
+  constexpr size_t kYieldEvery = 16;
+  const size_t moved =
+      moveSleepImagesByFavorite(*sfs, deps.isFavorite, deps.onPathRenamed, favorites, kBatch, kYieldEvery, []() {
+        esp_task_wdt_reset();
+        yield();
+      });
   if (moved > 0) v2::WallpaperPlaylistV2::instance().markFolderDirty();
   return moved;
 }

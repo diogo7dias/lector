@@ -97,6 +97,17 @@ size_t countImages(size_t scanCap);
 // rebuilds on the next sleep. Returns the number of files actually moved.
 size_t moveRandomToPause(size_t n);
 
+// Count /sleep images whose favorite state matches `favorites` (true = favorites,
+// false = non-favorites), bounded by `scanCap`. Backs the Settings confirmation
+// prompt ("Move N wallpapers?"). Returns 0 if fs is unavailable.
+size_t countByFavorite(bool favorites, size_t scanCap);
+
+// Move every /sleep image whose favorite state matches `favorites` into
+// "/sleep pause". Works in bounded batches (memory-safe on 1000+ image folders)
+// and yields to the watchdog during the run. Marks the rotation dirty so it
+// rebuilds on the next sleep. Returns the number of files actually moved.
+size_t moveToPauseByFavorite(bool favorites);
+
 // No-op in the V2 default path — reconcile is heap-gated and runs from
 // inside advance(). Kept so the boot-route hook + ActivityRouter signature
 // stay valid without conditional plumbing at the call site.
