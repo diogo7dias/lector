@@ -14,12 +14,10 @@ namespace {
 static_assert(font_upload::MAX_FAMILIES == SdCardFontRegistry::MAX_SD_FAMILIES,
               "Web upload and font registry family limits must match");
 uint32_t readU32(const uint8_t* p) {
-  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
-         (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
+         (static_cast<uint32_t>(p[3]) << 24);
 }
-uint16_t readU16(const uint8_t* p) {
-  return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
-}
+uint16_t readU16(const uint8_t* p) { return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8); }
 }  // namespace
 
 FontInstaller::FontInstaller(SdCardFontRegistry& registry) : registry_(registry) {}

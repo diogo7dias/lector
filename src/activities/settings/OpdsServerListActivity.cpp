@@ -82,7 +82,8 @@ void OpdsServerListActivity::handleSelection() {
   };
 
   if (selectedIndex < serverCount) {
-    startActivityForResult(makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, selectedIndex), resultHandler);
+    startActivityForResult(makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, selectedIndex),
+                           resultHandler);
   } else {
     startActivityForResult(makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, -1), resultHandler);
   }

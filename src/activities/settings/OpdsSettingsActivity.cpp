@@ -114,7 +114,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SERVER_NAME),
-                                                                   editServer.name, 63, InputType::Text),
+                                                                    editServer.name, 63, InputType::Text),
                            handler);
   } else if (selectedIndex == 1) {
     // Server URL
@@ -128,7 +128,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_OPDS_SERVER_URL),
-                                                                   prefillUrl, 127, InputType::Url),
+                                                                    prefillUrl, 127, InputType::Url),
                            handler);
   } else if (selectedIndex == 2) {
     // Username
@@ -141,7 +141,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_USERNAME),
-                                                                   editServer.username, 63, InputType::Text),
+                                                                    editServer.username, 63, InputType::Text),
                            handler);
   } else if (selectedIndex == 3) {
     // Password
@@ -154,7 +154,7 @@ void OpdsSettingsActivity::handleSelection() {
       }
     };
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_PASSWORD),
-                                                                   editServer.password, 63, InputType::Password),
+                                                                    editServer.password, 63, InputType::Password),
                            handler);
   } else if (selectedIndex == 4 && !isNewServer) {
     // Delete flow is only available for existing servers.

@@ -79,8 +79,7 @@ class FontUploadPolicy {
       const uint32_t glyphs = readU32(toc + 8);
       const uint32_t kernLeft = readU16(toc + 17);
       const uint32_t kernRight = readU16(toc + 19);
-      if (intervals == 0 || intervals > 4096 || glyphs == 0 || glyphs > 65536 || kernLeft > 4096 ||
-          kernRight > 4096) {
+      if (intervals == 0 || intervals > 4096 || glyphs == 0 || glyphs > 65536 || kernLeft > 4096 || kernRight > 4096) {
         return false;
       }
       size_t fixedBytes = 0;
@@ -100,12 +99,10 @@ class FontUploadPolicy {
  private:
   static constexpr size_t HEADER_SIZE = 32;
   static constexpr size_t TOC_SIZE = 32;
-  static uint16_t readU16(const uint8_t* p) {
-    return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
-  }
+  static uint16_t readU16(const uint8_t* p) { return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8); }
   static uint32_t readU32(const uint8_t* p) {
-    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
-           (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+    return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) |
+           (static_cast<uint32_t>(p[3]) << 24);
   }
   static bool checkedAddProduct(size_t& total, const size_t count, const size_t itemSize) {
     if (count != 0 && itemSize > std::numeric_limits<size_t>::max() / count) return false;

@@ -153,8 +153,7 @@ void FontSelectionActivity::renderPreviewPane(int top, int height, int fontId, c
   const int labelH = renderer.getTextHeight(labelFontId);
   const int labelGap = 4;
   const int rowGap = 6;
-  const auto layout =
-      calculateFontPreviewLayout(top, height, metrics_.previewPadding, labelH, labelGap, rowGap);
+  const auto layout = calculateFontPreviewLayout(top, height, metrics_.previewPadding, labelH, labelGap, rowGap);
 
   renderer.setPaperbackLook(false);
   if (fontId == 0) return;

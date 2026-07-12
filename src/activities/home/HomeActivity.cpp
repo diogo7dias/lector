@@ -579,7 +579,7 @@ void HomeActivity::openSleepMoveKeypad() {
   constexpr long kMaxMovePerAction = 256;
   const long maxN = std::min(sleepImageCount, kMaxMovePerAction);
   auto keyboard = makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_MOVE_SLEEP_HOW_MANY),
-                                                          std::string(), /*maxLength=*/5, InputType::Text);
+                                                           std::string(), /*maxLength=*/5, InputType::Text);
   startActivityForResult(std::move(keyboard), [this, maxN](const ActivityResult& res) {
     if (res.isCancelled) return;
     const std::string text = std::get<KeyboardResult>(res.data).text;
