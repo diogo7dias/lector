@@ -1,5 +1,6 @@
 #include "ParsedText.h"
 
+#include <Arena.h>
 #include <BidiUtils.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
@@ -520,15 +521,38 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 
   const int pageWidth = viewportWidth;
-  auto wordWidths = calculateWordWidths(renderer, fontId);
 
-  std::vector<size_t> lineBreakIndices;
+  // Per-paragraph scratch arena for the line-breaking pass. A 4 KiB initial slab
+  // covers typical paragraphs; the arena chains more slabs for very long ones,
+  // and everything is freed when this function returns -- one alloc/free instead
+  // of several churning std::vector allocations per paragraph. On arena OOM the
+  // paragraph is dropped (logged) rather than aborting, matching how extractLine
+  // already drops a line when the TextBlock arena cannot be allocated.
+  Arena scratch;
+  if (!scratch.init(4 * 1024)) {
+    LOG_ERR("PTX", "Dropping paragraph: layout scratch arena OOM");
+    return;
+  }
+
+  ArenaVector<uint16_t> wordWidths(scratch);
+  if (!calculateWordWidths(wordWidths, renderer, fontId)) {
+    LOG_ERR("PTX", "Dropping paragraph: word-width scratch OOM");
+    return;
+  }
+
+  ArenaVector<size_t> lineBreakIndices(scratch);
+  bool breaksOk;
   if (hyphenationEnabled) {
     // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
-    lineBreakIndices =
-        computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
+    breaksOk = computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore,
+                                           lineBreakIndices);
   } else {
-    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
+    breaksOk = computeLineBreaks(scratch, renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore,
+                                 lineBreakIndices);
+  }
+  if (!breaksOk) {
+    LOG_ERR("PTX", "Dropping paragraph: line-break scratch OOM");
+    return;
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
@@ -548,22 +572,24 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
 }
 
-std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& renderer, const int fontId) {
-  std::vector<uint16_t> wordWidths;
-  wordWidths.reserve(words.size());
-
-  for (size_t i = 0; i < words.size(); ++i) {
-    wordWidths.push_back(measureWordWidth(renderer, fontId, words[i], wordStyles[i]));
+bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const GfxRenderer& renderer, const int fontId) {
+  if (!wordWidths.reserve(words.size())) {
+    return false;
   }
-
-  return wordWidths;
+  for (size_t i = 0; i < words.size(); ++i) {
+    if (!wordWidths.push_back(measureWordWidth(renderer, fontId, words[i], wordStyles[i]))) {
+      return false;
+    }
+  }
+  return true;
 }
 
-std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
-                                                  std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
-                                                  std::vector<bool>& noSpaceBeforeVec) {
+bool ParsedText::computeLineBreaks(Arena& scratch, const GfxRenderer& renderer, const int fontId, const int pageWidth,
+                                   ArenaVector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                   std::vector<bool>& noSpaceBeforeVec, ArenaVector<size_t>& lineBreakIndices) {
+  lineBreakIndices.clear();
   if (words.empty()) {
-    return {};
+    return true;
   }
 
   const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
@@ -582,10 +608,15 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
   const size_t totalWordCount = words.size();
 
-  // DP table to store the minimum badness (cost) of lines starting at index i
-  std::vector<int> dp(totalWordCount);
-  // 'ans[i]' stores the index 'j' of the *last word* in the optimal line starting at 'i'
-  std::vector<size_t> ans(totalWordCount);
+  // DP table to store the minimum badness (cost) of lines starting at index i.
+  // 'ans[i]' stores the index 'j' of the *last word* in the optimal line starting
+  // at 'i'. Both are arena-backed; resize() zero-fills, matching the old
+  // std::vector value-initialization.
+  ArenaVector<int> dp(scratch);
+  ArenaVector<size_t> ans(scratch);
+  if (!dp.resize(totalWordCount) || !ans.resize(totalWordCount)) {
+    return false;
+  }
 
   // Base Case
   dp[totalWordCount - 1] = 0;
@@ -657,7 +688,6 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   }
 
   // Stores the index of the word that starts the next line (last_word_index + 1)
-  std::vector<size_t> lineBreakIndices;
   size_t currentWordIndex = 0;
 
   while (currentWordIndex < totalWordCount) {
@@ -669,22 +699,24 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
       nextBreakIndex = currentWordIndex + 1;
     }
 
-    lineBreakIndices.push_back(nextBreakIndex);
+    if (!lineBreakIndices.push_back(nextBreakIndex)) {
+      return false;
+    }
     currentWordIndex = nextBreakIndex;
   }
 
-  return lineBreakIndices;
+  return true;
 }
 
 // Builds break indices while opportunistically splitting the word that would overflow the current line.
-std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
-                                                            const int pageWidth, std::vector<uint16_t>& wordWidths,
-                                                            std::vector<bool>& continuesVec,
-                                                            std::vector<bool>& noSpaceBeforeVec) {
+bool ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId, const int pageWidth,
+                                             ArenaVector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
+                                             std::vector<bool>& noSpaceBeforeVec,
+                                             ArenaVector<size_t>& lineBreakIndices) {
+  lineBreakIndices.clear();
   const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
   const int wsDelta = wordSpacingDeltaPx(renderer, fontId);
 
-  std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
   bool isFirstLine = true;
 
@@ -745,17 +777,19 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       --currentIndex;
     }
 
-    lineBreakIndices.push_back(currentIndex);
+    if (!lineBreakIndices.push_back(currentIndex)) {
+      return false;
+    }
     isFirstLine = false;
   }
 
-  return lineBreakIndices;
+  return true;
 }
 
 // Splits words[wordIndex] into prefix (adding a hyphen only when needed) and remainder when a legal breakpoint fits the
 // available width.
 bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
-                                      const int fontId, std::vector<uint16_t>& wordWidths,
+                                      const int fontId, ArenaVector<uint16_t>& wordWidths,
                                       const bool allowFallbackBreaks) {
   // Guard against invalid indices or zero available width before attempting to split.
   if (availableWidth <= 0 || wordIndex >= words.size()) {
@@ -800,6 +834,16 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   // Split the word at the selected breakpoint and append a hyphen if required.
   std::string remainder = word.substr(chosenOffset);
+
+  // Do the one fallible (arena-backed) mutation first: an OOM here returns false
+  // ("no split") with the token vectors and the width array still consistent, so
+  // the caller simply leaves the word whole rather than aborting on a desync.
+  const uint16_t remainderWidth = measureWordWidth(renderer, fontId, remainder, style);
+  if (!wordWidths.insert(wordIndex + 1, remainderWidth)) {
+    return false;
+  }
+  wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
+
   words[wordIndex].resize(chosenOffset);
   if (chosenNeedsHyphen) {
     words[wordIndex].push_back('-');
@@ -834,16 +878,12 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
   wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, false);
 
-  // Update cached widths to reflect the new prefix/remainder pairing.
-  wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
-  const uint16_t remainderWidth = measureWordWidth(renderer, fontId, remainder, style);
-  wordWidths.insert(wordWidths.begin() + wordIndex + 1, remainderWidth);
   return true;
 }
 
-void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,
+void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const ArenaVector<uint16_t>& wordWidths,
                              const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
-                             const std::vector<size_t>& lineBreakIndices,
+                             const ArenaVector<size_t>& lineBreakIndices,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              const GfxRenderer& renderer, const int fontId) {
   const size_t lineBreak = lineBreakIndices[breakIndex];
