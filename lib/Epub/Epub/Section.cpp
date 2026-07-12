@@ -209,6 +209,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
                          const uint8_t paragraphSpacing, const std::function<void()>& popupFn) {
   // Abandon any prior in-progress build before starting a new one.
   abandonBuild();
+  lastBuildLowMemory_ = false;
 
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
@@ -356,6 +357,11 @@ bool Section::buildSomeMore(const int maxPages) {
     }
     if (status == ChapterHtmlSlimParser::ParseStatus::Error) {
       LOG_ERR("SCT", "Parse error during incremental build");
+      // Capture the low-memory signal before abandonBuild() tears the parser down,
+      // so the caller can tell an OOM abort apart from a parse/IO error.
+      if (build_ && build_->parser) {
+        lastBuildLowMemory_ = build_->parser->wasLowMemoryAbort();
+      }
       abandonBuild();
       return false;
     }
