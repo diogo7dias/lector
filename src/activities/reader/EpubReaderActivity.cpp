@@ -43,10 +43,16 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
 #include "util/BookmarkUtil.h"
+#include "util/ButtonResponsePolicy.h"
 #include "util/FavoriteImage.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
+static_assert(CrossPointSettings::LP_MENU_GRAB_QUOTE == button_response::kGrabQuoteLongPressSettingValue,
+              "Grab Quote setting value must remain append-only for saved settings");
+static_assert(ReaderUtils::BOOKMARK_HOLD_MS == button_response::kGrabQuoteHoldMs,
+              "Grab Quote and Bookmark long presses must use the same threshold");
+
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 // pages per minute, first item is 1 to prevent division by zero if accessed
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
@@ -376,7 +382,7 @@ void EpubReaderActivity::loop() {
   }
 
   // Enter reader menu activity on short-press Confirm. A long-press that fired a bound
-  // function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
+  // function (bookmark, quote selection, or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (ignoreNextConfirmRelease) {
@@ -444,6 +450,13 @@ void EpubReaderActivity::loop() {
             ignoreNextConfirmRelease = true;  // sync launched or error shown; suppress menu open
             return;
           }
+        }
+        break;
+      case CrossPointSettings::LP_MENU_GRAB_QUOTE:
+        if (button_response::shouldStartGrabQuote(SETTINGS.longPressMenuFunction, mappedInput.getHeldTime())) {
+          ignoreNextConfirmRelease = true;
+          enterHighlightMode();
+          return;
         }
         break;
       case CrossPointSettings::LP_MENU_DISABLED:
@@ -1428,6 +1441,12 @@ void EpubReaderActivity::handleHighlightInput() {
   }
   // Confirm (release) advances the selection state machine.
   if (mappedInput.wasReleased(Button::Confirm)) {
+    // A hold that opened quote mode owns this release. Consume it here so it
+    // neither sets the first selection anchor nor leaks into the reader menu.
+    if (ignoreNextConfirmRelease) {
+      ignoreNextConfirmRelease = false;
+      return;
+    }
     highlightConfirmSelection();
     return;
   }

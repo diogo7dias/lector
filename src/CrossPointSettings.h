@@ -155,6 +155,7 @@ class CrossPointSettings {
     LP_MENU_KOSYNC = 0,
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
+    LP_MENU_GRAB_QUOTE = 3,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
