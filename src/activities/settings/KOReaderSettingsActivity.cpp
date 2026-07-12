@@ -54,7 +54,7 @@ void KOReaderSettingsActivity::handleSelection() {
   if (selectedIndex == 0) {
     // Username
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_USERNAME),
-                                                                   KOREADER_STORE.getUsername(), 64, InputType::Text),
+                                                                    KOREADER_STORE.getUsername(), 64, InputType::Text),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
@@ -66,7 +66,7 @@ void KOReaderSettingsActivity::handleSelection() {
     // Password
     startActivityForResult(
         makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_KOREADER_PASSWORD),
-                                                KOREADER_STORE.getPassword(), 64, InputType::Password),
+                                                 KOREADER_STORE.getPassword(), 64, InputType::Password),
         [this](const ActivityResult& result) {
           if (!result.isCancelled) {
             const auto& kb = std::get<KeyboardResult>(result.data);
@@ -79,7 +79,7 @@ void KOReaderSettingsActivity::handleSelection() {
     const std::string currentUrl = KOREADER_STORE.getServerUrl();
     const std::string prefillUrl = currentUrl.empty() ? "https://" : currentUrl;
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_SYNC_SERVER_URL),
-                                                                   prefillUrl, 128, InputType::Url),
+                                                                    prefillUrl, 128, InputType::Url),
                            [this](const ActivityResult& result) {
                              if (!result.isCancelled) {
                                const auto& kb = std::get<KeyboardResult>(result.data);
@@ -103,7 +103,8 @@ void KOReaderSettingsActivity::handleSelection() {
       // Can't authenticate without credentials - just show message briefly
       return;
     }
-    startActivityForResult(makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInput), [](const ActivityResult&) {});
+    startActivityForResult(makeUniqueNoThrow<KOReaderAuthActivity>(renderer, mappedInput),
+                           [](const ActivityResult&) {});
   }
 }
 

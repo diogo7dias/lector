@@ -12,8 +12,8 @@ std::array<uint8_t, 92> validFile() {
   header[8] = 4;
   header[12] = 1;
   header[32] = 0;
-  header[36] = 1;  // interval count
-  header[40] = 1;  // glyph count
+  header[36] = 1;   // interval count
+  header[40] = 1;   // glyph count
   header[56] = 64;  // style data offset
   header[64] = 32;  // interval first
   header[68] = 32;  // interval last

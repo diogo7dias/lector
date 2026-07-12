@@ -5,8 +5,7 @@ enum class PxcOverlayStage { Base, Lsb, Msb };
 
 constexpr PxcOverlayTiming pxcViewerOverlayTiming() { return PxcOverlayTiming::EveryPass; }
 
-constexpr bool shouldDrawPxcOverlay(const PxcOverlayTiming timing, const PxcOverlayStage stage,
-                                    const bool grayscale) {
+constexpr bool shouldDrawPxcOverlay(const PxcOverlayTiming timing, const PxcOverlayStage stage, const bool grayscale) {
   return timing == PxcOverlayTiming::EveryPass || !grayscale || stage != PxcOverlayStage::Base;
 }
 

@@ -188,9 +188,9 @@ void WifiSelectionActivity::selectNetwork(const int index) {
     state = WifiSelectionState::PASSWORD_ENTRY;
     // Don't allow screen updates while changing activity
     startActivityForResult(makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, tr(STR_ENTER_WIFI_PASSWORD),
-                                                                   "",  // No initial text
-                                                                   64,  // Max password length
-                                                                   InputType::Password),
+                                                                    "",  // No initial text
+                                                                    64,  // Max password length
+                                                                    InputType::Password),
                            [this](const ActivityResult& result) {
                              if (result.isCancelled) {
                                state = WifiSelectionState::NETWORK_LIST;

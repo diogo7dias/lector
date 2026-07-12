@@ -18,8 +18,7 @@ TEST(FontPreviewLayout, GivesBothRowsEqualTextHeight) {
   const auto layout = calculateFontPreviewLayout(/*top=*/0, /*height=*/201, /*padding=*/10,
                                                  /*labelHeight=*/16, /*labelGap=*/3, /*rowGap=*/5);
 
-  EXPECT_EQ(layout.normal.textBottom - layout.normal.textTop,
-            layout.paperback.textBottom - layout.paperback.textTop);
+  EXPECT_EQ(layout.normal.textBottom - layout.normal.textTop, layout.paperback.textBottom - layout.paperback.textTop);
 }
 
 TEST(FontPreviewLayout, CollapsesSafelyWhenPaneIsTooShort) {

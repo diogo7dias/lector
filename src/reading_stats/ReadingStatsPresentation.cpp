@@ -71,8 +71,12 @@ DashboardLayout dashboardLayout(const int screenWidth, const int screenHeight) {
   const int maxCoverWidth = std::max(1, screenWidth - inset * 2 - statsWidth - kGap);
   const int coverWidth = std::min(kCoverWidth, maxCoverWidth);
   const int coverHeight = std::min(kCoverHeight, coverWidth * 3 / 2);
-  return DashboardLayout{inset + (wide ? kWideShift : 0), kTop, coverWidth, coverHeight,
-                         screenWidth - inset - (wide ? kWideShift : 0), std::max(0, screenHeight - kFooterBottom)};
+  return DashboardLayout{inset + (wide ? kWideShift : 0),
+                         kTop,
+                         coverWidth,
+                         coverHeight,
+                         screenWidth - inset - (wide ? kWideShift : 0),
+                         std::max(0, screenHeight - kFooterBottom)};
 }
 
 TimeOfDay dominantTimeOfDay(const std::array<uint32_t, kTimeOfDayBucketCount>& buckets) {
@@ -83,7 +87,7 @@ TimeOfDay dominantTimeOfDay(const std::array<uint32_t, kTimeOfDayBucketCount>& b
 std::string formatShortDate(const uint32_t dayIndex) {
   if (dayIndex == 0) return "-";
   static constexpr const char* kMonths[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                                             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+                                            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   CalendarDate date;
   if (!dateFromDayIndex(dayIndex, date) || date.month < 1 || date.month > 12) return "-";
   return std::string(kMonths[date.month - 1]) + " " + std::to_string(date.day);
@@ -96,8 +100,8 @@ uint32_t averagePerObservedDay(const uint32_t seconds, const uint32_t startDay, 
 
 DashboardImageRect fitDashboardImage(const int sourceWidth, const int sourceHeight, const DashboardImageRect target) {
   if (sourceWidth <= 0 || sourceHeight <= 0 || target.width <= 0 || target.height <= 0) return target;
-  const double scale = std::min(static_cast<double>(target.width) / sourceWidth,
-                                static_cast<double>(target.height) / sourceHeight);
+  const double scale =
+      std::min(static_cast<double>(target.width) / sourceWidth, static_cast<double>(target.height) / sourceHeight);
   const int width = std::min(target.width, std::max(1, static_cast<int>(std::ceil(sourceWidth * scale))));
   const int height = std::min(target.height, std::max(1, static_cast<int>(std::ceil(sourceHeight * scale))));
   return DashboardImageRect{target.x + (target.width - width) / 2, target.y + (target.height - height) / 2, width,

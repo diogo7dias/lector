@@ -110,8 +110,8 @@ void recoverInterruptedUploads(const char* dirPath) {
     entry.getName(name, sizeof(name));
     entry.close();
     const size_t nameLen = strlen(name);
-    const bool isBackup = nameLen > sizeof(BACKUP_SUFFIX) - 1 &&
-                          strcmp(name + nameLen - (sizeof(BACKUP_SUFFIX) - 1), BACKUP_SUFFIX) == 0;
+    const bool isBackup =
+        nameLen > sizeof(BACKUP_SUFFIX) - 1 && strcmp(name + nameLen - (sizeof(BACKUP_SUFFIX) - 1), BACKUP_SUFFIX) == 0;
     if (!isBackup) continue;
 
     char artifactPath[256];
