@@ -377,6 +377,14 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
     directAfter.clear();  // start at the new front so the freshest file is shown next
   }
 
+  // Whether more than one wallpaper exists. The immediate-repeat guard below only
+  // skips a repeat when there is something else to show; countSleepBmps is O(1)
+  // heap and the scan is capped at 2 (we only need "is there a second file?").
+  const bool moreThanOneFile = [] {
+    auto* fs = v2::WallpaperPlaylistV2::instance().deps().fs;
+    return fs && fs->countSleepBmps(2) > 1;
+  }();
+
   for (int attempt = 0; attempt < kNextSleepFileRetries; ++attempt) {
     std::string basename;
     bool pickedDirect = useDirectPick;
@@ -396,6 +404,17 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
       break;  // /sleep is empty — no point retrying.
     }
     SleepPick pick = makePickFromBasename(basename);
+    // Never show the same wallpaper twice in a row while rotation is active. The
+    // buffer-backed and direct-pick engines keep separate cursors, so a low-memory
+    // switch between them (or a reset direct cursor) can otherwise re-pick the
+    // just-shown file. Skip it and advance to the next candidate. Paused rotation
+    // and single-file folders are exempt (see isImmediateRepeat).
+    if (wallpaper_direct_pick::isImmediateRepeat(APP_STATE.wallpaperRotationPaused,
+                                                 pick.fullPath == APP_STATE.lastSleepWallpaperPath, moreThanOneFile)) {
+      directAfter = basename;  // step the direct cursor past the repeat; the buffer
+                               // path progresses on its own via the next advance()
+      continue;
+    }
     if (probe(pick)) {
       // Persist the direct walk's own cursor only when this pick actually came
       // from it, so a buffer-engine pick never moves it. Set before
