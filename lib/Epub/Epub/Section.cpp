@@ -16,7 +16,9 @@ namespace {
 // v29: word spacing + paragraph spacing added to the header + cache key.
 // v30: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 //      text blob) instead of length-prefixed strings and per-field arrays.
-constexpr uint8_t SECTION_FILE_VERSION = 30;
+// v31: TextBlock gains an optional per-word guideDotXOffset array + guideDotsPresent
+//      flag (guide dots feature); serialized layout adds one byte per block.
+constexpr uint8_t SECTION_FILE_VERSION = 31;
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss
