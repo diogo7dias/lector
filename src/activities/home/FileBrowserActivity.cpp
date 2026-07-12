@@ -23,6 +23,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/FavoriteImage.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -31,6 +32,9 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 
 // Defined below; forward-declared so openSearch()'s preview lambda can use it.
 std::string getFileName(std::string filename);
+// List label with a favorite marker: defined below, forward-declared for the
+// preview lambda and the row-name callback.
+std::string favoriteAwareFileName(const std::string& filename);
 
 bool FileBrowserActivity::loadFiles(const SdFileIndex::CancelFn& cancel) {
   files.clear();
@@ -263,7 +267,7 @@ void FileBrowserActivity::openSearch() {
                                : LibrarySearchSupport::rankMatches(files, query);
     out.total = static_cast<int>(ranked.size());
     for (int i = 0; i < static_cast<int>(ranked.size()) && i < maxRows; i++) {
-      out.rows.push_back(getFileName(fileNameAt(ranked[i])));
+      out.rows.push_back(favoriteAwareFileName(fileNameAt(ranked[i])));
     }
     return out;
   });
@@ -616,6 +620,18 @@ std::string getFileName(std::string filename) {
   return filename.substr(0, pos);
 }
 
+// List label with a leading favorite marker. Favorite images carry an "_F"
+// suffix before the extension (x_F.bmp / x_F.pxc); show them as "[F] x" — marker
+// added, raw suffix removed — so a favorite stands out at a glance in /sleep,
+// /sleep pause, or any wallpaper folder. Favorites are image-only, so books and
+// other files are never marked and just get the plain name stem.
+std::string favoriteAwareFileName(const std::string& filename) {
+  if (FavoriteImage::isFavoritePath(filename)) {
+    return "[F] " + getFileName(FavoriteImage::stripFavoriteSuffix(filename));
+  }
+  return getFileName(filename);
+}
+
 std::string getFileExtension(const std::string& filename) {
   if (filename.back() == '/') {
     return "";
@@ -663,7 +679,7 @@ void FileBrowserActivity::render(RenderLock&&) {
             case RowKind::Clear:
               return tr(STR_CLEAR_SEARCH);
             case RowKind::File:
-              return getFileName(fileNameAt(r.fileIndex));
+              return favoriteAwareFileName(fileNameAt(r.fileIndex));
           }
           return "";
         },
