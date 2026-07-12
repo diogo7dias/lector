@@ -44,6 +44,10 @@ class Section {
   std::unique_ptr<BuildContext> build_;
   bool buildComplete_ = false;
   uint16_t builtPageCount_ = 0;  // pages laid out by the active build (== build_->lut.size())
+  // True when the most recent build failed specifically because the heap ran
+  // critically low during layout (as opposed to a parse/IO error). Captured from
+  // the parser before the failed build is torn down; read via lastBuildWasLowMemory().
+  bool lastBuildLowMemory_ = false;
 
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
@@ -84,6 +88,10 @@ class Section {
   bool buildSomeMore(int maxPages);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }
+  // True if the last createSectionFile()/buildSomeMore() failure was a low-memory
+  // abort during layout. Lets the caller degrade render quality and retry rather
+  // than treat it as a hard error. Valid after a build call returns false.
+  bool lastBuildWasLowMemory() const { return lastBuildLowMemory_; }
   void abandonBuild();
   // Best-known total page count: the exact pageCount once finalized, or a byte-ratio
   // extrapolation while a build is still in flight.

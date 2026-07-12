@@ -6,6 +6,7 @@
 #include <Logging.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
+#include <esp_heap_caps.h>
 #include <expat.h>
 
 #include <algorithm>
@@ -17,6 +18,7 @@
 #include "Epub/converters/ImageDecoderFactory.h"
 #include "Epub/converters/ImageToFramebufferDecoder.h"
 #include "Epub/htmlEntities.h"
+#include "Epub/parsers/LayoutHeapGate.h"
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
@@ -1341,6 +1343,20 @@ bool ChapterHtmlSlimParser::beginParse() {
 }
 
 ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
+  // Low-memory guard: only lay out another chunk when the heap can afford it.
+  // Feeding this chunk to expat drives element layout, per-word vectors, a
+  // TextBlock arena and possibly a fresh Page; on a critically low or fragmented
+  // heap one of those can fail and abort() under -fno-exceptions. Stop the build
+  // cleanly with a distinguishable low-memory signal instead. See LayoutHeapGate.h.
+  if (crosspoint::layoutHeapCritical(heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
+                                     heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT))) {
+    LOG_ERR("EHP", "Low memory during layout (free=%u largest=%u) - aborting build",
+            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DEFAULT)),
+            static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)));
+    lowMemoryAbort_ = true;
+    return ParseStatus::Error;
+  }
+
   void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
   if (!buf) {
     LOG_ERR("EHP", "Couldn't allocate memory for buffer");
