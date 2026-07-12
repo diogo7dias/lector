@@ -30,6 +30,7 @@
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
+#include "LowMemoryRenderTier.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -187,6 +188,9 @@ void EpubReaderActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   epub->setupCacheDir();
+  // A freshly opened book starts at full render quality; the low-memory ladder
+  // only degrades it if a chapter build actually runs out of memory.
+  lowMemoryTierFloor_ = 0;
   statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
   statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
                           .minimumPageSeconds = 2,
@@ -1177,29 +1181,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
     section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
 
-    if (!section->loadSectionFile(
-            SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-            SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
-            SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-            firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
-      LOG_DBG("ERS", "Cache not found, building...");
-
-      GUI.drawPopup(renderer, tr(STR_INDEXING));
-
-      const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
-
-      if (!section->createSectionFile(
-              SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-              SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
-              SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-              firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
-        LOG_ERR("ERS", "Failed to persist page data to SD");
-        section.reset();
-        showBuildError();
-        return;
-      }
-    } else {
-      LOG_DBG("ERS", "Cache found, skipping build...");
+    if (!buildSectionForRead(*section, viewportWidth, viewportHeight)) {
+      LOG_ERR("ERS", "Failed to build section for reading");
+      section.reset();
+      showBuildError();
+      return;
     }
 
     if (pendingPageJump.has_value()) {
@@ -1329,6 +1315,64 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 // rebuilds a fresh Section and re-loads the committed cache normally. If the build has
 // not finished by the time we cross over, that fresh load misses and falls back to the
 // usual blocking build — no worse than before, just not sped up that once.
+bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t viewportWidth,
+                                             const uint16_t viewportHeight) {
+  const int fontId = SETTINGS.getReaderFontId();
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  const int firstLineIndentPx = firstLineIndentPxFor(viewportWidth);
+  const LowMemoryRenderTier::Knobs base{SETTINGS.imageRendering, SETTINGS.embeddedStyle, SETTINGS.hyphenationEnabled,
+                                        SETTINGS.focusReadingEnabled};
+
+  // Try the cache first, at the tier this book has already degraded to (0 = full).
+  const LowMemoryRenderTier::Knobs floorKnobs = LowMemoryRenderTier::apply(base, lowMemoryTierFloor_);
+  if (section.loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                              viewportWidth, viewportHeight, floorKnobs.hyphenationEnabled, floorKnobs.embeddedStyle,
+                              floorKnobs.imageRendering, floorKnobs.focusReadingEnabled, firstLineIndentPx,
+                              SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+    LOG_DBG("ERS", "Cache found, skipping build...");
+    return true;
+  }
+
+  LOG_DBG("ERS", "Cache not found, building...");
+  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
+
+  // Descend the fallback ladder: build at the current floor first, then reduce one
+  // render knob per rung on a low-memory abort, until it fits or the lowest tier
+  // fails. A non-memory failure is not retried. Tiers whose knobs equal the previous
+  // attempt (a reduction the user already applied) are skipped.
+  LowMemoryRenderTier::Knobs lastTried{};
+  bool haveLast = false;
+  for (int tier = lowMemoryTierFloor_; tier <= LowMemoryRenderTier::kMaxTier; ++tier) {
+    const LowMemoryRenderTier::Knobs knobs = LowMemoryRenderTier::apply(base, tier);
+    if (haveLast && LowMemoryRenderTier::equal(knobs, lastTried)) {
+      continue;
+    }
+    lastTried = knobs;
+    haveLast = true;
+
+    if (section.createSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                                  viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
+                                  knobs.imageRendering, knobs.focusReadingEnabled, firstLineIndentPx,
+                                  SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
+      if (tier > lowMemoryTierFloor_) {
+        LOG_INF("ERS", "Low memory: degraded chapter render to tier %d for the rest of this book", tier);
+        lowMemoryTierFloor_ = tier;
+      }
+      return true;
+    }
+
+    if (!section.lastBuildWasLowMemory()) {
+      LOG_ERR("ERS", "Section build failed (not low memory)");
+      return false;
+    }
+    LOG_ERR("ERS", "Section build hit low memory at tier %d; descending", tier);
+  }
+
+  LOG_ERR("ERS", "Section build failed even at the lowest render tier");
+  return false;
+}
+
 void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, const uint16_t viewportHeight) {
   // Pages of the next chapter to lay out per page turn. Small enough that the added
   // latency is negligible next to the ~1s e-ink refresh, large enough that a typical
