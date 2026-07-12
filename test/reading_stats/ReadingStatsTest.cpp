@@ -547,3 +547,20 @@ TEST(ReadingStatsDashboard, FormatsDatesAndDailyAverage) {
   EXPECT_EQ(averagePerObservedDay(3600, day - 2, day), 1200u);
   EXPECT_EQ(averagePerObservedDay(3600, 0, day), 0u);
 }
+
+TEST(ReadingStatsDashboard, FitsWallpaperInsideCoverWithoutStretching) {
+  const DashboardImageRect target{20, 70, 296, 444};
+  const auto portrait = fitDashboardImage(480, 800, target);
+  EXPECT_EQ(portrait, (DashboardImageRect{34, 70, 267, 444}));
+
+  const auto cover = fitDashboardImage(600, 900, target);
+  EXPECT_EQ(cover, target);
+  EXPECT_EQ(mapDashboardPixel(0, cover.width, 600), 0);
+  EXPECT_EQ(mapDashboardPixel(cover.width - 1, cover.width, 600), 599);
+}
+
+TEST(ReadingStatsDashboard, RejectsInvalidImageDimensions) {
+  const DashboardImageRect target{20, 70, 296, 444};
+  EXPECT_EQ(fitDashboardImage(0, 800, target), target);
+  EXPECT_EQ(mapDashboardPixel(4, 1, 480), 0);
+}

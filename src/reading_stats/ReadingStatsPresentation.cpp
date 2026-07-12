@@ -1,6 +1,7 @@
 #include "ReadingStatsPresentation.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <limits>
 
@@ -91,6 +92,21 @@ std::string formatShortDate(const uint32_t dayIndex) {
 uint32_t averagePerObservedDay(const uint32_t seconds, const uint32_t startDay, const uint32_t endDay) {
   if (startDay == 0 || endDay < startDay) return 0;
   return seconds / (endDay - startDay + 1u);
+}
+
+DashboardImageRect fitDashboardImage(const int sourceWidth, const int sourceHeight, const DashboardImageRect target) {
+  if (sourceWidth <= 0 || sourceHeight <= 0 || target.width <= 0 || target.height <= 0) return target;
+  const double scale = std::min(static_cast<double>(target.width) / sourceWidth,
+                                static_cast<double>(target.height) / sourceHeight);
+  const int width = std::min(target.width, std::max(1, static_cast<int>(std::ceil(sourceWidth * scale))));
+  const int height = std::min(target.height, std::max(1, static_cast<int>(std::ceil(sourceHeight * scale))));
+  return DashboardImageRect{target.x + (target.width - width) / 2, target.y + (target.height - height) / 2, width,
+                            height};
+}
+
+int mapDashboardPixel(const int destinationPixel, const int destinationSize, const int sourceSize) {
+  if (destinationSize <= 1 || sourceSize <= 1) return 0;
+  return std::clamp(destinationPixel, 0, destinationSize - 1) * (sourceSize - 1) / (destinationSize - 1);
 }
 
 }  // namespace reading_stats

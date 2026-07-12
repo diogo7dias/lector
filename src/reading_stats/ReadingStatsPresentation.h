@@ -22,6 +22,14 @@ struct DashboardLayout {
   int footerY;
 };
 
+struct DashboardImageRect {
+  int x;
+  int y;
+  int width;
+  int height;
+  bool operator==(const DashboardImageRect&) const = default;
+};
+
 std::string formatDuration(uint32_t seconds);
 float pagesPerMinute(uint32_t pages, uint32_t seconds);
 uint32_t estimateTimeLeft(uint32_t readingSeconds, uint8_t progressPercent);
@@ -33,5 +41,7 @@ DashboardLayout dashboardLayout(int screenWidth, int screenHeight);
 TimeOfDay dominantTimeOfDay(const std::array<uint32_t, kTimeOfDayBucketCount>& buckets);
 std::string formatShortDate(uint32_t dayIndex);
 uint32_t averagePerObservedDay(uint32_t seconds, uint32_t startDay, uint32_t endDay);
+DashboardImageRect fitDashboardImage(int sourceWidth, int sourceHeight, DashboardImageRect target);
+int mapDashboardPixel(int destinationPixel, int destinationSize, int sourceSize);
 
 }  // namespace reading_stats
