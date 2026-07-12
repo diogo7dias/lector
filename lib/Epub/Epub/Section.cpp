@@ -16,6 +16,12 @@ namespace {
 // v30: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 //      text blob) instead of length-prefixed strings and per-field arrays.
 constexpr uint8_t SECTION_FILE_VERSION = 30;
+// Written into the version byte while a build is in flight. The real version is
+// stamped only after every page, LUT and offset has been written (see the commit
+// step in createSectionFile), so a build interrupted by a crash or power loss
+// leaves a ".part" file whose version (0) loadSectionFile rejects as unknown —
+// the section is simply rebuilt, never loaded half-written.
+constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) + sizeof(uint8_t) +
@@ -62,7 +68,9 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                    sizeof(firstLineIndentPx) + sizeof(wordSpacing) + sizeof(paragraphSpacing) +
                                    sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
-  serialization::writePod(file, SECTION_FILE_VERSION);
+  // Version byte starts as INCOMPLETE; createSectionFile stamps the real version
+  // last, once the file is fully written, as the atomic commit point.
+  serialization::writePod(file, SECTION_FILE_INCOMPLETE_VERSION);
   serialization::writePod(file, fontId);
   serialization::writePod(file, lineCompression);
   serialization::writePod(file, extraParagraphSpacing);
@@ -153,6 +161,13 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
 // Your updated class method (assuming you are using the 'SD' object, which is a wrapper for a specific filesystem)
 bool Section::clearCache() const {
+  // Also drop any leftover ".part" from an interrupted build so a stale partial
+  // never lingers next to a cleared cache.
+  const auto partPath = filePath + ".part";
+  if (Storage.exists(partPath.c_str())) {
+    Storage.remove(partPath.c_str());
+  }
+
   if (!Storage.exists(filePath.c_str())) {
     LOG_DBG("SCT", "Cache does not exist, no action needed");
     return true;
@@ -219,7 +234,11 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 
   LOG_DBG("SCT", "Streamed temp HTML to %s (%d bytes)", tmpHtmlPath.c_str(), fileSize);
 
-  if (!Storage.openFileForWrite("SCT", filePath, file)) {
+  // Build into a ".part" sibling and atomically rename it over the real cache only
+  // once fully written and version-stamped. A crash mid-build leaves the .part (and
+  // any previous good .bin) rather than a half-written cache at the canonical path.
+  const auto partPath = filePath + ".part";
+  if (!Storage.openFileForWrite("SCT", partPath, file)) {
     return false;
   }
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
@@ -270,7 +289,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     LOG_ERR("SCT", "Failed to parse XML and build pages");
     // Explicitly close() file before calling Storage.remove()
     file.close();
-    Storage.remove(filePath.c_str());
+    Storage.remove(partPath.c_str());
     if (cssParser) {
       cssParser->clear();
     }
@@ -292,7 +311,7 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
     LOG_ERR("SCT", "Failed to write LUT due to invalid page positions");
     // Explicitly close() file before calling Storage.remove()
     file.close();
-    Storage.remove(filePath.c_str());
+    Storage.remove(partPath.c_str());
     return false;
   }
 
@@ -323,8 +342,29 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
   serialization::writePod(file, anchorMapOffset);
   serialization::writePod(file, paragraphLutOffset);
   serialization::writePod(file, liLutFileOffset);
-  // Explicit close() required: member variable persists beyond function scope
+
+  // Commit point: stamp the real version byte LAST, after every offset is patched.
+  // A crash before this leaves the .part at INCOMPLETE (0), which loadSectionFile
+  // rejects, so a partially written build is never mistaken for a finished cache.
+  file.seek(0);
+  serialization::writePod(file, SECTION_FILE_VERSION);
+  file.flush();
+  // Explicit close() required before rename: SdFat cannot rename a path that still
+  // has an open FsFile, and the member variable persists beyond function scope.
   file.close();
+
+  // Atomically swap the finished build over any previous cache. SdFat's rename does
+  // not overwrite, so remove the canonical file first.
+  Storage.remove(filePath.c_str());
+  if (!Storage.rename(partPath.c_str(), filePath.c_str())) {
+    LOG_ERR("SCT", "Failed to rename section .part into place: %s", filePath.c_str());
+    Storage.remove(partPath.c_str());
+    if (cssParser) {
+      cssParser->clear();
+    }
+    return false;
+  }
+
   if (cssParser) {
     cssParser->clear();
   }
