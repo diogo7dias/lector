@@ -45,3 +45,56 @@ jobs:
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
             .pio/build/gh_release/partitions.bin
+
+      # Publishes the freshly built binaries into the wallpaper site so its
+      # /flash page can serve the latest build to the browser flasher.
+      # Stable tags only (skips *-rc*). Needs a fine-grained PAT with
+      # Contents:write on lector-wallpaper-converter, stored as WALLPAPER_REPO_TOKEN.
+      - name: Publish firmware to flasher site
+        if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') }}
+        env:
+          WALLPAPER_TOKEN: ${{ secrets.WALLPAPER_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WALLPAPER_TOKEN:-}" ]; then
+            echo "WALLPAPER_REPO_TOKEN is not set; skipping flasher publish." >&2
+            exit 0
+          fi
+          VERSION="${GITHUB_REF_NAME#v}"
+          BUILD_DIR=.pio/build/gh_release
+          BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' | head -n1)"
+          if [ -z "$BOOT_APP0" ]; then
+            echo "boot_app0.bin not found in the framework package." >&2
+            exit 1
+          fi
+          for f in firmware.bin bootloader.bin partitions.bin; do
+            test -f "$BUILD_DIR/$f" || { echo "missing $BUILD_DIR/$f" >&2; exit 1; }
+          done
+          git clone --depth 1 \
+            "https://x-access-token:${WALLPAPER_TOKEN}@github.com/diogo7dias/lector-wallpaper-converter.git" site
+          DEST=site/flash/firmware/latest
+          mkdir -p "$DEST"
+          cp "$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$DEST/"
+          cp "$BOOT_APP0" "$DEST/boot_app0.bin"
+          printf '%s\n' "$VERSION" > site/flash/version.txt
+          python3 - "$VERSION" <<'PY'
+          import json, sys
+          version = sys.argv[1]
+          for path in ("site/flash/manifest-update.json", "site/flash/manifest-full.json"):
+              with open(path) as fh:
+                  data = json.load(fh)
+              data["version"] = version
+              with open(path, "w") as fh:
+                  json.dump(data, fh, indent=2)
+                  fh.write("\n")
+          PY
+          cd site
+          git config user.name "lector-release-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add flash/firmware/latest flash/version.txt flash/manifest-update.json flash/manifest-full.json
+          if git diff --cached --quiet; then
+            echo "No firmware changes to publish."
+          else
+            git commit -m "chore(flash): publish Lector v${VERSION} firmware"
+            git push
+          fi
