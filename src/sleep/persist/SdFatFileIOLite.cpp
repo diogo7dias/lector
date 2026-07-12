@@ -2,8 +2,12 @@
 
 #include <Arduino.h>
 #include <HalStorage.h>
+#include <Logging.h>
+#include <esp_heap_caps.h>
 
 #include <string>
+
+#include "WholeFileReadGate.h"
 
 namespace crosspoint {
 namespace persist {
@@ -22,6 +26,29 @@ void ensureParentDir(const std::string& path) {
 
 std::string readWhole(const std::string& path) {
   if (!Storage.exists(path.c_str())) return {};
+
+  // Storage.readFile builds an Arduino String of the whole file and we then copy
+  // it into a std::string — peak transient heap is ~2x the file size, all via
+  // THROWING allocators. The build is -fno-exceptions, so a failed operator new
+  // does not return null: it terminates -> abort() -> firmware crash. This runs
+  // at sleep entry (loading the wallpaper order file on lock) when the heap is
+  // low and fragmented, which is exactly where a large order file aborted the
+  // device. Gate on the heap: if the largest free block cannot comfortably hold
+  // the file, return empty so the caller degrades to the O(1)-heap direct pick
+  // (rebuildSequential / streaming) instead of crashing.
+  {
+    HalFile f;
+    if (Storage.openFileForRead(kModule, path, f)) {
+      const size_t sz = f.size();
+      f.close();
+      if (!wholeFileReadAffordable(sz, heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT))) {
+        LOG_ERR(kModule, "readWhole: heap too low for %s (%u bytes) - skipping", path.c_str(),
+                static_cast<unsigned>(sz));
+        return {};
+      }
+    }
+  }
+
   const String s = Storage.readFile(path.c_str());
   return std::string(s.c_str(), s.length());
 }
