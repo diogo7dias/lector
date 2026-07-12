@@ -22,6 +22,15 @@ class Page;
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
+  // Incremental background build of the NEXT chapter, pumped a few pages per page
+  // turn so its cache is warm (committed) by the time the reader crosses into it.
+  // Replaces the old blocking one-shot next-chapter index. Never read while it is
+  // building (its single file handle is mid-write); it is only ever committed here
+  // and re-loaded fresh on arrival. prefetchSpineIndex_ marks which next chapter is
+  // being handled this position (set even when the section pointer is null: warm
+  // cache found, or a build that failed to start — so we do not retry every turn).
+  std::unique_ptr<Section> prefetchSection_ = nullptr;
+  int prefetchSpineIndex_ = -1;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -73,7 +82,7 @@ class EpubReaderActivity final : public Activity {
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
-  void silentIndexNextChapterIfNeeded(uint16_t viewportWidth, uint16_t viewportHeight);
+  void pumpNextChapterPrefetch(uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
