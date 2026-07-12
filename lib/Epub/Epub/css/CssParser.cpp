@@ -803,6 +803,10 @@ bool CssParser::loadFromCache() {
     return false;
   }
 
+  // Size the bucket array up front to avoid incremental rehashes (each a full
+  // reallocation + copy) while inserting rules one at a time below.
+  rulesBySelector_.reserve(ruleCount);
+
   auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
     return static_cast<size_t>(file.available()) >= neededBytes;
   };

@@ -434,6 +434,13 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
         Storage.removeDir((cachePath + "/sections").c_str());
       }
     }
+    // Release the resident CSS rule map now that the book is loaded. On a warm
+    // open (loadFromCache above succeeded) it would otherwise stay resident for
+    // the entire reading session, pinning tens of KB on a 380 KB heap. The map
+    // is only needed transiently while building section caches, and Section's
+    // builder reloads it from cache on demand (Section.cpp), so nothing here
+    // relies on it staying loaded. clear() is a no-op when CSS was skipped.
+    cssParser->clear();
     LOG_DBG("EBP", "Loaded ePub: %s", filepath.c_str());
     return true;
   }
