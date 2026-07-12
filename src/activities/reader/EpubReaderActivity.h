@@ -31,6 +31,12 @@ class EpubReaderActivity final : public Activity {
   // cache found, or a build that failed to start — so we do not retry every turn).
   std::unique_ptr<Section> prefetchSection_ = nullptr;
   int prefetchSpineIndex_ = -1;
+  // Low-memory render fallback ladder: the current degrade tier for this open book
+  // (0 = full quality). Raised when a chapter build aborts for low memory and a
+  // reduced-quality rebuild succeeds; it then sticks for the rest of the session so
+  // later chapters start already-degraded instead of re-descending each time. Reset
+  // to 0 in onEnter when a book is opened. See LowMemoryRenderTier.h.
+  int lowMemoryTierFloor_ = 0;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -83,6 +89,11 @@ class EpubReaderActivity final : public Activity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
   void pumpNextChapterPrefetch(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Loads or builds `section` for reading, descending the low-memory render tier
+  // ladder (LowMemoryRenderTier.h) when a build aborts for lack of memory. Returns
+  // false only on a genuine (non-memory) build failure or when even the lowest tier
+  // cannot fit. Updates lowMemoryTierFloor_ on a successful degrade.
+  bool buildSectionForRead(Section& section, uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
