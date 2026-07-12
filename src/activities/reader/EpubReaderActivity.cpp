@@ -266,6 +266,9 @@ void EpubReaderActivity::onExit() {
     saveProgress(origin.spineIndex, origin.pageNumber, 0);
   }
 
+  // Tear down any in-flight next-chapter prefetch first so its ".part" is removed
+  // (a committed prefetch cache is left in place for the next open).
+  prefetchSection_.reset();
   section.reset();
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
@@ -1092,6 +1095,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     currentSpineIndex = epub->getSpineItemsCount();
   }
 
+  // Drop a next-chapter prefetch that no longer matches where we are (any navigation
+  // changed currentSpineIndex). Doing this BEFORE the section (re)build below releases
+  // the prefetch's open ".part" write handle first, so if we just crossed into the
+  // chapter it was building, that build is torn down cleanly before we rebuild the
+  // same spine here. A committed prefetch cache simply stays on disk for the reload.
+  if (prefetchSpineIndex_ != -1 && prefetchSpineIndex_ != currentSpineIndex + 1) {
+    prefetchSection_.reset();
+    prefetchSpineIndex_ = -1;
+  }
+
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
     // Sole load site: runs on the render task (serialized by RenderLock); the main
@@ -1282,7 +1295,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
   }
-  silentIndexNextChapterIfNeeded(viewportWidth, viewportHeight);
+  pumpNextChapterPrefetch(viewportWidth, viewportHeight);
   saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
 
   showPendingSyncSaveError();
@@ -1305,37 +1318,76 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 }
 
-void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportWidth, const uint16_t viewportHeight) {
-  if (!epub || !section || section->pageCount < 2) {
+// Warm the NEXT chapter's section cache in the background, a few pages per page turn,
+// so crossing a chapter boundary is a cache hit instead of a one-shot blocking build.
+// This replaces the old silent index, which laid out the whole next chapter in a single
+// synchronous call on the penultimate page (the visible chapter-boundary hitch). Here the
+// same work is spread across the render calls of the current chapter's page turns.
+//
+// The prefetch section is only ever built and committed here; it is never read while
+// building (its single file handle is the open .part writer), so on arrival render()
+// rebuilds a fresh Section and re-loads the committed cache normally. If the build has
+// not finished by the time we cross over, that fresh load misses and falls back to the
+// usual blocking build — no worse than before, just not sped up that once.
+void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  // Pages of the next chapter to lay out per page turn. Small enough that the added
+  // latency is negligible next to the ~1s e-ink refresh, large enough that a typical
+  // chapter's next chapter is fully built within a handful of turns.
+  static constexpr int PREFETCH_PAGES_PER_TURN = 8;
+
+  if (!epub || !section || section->pageCount == 0) {
     return;
   }
-
-  // Build the next chapter cache while the penultimate page is on screen.
-  if (section->currentPage != section->pageCount - 2) {
+  // Skip the render that first paints a freshly opened chapter so the prefetch never
+  // competes with the page the reader is waiting for; begin on the first in-chapter turn.
+  if (section->currentPage < 1) {
     return;
   }
 
   const int nextSpineIndex = currentSpineIndex + 1;
-  if (nextSpineIndex < 0 || nextSpineIndex >= epub->getSpineItemsCount()) {
-    return;
+  if (nextSpineIndex >= epub->getSpineItemsCount()) {
+    return;  // last chapter: nothing ahead to warm
   }
 
-  Section nextSection(epub, nextSpineIndex, renderer);
-  if (nextSection.loadSectionFile(
-          SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-          SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
-          SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-          firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
-    return;
+  // First time targeting this next chapter from this position: decide once whether it is
+  // already cached or needs a build, then mark it handled (prefetchSpineIndex_) so a warm
+  // cache or a failed start is not re-probed every turn. The stale-prefetch guard at the
+  // top of render() clears prefetchSpineIndex_ when currentSpineIndex changes.
+  if (prefetchSpineIndex_ != nextSpineIndex) {
+    prefetchSpineIndex_ = nextSpineIndex;
+    prefetchSection_.reset();
+
+    auto next = makeUniqueNoThrow<Section>(epub, nextSpineIndex, renderer);
+    if (!next) {
+      LOG_ERR("ERS", "OOM: prefetch Section for chapter %d", nextSpineIndex);
+      return;
+    }
+    if (next->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                              SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+                              viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                              SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                              firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+      return;  // already warm; drop the probe object, committed cache stays on disk
+    }
+    LOG_DBG("ERS", "Prefetching next chapter: %d", nextSpineIndex);
+    if (!next->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
+                          SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                          SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
+                          SETTINGS.focusReadingEnabled, firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing,
+                          SETTINGS.paragraphSpacing)) {
+      LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", nextSpineIndex);
+      return;  // marked handled; will not retry until we move on
+    }
+    prefetchSection_ = std::move(next);
   }
 
-  LOG_DBG("ERS", "Silently indexing next chapter: %d", nextSpineIndex);
-  if (!nextSection.createSectionFile(
-          SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(), SETTINGS.extraParagraphSpacing,
-          SETTINGS.paragraphAlignment, viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled,
-          SETTINGS.embeddedStyle, SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
-          firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
-    LOG_ERR("ERS", "Failed silent indexing for chapter: %d", nextSpineIndex);
+  // Lay out another slice; on completion buildSomeMore commits the .part and the section
+  // goes idle (isBuilding() false), so we stop pumping it.
+  if (prefetchSection_ && prefetchSection_->isBuilding()) {
+    if (!prefetchSection_->buildSomeMore(PREFETCH_PAGES_PER_TURN)) {
+      LOG_ERR("ERS", "Prefetch build failed for chapter: %d", nextSpineIndex);
+      prefetchSection_.reset();  // arrival will rebuild from scratch
+    }
   }
 }
 
