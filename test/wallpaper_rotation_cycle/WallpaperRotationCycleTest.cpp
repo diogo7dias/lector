@@ -157,8 +157,7 @@ struct Harness {
 Harness sixFiles() {
   Harness h;
   // mtime DESC (newest first) fixes the order to A..F.
-  h.fs.files = {{"A.pxc", 106}, {"B.pxc", 105}, {"C.pxc", 104},
-                {"D.pxc", 103}, {"E.pxc", 102}, {"F.pxc", 101}};
+  h.fs.files = {{"A.pxc", 106}, {"B.pxc", 105}, {"C.pxc", 104}, {"D.pxc", 103}, {"E.pxc", 102}, {"F.pxc", 101}};
   return h;
 }
 
