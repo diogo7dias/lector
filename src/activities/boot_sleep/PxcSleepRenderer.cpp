@@ -35,6 +35,19 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   const size_t dataOffset = file.position();
   const int bytesPerRow = (pxcWidth + 3) / 4;  // 2bpp, 4 px/byte
 
+  // Read the whole 2bpp payload once so the three grayscale planes decode from RAM
+  // instead of re-reading it from SD three times. At low sleep-entry heap this
+  // ~90KB block often will not fit — that is expected, not an error; when it does
+  // not fit we fall back to the per-pass row-batch SD reads below.
+  const size_t payloadBytes = static_cast<size_t>(bytesPerRow) * pxcHeight;
+  auto frame = makeUniqueNoThrow<uint8_t[]>(payloadBytes);
+  if (frame) {
+    if (!file.seek(dataOffset) || file.read(frame.get(), payloadBytes) != static_cast<int>(payloadBytes)) {
+      frame.reset();
+    }
+  }
+  const uint8_t* const frameData = frame ? frame.get() : nullptr;
+
   // Batch rows into ~4KB when heap allows, else fall back to a single row. At
   // sleep entry the heap is low/fragmented, so the single-row floor keeps this
   // from OOM-bricking (build is -fno-exceptions: a failed alloc must be caught
@@ -59,23 +72,28 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // Decode the whole frame into the CURRENT render mode. Re-seekable so it can be
   // replayed once per grayscale plane. Returns false on a read/seek error.
   auto decode = [&]() -> bool {
-    if (!file.seek(dataOffset)) return false;
+    if (!frameData && !file.seek(dataOffset)) return false;
     DirectPixelWriter pw;
     pw.init(renderer);
     int rowsInBuffer = 0, bufferRow = 0;
     for (int row = 0; row < pxcHeight; row++) {
-      if (bufferRow >= rowsInBuffer) {
-        const int toRead = (pxcHeight - row < rowsPerRead) ? (pxcHeight - row) : rowsPerRead;
-        const size_t bytes = static_cast<size_t>(toRead) * bytesPerRow;
-        if (file.read(readBufferData, bytes) != static_cast<int>(bytes)) {
-          LOG_ERR("SLP", "pxc read error at row %d", row);
-          return false;
+      const uint8_t* rowBuffer;
+      if (frameData) {
+        rowBuffer = frameData + static_cast<size_t>(row) * bytesPerRow;
+      } else {
+        if (bufferRow >= rowsInBuffer) {
+          const int toRead = (pxcHeight - row < rowsPerRead) ? (pxcHeight - row) : rowsPerRead;
+          const size_t bytes = static_cast<size_t>(toRead) * bytesPerRow;
+          if (file.read(readBufferData, bytes) != static_cast<int>(bytes)) {
+            LOG_ERR("SLP", "pxc read error at row %d", row);
+            return false;
+          }
+          rowsInBuffer = toRead;
+          bufferRow = 0;
         }
-        rowsInBuffer = toRead;
-        bufferRow = 0;
+        rowBuffer = readBufferData + static_cast<size_t>(bufferRow) * bytesPerRow;
+        bufferRow++;
       }
-      const uint8_t* rowBuffer = readBufferData + static_cast<size_t>(bufferRow) * bytesPerRow;
-      bufferRow++;
       pw.beginRow(y + row);
       int colStart, colEnd;
       pw.bandColRange(x, pxcWidth, colStart, colEnd);
