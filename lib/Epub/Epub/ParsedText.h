@@ -17,13 +17,15 @@ struct Arena;
 class ParsedText {
   std::vector<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<bool> wordContinues;      // true = word attaches to previous with no break
-  std::vector<bool> wordNoSpaceBefore;  // true = may break before token, but no synthetic space when joined
-  std::vector<bool> wordIsFocusSuffix;  // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordContinues;       // true = word attaches to previous with no break
+  std::vector<bool> wordNoSpaceBefore;   // true = may break before token, but no synthetic space when joined
+  std::vector<bool> wordIsFocusSuffix;   // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordGuideDotBefore;  // true = a virtual guide dot belongs in the gap before this token
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
+  bool guideReadingEnabled;
   bool isNaturalAlign;
   bool hasRtlWord;
   // Explicit first-line indent in pixels. -1 = "book mode" (use the publisher/CSS
@@ -78,12 +80,14 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
-                      const int firstLineIndentPx = -1, const uint8_t wordSpacing = 3)
+                      const bool focusReadingEnabled = false, const bool guideReadingEnabled = false,
+                      const BlockStyle& blockStyle = BlockStyle(), const int firstLineIndentPx = -1,
+                      const uint8_t wordSpacing = 3)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
+        guideReadingEnabled(guideReadingEnabled),
         isNaturalAlign(false),
         hasRtlWord(false),
         firstLineIndentPx(firstLineIndentPx),

@@ -52,7 +52,8 @@ class Section {
   void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled,
-                              int firstLineIndentPx, uint8_t wordSpacing, uint8_t paragraphSpacing);
+                              bool guideDotsEnabled, int firstLineIndentPx, uint8_t wordSpacing,
+                              uint8_t paragraphSpacing);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
   // Writes the LUT + trailers, patches the header, stamps the real version byte and
   // atomically renames the .part into place. Consumes build_. Returns true on commit.
@@ -66,15 +67,15 @@ class Section {
   ~Section();
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
-                       uint8_t paragraphSpacing);
+                       uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
+                       uint8_t wordSpacing, uint8_t paragraphSpacing);
   bool clearCache() const;
   // One-shot full build. Thin wrapper over startBuild() + buildSomeMore(0), retained
   // so existing callers are unaffected.
   bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                          uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
-                         uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
+                         uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
+                         uint8_t wordSpacing, uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
 
   // Incremental build API. startBuild() streams the chapter HTML, opens the .part and
   // primes the parser without laying out any pages. buildSomeMore(maxPages) lays out
@@ -83,8 +84,8 @@ class Section {
   // A build is torn down (persist-less) by abandonBuild() and by the destructor.
   bool startBuild(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                   uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                  uint8_t imageRendering, bool focusReadingEnabled, int firstLineIndentPx, uint8_t wordSpacing,
-                  uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
+                  uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
+                  uint8_t wordSpacing, uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
   bool buildSomeMore(int maxPages);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }

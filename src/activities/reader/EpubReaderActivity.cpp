@@ -1321,14 +1321,14 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
   const float lineCompression = SETTINGS.getReaderLineCompression();
   const int firstLineIndentPx = firstLineIndentPxFor(viewportWidth);
   const LowMemoryRenderTier::Knobs base{SETTINGS.imageRendering, SETTINGS.embeddedStyle, SETTINGS.hyphenationEnabled,
-                                        SETTINGS.focusReadingEnabled};
+                                        SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled};
 
   // Try the cache first, at the tier this book has already degraded to (0 = full).
   const LowMemoryRenderTier::Knobs floorKnobs = LowMemoryRenderTier::apply(base, lowMemoryTierFloor_);
   if (section.loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
                               viewportWidth, viewportHeight, floorKnobs.hyphenationEnabled, floorKnobs.embeddedStyle,
-                              floorKnobs.imageRendering, floorKnobs.focusReadingEnabled, firstLineIndentPx,
-                              SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+                              floorKnobs.imageRendering, floorKnobs.focusReadingEnabled, floorKnobs.guideDotsEnabled,
+                              firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
     LOG_DBG("ERS", "Cache found, skipping build...");
     return true;
   }
@@ -1353,8 +1353,8 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
 
     if (section.createSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
                                   viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
-                                  knobs.imageRendering, knobs.focusReadingEnabled, firstLineIndentPx,
-                                  SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
+                                  knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
+                                  firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
       if (tier > lowMemoryTierFloor_) {
         LOG_INF("ERS", "Low memory: degraded chapter render to tier %d for the rest of this book", tier);
         lowMemoryTierFloor_ = tier;
@@ -1409,7 +1409,7 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
     if (next->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                               SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                               viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                              SETTINGS.imageRendering, SETTINGS.focusReadingEnabled,
+                              SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
                               firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
       return;  // already warm; drop the probe object, committed cache stays on disk
     }
@@ -1417,8 +1417,8 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
     if (!next->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                           SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
                           SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
-                          SETTINGS.focusReadingEnabled, firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing,
-                          SETTINGS.paragraphSpacing)) {
+                          SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled, firstLineIndentPxFor(viewportWidth),
+                          SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
       LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", nextSpineIndex);
       return;  // marked handled; will not retry until we move on
     }

@@ -271,6 +271,10 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   const bool wordStartsRtl = !hasRtlWord && mayContainRtlBytes(word.c_str()) &&
                              BidiUtils::startsWithRtl(word.c_str(), RTL_PER_WORD_PROBE_DEPTH);
 
+  // Guide dot: a virtual middle dot (U+00B7) belongs in the gap before the next
+  // real token. Set once effectiveAttach/NoSpaceBefore are known below; every push
+  // consumes and clears it so only the first token of a word carries the dot.
+  bool guideDotBeforeNextToken = false;
   const auto pushToken = [&](std::string token, const bool continues, const bool noSpaceBefore,
                              const bool isFocusSuffix) {
     words.push_back(std::move(token));
@@ -278,6 +282,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
     wordIsFocusSuffix.push_back(isFocusSuffix);
+    wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+    guideDotBeforeNextToken = false;
   };
 
   bool effectiveAttachToPrevious = attachToPrevious;
@@ -286,6 +292,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
     effectiveAttachToPrevious = false;
     effectiveNoSpaceBefore = true;
+  }
+
+  // A guide dot precedes this word only when it starts a fresh space-separated
+  // token (not attached, not a no-space break) and is not the first word on the line.
+  if (guideReadingEnabled && !effectiveAttachToPrevious && !effectiveNoSpaceBefore && !words.empty()) {
+    guideDotBeforeNextToken = true;
   }
 
   if (auto breakOffsets = cjkCharacterBreakByteOffsets(word); !breakOffsets.empty()) {
@@ -349,6 +361,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
     wordIsFocusSuffix.reserve(newCapacity);
+    wordGuideDotBefore.reserve(newCapacity);
   }
 
   // Lambda helper to process and push individual sub-segments of the string
@@ -361,6 +374,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordContinues.push_back(attach);
       wordNoSpaceBefore.push_back(noSpaceBefore);
       wordIsFocusSuffix.push_back(false);
+      wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+      guideDotBeforeNextToken = false;
     } else {
       size_t charCount = 0;
       const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
@@ -383,6 +398,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
+        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+        guideDotBeforeNextToken = false;
       } else {
         countPtr = reinterpret_cast<const unsigned char*>(segment.data());
         for (size_t i = 0; i < targetBoldChars; ++i) {
@@ -396,6 +413,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
+        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+        guideDotBeforeNextToken = false;
 
         // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
         words.emplace_back(segment.substr(splitByteOffset));
@@ -403,6 +422,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(true);
         wordNoSpaceBefore.push_back(false);
         wordIsFocusSuffix.push_back(true);
+        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+        guideDotBeforeNextToken = false;
       }
     }
   };
@@ -569,6 +590,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
+    wordGuideDotBefore.erase(wordGuideDotBefore.begin(), wordGuideDotBefore.begin() + consumed);
   }
 }
 
@@ -852,8 +874,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
-  // The hyphen remainder is not a focus suffix - it starts fresh on the next line.
+  // The hyphen remainder is not a focus suffix and carries no guide dot - it
+  // starts fresh on the next line.
   wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, false);
+  wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
 
   // Continuation flag handling after splitting a word into prefix + remainder.
   //
