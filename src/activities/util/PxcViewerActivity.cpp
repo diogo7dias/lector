@@ -101,15 +101,17 @@ void PxcViewerActivity::loop() {
         });
     return;
   }
-  // Right button toggles favorite by renaming the file (adds/strips the _F suffix).
-  // Stays in the viewer and re-renders in place: the hint label flips Fav<->Unfav and
-  // the favorite badge in the sleep info overlay updates. filePath is repointed to the
-  // renamed file so Back/Move/Delete keep working.
+  // Right button toggles favorite by renaming the file (adds/strips the _F suffix),
+  // then returns to the /sleep browser (the file stays in the folder, just renamed).
+  // returnToBrowser(false) patches that one row in place — no folder rescan. On a
+  // rename failure it stays in the viewer and re-renders.
   if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
     const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
     std::string updated;
     if (FavoriteImage::setFavorite(filePath, makeFavorite, &updated) == FavoriteImage::SetFavoriteResult::Success) {
       filePath = updated;
+      returnToBrowser(false);
+      return;
     }
     render();
     return;
