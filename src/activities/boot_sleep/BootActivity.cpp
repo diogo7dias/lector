@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <string>
+#include <vector>
 
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
@@ -38,12 +39,20 @@ void BootActivity::drawUnlockBanners() const {
     for (char& c : bookLine) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
   }
 
-  // --- TOP banner: version (+ resuming book) ---
-  const int topH = bookLine.empty() ? (lh12 + pad * 2) : (lh12 + 4 + lh10 + pad * 2);
+  // Title wraps to at most 12 rows so a long title keeps its words instead of a
+  // single ellipsised line. The version and every title row share the UI_10 size.
+  std::vector<std::string> titleLines;
+  if (!bookLine.empty()) {
+    titleLines = renderer.wrappedText(UI_10_FONT_ID, bookLine.c_str(), pageWidth - 24, 12);
+  }
+  const int titleRows = static_cast<int>(titleLines.size());
+
+  // --- TOP banner: version (+ resuming book, up to 12 title rows) ---
+  const int topH = pad * 2 + lh10 + (titleRows > 0 ? 4 + titleRows * lh10 : 0);
   const int topY = 0;
   renderer.fillRect(0, topY, pageWidth, topH, true);  // black banner, drawn every pass
 
-  // --- BOTTOM banner: "READ UNTIL YOU DIE." ---
+  // --- BOTTOM banner: footer text ---
   const int botH = lh12 + pad * 2;
   const int botY = pageHeight - botH;
   renderer.fillRect(0, botY, pageWidth, botH, true);  // black banner, drawn every pass
@@ -61,10 +70,11 @@ void BootActivity::drawUnlockBanners() const {
   renderer.setPaperbackLook(true);
 
   const std::string version = std::string("Lector ") + CROSSPOINT_VERSION;
-  renderer.drawCenteredText(UI_12_FONT_ID, topY + pad, version.c_str(), false);
-  if (!bookLine.empty()) {
-    const std::string shown = renderer.truncatedText(UI_10_FONT_ID, bookLine.c_str(), pageWidth - 24);
-    renderer.drawCenteredText(UI_10_FONT_ID, topY + pad + lh12 + 4, shown.c_str(), false);
+  renderer.drawCenteredText(UI_10_FONT_ID, topY + pad, version.c_str(), false);
+  int titleY = topY + pad + lh10 + 4;
+  for (const std::string& line : titleLines) {
+    renderer.drawCenteredText(UI_10_FONT_ID, titleY, line.c_str(), false);
+    titleY += lh10;
   }
 
   renderer.drawCenteredText(UI_12_FONT_ID, botY + pad, "READ UNTIL YOU DIE.", false);
