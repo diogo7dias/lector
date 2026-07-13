@@ -23,6 +23,7 @@
 #include "StatusBarSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/Wallpaper.h"
@@ -308,6 +309,37 @@ void SettingsActivity::toggleCurrentSetting() {
     } else {
       SETTINGS.*(setting.valuePtr) = static_cast<uint8_t>(currentValue + setting.valueRange.step);
     }
+  } else if (setting.type == SettingType::STRING) {
+    // Free-text entry via the on-screen keyboard. Handles both direct char[] fields
+    // (stringOffset into SETTINGS) and dynamic getter/setter string settings.
+    std::string initial;
+    if (setting.stringGetter) {
+      initial = setting.stringGetter();
+    } else if (setting.stringMaxLen > 0) {
+      initial = reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
+    }
+    const size_t offset = setting.stringOffset;
+    const size_t maxLen = setting.stringMaxLen;
+    const auto stringSetter = setting.stringSetter;
+    const size_t maxChars = maxLen > 0 ? maxLen - 1 : 63;
+    startActivityForResult(
+        makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)), initial,
+                                                 maxChars, InputType::Text),
+        [this, offset, maxLen, stringSetter](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            const auto& kb = std::get<KeyboardResult>(result.data);
+            if (stringSetter) {
+              stringSetter(kb.text);
+            } else if (maxLen > 0) {
+              char* dst = reinterpret_cast<char*>(reinterpret_cast<uint8_t*>(&SETTINGS) + offset);
+              strncpy(dst, kb.text.c_str(), maxLen - 1);
+              dst[maxLen - 1] = '\0';
+            }
+            SETTINGS.saveToFile();
+            rebuildSettingsLists();
+          }
+        });
+    return;
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
@@ -573,6 +605,13 @@ void SettingsActivity::render(RenderLock&&) {
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
           }
+        } else if (setting.type == SettingType::STRING) {
+          if (setting.stringGetter) {
+            valueText = setting.stringGetter();
+          } else if (setting.stringMaxLen > 0) {
+            valueText =
+                reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
+          }
         }
         return valueText;
       },
@@ -585,9 +624,9 @@ void SettingsActivity::render(RenderLock&&) {
     confirmLabel = I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount]);
   } else {
     const auto& sel = (*currentSettings)[selectedSettingIndex - 1];
-    const bool opensPicker = sel.type == SettingType::ENUM || sel.nameId == StrId::STR_TIME_TO_SLEEP ||
-                             sel.nameId == StrId::STR_LINE_SPACING || sel.nameId == StrId::STR_SCREEN_MARGIN ||
-                             sel.nameId == StrId::STR_SCREEN_MARGIN_TOP ||
+    const bool opensPicker = sel.type == SettingType::ENUM || sel.type == SettingType::STRING ||
+                             sel.nameId == StrId::STR_TIME_TO_SLEEP || sel.nameId == StrId::STR_LINE_SPACING ||
+                             sel.nameId == StrId::STR_SCREEN_MARGIN || sel.nameId == StrId::STR_SCREEN_MARGIN_TOP ||
                              sel.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM ||
                              sel.nameId == StrId::STR_FIRST_LINE_INDENT_PERCENT;
     confirmLabel = opensPicker ? tr(STR_SELECT) : tr(STR_TOGGLE);

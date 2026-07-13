@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
 #include "fontIds.h"
@@ -77,7 +78,8 @@ void BootActivity::drawUnlockBanners() const {
     titleY += lh10;
   }
 
-  renderer.drawCenteredText(UI_12_FONT_ID, botY + pad, "READ UNTIL YOU DIE.", false);
+  const char* footer = SETTINGS.customFooter[0] != '\0' ? SETTINGS.customFooter : "READ UNTIL YOU DIE.";
+  renderer.drawCenteredText(UI_12_FONT_ID, botY + pad, footer, false);
 
   renderer.setPaperbackLook(false);
 }
