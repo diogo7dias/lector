@@ -253,6 +253,110 @@ bool isWordCharacter(uint32_t cp) {
   return true;
 }
 
+// Focus Reading bolds the first ~43% of a word's codepoints. Same anchors as CrossInk
+// (1 bold at 4 chars, 3 bold at 7) so focus-reading bold length matches CrossInk exactly.
+constexpr size_t FOCUS_READING_PERCENT = 43;
+
+struct FocusTokenMetadata {
+  EpdFontFamily::Style style;  // baseStyle, or baseStyle|BOLD when the whole word is bold
+  uint8_t boundary;            // UTF-8 byte offset where the regular suffix starts; 0 = no split
+};
+
+// Computes the bold-prefix boundary for one word segment without splitting it into two
+// tokens: the word stays whole and carries this byte offset. boundary 0 means "no split"
+// (feature off, already-bold text, empty, or the whole word is bold).
+FocusTokenMetadata computeFocusMetadata(const std::string_view segment, const EpdFontFamily::Style baseStyle,
+                                        const bool focusReadingEnabled) {
+  if (!focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0 || segment.empty()) {
+    return {baseStyle, 0};
+  }
+
+  size_t charCount = 0;
+  const auto* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
+  const auto* const countEnd = countPtr + segment.length();
+  while (countPtr < countEnd) {
+    const auto* const cpStart = countPtr;
+    const uint32_t cp = utf8NextCodepoint(&countPtr);
+    if (!isWordCharacter(cp)) break;
+    if (countPtr <= cpStart) break;
+    charCount++;
+  }
+
+  if (charCount == 0) {
+    return {baseStyle, 0};
+  }
+
+  size_t targetBoldChars = (charCount * FOCUS_READING_PERCENT) / 100;
+  targetBoldChars = std::clamp<size_t>(targetBoldChars, 1, 9);
+
+  if (targetBoldChars >= charCount) {
+    return {static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD), 0};
+  }
+
+  const auto* splitPtr = reinterpret_cast<const unsigned char*>(segment.data());
+  for (size_t i = 0; i < targetBoldChars; ++i) {
+    utf8NextCodepoint(&splitPtr);
+  }
+  const size_t splitByteOffset = splitPtr - reinterpret_cast<const unsigned char*>(segment.data());
+  return {baseStyle, static_cast<uint8_t>(std::min<size_t>(splitByteOffset, UINT8_MAX))};
+}
+
+// First codepoint at or after byteOffset (the first codepoint of the regular suffix).
+uint32_t firstCodepointAtByteOffset(const std::string& word, const size_t byteOffset) {
+  if (byteOffset >= word.size()) return 0;
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + byteOffset);
+  return utf8NextCodepoint(&ptr);
+}
+
+// Last codepoint ending before byteOffset (the last codepoint of the bold prefix).
+uint32_t lastCodepointBeforeByteOffset(const std::string& word, const size_t byteOffset) {
+  if (word.empty() || byteOffset == 0) return 0;
+  size_t i = std::min(byteOffset, word.size()) - 1;
+  while (i > 0 && (static_cast<uint8_t>(word[i]) & 0xC0) == 0x80) {
+    --i;
+  }
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + i);
+  return utf8NextCodepoint(&ptr);
+}
+
+// X advance to the start of the regular suffix of a focus-split word: bold prefix
+// advance plus the kerning between the last prefix glyph and the first suffix glyph,
+// both measured in the bold style (the prefix is rendered bold). Returns 0 when the
+// word is not focus-split (boundary 0) or the boundary is out of range.
+int measureFocusSuffixX(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                        const EpdFontFamily::Style style, const uint8_t boundary) {
+  if (boundary == 0 || boundary >= word.size()) {
+    return 0;
+  }
+
+  const auto boldStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+  char prefixBuf[40];
+  const size_t prefixLen = std::min<size_t>(boundary, sizeof(prefixBuf) - 1);
+  memcpy(prefixBuf, word.c_str(), prefixLen);
+  prefixBuf[prefixLen] = '\0';
+
+  const int prefixWidth = renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle);
+  const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary),
+                                       firstCodepointAtByteOffset(word, boundary), boldStyle);
+  return prefixWidth + kern;
+}
+
+// Advance width of a single word token that may be focus-split: bold prefix + regular
+// suffix measured as one unit. Falls back to plain measureWordWidth when the word is not
+// focus-split, is being hyphenated, or carries a soft hyphen (all of which keep a single
+// style). Equivalent to measureWordWidth when focusBoundary is 0.
+uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                           const EpdFontFamily::Style style, const uint8_t focusBoundary,
+                           const bool appendHyphen = false) {
+  if (focusBoundary == 0 || focusBoundary >= word.size() || appendHyphen || containsSoftHyphen(word)) {
+    return measureWordWidth(renderer, fontId, word, style, appendHyphen);
+  }
+
+  const int suffixX = measureFocusSuffixX(renderer, fontId, word, style, focusBoundary);
+  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style);
+  return static_cast<uint16_t>(std::max(0, suffixX + suffixWidth));
+}
+
 // Advance width of the guide dot glyph itself (always drawn in the regular style).
 int guideDotAdvance(const GfxRenderer& renderer, const int fontId) {
   return renderer.getTextAdvanceX(fontId, GUIDE_DOT_UTF8, EpdFontFamily::REGULAR);
@@ -294,12 +398,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // consumes and clears it so only the first token of a word carries the dot.
   bool guideDotBeforeNextToken = false;
   const auto pushToken = [&](std::string token, const bool continues, const bool noSpaceBefore,
-                             const bool isFocusSuffix) {
+                             const uint8_t focusBoundary = 0) {
     words.push_back(std::move(token));
     wordStyles.push_back(baseStyle);
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
-    wordIsFocusSuffix.push_back(isFocusSuffix);
+    wordFocusBoundary.push_back(focusBoundary);
     wordGuideDotBefore.push_back(guideDotBeforeNextToken);
     guideDotBeforeNextToken = false;
   };
@@ -324,13 +428,13 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     for (const size_t breakOffset : breakOffsets) {
       if (breakOffset <= tokenStart || breakOffset > word.size()) continue;
       pushToken(word.substr(tokenStart, breakOffset - tokenStart), firstToken ? effectiveAttachToPrevious : false,
-                firstToken ? effectiveNoSpaceBefore : true, false);
+                firstToken ? effectiveNoSpaceBefore : true);
       firstToken = false;
       tokenStart = breakOffset;
     }
     if (tokenStart < word.size()) {
       pushToken(word.substr(tokenStart), firstToken ? effectiveAttachToPrevious : false,
-                firstToken ? effectiveNoSpaceBefore : true, false);
+                firstToken ? effectiveNoSpaceBefore : true);
     }
     if (wordStartsRtl) {
       hasRtlWord = true;
@@ -339,7 +443,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 
   if (containsCjkBreakableCodepoint(word)) {
-    pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore, false);
+    pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore);
     if (wordStartsRtl) {
       hasRtlWord = true;
     }
@@ -348,7 +452,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
   if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0) {
-    pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore, false);
+    pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore);
     if (wordStartsRtl) {
       hasRtlWord = true;
     }
@@ -378,73 +482,24 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordStyles.reserve(newCapacity);
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
-    wordIsFocusSuffix.reserve(newCapacity);
+    wordFocusBoundary.reserve(newCapacity);
     wordGuideDotBefore.reserve(newCapacity);
   }
 
   // Lambda helper to process and push individual sub-segments of the string
   // Use std::string_view to avoid heap allocations when slicing
   auto processSegment = [&](std::string_view segment, bool isWord, bool attach, bool noSpaceBefore) {
-    if (!isWord) {
-      // Punctuation and Numbers stay regular
-      words.emplace_back(segment);
-      wordStyles.push_back(baseStyle);
-      wordContinues.push_back(attach);
-      wordNoSpaceBefore.push_back(noSpaceBefore);
-      wordIsFocusSuffix.push_back(false);
-      wordGuideDotBefore.push_back(guideDotBeforeNextToken);
-      guideDotBeforeNextToken = false;
-    } else {
-      size_t charCount = 0;
-      const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
-      const unsigned char* countEnd = countPtr + segment.length();
-
-      while (countPtr < countEnd) {
-        utf8NextCodepoint(&countPtr);
-        charCount++;
-      }
-
-      // Target 43% for 1-bold at 4 chars and 3-bold at 7 chars with floor truncation.
-      // Matches CrossInk's FOCUS_READING_PERCENT so focus-reading bold length is identical.
-      constexpr size_t FOCUS_READING_PERCENT = 43;
-      size_t targetBoldChars = (charCount * FOCUS_READING_PERCENT) / 100;
-      targetBoldChars = std::clamp<size_t>(targetBoldChars, 1, 9);
-
-      if (targetBoldChars >= charCount) {
-        // Whole segment is bold - no suffix split needed
-        words.emplace_back(segment);
-        wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
-        wordContinues.push_back(attach);
-        wordNoSpaceBefore.push_back(noSpaceBefore);
-        wordIsFocusSuffix.push_back(false);
-        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
-        guideDotBeforeNextToken = false;
-      } else {
-        countPtr = reinterpret_cast<const unsigned char*>(segment.data());
-        for (size_t i = 0; i < targetBoldChars; ++i) {
-          utf8NextCodepoint(&countPtr);
-        }
-        size_t splitByteOffset = countPtr - reinterpret_cast<const unsigned char*>(segment.data());
-
-        // Bold prefix
-        words.emplace_back(segment.substr(0, splitByteOffset));
-        wordStyles.push_back(static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::BOLD));
-        wordContinues.push_back(attach);
-        wordNoSpaceBefore.push_back(noSpaceBefore);
-        wordIsFocusSuffix.push_back(false);
-        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
-        guideDotBeforeNextToken = false;
-
-        // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
-        words.emplace_back(segment.substr(splitByteOffset));
-        wordStyles.push_back(baseStyle);
-        wordContinues.push_back(true);
-        wordNoSpaceBefore.push_back(false);
-        wordIsFocusSuffix.push_back(true);
-        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
-        guideDotBeforeNextToken = false;
-      }
-    }
+    // The word stays one token; a focus-split word carries its bold-prefix byte boundary
+    // (rendered bold up to the boundary) instead of being split into two transient tokens.
+    const FocusTokenMetadata meta =
+        isWord ? computeFocusMetadata(segment, baseStyle, this->focusReadingEnabled) : FocusTokenMetadata{baseStyle, 0};
+    words.emplace_back(segment);
+    wordStyles.push_back(meta.style);
+    wordContinues.push_back(attach);
+    wordNoSpaceBefore.push_back(noSpaceBefore);
+    wordFocusBoundary.push_back(meta.boundary);
+    wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+    guideDotBeforeNextToken = false;
   };
 
   // Tokenize the string by alternating states (Word vs. Non-Word)
@@ -613,7 +668,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
-    wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
+    wordFocusBoundary.erase(wordFocusBoundary.begin(), wordFocusBoundary.begin() + consumed);
     wordGuideDotBefore.erase(wordGuideDotBefore.begin(), wordGuideDotBefore.begin() + consumed);
   }
 }
@@ -623,7 +678,7 @@ bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const Gf
     return false;
   }
   for (size_t i = 0; i < words.size(); ++i) {
-    if (!wordWidths.push_back(measureWordWidth(renderer, fontId, words[i], wordStyles[i]))) {
+    if (!wordWidths.push_back(measureTokenWidth(renderer, fontId, words[i], wordStyles[i], wordFocusBoundary[i]))) {
       return false;
     }
   }
@@ -854,6 +909,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   const std::string& word = words[wordIndex];
   const auto style = wordStyles[wordIndex];
+  const uint8_t origBoundary = wordFocusBoundary[wordIndex];
 
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
   auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
@@ -873,7 +929,13 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     }
 
     const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureWordWidth(renderer, fontId, word.substr(0, offset), style, needsHyphen);
+    // The prefix carries the original bold boundary if the break is past it; otherwise the
+    // whole prefix is bold. Measured as a focus token so the fit check matches what renders.
+    const uint8_t pb = (origBoundary != 0 && origBoundary <= offset) ? origBoundary : 0;
+    const EpdFontFamily::Style ps = (origBoundary > 0 && origBoundary > offset)
+                                        ? static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD)
+                                        : style;
+    const int prefixWidth = measureTokenWidth(renderer, fontId, word.substr(0, offset), ps, pb, needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
     }
@@ -891,10 +953,26 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Split the word at the selected breakpoint and append a hyphen if required.
   std::string remainder = word.substr(chosenOffset);
 
+  // Carry the original bold boundary across the split instead of recomputing it from the
+  // fragment: a break past the bold region leaves the prefix's boundary intact and the
+  // remainder fully regular; a break inside it makes the whole prefix bold and shifts the
+  // leftover bold bytes onto the remainder. Preserves the pre-split rendered bolding.
+  uint8_t prefixBoundary = 0;
+  uint8_t remainderBoundary = 0;
+  EpdFontFamily::Style prefixStyle = style;
+  if (origBoundary > 0) {
+    if (origBoundary <= chosenOffset) {
+      prefixBoundary = origBoundary;
+    } else {
+      prefixStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+      remainderBoundary = static_cast<uint8_t>(origBoundary - chosenOffset);
+    }
+  }
+
   // Do the one fallible (arena-backed) mutation first: an OOM here returns false
   // ("no split") with the token vectors and the width array still consistent, so
   // the caller simply leaves the word whole rather than aborting on a desync.
-  const uint16_t remainderWidth = measureWordWidth(renderer, fontId, remainder, style);
+  const uint16_t remainderWidth = measureTokenWidth(renderer, fontId, remainder, style, remainderBoundary);
   if (!wordWidths.insert(wordIndex + 1, remainderWidth)) {
     return false;
   }
@@ -904,13 +982,15 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   if (chosenNeedsHyphen) {
     words[wordIndex].push_back('-');
   }
+  wordStyles[wordIndex] = prefixStyle;
+  wordFocusBoundary[wordIndex] = prefixBoundary;
 
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
-  // The hyphen remainder is not a focus suffix and carries no guide dot - it
-  // starts fresh on the next line.
-  wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, false);
+  // The remainder carries any bold bytes that spilled past the break; it carries no guide
+  // dot - it starts fresh on the next line.
+  wordFocusBoundary.insert(wordFocusBoundary.begin() + wordIndex + 1, remainderBoundary);
   wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
 
   // Continuation flag handling after splitting a word into prefix + remainder.
@@ -1050,20 +1130,20 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     reorderedWidthsScratch.clear();
     reorderedContinuesScratch.clear();
     reorderedNoSpaceBeforeScratch.clear();
-    reorderedFocusSuffixScratch.clear();
+    reorderedFocusBoundaryScratch.clear();
     reorderedWordsScratch.reserve(visualOrderScratch.size());
     reorderedStylesScratch.reserve(visualOrderScratch.size());
     reorderedWidthsScratch.reserve(visualOrderScratch.size());
     reorderedContinuesScratch.reserve(visualOrderScratch.size());
     reorderedNoSpaceBeforeScratch.reserve(visualOrderScratch.size());
-    reorderedFocusSuffixScratch.reserve(visualOrderScratch.size());
+    reorderedFocusBoundaryScratch.reserve(visualOrderScratch.size());
 
     for (size_t i = 0; i < visualOrderScratch.size(); ++i) {
       const uint16_t src = visualOrderScratch[i];
       reorderedWordsScratch.push_back(std::move(lineWords[src]));
       reorderedStylesScratch.push_back(lineWordStyles[src]);
       reorderedWidthsScratch.push_back(wordWidths[lastBreakAt + src]);
-      reorderedFocusSuffixScratch.push_back(wordIsFocusSuffix[lastBreakAt + src]);
+      reorderedFocusBoundaryScratch.push_back(wordFocusBoundary[lastBreakAt + src]);
 
       // Continuation means "no break/gap between two adjacent logical tokens".
       // After visual reordering (common in RTL), an adjacent logical pair can appear
@@ -1262,17 +1342,17 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  const auto isFocusSuffixAt = [&](const size_t idx) {
-    return willReorder ? reorderedFocusSuffixScratch[idx] : wordIsFocusSuffix[lastBreakAt + idx];
+  const auto focusBoundaryAt = [&](const size_t idx) -> uint8_t {
+    return willReorder ? reorderedFocusBoundaryScratch[idx] : wordFocusBoundary[lastBreakAt + idx];
   };
 
-  // Fast path: when no word on this line was split for focus reading and no guide
-  // dot sits between words, skip the merge work and pass empty annotation vectors.
-  // TextBlock pays zero per-word RAM cost for these when the vectors are empty.
+  // Fast path: when no word on this line is focus-split and no guide dot sits between
+  // words, skip the per-word annotation work and pass empty vectors. TextBlock pays zero
+  // per-word RAM cost for these when the vectors are empty.
   bool lineHasFocusSplit = false;
   bool lineHasGuideDot = false;
   for (size_t i = 0; i < lineWordCount; i++) {
-    if (isFocusSuffixAt(i)) {
+    if (focusBoundaryAt(i) > 0) {
       lineHasFocusSplit = true;
     }
     if (guideDotBeforeLine(i)) {
@@ -1295,10 +1375,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     return;
   }
 
-  // Merge path: focus-suffix tokens merge back into their preceding word entry, and
-  // guide-dot offsets are recorded per output word. Focus and guide annotations are
-  // filled only when present on this line, so a line with just one of them does not
-  // pay per-word RAM for the other.
+  // Annotation path: each word is one output entry carrying its focus boundary; guide-dot
+  // offsets are recorded per output word. Focus and guide annotations are filled only when
+  // present on this line, so a line with just one of them does not pay per-word RAM for the other.
   auto& outWords = outWordsScratch;
   auto& outXPos = outXPosScratch;
   auto& outStyles = outStylesScratch;
@@ -1325,47 +1404,34 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const int dotAdv = lineHasGuideDot ? guideDotAdvance(renderer, fontId) : 0;
 
   for (size_t i = 0; i < lineWordCount; i++) {
-    if (isFocusSuffixAt(i) && !outWords.empty()) {
-      // Focus suffix: merge string into the preceding bold-prefix entry.
-      outWords.back() += lineWords[i];
-    } else {
-      // Normal word: check for a following focus suffix to record the byte boundary.
-      uint8_t boundary = 0;
-      uint16_t suffixX = 0;
-      if (lineHasFocusSplit && i + 1 < lineWordCount && isFocusSuffixAt(i + 1)) {
-        boundary = static_cast<uint8_t>(std::min(lineWords[i].size(), size_t{255}));
-        // Suffix x offset = layout-time advance of the bold prefix, already known from xpos table.
-        const int suffixDelta = static_cast<int>(lineXPos[i + 1]) - static_cast<int>(lineXPos[i]);
-        suffixX = static_cast<uint16_t>(suffixDelta > 0 ? suffixDelta : 0);
-      }
-      outWords.push_back(std::move(lineWords[i]));
-      outXPos.push_back(lineXPos[i]);
-      // For focus entries with a suffix, strip BOLD from the stored style.
-      // Render re-applies it to the prefix portion only, via the boundary field.
-      const EpdFontFamily::Style storedStyle =
-          boundary > 0 ? static_cast<EpdFontFamily::Style>(lineWordStyles[i] & ~EpdFontFamily::BOLD)
-                       : lineWordStyles[i];
-      outStyles.push_back(storedStyle);
-      if (lineHasFocusSplit) {
-        outBoundaries.push_back(boundary);
-        outSuffixX.push_back(suffixX);
-      }
-      if (lineHasGuideDot) {
-        outGuideDotXOffset.push_back(0);
-        // A guide dot precedes this word: centre it in the gap between the previous
-        // output word and this one, so it stays mid-gap even when justification has
-        // stretched the gap. The offset is stored on the previous output word, which
-        // is where render() draws it from.
-        if (guideDotBeforeLine(i) && outGuideDotXOffset.size() >= 2) {
-          const int prevX = static_cast<int>(outXPos[outXPos.size() - 2]);
-          const int prevWidth =
-              measureWordWidth(renderer, fontId, outWords[outWords.size() - 2], outStyles[outStyles.size() - 2]);
-          const int gapStart = prevX + prevWidth;
-          const int gapWidth = static_cast<int>(lineXPos[i]) - gapStart;
-          const int dotX = gapStart + (gapWidth - dotAdv) / 2;
-          const int dotDelta = dotX - prevX;
-          outGuideDotXOffset[outGuideDotXOffset.size() - 2] = static_cast<uint16_t>(dotDelta > 0 ? dotDelta : 0);
-        }
+    uint8_t boundary = focusBoundaryAt(i);
+    if (boundary >= lineWords[i].size()) {
+      boundary = 0;
+    }
+    outWords.push_back(std::move(lineWords[i]));
+    outXPos.push_back(lineXPos[i]);
+    // The style is already regular for a focus-split word; the boundary drives the bold
+    // prefix at render time, so nothing is stripped here.
+    outStyles.push_back(lineWordStyles[i]);
+    if (lineHasFocusSplit) {
+      outBoundaries.push_back(boundary);
+      outSuffixX.push_back(static_cast<uint16_t>(
+          std::max(0, measureFocusSuffixX(renderer, fontId, outWords.back(), outStyles.back(), boundary))));
+    }
+    if (lineHasGuideDot) {
+      outGuideDotXOffset.push_back(0);
+      // A guide dot precedes this word: centre it in the gap between the previous output
+      // word and this one, so it stays mid-gap even when justification has stretched the
+      // gap. The offset is stored on the previous output word, which render() draws from.
+      if (guideDotBeforeLine(i) && outGuideDotXOffset.size() >= 2) {
+        const int prevX = static_cast<int>(outXPos[outXPos.size() - 2]);
+        const int prevWidth =
+            measureWordWidth(renderer, fontId, outWords[outWords.size() - 2], outStyles[outStyles.size() - 2]);
+        const int gapStart = prevX + prevWidth;
+        const int gapWidth = static_cast<int>(lineXPos[i]) - gapStart;
+        const int dotX = gapStart + (gapWidth - dotAdv) / 2;
+        const int dotDelta = dotX - prevX;
+        outGuideDotXOffset[outGuideDotXOffset.size() - 2] = static_cast<uint16_t>(dotDelta > 0 ? dotDelta : 0);
       }
     }
   }
