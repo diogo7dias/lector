@@ -253,6 +253,62 @@ bool isWordCharacter(uint32_t cp) {
   return true;
 }
 
+// First codepoint at or after byteOffset (the first codepoint of the regular suffix).
+uint32_t firstCodepointAtByteOffset(const std::string& word, const size_t byteOffset) {
+  if (byteOffset >= word.size()) return 0;
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + byteOffset);
+  return utf8NextCodepoint(&ptr);
+}
+
+// Last codepoint ending before byteOffset (the last codepoint of the bold prefix).
+uint32_t lastCodepointBeforeByteOffset(const std::string& word, const size_t byteOffset) {
+  if (word.empty() || byteOffset == 0) return 0;
+  size_t i = std::min(byteOffset, word.size()) - 1;
+  while (i > 0 && (static_cast<uint8_t>(word[i]) & 0xC0) == 0x80) {
+    --i;
+  }
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + i);
+  return utf8NextCodepoint(&ptr);
+}
+
+// X advance to the start of the regular suffix of a focus-split word: bold prefix
+// advance plus the kerning between the last prefix glyph and the first suffix glyph,
+// both measured in the bold style (the prefix is rendered bold). Returns 0 when the
+// word is not focus-split (boundary 0) or the boundary is out of range.
+int measureFocusSuffixX(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                        const EpdFontFamily::Style style, const uint8_t boundary) {
+  if (boundary == 0 || boundary >= word.size()) {
+    return 0;
+  }
+
+  const auto boldStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
+  char prefixBuf[40];
+  const size_t prefixLen = std::min<size_t>(boundary, sizeof(prefixBuf) - 1);
+  memcpy(prefixBuf, word.c_str(), prefixLen);
+  prefixBuf[prefixLen] = '\0';
+
+  const int prefixWidth = renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle);
+  const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary),
+                                       firstCodepointAtByteOffset(word, boundary), boldStyle);
+  return prefixWidth + kern;
+}
+
+// Advance width of a single word token that may be focus-split: bold prefix + regular
+// suffix measured as one unit. Falls back to plain measureWordWidth when the word is not
+// focus-split, is being hyphenated, or carries a soft hyphen (all of which keep a single
+// style). Equivalent to measureWordWidth when focusBoundary is 0.
+uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
+                           const EpdFontFamily::Style style, const uint8_t focusBoundary,
+                           const bool appendHyphen = false) {
+  if (focusBoundary == 0 || focusBoundary >= word.size() || appendHyphen || containsSoftHyphen(word)) {
+    return measureWordWidth(renderer, fontId, word, style, appendHyphen);
+  }
+
+  const int suffixX = measureFocusSuffixX(renderer, fontId, word, style, focusBoundary);
+  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style);
+  return static_cast<uint16_t>(std::max(0, suffixX + suffixWidth));
+}
+
 // Advance width of the guide dot glyph itself (always drawn in the regular style).
 int guideDotAdvance(const GfxRenderer& renderer, const int fontId) {
   return renderer.getTextAdvanceX(fontId, GUIDE_DOT_UTF8, EpdFontFamily::REGULAR);
@@ -623,7 +679,7 @@ bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const Gf
     return false;
   }
   for (size_t i = 0; i < words.size(); ++i) {
-    if (!wordWidths.push_back(measureWordWidth(renderer, fontId, words[i], wordStyles[i]))) {
+    if (!wordWidths.push_back(measureTokenWidth(renderer, fontId, words[i], wordStyles[i], /*focusBoundary=*/0))) {
       return false;
     }
   }
