@@ -268,12 +268,6 @@ int guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std:
          renderer.getSpaceAdvance(fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
 }
 
-// The space between the guide dot and the word that follows it. Used at render
-// time to place the dot to the left of the following word.
-int guideDotSecondGap(const GfxRenderer& renderer, const int fontId, const std::string& rightWord) {
-  return renderer.getSpaceAdvance(fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
-}
-
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -1357,13 +1351,18 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       }
       if (lineHasGuideDot) {
         outGuideDotXOffset.push_back(0);
-        // A guide dot precedes this word: sit it just left of this word (one space
-        // between dot and word) and store its x offset on the PREVIOUS output word,
-        // which is where render() draws it from.
+        // A guide dot precedes this word: centre it in the gap between the previous
+        // output word and this one, so it stays mid-gap even when justification has
+        // stretched the gap. The offset is stored on the previous output word, which
+        // is where render() draws it from.
         if (guideDotBeforeLine(i) && outGuideDotXOffset.size() >= 2) {
-          const int secondGap = guideDotSecondGap(renderer, fontId, outWords.back());
-          const int dotX = static_cast<int>(lineXPos[i]) - secondGap - dotAdv;
-          const int dotDelta = dotX - static_cast<int>(outXPos[outXPos.size() - 2]);
+          const int prevX = static_cast<int>(outXPos[outXPos.size() - 2]);
+          const int prevWidth =
+              measureWordWidth(renderer, fontId, outWords[outWords.size() - 2], outStyles[outStyles.size() - 2]);
+          const int gapStart = prevX + prevWidth;
+          const int gapWidth = static_cast<int>(lineXPos[i]) - gapStart;
+          const int dotX = gapStart + (gapWidth - dotAdv) / 2;
+          const int dotDelta = dotX - prevX;
           outGuideDotXOffset[outGuideDotXOffset.size() - 2] = static_cast<uint16_t>(dotDelta > 0 ? dotDelta : 0);
         }
       }
