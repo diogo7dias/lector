@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <HalStorage.h>
+#include <Logging.h>
 #include <esp_heap_caps.h>
 #include <esp_task_wdt.h>
 
@@ -209,10 +210,14 @@ bool streamOrderNames(Fn&& onName) {
 // Next name strictly after `after` in the saved order, wrapping to the first name
 // (also when `after` is empty or absent). Empty when there is no usable order file.
 std::string orderNextAfter(const std::string& after) {
+  auto* sfs = v2::WallpaperPlaylistV2::instance().deps().fs;
   std::string firstName;
   std::string result;
   bool prevMatched = after.empty();
   streamOrderNames([&](const std::string& name) -> bool {
+    // Skip names whose file has vanished (moved to pause / deleted) and keep
+    // walking in order, so a stale order-file entry never strands the cursor.
+    if (sfs && !sfs->exists("/sleep/" + name)) return false;
     if (firstName.empty()) firstName = name;
     if (prevMatched) {
       result = name;
@@ -362,13 +367,13 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
   // folder; otherwise fall back to the O(1)-heap, anti-repeat direct pick.
   const bool useDirectPick = !sequentialPlaylistAffordable();
 
-  // Sequential cursor for the direct-pick path: its OWN persisted field, NOT
-  // lastShownSleepFilename. The buffer engine writes lastShownSleepFilename on
-  // its picks; sharing it let a buffer wake reset the direct walk to an unrelated
-  // lex position, so at ~400 files (where the heap gate flips wake-to-wake) the
-  // rotation clustered on a shifting few and never cycled the rest. Keeping the
-  // direct cursor separate lets each engine advance its own progress.
-  std::string directAfter = APP_STATE.lastDirectPickFilename;
+  // Both engines share ONE cursor (lastShownSleepFilename) and walk the same
+  // stable order — the buffer engine in RAM, the direct path via orderNextAfter
+  // streaming — so the heap-gate engine flip resolves to the same successor
+  // either way. This replaces the old split cursor (a separate
+  // lastDirectPickFilename), whose divergence under the wake-to-wake engine flip
+  // produced the two-image ping-pong.
+  std::string directAfter = APP_STATE.lastShownSleepFilename;
 
   // When the low-heap direct pick is active, fold any newly-added /sleep files into
   // the FRONT of the saved order (streaming, bounded) so fresh uploads show next.
@@ -416,21 +421,17 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
       continue;
     }
     if (probe(pick)) {
-      // Persist the direct walk's own cursor only when this pick actually came
-      // from it, so a buffer-engine pick never moves it. Set before
-      // rememberRendered() so its APP_STATE save (fullPath always changes on a
-      // new pick) writes this field too — no extra SD write.
-      // Persist the direct-pick cursor advance. rememberRendered() below saves
-      // APP_STATE only when the shown file/path changes; when the SAME file is
-      // re-picked it skips the save, stranding this cursor update in RAM where the
-      // deep-sleep reset loses it — so the walk lands on that same file every wake
-      // (the favorite-successor freeze). Detect the unchanged-render case and force
-      // the save so the cursor always advances across sleep.
-      const bool renderedFileUnchanged =
-          pick.fullPath == APP_STATE.lastSleepWallpaperPath && pick.basename == APP_STATE.lastShownSleepFilename;
-      if (pickedDirect) APP_STATE.lastDirectPickFilename = pick.basename;
+      // Diagnostic for on-device confirmation (LOG_INF survives a release build):
+      // cursorIn should equal the previous wake's pick, and pick should march
+      // through every wallpaper regardless of which engine ran.
+      LOG_INF("SLP", "rot engine=%s cursorIn=%s pick=%s lastShown=%s afford=%d", pickedDirect ? "direct" : "buffer",
+              directAfter.c_str(), pick.basename.c_str(), APP_STATE.lastShownSleepFilename.c_str(),
+              (int)!useDirectPick);
+      // One shared cursor: rememberRendered() persists lastShownSleepFilename +
+      // lastSleepWallpaperPath (state.json) when the shown pick changes. A pick is
+      // always a forward successor now, so there is no unchanged-render freeze to
+      // force-save around.
       v2::WallpaperPlaylistV2::instance().rememberRendered(pick.fullPath, pick.basename);
-      if (pickedDirect && renderedFileUnchanged) APP_STATE.saveToFile();
       return pick;
     }
     // Probe rejected this candidate. Step the direct-pick cursor past it so the

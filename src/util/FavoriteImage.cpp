@@ -43,23 +43,14 @@ void updateSleepReferencesOnPathChange(const std::string& oldPath, const std::st
   const std::string newBase = getBasename(newPath);
 
   if (oldInSleep && newInSleep) {
+    // The single rotation cursor references a basename; move it with the rename or
+    // it is left pointing at the dead pre-rename name.
     if (APP_STATE.lastShownSleepFilename == oldBase) {
       APP_STATE.lastShownSleepFilename = newBase;
-    }
-    // The direct-pick rotation cursor references a basename too; move it with the
-    // rename or it is left pointing at the dead pre-rename name. A favorite adds
-    // "_F", and "_" sorts immediately after ".", so the renamed file is the exact
-    // lexicographic successor of the stale cursor — the walk would then land on it
-    // every wake (the "favoriting freezes the wallpaper" bug).
-    if (APP_STATE.lastDirectPickFilename == oldBase) {
-      APP_STATE.lastDirectPickFilename = newBase;
     }
   } else if (oldInSleep && !newInSleep) {
     if (APP_STATE.lastShownSleepFilename == oldBase) {
       APP_STATE.lastShownSleepFilename.clear();
-    }
-    if (APP_STATE.lastDirectPickFilename == oldBase) {
-      APP_STATE.lastDirectPickFilename.clear();
     }
   }
 

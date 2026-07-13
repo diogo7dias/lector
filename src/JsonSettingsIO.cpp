@@ -29,7 +29,8 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["lastUntilDeathLogo"] = s.lastUntilDeathLogo;
   // Sleep wallpaper V2 rotation state.
   doc["lastShownSleepFilename"] = s.lastShownSleepFilename;
-  doc["lastDirectPickFilename"] = s.lastDirectPickFilename;
+  // lastDirectPickFilename is retired (both engines share lastShownSleepFilename);
+  // no longer emitted. The loader still reads it so old state files load cleanly.
   doc["lastSleepWallpaperPath"] = s.lastSleepWallpaperPath;
   doc["wallpaperRotationPaused"] = s.wallpaperRotationPaused;
   doc["sleepFavoritesCapReached"] = s.sleepFavoritesCapReached;
