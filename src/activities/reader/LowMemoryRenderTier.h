@@ -30,6 +30,7 @@ struct Knobs {
   bool embeddedStyle = true;
   bool hyphenationEnabled = true;
   bool focusReadingEnabled = true;
+  bool guideDotsEnabled = true;
 };
 
 // Highest descent tier (see file header). Tier 0 == full quality.
@@ -43,6 +44,7 @@ constexpr uint8_t kImagesSuppressed = 2;
 inline Knobs apply(Knobs base, int tier) {
   if (tier >= 1) base.imageRendering = kImagesSuppressed;
   if (tier >= 2) base.embeddedStyle = false;
+  if (tier >= 2) base.guideDotsEnabled = false;
   if (tier >= 3) base.hyphenationEnabled = false;
   if (tier >= 4) base.focusReadingEnabled = false;
   return base;
@@ -50,7 +52,8 @@ inline Knobs apply(Knobs base, int tier) {
 
 inline bool equal(const Knobs& a, const Knobs& b) {
   return a.imageRendering == b.imageRendering && a.embeddedStyle == b.embeddedStyle &&
-         a.hyphenationEnabled == b.hyphenationEnabled && a.focusReadingEnabled == b.focusReadingEnabled;
+         a.hyphenationEnabled == b.hyphenationEnabled && a.focusReadingEnabled == b.focusReadingEnabled &&
+         a.guideDotsEnabled == b.guideDotsEnabled;
 }
 
 }  // namespace LowMemoryRenderTier

@@ -16,7 +16,9 @@ namespace {
 // v29: word spacing + paragraph spacing added to the header + cache key.
 // v30: TextBlock word data stored as one flat arena (offset table + NUL-terminated
 //      text blob) instead of length-prefixed strings and per-field arrays.
-constexpr uint8_t SECTION_FILE_VERSION = 30;
+// v31: TextBlock gains an optional per-word guideDotXOffset array + guideDotsPresent
+//      flag (guide dots feature); serialized layout adds one byte per block.
+constexpr uint8_t SECTION_FILE_VERSION = 31;
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss
@@ -25,8 +27,9 @@ constexpr uint8_t SECTION_FILE_VERSION = 30;
 constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
-                                 sizeof(uint8_t) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) + sizeof(uint8_t) +
-                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
+                                 sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) +
+                                 sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                 sizeof(uint32_t);
 }  // namespace
 
 Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRenderer& renderer)
@@ -60,8 +63,9 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                      const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                      const uint16_t viewportHeight, const bool hyphenationEnabled,
                                      const bool embeddedStyle, const uint8_t imageRendering,
-                                     const bool focusReadingEnabled, const int firstLineIndentPx,
-                                     const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
+                                     const bool focusReadingEnabled, const bool guideDotsEnabled,
+                                     const int firstLineIndentPx, const uint8_t wordSpacing,
+                                     const uint8_t paragraphSpacing) {
   if (!file) {
     LOG_DBG("SCT", "File not open for writing header");
     return;
@@ -70,8 +74,9 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
                                    sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
                                    sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(focusReadingEnabled) +
-                                   sizeof(firstLineIndentPx) + sizeof(wordSpacing) + sizeof(paragraphSpacing) +
-                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+                                   sizeof(guideDotsEnabled) + sizeof(firstLineIndentPx) + sizeof(wordSpacing) +
+                                   sizeof(paragraphSpacing) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint32_t),
                 "Header size mismatch");
   // Version byte starts as INCOMPLETE; createSectionFile stamps the real version
   // last, once the file is fully written, as the atomic commit point.
@@ -86,6 +91,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   serialization::writePod(file, embeddedStyle);
   serialization::writePod(file, imageRendering);
   serialization::writePod(file, focusReadingEnabled);
+  serialization::writePod(file, guideDotsEnabled);
   serialization::writePod(file, firstLineIndentPx);
   serialization::writePod(file, wordSpacing);
   serialization::writePod(file, paragraphSpacing);
@@ -99,8 +105,8 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                              const uint8_t imageRendering, const bool focusReadingEnabled, const int firstLineIndentPx,
-                              const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
+                              const uint8_t imageRendering, const bool focusReadingEnabled, const bool guideDotsEnabled,
+                              const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -126,6 +132,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
+    bool fileGuideDotsEnabled;
     int fileFirstLineIndentPx;
     uint8_t fileWordSpacing;
     uint8_t fileParagraphSpacing;
@@ -139,6 +146,7 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
+    serialization::readPod(file, fileGuideDotsEnabled);
     serialization::readPod(file, fileFirstLineIndentPx);
     serialization::readPod(file, fileWordSpacing);
     serialization::readPod(file, fileParagraphSpacing);
@@ -148,8 +156,8 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
         viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
         hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle ||
         imageRendering != fileImageRendering || focusReadingEnabled != fileFocusReadingEnabled ||
-        firstLineIndentPx != fileFirstLineIndentPx || wordSpacing != fileWordSpacing ||
-        paragraphSpacing != fileParagraphSpacing) {
+        guideDotsEnabled != fileGuideDotsEnabled || firstLineIndentPx != fileFirstLineIndentPx ||
+        wordSpacing != fileWordSpacing || paragraphSpacing != fileParagraphSpacing) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
@@ -191,12 +199,12 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                 const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
                                 const uint8_t imageRendering, const bool focusReadingEnabled,
-                                const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing,
-                                const std::function<void()>& popupFn) {
+                                const bool guideDotsEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
+                                const uint8_t paragraphSpacing, const std::function<void()>& popupFn) {
   // One-shot: prime the build, then lay out every page and commit in a single call.
   if (!startBuild(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
-                  hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, firstLineIndentPx,
-                  wordSpacing, paragraphSpacing, popupFn)) {
+                  hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
+                  firstLineIndentPx, wordSpacing, paragraphSpacing, popupFn)) {
     return false;
   }
   return buildSomeMore(0);
@@ -205,8 +213,9 @@ bool Section::createSectionFile(const int fontId, const float lineCompression, c
 bool Section::startBuild(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                          const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
                          const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
-                         const bool focusReadingEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
-                         const uint8_t paragraphSpacing, const std::function<void()>& popupFn) {
+                         const bool focusReadingEnabled, const bool guideDotsEnabled, const int firstLineIndentPx,
+                         const uint8_t wordSpacing, const uint8_t paragraphSpacing,
+                         const std::function<void()>& popupFn) {
   // Abandon any prior in-progress build before starting a new one.
   abandonBuild();
   lastBuildLowMemory_ = false;
@@ -267,7 +276,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   }
   writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
                          viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
-                         firstLineIndentPx, wordSpacing, paragraphSpacing);
+                         guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing);
   pageCount = 0;
   builtPageCount_ = 0;
   buildComplete_ = false;
@@ -317,8 +326,8 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
 
   build_->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, build_->tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment,
-      viewportWidth, viewportHeight, hyphenationEnabled, focusReadingEnabled, firstLineIndentPx, wordSpacing,
-      paragraphSpacing,
+      viewportWidth, viewportHeight, hyphenationEnabled, focusReadingEnabled, guideDotsEnabled, firstLineIndentPx,
+      wordSpacing, paragraphSpacing,
       [this](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         if (build_) {
           build_->lut.push_back({onPageComplete(std::move(page)), paragraphIndex, listItemIndex});

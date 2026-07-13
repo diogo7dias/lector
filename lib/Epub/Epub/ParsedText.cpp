@@ -21,6 +21,9 @@ namespace {
 // Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
 constexpr size_t SOFT_HYPHEN_BYTES = 2;
+// Guide dot: a middle dot (U+00B7) drawn in the widened gap between words.
+constexpr char GUIDE_DOT_UTF8[] = "\xC2\xB7";
+constexpr uint32_t GUIDE_DOT_CODEPOINT = 0x00B7;
 // Paragraph-level direction: scan the first N words to find base direction.
 constexpr size_t RTL_PARAGRAPH_PROBE_WORDS = 3;
 // Per-word: scan enough chars to see through leading neutrals (quotes, numbers)
@@ -250,6 +253,21 @@ bool isWordCharacter(uint32_t cp) {
   return true;
 }
 
+// Advance width of the guide dot glyph itself (always drawn in the regular style).
+int guideDotAdvance(const GfxRenderer& renderer, const int fontId) {
+  return renderer.getTextAdvanceX(fontId, GUIDE_DOT_UTF8, EpdFontFamily::REGULAR);
+}
+
+// The full widened gap that holds a guide dot: space(leftWord -> dot) + dot glyph
+// + space(dot -> rightWord). Replaces the plain inter-word space when a dot sits
+// between two words. No word-spacing delta is applied to a guide-dot gap.
+int guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
+                       const std::string& rightWord, const EpdFontFamily::Style leftStyle) {
+  return renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), GUIDE_DOT_CODEPOINT, leftStyle) +
+         guideDotAdvance(renderer, fontId) +
+         renderer.getSpaceAdvance(fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
+}
+
 }  // namespace
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -271,6 +289,10 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   const bool wordStartsRtl = !hasRtlWord && mayContainRtlBytes(word.c_str()) &&
                              BidiUtils::startsWithRtl(word.c_str(), RTL_PER_WORD_PROBE_DEPTH);
 
+  // Guide dot: a virtual middle dot (U+00B7) belongs in the gap before the next
+  // real token. Set once effectiveAttach/NoSpaceBefore are known below; every push
+  // consumes and clears it so only the first token of a word carries the dot.
+  bool guideDotBeforeNextToken = false;
   const auto pushToken = [&](std::string token, const bool continues, const bool noSpaceBefore,
                              const bool isFocusSuffix) {
     words.push_back(std::move(token));
@@ -278,6 +300,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
     wordIsFocusSuffix.push_back(isFocusSuffix);
+    wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+    guideDotBeforeNextToken = false;
   };
 
   bool effectiveAttachToPrevious = attachToPrevious;
@@ -286,6 +310,12 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       hasCjkBreakOpportunityBetween(lastCodepoint(words.back()), firstCodepoint(word))) {
     effectiveAttachToPrevious = false;
     effectiveNoSpaceBefore = true;
+  }
+
+  // A guide dot precedes this word only when it starts a fresh space-separated
+  // token (not attached, not a no-space break) and is not the first word on the line.
+  if (guideReadingEnabled && !effectiveAttachToPrevious && !effectiveNoSpaceBefore && !words.empty()) {
+    guideDotBeforeNextToken = true;
   }
 
   if (auto breakOffsets = cjkCharacterBreakByteOffsets(word); !breakOffsets.empty()) {
@@ -349,6 +379,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordContinues.reserve(newCapacity);
     wordNoSpaceBefore.reserve(newCapacity);
     wordIsFocusSuffix.reserve(newCapacity);
+    wordGuideDotBefore.reserve(newCapacity);
   }
 
   // Lambda helper to process and push individual sub-segments of the string
@@ -361,6 +392,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       wordContinues.push_back(attach);
       wordNoSpaceBefore.push_back(noSpaceBefore);
       wordIsFocusSuffix.push_back(false);
+      wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+      guideDotBeforeNextToken = false;
     } else {
       size_t charCount = 0;
       const unsigned char* countPtr = reinterpret_cast<const unsigned char*>(segment.data());
@@ -383,6 +416,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
+        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+        guideDotBeforeNextToken = false;
       } else {
         countPtr = reinterpret_cast<const unsigned char*>(segment.data());
         for (size_t i = 0; i < targetBoldChars; ++i) {
@@ -396,6 +431,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(attach);
         wordNoSpaceBefore.push_back(noSpaceBefore);
         wordIsFocusSuffix.push_back(false);
+        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+        guideDotBeforeNextToken = false;
 
         // Regular suffix - marked so extractLine can merge it back into single TextBlock entry
         words.emplace_back(segment.substr(splitByteOffset));
@@ -403,6 +440,8 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         wordContinues.push_back(true);
         wordNoSpaceBefore.push_back(false);
         wordIsFocusSuffix.push_back(true);
+        wordGuideDotBefore.push_back(guideDotBeforeNextToken);
+        guideDotBeforeNextToken = false;
       }
     }
   };
@@ -518,6 +557,11 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
     renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
+    // The guide dot renders in the regular style; load its glyph metrics too so
+    // gap measurement and drawing never trigger on-demand SD I/O for it.
+    if (guideReadingEnabled) {
+      renderer.ensureSdCardFontReady(fontId, GUIDE_DOT_UTF8, 0x01);
+    }
   }
 
   const int pageWidth = viewportWidth;
@@ -569,6 +613,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordIsFocusSuffix.erase(wordIsFocusSuffix.begin(), wordIsFocusSuffix.begin() + consumed);
+    wordGuideDotBefore.erase(wordGuideDotBefore.begin(), wordGuideDotBefore.begin() + consumed);
   }
 }
 
@@ -594,6 +639,10 @@ bool ParsedText::computeLineBreaks(Arena& scratch, const GfxRenderer& renderer, 
 
   const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
   const int wsDelta = wordSpacingDeltaPx(renderer, fontId);
+  // Guide dots widen inter-word gaps. This first implementation applies them only
+  // to pure left-to-right paragraphs (no RTL words); RTL/BiDi lines skip dots so
+  // the reordered layout stays correct. Gated the same way in extractLine.
+  const bool guideOk = !blockStyle.isRtl && !hasRtlWord;
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -635,9 +684,11 @@ bool ParsedText::computeLineBreaks(Arena& scratch, const GfxRenderer& renderer, 
       if (j > static_cast<size_t>(i) && noSpaceBeforeVec[j]) {
         gap = 0;
       } else if (j > static_cast<size_t>(i) && !continuesVec[j]) {
-        gap =
-            renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]) +
-            wsDelta;
+        gap = (guideOk && wordGuideDotBefore[j])
+                  ? guideDotNaturalGap(renderer, fontId, words[j - 1], words[j], wordStyles[j - 1])
+                  : renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
+                                             wordStyles[j - 1]) +
+                        wsDelta;
       } else if (j > static_cast<size_t>(i) && continuesVec[j]) {
         // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
         gap = renderer.getKerning(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]), wordStyles[j - 1]);
@@ -716,6 +767,7 @@ bool ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const 
   lineBreakIndices.clear();
   const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
   const int wsDelta = wordSpacingDeltaPx(renderer, fontId);
+  const bool guideOk = !blockStyle.isRtl && !hasRtlWord;
 
   size_t currentIndex = 0;
   bool isFirstLine = true;
@@ -734,9 +786,12 @@ bool ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const 
       if (!isFirstWord && noSpaceBeforeVec[currentIndex]) {
         spacing = 0;
       } else if (!isFirstWord && !continuesVec[currentIndex]) {
-        spacing = renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
-                                           firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]) +
-                  wsDelta;
+        spacing = (guideOk && wordGuideDotBefore[currentIndex])
+                      ? guideDotNaturalGap(renderer, fontId, words[currentIndex - 1], words[currentIndex],
+                                           wordStyles[currentIndex - 1])
+                      : renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
+                                                 firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]) +
+                            wsDelta;
       } else if (!isFirstWord && continuesVec[currentIndex]) {
         // Cross-boundary kerning for continuation words (e.g. nonbreaking spaces, attached punctuation)
         spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
@@ -852,8 +907,10 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
   words.insert(words.begin() + wordIndex + 1, remainder);
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
-  // The hyphen remainder is not a focus suffix - it starts fresh on the next line.
+  // The hyphen remainder is not a focus suffix and carries no guide dot - it
+  // starts fresh on the next line.
   wordIsFocusSuffix.insert(wordIsFocusSuffix.begin() + wordIndex + 1, false);
+  wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
 
   // Continuation flag handling after splitting a word into prefix + remainder.
   //
@@ -892,6 +949,15 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
 
+  // Guide dots apply only to pure LTR lines (matches the gate in computeLineBreaks).
+  // A dot sits in the gap BEFORE a word, so the first word on a line never carries
+  // one (k > 0). guideOk is mutually exclusive with visual reordering, so the RTL
+  // and reordered layout branches below never need to account for dots.
+  const bool guideOk = !blockStyle.isRtl && !hasRtlWord;
+  const auto guideDotBeforeLine = [&](const size_t k) {
+    return guideOk && k > 0 && wordGuideDotBefore[lastBreakAt + k];
+  };
+
   // Build line data by moving from the original vectors using index range. These
   // are reused member buffers: clear() keeps their capacity so the same storage
   // serves every line on the page instead of a fresh allocation per line.
@@ -929,9 +995,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       actualGapCount++;
     } else if (wordIdx > 0 && !continuesVec[lastBreakAt + wordIdx]) {
       actualGapCount++;
-      totalNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
-                                                   firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]) +
-                          wsDelta;
+      totalNaturalGaps +=
+          guideDotBeforeLine(wordIdx)
+              ? guideDotNaturalGap(renderer, fontId, lineWords[wordIdx - 1], lineWords[wordIdx],
+                                   lineWordStyles[wordIdx - 1])
+              : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                         firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]) +
+                    wsDelta;
     } else if (wordIdx > 0 && continuesVec[lastBreakAt + wordIdx]) {
       // Non-breaking space tokens (" " with continues=true) are visible, stretchable spaces —
       // count them as justifiable gaps so justifyExtra is distributed to them too.
@@ -1174,8 +1244,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           bool nextNoSpace = false;
           if (wordIdx + 1 < lineWordCount) {
             nextNoSpace = noSpaceBeforeVec[lastBreakAt + wordIdx + 1];
-            gap = nextNoSpace
-                      ? 0
+            gap = nextNoSpace ? 0
+                  : guideDotBeforeLine(wordIdx + 1)
+                      ? guideDotNaturalGap(renderer, fontId, lineWords[wordIdx], lineWords[wordIdx + 1],
+                                           lineWordStyles[wordIdx])
                       : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
                                                  firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]) +
                             wsDelta;
@@ -1193,21 +1265,27 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     return willReorder ? reorderedFocusSuffixScratch[idx] : wordIsFocusSuffix[lastBreakAt + idx];
   };
 
-  // Fast path: when no word on this line was split for focus reading, skip the merge work
-  // entirely and pass empty boundary/suffixX vectors. TextBlock pays zero per-word RAM cost
-  // for these annotations when the vectors are empty.
+  // Fast path: when no word on this line was split for focus reading and no guide
+  // dot sits between words, skip the merge work and pass empty annotation vectors.
+  // TextBlock pays zero per-word RAM cost for these when the vectors are empty.
   bool lineHasFocusSplit = false;
+  bool lineHasGuideDot = false;
   for (size_t i = 0; i < lineWordCount; i++) {
     if (isFocusSuffixAt(i)) {
       lineHasFocusSplit = true;
+    }
+    if (guideDotBeforeLine(i)) {
+      lineHasGuideDot = true;
+    }
+    if (lineHasFocusSplit && lineHasGuideDot) {
       break;
     }
   }
 
-  if (!lineHasFocusSplit) {
+  if (!lineHasFocusSplit && !lineHasGuideDot) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
     auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                             std::vector<uint16_t>{}, blockStyle);
+                                             std::vector<uint16_t>{}, std::vector<uint16_t>{}, blockStyle);
     if (!block->valid()) {
       LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
       return;
@@ -1216,24 +1294,34 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     return;
   }
 
-  // Slow path: merge focus suffix tokens back into their preceding word entry so each
-  // original word occupies one TextBlock slot. Splits are recorded as per-word annotations
-  // applied at render time, cutting the token count significantly when the feature is active.
+  // Merge path: focus-suffix tokens merge back into their preceding word entry, and
+  // guide-dot offsets are recorded per output word. Focus and guide annotations are
+  // filled only when present on this line, so a line with just one of them does not
+  // pay per-word RAM for the other.
   auto& outWords = outWordsScratch;
   auto& outXPos = outXPosScratch;
   auto& outStyles = outStylesScratch;
   auto& outBoundaries = outBoundaryScratch;
   auto& outSuffixX = outSuffixXScratch;
+  auto& outGuideDotXOffset = outGuideDotXOffsetScratch;
   outWords.clear();
   outXPos.clear();
   outStyles.clear();
   outBoundaries.clear();
   outSuffixX.clear();
+  outGuideDotXOffset.clear();
   outWords.reserve(lineWordCount);
   outXPos.reserve(lineWordCount);
   outStyles.reserve(lineWordCount);
-  outBoundaries.reserve(lineWordCount);
-  outSuffixX.reserve(lineWordCount);
+  if (lineHasFocusSplit) {
+    outBoundaries.reserve(lineWordCount);
+    outSuffixX.reserve(lineWordCount);
+  }
+  if (lineHasGuideDot) {
+    outGuideDotXOffset.reserve(lineWordCount);
+  }
+
+  const int dotAdv = lineHasGuideDot ? guideDotAdvance(renderer, fontId) : 0;
 
   for (size_t i = 0; i < lineWordCount; i++) {
     if (isFocusSuffixAt(i) && !outWords.empty()) {
@@ -1243,7 +1331,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       // Normal word: check for a following focus suffix to record the byte boundary.
       uint8_t boundary = 0;
       uint16_t suffixX = 0;
-      if (i + 1 < lineWordCount && isFocusSuffixAt(i + 1)) {
+      if (lineHasFocusSplit && i + 1 < lineWordCount && isFocusSuffixAt(i + 1)) {
         boundary = static_cast<uint8_t>(std::min(lineWords[i].size(), size_t{255}));
         // Suffix x offset = layout-time advance of the bold prefix, already known from xpos table.
         const int suffixDelta = static_cast<int>(lineXPos[i + 1]) - static_cast<int>(lineXPos[i]);
@@ -1257,12 +1345,32 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           boundary > 0 ? static_cast<EpdFontFamily::Style>(lineWordStyles[i] & ~EpdFontFamily::BOLD)
                        : lineWordStyles[i];
       outStyles.push_back(storedStyle);
-      outBoundaries.push_back(boundary);
-      outSuffixX.push_back(suffixX);
+      if (lineHasFocusSplit) {
+        outBoundaries.push_back(boundary);
+        outSuffixX.push_back(suffixX);
+      }
+      if (lineHasGuideDot) {
+        outGuideDotXOffset.push_back(0);
+        // A guide dot precedes this word: centre it in the gap between the previous
+        // output word and this one, so it stays mid-gap even when justification has
+        // stretched the gap. The offset is stored on the previous output word, which
+        // is where render() draws it from.
+        if (guideDotBeforeLine(i) && outGuideDotXOffset.size() >= 2) {
+          const int prevX = static_cast<int>(outXPos[outXPos.size() - 2]);
+          const int prevWidth =
+              measureWordWidth(renderer, fontId, outWords[outWords.size() - 2], outStyles[outStyles.size() - 2]);
+          const int gapStart = prevX + prevWidth;
+          const int gapWidth = static_cast<int>(lineXPos[i]) - gapStart;
+          const int dotX = gapStart + (gapWidth - dotAdv) / 2;
+          const int dotDelta = dotX - prevX;
+          outGuideDotXOffset[outGuideDotXOffset.size() - 2] = static_cast<uint16_t>(dotDelta > 0 ? dotDelta : 0);
+        }
+      }
     }
   }
 
-  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outSuffixX, blockStyle);
+  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outSuffixX, outGuideDotXOffset,
+                                           blockStyle);
   if (!block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
     return;
