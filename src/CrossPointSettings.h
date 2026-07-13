@@ -341,6 +341,8 @@ class CrossPointSettings {
   uint8_t guideDotsEnabled = 0;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
+  // Custom text for the lock/wake screen footer banner (empty = default "READ UNTIL YOU DIE.")
+  char customFooter[64] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on)
