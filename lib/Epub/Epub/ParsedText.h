@@ -55,6 +55,7 @@ class ParsedText {
   std::vector<EpdFontFamily::Style> outStylesScratch;
   std::vector<uint8_t> outBoundaryScratch;
   std::vector<uint16_t> outSuffixXScratch;
+  std::vector<uint16_t> outGuideDotXOffsetScratch;
 
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   // Signed pixels to add to each real inter-word gap for the word-spacing setting.
