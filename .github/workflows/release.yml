@@ -98,3 +98,32 @@ jobs:
             git commit -m "chore(flash): publish Lector v${VERSION} firmware"
             git push
           fi
+
+      # A PAT push to the wallpaper repo does not reliably trigger its (legacy,
+      # branch-based) GitHub Pages rebuild, so the /flash site can keep serving the
+      # previous version.txt until forced. Request a build explicitly. Needs the PAT
+      # to also have Pages:write on lector-wallpaper-converter; if it does not, this
+      # warns (does not fail the release) and the build can be triggered by hand with
+      # `gh api -X POST repos/diogo7dias/lector-wallpaper-converter/pages/builds`.
+      - name: Trigger flasher site Pages rebuild
+        if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') }}
+        env:
+          WALLPAPER_TOKEN: ${{ secrets.WALLPAPER_REPO_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${WALLPAPER_TOKEN:-}" ]; then
+            echo "WALLPAPER_REPO_TOKEN is not set; skipping Pages rebuild." >&2
+            exit 0
+          fi
+          code="$(curl -sS -o /tmp/pages_resp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${WALLPAPER_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/diogo7dias/lector-wallpaper-converter/pages/builds || echo 000)"
+          echo "Pages build request HTTP ${code}"
+          if [ "${code}" = "201" ]; then
+            echo "GitHub Pages rebuild requested; the /flash site will show v${GITHUB_REF_NAME#v} shortly."
+          else
+            echo "::warning::Pages rebuild request returned HTTP ${code}. WALLPAPER_REPO_TOKEN likely lacks Pages:write on lector-wallpaper-converter. Grant it, or run: gh api -X POST repos/diogo7dias/lector-wallpaper-converter/pages/builds"
+            cat /tmp/pages_resp.json 2>/dev/null || true
+          fi
