@@ -17,9 +17,10 @@ struct Arena;
 class ParsedText {
   std::vector<std::string> words;
   std::vector<EpdFontFamily::Style> wordStyles;
-  std::vector<bool> wordContinues;       // true = word attaches to previous with no break
-  std::vector<bool> wordNoSpaceBefore;   // true = may break before token, but no synthetic space when joined
-  std::vector<bool> wordIsFocusSuffix;   // true = token is the regular tail of a focus bold-prefix split
+  std::vector<bool> wordContinues;      // true = word attaches to previous with no break
+  std::vector<bool> wordNoSpaceBefore;  // true = may break before token, but no synthetic space when joined
+  std::vector<uint8_t>
+      wordFocusBoundary;  // UTF-8 byte offset where the regular suffix of a focus-split word starts; 0 = no split
   std::vector<bool> wordGuideDotBefore;  // true = a virtual guide dot belongs in the gap before this token
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
@@ -41,7 +42,7 @@ class ParsedText {
   std::vector<uint16_t> reorderedWidthsScratch;
   std::vector<bool> reorderedContinuesScratch;
   std::vector<bool> reorderedNoSpaceBeforeScratch;
-  std::vector<bool> reorderedFocusSuffixScratch;
+  std::vector<uint8_t> reorderedFocusBoundaryScratch;
   std::vector<uint16_t> visualOrderScratch;
   // Per-line scratch reused across extractLine() calls: cleared (not reallocated)
   // each line so a page of ~25-30 lines reuses one set of buffers instead of
