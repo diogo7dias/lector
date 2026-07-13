@@ -18,7 +18,9 @@ namespace {
 //      text blob) instead of length-prefixed strings and per-field arrays.
 // v31: TextBlock gains an optional per-word guideDotXOffset array + guideDotsPresent
 //      flag (guide dots feature); serialized layout adds one byte per block.
-constexpr uint8_t SECTION_FILE_VERSION = 31;
+// v32: focus-reading bold length changed (FOCUS_READING_PERCENT 45 -> 43 for CrossInk
+//      parity); cached layouts differ, so old sections must regenerate.
+constexpr uint8_t SECTION_FILE_VERSION = 32;
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss

@@ -404,8 +404,9 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         charCount++;
       }
 
-      // Target 45% for 1-bold at 4 chars and 3-bold at 7 chars with floor truncation
-      constexpr size_t FOCUS_READING_PERCENT = 45;
+      // Target 43% for 1-bold at 4 chars and 3-bold at 7 chars with floor truncation.
+      // Matches CrossInk's FOCUS_READING_PERCENT so focus-reading bold length is identical.
+      constexpr size_t FOCUS_READING_PERCENT = 43;
       size_t targetBoldChars = (charCount * FOCUS_READING_PERCENT) / 100;
       targetBoldChars = std::clamp<size_t>(targetBoldChars, 1, 9);
 
