@@ -518,6 +518,10 @@ void WallpaperPlaylistV2::reconcile() {
     saveToDisk();
   }
 
+  // Genuinely-new files were spliced to the front this pass — tell advance() to
+  // show the freshest one next (new-on-top), overriding the cursor successor.
+  splicedFront_ = true;
+
   // A truncated batch means files remain unabsorbed — stay dirty so the next
   // sleep's reconcile continues where this one stopped (pre-fix this cleared
   // unconditionally, stranding the remainder until the next upload or reboot).
@@ -539,51 +543,43 @@ std::string WallpaperPlaylistV2::advance() {
     if (!rebuildSequential()) return {};
   }
 
-  // Move-to-back queue: the next wallpaper is always the FRONT entry; once shown
-  // it is moved to the BACK, so the whole list cycles before anything repeats.
-  // New uploads (spliced to the front by reconcile) are shown next, ahead of the
-  // already-queued entries. Position is the buffer order itself — cursor_ is
-  // pinned to 0 (front) for on-disk format compatibility only.
-  cursor_ = 0;
-  bool droppedAny = false;  // vanished entries pruned this call — persist even on failure
-  for (int skipBudget = 0; skipBudget < 16; ++skipBudget) {
-    if (buffer_.empty()) {
-      if (!rebuildSequential()) {
-        if (droppedAny) saveToDisk();
-        return {};
-      }
-    }
-    // Split off the front line (the next candidate) and remove it from the queue.
-    const size_t nl = buffer_.find('\n');
-    const size_t lineLen = (nl == std::string::npos) ? buffer_.size() : nl;
-    std::string candidate = buffer_.substr(0, lineLen);
-    buffer_.erase(0, (nl == std::string::npos) ? buffer_.size() : nl + 1);
+  // Cursor-successor walk over a STABLE order: return the first still-existing
+  // name AFTER the shared cursor (deps_.lastShownFilename), skipping vanished
+  // names, wrapping to the first existing name. The order file is NOT mutated by
+  // a pick (no move-to-back, no per-pick saveToDisk) — it is written only by
+  // reconcile()/reshuffle(). This makes the buffer engine and the low-heap
+  // direct walk (Wallpaper.cpp orderNextAfter) compute the SAME next from the
+  // SAME cursor over the SAME order, so the heap-gate engine flip can no longer
+  // desync them into a two-image ping-pong. A freshly-spliced upload
+  // (splicedFront_) starts at the front so new-on-top is preserved.
+  const std::string cursor = (splicedFront_ || !deps_.lastShownFilename) ? std::string() : *deps_.lastShownFilename;
+  splicedFront_ = false;
 
-    if (candidate.empty()) {
-      continue;  // stray blank line — already dropped, try the next
+  std::string firstExisting;
+  std::string result;
+  bool prevMatched = cursor.empty();
+  size_t pos = 0;
+  while (pos < buffer_.size()) {
+    const size_t nl = buffer_.find('\n', pos);
+    const size_t lineLen = (nl == std::string::npos) ? buffer_.size() - pos : nl - pos;
+    std::string name = buffer_.substr(pos, lineLen);
+    pos = (nl == std::string::npos) ? buffer_.size() : nl + 1;
+    if (name.empty()) continue;
+    if (!deps_.fs->exists(makeSleepPath(name))) continue;  // skip vanished, do not repick
+    if (firstExisting.empty()) firstExisting = name;
+    if (prevMatched) {
+      result = name;
+      break;
     }
-    if (deps_.fs->exists(makeSleepPath(candidate))) {
-      // Move it to the back (erase above freed exactly this many bytes, so the
-      // append reuses that capacity — no reallocation) and commit ONCE — this
-      // save also persists any vanished-entry drops from earlier iterations
-      // (previously each drop was its own atomic order-file rewrite, up to 16
-      // back-to-back right before deep sleep).
-      buffer_.append(candidate);
-      buffer_.push_back('\n');
-      saveToDisk();
-      // lastShownFilename is persisted by the caller's rememberRendered()
-      // (one state.json write per pick instead of two).
-      if (deps_.lastShownFilename && *deps_.lastShownFilename != candidate) {
-        *deps_.lastShownFilename = candidate;
-      }
-      return candidate;
-    }
-    // File vanished (moved to /sleep pause, deleted): it stays dropped, pruning
-    // the queue so it is never picked again. Persisted in one batch above/below.
-    droppedAny = true;
+    if (name == cursor) prevMatched = true;
   }
-  if (droppedAny) saveToDisk();
-  return {};
+
+  // result empty means the cursor was the last (or vanished/not found) — wrap to
+  // the first existing name. firstExisting empty means nothing exists at all.
+  std::string candidate = !result.empty() ? result : firstExisting;
+  if (candidate.empty()) return {};
+  if (deps_.lastShownFilename) *deps_.lastShownFilename = candidate;
+  return candidate;
 }
 
 bool WallpaperPlaylistV2::rebuildSequential() {

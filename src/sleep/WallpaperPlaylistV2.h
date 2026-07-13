@@ -167,6 +167,10 @@ class WallpaperPlaylistV2 {
   size_t cursor_ = 0;
   bool dirty_ = true;
   bool loaded_ = false;
+  // Set by reconcile() when it splices genuinely-new uploads to the front, read
+  // and cleared by advance() so the freshest upload is shown on the very next
+  // pick (new-on-top) even though rotation is otherwise a cursor successor walk.
+  bool splicedFront_ = false;
   Notice pendingNotice_;
 };
 
