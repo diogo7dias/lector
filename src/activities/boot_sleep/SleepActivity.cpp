@@ -29,6 +29,7 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsStore.h"
 #include "reading_stats/SdStatsFiles.h"
+#include "sleep/SleepWallpaperStage.h"
 #include "sleep/Wallpaper.h"
 
 static_assert(CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD == stats_dashboard::kStatsDashboardMode);
@@ -255,6 +256,13 @@ void SleepActivity::renderUntilDeathSleepScreen() const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
+  // Idle-prestaged planes first: streams the pre-converted wallpaper straight
+  // into the framebuffer (no pxc decode at lock). Falls through to the normal
+  // pick+render when no matching stage exists.
+  if (SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC &&
+      crosspoint::sleep::stage::renderStaged(renderer)) {
+    return;
+  }
   // V2 wallpaper rotation (WallpaperPlaylistV2 via the wallpaper facade). The
   // playlist is filtered to the chosen wallpaperFormat, ordered newest-first,
   // honours pause + the /sleep pause overflow, and falls back to /sleep.{pxc,bmp}

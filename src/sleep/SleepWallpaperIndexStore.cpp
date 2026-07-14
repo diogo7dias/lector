@@ -160,6 +160,8 @@ void markDirty() { s_dirty = true; }
 
 bool isDirty() { return s_dirty; }
 
+bool idleComplete() { return s_phase == PumpPhase::Done && !s_dirty; }
+
 void pumpIdle() {
   if (s_dirty) {
     // Re-arm: abandon any in-flight scan so it restarts over fresh content.
