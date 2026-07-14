@@ -1522,6 +1522,22 @@ static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, in
   return true;
 }
 
+void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
+  int x0, y0, x1, y1;
+  if (!logicalRectToPhysicalBounds(orientation, x, y, width, height, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
+    display.displayBuffer(HalDisplay::FAST_REFRESH, fadingFix);
+    return;
+  }
+  // Panel RAM addressing needs x and width in whole bytes — widen outward.
+  const int alignedX0 = x0 & ~7;
+  int alignedW = ((x1 - alignedX0 + 8) / 8) * 8;
+  if (alignedX0 + alignedW > panelWidth) {
+    alignedW = panelWidth - alignedX0;
+  }
+  display.displayWindow(static_cast<uint16_t>(alignedX0), static_cast<uint16_t>(y0), static_cast<uint16_t>(alignedW),
+                        static_cast<uint16_t>(y1 - y0 + 1), fadingFix);
+}
+
 size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {

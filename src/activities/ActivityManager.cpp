@@ -9,6 +9,7 @@
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/ListWindowRefresh.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -64,6 +65,10 @@ void ActivityManager::loop() {
   }
 
   while (pendingAction != PendingAction::None) {
+    // Any activity transition (pop/push/replace) repaints the panel with a
+    // different screen — windowed list refreshes must never match across it.
+    list_window::invalidate();
+
     if (pendingAction == PendingAction::Pop) {
       RenderLock lock;
 

@@ -20,6 +20,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "activities/util/PxcViewerActivity.h"
+#include "components/ListWindowRefresh.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
@@ -761,7 +762,14 @@ void FileBrowserActivity::render(RenderLock&&) {
                                             emptyList ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  // Everything outside the list that can change while the list geometry stays
+  // identical goes into the frame identity: the folder (header + path line),
+  // the active search (row content), and the selection-driven Confirm hint.
+  // Any change there forces a full-panel refresh instead of a windowed one.
+  uint32_t frameHash = list_window::hash32(basepath.c_str());
+  frameHash = list_window::hash32(activeSearchQuery.c_str(), frameHash);
+  frameHash = list_window::hash32(confirmLabel, frameHash);
+  list_window::present(renderer, pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH, frameHash);
   pendingFullRefresh = false;
 }
 

@@ -144,8 +144,13 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
-  // EXPERIMENTAL: Windowed update - display only a rectangular region
-  // void displayWindow(int x, int y, int width, int height) const;
+  // Windowed update: FAST-refresh only the given logical rect, leaving the rest
+  // of the panel untouched. The rect is mapped through the current orientation
+  // and widened to the panel's byte alignment. Falls back to a full
+  // displayBuffer(FAST) when the rect is degenerate, or inside the SDK on
+  // panels without a windowed path (X3). The framebuffer must already hold the
+  // full frame — only the refresh is windowed, not the drawing.
+  void displayWindow(int x, int y, int width, int height) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
