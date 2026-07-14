@@ -62,13 +62,27 @@ void SleepActivity::onEnter() {
     return renderLastScreenSleepScreen();
   }
 
+  // Fast custom-wallpaper path: the final image lands in ~2 s, so skip the
+  // "Entering sleep" banner — its own HALF_REFRESH (~1.7 s) would nearly
+  // double the lock time just to show a transient popup. Slow paths (grayscale
+  // wallpaper, covers, dashboards) keep the banner as progress feedback.
+  const bool routesToCustom =
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
+      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader) ||
+      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::RANDOM_LOGO_CUSTOM &&
+       APP_STATE.lastSleepFromReader);
+  const bool fastWallpaperLock = routesToCustom && SETTINGS.sleepImageQuality == CrossPointSettings::SLEEP_IMG_FAST &&
+                                 SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC;
+
   // Show popup with reader orientation only when going to sleep from reader
-  if (APP_STATE.lastSleepFromReader) {
-    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-  } else {
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  if (!fastWallpaperLock) {
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    } else {
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    }
   }
 
   switch (SETTINGS.sleepScreen) {
@@ -253,7 +267,10 @@ void SleepActivity::renderCustomSleepScreen() const {
       [this](const crosspoint::sleep::wallpaper::SleepPick& pick) -> bool {
     const std::string& p = pick.fullPath;
     if (p.size() >= 4 && strcasecmp(p.c_str() + p.size() - 4, ".pxc") == 0) {
-      return renderPxcSleepScreen(renderer, p);
+      // FAST = one 1-bit dithered refresh (~0.5 s panel time), same path the
+      // unlock banner uses; PRETTY = OEM multi-pass grayscale (~4-6 s on X3).
+      const bool grayscale = SETTINGS.sleepImageQuality == CrossPointSettings::SLEEP_IMG_PRETTY;
+      return renderPxcSleepScreen(renderer, p, /*extraOverlay=*/nullptr, /*drawInfoOverlay=*/true, grayscale);
     }
     HalFile f;
     if (!Storage.openFileForRead("SLP", p, f)) return false;
