@@ -300,6 +300,21 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Replay a page press that arrived while the section was still building.
+  // Waits for the render lock to be free so the replayed turn renders right
+  // after the first page instead of racing it. A stale queue (user walked
+  // away) is dropped rather than turning a page out of nowhere.
+  if (queuedPageTurn != 0 && section) {
+    if (millis() - queuedPageTurnAtMs > 10000UL) {
+      queuedPageTurn = 0;
+    } else if (!RenderLock::peek() && currentSpineIndex < epub->getSpineItemsCount()) {
+      const bool forward = queuedPageTurn > 0;
+      queuedPageTurn = 0;
+      pageTurn(forward);
+      return;
+    }
+  }
+
   // End-of-Book screen reached (currentSpineIndex == spine count) means the book is
   // finished. Two independent finished-book features key off this same condition.
   const bool atEndOfBook = currentSpineIndex > 0 && currentSpineIndex >= epub->getSpineItemsCount();
@@ -420,6 +435,8 @@ void EpubReaderActivity::loop() {
       const bool hasSleepWallpaper = !lastWallpaper.empty() && Storage.exists(lastWallpaper.c_str());
       const bool wallpaperPaused = APP_STATE.wallpaperRotationPaused;
       const bool wallpaperFavorited = hasSleepWallpaper && FavoriteImage::isFavoritePath(lastWallpaper);
+      // Opening the menu supersedes any press queued while the page was building.
+      queuedPageTurn = 0;
       startActivityForResult(
           makeUniqueNoThrow<EpubReaderMenuActivity>(
               renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
@@ -580,8 +597,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // No current section, attempt to rerender the book
+  // No current section: the page is still building (typical right after a wake,
+  // when the restored frame is visible but the book engine is not ready yet).
+  // Queue the press instead of swallowing it; loop() replays it when ready.
   if (!section) {
+    queuedPageTurn = prevTriggered ? -1 : 1;
+    queuedPageTurnAtMs = millis();
     requestUpdate();
     return;
   }

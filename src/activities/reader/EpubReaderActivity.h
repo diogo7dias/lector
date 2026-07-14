@@ -57,6 +57,12 @@ class EpubReaderActivity final : public Activity {
   bool pendingSyncSaveError = false;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
   bool automaticPageTurnActive = false;
+  // Page press that arrived while the section was still loading (e.g. the first
+  // page build after a wake, when the restored frame is already visible but the
+  // book engine is not ready). -1 = back, +1 = forward, 0 = none. loop() replays
+  // it once the section is ready; latest press wins and only one is replayed.
+  int8_t queuedPageTurn = 0;
+  unsigned long queuedPageTurnAtMs = 0UL;
   bool showBookmarkMessage = false;
   bool ignoreNextConfirmRelease = false;
   bool currentPageBookmarked = false;
