@@ -38,6 +38,7 @@
 #include "QuotesViewerActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "WakeFrameHandoff.h"
 #include "components/StatusBar.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -1312,6 +1313,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
     statsSession.pageShown(millis(), now);
   }
+
+  // The wake-frame handoff only covers the very first paint after a
+  // reader-resume wake. If this render displayed through any other path
+  // (image page, end-of-book, error popup), drop the pending handoff so it
+  // can never suppress a later, unrelated refresh.
+  wake_frame::disarm();
 }
 
 // Warm the NEXT chapter's section cache in the background, a few pages per page turn,
@@ -1948,6 +1955,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // HALF ghost-cleanup path, which drives every pixel to its target
     // regardless of residue.
     pagesUntilFullRefresh = 1;
+  } else if (wake_frame::consumeIfMatch(renderer.getFrameBuffer(), renderer.getBufferSize())) {
+    // Reader-resume wake: the restore in setup() already put this exact page on
+    // the panel (hash match), so the first paint needs no refresh at all. The
+    // controller RAM was synced by that restore's displayBuffer, keeping the
+    // next page turn's differential refresh correct.
+    LOG_INF("ERS", "Wake frame handoff hit: first-page refresh skipped");
   } else {
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh);
   }
