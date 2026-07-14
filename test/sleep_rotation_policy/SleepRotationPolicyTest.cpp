@@ -72,17 +72,34 @@ TEST(SleepRotationPolicy, ReseedsAtLapBoundaryAndKeepsCovering) {
   EXPECT_EQ(secondLap.size(), count);
 }
 
-// The file count changing mid-lap (upload/delete) reseeds to a valid permutation
-// of the new size rather than producing an out-of-range index.
-TEST(SleepRotationPolicy, CountChangeStaysInRange) {
+// The file count changing mid-lap (upload/delete) reseeds so the shuffle stays a
+// TRUE permutation of the new size — an affine map with a multiplier chosen for
+// the old count is not coprime with the new count in general, which would repeat
+// some slots and skip others.
+TEST(SleepRotationPolicy, CountChangeReseedsToValidPermutation) {
   Cursor c;
   sleep_rotation::reseed(c, 10, 5u, 6u);
-  // Advance a few steps, then the folder shrinks to 4.
   for (int i = 0; i < 3; ++i) sleep_rotation::advance(c, 10, 5u, 6u);
+
+  // The folder shrinks to 4: the stale cursor must be flagged, and a reseeded
+  // lap over the new count covers every slot exactly once.
+  EXPECT_TRUE(sleep_rotation::needsReseed(c, 4));
+  const auto lap = oneLap(4, 9u, 13u);
+  EXPECT_EQ(std::set<size_t>(lap.begin(), lap.end()).size(), 4u);
+
+  // The folder grows to 360 (bulk upload): same guarantee, full coverage.
+  sleep_rotation::reseed(c, 4, 9u, 13u);
+  EXPECT_TRUE(sleep_rotation::needsReseed(c, 360));
+  const auto bigLap = oneLap(360, 21u, 34u);
+  EXPECT_EQ(std::set<size_t>(bigLap.begin(), bigLap.end()).size(), 360u);
+
+  // advance() self-heals a stale cursor in place (no explicit reseed call) and
+  // every subsequent pick stays in range for the new count.
+  sleep_rotation::reseed(c, 10, 5u, 6u);
   for (int i = 0; i < 20; ++i) {
-    const size_t p = sleep_rotation::physicalIndex(c, 4);
-    EXPECT_LT(p, 4u);
     sleep_rotation::advance(c, 4, static_cast<uint32_t>(i + 1), static_cast<uint32_t>(i + 2));
+    EXPECT_LT(sleep_rotation::physicalIndex(c, 4), 4u);
+    EXPECT_FALSE(sleep_rotation::needsReseed(c, 4));
   }
 }
 
