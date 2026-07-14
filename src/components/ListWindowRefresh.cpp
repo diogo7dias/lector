@@ -35,7 +35,12 @@ void present(const GfxRenderer& renderer, const HalDisplay::RefreshMode requeste
   WindowRect window;
   if (requested == HalDisplay::FAST_REFRESH && planSelectionWindow(previousFrame, currentFrame, &window)) {
     LOG_DBG("LWIN", "Windowed list refresh (%d,%d %dx%d)", window.x, window.y, window.width, window.height);
-    renderer.displayWindow(window.x, window.y, window.width, window.height);
+    renderer.displayWindowAsync(window.x, window.y, window.width, window.height);
+  } else if (requested == HalDisplay::FAST_REFRESH) {
+    // Menu FAST refreshes run detached too: the waveform drives while the
+    // loop returns to input polling, so the next key press is sampled
+    // immediately. The next frame's first draw call joins the refresh.
+    renderer.displayBufferAsync();
   } else {
     renderer.displayBuffer(requested);
   }

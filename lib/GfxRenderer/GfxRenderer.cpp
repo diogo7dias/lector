@@ -1539,6 +1539,29 @@ void GfxRenderer::finishAsyncRefresh() const {
   asyncRefreshPending_ = false;
 }
 
+void GfxRenderer::displayWindowAsync(const int x, const int y, const int width, const int height) const {
+  if (fadingFix) {
+    // Fading fix powers the panel off after every refresh; that sequencing is
+    // synchronous by nature, so keep the blocking path for those users.
+    displayWindow(x, y, width, height);
+    return;
+  }
+  int x0, y0, x1, y1;
+  if (!logicalRectToPhysicalBounds(orientation, x, y, width, height, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
+    displayBufferAsync();
+    return;
+  }
+  // Panel RAM addressing needs x and width in whole bytes — widen outward.
+  const int alignedX0 = x0 & ~7;
+  int alignedW = ((x1 - alignedX0 + 8) / 8) * 8;
+  if (alignedX0 + alignedW > panelWidth) {
+    alignedW = panelWidth - alignedX0;
+  }
+  asyncRefreshPending_ =
+      display.displayWindowAsync(static_cast<uint16_t>(alignedX0), static_cast<uint16_t>(y0),
+                                 static_cast<uint16_t>(alignedW), static_cast<uint16_t>(y1 - y0 + 1));
+}
+
 void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {
   int x0, y0, x1, y1;
   if (!logicalRectToPhysicalBounds(orientation, x, y, width, height, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {

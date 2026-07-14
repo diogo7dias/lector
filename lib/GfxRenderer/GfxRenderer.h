@@ -161,6 +161,12 @@ class GfxRenderer {
   // panels without a windowed path (X3). The framebuffer must already hold the
   // full frame — only the refresh is windowed, not the drawing.
   void displayWindow(int x, int y, int width, int height) const;
+  // Async variant of displayWindow: fires the window waveform and returns.
+  // Same pending-refresh contract as displayBufferAsync (RenderLock and all
+  // draw entry points join automatically). Degenerate rects fall back to a
+  // full displayBufferAsync; the fading-fix setting (panel power-off after
+  // every refresh) forces the synchronous path.
+  void displayWindowAsync(int x, int y, int width, int height) const;
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;
