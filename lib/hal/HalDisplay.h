@@ -42,6 +42,12 @@ class HalDisplay {
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
+  // Windowed FAST refresh of a physical-panel rect (x and w byte-aligned).
+  // Participates in the refresh policy: when the policy demands a periodic
+  // clean/full pass (anti-ghosting), the whole panel refreshes instead. The
+  // SDK falls back to a full FAST refresh on panels without a windowed path.
+  void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
+
   // Power management
   void deepSleep();
 

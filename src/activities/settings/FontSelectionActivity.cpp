@@ -12,6 +12,7 @@
 #include "FontPreviewLayout.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
+#include "components/ListWindowRefresh.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -226,5 +227,7 @@ void FontSelectionActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  // The Confirm hint follows the selection (Preview vs Select), so it is
+  // part of the frame identity: when it flips, the full panel refreshes.
+  list_window::present(renderer, HalDisplay::FAST_REFRESH, list_window::hash32(confirmLabel));
 }

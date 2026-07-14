@@ -94,6 +94,21 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
+void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen) {
+  // Window refreshes count as FAST toward the policy so ghosting cleanup still
+  // happens: when the policy promotes, run it as a full-panel pass (a windowed
+  // clean is not a thing the panels support).
+  const RefreshMode mode = applyRefreshPolicy(RefreshMode::FAST_REFRESH);
+  if (mode != RefreshMode::FAST_REFRESH) {
+    if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+      einkDisplay.requestResync(1);
+    }
+    einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
+    return;
+  }
+  einkDisplay.displayWindow(x, y, w, h, turnOffScreen);
+}
+
 void HalDisplay::deepSleep() {
   refreshPolicy.reset();
   einkDisplay.deepSleep();

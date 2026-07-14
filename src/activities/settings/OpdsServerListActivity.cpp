@@ -8,6 +8,7 @@
 #include "OpdsSettingsActivity.h"
 #include "activities/ActivityManager.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
+#include "components/ListWindowRefresh.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -130,5 +131,7 @@ void OpdsServerListActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  // Selection-only moves refresh just the two affected rows; the screen
+  // around the list is static.
+  list_window::present(renderer);
 }

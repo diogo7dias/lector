@@ -14,6 +14,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "components/ListWindowRefresh.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
@@ -514,6 +515,10 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   int rowHeight =
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rect.height / rowHeight;
+
+  // Record the list geometry so activities that end their render with
+  // list_window::present() can refresh only the moved selection rows.
+  list_window::noteListDraw(rect.x, rect.y, rect.width, rect.height, rowHeight, pageItems, itemCount, selectedIndex);
 
   const int totalPages = (itemCount + pageItems - 1) / pageItems;
   if (totalPages > 1) {

@@ -7,6 +7,7 @@
 
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "components/ListWindowRefresh.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -84,5 +85,7 @@ void SettingSelectActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  // Selection-only moves refresh just the two affected rows. Header + hints
+  // are static for the life of this screen; the title hash guards regardless.
+  list_window::present(renderer, HalDisplay::FAST_REFRESH, list_window::hash32(title_.c_str()));
 }
