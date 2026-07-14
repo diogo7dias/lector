@@ -1,3 +1,10 @@
+// Hot translation unit: compiled -O2 instead of the global -Os (speed-plan
+// 6.3). The inner loops here dominate layout/render time on the flash-cache-
+// starved ESP32-C3; the size cost is confined to this file.
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC optimize("O2")
+#endif
+
 #include "GfxRenderer.h"
 
 #include <BidiUtils.h>

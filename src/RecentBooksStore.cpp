@@ -24,6 +24,18 @@ RecentBooksStore RecentBooksStore::instance;
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& coverBmpPath) {
   ensureLoaded();
+
+  // Reopening the current front book with unchanged metadata is the common
+  // resume-wake case. The list would come out byte-identical, so skip the
+  // whole pass — pruneMissing() alone costs one FAT existence lookup per
+  // recent entry, plus the file rewrite.
+  if (!recentBooks.empty()) {
+    const RecentBook& front = recentBooks.front();
+    if (front.path == path && front.title == title && front.author == author && front.coverBmpPath == coverBmpPath) {
+      return;
+    }
+  }
+
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
