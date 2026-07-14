@@ -633,10 +633,15 @@ std::string favoriteAwareFileName(const std::string& filename) {
 }
 
 std::string getFileExtension(const std::string& filename) {
-  if (filename.back() == '/') {
+  if (filename.empty() || filename.back() == '/') {
     return "";
   }
   const auto pos = filename.rfind('.');
+  // No dot at all: rfind returns npos, and substr(npos) throws std::out_of_range,
+  // which aborts under -fno-exceptions. An extensionless entry has no extension.
+  if (pos == std::string::npos) {
+    return "";
+  }
   return filename.substr(pos);
 }
 
