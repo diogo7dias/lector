@@ -39,6 +39,13 @@ class HalDisplay {
   void drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                             bool fromProgmem = false) const;
 
+  // Staged boot reset: fire the panel's hardware reset immediately after GPIO
+  // bring-up and let its settle delays (~92ms on X3) elapse under the SD
+  // mount and boot JSON loads; begin() tops up any remainder. pump() never
+  // blocks. See EInkDisplay::resetStart.
+  void startBootReset();
+  void pumpBootReset();
+
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
