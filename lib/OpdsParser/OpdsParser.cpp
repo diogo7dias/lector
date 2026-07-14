@@ -115,9 +115,15 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
         self->prevPageUrl = href;
       }
 
+      // EPUB acquisition type: exact match or with trailing MIME parameters
+      // ("application/epub+zip;profile=..."). Require end-of-string or the
+      // parameter separator after the prefix so nothing else sneaks in.
+      constexpr size_t EPUB_TYPE_LEN = sizeof("application/epub+zip") - 1;
+      const bool isEpubType = type && strncmp(type, "application/epub+zip", EPUB_TYPE_LEN) == 0 &&
+                              (type[EPUB_TYPE_LEN] == '\0' || type[EPUB_TYPE_LEN] == ';');
+
       if (self->inEntry) {
-        if (rel && type && strstr(rel, "opds-spec.org/acquisition") != nullptr &&
-            strcmp(type, "application/epub+zip") == 0) {
+        if (rel && strstr(rel, "opds-spec.org/acquisition") != nullptr && isEpubType) {
           // Prefer plain EPUB links over derived formats when multiple
           // acquisition links are present for one entry.
           const bool isPlainEpub = strstr(href, ".epub") != nullptr || strstr(href, "/epub/") != nullptr;

@@ -19,7 +19,27 @@
 
 namespace {
 constexpr int PAGE_ITEMS = 23;
+
+// Turn the generic fetch/download failure into an actionable line. 401/403 is
+// almost always stale credentials on the device (the server-side password
+// changed); 0 means the request never got a response (DNS/TLS/socket); any
+// other non-200 status is shown verbatim; 200 means the transfer started but
+// broke mid-body.
+std::string httpErrorDetail() {
+  const int status = HttpDownloader::lastHttpStatus();
+  char buf[64];
+  if (status == 401 || status == 403) {
+    snprintf(buf, sizeof(buf), "HTTP %d: %s", status, tr(STR_HTTP_CHECK_CREDENTIALS));
+  } else if (status == 0) {
+    snprintf(buf, sizeof(buf), "%s", tr(STR_HTTP_NO_RESPONSE));
+  } else if (status == 200) {
+    snprintf(buf, sizeof(buf), "%s", tr(STR_HTTP_CONNECTION_LOST));
+  } else {
+    snprintf(buf, sizeof(buf), "HTTP %d", status);
+  }
+  return std::string(buf);
 }
+}  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
   Activity::onEnter();
@@ -200,7 +220,7 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     OpdsParserStream stream{parser};
     if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
       state = BrowserState::ERROR;
-      errorMessage = tr(STR_FETCH_FEED_FAILED);
+      errorMessage = std::string(tr(STR_FETCH_FEED_FAILED)) + " (" + httpErrorDetail() + ")";
       requestUpdate();
       return;
     }
@@ -285,6 +305,9 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   if (result == HttpDownloader::OK) {
     clearBookCache(filename);
     state = BrowserState::BROWSING;
+  } else if (result == HttpDownloader::HTTP_ERROR) {
+    state = BrowserState::ERROR;
+    errorMessage = std::string(tr(STR_DOWNLOAD_FAILED)) + " (" + httpErrorDetail() + ")";
   } else {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
