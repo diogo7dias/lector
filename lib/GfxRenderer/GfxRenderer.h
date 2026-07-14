@@ -48,6 +48,10 @@ class GfxRenderer {
   // right and +1px down to fake heavier paperback ink. Plain bool owned by the
   // renderer (lib/ must not depend on src/); callers bracket it per region.
   mutable bool paperbackLook_ = false;
+  // True while a panel refresh started by displayBufferAsync() is still
+  // running. Draw entry points join before touching the framebuffer (the
+  // deferred RAM sync needs the displayed frame intact).
+  mutable bool asyncRefreshPending_ = false;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -144,6 +148,12 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
+  // Async FAST refresh: fire the waveform and return (~0.4-0.5s saved for the
+  // caller). The framebuffer must stay untouched until the refresh is joined —
+  // RenderLock acquisition joins automatically, so any properly-locked drawing
+  // is safe. See HalDisplay::displayBufferAsync.
+  void displayBufferAsync() const;
+  void finishAsyncRefresh() const;
   // Windowed update: FAST-refresh only the given logical rect, leaving the rest
   // of the panel untouched. The rect is mapped through the current orientation
   // and widened to the panel's byte alignment. Falls back to a full

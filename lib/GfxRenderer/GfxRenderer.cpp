@@ -343,6 +343,7 @@ static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode 
 // IMPORTANT: This function is in critical rendering path and is called for every pixel. Please keep it as simple and
 // efficient as possible.
 void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
+  if (asyncRefreshPending_) finishAsyncRefresh();
   int phyX = 0;
   int phyY = 0;
 
@@ -514,6 +515,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
 }  // namespace
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) const {
+  if (asyncRefreshPending_) finishAsyncRefresh();
   if (fontCacheManager_ && fontCacheManager_->isScanning()) return;
   if (x1 == x2) {
     if (y2 < y1) {
@@ -556,6 +558,7 @@ void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const bool state) con
 }
 
 void GfxRenderer::drawLine(int x1, int y1, int x2, int y2, const int lineWidth, const bool state) const {
+  if (asyncRefreshPending_) finishAsyncRefresh();
   for (int i = 0; i < lineWidth; i++) {
     drawLine(x1, y1 + i, x2, y2 + i, state);
   }
@@ -684,6 +687,7 @@ void GfxRenderer::drawRoundedRect(const int x, const int y, const int width, con
 }
 
 void GfxRenderer::fillRect(const int x, const int y, const int width, const int height, const bool state) const {
+  if (asyncRefreshPending_) finishAsyncRefresh();
   if (state) {
     fillRectImpl<Color::Black>(x, y, width, height);
   } else {
@@ -719,6 +723,7 @@ void GfxRenderer::drawPixelDither<Color::DarkGray>(const int x, const int y) con
 }
 
 void GfxRenderer::fillRectDither(const int x, const int y, const int width, const int height, Color color) const {
+  if (asyncRefreshPending_) finishAsyncRefresh();
   switch (color) {
     case Color::Clear:
       break;
@@ -1365,6 +1370,7 @@ bool GfxRenderer::glyphIntersectsStrip(int x0, int y0, int x1, int y1) const {
 }
 
 void GfxRenderer::invertScreen() const {
+  if (asyncRefreshPending_) finishAsyncRefresh();
   for (uint32_t i = 0; i < frameBufferSize; i++) {
     frameBuffer[i] = ~frameBuffer[i];
   }
@@ -1520,6 +1526,17 @@ static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, in
   *outX1 = maxX;
   *outY1 = maxY;
   return true;
+}
+
+void GfxRenderer::displayBufferAsync() const {
+  auto elapsed = millis() - start_ms;
+  LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBufferAsync", elapsed);
+  asyncRefreshPending_ = display.displayBufferAsync();
+}
+
+void GfxRenderer::finishAsyncRefresh() const {
+  display.finishRefresh();
+  asyncRefreshPending_ = false;
 }
 
 void GfxRenderer::displayWindow(const int x, const int y, const int width, const int height) const {

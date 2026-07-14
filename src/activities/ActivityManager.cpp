@@ -335,11 +335,16 @@ void ActivityManager::requestUpdateAndWait() {
 RenderLock::RenderLock() {
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
+  // All framebuffer drawing happens under this lock, and the framebuffer must
+  // not change while an async panel refresh is in flight — join it here, once,
+  // at the choke point instead of in every draw call.
+  activityManager.renderer.finishAsyncRefresh();
 }
 
 RenderLock::RenderLock([[maybe_unused]] Activity&) {
   xSemaphoreTake(activityManager.renderingMutex, portMAX_DELAY);
   isLocked = true;
+  activityManager.renderer.finishAsyncRefresh();
 }
 
 RenderLock::~RenderLock() {

@@ -94,6 +94,22 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
+bool HalDisplay::displayBufferAsync() {
+  // Counts as FAST toward the anti-ghosting policy; when the policy promotes,
+  // run the stronger pass synchronously (it has multi-phase post-work).
+  const RefreshMode mode = applyRefreshPolicy(RefreshMode::FAST_REFRESH);
+  if (mode != RefreshMode::FAST_REFRESH) {
+    if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+      einkDisplay.requestResync(1);
+    }
+    einkDisplay.displayBuffer(convertRefreshMode(mode), false);
+    return false;
+  }
+  return einkDisplay.displayBufferAsync();
+}
+
+void HalDisplay::finishRefresh() { einkDisplay.finishRefresh(); }
+
 void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen) {
   // Window refreshes count as FAST toward the policy so ghosting cleanup still
   // happens: when the policy promotes, run it as a full-panel pass (a windowed
