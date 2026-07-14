@@ -1136,7 +1136,9 @@ void CrossPointWebServer::handleSettingsPage() const {
 void CrossPointWebServer::handleGetSettings() const {
   // Pass the SD font registry so the fontFamily setting's enumStringValues
   // includes SD-resident families — otherwise the web API only exposes the
-  // three built-in fonts.
+  // three built-in fonts. Refresh first: the boot-time scan is deferred, so
+  // this may be the first registry use of the session.
+  const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
   const auto& settings = getSettingsList(&sdFontSystem.registry());
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -1239,6 +1241,9 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
+  // Refresh first: the boot-time scan is deferred, so this may be the first
+  // registry use of the session (SD families must resolve in the enum list).
+  const_cast<SdCardFontSystem&>(sdFontSystem).refreshIfDirty();
   const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
 

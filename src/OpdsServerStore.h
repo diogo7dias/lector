@@ -24,6 +24,13 @@ class OpdsServerStore {
  private:
   static OpdsServerStore instance;
   std::vector<OpdsServer> servers;
+  bool loaded = false;
+
+  // Lazy first-use load: main.cpp no longer reads this store at boot, so every
+  // public entry point funnels through here before touching servers.
+  void ensureLoaded() const {
+    if (!loaded) const_cast<OpdsServerStore*>(this)->loadFromFile();
+  }
 
   static constexpr size_t MAX_SERVERS = 8;
 
@@ -45,10 +52,19 @@ class OpdsServerStore {
   bool updateServer(size_t index, const OpdsServer& server);
   bool removeServer(size_t index);
 
-  const std::vector<OpdsServer>& getServers() const { return servers; }
+  const std::vector<OpdsServer>& getServers() const {
+    ensureLoaded();
+    return servers;
+  }
   const OpdsServer* getServer(size_t index) const;
-  size_t getCount() const { return servers.size(); }
-  bool hasServers() const { return !servers.empty(); }
+  size_t getCount() const {
+    ensureLoaded();
+    return servers.size();
+  }
+  bool hasServers() const {
+    ensureLoaded();
+    return !servers.empty();
+  }
 
   /**
    * Migrate from legacy single-server settings in CrossPointSettings.

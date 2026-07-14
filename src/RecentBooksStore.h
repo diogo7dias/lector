@@ -22,6 +22,13 @@ class RecentBooksStore {
   static RecentBooksStore instance;
 
   std::vector<RecentBook> recentBooks;
+  bool loaded = false;
+
+  // Lazy first-use load: main.cpp no longer reads this store at boot, so every
+  // public entry point funnels through here before touching recentBooks.
+  void ensureLoaded() const {
+    if (!loaded) const_cast<RecentBooksStore*>(this)->loadFromFile();
+  }
 
   friend bool JsonSettingsIO::loadRecentBooks(RecentBooksStore&, const char*);
 
@@ -62,10 +69,16 @@ class RecentBooksStore {
   bool pruneMissing();
 
   // Get the list of recent books (most recent first)
-  const std::vector<RecentBook>& getBooks() const { return recentBooks; }
+  const std::vector<RecentBook>& getBooks() const {
+    ensureLoaded();
+    return recentBooks;
+  }
 
   // Get the count of recent books
-  int getCount() const { return static_cast<int>(recentBooks.size()); }
+  int getCount() const {
+    ensureLoaded();
+    return static_cast<int>(recentBooks.size());
+  }
 
   bool saveToFile() const;
 

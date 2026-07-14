@@ -14,7 +14,10 @@ class SdCardFontSystem {
   SdCardFontSystem() = default;
   SdCardFontSystem(const SdCardFontSystem&) = delete;
   SdCardFontSystem& operator=(const SdCardFontSystem&) = delete;
-  /// Discover SD card fonts and load user's saved selection. Call once during setup.
+  /// Register the SD font resolver in settings. Call once during setup.
+  /// The SD /fonts directory scan and the user's saved-family load are
+  /// deferred to the first ensureLoaded()/refreshIfDirty() so plain boots
+  /// (built-in fonts) never pay the scan before first paint.
   void begin(GfxRenderer& renderer);
 
   /// Ensure the correct SD font family is loaded for the current settings.
@@ -43,7 +46,9 @@ class SdCardFontSystem {
   /// Used by the web UI so uploaded/deleted fonts appear in the list
   /// without waiting for the reader activity to run ensureLoaded().
   void refreshIfDirty() {
-    if (registryDirty_.exchange(false, std::memory_order_acquire)) {
+    const bool dirty = registryDirty_.exchange(false, std::memory_order_acquire);
+    const bool firstUse = !discovered_.exchange(true, std::memory_order_acq_rel);
+    if (dirty || firstUse) {
       registry_.discover();
     }
   }
@@ -51,6 +56,9 @@ class SdCardFontSystem {
  private:
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
+  // False until the first /fonts scan has run (deferred out of begin()).
+  // Atomic because the web server task can race the main task here.
+  std::atomic<bool> discovered_{false};
   std::atomic<bool> registryDirty_{false};
   // Kept separate because the web list may consume the registry rescan while
   // the reader still must reload an active file that was replaced in place.

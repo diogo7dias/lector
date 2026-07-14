@@ -15,9 +15,7 @@ static uint8_t fontSizeEnumFromSettings() {
 
 }  // namespace
 
-void SdCardFontSystem::begin(GfxRenderer& renderer) {
-  registry_.discover();
-
+void SdCardFontSystem::begin(GfxRenderer& /*renderer*/) {
   // Register this system as the SD font ID resolver in settings.
   // Uses a static trampoline since CrossPointSettings stores a plain function pointer.
   SETTINGS.sdFontIdResolver = [](void* ctx, const char* familyName, uint8_t fontSizeEnum) -> int {
@@ -25,25 +23,10 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   };
   SETTINGS.sdFontResolverCtx = this;
 
-  // If user has a saved SD font selection, load it
-  if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
-    if (family) {
-      if (manager_.loadFamily(*family, renderer, fontSizeEnumFromSettings())) {
-        LOG_DBG("SDFS", "Loaded SD card font family: %s", SETTINGS.sdFontFamilyName);
-      } else {
-        LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", SETTINGS.sdFontFamilyName);
-        SETTINGS.sdFontFamilyName[0] = '\0';
-        SETTINGS.saveToFile();
-      }
-    } else {
-      LOG_DBG("SDFS", "SD font family not found on card: %s (clearing)", SETTINGS.sdFontFamilyName);
-      SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.saveToFile();
-    }
-  }
-
-  LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
+  // The /fonts scan and the saved-family load are deferred: every consumer of
+  // SD fonts (reader entry, font picker, web font list) already calls
+  // ensureLoaded()/refreshIfDirty() first, and those run the first scan.
+  LOG_DBG("SDFS", "SD font resolver registered (scan deferred to first use)");
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
@@ -53,8 +36,9 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   // contents on disk may have changed (e.g. user re-uploaded a new build).
   const bool registryWasDirty = registryDirty_.exchange(false, std::memory_order_acquire);
   const bool reloadWasDirty = reloadDirty_.exchange(false, std::memory_order_acquire);
-  if (registryWasDirty) {
-    LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
+  const bool firstUse = !discovered_.exchange(true, std::memory_order_acq_rel);
+  if (registryWasDirty || firstUse) {
+    LOG_DBG("SDFS", "%s — discovering fonts", firstUse ? "First use" : "Registry dirty");
     registry_.discover();
   }
 
