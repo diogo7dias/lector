@@ -65,6 +65,11 @@ class Reader {
 void markDirty();
 bool isDirty();
 
+// True once this wake's idle verification/scan has fully settled and no
+// re-scan is pending. Gate for other idle SD workers (the wallpaper
+// prestager) so they can never trigger a blocking index build.
+bool idleComplete();
+
 // Chunked idle rebuild. Call from loop() when the device has been idle a few
 // seconds: each call advances the scan by a bounded number of directory
 // entries (a few ms), so a 5000-file folder is indexed across idle ticks
