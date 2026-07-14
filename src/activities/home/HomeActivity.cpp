@@ -413,7 +413,7 @@ void HomeActivity::render(RenderLock&&) {
         renderer.drawRect(cardX, recentAreaY, cardW, cardH, 2, true);
       }
       const std::string warnText = std::string(tr(STR_SLEEP_OVER_LIMIT)) + ": " + std::to_string(sleepImageCount) +
-                                   " / " + std::to_string(crosspoint::sleep::wallpaper::kSleepFolderCap);
+                                   " / " + std::to_string(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
       const std::string shown = renderer.truncatedText(SMALL_FONT_ID, warnText.c_str(), cardW - 16);
       const int textY = recentAreaY + (cardH - renderer.getLineHeight(SMALL_FONT_ID)) / 2;
       renderer.drawText(SMALL_FONT_ID, cardX + 8, textY, shown.c_str(), !cardSelected);
@@ -555,7 +555,7 @@ void HomeActivity::refreshSleepOverLimit() {
     sleepImageCountKnown = true;
   }
   sleepImageCount = cachedSleepImageCount;
-  sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepFolderCap);
+  sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
 }
 
 void HomeActivity::maybeShowWallpaperPauseToast() {
@@ -597,7 +597,7 @@ void HomeActivity::openSleepMoveKeypad() {
     cachedSleepImageCount =
         (cachedSleepImageCount >= static_cast<long>(moved)) ? cachedSleepImageCount - static_cast<long>(moved) : 0;
     sleepImageCount = cachedSleepImageCount;
-    sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepFolderCap);
+    sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
     moveToast = std::string(tr(STR_MOVED)) + " " + std::to_string(moved);
     // The warning slot may have just vanished; keep the selector in range.
     const int bookCount = static_cast<int>(recentBooks.size());

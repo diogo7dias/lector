@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <esp_heap_caps.h>
+#include <esp_random.h>
 #include <esp_task_wdt.h>
 
 #include <string>
@@ -13,7 +14,9 @@
 #include "../util/FavoriteImage.h"
 #include "SdFatSleepFs.h"
 #include "SleepFavoriteMove.h"
+#include "SleepIndexPickPolicy.h"
 #include "SleepMoveSelection.h"
+#include "SleepWallpaperIndexStore.h"
 #include "WallpaperDirectPickPolicy.h"
 #include "WallpaperPlaylistV2.h"
 #include "persist/SdFatFileIOLite.h"
@@ -75,259 +78,8 @@ void ensureConfigured() {
   v2::WallpaperPlaylistV2::instance().setDeps(d);
 }
 
-// Drain the reconcile notice and fold it into persistent APP_STATE so the
-// next-wake home screen can warn / toast. The favorites-cap flag is sticky
-// state (refreshed only when a reconcile actually ran); the moved-to-pause
-// count is a transient event the home screen consumes once. Persists only when
-// something changed — overflow is rare, so the extra synchronous flush before
-// deep sleep stays off the common path.
-void applyReconcileNotice() {
-  const auto n = v2::WallpaperPlaylistV2::instance().takeNotice();
-  bool changed = false;
-  if (n.reconciled && APP_STATE.sleepFavoritesCapReached != n.favoritesCapBlocked) {
-    APP_STATE.sleepFavoritesCapReached = n.favoritesCapBlocked;
-    changed = true;
-  }
-  if (n.movedToPause > 0 && APP_STATE.pendingSleepWallpapersMovedToPause < 9999) {
-    APP_STATE.pendingSleepWallpapersMovedToPause += n.movedToPause;
-    changed = true;
-  }
-  if (changed) {
-    APP_STATE.saveToFile();
-  }
-}
-
-}  // namespace
-
-std::string advance() {
-  ensureConfigured();
-  const std::string pick = v2::WallpaperPlaylistV2::instance().advance();
-  applyReconcileNotice();
-  return pick;
-}
-
-namespace {
-
 // Retry budget for nextSleepFile's probe loop.
 constexpr int kNextSleepFileRetries = 5;
-
-// Slack added on top of the measured sequential-playlist cost before deciding
-// it's affordable. Covers small ancillary allocations during load/reconcile.
-constexpr size_t kSeqGateHeadroom = 12 * 1024;
-
-// Decide whether the sequential playlist (advance/reconcile/rebuild) can be
-// materialized safely this cycle, or whether to fall back to the O(1)-heap
-// direct pick. Measures the REAL cost with a streaming, zero-heap walk (sums
-// filename bytes) and requires both enough contiguous heap (largest single
-// block) and enough total free. Conservative on purpose: under-gating only
-// costs a direct pick; over-gating costs a brick.
-bool sequentialPlaylistAffordable() {
-  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
-  auto* sfs = deps.fs;
-  if (!sfs) return false;
-  size_t count = 0;
-  size_t bufferBytes = 0;  // == order-buffer size: sum of (filename length + 1)
-  sfs->walkSleepBmps([&](const char* /*name*/, size_t len, uint32_t /*mtime*/) {
-    ++count;
-    bufferBytes += len + 1;
-  });
-  if (count == 0) return false;  // empty folder — direct pick returns empty too
-
-  const size_t entryVecBytes = count * sizeof(crosspoint::sleep::SleepBmpEntry);
-  // Largest single contiguous allocation the path makes: the order buffer, or
-  // (on rebuild) the entry vector — whichever is bigger.
-  const size_t contigNeed = (bufferBytes > entryVecBytes ? bufferBytes : entryVecBytes) + kSeqGateHeadroom;
-  // Worst-case coexisting transient peak: order buffer + safeRead's String +
-  // std::string copy (~3x buffer) plus the entry vector and its per-name strings.
-  const size_t totalNeed = bufferBytes * 3 + entryVecBytes * 2 + kSeqGateHeadroom;
-
-  // Use the SAME largest-free-block source the V2 playlist's inner gates use
-  // (deps.largestFreeBlockFn) so the sequential-vs-direct decision stays
-  // consistent. Fall back to the raw heap_caps probe if unset.
-  const size_t largestFree =
-      deps.largestFreeBlockFn ? deps.largestFreeBlockFn() : heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
-
-  return largestFree >= contigNeed && heap_caps_get_free_size(MALLOC_CAP_DEFAULT) >= totalNeed;
-}
-
-// ── Streaming, O(1)-heap access to the saved order file (sleep_order.txt) ─────
-// The buffer engine owns that file and writes the shuffled / newest-first order
-// there when the heap can afford it. On the fragmented cold-sleep heap the buffer
-// engine is gated off and the direct pick runs — these helpers let the direct
-// pick HONOR the saved order WITHOUT ever loading the whole file. Every allocation
-// here is bounded to one filename or a small fixed cap, so nothing can bad_alloc-
-// abort the way the whole-buffer load did (the lock crash). Read buffers are on
-// the stack; membership/next-after each stream the file one line at a time.
-
-// Longest name we retain while streaming a line (SD long-name cap sits under this).
-constexpr size_t kOrderLineMax = 280;
-// Hard cap on files spliced to the front of the order file in one wake. Each is a
-// short heap std::string; bounding it prevents the "every file is new" batch
-// bad_alloc — the exact failure the buffer engine's kMaxNewFilesPerReconcile guards.
-constexpr size_t kMaxNewOrderSplice = 8;
-
-const std::string& orderFilePath() { return v2::WallpaperPlaylistV2::instance().deps().orderFilePath; }
-
-// Stream the order file, invoking onName(const std::string&) per name line (the
-// "v1 cursor=N" header line is skipped). onName returns true to stop early.
-// O(1) heap: a 512-byte stack read buffer + one bounded line accumulator.
-template <typename Fn>
-bool streamOrderNames(Fn&& onName) {
-  const std::string& path = orderFilePath();
-  if (path.empty()) return false;
-  HalFile f = Storage.open(path.c_str());
-  if (!f || f.isDirectory()) return false;
-  char buf[512];
-  std::string line;
-  line.reserve(kOrderLineMax + 8);  // bounded: pushes are capped at kOrderLineMax, never reallocs
-  bool headerDone = false;
-  bool stop = false;
-  while (!stop) {
-    const int n = f.read(buf, sizeof(buf));
-    if (n <= 0) break;
-    for (int i = 0; i < n; ++i) {
-      const char c = buf[i];
-      if (c == '\r') continue;
-      if (c == '\n') {
-        if (!headerDone) {
-          headerDone = true;  // first line is the header — discard it
-        } else if (!line.empty()) {
-          if (onName(line)) {
-            stop = true;
-            break;
-          }
-        }
-        line.clear();
-      } else if (headerDone && line.size() < kOrderLineMax) {
-        line.push_back(c);
-      }
-    }
-  }
-  if (!stop && headerDone && !line.empty()) onName(line);  // trailing name, no final newline
-  return headerDone;
-}
-
-// Next name strictly after `after` in the saved order, wrapping to the first name
-// (also when `after` is empty or absent). Empty when there is no usable order file.
-std::string orderNextAfter(const std::string& after) {
-  auto* sfs = v2::WallpaperPlaylistV2::instance().deps().fs;
-  std::string firstName;
-  std::string result;
-  bool prevMatched = after.empty();
-  streamOrderNames([&](const std::string& name) -> bool {
-    // Skip names whose file has vanished (moved to pause / deleted) and keep
-    // walking in order, so a stale order-file entry never strands the cursor.
-    if (sfs && !sfs->exists("/sleep/" + name)) return false;
-    if (firstName.empty()) firstName = name;
-    if (prevMatched) {
-      result = name;
-      return true;
-    }
-    if (name == after) prevMatched = true;
-    return false;
-  });
-  return result.empty() ? firstName : result;
-}
-
-size_t orderNameCount() {
-  size_t count = 0;
-  streamOrderNames([&count](const std::string&) -> bool {
-    ++count;
-    return false;
-  });
-  return count;
-}
-
-bool orderContains(const std::string& target) {
-  bool found = false;
-  streamOrderNames([&](const std::string& name) -> bool {
-    if (name == target) {
-      found = true;
-      return true;
-    }
-    return false;
-  });
-  return found;
-}
-
-// Splice newly-added /sleep files to the FRONT of the saved order so fresh uploads
-// show next. Cheap count-compare gate first; the membership scan and the atomic
-// rewrite are all streaming (O(1) heap, bounded to kMaxNewOrderSplice names).
-// Returns how many were spliced. Only meaningful when an order file already exists
-// (a missing one is left for the buffer engine to build).
-int prependNewOrderFiles() {
-  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
-  auto* sfs = deps.fs;
-  auto* io = deps.fileIO;
-  if (!sfs || !io) return 0;
-
-  const size_t orderCount = orderNameCount();
-  if (orderCount == 0) return 0;  // no saved order yet — leave building to the buffer engine
-
-  size_t folderCount = 0;
-  sfs->walkSleepBmps([&folderCount](const char*, size_t, uint32_t) { ++folderCount; });
-  if (folderCount <= orderCount) return 0;  // nothing net-new since the order was written
-
-  std::vector<std::string> newNames;
-  newNames.reserve(kMaxNewOrderSplice);  // bounded: <= 8 short filenames, ~2 KB worst case
-  sfs->walkSleepBmps([&](const char* name, size_t len, uint32_t) {
-    if (newNames.size() >= kMaxNewOrderSplice || len == 0 || len > kOrderLineMax) return;
-    std::string n(name, len);
-    if (!orderContains(n)) newNames.push_back(std::move(n));
-  });
-  if (newNames.empty()) return 0;
-
-  const std::string& path = orderFilePath();
-  const bool ok = io->safeWriteStreamed(path, [&path, &newNames](persist::JsonSink& sink) -> bool {
-    static constexpr char kHeader[] = "v1 cursor=0\n";
-    sink.write(reinterpret_cast<const uint8_t*>(kHeader), sizeof(kHeader) - 1);
-    for (const auto& n : newNames) {
-      sink.write(reinterpret_cast<const uint8_t*>(n.data()), n.size());
-      sink.write(static_cast<uint8_t>('\n'));
-    }
-    // Append the OLD order body (header stripped) after the new front entries.
-    // safeWriteStreamed writes to <path>.tmp and only rotates AFTER this producer
-    // returns, so `path` still holds the old content here.
-    HalFile f = Storage.open(path.c_str());
-    if (f && !f.isDirectory()) {
-      char rbuf[512];
-      bool headerSkipped = false;
-      while (true) {
-        const int n = f.read(rbuf, sizeof(rbuf));
-        if (n <= 0) break;
-        int start = 0;
-        if (!headerSkipped) {
-          for (int i = 0; i < n; ++i) {
-            if (rbuf[i] == '\n') {
-              start = i + 1;
-              headerSkipped = true;
-              break;
-            }
-          }
-          if (!headerSkipped) continue;  // header spans past this chunk
-        }
-        if (start < n) sink.write(reinterpret_cast<const uint8_t*>(rbuf + start), static_cast<size_t>(n - start));
-      }
-    }
-    return true;
-  });
-  return ok ? static_cast<int>(newNames.size()) : 0;
-}
-
-// Fragment-safe pick. Prefers the saved order (shuffle + newest-first), streamed
-// one line at a time; falls back to the deterministic lexicographic walk only when
-// no usable order file exists. `after` is the just-shown basename persisted across
-// deep sleep, so successive wakes advance one entry at a time.
-std::string pickDirectBasename(const std::string& after) {
-  auto* sfs = v2::WallpaperPlaylistV2::instance().deps().fs;
-  if (!sfs) return {};
-  std::string ordered = orderNextAfter(after);
-  const bool orderedExists = !ordered.empty() && sfs->exists("/sleep/" + ordered);
-  if (wallpaper_direct_pick::source(!ordered.empty(), orderedExists) == wallpaper_direct_pick::Source::SavedOrder) {
-    return ordered;
-  }
-  return sfs->nextSleepBmpAfter(after);
-}
 
 SleepPick makePickFromBasename(const std::string& basename) {
   SleepPick p;
@@ -338,6 +90,29 @@ SleepPick makePickFromBasename(const std::string& basename) {
   return p;
 }
 
+// ── Index-engine cursor bridge (SleepRotationPolicy <-> APP_STATE) ───────────
+// The shuffled-lap cursor lives in state.json so it survives the deep-sleep
+// power cut. Loaded into the pure Cursor struct for the pick, stored back
+// before the single post-render state flush.
+
+sleep_rotation::Cursor loadCursor() {
+  sleep_rotation::Cursor c;
+  c.position = APP_STATE.sleepCursorPos;
+  c.multiplier = APP_STATE.sleepCursorMult;
+  c.offset = APP_STATE.sleepCursorOff;
+  c.seededCount = APP_STATE.sleepCursorSeededCount;
+  c.seeded = APP_STATE.sleepCursorSeeded;
+  return c;
+}
+
+void storeCursor(const sleep_rotation::Cursor& c) {
+  APP_STATE.sleepCursorPos = c.position;
+  APP_STATE.sleepCursorMult = c.multiplier;
+  APP_STATE.sleepCursorOff = c.offset;
+  APP_STATE.sleepCursorSeededCount = c.seededCount;
+  APP_STATE.sleepCursorSeeded = c.seeded;
+}
+
 }  // namespace
 
 SleepPick nextSleepFile(const RenderProbe& probe) {
@@ -345,8 +120,8 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
   if (!probe) return SleepPick{};
 
   // Paused-rotation branch: re-show the previously rendered wallpaper without
-  // advancing the playlist cursor. The "/sleep/" prefix guard covers a paused
-  // wallpaper demoted to /sleep pause (trim, quick-move): the reference fixup
+  // advancing the rotation cursor. The "/sleep/" prefix guard covers a paused
+  // wallpaper demoted to /sleep pause (quick-move): the reference fixup
   // repoints lastSleepWallpaperPath to the pause folder, and re-showing from
   // there would defeat the move — fall through to normal rotation instead.
   if (APP_STATE.wallpaperRotationPaused && APP_STATE.lastSleepWallpaperPath.rfind("/sleep/", 0) == 0 &&
@@ -362,81 +137,63 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
     // the normal pick path so the user still sees an image.
   }
 
-  // Sequential-playlist gate: only run the buffer-backed advance()/reconcile()
-  // when the heap can truly afford to materialize the order list for THIS
-  // folder; otherwise fall back to the O(1)-heap, anti-repeat direct pick.
-  const bool useDirectPick = !sequentialPlaylistAffordable();
-
-  // Both engines share ONE cursor (lastShownSleepFilename) and walk the same
-  // stable order — the buffer engine in RAM, the direct path via orderNextAfter
-  // streaming — so the heap-gate engine flip resolves to the same successor
-  // either way. This replaces the old split cursor (a separate
-  // lastDirectPickFilename), whose divergence under the wake-to-wake engine flip
-  // produced the two-image ping-pong.
-  std::string directAfter = APP_STATE.lastShownSleepFilename;
-
-  // When the low-heap direct pick is active, fold any newly-added /sleep files into
-  // the FRONT of the saved order (streaming, bounded) so fresh uploads show next.
-  // The buffer path handles new files itself via reconcile(), so only do it here.
-  if (useDirectPick && prependNewOrderFiles() > 0) {
-    directAfter.clear();  // start at the new front so the freshest file is shown next
+  // ── Index engine (the only rotation engine) ────────────────────────────────
+  // Picks are O(1) reads from the prebuilt /.crosspoint/sleep_index.bin — no
+  // directory scan on this user-blocking path. The index is normally rebuilt by
+  // the chunked idle pump while the user reads; a missing/stale index (first
+  // boot after upgrade, format switch, uploads with no idle window) falls back
+  // to ONE blocking WDT-yielded build here — still a single scan, not the old
+  // O(N²) per-name walk.
+  windex::Snapshot snap{APP_STATE.sleepIndexCount, APP_STATE.sleepIndexFingerprint};
+  windex::Reader reader;
+  bool rebuilt = false;
+  if (windex::isDirty() || snap.count == 0 || !reader.open()) {
+    rebuilt = windex::buildBlocking(snap);
+    if (rebuilt) reader.open();
   }
 
-  // Whether more than one wallpaper exists. The immediate-repeat guard below only
-  // skips a repeat when there is something else to show; countSleepBmps is O(1)
-  // heap and the scan is capped at 2 (we only need "is there a second file?").
-  const bool moreThanOneFile = [] {
-    auto* fs = v2::WallpaperPlaylistV2::instance().deps().fs;
-    return fs && fs->countSleepBmps(2) > 1;
-  }();
+  sleep_rotation::Cursor cursor = loadCursor();
+  const auto entropy = []() { return static_cast<uint32_t>(esp_random()); };
 
-  for (int attempt = 0; attempt < kNextSleepFileRetries; ++attempt) {
-    std::string basename;
-    bool pickedDirect = useDirectPick;
-    if (useDirectPick) {
-      basename = pickDirectBasename(directAfter);
-    } else {
-      // Buffer-backed playlist advance via the facade entry point, so the
-      // reconcile notice is drained + persisted here too. advance() can still
-      // bail to empty under its internal heap probes — fall through to direct.
-      basename = advance();
-      if (basename.empty()) {
-        basename = pickDirectBasename(directAfter);
-        pickedDirect = true;  // buffer engine bailed — this came from the direct walk
-      }
+  for (int attempt = 0; attempt < kNextSleepFileRetries && snap.count > 0; ++attempt) {
+    auto picked = sleep_index_pick::pickNext(
+        cursor, snap.count, entropy(), entropy(), [&](size_t i) { return reader.nameAt(i); },
+        [&](const std::string& n) { return Storage.exists(("/sleep/" + n).c_str()); },
+        [](const std::string& n) -> std::string {
+          return FavoriteImage::hasFavoriteSuffix(n) ? FavoriteImage::stripFavoriteSuffix(n)
+                                                     : FavoriteImage::addFavoriteSuffix(n);
+        });
+    if (picked.needsRebuild && !rebuilt) {
+      // Too many dead records: the folder changed a lot since the index was
+      // built. Rebuild once and keep picking.
+      rebuilt = windex::buildBlocking(snap);
+      if (!rebuilt || !reader.open()) break;
+      cursor = loadCursor();
+      continue;
     }
-    if (basename.empty()) {
-      break;  // /sleep is empty — no point retrying.
-    }
-    SleepPick pick = makePickFromBasename(basename);
-    // Never show the same wallpaper twice in a row while rotation is active. The
-    // buffer-backed and direct-pick engines keep separate cursors, so a low-memory
-    // switch between them (or a reset direct cursor) can otherwise re-pick the
-    // just-shown file. Skip it and advance to the next candidate. Paused rotation
-    // and single-file folders are exempt (see isImmediateRepeat).
+    if (picked.basename.empty()) break;
+
+    SleepPick pick = makePickFromBasename(picked.basename);
+    // Never show the same wallpaper twice in a row while rotation is active and
+    // more than one image exists (a reseed can land the fresh lap on the
+    // just-shown file). The cursor has already stepped past it.
     if (wallpaper_direct_pick::isImmediateRepeat(APP_STATE.wallpaperRotationPaused,
-                                                 pick.fullPath == APP_STATE.lastSleepWallpaperPath, moreThanOneFile)) {
-      directAfter = basename;  // step the direct cursor past the repeat; the buffer
-                               // path progresses on its own via the next advance()
+                                                 pick.fullPath == APP_STATE.lastSleepWallpaperPath, snap.count > 1)) {
       continue;
     }
     if (probe(pick)) {
-      // Diagnostic for on-device confirmation (LOG_INF survives a release build):
-      // cursorIn should equal the previous wake's pick, and pick should march
-      // through every wallpaper regardless of which engine ran.
-      LOG_INF("SLP", "rot engine=%s cursorIn=%s pick=%s lastShown=%s afford=%d", pickedDirect ? "direct" : "buffer",
-              directAfter.c_str(), pick.basename.c_str(), APP_STATE.lastShownSleepFilename.c_str(),
-              (int)!useDirectPick);
-      // One shared cursor: rememberRendered() persists lastShownSleepFilename +
-      // lastSleepWallpaperPath (state.json) when the shown pick changes. A pick is
-      // always a forward successor now, so there is no unchanged-render freeze to
-      // force-save around.
+      // Diagnostic for on-device confirmation (LOG_INF survives a release
+      // build): count is the index size, pos the lap position just consumed.
+      LOG_INF("SLP", "rot engine=index count=%u pos=%u pick=%s", static_cast<unsigned>(snap.count),
+              static_cast<unsigned>(cursor.position), pick.basename.c_str());
+      // Persist cursor + lastShown bookkeeping in ONE state.json flush (the
+      // old path wrote state.json up to three times per lock).
+      storeCursor(cursor);
       v2::WallpaperPlaylistV2::instance().rememberRendered(pick.fullPath, pick.basename);
       return pick;
     }
-    // Probe rejected this candidate. Step the direct-pick cursor past it so the
-    // next retry returns the following file in sequence, not the same one.
-    directAfter = basename;
+    // Probe rejected this candidate (decode/open failure). The cursor already
+    // stepped past it; the next pickNext returns the following live file.
   }
 
   // Root-level fallback ladder: /sleep is empty or every candidate failed to
@@ -458,12 +215,20 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
 
 void markFolderDirty() {
   ensureConfigured();
-  v2::WallpaperPlaylistV2::instance().markFolderDirty();
+  windex::markDirty();
 }
 
 bool reshuffle() {
   ensureConfigured();
-  return v2::WallpaperPlaylistV2::instance().reshuffle();
+  if (APP_STATE.sleepIndexCount == 0 && countImages(2) == 0) return false;
+  // Fresh lap: new shuffle seed, cursor rewound. The index itself is untouched
+  // (a reshuffle changes the visit order, not the folder contents).
+  sleep_rotation::Cursor c;
+  sleep_rotation::reseed(c, APP_STATE.sleepIndexCount, static_cast<uint32_t>(esp_random()),
+                         static_cast<uint32_t>(esp_random()));
+  storeCursor(c);
+  APP_STATE.saveToFile();
+  return true;
 }
 
 void rememberRendered(const std::string& fullPath, const std::string& filename) {

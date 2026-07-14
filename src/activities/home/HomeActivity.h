@@ -45,10 +45,11 @@ class HomeActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
 
-  // Sleep-folder overflow (RFC #145 port). When /sleep exceeds kSleepFolderCap the
-  // LIST home shows a selectable warning card (selector slot 1, pushing books down)
-  // that opens a keypad to randomly move N wallpapers to /sleep pause. A separate
-  // one-shot toast reports wallpapers the sleep reconcile auto-moved while asleep.
+  // Sleep-folder overflow. When /sleep exceeds kSleepIndexMaxImages (the index
+  // rotation engine's ceiling — thousands are fine below it) the LIST home shows
+  // a selectable warning card (selector slot 1, pushing books down) that opens a
+  // keypad to randomly move N wallpapers to /sleep pause. A separate one-shot
+  // toast reports wallpapers a legacy reconcile auto-moved while asleep.
   bool sleepOverLimit = false;
   long sleepImageCount = 0;
   // Static so the /sleep count survives HomeActivity re-construction: every

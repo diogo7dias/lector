@@ -1,0 +1,8 @@
+add_executable(sleep_rotation_policy_tests
+  SleepRotationPolicyTest.cpp
+)
+target_link_libraries(sleep_rotation_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(sleep_rotation_policy_tests PRIVATE
+  ${REPO_ROOT}/src
+)
+gtest_discover_tests(sleep_rotation_policy_tests)

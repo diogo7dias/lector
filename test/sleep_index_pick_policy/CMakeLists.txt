@@ -1,0 +1,8 @@
+add_executable(sleep_index_pick_policy_tests
+  SleepIndexPickPolicyTest.cpp
+)
+target_link_libraries(sleep_index_pick_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(sleep_index_pick_policy_tests PRIVATE
+  ${REPO_ROOT}/src
+)
+gtest_discover_tests(sleep_index_pick_policy_tests)

@@ -35,6 +35,14 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   doc["wallpaperRotationPaused"] = s.wallpaperRotationPaused;
   doc["sleepFavoritesCapReached"] = s.sleepFavoritesCapReached;
   doc["pendingSleepWallpapersMovedToPause"] = s.pendingSleepWallpapersMovedToPause;
+  // Sleep wallpaper index rotation (index snapshot + shuffled-lap cursor).
+  doc["sleepIndexCount"] = s.sleepIndexCount;
+  doc["sleepIndexFingerprint"] = s.sleepIndexFingerprint;
+  doc["sleepCursorPos"] = s.sleepCursorPos;
+  doc["sleepCursorMult"] = s.sleepCursorMult;
+  doc["sleepCursorOff"] = s.sleepCursorOff;
+  doc["sleepCursorSeededCount"] = s.sleepCursorSeededCount;
+  doc["sleepCursorSeeded"] = s.sleepCursorSeeded;
 
   String json;
   serializeJson(doc, json);
@@ -62,6 +70,15 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.wallpaperRotationPaused = doc["wallpaperRotationPaused"] | false;
   s.sleepFavoritesCapReached = doc["sleepFavoritesCapReached"] | false;
   s.pendingSleepWallpapersMovedToPause = doc["pendingSleepWallpapersMovedToPause"] | static_cast<uint16_t>(0);
+  // Sleep wallpaper index rotation (missing keys = pre-index firmware: the
+  // zero count forces an index build on the first lock/idle after upgrade).
+  s.sleepIndexCount = doc["sleepIndexCount"] | static_cast<uint32_t>(0);
+  s.sleepIndexFingerprint = doc["sleepIndexFingerprint"] | static_cast<uint32_t>(0);
+  s.sleepCursorPos = doc["sleepCursorPos"] | static_cast<uint32_t>(0);
+  s.sleepCursorMult = doc["sleepCursorMult"] | static_cast<uint32_t>(1);
+  s.sleepCursorOff = doc["sleepCursorOff"] | static_cast<uint32_t>(0);
+  s.sleepCursorSeededCount = doc["sleepCursorSeededCount"] | static_cast<uint32_t>(0);
+  s.sleepCursorSeeded = doc["sleepCursorSeeded"] | false;
   return true;
 }
 
