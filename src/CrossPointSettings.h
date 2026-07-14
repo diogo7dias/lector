@@ -43,6 +43,10 @@ class CrossPointSettings {
   // hold both, but the rotation is filtered to one so switching is instant.
   enum WALLPAPER_FORMAT { WALLPAPER_BMP = 0, WALLPAPER_PXC = 1, WALLPAPER_FORMAT_COUNT };
 
+  // Sleep wallpaper render quality. FAST = single 1-bit dithered refresh
+  // (~0.5 s panel time); PRETTY = OEM multi-pass grayscale (~4-6 s on X3).
+  enum SLEEP_IMAGE_QUALITY { SLEEP_IMG_FAST = 0, SLEEP_IMG_PRETTY = 1, SLEEP_IMAGE_QUALITY_COUNT };
+
   // Status bar enum - legacy
   // Legacy status-bar enums (STATUS_BAR_MODE / _PROGRESS_BAR / _THICKNESS / _TITLE /
   // _CLOCK_MODE) were removed with the v1 fixed-slot renderer. XTC keeps its own mode.
@@ -199,6 +203,10 @@ class CrossPointSettings {
   // Sleep wallpaper file type shown by the rotation (see WALLPAPER_FORMAT).
   // Defaults to PXC (pre-dithered 2bpp, the recommended format).
   uint8_t wallpaperFormat = WALLPAPER_PXC;
+  // Sleep wallpaper render quality (see SLEEP_IMAGE_QUALITY). Default FAST:
+  // lock-to-dark in ~2 s instead of the ~4-6 s grayscale cascade. PXC only —
+  // BMP wallpapers always render through the grayscale path.
+  uint8_t sleepImageQuality = SLEEP_IMG_FAST;
   // Overlay the wallpaper's filename on the sleep screen (bottom-left box). When
   // off, showSleepFavoriteBadge instead draws a small "F" badge for favorites.
   uint8_t showSleepImageFilename = 0;
