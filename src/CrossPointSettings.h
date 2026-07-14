@@ -203,10 +203,13 @@ class CrossPointSettings {
   // Sleep wallpaper file type shown by the rotation (see WALLPAPER_FORMAT).
   // Defaults to PXC (pre-dithered 2bpp, the recommended format).
   uint8_t wallpaperFormat = WALLPAPER_PXC;
-  // Sleep wallpaper render quality (see SLEEP_IMAGE_QUALITY). Default FAST:
-  // lock-to-dark in ~2 s instead of the ~4-6 s grayscale cascade. PXC only —
-  // BMP wallpapers always render through the grayscale path.
-  uint8_t sleepImageQuality = SLEEP_IMG_FAST;
+  // Sleep wallpaper render quality (see SLEEP_IMAGE_QUALITY). Default PRETTY
+  // (owner call after device comparison: the grayscale look wins day-to-day,
+  // and the lock delay is pocketable since sleep is committed — no page-turn
+  // risk). FAST drops the X3 lock to ~4.3 s measured (one 1-bit refresh,
+  // near the panel floor for a clean full-image swap). PXC only — BMP
+  // wallpapers always render through the grayscale path.
+  uint8_t sleepImageQuality = SLEEP_IMG_PRETTY;
   // Overlay the wallpaper's filename on the sleep screen (bottom-left box). When
   // off, showSleepFavoriteBadge instead draws a small "F" badge for favorites.
   uint8_t showSleepImageFilename = 0;
