@@ -35,6 +35,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -666,6 +667,11 @@ void loop() {
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
+      // Idle window: advance the sleep-wallpaper index scan a bounded slice at a
+      // time (a few ms per call) so the lock path never pays a folder scan. Runs
+      // to completion once per wake, then is a cheap no-op. Done before the
+      // power-saving throttle below; the pump takes its own full-speed lock.
+      crosspoint::sleep::windex::pumpIdle();
       // Inactive for a while: throttle the CPU to save power. The screen is static in
       // this state (no e-ink refresh in flight), so — unlike the active branch below —
       // a short poll here cannot preempt a refresh mid-waveform. Keep it short (20ms,

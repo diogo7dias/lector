@@ -27,13 +27,15 @@ namespace crosspoint {
 namespace sleep {
 namespace wallpaper {
 
-// Re-export of the V2 hard cap, so callers do not reach into v2::.
+// Legacy V2 hard cap. The index rotation engine no longer trims /sleep to this;
+// it survives only as the V2 class's internal constant during the migration
+// window. UI warnings key off kSleepIndexMaxImages below instead.
 constexpr size_t kSleepFolderCap = 500;
 
-// Hot path: pick the next wallpaper basename (e.g. "abc.bmp"). Empty if
-// /sleep is empty. Caller prepends "/sleep/" itself. Synchronously flushes
-// APP_STATE so rotation survives the deep-sleep boundary.
-std::string advance();
+// Ceiling of the index rotation engine (mirrors windex::kMaxEntries /
+// large_folder_index::MAX_INDEX_ENTRIES). /sleep may hold up to this many
+// images; picks stay O(1) regardless of count.
+constexpr size_t kSleepIndexMaxImages = 20000;
 
 // Outcome of nextSleepFile() — everything the caller needs to render the
 // picked wallpaper without consulting APP_STATE or recomputing the

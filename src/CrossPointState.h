@@ -34,6 +34,19 @@ class CrossPointState {
   std::string lastSleepWallpaperPath;
   // Rotation paused via the in-book triage menu: re-show the current wallpaper.
   bool wallpaperRotationPaused = false;
+
+  // --- Sleep wallpaper index rotation (SleepWallpaperIndexStore + SleepRotationPolicy) ---
+  // Snapshot of the built /.crosspoint/sleep_index.bin: record count and the
+  // /sleep content fingerprint it was built from (rebuild gate).
+  uint32_t sleepIndexCount = 0;
+  uint32_t sleepIndexFingerprint = 0;
+  // Shuffled-lap rotation cursor (sleep_rotation::Cursor), persisted across the
+  // deep-sleep power cut so every lap shows each wallpaper exactly once.
+  uint32_t sleepCursorPos = 0;
+  uint32_t sleepCursorMult = 1;
+  uint32_t sleepCursorOff = 0;
+  uint32_t sleepCursorSeededCount = 0;
+  bool sleepCursorSeeded = false;
   // Sticky: favorites alone saturate the /sleep cap, new uploads blocked.
   bool sleepFavoritesCapReached = false;
   // Transient: wallpapers demoted to "/sleep pause" pending a home-screen notice.

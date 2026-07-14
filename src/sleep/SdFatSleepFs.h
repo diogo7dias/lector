@@ -11,6 +11,12 @@
 namespace crosspoint {
 namespace sleep {
 
+// True when `name` is a sleep wallpaper of the format currently selected in
+// Settings (wallpaperFormat: .pxc or .bmp). The single accept filter shared by
+// the ISleepFs scans and the wallpaper index builder, so both always agree on
+// which files are in rotation.
+bool isSleepImageName(const char* name);
+
 class SdFatSleepFs final : public ISleepFs {
  public:
   SdFatSleepFs() = default;

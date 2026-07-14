@@ -36,6 +36,8 @@ bool isBmpName(const char* name) {
 
 }  // namespace
 
+bool isSleepImageName(const char* name) { return isBmpName(name); }
+
 size_t SdFatSleepFs::countSleepBmps(size_t scanCap) {
   auto dir = Storage.open(kSleepDir);
   if (!dir || !dir.isDirectory()) {
