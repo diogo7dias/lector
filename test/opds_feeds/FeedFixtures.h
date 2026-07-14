@@ -297,4 +297,3 @@ inline const char* kAuthorFeed = R"XMLFEED(<?xml version="1.0" encoding="UTF-8"?
   </entry>
   
 </feed>)XMLFEED";
-
