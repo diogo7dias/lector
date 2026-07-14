@@ -225,6 +225,7 @@ static bool loadSleepFrameBuffer() {
 
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
+  const unsigned long lockStartMs = millis();
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
@@ -235,15 +236,25 @@ void enterDeepSleep(bool fromTimeout = false) {
   APP_STATE.showBootScreen = !isQuickResumeSleep;
 
   APP_STATE.saveToFile();
+  const unsigned long lockStateSavedMs = millis();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
+  const unsigned long lockSleepScreenDoneMs = millis();
 
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
   }
+  const unsigned long lockFrameSavedMs = millis();
+
+  // Lock timing ledger. state = APP_STATE JSON write; screen = sleep-screen
+  // render (wallpaper scan + decode + e-ink refresh, the dominant cost); frame
+  // = quick-resume 48 KB framebuffer save.
+  LOG_INF("LOCK", "LOCK ms: total=%lu state=%lu screen=%lu frame=%lu", lockFrameSavedMs - lockStartMs,
+          lockStateSavedMs - lockStartMs, lockSleepScreenDoneMs - lockStateSavedMs,
+          lockFrameSavedMs - lockSleepScreenDoneMs);
 
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
@@ -337,6 +348,11 @@ void setup() {
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
+  // Boot timing ledger checkpoint: hardware bring-up done (see BOOT ms line at
+  // end of setup). Cheap millis() snapshots so every perf change can be proven
+  // on device from the serial log.
+  const unsigned long bootHwDoneMs = millis();
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
@@ -346,6 +362,7 @@ void setup() {
     return;
   }
   gpio.update();
+  const unsigned long bootSdDoneMs = millis();
 
   HalSystem::checkPanic();
 
@@ -358,6 +375,7 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   gpio.update();
+  const unsigned long bootJsonDoneMs = millis();
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
@@ -433,6 +451,7 @@ void setup() {
                              strcasecmp(lastWallpaper.c_str() + lastWallpaper.size() - 4, ".pxc") == 0;
 
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
+  const unsigned long bootDisplayDoneMs = millis();
 
   switch (resume) {
     case BootResume::Silent:
@@ -539,6 +558,19 @@ void setup() {
     delay(10);
     gpio.update();
   }
+
+  // Boot timing ledger. Deltas from cold-boot start (t1). Every stage that a
+  // perf change targets shows up here so the win is measurable on device.
+  //   serial : blind 250 ms USB-enumeration stall (logging builds only)
+  //   hw     : GPIO + power + tilt + clock bring-up
+  //   sd     : SD card mount
+  //   json   : 7 settings/state JSON loads
+  //   disp   : display + font init (includes X3 cold full syncs)
+  //   route  : boot presentation + activity routing (first paint requested)
+  const unsigned long bootRouteDoneMs = millis();
+  LOG_INF("BOOT", "BOOT ms: total=%lu hw=%lu sd=%lu json=%lu disp=%lu route=%lu", bootRouteDoneMs - t1,
+          bootHwDoneMs - t1, bootSdDoneMs - bootHwDoneMs, bootJsonDoneMs - bootSdDoneMs,
+          bootDisplayDoneMs - bootJsonDoneMs, bootRouteDoneMs - bootDisplayDoneMs);
 
   // Ensure we're not still holding the power button before leaving setup
   waitForPowerRelease();
