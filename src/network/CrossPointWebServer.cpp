@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
@@ -23,6 +24,7 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "sleep/Wallpaper.h"
 #include "util/BookCacheUtils.h"
 
 namespace {
@@ -172,6 +174,9 @@ void CrossPointWebServer::begin() {
 
   // Move file endpoint
   server->on("/move", HTTP_POST, [this] { handleMove(); });
+
+  // Batch move endpoint (JSON array of file paths + one destination folder)
+  server->on("/movebatch", HTTP_POST, [this] { handleMoveBatch(); });
 
   // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
@@ -1004,6 +1009,119 @@ void CrossPointWebServer::handleMove() const {
     LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
     server->send(500, "text/plain", "Failed to move file");
   }
+}
+
+// Batch file move: `paths` = JSON array of file paths, `dest` = one folder.
+// Backs the web UI's "move favorites" bulk action; the client chunks large
+// sets across several requests, so the per-request cap only bounds heap.
+void CrossPointWebServer::handleMoveBatch() const {
+  if (!server->hasArg("paths") || !server->hasArg("dest")) {
+    server->send(400, "text/plain", "Missing paths or destination");
+    return;
+  }
+
+  const String destPath = normalizeWebPath(server->arg("dest"));
+  if (destPath.isEmpty()) {
+    server->send(400, "text/plain", "Invalid destination");
+    return;
+  }
+  if (destPath != "/") {
+    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
+    if (isProtectedItemName(destName)) {
+      server->send(403, "text/plain", "Cannot move into protected folder");
+      return;
+    }
+  }
+  if (!Storage.exists(destPath.c_str())) {
+    server->send(404, "text/plain", "Destination not found");
+    return;
+  }
+  {
+    HalFile destDir = Storage.open(destPath.c_str());
+    const bool isDir = destDir && destDir.isDirectory();
+    if (destDir) destDir.close();
+    if (!isDir) {
+      server->send(400, "text/plain", "Destination is not a folder");
+      return;
+    }
+  }
+
+  JsonDocument doc;
+  if (deserializeJson(doc, server->arg("paths")) != DeserializationError::Ok || !doc.is<JsonArray>()) {
+    server->send(400, "text/plain", "Invalid paths JSON");
+    return;
+  }
+  const JsonArray arr = doc.as<JsonArray>();
+  constexpr size_t kMaxBatch = 64;
+  if (arr.size() > kMaxBatch) {
+    server->send(400, "text/plain", "Too many paths in one request");
+    return;
+  }
+
+  size_t moved = 0;
+  size_t failed = 0;
+  bool touchedSleep = destPath == "/sleep";
+  bool appStateChanged = false;
+
+  for (JsonVariant v : arr) {
+    if (!v.is<const char*>()) {
+      failed++;
+      continue;
+    }
+    const String itemPath = normalizeWebPath(String(v.as<const char*>()));
+    if (itemPath.isEmpty() || itemPath == "/") {
+      failed++;
+      continue;
+    }
+    const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
+    if (isProtectedItemName(itemName) || !Storage.exists(itemPath.c_str())) {
+      failed++;
+      continue;
+    }
+
+    String newPath = destPath;
+    if (!newPath.endsWith("/")) newPath += "/";
+    newPath += itemName;
+    if (newPath == itemPath) continue;  // already there — not a failure
+    if (Storage.exists(newPath.c_str())) {
+      failed++;
+      continue;
+    }
+
+    HalFile file = Storage.open(itemPath.c_str());
+    if (!file || file.isDirectory()) {
+      if (file) file.close();
+      failed++;
+      continue;
+    }
+    clearBookCache(itemPath.c_str());
+    const bool ok = file.rename(newPath.c_str());
+    file.close();
+    if (!ok) {
+      failed++;
+      continue;
+    }
+    moved++;
+    if (itemPath.startsWith("/sleep/")) touchedSleep = true;
+    // Keep the wake wallpaper repaint pointed at the file's new home.
+    if (APP_STATE.lastSleepWallpaperPath == itemPath.c_str()) {
+      APP_STATE.lastSleepWallpaperPath = newPath.c_str();
+      appStateChanged = true;
+    }
+  }
+
+  if (appStateChanged) APP_STATE.saveToFile();
+  if (touchedSleep && moved > 0) {
+    // /sleep contents changed: stale the wallpaper index + V2 playlist so the
+    // idle pump rebuilds this session instead of waiting for the next boot.
+    crosspoint::sleep::wallpaper::markFolderDirty();
+  }
+
+  char response[64];
+  snprintf(response, sizeof(response), "{\"moved\":%u,\"failed\":%u}", static_cast<unsigned>(moved),
+           static_cast<unsigned>(failed));
+  LOG_DBG("WEB", "Batch move to %s: %s", destPath.c_str(), response);
+  server->send(200, "application/json", response);
 }
 
 void CrossPointWebServer::handleDelete() const {

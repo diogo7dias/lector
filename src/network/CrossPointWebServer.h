@@ -101,6 +101,7 @@ class CrossPointWebServer {
   void handleCreateFolder() const;
   void handleRename() const;
   void handleMove() const;
+  void handleMoveBatch() const;
   void handleDelete() const;
 
   // Settings handlers
