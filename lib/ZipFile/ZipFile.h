@@ -39,7 +39,9 @@ class ZipFile {
   }
 
  private:
-  const std::string& filePath;
+  // Owned copy: a ZipFile may now outlive the scope of the string it was
+  // constructed from (Epub keeps one alive for its whole lifetime).
+  const std::string filePath;
   HalFile file;
   ZipDetails zipDetails = {0, 0, false};
   std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;

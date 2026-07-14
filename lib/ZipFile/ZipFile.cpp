@@ -281,8 +281,10 @@ bool ZipFile::close() {
     // Explicit close() required: member variable persists beyond function scope
     file.close();
   }
-  lastCentralDirPos = 0;
-  lastCentralDirPosValid = false;
+  // The central-dir cursor is a byte offset into the archive, not handle state.
+  // The archive is immutable while a book is open, so the cursor stays valid
+  // across close/reopen — keeping it makes sequential chapter fetches through a
+  // long-lived ZipFile near O(1) instead of a full central-dir walk each time.
   return true;
 }
 
@@ -397,7 +399,10 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
 
     // Continue out of block with data set
   } else if (fileStat.method == ZIP_METHOD_DEFLATED) {
-    auto* fileReadBuffer = static_cast<uint8_t*>(malloc(1024));
+    // 4KB transient read buffer: fewer SD transactions (each takes the storage
+    // mutex) than the old 1KB without meaningful heap pressure for the call.
+    constexpr size_t READ_BUFFER_SIZE = 4096;
+    auto* fileReadBuffer = static_cast<uint8_t*>(malloc(READ_BUFFER_SIZE));
     if (!fileReadBuffer) {
       LOG_ERR("ZIP", "Failed to allocate memory for zip file read buffer");
       free(data);
@@ -408,7 +413,7 @@ uint8_t* ZipFile::readFileToMemory(const char* filename, size_t* size, const boo
     ctx.file = &file;
     ctx.fileRemaining = deflatedDataSize;
     ctx.readBuf = fileReadBuffer;
-    ctx.readBufSize = 1024;
+    ctx.readBufSize = READ_BUFFER_SIZE;
 
     if (!ctx.reader.init(true)) {
       LOG_ERR("ZIP", "Failed to init inflate reader");

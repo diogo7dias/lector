@@ -249,7 +249,9 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     if (!Storage.openFileForWrite("SCT", tmpHtmlPath, tmpHtml)) {
       continue;
     }
-    success = epub->readItemContentsToStream(localPath, tmpHtml, 1024);
+    // 4KB chunks: transient buffers only live for this call; fewer SD mutex
+    // round-trips than 1KB on the cold-build hot path.
+    success = epub->readItemContentsToStream(localPath, tmpHtml, 4096);
     fileSize = tmpHtml.size();
     // Explicitly close() file before calling Storage.remove()
     tmpHtml.close();
