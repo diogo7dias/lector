@@ -62,20 +62,21 @@ void SleepActivity::onEnter() {
     return renderLastScreenSleepScreen();
   }
 
-  // Fast custom-wallpaper path: the final image lands in ~2 s, so skip the
-  // "Entering sleep" banner — its own HALF_REFRESH (~1.7 s) would nearly
-  // double the lock time just to show a transient popup. Slow paths (grayscale
-  // wallpaper, covers, dashboards) keep the banner as progress feedback.
+  // Custom-wallpaper path (both quality modes): skip the "Entering sleep"
+  // banner — its own HALF_REFRESH (~1.7 s) only shows a transient popup that
+  // the wallpaper paints over anyway. Fast mode lands the image in ~2 s;
+  // Pretty mode takes ~6 s but sleep is already committed at this point (no
+  // page-turn risk), so the frozen page reads as "locking" without a banner.
+  // Slow paths (covers, dashboards) keep the banner as progress feedback.
   const bool routesToCustom =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
       (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader) ||
       (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::RANDOM_LOGO_CUSTOM &&
        APP_STATE.lastSleepFromReader);
-  const bool fastWallpaperLock = routesToCustom && SETTINGS.sleepImageQuality == CrossPointSettings::SLEEP_IMG_FAST &&
-                                 SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC;
+  const bool directWallpaperLock = routesToCustom && SETTINGS.wallpaperFormat == CrossPointSettings::WALLPAPER_PXC;
 
   // Show popup with reader orientation only when going to sleep from reader
-  if (!fastWallpaperLock) {
+  if (!directWallpaperLock) {
     if (APP_STATE.lastSleepFromReader) {
       ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
       GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
