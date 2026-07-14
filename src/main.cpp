@@ -376,6 +376,12 @@ void setup() {
   // on device from the serial log.
   const unsigned long bootHwDoneMs = millis();
 
+  // Boot overlap (speed-plan 2.4): fire the panel's hardware reset now so its
+  // settle delays (~92ms on X3, ~42ms on X4) elapse under the SD mount and
+  // JSON loads below. display.begin() inside setupDisplayAndFonts tops up
+  // whatever remains.
+  display.startBootReset();
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
@@ -385,6 +391,7 @@ void setup() {
     return;
   }
   gpio.update();
+  display.pumpBootReset();
   startSerialLogOnceUsbSettled();
   const unsigned long bootSdDoneMs = millis();
 
@@ -394,7 +401,9 @@ void setup() {
   // presentation + routing read both). RECENT_BOOKS, KOREADER_STORE and
   // OPDS_STORE lazy-load from SD on first access inside their stores.
   SETTINGS.loadFromFile();
+  display.pumpBootReset();
   APP_STATE.loadFromFile();
+  display.pumpBootReset();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);

@@ -10,6 +10,18 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
+void HalDisplay::startBootReset() {
+  // Panel geometry/mode must be set before the reset settle tail is chosen
+  // (X3 needs the extra 50ms). setDisplayX3 is idempotent; begin() calls it
+  // again harmlessly.
+  if (gpio.deviceIsX3()) {
+    einkDisplay.setDisplayX3();
+  }
+  einkDisplay.resetStart();
+}
+
+void HalDisplay::pumpBootReset() { einkDisplay.resetPump(); }
+
 void HalDisplay::begin(bool seamless) {
   // Set X3-specific panel mode before initializing.
   if (gpio.deviceIsX3()) {
