@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <PngToBmpConverter.h>
 #include <Utf8.h>
 #include <ZipFile.h>
@@ -49,6 +50,28 @@ std::string sanitizeDescription(const std::string& in) {
   return out;
 }
 }  // namespace
+
+// Out of line: Epub's special members and zip() need ZipFile as a complete type
+// (unique_ptr member).
+Epub::Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
+  // create a cache key based on the filepath
+  cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
+}
+
+Epub::~Epub() = default;
+
+ZipFile* Epub::zip() const {
+  if (!sharedZip) {
+    // const accessor with lazy init: the shared ZipFile is a cache, not logical state
+    auto* self = const_cast<Epub*>(this);
+    self->sharedZip = makeUniqueNoThrow<ZipFile>(filepath);
+    if (!self->sharedZip) {
+      LOG_ERR("EBP", "OOM: ZipFile");
+      return nullptr;
+    }
+  }
+  return sharedZip.get();
+}
 
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
@@ -298,9 +321,13 @@ bool Epub::parseTocNavFile() const {
 
 void Epub::discoverCssFilesFromZip() {
   const std::string& opfDir = contentBasePath;
-  ZipFile zf(filepath);
+  ZipFile* zf = zip();
+  if (!zf) {
+    LOG_ERR("EBP", "No ZipFile for CSS discovery");
+    return;
+  }
 
-  if (!zf.enumerateFilePaths([&](std::string_view filePath) {
+  if (!zf->enumerateFilePaths([&](std::string_view filePath) {
         if (!opfDir.empty() && filePath.find(opfDir) != 0) {
           return;
         }
@@ -813,7 +840,10 @@ uint8_t* Epub::readItemContentsToBytes(const std::string& itemHref, size_t* size
 
   const std::string path = FsHelpers::normalisePath(itemHref);
 
-  const auto content = ZipFile(filepath).readFileToMemory(path.c_str(), size, trailingNullByte);
+  ZipFile* zf = zip();
+  if (!zf) return nullptr;
+
+  const auto content = zf->readFileToMemory(path.c_str(), size, trailingNullByte);
   if (!content) {
     LOG_DBG("EBP", "Failed to read item %s", path.c_str());
     return nullptr;
@@ -829,12 +859,14 @@ bool Epub::readItemContentsToStream(const std::string& itemHref, Print& out, con
   }
 
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).readFileToStream(path.c_str(), out, chunkSize);
+  ZipFile* zf = zip();
+  return zf && zf->readFileToStream(path.c_str(), out, chunkSize);
 }
 
 bool Epub::getItemSize(const std::string& itemHref, size_t* size) const {
   const std::string path = FsHelpers::normalisePath(itemHref);
-  return ZipFile(filepath).getInflatedFileSize(path.c_str(), size);
+  ZipFile* zf = zip();
+  return zf && zf->getInflatedFileSize(path.c_str(), size);
 }
 
 int Epub::getSpineItemsCount() const {

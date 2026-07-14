@@ -29,7 +29,14 @@ class Epub {
   std::unique_ptr<CssParser> cssParser;
   // CSS files
   std::vector<std::string> cssFiles;
+  // Shared ZIP accessor, created lazily. Keeping one alive for the life of the
+  // Epub preserves the EOCD details and central-dir cursor across chapter
+  // fetches; a throwaway ZipFile per call re-scanned the whole central
+  // directory every time. It does NOT hold the file handle open between calls.
+  std::unique_ptr<ZipFile> sharedZip;
 
+  // Returns the shared ZipFile, or nullptr on allocation failure.
+  ZipFile* zip() const;
   bool findContentOpfFile(std::string* contentOpfFile) const;
   bool parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, bool writeSpineEntries = true);
   bool parseTocNcxFile() const;
@@ -38,11 +45,9 @@ class Epub {
   void parseCssFiles() const;
 
  public:
-  explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {
-    // create a cache key based on the filepath
-    cachePath = cacheDir + "/epub_" + std::to_string(std::hash<std::string>{}(this->filepath));
-  }
-  ~Epub() = default;
+  // Ctor/dtor defined in Epub.cpp where ZipFile is a complete type (unique_ptr member).
+  explicit Epub(std::string filepath, const std::string& cacheDir);
+  ~Epub();
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
   bool clearCache() const;

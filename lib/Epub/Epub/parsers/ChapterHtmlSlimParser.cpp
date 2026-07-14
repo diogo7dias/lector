@@ -22,7 +22,9 @@
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
-constexpr size_t PARSE_BUFFER_SIZE = 1024;
+// 4KB: expat heap-allocates this via XML_GetBuffer; larger chunks mean 4x fewer
+// SD reads per chapter with no stack cost.
+constexpr size_t PARSE_BUFFER_SIZE = 4096;
 
 // Hard cap on the number of anchor IDs recorded per chapter. Legitimate navigation
 // anchors (TOC entries, footnotes, cross-references) rarely exceed a few hundred per
