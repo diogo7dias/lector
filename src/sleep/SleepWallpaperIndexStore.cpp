@@ -2,9 +2,11 @@
 
 #include <HalPowerManager.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <esp_task_wdt.h>
 
 #include <cstring>
+#include <memory>
 
 #include "../CrossPointState.h"
 #include "SdFatSleepFs.h"
@@ -48,6 +50,11 @@ uint32_t s_count = 0;
 uint32_t s_fingerprint = 0;
 size_t s_iter = 0;
 bool s_failed = false;
+// Held for the WHOLE idle scan (created at startScan, released at finish/abort).
+// A per-tick Lock re-took and released the power lock every loop iteration,
+// thrashing the CPU frequency and spamming "Lock already held" against the
+// render task's own lock during refreshes.
+std::unique_ptr<HalPowerManager::Lock> s_scanPowerLock;
 
 // Append `name` as one fixed-size NUL-padded record. Returns false on SD error.
 bool writeRecord(HalFile& out, const char* name, const size_t len) {
@@ -76,6 +83,7 @@ void acceptEntry(HalFile& file, const char* name, uint32_t& count, uint32_t& fin
 void closeScanHandles() {
   if (s_dir) s_dir.close();
   if (s_tmp) s_tmp.close();
+  s_scanPowerLock.reset();
 }
 
 // Rotate tmp -> live index and persist the new snapshot fields in RAM.
@@ -141,6 +149,7 @@ bool startScan() {
   s_fingerprint = 0;
   s_iter = 0;
   s_failed = false;
+  s_scanPowerLock = makeUniqueNoThrow<HalPowerManager::Lock>();  // full CPU speed for the scan's lifetime
   s_phase = PumpPhase::Scanning;
   return true;
 }
@@ -162,9 +171,6 @@ void pumpIdle() {
     s_dirty = false;
   }
   if (s_phase == PumpPhase::Done) return;
-  // The idle loop throttles the CPU to 10 MHz; scan at full speed instead so
-  // each bounded step stays a few ms (Lock restores the previous state).
-  HalPowerManager::Lock powerLock;
   if (s_phase == PumpPhase::Pending && !startScan()) return;
 
   char name[256];
