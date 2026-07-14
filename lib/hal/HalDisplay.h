@@ -42,6 +42,15 @@ class HalDisplay {
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
+  // Async FAST refresh: starts the waveform and returns while the panel runs
+  // it. Applies the refresh policy first — a promoted anti-ghosting pass runs
+  // synchronously full-panel instead (returns false). While a refresh is
+  // pending the framebuffer must not be modified; finishRefresh() joins and
+  // restores the differential RAM invariants (the SDK also self-joins on any
+  // display call).
+  bool displayBufferAsync();
+  void finishRefresh();
+
   // Windowed FAST refresh of a physical-panel rect (x and w byte-aligned).
   // Participates in the refresh policy: when the policy demands a periodic
   // clean/full pass (anti-ghosting), the whole panel refreshes instead. The

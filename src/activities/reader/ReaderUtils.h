@@ -64,7 +64,10 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
-    renderer.displayBuffer();
+    // Async: the render task returns while the panel still drives the
+    // waveform (~0.45s on X3), so input polling and the prefetch pump run
+    // during the refresh instead of after it. The next RenderLock joins.
+    renderer.displayBufferAsync();
     pagesUntilFullRefresh--;
   }
 }
