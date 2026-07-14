@@ -121,6 +121,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, &CrossPointSettings::showSleepImageFilename,
                             "showSleepImageFilename", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_WAKE_DIAGNOSTICS, &CrossPointSettings::wakeDiagnostics, "wakeDiagnostics",
+                            StrId::STR_CAT_SYSTEM),
         SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
                             "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY),
         SettingInfo::String(StrId::STR_SLEEP_FOOTER_TEXT, SETTINGS.customFooter, sizeof(SETTINGS.customFooter),
