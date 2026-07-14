@@ -28,7 +28,21 @@ class Section {
   const int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
+  // Generation directory holding this section's cache + its image files:
+  // "<cachePath>/sections/<hash8>", where hash8 covers every layout-affecting
+  // render setting. Distinct settings get distinct directories, so toggling a
+  // setting back reuses the previously built pages instead of re-indexing.
+  // Set by selectGeneration(); the newest two generations are kept on disk.
+  std::string sectionDirPath;
   HalFile file;
+
+  // Derive the generation from the layout settings and point filePath at it.
+  // Also prepares the directory and prunes stale generations (once per
+  // generation per session).
+  void selectGeneration(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
+                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
+                        uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
+                        uint8_t wordSpacing, uint8_t paragraphSpacing);
 
   // State of an in-progress incremental build. Non-null only while building; the
   // parser and HTML file stay live between buildSomeMore() calls so layout can be

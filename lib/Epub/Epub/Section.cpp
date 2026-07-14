@@ -32,6 +32,118 @@ constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) +
                                  sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t);
+
+// ---- Layout-settings cache generations -------------------------------------
+// Section caches (and their per-chapter image files) live under
+// "<cachePath>/sections/<hash8>/", where hash8 is an FNV-1a fold of every
+// layout-affecting render setting. A settings change lands in a fresh
+// directory; the outgoing generation is kept so toggling the setting back
+// reuses its already-built pages. Only the current + previous generation
+// survive: "gen.txt" records them, and everything else (including the legacy
+// flat "sections/N.bin" layout and root-level "img_*" files) is deleted when
+// the current generation changes.
+
+uint32_t fnvFold(uint32_t h, const void* data, size_t len) {
+  const auto* p = static_cast<const uint8_t*>(data);
+  for (size_t i = 0; i < len; i++) {
+    h ^= p[i];
+    h *= 16777619u;
+  }
+  return h;
+}
+
+template <typename T>
+uint32_t fnvFoldPod(uint32_t h, const T& v) {
+  return fnvFold(h, &v, sizeof(v));
+}
+
+// Generation dir already prepared this session; avoids re-scanning the
+// sections root on every section open.
+std::string s_preparedGenDir;
+
+void cleanLegacyRootImages(const std::string& cacheDir) {
+  auto root = Storage.open(cacheDir.c_str());
+  if (!root || !root.isDirectory()) return;
+  std::vector<std::string> stale;
+  char name[128];
+  for (auto f = root.openNextFile(); f; f = root.openNextFile()) {
+    f.getName(name, sizeof(name));
+    if (!f.isDirectory() && strncmp(name, "img_", 4) == 0) {
+      stale.emplace_back(name);
+    }
+  }
+  for (const auto& n : stale) {
+    Storage.remove((cacheDir + "/" + n).c_str());
+  }
+}
+
+void prepareGeneration(const std::string& cacheDir, const std::string& genName) {
+  const std::string sectionsRoot = cacheDir + "/sections";
+  const std::string genDir = sectionsRoot + "/" + genName;
+  if (s_preparedGenDir == genDir) return;
+
+  Storage.mkdir(cacheDir.c_str());
+  Storage.mkdir(sectionsRoot.c_str());
+
+  const std::string markerPath = sectionsRoot + "/gen.txt";
+  std::string current;
+  std::string previous;
+  {
+    HalFile marker;
+    if (Storage.openFileForRead("SCT", markerPath, marker)) {
+      char buf[24] = {};
+      const int n = marker.read(buf, sizeof(buf) - 1);
+      if (n > 0) {
+        const std::string text(buf);
+        const size_t nl = text.find('\n');
+        current = text.substr(0, nl);
+        if (nl != std::string::npos) previous = text.substr(nl + 1);
+        const size_t tail = previous.find('\n');
+        if (tail != std::string::npos) previous.resize(tail);
+      }
+    }
+  }
+
+  if (current != genName) {
+    // The outgoing current becomes the kept previous; everything else goes,
+    // including loose files from the pre-generation flat layout.
+    const std::string keepPrev = current;
+    std::vector<std::pair<std::string, bool>> entries;
+    {
+      auto root = Storage.open(sectionsRoot.c_str());
+      if (root && root.isDirectory()) {
+        char name[128];
+        for (auto f = root.openNextFile(); f; f = root.openNextFile()) {
+          f.getName(name, sizeof(name));
+          entries.emplace_back(name, f.isDirectory());
+        }
+      }
+    }
+    for (const auto& [name, isDir] : entries) {
+      if (isDir) {
+        if (name != genName && name != keepPrev) {
+          Storage.removeDir((sectionsRoot + "/" + name).c_str());
+        }
+      } else if (name != "gen.txt") {
+        Storage.remove((sectionsRoot + "/" + name).c_str());
+      }
+    }
+    cleanLegacyRootImages(cacheDir);
+
+    HalFile marker;
+    // Explicit rewrite of a small marker: openFileForWrite truncates.
+    if (Storage.openFileForWrite("SCT", markerPath, marker)) {
+      const std::string text = genName + "\n" + keepPrev + "\n";
+      marker.write(text.c_str(), text.size());
+    }
+    LOG_INF("SCT", "Section cache generation switched to %s (kept previous: %s)", genName.c_str(),
+            keepPrev.empty() ? "none" : keepPrev.c_str());
+  }
+
+  Storage.mkdir(genDir.c_str());
+  s_preparedGenDir = genDir;
+}
+
 }  // namespace
 
 Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRenderer& renderer)
@@ -43,6 +155,37 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
 // Out-of-line so BuildContext (which holds a unique_ptr to the forward-declared
 // ChapterHtmlSlimParser) is a complete type here. Any in-flight build is torn down.
 Section::~Section() { abandonBuild(); }
+
+void Section::selectGeneration(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
+                               const uint8_t imageRendering, const bool focusReadingEnabled,
+                               const bool guideDotsEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
+                               const uint8_t paragraphSpacing) {
+  uint32_t h = 2166136261u;
+  h = fnvFoldPod(h, fontId);
+  h = fnvFoldPod(h, lineCompression);
+  h = fnvFoldPod(h, extraParagraphSpacing);
+  h = fnvFoldPod(h, paragraphAlignment);
+  h = fnvFoldPod(h, viewportWidth);
+  h = fnvFoldPod(h, viewportHeight);
+  h = fnvFoldPod(h, hyphenationEnabled);
+  h = fnvFoldPod(h, embeddedStyle);
+  h = fnvFoldPod(h, imageRendering);
+  h = fnvFoldPod(h, focusReadingEnabled);
+  h = fnvFoldPod(h, guideDotsEnabled);
+  h = fnvFoldPod(h, firstLineIndentPx);
+  h = fnvFoldPod(h, wordSpacing);
+  h = fnvFoldPod(h, paragraphSpacing);
+
+  char genName[12];
+  snprintf(genName, sizeof(genName), "%08x", static_cast<unsigned>(h));
+
+  const std::string& cacheDir = epub->getCachePath();
+  prepareGeneration(cacheDir, genName);
+  sectionDirPath = cacheDir + "/sections/" + genName;
+  filePath = sectionDirPath + "/" + std::to_string(spineIndex) + ".bin";
+}
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   if (!file) {
@@ -109,6 +252,9 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
                               const uint8_t imageRendering, const bool focusReadingEnabled, const bool guideDotsEnabled,
                               const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
+  selectGeneration(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
+                   hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
+                   firstLineIndentPx, wordSpacing, paragraphSpacing);
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -222,14 +368,12 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   abandonBuild();
   lastBuildLowMemory_ = false;
 
+  selectGeneration(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
+                   hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
+                   firstLineIndentPx, wordSpacing, paragraphSpacing);
+
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
-
-  // Create cache directory if it doesn't exist
-  {
-    const auto sectionsDir = epub->getCachePath() + "/sections";
-    Storage.mkdir(sectionsDir.c_str());
-  }
 
   // Retry logic for SD card timing issues
   bool success = false;
@@ -288,7 +432,10 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   // Derive the content base directory and image cache path prefix for the parser
   const size_t lastSlash = localPath.find_last_of('/');
   const std::string contentBase = (lastSlash != std::string::npos) ? localPath.substr(0, lastSlash + 1) : "";
-  const std::string imageBasePath = epub->getCachePath() + "/img_" + std::to_string(spineIndex) + "_";
+  // Image files live inside the generation dir: serialized pages reference
+  // them by absolute path, so each generation stays self-contained and dies
+  // with its directory.
+  const std::string imageBasePath = sectionDirPath + "/img_" + std::to_string(spineIndex) + "_";
 
   CssParser* cssParser = nullptr;
   if (embeddedStyle) {
