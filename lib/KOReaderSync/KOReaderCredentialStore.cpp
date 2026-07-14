@@ -40,6 +40,9 @@ bool KOReaderCredentialStore::saveToFile() const {
 }
 
 bool KOReaderCredentialStore::loadFromFile() {
+  // Set before any I/O: a missing/corrupt file must read as a loaded-but-empty
+  // store, not retrigger the SD read on every subsequent access.
+  loaded = true;
   // Try JSON first
   if (Storage.exists(KOREADER_FILE_JSON)) {
     String json = Storage.readFile(KOREADER_FILE_JSON);
@@ -117,12 +120,14 @@ bool KOReaderCredentialStore::loadFromBinaryFile() {
 }
 
 void KOReaderCredentialStore::setCredentials(const std::string& user, const std::string& pass) {
+  ensureLoaded();
   username = user;
   password = pass;
   LOG_DBG("KRS", "Set credentials for user: %s", user.c_str());
 }
 
 std::string KOReaderCredentialStore::getMd5Password() const {
+  ensureLoaded();
   if (password.empty()) {
     return "";
   }
@@ -136,9 +141,13 @@ std::string KOReaderCredentialStore::getMd5Password() const {
   return md5.toString().c_str();
 }
 
-bool KOReaderCredentialStore::hasCredentials() const { return !username.empty() && !password.empty(); }
+bool KOReaderCredentialStore::hasCredentials() const {
+  ensureLoaded();
+  return !username.empty() && !password.empty();
+}
 
 void KOReaderCredentialStore::clearCredentials() {
+  ensureLoaded();
   username.clear();
   password.clear();
   saveToFile();
@@ -146,11 +155,13 @@ void KOReaderCredentialStore::clearCredentials() {
 }
 
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
+  ensureLoaded();
   serverUrl = url;
   LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
 }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {
+  ensureLoaded();
   std::string url;
   if (serverUrl.empty()) {
     url = DEFAULT_SERVER_URL;
@@ -170,6 +181,7 @@ std::string KOReaderCredentialStore::getBaseUrl() const {
 }
 
 void KOReaderCredentialStore::setMatchMethod(DocumentMatchMethod method) {
+  ensureLoaded();
   matchMethod = method;
   LOG_DBG("KRS", "Set match method: %s", method == DocumentMatchMethod::FILENAME ? "Filename" : "Binary");
 }

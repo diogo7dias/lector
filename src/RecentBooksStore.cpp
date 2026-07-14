@@ -23,6 +23,7 @@ RecentBooksStore RecentBooksStore::instance;
 
 void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
                                const std::string& coverBmpPath) {
+  ensureLoaded();
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
@@ -51,6 +52,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
 
 void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
                                   const std::string& coverBmpPath) {
+  ensureLoaded();
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
@@ -63,6 +65,7 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
 }
 
 void RecentBooksStore::setProgress(const std::string& path, int percent) {
+  ensureLoaded();
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it == recentBooks.end()) {
@@ -77,6 +80,7 @@ void RecentBooksStore::setProgress(const std::string& path, int percent) {
 }
 
 bool RecentBooksStore::removeByPath(const std::string& path) {
+  ensureLoaded();
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it == recentBooks.end()) {
@@ -91,6 +95,7 @@ bool RecentBooksStore::removeByPath(const std::string& path) {
 
 void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath,
                                   const std::string& oldCachePath, const std::string& newCachePath) {
+  ensureLoaded();
   auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
                          [&](const RecentBook& book) { return book.path == oldPath; });
   if (it == recentBooks.end()) {
@@ -106,6 +111,7 @@ void RecentBooksStore::updatePath(const std::string& oldPath, const std::string&
 bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }
 
 bool RecentBooksStore::pruneMissing() {
+  ensureLoaded();
   const size_t before = recentBooks.size();
   recentBooks.erase(std::remove_if(recentBooks.begin(), recentBooks.end(), &isMissing), recentBooks.end());
   return recentBooks.size() != before;
@@ -145,6 +151,9 @@ RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
 }
 
 bool RecentBooksStore::loadFromFile() {
+  // Set before any I/O: a missing/corrupt file must read as a loaded-but-empty
+  // store, not retrigger the SD read on every subsequent access.
+  loaded = true;
   // Try JSON first
   if (Storage.exists(RECENT_BOOKS_FILE_JSON)) {
     String json = Storage.readFile(RECENT_BOOKS_FILE_JSON);

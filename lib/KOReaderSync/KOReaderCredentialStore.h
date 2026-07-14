@@ -25,6 +25,14 @@ class KOReaderCredentialStore {
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
 
+  bool loaded = false;
+
+  // Lazy first-use load: main.cpp no longer reads this store at boot, so every
+  // public entry point funnels through here before touching the fields.
+  void ensureLoaded() const {
+    if (!loaded) const_cast<KOReaderCredentialStore*>(this)->loadFromFile();
+  }
+
   bool loadFromBinaryFile();
 
  public:
@@ -41,8 +49,14 @@ class KOReaderCredentialStore {
 
   // Credential management
   void setCredentials(const std::string& user, const std::string& pass);
-  const std::string& getUsername() const { return username; }
-  const std::string& getPassword() const { return password; }
+  const std::string& getUsername() const {
+    ensureLoaded();
+    return username;
+  }
+  const std::string& getPassword() const {
+    ensureLoaded();
+    return password;
+  }
 
   // Get MD5 hash of password for API authentication
   std::string getMd5Password() const;
@@ -55,14 +69,20 @@ class KOReaderCredentialStore {
 
   // Server URL management
   void setServerUrl(const std::string& url);
-  const std::string& getServerUrl() const { return serverUrl; }
+  const std::string& getServerUrl() const {
+    ensureLoaded();
+    return serverUrl;
+  }
 
   // Get base URL for API calls (with http:// normalization if no protocol, falls back to default)
   std::string getBaseUrl() const;
 
   // Document matching method
   void setMatchMethod(DocumentMatchMethod method);
-  DocumentMatchMethod getMatchMethod() const { return matchMethod; }
+  DocumentMatchMethod getMatchMethod() const {
+    ensureLoaded();
+    return matchMethod;
+  }
 };
 
 // Helper macro to access credential store

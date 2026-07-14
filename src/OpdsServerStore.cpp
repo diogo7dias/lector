@@ -20,6 +20,9 @@ bool OpdsServerStore::saveToFile() const {
 }
 
 bool OpdsServerStore::loadFromFile() {
+  // Set before any I/O: a missing/corrupt file must read as a loaded-but-empty
+  // store, not retrigger the SD read on every subsequent access.
+  loaded = true;
   if (Storage.exists(OPDS_FILE_JSON)) {
     String json = Storage.readFile(OPDS_FILE_JSON);
     if (!json.isEmpty()) {
@@ -72,6 +75,7 @@ bool OpdsServerStore::migrateFromSettings() {
 }
 
 bool OpdsServerStore::addServer(const OpdsServer& server) {
+  ensureLoaded();
   if (servers.size() >= MAX_SERVERS) {
     LOG_DBG("OPS", "Cannot add more servers, limit of %zu reached", MAX_SERVERS);
     return false;
@@ -83,6 +87,7 @@ bool OpdsServerStore::addServer(const OpdsServer& server) {
 }
 
 bool OpdsServerStore::updateServer(size_t index, const OpdsServer& server) {
+  ensureLoaded();
   if (index >= servers.size()) {
     return false;
   }
@@ -93,6 +98,7 @@ bool OpdsServerStore::updateServer(size_t index, const OpdsServer& server) {
 }
 
 bool OpdsServerStore::removeServer(size_t index) {
+  ensureLoaded();
   if (index >= servers.size()) {
     return false;
   }
@@ -103,6 +109,7 @@ bool OpdsServerStore::removeServer(size_t index) {
 }
 
 const OpdsServer* OpdsServerStore::getServer(size_t index) const {
+  ensureLoaded();
   if (index >= servers.size()) {
     return nullptr;
   }

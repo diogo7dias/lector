@@ -313,19 +313,29 @@ static std::string pickRandomRecentBookPath() {
   return *candidates[esp_random() % candidates.size()];
 }
 
-void setup() {
-  t1 = millis();
-
 #ifdef ENABLE_SERIAL_LOG
-  // Earliest possible Serial setup. The 250 ms stall before begin() lets the
-  // USB Serial/JTAG peripheral finish power-on and lets the host complete USB
-  // enumeration before we touch the CDC state — otherwise cold boot races
-  // and the host has to be physically replugged for logs to flow. Warm reboot
-  // worked without the delay because USB was already enumerated.
-  delay(250);
+// Serial must not begin() before ~250 ms of uptime: the USB Serial/JTAG
+// peripheral needs that long after power-on for the host to complete USB
+// enumeration, and touching the CDC state earlier races it — the host then
+// has to be physically replugged for logs to flow. Instead of a blind
+// delay(250) blocking every wake (battery wakes have no host at all), real
+// boot work runs first and begin() fires at the first checkpoint past the
+// threshold. Lines logged before that are dropped from serial but still land
+// in the RTC crash ring buffer (logPrintf guards on `if (logSerial)`).
+static void startSerialLogOnceUsbSettled() {
+  static bool started = false;
+  constexpr unsigned long USB_ENUMERATION_SETTLE_MS = 250;
+  if (started || millis() < USB_ENUMERATION_SETTLE_MS) return;
+  started = true;
   Serial.begin(115200);
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
+}
+#else
+static void startSerialLogOnceUsbSettled() {}
 #endif
+
+void setup() {
+  t1 = millis();
 
   HalSystem::begin();
 
@@ -363,19 +373,21 @@ void setup() {
     return;
   }
   gpio.update();
+  startSerialLogOnceUsbSettled();
   const unsigned long bootSdDoneMs = millis();
 
   HalSystem::checkPanic();
 
+  // Only SETTINGS and APP_STATE are needed before the first paint (boot
+  // presentation + routing read both). RECENT_BOOKS, KOREADER_STORE and
+  // OPDS_STORE lazy-load from SD on first access inside their stores.
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
-  RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
-  KOREADER_STORE.loadFromFile();
-  OPDS_STORE.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   gpio.update();
+  startSerialLogOnceUsbSettled();
   const unsigned long bootJsonDoneMs = millis();
 
   const auto wakeupReason = gpio.getWakeupReason();
@@ -404,9 +416,11 @@ void setup() {
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // Debounce was sampled during hardware, SD, and settings startup above, so
     // recovery detection waits only for any settle time that startup did not
-    // already consume. This preserves the recovery chord on unusually fast
-    // boots without charging every wake a fresh fixed half-second.
-    constexpr unsigned long RECOVERY_BUTTON_SETTLE_MS = 500;
+    // already consume. InputManager's debounce is 5 ms and the ADC ladder is
+    // stable well within the startup window, so 200 ms of total sampling is
+    // ample for a held UP+POWER chord; a missed chord just means retrying the
+    // recovery boot. (Was 500 ms, which burned ~330 ms of every wake.)
+    constexpr unsigned long RECOVERY_BUTTON_SETTLE_MS = 200;
     while (millis() - gpioSamplingStartedAt < RECOVERY_BUTTON_SETTLE_MS) {
       gpio.update();
       delay(10);
@@ -452,6 +466,7 @@ void setup() {
                              strcasecmp(lastWallpaper.c_str() + lastWallpaper.size() - 4, ".pxc") == 0;
 
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
+  startSerialLogOnceUsbSettled();
   const unsigned long bootDisplayDoneMs = millis();
 
   switch (resume) {
@@ -562,13 +577,13 @@ void setup() {
 
   // Boot timing ledger. Deltas from cold-boot start (t1). Every stage that a
   // perf change targets shows up here so the win is measurable on device.
-  //   serial : blind 250 ms USB-enumeration stall (logging builds only)
   //   hw     : GPIO + power + tilt + clock bring-up
   //   sd     : SD card mount
   //   json   : 7 settings/state JSON loads
   //   disp   : display + font init (includes X3 cold full syncs)
   //   route  : boot presentation + activity routing (first paint requested)
   const unsigned long bootRouteDoneMs = millis();
+  startSerialLogOnceUsbSettled();
   LOG_INF("BOOT", "BOOT ms: total=%lu hw=%lu sd=%lu json=%lu disp=%lu route=%lu", bootRouteDoneMs - t1,
           bootHwDoneMs - t1, bootSdDoneMs - bootHwDoneMs, bootJsonDoneMs - bootSdDoneMs,
           bootDisplayDoneMs - bootJsonDoneMs, bootRouteDoneMs - bootDisplayDoneMs);
@@ -584,6 +599,9 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.update();
+  // Covers early-return setup paths (e.g. SD mount failure) that never reached
+  // a post-threshold checkpoint. No-op once serial is started.
+  startSerialLogOnceUsbSettled();
   halTiltSensor.update(SETTINGS.tiltPageTurn, SETTINGS.orientation, activityManager.isReaderActivity());
 
   renderer.setFadingFix(SETTINGS.fadingFix);
