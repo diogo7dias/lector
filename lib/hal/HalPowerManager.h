@@ -28,7 +28,10 @@ class HalPowerManager {
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
 
  public:
-  static constexpr int LOW_POWER_FREQ = 10;                    // MHz
+  // 40 MHz idle floor (was 10): the first press after an idle pause pays the
+  // input poll + ramp-up at this speed, and 10 MHz made that press feel dead.
+  // Battery cost is minor next to the e-ink refresh energy per interaction.
+  static constexpr int LOW_POWER_FREQ = 40;                    // MHz
   static constexpr unsigned long IDLE_POWER_SAVING_MS = 3000;  // ms
   static constexpr unsigned long BATTERY_POLL_MS = 1500;       // ms
 
