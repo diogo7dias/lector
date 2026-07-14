@@ -31,6 +31,17 @@ class EpubReaderActivity final : public Activity {
   // cache found, or a build that failed to start — so we do not retry every turn).
   std::unique_ptr<Section> prefetchSection_ = nullptr;
   int prefetchSpineIndex_ = -1;
+  // Whole-book background warmer: once the next-chapter prefetch is idle, the
+  // pump probes the remaining chapters one per turn and incrementally builds
+  // any that are cold for the current layout settings, so chapter jumps land
+  // warm (big after a settings change, where only visited chapters get
+  // rebuilt otherwise). One build at a time, sharing the prefetch pump slot.
+  // The scan restarts when the layout-settings fingerprint changes.
+  std::unique_ptr<Section> warmSection_ = nullptr;
+  int warmBuildSpine_ = -1;  // spine warmSection_ is building (-1 none)
+  int warmScanSpine_ = -1;   // next spine to probe (-1 = scan not started)
+  bool warmScanComplete_ = false;
+  uint32_t warmSettingsHash_ = 0;
   // Low-memory render fallback ladder: the current degrade tier for this open book
   // (0 = full quality). Raised when a chapter build aborts for low memory and a
   // reduced-quality rebuild succeeds; it then sticks for the rest of the session so
@@ -101,6 +112,7 @@ class EpubReaderActivity final : public Activity {
                       int orientedMarginBottom, int orientedMarginLeft);
   void renderStatusBar() const;
   void pumpNextChapterPrefetch(uint16_t viewportWidth, uint16_t viewportHeight);
+  void pumpWholeBookWarm(uint16_t viewportWidth, uint16_t viewportHeight);
   // Loads or builds `section` for reading, descending the low-memory render tier
   // ladder (LowMemoryRenderTier.h) when a build aborts for lack of memory. Returns
   // false only on a genuine (non-memory) build failure or when even the lowest tier

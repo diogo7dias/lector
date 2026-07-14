@@ -274,6 +274,7 @@ void EpubReaderActivity::onExit() {
   // Tear down any in-flight next-chapter prefetch first so its ".part" is removed
   // (a committed prefetch cache is left in place for the next open).
   prefetchSection_.reset();
+  warmSection_.reset();
   section.reset();
   if (pendingReadFolderMove && epub) {
     const std::string srcPath = epub->getPath();
@@ -1130,6 +1131,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     prefetchSection_.reset();
     prefetchSpineIndex_ = -1;
   }
+  // Same hazard for the whole-book warmer: if the reader just crossed into the
+  // chapter it is building, release its ".part" write handle before the
+  // section (re)build below opens the same path.
+  if (warmSection_ && warmBuildSpine_ == currentSpineIndex) {
+    warmSection_.reset();
+    warmBuildSpine_ = -1;
+  }
 
   // Show end of book screen
   if (currentSpineIndex == epub->getSpineItemsCount()) {
@@ -1428,7 +1436,10 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
 
   const int nextSpineIndex = currentSpineIndex + 1;
   if (nextSpineIndex >= epub->getSpineItemsCount()) {
-    return;  // last chapter: nothing ahead to warm
+    // Last chapter: nothing ahead to prefetch, but earlier chapters may still
+    // be cold for the current settings.
+    pumpWholeBookWarm(viewportWidth, viewportHeight);
+    return;
   }
 
   // First time targeting this next chapter from this position: decide once whether it is
@@ -1470,7 +1481,115 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       LOG_ERR("ERS", "Prefetch build failed for chapter: %d", nextSpineIndex);
       prefetchSection_.reset();  // arrival will rebuild from scratch
     }
+    return;  // next-chapter build active: it keeps the pump slot
   }
+
+  pumpWholeBookWarm(viewportWidth, viewportHeight);
+}
+
+void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  static constexpr int WARM_PAGES_PER_TURN = 8;
+  // Building a section runs the HTML parser + layout arena; stay out of the
+  // way when the heap is already tight (matches the spirit of the low-memory
+  // render ladder — warming is strictly optional work).
+  static constexpr uint32_t WARM_MIN_FREE_HEAP = 40000;
+
+  const int spineCount = epub->getSpineItemsCount();
+  if (spineCount <= 0) {
+    return;
+  }
+
+  // Restart the scan whenever the layout settings change: the generation the
+  // previous scan warmed is no longer the one the reader loads from.
+  uint32_t h = 2166136261u;
+  const auto fold = [&h](const void* p, size_t n) {
+    const auto* b = static_cast<const uint8_t*>(p);
+    for (size_t i = 0; i < n; i++) {
+      h ^= b[i];
+      h *= 16777619u;
+    }
+  };
+  const int fontId = SETTINGS.getReaderFontId();
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  const int firstLineIndent = firstLineIndentPxFor(viewportWidth);
+  fold(&fontId, sizeof(fontId));
+  fold(&lineCompression, sizeof(lineCompression));
+  fold(&SETTINGS.extraParagraphSpacing, sizeof(SETTINGS.extraParagraphSpacing));
+  fold(&SETTINGS.paragraphAlignment, sizeof(SETTINGS.paragraphAlignment));
+  fold(&viewportWidth, sizeof(viewportWidth));
+  fold(&viewportHeight, sizeof(viewportHeight));
+  fold(&SETTINGS.hyphenationEnabled, sizeof(SETTINGS.hyphenationEnabled));
+  fold(&SETTINGS.embeddedStyle, sizeof(SETTINGS.embeddedStyle));
+  fold(&SETTINGS.imageRendering, sizeof(SETTINGS.imageRendering));
+  fold(&SETTINGS.focusReadingEnabled, sizeof(SETTINGS.focusReadingEnabled));
+  fold(&SETTINGS.guideDotsEnabled, sizeof(SETTINGS.guideDotsEnabled));
+  fold(&firstLineIndent, sizeof(firstLineIndent));
+  fold(&SETTINGS.wordSpacing, sizeof(SETTINGS.wordSpacing));
+  fold(&SETTINGS.paragraphSpacing, sizeof(SETTINGS.paragraphSpacing));
+  if (h != warmSettingsHash_) {
+    warmSettingsHash_ = h;
+    warmScanComplete_ = false;
+    warmScanSpine_ = -1;
+    warmSection_.reset();
+    warmBuildSpine_ = -1;
+  }
+
+  // Pump an active warm build first.
+  if (warmSection_ && warmSection_->isBuilding()) {
+    if (!warmSection_->buildSomeMore(WARM_PAGES_PER_TURN)) {
+      LOG_ERR("ERS", "Warm build failed for chapter %d; skipping it", warmBuildSpine_);
+      warmSection_.reset();
+      warmBuildSpine_ = -1;
+    }
+    return;
+  }
+  if (warmSection_) {
+    // Build committed on the previous pump.
+    LOG_DBG("ERS", "Warmed chapter %d", warmBuildSpine_);
+    warmSection_.reset();
+    warmBuildSpine_ = -1;
+  }
+
+  if (warmScanComplete_ || ESP.getFreeHeap() < WARM_MIN_FREE_HEAP) {
+    return;
+  }
+  if (warmScanSpine_ < 0) {
+    warmScanSpine_ = 0;
+  }
+
+  // Probe one chapter per pump (a warm probe is just an open + header check).
+  // Skip the chapter being read and the next one (the prefetch owns it).
+  while (warmScanSpine_ < spineCount &&
+         (warmScanSpine_ == currentSpineIndex || warmScanSpine_ == currentSpineIndex + 1)) {
+    warmScanSpine_++;
+  }
+  if (warmScanSpine_ >= spineCount) {
+    warmScanComplete_ = true;
+    LOG_INF("ERS", "Whole-book warm scan complete");
+    return;
+  }
+
+  const int spine = warmScanSpine_++;
+  auto probe = makeUniqueNoThrow<Section>(epub, spine, renderer);
+  if (!probe) {
+    return;
+  }
+  if (probe->loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                             viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                             SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
+                             firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+    return;  // already warm
+  }
+  LOG_DBG("ERS", "Warming cold chapter %d", spine);
+  if (!probe->startBuild(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                         viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                         SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
+                         firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+    LOG_ERR("ERS", "Warm build failed to start for chapter %d", spine);
+    return;  // cursor already advanced; skipped
+  }
+  warmSection_ = std::move(probe);
+  warmBuildSpine_ = spine;
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
