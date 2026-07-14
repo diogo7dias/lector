@@ -125,6 +125,21 @@ void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, b
   einkDisplay.displayWindow(x, y, w, h, turnOffScreen);
 }
 
+bool HalDisplay::displayWindowAsync(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+  // Same policy participation as displayWindow: a promoted pass has
+  // multi-phase post-work and a windowed clean is not a panel feature, so it
+  // runs synchronously full-panel.
+  const RefreshMode mode = applyRefreshPolicy(RefreshMode::FAST_REFRESH);
+  if (mode != RefreshMode::FAST_REFRESH) {
+    if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+      einkDisplay.requestResync(1);
+    }
+    einkDisplay.displayBuffer(convertRefreshMode(mode), false);
+    return false;
+  }
+  return einkDisplay.displayWindowAsync(x, y, w, h);
+}
+
 void HalDisplay::deepSleep() {
   refreshPolicy.reset();
   einkDisplay.deepSleep();

@@ -56,6 +56,10 @@ class HalDisplay {
   // clean/full pass (anti-ghosting), the whole panel refreshes instead. The
   // SDK falls back to a full FAST refresh on panels without a windowed path.
   void displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen = false);
+  // Async variant of displayWindow: fires the window waveform and returns
+  // (same pending-refresh contract as displayBufferAsync). A policy-promoted
+  // anti-ghosting pass still runs synchronously full-panel (returns false).
+  bool displayWindowAsync(uint16_t x, uint16_t y, uint16_t w, uint16_t h);
 
   // Power management
   void deepSleep();
