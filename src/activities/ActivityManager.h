@@ -1,5 +1,6 @@
 #pragma once
 
+#include <I18n.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -79,6 +80,13 @@ class ActivityManager {
 
   // Will replace currentActivity and drop all activities on stack
   void replaceActivity(std::unique_ptr<Activity>&& newActivity);
+
+  // Immediate "heard you" feedback for slow activity switches: paints a small
+  // pill over the current frame and fires the waveform detached, so the
+  // switch work (activity construction, SD I/O) runs while the panel drives
+  // and the screen is never silently frozen. No-op before the first activity
+  // exists or while a render pass holds the lock.
+  void showTransitionBanner(StrId label);
 
   // goTo... functions are convenient wrapper for replaceActivity()
   void goToFileTransfer();
