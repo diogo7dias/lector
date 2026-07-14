@@ -39,6 +39,15 @@ class HttpDownloader {
                        const std::string& password = "");
 
   /**
+   * HTTP status code of the most recent fetchUrl/downloadToFile response
+   * (after following redirects), or 0 when no response arrived at all
+   * (DNS/TCP/TLS failure). Lets callers turn a generic failure into an
+   * actionable message ("HTTP 401: check username/password"). Single-threaded
+   * use only, like the rest of this class.
+   */
+  static int lastHttpStatus();
+
+  /**
    * Download a file to the SD card with optional credentials.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,

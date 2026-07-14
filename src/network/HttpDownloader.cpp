@@ -26,6 +26,9 @@ constexpr int HTTP_TX_BUF = 1024;
 constexpr int HTTP_TIMEOUT_MS = 60000;
 constexpr size_t READ_CHUNK = 2048;
 
+// See HttpDownloader::lastHttpStatus(). 0 = no response received.
+int s_lastHttpStatus = 0;
+
 struct Sink {
   std::function<bool(const uint8_t*, size_t)> write;  // returns false to abort the transfer
   HttpDownloader::ProgressCallback progress;
@@ -45,6 +48,7 @@ bool isRedirect(int status) {
 // large/slow files and surfaces a short read directly.
 HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
                                      Sink& sink) {
+  s_lastHttpStatus = 0;
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.buffer_size = HTTP_RX_BUF;
@@ -96,6 +100,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     status = esp_http_client_get_status_code(client);
   }
 
+  s_lastHttpStatus = status;
   if (status != 200) {
     LOG_ERR("HTTP", "unexpected status: %d", status);
     esp_http_client_cleanup(client);
@@ -142,6 +147,8 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   return HttpDownloader::OK;
 }
 }  // namespace
+
+int HttpDownloader::lastHttpStatus() { return s_lastHttpStatus; }
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
                               const std::string& password) {

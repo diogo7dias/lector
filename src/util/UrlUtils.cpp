@@ -35,16 +35,22 @@ std::string buildUrl(const std::string& serverUrl, const std::string& path) {
     // Absolute path - use just the host
     return extractHost(urlWithProtocol) + path;
   }
-  // Relative path - strip query string from base before appending
+  // Relative path - strip query string from base before resolving
   std::string base = urlWithProtocol;
   const size_t queryPos = base.find('?');
   if (queryPos != std::string::npos) {
     base.resize(queryPos);
   }
-  if (base.back() == '/') {
-    return base + path;
+  // RFC 3986 5.3 merge: a relative reference replaces the base URL's last
+  // path segment (a feed at /opds/new linking "page2" means /opds/page2).
+  // Only look for '/' after the host so the merge never cuts into it.
+  const size_t protocolEnd = base.find("://");
+  const size_t hostStart = protocolEnd == std::string::npos ? 0 : protocolEnd + 3;
+  const size_t pathStart = base.find('/', hostStart);
+  if (pathStart == std::string::npos) {
+    return base + "/" + path;
   }
-  return base + "/" + path;
+  return base.substr(0, base.rfind('/') + 1) + path;
 }
 
 }  // namespace UrlUtils
