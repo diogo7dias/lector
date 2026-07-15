@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(crosspoint_reader_tests CXX)
+project(crosspoint_reader_tests C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -73,3 +73,4 @@ add_subdirectory(low_memory_render_tier)
 add_subdirectory(arena)
 add_subdirectory(wallpaper_rotation_cycle)
 add_subdirectory(opds_feeds)
+add_subdirectory(parsed_text_layout)
