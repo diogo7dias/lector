@@ -122,6 +122,8 @@ bool HalDisplay::displayBufferAsync() {
 
 void HalDisplay::finishRefresh() { einkDisplay.finishRefresh(); }
 
+void HalDisplay::setBusyWaitPump(void (*pump)()) { einkDisplay.setBusyWaitPump(pump); }
+
 void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, bool turnOffScreen) {
   // Window refreshes count as FAST toward the policy so ghosting cleanup still
   // happens: when the policy promotes, run it as a full-panel pass (a windowed
