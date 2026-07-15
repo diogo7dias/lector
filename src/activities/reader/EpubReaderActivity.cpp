@@ -184,6 +184,9 @@ void EpubReaderActivity::onEnter() {
     return;
   }
 
+  diagEnterMs_ = millis();
+  diagOverlayPending_ = true;  // logged always; drawn only when the setting is on
+
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
@@ -299,6 +302,30 @@ void EpubReaderActivity::loop() {
   if (highlights_.state() != crosspoint::reader::HighlightController::State::NONE) {
     loopHighlightMode();
     return;
+  }
+
+  // One-shot wake diagnostics: once the book engine is usable, log the
+  // unlock-to-usable breakdown and (when the setting is on) draw it over the
+  // page. Runs before the queued-press replay so the numbers reflect the
+  // wait the user actually felt.
+  if (diagOverlayPending_ && section && diagSectionReadyMs_ != 0 && !RenderLock::peek()) {
+    diagOverlayPending_ = false;
+    const unsigned long sectMs = diagSectionReadyMs_ - diagEnterMs_;
+    const unsigned long pressWaitMs = diagFirstPressMs_ ? diagSectionReadyMs_ - diagFirstPressMs_ : 0;
+    LOG_INF("DIAG", "WAKE usable=%lums (since boot) reader=%lums sect=%lums(%s) press-wait=%lums", diagSectionReadyMs_,
+            diagSectionReadyMs_ - diagEnterMs_, sectMs, diagSectionWasBuild_ ? "build" : "cache", pressWaitMs);
+    if (SETTINGS.wakeDiagnostics) {
+      char line[96];
+      snprintf(line, sizeof(line), "boot>use %lums  sect %lums %s  press-wait %lums", diagSectionReadyMs_, sectMs,
+               diagSectionWasBuild_ ? "build" : "cache", pressWaitMs);
+      RenderLock lock(*this);
+      const int h = renderer.getLineHeight(SMALL_FONT_ID) + 4;
+      const int y = renderer.getScreenHeight() - h;
+      renderer.fillRect(0, y, renderer.getScreenWidth(), h, false);  // white band
+      renderer.drawText(SMALL_FONT_ID, 4, y + 2, line, true);
+      renderer.displayWindow(0, y, renderer.getScreenWidth(), h);
+      return;
+    }
   }
 
   // Replay a page press that arrived while the section was still building.
@@ -604,6 +631,7 @@ void EpubReaderActivity::loop() {
   if (!section) {
     queuedPageTurn = prevTriggered ? -1 : 1;
     queuedPageTurnAtMs = millis();
+    if (diagFirstPressMs_ == 0) diagFirstPressMs_ = millis();
     requestUpdate();
     return;
   }
@@ -1376,10 +1404,13 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
                               floorKnobs.imageRendering, floorKnobs.focusReadingEnabled, floorKnobs.guideDotsEnabled,
                               firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
     LOG_DBG("ERS", "Cache found, skipping build...");
+    diagSectionWasBuild_ = false;
+    diagSectionReadyMs_ = millis();
     return true;
   }
 
   LOG_DBG("ERS", "Cache not found, building...");
+  diagSectionWasBuild_ = true;
   GUI.drawPopup(renderer, tr(STR_INDEXING));
   const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
 
@@ -1405,6 +1436,7 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
         LOG_INF("ERS", "Low memory: degraded chapter render to tier %d for the rest of this book", tier);
         lowMemoryTierFloor_ = tier;
       }
+      diagSectionReadyMs_ = millis();
       return true;
     }
 

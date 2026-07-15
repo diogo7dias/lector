@@ -10,6 +10,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/ListWindowRefresh.h"
+#include "fontIds.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -179,13 +180,37 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   }
 }
 
+void ActivityManager::showTransitionBanner(const StrId label) {
+  // Skip before the first activity (boot paths run before display init) and
+  // when a render pass is in flight (its own paint is the feedback; taking
+  // the lock from the render task would self-deadlock).
+  if (!currentActivity || RenderLock::peek()) {
+    return;
+  }
+  RenderLock lock;
+  const char* text = I18n::getInstance().get(label);
+  const int h = renderer.getLineHeight(UI_10_FONT_ID) + 8;
+  const int w = renderer.getTextWidth(UI_10_FONT_ID, text) + 24;
+  const int x = (renderer.getScreenWidth() - w) / 2;
+  renderer.fillRect(x, 0, w, h, true);
+  renderer.drawText(UI_10_FONT_ID, x + 12, 4, text, false);
+  // Detached: the activity switch executes while the panel drives the pill;
+  // the next activity's first draw joins the refresh (framebuffer contract).
+  renderer.displayWindowAsync(x, 0, w, h);
+}
+
 void ActivityManager::goToFileTransfer() {
+  showTransitionBanner(StrId::STR_LOADING);
   replaceActivity(makeUniqueNoThrow<CrossPointWebServerActivity>(renderer, mappedInput));
 }
 
-void ActivityManager::goToSettings() { replaceActivity(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput)); }
+void ActivityManager::goToSettings() {
+  showTransitionBanner(StrId::STR_LOADING);
+  replaceActivity(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput));
+}
 
 void ActivityManager::goToFileBrowser(std::string path) {
+  showTransitionBanner(StrId::STR_LOADING);
   replaceActivity(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
@@ -194,10 +219,12 @@ void ActivityManager::goToQRShare(std::string path) {
 }
 
 void ActivityManager::goToRecentBooks() {
+  showTransitionBanner(StrId::STR_LOADING);
   replaceActivity(makeUniqueNoThrow<RecentBooksActivity>(renderer, mappedInput));
 }
 
 void ActivityManager::goToBrowser() {
+  showTransitionBanner(StrId::STR_LOADING);
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
   if (servers.size() == 1) {
@@ -208,6 +235,7 @@ void ActivityManager::goToBrowser() {
 }
 
 void ActivityManager::goToReader(std::string path) {
+  showTransitionBanner(StrId::STR_BANNER_OPENING_BOOK);
   replaceActivity(makeUniqueNoThrow<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 
@@ -241,6 +269,7 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }
+  showTransitionBanner(StrId::STR_BANNER_GOING_HOME);
   replaceActivity(makeUniqueNoThrow<HomeActivity>(renderer, mappedInput, initialMenuItem));
 }
 void ActivityManager::goToCrashReport() { replaceActivity(makeUniqueNoThrow<CrashActivity>(renderer, mappedInput)); }

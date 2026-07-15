@@ -72,6 +72,14 @@ class EpubReaderActivity final : public Activity {
   // page build after a wake, when the restored frame is already visible but the
   // book engine is not ready). -1 = back, +1 = forward, 0 = none. loop() replays
   // it once the section is ready; latest press wins and only one is replayed.
+  // Wake diagnostics (SETTINGS.wakeDiagnostics): one-shot unlock-to-usable
+  // timing, drawn over the first ready page and always logged.
+  unsigned long diagEnterMs_ = 0;
+  unsigned long diagSectionReadyMs_ = 0;
+  unsigned long diagFirstPressMs_ = 0;
+  bool diagSectionWasBuild_ = false;
+  bool diagOverlayPending_ = false;
+
   int8_t queuedPageTurn = 0;
   unsigned long queuedPageTurnAtMs = 0UL;
   bool showBookmarkMessage = false;

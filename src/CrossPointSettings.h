@@ -213,6 +213,9 @@ class CrossPointSettings {
   // Overlay the wallpaper's filename on the sleep screen (bottom-left box). When
   // off, showSleepFavoriteBadge instead draws a small "F" badge for favorites.
   uint8_t showSleepImageFilename = 0;
+  // Draw a one-shot timing line over the first reader page after a wake
+  // (unlock-to-usable breakdown) — a debugging aid, off by default.
+  uint8_t wakeDiagnostics = 0;
   uint8_t showSleepFavoriteBadge = 0;
   // Status bar: the legacy fixed-slot fields (statusBar / statusBar*) were removed
   // in favour of the per-item v2 model below. XTC keeps its own top/bottom overlay.
