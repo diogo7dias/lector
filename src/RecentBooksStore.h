@@ -87,6 +87,9 @@ class RecentBooksStore {
 
  private:
   bool loadFromBinaryFile();
+  // Fill progressPercent == -1 entries from the per-book progress.bin sidecar's
+  // trailing percent byte (survives a lost recent.json). In-RAM only, no save.
+  void restoreMissingProgress();
 };
 
 // Helper macro to access recent books store

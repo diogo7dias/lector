@@ -513,11 +513,17 @@ void XtcReaderActivity::renderPage() {
 }
 
 void XtcReaderActivity::saveProgress() const {
-  uint8_t data[4];
+  // Trailing byte 4 = whole-book percent (255 = unknown) so the Home [NN%]
+  // badge can be recovered from this sidecar if recent.json loses it. Old
+  // 4-byte files stay readable; old firmware ignores the extra byte.
+  uint8_t data[5];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
   data[2] = (currentPage >> 16) & 0xFF;
   data[3] = (currentPage >> 24) & 0xFF;
+  const uint32_t pageCount = xtc ? xtc->getPageCount() : 0;
+  int pct = pageCount > 0 ? static_cast<int>(((currentPage + 1) * 100) / pageCount) : -1;
+  data[4] = (pct >= 0 && pct <= 100) ? static_cast<uint8_t>(pct) : 255;
   if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
     LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
   }

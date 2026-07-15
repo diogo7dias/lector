@@ -70,7 +70,11 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
   // epub is guaranteed non-null here: ensureEpubLoaded() was called in performSync() before
   // SHOWING_RESULT state is entered, and this method is only called from that state.
   assert(epub);
-  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, page, 0)) {
+  // Badge percent for the sidecar: chapter-start approximation (the synced page's
+  // chapter page count is unknown here — pageCount is 0 for the same reason).
+  int pct = static_cast<int>(epub->calculateProgress(spineIndex, 0.0f) * 100.0f + 0.5f);
+  pct = pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, page, 0, pct)) {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
