@@ -29,7 +29,6 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
-#include "WakeFrameHandoff.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -241,14 +240,12 @@ void enterDeepSleep(bool fromTimeout = false) {
   APP_STATE.saveToFile();
   const unsigned long lockStateSavedMs = millis();
 
-  // Reader-resume wake face: while the framebuffer still holds the page the
-  // user was reading (the sleep screen paints over it below), save it so the
-  // next wake can restore it with a single refresh and skip the boot-screen
-  // repaint entirely. Quick-resume sleeps keep their existing post-sleep-screen
-  // save (their sleep screen IS the retained frame).
-  if (!isQuickResumeSleep && APP_STATE.lastSleepFromReader) {
-    saveSleepFrameBuffer();
-  }
+  // Reader-resume wakes no longer restore the page frame: per Diogo, a page
+  // that is visible but not yet interactive reads as "stuck", so the wake
+  // keeps the boot screen (wallpaper + unlock banners) until the book engine
+  // is actually ready, then paints the page with the buttons live. No frame
+  // to save here; quick-resume sleeps keep their post-sleep-screen save
+  // (their sleep screen IS the retained frame).
   const unsigned long lockReaderFrameSavedMs = millis();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
@@ -486,19 +483,7 @@ void setup() {
                              sleepWasCustomWallpaper && lastWallpaper.size() >= 4 &&
                              strcasecmp(lastWallpaper.c_str() + lastWallpaper.size() - 4, ".pxc") == 0;
 
-  // Reader-resume wake face: when this wake will route straight back into the
-  // book anyway (the final routing branch below), skip the boot screen and
-  // restore the page frame saved at lock instead — one refresh and the user is
-  // looking at their page while the book loads behind it. Every condition here
-  // mirrors a routing branch that would NOT land in goToReader(openEpubPath).
-  const bool wantsReaderResume = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton &&
-                                 APP_STATE.lastSleepFromReader && !APP_STATE.openEpubPath.empty() &&
-                                 !SETTINGS.openRandomRecentOnBoot && APP_STATE.readerActivityLoadCount == 0 &&
-                                 !recoveryFirmwareMode && !HalSystem::isRebootFromPanic() &&
-                                 !mappedInputManager.isPressed(MappedInputManager::Button::Back);
-  const bool readerFrameWake = wantsReaderResume && Storage.exists(SLEEP_FRAME_FILE);
-
-  setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake || readerFrameWake);
+  setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
   startSerialLogOnceUsbSettled();
   const unsigned long bootDisplayDoneMs = millis();
 
@@ -523,17 +508,13 @@ void setup() {
       }
       break;
     case BootResume::Splash:
-      if (readerFrameWake && loadSleepFrameBuffer()) {
-        // Page frame restored: one HALF refresh (drives every pixel, so no
-        // ghost of the sleep wallpaper survives) and the user sees their page.
-        // Arm the handoff so the reader's first paint of the identical page
-        // skips its own full-refresh chain.
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        wake_frame::arm(wake_frame::hashBuffer(renderer.getFrameBuffer(), renderer.getBufferSize()));
-        LOG_INF("BOOT", "Reader page frame restored on wake");
-      } else {
-        activityManager.goToBoot(wallpaperWake ? APP_STATE.lastSleepWallpaperPath : std::string());
-      }
+      // Reader-resume wakes keep the boot screen (wallpaper + unlock banners)
+      // until the reader's first real paint: the page appears exactly when the
+      // buttons are live, instead of appearing early and playing dead while
+      // the chapter loads (Diogo: a visible-but-unresponsive page reads as
+      // "stuck"; a loading face that flips straight into a working page does
+      // not).
+      activityManager.goToBoot(wallpaperWake ? APP_STATE.lastSleepWallpaperPath : std::string());
       break;
   }
 
