@@ -47,9 +47,16 @@ class HalGPIO {
   bool usbStateChanged = false;
 
   // Edges latched by pumpWaitInput() while the loop task was blocked; folded
-  // into the was*() accessors for exactly one update() cycle.
+  // into the was*() accessors for exactly one update() cycle - but ONLY while
+  // fresh. LOCKED product rule (Diogo): a press acts promptly or not at all;
+  // an edge that would surface more than STICKY_FRESH_MS after the finger
+  // pressed is discarded, never replayed as a phantom click. Blocks longer
+  // than the window (promoted clean passes, cover grinds) simply lose the
+  // press - the user re-presses, which beats the device acting on its own.
+  static constexpr unsigned long STICKY_FRESH_MS = 500;
   uint8_t stickyPressed = 0;
   uint8_t stickyReleased = 0;
+  unsigned long stickyLatchedAtMs = 0;
   uint8_t mergedPressed = 0;
   uint8_t mergedReleased = 0;
 
