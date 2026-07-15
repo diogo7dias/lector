@@ -575,14 +575,13 @@ void HomeActivity::promptRemoveBook(const std::string& path, const std::string& 
 }
 
 void HomeActivity::refreshSleepOverLimit() {
-  if (!sleepImageCountKnown) {
-    // Scan /sleep once per home instance; cached so the snappy home re-entry path
-    // never rescans a large wallpaper folder.
-    cachedSleepImageCount = static_cast<long>(crosspoint::sleep::wallpaper::countImages(5000));
-    sleepImageCountKnown = true;
-  }
-  sleepImageCount = cachedSleepImageCount;
-  sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
+  // Persisted index snapshot — no SD directory walk on the home (= wake) path.
+  // The idle pump keeps it honest while the user reads; until the first-ever
+  // build it reads 0, which just hides the warning card (same as today).
+  // acceptEntry saturates the count AT kMaxEntries (== kSleepIndexMaxImages),
+  // so the over-limit test must be >=, not > (which could never fire).
+  sleepImageCount = static_cast<long>(APP_STATE.sleepIndexCount);
+  sleepOverLimit = sleepImageCount >= static_cast<long>(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
 }
 
 void HomeActivity::maybeShowWallpaperPauseToast() {
@@ -621,10 +620,11 @@ void HomeActivity::openSleepMoveKeypad() {
     }
     size_t moved = 0;
     if (n > 0) moved = crosspoint::sleep::wallpaper::moveRandomToPause(static_cast<size_t>(n));
-    cachedSleepImageCount =
-        (cachedSleepImageCount >= static_cast<long>(moved)) ? cachedSleepImageCount - static_cast<long>(moved) : 0;
-    sleepImageCount = cachedSleepImageCount;
-    sleepOverLimit = sleepImageCount > static_cast<long>(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
+    // Optimistic local decrement so the card updates immediately; the real count
+    // lands in APP_STATE.sleepIndexCount when the idle pump rebuilds the index
+    // (moveRandomToPause marked it dirty).
+    sleepImageCount = (sleepImageCount >= static_cast<long>(moved)) ? sleepImageCount - static_cast<long>(moved) : 0;
+    sleepOverLimit = sleepImageCount >= static_cast<long>(crosspoint::sleep::wallpaper::kSleepIndexMaxImages);
     moveToast = std::string(tr(STR_MOVED)) + " " + std::to_string(moved);
     // The warning slot may have just vanished; keep the selector in range.
     const int bookCount = static_cast<int>(recentBooks.size());
