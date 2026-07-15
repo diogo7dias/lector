@@ -18,6 +18,12 @@ class MappedInputManager {
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
   void update() const { gpio.update(); }
+  // Sticky input pump for long blocking work on the loop task (SD grinds,
+  // image decodes). Unlike update() this never rotates events out - taps are
+  // latched and surface at the next real update(). See HalGPIO::pumpWaitInput.
+  void pumpWaitInput() const { gpio.pumpWaitInput(); }
+  // millis() of the last no-buttons -> any-button edge (diagnostics).
+  unsigned long lastPressStart() const { return gpio.getLastPressStart(); }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;

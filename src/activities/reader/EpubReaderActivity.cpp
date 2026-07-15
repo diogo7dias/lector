@@ -329,7 +329,11 @@ void EpubReaderActivity::loop() {
       const int y = renderer.getScreenHeight() - h;
       renderer.fillRect(0, y, renderer.getScreenWidth(), h, false);  // white band
       renderer.drawText(SMALL_FONT_ID, 4, y + 2, line, true);
-      renderer.displayWindow(0, y, renderer.getScreenWidth(), h);
+      // Detached: the old blocking displayWindow added a full waveform of
+      // dead time right after the page became visible (worse still on X3,
+      // where windowed passes run as full-frame FAST). Input latches while
+      // this drives and is handled the moment the loop comes back around.
+      renderer.displayWindowAsync(0, y, renderer.getScreenWidth(), h);
       return;
     }
   }

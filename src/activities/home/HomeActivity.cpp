@@ -82,6 +82,9 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   int progress = 0;
   for (RecentBook& book : recentBooks) {
+    // Thumb generation can grind for seconds per book (epub open + image
+    // decode + scale); latch any taps so they act the moment this finishes.
+    mappedInput.pumpWaitInput();
     if (!book.coverBmpPath.empty()) {
       std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
       if (!Storage.exists(coverPath.c_str())) {
@@ -211,6 +214,28 @@ void HomeActivity::freeCoverBuffer() {
 }
 
 void HomeActivity::loop() {
+  // Wake press meter: on the first press after the entry paint, stamp a terse
+  // band with the numbers that matter for the "menu visible but dead" hunt -
+  // when the menu was physically ready, how long after that the press edge
+  // came, and edge-to-handled latency (should be ~0 when nothing blocks the
+  // loop; a big value = something ground on after the paint). Photo-able,
+  // like the reader wake overlay.
+  if (!wakePressMeterDone_ && SETTINGS.wakeDiagnostics && wakeMenuReadyAt_ != 0 && mappedInput.wasAnyPressed()) {
+    wakePressMeterDone_ = true;
+    const unsigned long now = millis();
+    const unsigned long edge = mappedInput.lastPressStart();
+    const unsigned long sinceMenu = edge >= wakeMenuReadyAt_ ? edge - wakeMenuReadyAt_ : 0;
+    const unsigned long latency = now >= edge ? now - edge : 0;
+    LOG_INF("DIAG", "HOME wake: menu@%lums press@+%lums lat=%lums", wakeMenuReadyAt_, sinceMenu, latency);
+    char line[96];
+    snprintf(line, sizeof(line), "menu %lu press +%lu lat %lu", wakeMenuReadyAt_, sinceMenu, latency);
+    const int h = renderer.getLineHeight(SMALL_FONT_ID) + 4;
+    const int y = renderer.getScreenHeight() - h;
+    renderer.fillRect(0, y, renderer.getScreenWidth(), h, false);
+    renderer.drawText(SMALL_FONT_ID, 4, y + 2, line, true);
+    renderer.displayWindowAsync(0, y, renderer.getScreenWidth(), h);
+  }
+
   const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
   const int bookCount = static_cast<int>(recentBooks.size());
   // Both layouts reserve selector 0 for the pages tally.
@@ -445,6 +470,7 @@ void HomeActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
     pendingFullRefresh = false;
+    if (wakeMenuReadyAt_ == 0) wakeMenuReadyAt_ = millis();
     drawSleepToasts();
     return;
   }
@@ -490,6 +516,7 @@ void HomeActivity::render(RenderLock&&) {
 
   renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
   pendingFullRefresh = false;
+  if (wakeMenuReadyAt_ == 0) wakeMenuReadyAt_ = millis();
   // Toasts only once the forced first re-render is behind us: the
   // !firstRenderDone branch below immediately repaints, which would wipe a
   // toast one frame after it appeared (it is one-shot — cleared when drawn).
