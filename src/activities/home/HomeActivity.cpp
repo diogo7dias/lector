@@ -75,64 +75,50 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
   }
 }
 
-void HomeActivity::loadRecentCovers(int coverHeight) {
-  recentsLoading = true;
-  bool showingLoading = false;
-  Rect popupRect;
+void HomeActivity::pumpRecentCovers(int coverHeight) {
+  // Chunked cover-thumb pump, driven from loop(): generates AT MOST ONE
+  // missing thumbnail per call, then returns so input is serviced between
+  // grinds. The old whole-list loop ran inside render() and could hold the
+  // loop for many seconds right after the wake paint — a "menu visible but
+  // buttons dead" window, which the hold-boot rule forbids.
+  while (coverGenIndex < recentBooks.size()) {
+    RecentBook& book = recentBooks[coverGenIndex];
+    ++coverGenIndex;
+    if (book.coverBmpPath.empty()) continue;
+    const std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
+    if (Storage.exists(coverPath.c_str())) continue;
 
-  int progress = 0;
-  for (RecentBook& book : recentBooks) {
-    // Thumb generation can grind for seconds per book (epub open + image
-    // decode + scale); latch any taps so they act the moment this finishes.
+    // One real grind (epub/xtc open + image decode + scale, seconds). Latch
+    // any taps so they act the moment this book finishes.
     mappedInput.pumpWaitInput();
-    if (!book.coverBmpPath.empty()) {
-      std::string coverPath = UITheme::getCoverThumbPath(book.coverBmpPath, coverHeight);
-      if (!Storage.exists(coverPath.c_str())) {
-        // If epub, try to load the metadata for title/author and cover
-        if (FsHelpers::hasEpubExtension(book.path)) {
-          Epub epub(book.path, "/.crosspoint");
-          // Skip loading css since we only need metadata here
-          epub.load(false, true);
-
-          // Try to generate thumbnail image for Continue Reading card
-          if (!showingLoading) {
-            showingLoading = true;
-            popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-          }
-          GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-          bool success = epub.generateThumbBmp(coverHeight);
-          if (!success) {
-            RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-            book.coverBmpPath = "";
-          }
-          coverRendered = false;
-          requestUpdate();
-        } else if (FsHelpers::hasXtcExtension(book.path)) {
-          // Handle XTC file
-          Xtc xtc(book.path, "/.crosspoint");
-          if (xtc.load()) {
-            // Try to generate thumbnail image for Continue Reading card
-            if (!showingLoading) {
-              showingLoading = true;
-              popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
-            }
-            GUI.fillPopupProgress(renderer, popupRect, 10 + progress * (90 / recentBooks.size()));
-            bool success = xtc.generateThumbBmp(coverHeight);
-            if (!success) {
-              RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
-              book.coverBmpPath = "";
-            }
-            coverRendered = false;
-            requestUpdate();
-          }
-        }
+    const int progressPct = 10 + static_cast<int>(coverGenIndex - 1) * (90 / static_cast<int>(recentBooks.size()));
+    bool attempted = false;
+    bool success = false;
+    if (FsHelpers::hasEpubExtension(book.path)) {
+      Epub epub(book.path, "/.crosspoint");
+      // Skip loading css since we only need metadata here
+      epub.load(false, true);
+      GUI.fillPopupProgress(renderer, GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)), progressPct);
+      success = epub.generateThumbBmp(coverHeight);
+      attempted = true;
+    } else if (FsHelpers::hasXtcExtension(book.path)) {
+      Xtc xtc(book.path, "/.crosspoint");
+      if (xtc.load()) {
+        GUI.fillPopupProgress(renderer, GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)), progressPct);
+        success = xtc.generateThumbBmp(coverHeight);
+        attempted = true;
       }
     }
-    progress++;
+    if (!attempted) continue;
+    if (!success) {
+      RECENT_BOOKS.updateBook(book.path, book.title, book.author, "");
+      book.coverBmpPath = "";
+    }
+    coverRendered = false;
+    requestUpdate();
+    return;  // one grind per loop pass; input runs before the next one
   }
-
   recentsLoaded = true;
-  recentsLoading = false;
 }
 
 void HomeActivity::onEnter() {
@@ -238,6 +224,13 @@ void HomeActivity::loop() {
 
   const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
   const int bookCount = static_cast<int>(recentBooks.size());
+
+  // Coverflow home: top up missing cover thumbs one book per pass, so a press
+  // is handled between grinds (menu visible = buttons live, LOCKED rule).
+  if (!listLayout && firstRenderDone && !recentsLoaded) {
+    pumpRecentCovers(UITheme::getInstance().getMetrics().homeCoverHeight);
+  }
+
   // Both layouts reserve selector 0 for the pages tally.
   //  LIST:         [pages][book 0..N-1][menu 0..]  -> 1 + bookCount + menuItemsOnly
   //  SINGLE_COVER: [pages][cover][menu 0..]        -> 2 + menuItemsOnly
@@ -527,10 +520,9 @@ void HomeActivity::render(RenderLock&&) {
   if (!firstRenderDone) {
     firstRenderDone = true;
     requestUpdate();
-  } else if (!recentsLoaded && !recentsLoading) {
-    recentsLoading = true;
-    loadRecentCovers(metrics.homeCoverHeight);
   }
+  // Missing cover thumbs are generated by pumpRecentCovers from loop(), one
+  // book per pass — never here, where they would block input after the paint.
 }
 
 void HomeActivity::onSelectBook(const std::string& path) {
