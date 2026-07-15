@@ -404,6 +404,19 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // real token. Set once effectiveAttach/NoSpaceBefore are known below; every push
   // consumes and clears it so only the first token of a word carries the dot.
   bool guideDotBeforeNextToken = false;
+  // First token of the paragraph: pre-size the six parallel per-word vectors.
+  // Growth events triple the heap traffic (alloc + copy + free) and interleave
+  // with glyph-cache allocations, fragmenting the layout-time heap; a typical
+  // paragraph fits in 64 tokens, so most paragraphs now grow zero times.
+  if (words.empty() && words.capacity() == 0) {
+    constexpr size_t kInitialWordCapacity = 64;
+    words.reserve(kInitialWordCapacity);
+    wordStyles.reserve(kInitialWordCapacity);
+    wordContinues.reserve(kInitialWordCapacity);
+    wordNoSpaceBefore.reserve(kInitialWordCapacity);
+    wordFocusBoundary.reserve(kInitialWordCapacity);
+    wordGuideDotBefore.reserve(kInitialWordCapacity);
+  }
   const auto pushToken = [&](std::string token, const bool continues, const bool noSpaceBefore,
                              const uint8_t focusBoundary = 0) {
     words.push_back(std::move(token));
