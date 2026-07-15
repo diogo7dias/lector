@@ -15,8 +15,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <limits>
+#include <string_view>
 #include <vector>
 
 #include "hyphenation/Hyphenator.h"
@@ -46,9 +48,16 @@ bool mayContainRtlBytes(const char* str) {
   return false;
 }
 
+// NOTE ON string_view USAGE IN THIS FILE: every view stored in ParsedText's
+// word vectors points into the paragraph's textPool_ and is NUL-terminated by
+// construction (poolStore allocates len+1 and writes the NUL), or views a
+// std::string temporary (also NUL-terminated). Passing .data() to C-style
+// APIs below is therefore safe — this is the sanctioned exception to the
+// CLAUDE.md string_view rule because termination is controlled here.
+
 // Returns the first rendered codepoint of a word (skipping leading soft hyphens).
-uint32_t firstCodepoint(const std::string& word) {
-  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str());
+uint32_t firstCodepoint(const std::string_view word) {
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.data());
   while (true) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
     if (cp == 0) return 0;
@@ -57,18 +66,18 @@ uint32_t firstCodepoint(const std::string& word) {
 }
 
 // Returns the last codepoint of a word by scanning backward for the start of the last UTF-8 sequence.
-uint32_t lastCodepoint(const std::string& word) {
+uint32_t lastCodepoint(const std::string_view word) {
   if (word.empty()) return 0;
   // UTF-8 continuation bytes start with 10xxxxxx; scan backward to find the leading byte.
   size_t i = word.size() - 1;
   while (i > 0 && (static_cast<uint8_t>(word[i]) & 0xC0) == 0x80) {
     --i;
   }
-  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + i);
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.data() + i);
   return utf8NextCodepoint(&ptr);
 }
 
-bool containsSoftHyphen(const std::string& word) { return word.find(SOFT_HYPHEN_UTF8) != std::string::npos; }
+bool containsSoftHyphen(const std::string_view word) { return word.find(SOFT_HYPHEN_UTF8) != std::string_view::npos; }
 
 bool isNoBreakBeforeCjkPunctuation(const uint32_t cp) {
   switch (cp) {
@@ -136,8 +145,8 @@ bool isNoBreakAfterCjkPunctuation(const uint32_t cp) {
   }
 }
 
-bool containsCjkBreakableCodepoint(const std::string& text) {
-  const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
+bool containsCjkBreakableCodepoint(const std::string_view text) {
+  const auto* ptr = reinterpret_cast<const unsigned char*>(text.data());
   while (*ptr) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
     if (utf8IsCjkBreakable(cp)) {
@@ -154,7 +163,7 @@ bool hasCjkBreakOpportunityBetween(const uint32_t leftCp, const uint32_t rightCp
   return true;
 }
 
-std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
+std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string_view text) {
   struct CodepointBoundary {
     uint32_t cp;
     size_t endOffset;
@@ -164,7 +173,7 @@ std::vector<size_t> cjkCharacterBreakByteOffsets(const std::string& text) {
   codepoints.reserve(text.size());
   bool hasCjkBreakable = false;
 
-  const auto* ptr = reinterpret_cast<const unsigned char*>(text.c_str());
+  const auto* ptr = reinterpret_cast<const unsigned char*>(text.data());
   const auto* const start = ptr;
   while (*ptr) {
     const uint32_t cp = utf8NextCodepoint(&ptr);
@@ -209,17 +218,18 @@ void stripSoftHyphensInPlace(std::string& word) {
 // Returns the advance width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
 // Uses advance width (sum of glyph advances + kerning) rather than bounding box width so that italic glyph overhangs
 // don't inflate inter-word spacing.
-uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
+uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string_view word,
                           const EpdFontFamily::Style style, const bool appendHyphen = false) {
   if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
     return renderer.getSpaceWidth(fontId, style);
   }
   const bool hasSoftHyphen = containsSoftHyphen(word);
   if (!hasSoftHyphen && !appendHyphen) {
-    return renderer.getTextAdvanceX(fontId, word.c_str(), style);
+    // Pool views are NUL-terminated by construction (see note at top of file).
+    return renderer.getTextAdvanceX(fontId, word.data(), style);
   }
 
-  std::string sanitized = word;
+  std::string sanitized(word);
   if (hasSoftHyphen) {
     stripSoftHyphensInPlace(sanitized);
   }
@@ -309,20 +319,20 @@ FocusTokenMetadata computeFocusMetadata(const std::string_view segment, const Ep
 }
 
 // First codepoint at or after byteOffset (the first codepoint of the regular suffix).
-uint32_t firstCodepointAtByteOffset(const std::string& word, const size_t byteOffset) {
+uint32_t firstCodepointAtByteOffset(const std::string_view word, const size_t byteOffset) {
   if (byteOffset >= word.size()) return 0;
-  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + byteOffset);
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.data() + byteOffset);
   return utf8NextCodepoint(&ptr);
 }
 
 // Last codepoint ending before byteOffset (the last codepoint of the bold prefix).
-uint32_t lastCodepointBeforeByteOffset(const std::string& word, const size_t byteOffset) {
+uint32_t lastCodepointBeforeByteOffset(const std::string_view word, const size_t byteOffset) {
   if (word.empty() || byteOffset == 0) return 0;
   size_t i = std::min(byteOffset, word.size()) - 1;
   while (i > 0 && (static_cast<uint8_t>(word[i]) & 0xC0) == 0x80) {
     --i;
   }
-  const auto* ptr = reinterpret_cast<const unsigned char*>(word.c_str() + i);
+  const auto* ptr = reinterpret_cast<const unsigned char*>(word.data() + i);
   return utf8NextCodepoint(&ptr);
 }
 
@@ -330,7 +340,7 @@ uint32_t lastCodepointBeforeByteOffset(const std::string& word, const size_t byt
 // advance plus the kerning between the last prefix glyph and the first suffix glyph,
 // both measured in the bold style (the prefix is rendered bold). Returns 0 when the
 // word is not focus-split (boundary 0) or the boundary is out of range.
-int measureFocusSuffixX(const GfxRenderer& renderer, const int fontId, const std::string& word,
+int measureFocusSuffixX(const GfxRenderer& renderer, const int fontId, const std::string_view word,
                         const EpdFontFamily::Style style, const uint8_t boundary) {
   if (boundary == 0 || boundary >= word.size()) {
     return 0;
@@ -339,7 +349,7 @@ int measureFocusSuffixX(const GfxRenderer& renderer, const int fontId, const std
   const auto boldStyle = static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD);
   char prefixBuf[40];
   const size_t prefixLen = std::min<size_t>(boundary, sizeof(prefixBuf) - 1);
-  memcpy(prefixBuf, word.c_str(), prefixLen);
+  memcpy(prefixBuf, word.data(), prefixLen);
   prefixBuf[prefixLen] = '\0';
 
   const int prefixWidth = renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle);
@@ -352,15 +362,16 @@ int measureFocusSuffixX(const GfxRenderer& renderer, const int fontId, const std
 // suffix measured as one unit. Falls back to plain measureWordWidth when the word is not
 // focus-split, is being hyphenated, or carries a soft hyphen (all of which keep a single
 // style). Equivalent to measureWordWidth when focusBoundary is 0.
-uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
+uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string_view word,
                            const EpdFontFamily::Style style, const uint8_t focusBoundary,
                            const bool appendHyphen = false) {
   if (focusBoundary == 0 || focusBoundary >= word.size() || appendHyphen || containsSoftHyphen(word)) {
     return measureWordWidth(renderer, fontId, word, style, appendHyphen);
   }
 
+  // Pool views are NUL-terminated by construction, so the suffix slice is too.
   const int suffixX = measureFocusSuffixX(renderer, fontId, word, style, focusBoundary);
-  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style);
+  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.data() + focusBoundary, style);
   return static_cast<uint16_t>(std::max(0, suffixX + suffixWidth));
 }
 
@@ -372,14 +383,31 @@ int guideDotAdvance(const GfxRenderer& renderer, const int fontId) {
 // The full widened gap that holds a guide dot: space(leftWord -> dot) + dot glyph
 // + space(dot -> rightWord). Replaces the plain inter-word space when a dot sits
 // between two words. No word-spacing delta is applied to a guide-dot gap.
-int guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
-                       const std::string& rightWord, const EpdFontFamily::Style leftStyle) {
+int guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std::string_view leftWord,
+                       const std::string_view rightWord, const EpdFontFamily::Style leftStyle) {
   return renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), GUIDE_DOT_CODEPOINT, leftStyle) +
          guideDotAdvance(renderer, fontId) +
          renderer.getSpaceAdvance(fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
 }
 
 }  // namespace
+
+std::string_view ParsedText::poolStore(const char* data, const size_t len) {
+  // Lazy init: paragraphs with no text (or dropped before any word) never pay
+  // for a slab. 4 KiB covers a typical paragraph's word text in one slab.
+  if (!textPool_.head && !textPool_.init(4 * 1024)) {
+    LOG_ERR("PTX", "Word pool init OOM (%u bytes)", static_cast<unsigned>(len));
+    return {};
+  }
+  auto* buf = static_cast<char*>(textPool_.alloc(len + 1, /*align=*/1));
+  if (!buf) {
+    LOG_ERR("PTX", "Word pool OOM (%u bytes)", static_cast<unsigned>(len));
+    return {};
+  }
+  memcpy(buf, data, len);
+  buf[len] = '\0';
+  return {buf, len};
+}
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious) {
@@ -417,9 +445,16 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     wordFocusBoundary.reserve(kInitialWordCapacity);
     wordGuideDotBefore.reserve(kInitialWordCapacity);
   }
-  const auto pushToken = [&](std::string token, const bool continues, const bool noSpaceBefore,
+  // token must already be pool-backed (poolStore). A default view (nullptr
+  // data) signals pool OOM: the token is dropped, degrading rather than
+  // crashing; poolStore already logged the failure.
+  const auto pushToken = [&](const std::string_view token, const bool continues, const bool noSpaceBefore,
                              const uint8_t focusBoundary = 0) {
-    words.push_back(std::move(token));
+    if (token.data() == nullptr) {
+      guideDotBeforeNextToken = false;
+      return;
+    }
+    words.push_back(token);
     wordStyles.push_back(baseStyle);
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
@@ -447,14 +482,16 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     size_t tokenStart = 0;
     for (const size_t breakOffset : breakOffsets) {
       if (breakOffset <= tokenStart || breakOffset > word.size()) continue;
-      pushToken(word.substr(tokenStart, breakOffset - tokenStart), firstToken ? effectiveAttachToPrevious : false,
-                firstToken ? effectiveNoSpaceBefore : true);
+      // Pool-store the slice directly from the composed word; no per-piece
+      // std::string (the old substr) is allocated.
+      pushToken(poolStore(word.data() + tokenStart, breakOffset - tokenStart),
+                firstToken ? effectiveAttachToPrevious : false, firstToken ? effectiveNoSpaceBefore : true);
       firstToken = false;
       tokenStart = breakOffset;
     }
     if (tokenStart < word.size()) {
-      pushToken(word.substr(tokenStart), firstToken ? effectiveAttachToPrevious : false,
-                firstToken ? effectiveNoSpaceBefore : true);
+      pushToken(poolStore(word.data() + tokenStart, word.size() - tokenStart),
+                firstToken ? effectiveAttachToPrevious : false, firstToken ? effectiveNoSpaceBefore : true);
     }
     if (wordStartsRtl) {
       hasRtlWord = true;
@@ -463,7 +500,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 
   if (containsCjkBreakableCodepoint(word)) {
-    pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore);
+    pushToken(poolStore(word.data(), word.size()), effectiveAttachToPrevious, effectiveNoSpaceBefore);
     if (wordStartsRtl) {
       hasRtlWord = true;
     }
@@ -472,7 +509,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
 
   // Already-bold text should stay fully bold; focus splitting would make its suffix regular later.
   if (!this->focusReadingEnabled || (baseStyle & EpdFontFamily::BOLD) != 0) {
-    pushToken(std::move(word), effectiveAttachToPrevious, effectiveNoSpaceBefore);
+    pushToken(poolStore(word.data(), word.size()), effectiveAttachToPrevious, effectiveNoSpaceBefore);
     if (wordStartsRtl) {
       hasRtlWord = true;
     }
@@ -513,7 +550,15 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     // (rendered bold up to the boundary) instead of being split into two transient tokens.
     const FocusTokenMetadata meta =
         isWord ? computeFocusMetadata(segment, baseStyle, this->focusReadingEnabled) : FocusTokenMetadata{baseStyle, 0};
-    words.emplace_back(segment);
+    // segment views the transient composed word; retain a pool-backed copy.
+    // On pool OOM (nullptr data) drop the token so the parallel vectors stay
+    // in lockstep; poolStore already logged the failure.
+    const std::string_view stored = poolStore(segment.data(), segment.size());
+    if (stored.data() == nullptr) {
+      guideDotBeforeNextToken = false;
+      return;
+    }
+    words.push_back(stored);
     wordStyles.push_back(meta.style);
     wordContinues.push_back(attach);
     wordNoSpaceBefore.push_back(noSpaceBefore);
@@ -607,7 +652,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     // Check the first few words for RTL letter codepoints (no heap allocation).
     const size_t wordsToScan = std::min(words.size(), RTL_PARAGRAPH_PROBE_WORDS);
     for (size_t i = 0; i < wordsToScan; ++i) {
-      if (BidiUtils::startsWithRtl(words[i].c_str(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH)) {
+      // Pool views are NUL-terminated by construction (see note at top of file).
+      if (BidiUtils::startsWithRtl(words[i].data(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH)) {
         blockStyle.isRtl = true;
         break;
       }
@@ -927,12 +973,15 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     return false;
   }
 
-  const std::string& word = words[wordIndex];
+  // Copy the view: words[] is mutated below and the entry must stay readable.
+  const std::string_view word = words[wordIndex];
   const auto style = wordStyles[wordIndex];
   const uint8_t origBoundary = wordFocusBoundary[wordIndex];
 
   // Collect candidate breakpoints (byte offsets and hyphen requirements).
-  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
+  // Hyphenator keeps its std::string interface; this transient copy only
+  // happens on the rare split-a-word path.
+  auto breakInfos = Hyphenator::breakOffsets(std::string(word), allowFallbackBreaks);
   if (breakInfos.empty()) {
     return false;
   }
@@ -940,6 +989,11 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   size_t chosenOffset = 0;
   int chosenWidth = -1;
   bool chosenNeedsHyphen = true;
+
+  // Transient measurement copy, reused across candidates. A raw subview of the
+  // word is NOT NUL-terminated at the break offset, so it cannot be handed to
+  // the renderer's C API directly.
+  std::string prefixTmp;
 
   // Iterate over each legal breakpoint and retain the widest prefix that still fits.
   for (const auto& info : breakInfos) {
@@ -955,7 +1009,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     const EpdFontFamily::Style ps = (origBoundary > 0 && origBoundary > offset)
                                         ? static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD)
                                         : style;
-    const int prefixWidth = measureTokenWidth(renderer, fontId, word.substr(0, offset), ps, pb, needsHyphen);
+    prefixTmp.assign(word.data(), offset);
+    const int prefixWidth = measureTokenWidth(renderer, fontId, prefixTmp, ps, pb, needsHyphen);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
     }
@@ -971,7 +1026,20 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   }
 
   // Split the word at the selected breakpoint and append a hyphen if required.
-  std::string remainder = word.substr(chosenOffset);
+  // The remainder ends where the parent pool word ends, so it inherits the
+  // parent's NUL terminator and can stay a zero-copy subview.
+  const std::string_view remainder = word.substr(chosenOffset);
+  // The retained prefix needs its own NUL (and possibly a hyphen), so it goes
+  // through the pool. Do this before any mutation: on pool OOM return false
+  // ("no split") with every vector still consistent.
+  prefixTmp.assign(word.data(), chosenOffset);
+  if (chosenNeedsHyphen) {
+    prefixTmp.push_back('-');
+  }
+  const std::string_view prefixView = poolStore(prefixTmp.data(), prefixTmp.size());
+  if (prefixView.data() == nullptr) {
+    return false;
+  }
 
   // Carry the original bold boundary across the split instead of recomputing it from the
   // fragment: a break past the bold region leaves the prefix's boundary intact and the
@@ -998,10 +1066,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
   }
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
 
-  words[wordIndex].resize(chosenOffset);
-  if (chosenNeedsHyphen) {
-    words[wordIndex].push_back('-');
-  }
+  words[wordIndex] = prefixView;
   wordStyles[wordIndex] = prefixStyle;
   wordFocusBoundary[wordIndex] = prefixBoundary;
 
@@ -1070,11 +1135,19 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   lineWordStyles.reserve(lineWordCount);
 
   for (size_t i = 0; i < lineWordCount; ++i) {
-    std::string word = std::move(words[lastBreakAt + i]);
+    std::string_view word = words[lastBreakAt + i];
     if (containsSoftHyphen(word)) {
-      stripSoftHyphensInPlace(word);
+      // Retained modified text goes back through the pool. On pool OOM keep
+      // the unstripped view (soft hyphens render as small artifacts) rather
+      // than dropping the word; poolStore already logged the failure.
+      std::string stripped(word);
+      stripSoftHyphensInPlace(stripped);
+      const std::string_view pooled = poolStore(stripped.data(), stripped.size());
+      if (pooled.data() != nullptr) {
+        word = pooled;
+      }
     }
-    lineWords.push_back(std::move(word));
+    lineWords.push_back(word);
     lineWordStyles.push_back(wordStyles[lastBreakAt + i]);
   }
 
@@ -1137,8 +1210,14 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   visualOrderScratch.reserve(lineWordCount);
   // Skip expensive visual-order resolution for pure LTR paragraphs that have no RTL words.
   const bool shouldResolveVisualOrder = blockStyle.isRtl || hasRtlWord;
-  const bool willReorder =
-      shouldResolveVisualOrder && BidiUtils::computeVisualWordOrder(lineWords, blockStyle.isRtl, visualOrderScratch);
+  bool willReorder = false;
+  if (shouldResolveVisualOrder) {
+    // BidiUtils keeps its std::string interface; materialize a transient copy
+    // of the line at the boundary. RTL paragraphs are rare, so the extra
+    // copies stay off the common LTR path.
+    std::vector<std::string> bidiWords(lineWords.begin(), lineWords.end());
+    willReorder = BidiUtils::computeVisualWordOrder(bidiWords, blockStyle.isRtl, visualOrderScratch);
+  }
 
   auto& lineXPos = lineXPosScratch;
   lineXPos.clear();
@@ -1160,7 +1239,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
     for (size_t i = 0; i < visualOrderScratch.size(); ++i) {
       const uint16_t src = visualOrderScratch[i];
-      reorderedWordsScratch.push_back(std::move(lineWords[src]));
+      reorderedWordsScratch.push_back(lineWords[src]);
       reorderedStylesScratch.push_back(lineWordStyles[src]);
       reorderedWidthsScratch.push_back(wordWidths[lastBreakAt + src]);
       reorderedFocusBoundaryScratch.push_back(wordFocusBoundary[lastBreakAt + src]);
@@ -1428,7 +1507,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     if (boundary >= lineWords[i].size()) {
       boundary = 0;
     }
-    outWords.push_back(std::move(lineWords[i]));
+    outWords.push_back(lineWords[i]);
     outXPos.push_back(lineXPos[i]);
     // The style is already regular for a focus-split word; the boundary drives the bold
     // prefix at render time, so nothing is stripped here.

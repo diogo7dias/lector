@@ -3,7 +3,7 @@
 #include <HalStorage.h>
 
 #include <memory>
-#include <string>
+#include <string_view>
 #include <vector>
 
 #include "Block.h"
@@ -66,7 +66,10 @@ class TextBlock final : public Block {
   // Flatten-on-construct: copies the layout-time vectors into the arena; the
   // vectors die with the caller. On arena OOM the block is empty and valid()
   // is false -- callers must check and fail the line instead of using it.
-  explicit TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
+  // words may be std::string_view slices (ParsedText's arena-backed word pool);
+  // the text is memcpy'd into this block's own arena, so the views only need
+  // to stay alive for the duration of this constructor.
+  explicit TextBlock(const std::vector<std::string_view>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const std::vector<uint16_t>& guideDotXOffset,
                      const BlockStyle& blockStyle = BlockStyle());

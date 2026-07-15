@@ -12,6 +12,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // The real GfxRenderer.h declares this inside BidiUtils (not BidiUtils.h);
@@ -37,7 +38,7 @@ class GfxRenderer {
   bool isFontCacheScanning() const { return false; }
   bool isSdCardFont(int /*fontId*/) const { return false; }
   void ensureSdCardFontReady(int /*fontId*/, const char* /*utf8Text*/, uint8_t /*styleMask*/ = 0x0F) const {}
-  void ensureSdCardFontReady(int /*fontId*/, const std::vector<std::string>& /*words*/, bool /*includeHyphen*/,
+  void ensureSdCardFontReady(int /*fontId*/, const std::vector<std::string_view>& /*words*/, bool /*includeHyphen*/,
                              uint8_t /*styleMask*/ = 0x0F) const {}
 
   int getTextAdvanceX(int /*fontId*/, const char* text, EpdFontFamily::Style /*style*/) const {

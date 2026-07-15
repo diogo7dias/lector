@@ -6,16 +6,22 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
 class GfxRenderer;
-struct Arena;
 
 class ParsedText {
-  std::vector<std::string> words;
+  // Word text lives in one arena-backed char pool (textPool_) instead of one
+  // heap std::string per word: hundreds of small string allocations per
+  // paragraph interleaved with glyph-cache allocations and fragmented the
+  // layout-time heap. Every view in `words` (and the per-line scratch below)
+  // points into the pool and is guaranteed NUL-terminated by poolStore(), so
+  // .data() is safe at C API boundaries.
+  std::vector<std::string_view> words;
   std::vector<EpdFontFamily::Style> wordStyles;
   std::vector<bool> wordContinues;      // true = word attaches to previous with no break
   std::vector<bool> wordNoSpaceBefore;  // true = may break before token, but no synthetic space when joined
@@ -37,7 +43,7 @@ class ParsedText {
   // Word spacing as a 10%-step count (3 = 0%). Adds a signed delta to every real
   // inter-word gap so line-breaking, justification and drawing stay consistent.
   uint8_t wordSpacing;
-  std::vector<std::string> reorderedWordsScratch;
+  std::vector<std::string_view> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
   std::vector<bool> reorderedContinuesScratch;
@@ -48,15 +54,24 @@ class ParsedText {
   // each line so a page of ~25-30 lines reuses one set of buffers instead of
   // allocating fresh vectors per line. lineWords/lineStyles/lineXPos build the
   // line; the out* buffers hold the focus-merged result on the slow path.
-  std::vector<std::string> lineWordsScratch;
+  std::vector<std::string_view> lineWordsScratch;
   std::vector<EpdFontFamily::Style> lineStylesScratch;
   std::vector<int16_t> lineXPosScratch;
-  std::vector<std::string> outWordsScratch;
+  std::vector<std::string_view> outWordsScratch;
   std::vector<int16_t> outXPosScratch;
   std::vector<EpdFontFamily::Style> outStylesScratch;
   std::vector<uint8_t> outBoundaryScratch;
   std::vector<uint16_t> outSuffixXScratch;
   std::vector<uint16_t> outGuideDotXOffsetScratch;
+
+  // Bump-allocated char pool holding every word's text for this paragraph's
+  // lifetime; freed as one block when the ParsedText is destroyed (a ParsedText
+  // is per-paragraph and dies right after layoutAndExtractLines).
+  Arena textPool_;
+  // Copies [data, data+len) into textPool_ with a trailing NUL and returns a
+  // view of it. On pool OOM returns a default view (data() == nullptr); the
+  // caller drops the token/paragraph rather than crashing.
+  std::string_view poolStore(const char* data, size_t len);
 
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   // Signed pixels to add to each real inter-word gap for the word-spacing setting.
