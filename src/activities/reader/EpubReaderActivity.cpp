@@ -312,12 +312,13 @@ void EpubReaderActivity::loop() {
     diagOverlayPending_ = false;
     const unsigned long sectMs = diagSectionReadyMs_ - diagEnterMs_;
     const unsigned long pressWaitMs = diagFirstPressMs_ ? diagSectionReadyMs_ - diagFirstPressMs_ : 0;
-    LOG_INF("DIAG", "WAKE usable=%lums (since boot) reader=%lums sect=%lums(%s) press-wait=%lums", diagSectionReadyMs_,
-            diagSectionReadyMs_ - diagEnterMs_, sectMs, diagSectionWasBuild_ ? "build" : "cache", pressWaitMs);
+    LOG_INF("DIAG", "WAKE usable=%lums (since boot) reader=%lums sect=%lums(%s) press-wait=%lums %s",
+            diagSectionReadyMs_, diagSectionReadyMs_ - diagEnterMs_, sectMs, diagSectionWasBuild_ ? "build" : "cache",
+            pressWaitMs, diagMissInfo_.c_str());
     if (SETTINGS.wakeDiagnostics) {
-      char line[96];
-      snprintf(line, sizeof(line), "boot>use %lums  sect %lums %s  press-wait %lums", diagSectionReadyMs_, sectMs,
-               diagSectionWasBuild_ ? "build" : "cache", pressWaitMs);
+      char line[128];
+      snprintf(line, sizeof(line), "boot>use %lums  sect %lums %s  press-wait %lums  %s", diagSectionReadyMs_, sectMs,
+               diagSectionWasBuild_ ? "build" : "cache", pressWaitMs, diagMissInfo_.c_str());
       RenderLock lock(*this);
       const int h = renderer.getLineHeight(SMALL_FONT_ID) + 4;
       const int y = renderer.getScreenHeight() - h;
@@ -1389,6 +1390,37 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 // rebuilds a fresh Section and re-loads the committed cache normally. If the build has
 // not finished by the time we cross over, that fresh load misses and falls back to the
 // usual blocking build — no worse than before, just not sped up that once.
+std::string EpubReaderActivity::classifySectionMiss(const Section& section) const {
+  const std::string& path = section.cacheFilePath();
+  const bool existed = Storage.exists(path.c_str());
+  // Generation dir name = trailing path component (8 hex chars).
+  const std::string& genDir = section.cacheGenerationDir();
+  const size_t slash = genDir.rfind('/');
+  const std::string gen = slash == std::string::npos ? genDir : genDir.substr(slash + 1);
+
+  bool otherGen = false;
+  const std::string sectionsRoot = epub->getCachePath() + "/sections";
+  const std::string spineBin = std::to_string(currentSpineIndex) + ".bin";
+  auto root = Storage.open(sectionsRoot.c_str());
+  if (root && root.isDirectory()) {
+    char name[128];
+    for (auto f = root.openNextFile(); f; f = root.openNextFile()) {
+      f.getName(name, sizeof(name));
+      if (!f.isDirectory() || gen == name) continue;
+      if (Storage.exists((sectionsRoot + "/" + name + "/" + spineBin).c_str())) {
+        otherGen = true;
+        break;
+      }
+    }
+  }
+
+  char info[48];
+  snprintf(info, sizeof(info), "miss %s %s%s t%d", gen.c_str(), existed ? "stale" : "none", otherGen ? " othergen" : "",
+           lowMemoryTierFloor_);
+  LOG_INF("DIAG", "Section cache %s (%s)", info, path.c_str());
+  return std::string(info);
+}
+
 bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t viewportWidth,
                                              const uint16_t viewportHeight) {
   const int fontId = SETTINGS.getReaderFontId();
@@ -1411,6 +1443,9 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
 
   LOG_DBG("ERS", "Cache not found, building...");
   diagSectionWasBuild_ = true;
+  if (diagOverlayPending_) {
+    diagMissInfo_ = classifySectionMiss(section);
+  }
   GUI.drawPopup(renderer, tr(STR_INDEXING));
   const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
 

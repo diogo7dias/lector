@@ -74,6 +74,12 @@ class Section {
   bool finalizeBuild();
 
  public:
+  // Wake-diagnostics introspection: the cache file and generation dir this
+  // section resolved to (valid after loadSectionFile/startBuild ran
+  // selectGeneration).
+  const std::string& cacheFilePath() const { return filePath; }
+  const std::string& cacheGenerationDir() const { return sectionDirPath; }
+
   uint16_t pageCount = 0;
   int currentPage = 0;
 
