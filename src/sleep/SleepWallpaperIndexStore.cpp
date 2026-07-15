@@ -40,7 +40,14 @@ uint32_t entryHash(const char* name, const size_t len, const uint32_t mtime) {
   return h;
 }
 
-enum class PumpPhase : uint8_t { Pending, Scanning, Done };
+// Idle scan runs in two passes so an unchanged folder costs ZERO SD writes:
+// Verifying walks the directory computing only count + fingerprint; only when
+// that differs from the persisted snapshot (or the live index file is missing)
+// does Writing re-walk the folder and stream the 160-byte records to the tmp
+// file. The old single-pass scan wrote the full tmp index (1200 images ≈
+// 192 KB) on EVERY wake and then usually threw it away — pure SD wear, and it
+// delayed idleComplete() (which gates the wallpaper prestager).
+enum class PumpPhase : uint8_t { Pending, Verifying, Writing, Done };
 
 PumpPhase s_phase = PumpPhase::Pending;
 bool s_dirty = false;
@@ -64,8 +71,9 @@ bool writeRecord(HalFile& out, const char* name, const size_t len) {
   return out.write(record, sizeof(record)) == static_cast<int>(sizeof(record));
 }
 
-// Process one directory entry into (count, fingerprint, tmp records).
-void acceptEntry(HalFile& file, const char* name, uint32_t& count, uint32_t& fingerprint, HalFile& tmp, bool& failed) {
+// Process one directory entry into (count, fingerprint, tmp records). `tmp`
+// is null on the read-only verification pass — no record is written then.
+void acceptEntry(HalFile& file, const char* name, uint32_t& count, uint32_t& fingerprint, HalFile* tmp, bool& failed) {
   const size_t len = std::strlen(name);
   if (len == 0 || len >= kRecordBytes) {
     if (len >= kRecordBytes) LOG_ERR("WIDX", "Name too long for index (%u), skipped", static_cast<unsigned>(len));
@@ -76,7 +84,7 @@ void acceptEntry(HalFile& file, const char* name, uint32_t& count, uint32_t& fin
   file.getModifyDateTime(&fdate, &ftime);
   const uint32_t mtime = (static_cast<uint32_t>(fdate) << 16) | ftime;
   fingerprint += entryHash(name, len, mtime);
-  if (!failed && !writeRecord(tmp, name, len)) failed = true;
+  if (tmp && !failed && !writeRecord(*tmp, name, len)) failed = true;
   ++count;
 }
 
@@ -102,29 +110,12 @@ bool rotateIn(const uint32_t count, const uint32_t fingerprint, const bool save)
   return true;
 }
 
-// Finish an idle scan: rotate in the fresh index only when the folder content
-// actually changed (or the live index file is missing).
-void finishIdleScan() {
-  closeScanHandles();
-  s_phase = PumpPhase::Done;
-  if (s_failed) {
-    Storage.remove(kIndexTmpPath);
-    LOG_ERR("WIDX", "Idle index scan failed, keeping previous index");
-    return;
-  }
-  const bool changed = s_count != APP_STATE.sleepIndexCount || s_fingerprint != APP_STATE.sleepIndexFingerprint ||
-                       !Storage.exists(kIndexPath);
-  if (changed) {
-    rotateIn(s_count, s_fingerprint, /*save=*/true);
-  } else {
-    Storage.remove(kIndexTmpPath);
-  }
-}
-
-bool startScan() {
+// Start a scan pass. `writeRecords` false = read-only verification (no tmp
+// file touched); true = full write pass streaming records to the tmp file.
+bool startScan(const bool writeRecords) {
   closeScanHandles();  // close-before-reopen: never reassign an open HalFile
   Storage.mkdir(kIndexDir);
-  if (Storage.exists(kIndexTmpPath)) Storage.remove(kIndexTmpPath);
+  if (writeRecords && Storage.exists(kIndexTmpPath)) Storage.remove(kIndexTmpPath);
   s_dir = Storage.open(kSleepDir);
   if (!s_dir || !s_dir.isDirectory()) {
     if (s_dir) s_dir.close();
@@ -140,7 +131,7 @@ bool startScan() {
     s_phase = PumpPhase::Done;
     return false;
   }
-  if (!Storage.openFileForWrite("WIDX", kIndexTmpPath, s_tmp)) {
+  if (writeRecords && !Storage.openFileForWrite("WIDX", kIndexTmpPath, s_tmp)) {
     s_dir.close();
     s_phase = PumpPhase::Done;
     return false;
@@ -150,8 +141,35 @@ bool startScan() {
   s_iter = 0;
   s_failed = false;
   s_scanPowerLock = makeUniqueNoThrow<HalPowerManager::Lock>();  // full CPU speed for the scan's lifetime
-  s_phase = PumpPhase::Scanning;
+  s_phase = writeRecords ? PumpPhase::Writing : PumpPhase::Verifying;
   return true;
+}
+
+// Finish the read-only verification pass: unchanged folder -> Done with zero
+// writes; changed (or missing index file) -> chain straight into the write
+// pass, which the next pumpIdle ticks advance.
+void finishVerifyScan() {
+  closeScanHandles();
+  const bool changed = s_count != APP_STATE.sleepIndexCount || s_fingerprint != APP_STATE.sleepIndexFingerprint ||
+                       !Storage.exists(kIndexPath);
+  if (!changed) {
+    s_phase = PumpPhase::Done;
+    return;
+  }
+  startScan(/*writeRecords=*/true);  // sets Writing, or Done on open failure
+}
+
+// Finish the write pass: rotate the fresh tmp index in (the verify pass
+// already established the folder changed).
+void finishWriteScan() {
+  closeScanHandles();
+  s_phase = PumpPhase::Done;
+  if (s_failed) {
+    Storage.remove(kIndexTmpPath);
+    LOG_ERR("WIDX", "Idle index scan failed, keeping previous index");
+    return;
+  }
+  rotateIn(s_count, s_fingerprint, /*save=*/true);
 }
 
 }  // namespace
@@ -165,7 +183,7 @@ bool idleComplete() { return s_phase == PumpPhase::Done && !s_dirty; }
 void pumpIdle() {
   if (s_dirty) {
     // Re-arm: abandon any in-flight scan so it restarts over fresh content.
-    if (s_phase == PumpPhase::Scanning) {
+    if (s_phase == PumpPhase::Verifying || s_phase == PumpPhase::Writing) {
       closeScanHandles();
       Storage.remove(kIndexTmpPath);
     }
@@ -173,18 +191,23 @@ void pumpIdle() {
     s_dirty = false;
   }
   if (s_phase == PumpPhase::Done) return;
-  if (s_phase == PumpPhase::Pending && !startScan()) return;
+  if (s_phase == PumpPhase::Pending && !startScan(/*writeRecords=*/false)) return;
 
+  const bool writing = s_phase == PumpPhase::Writing;
   char name[256];
   for (size_t i = 0; i < kEntriesPerPump; ++i) {
     auto file = s_dir.openNextFile();
     if (!file) {
-      finishIdleScan();
+      if (writing) {
+        finishWriteScan();
+      } else {
+        finishVerifyScan();
+      }
       return;
     }
     if (!file.isDirectory()) {
       file.getName(name, sizeof(name));
-      if (isSleepImageName(name)) acceptEntry(file, name, s_count, s_fingerprint, s_tmp, s_failed);
+      if (isSleepImageName(name)) acceptEntry(file, name, s_count, s_fingerprint, writing ? &s_tmp : nullptr, s_failed);
     }
     file.close();
     if (++s_iter % kWdtInterval == 0) esp_task_wdt_reset();
@@ -193,7 +216,7 @@ void pumpIdle() {
 
 bool buildBlocking(Snapshot& out) {
   // Cancel any half-done idle scan; this full pass supersedes it.
-  if (s_phase == PumpPhase::Scanning) closeScanHandles();
+  if (s_phase == PumpPhase::Verifying || s_phase == PumpPhase::Writing) closeScanHandles();
   s_phase = PumpPhase::Done;
   s_dirty = false;
 
@@ -222,7 +245,7 @@ bool buildBlocking(Snapshot& out) {
   for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
     if (!file.isDirectory()) {
       file.getName(name, sizeof(name));
-      if (isSleepImageName(name)) acceptEntry(file, name, count, fingerprint, tmp, failed);
+      if (isSleepImageName(name)) acceptEntry(file, name, count, fingerprint, &tmp, failed);
     }
     file.close();
     if (++iter % kWdtInterval == 0) {

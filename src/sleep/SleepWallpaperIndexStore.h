@@ -13,7 +13,9 @@
  * path; buildBlocking exists as the lock-time fallback for a first boot or a
  * dirty index. Rebuilds are gated on a content fingerprint (count + commutative
  * FNV over name+mtime) persisted in APP_STATE, so an unchanged folder costs one
- * verification scan per wake at idle and nothing at lock.
+ * READ-ONLY verification scan per wake at idle (zero SD writes; records are
+ * only streamed out on a second pass when the fingerprint actually changed)
+ * and nothing at lock.
  *
  * Excluded from the host test build: HalStorage pulls in ESP32-only headers.
  * The pick/rotation logic layered on top lives in SleepIndexPickPolicy.h /
