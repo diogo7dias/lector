@@ -318,9 +318,11 @@ void EpubReaderActivity::loop() {
             pressWaitMs, (unsigned)ESP.getFreeHeap(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
             diagMissInfo_.c_str());
     if (SETTINGS.wakeDiagnostics) {
+      // Terse on purpose: the whole line must fit the screen width in the small
+      // font (a clipped heap value defeats the diagnostic).
       char line[128];
-      snprintf(line, sizeof(line), "boot>use %lums  sect %lums %s  press %lums  heap %u/%u  %s", diagSectionReadyMs_,
-               sectMs, diagSectionWasBuild_ ? "build" : "cache", pressWaitMs, (unsigned)ESP.getFreeHeap(),
+      snprintf(line, sizeof(line), "use %lu sect %lu %s pr %lu heap %u/%u %s", diagSectionReadyMs_, sectMs,
+               diagSectionWasBuild_ ? "build" : "cache", pressWaitMs, (unsigned)ESP.getFreeHeap(),
                (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), diagMissInfo_.c_str());
       RenderLock lock(*this);
       const int h = renderer.getLineHeight(SMALL_FONT_ID) + 4;
