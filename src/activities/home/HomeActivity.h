@@ -31,6 +31,11 @@ class HomeActivity final : public Activity {
   // so it remains snappy. Set on every onEnter, cleared after the first paint.
   bool pendingFullRefresh = true;
   bool hasOpdsServers = false;
+  // Wake press meter (wakeDiagnostics): millis() when the entry paint's
+  // refresh returned (menu physically on screen and loop back in control),
+  // and a one-shot guard for the first-press latency band.
+  unsigned long wakeMenuReadyAt_ = 0;
+  bool wakePressMeterDone_ = false;
   bool coverRendered = false;      // Track if cover has been rendered once
   bool coverBufferStored = false;  // Track if cover buffer is stored
   uint8_t* coverBuffer = nullptr;  // HomeActivity's own buffer for cover image

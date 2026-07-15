@@ -247,6 +247,8 @@ bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased() || merge
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
+unsigned long HalGPIO::getLastPressStart() const { return inputMgr.getLastPressStart(); }
+
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
 void HalGPIO::startDeepSleep() {
