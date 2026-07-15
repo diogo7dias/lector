@@ -50,20 +50,18 @@ class HomeActivity final : public Activity {
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
 
-  // Sleep-folder overflow. When /sleep exceeds kSleepIndexMaxImages (the index
+  // Sleep-folder overflow. When /sleep reaches kSleepIndexMaxImages (the index
   // rotation engine's ceiling — thousands are fine below it) the LIST home shows
   // a selectable warning card (selector slot 1, pushing books down) that opens a
   // keypad to randomly move N wallpapers to /sleep pause. A separate one-shot
   // toast reports wallpapers a legacy reconcile auto-moved while asleep.
+  // The count comes from APP_STATE.sleepIndexCount (the persisted sleep-index
+  // snapshot, refreshed by the windex idle pump) — home entry does NO directory
+  // walk. Every wake is a cold boot, so the old first-entry countImages(5000)
+  // walk sat on the wake-to-menu path for nothing: capped at 5000, it could
+  // never reach the 20000 warning threshold.
   bool sleepOverLimit = false;
   long sleepImageCount = 0;
-  // Static so the /sleep count survives HomeActivity re-construction: every
-  // goHome() builds a fresh instance, and an instance-member cache made each
-  // home entry re-walk the whole wallpaper folder (up to 5000 SD dir entries)
-  // before the first paint. Invalidated only by the bulk move below; a stale
-  // count self-corrects on the next boot (deep sleep resets statics too).
-  inline static long cachedSleepImageCount = 0;
-  inline static bool sleepImageCountKnown = false;
   std::string sleepPauseToast;  // "N moved to /sleep pause/" — shown once on entry
   std::string moveToast;        // "Moved N" — result popup after a bulk move
   // The over-limit warning card is a LIST-home-only slot; it sits at selector 1,
