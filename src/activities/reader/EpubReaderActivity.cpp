@@ -343,7 +343,9 @@ void EpubReaderActivity::loop() {
   // after the first page instead of racing it. A stale queue (user walked
   // away) is dropped rather than turning a page out of nowhere.
   if (queuedPageTurn != 0 && section) {
-    if (millis() - queuedPageTurnAtMs > 10000UL) {
+    // LOCKED rule: no phantom clicks. A queued turn only replays if the press
+    // is fresh; anything older is dropped (the user re-presses).
+    if (millis() - queuedPageTurnAtMs > 600UL) {
       queuedPageTurn = 0;
     } else if (!RenderLock::peek() && currentSpineIndex < epub->getSpineItemsCount()) {
       const bool forward = queuedPageTurn > 0;

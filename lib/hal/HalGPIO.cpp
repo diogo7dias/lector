@@ -204,7 +204,12 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
-  // Events latched during blocking waits surface for this one cycle.
+  // Events latched during blocking waits surface for this one cycle - unless
+  // they went stale inside the block (see STICKY_FRESH_MS).
+  if ((stickyPressed | stickyReleased) != 0 && millis() - stickyLatchedAtMs > STICKY_FRESH_MS) {
+    stickyPressed = 0;
+    stickyReleased = 0;
+  }
   mergedPressed = stickyPressed;
   mergedReleased = stickyReleased;
   stickyPressed = 0;
@@ -216,10 +221,18 @@ void HalGPIO::update() {
 
 void HalGPIO::pumpWaitInput() {
   inputMgr.update();
+  bool latched = false;
   for (uint8_t i = BTN_BACK; i <= BTN_POWER; i++) {
-    if (inputMgr.wasPressed(i)) stickyPressed |= static_cast<uint8_t>(1u << i);
-    if (inputMgr.wasReleased(i)) stickyReleased |= static_cast<uint8_t>(1u << i);
+    if (inputMgr.wasPressed(i)) {
+      stickyPressed |= static_cast<uint8_t>(1u << i);
+      latched = true;
+    }
+    if (inputMgr.wasReleased(i)) {
+      stickyReleased |= static_cast<uint8_t>(1u << i);
+      latched = true;
+    }
   }
+  if (latched) stickyLatchedAtMs = millis();
 }
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
