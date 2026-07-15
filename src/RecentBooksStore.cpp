@@ -17,6 +17,36 @@ constexpr char RECENT_BOOKS_FILE_BIN[] = "/.crosspoint/recent.bin";
 constexpr char RECENT_BOOKS_FILE_JSON[] = "/.crosspoint/recent.json";
 constexpr char RECENT_BOOKS_FILE_BAK[] = "/.crosspoint/recent.bin.bak";
 constexpr int MAX_RECENT_BOOKS = 10;
+
+// Best-effort [NN%] badge fallback. The badge value lives in recent.json,
+// which a firmware/store migration can lose; each book's progress.bin sidecar
+// survives (it also holds the precious reading position). New-format sidecars
+// carry a trailing percent byte — EPUB at offset 6, TXT/XTC at offset 4;
+// 255 or a short (old-format) file means unknown. Cache dirs are derived from
+// the same std::hash the readers use, so no book is ever opened here.
+int readSidecarPercent(const std::string& bookPath) {
+  const char* prefix;
+  size_t offset;
+  if (FsHelpers::hasEpubExtension(bookPath)) {
+    prefix = "/.crosspoint/epub_";
+    offset = 6;
+  } else if (FsHelpers::hasXtcExtension(bookPath)) {
+    prefix = "/.crosspoint/xtc_";
+    offset = 4;
+  } else if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
+    prefix = "/.crosspoint/txt_";
+    offset = 4;
+  } else {
+    return -1;
+  }
+  const std::string sidecar = prefix + std::to_string(std::hash<std::string>{}(bookPath)) + "/progress.bin";
+  HalFile f;
+  if (!Storage.openFileForRead("RBS", sidecar, f)) return -1;
+  uint8_t buf[8];
+  const int got = f.read(buf, sizeof(buf));
+  if (got < static_cast<int>(offset) + 1) return -1;
+  return buf[offset] <= 100 ? buf[offset] : -1;
+}
 }  // namespace
 
 RecentBooksStore RecentBooksStore::instance;
@@ -134,6 +164,18 @@ bool RecentBooksStore::saveToFile() const {
   return JsonSettingsIO::saveRecentBooks(*this, RECENT_BOOKS_FILE_JSON);
 }
 
+void RecentBooksStore::restoreMissingProgress() {
+  // In-RAM only: no saveToFile here (this runs on the lazy first load, i.e.
+  // usually the wake path). The recovered value persists with the next
+  // ordinary store write. At most MAX_RECENT_BOOKS tiny sidecar reads, and
+  // only for entries whose badge is actually missing.
+  for (RecentBook& book : recentBooks) {
+    if (book.progressPercent >= 0) continue;
+    const int pct = readSidecarPercent(book.path);
+    if (pct >= 0) book.progressPercent = pct;
+  }
+}
+
 RecentBook RecentBooksStore::getDataFromBook(std::string path) const {
   std::string lastBookFileName = "";
   const size_t lastSlash = path.find_last_of('/');
@@ -170,13 +212,16 @@ bool RecentBooksStore::loadFromFile() {
   if (Storage.exists(RECENT_BOOKS_FILE_JSON)) {
     String json = Storage.readFile(RECENT_BOOKS_FILE_JSON);
     if (!json.isEmpty()) {
-      return JsonSettingsIO::loadRecentBooks(*this, json.c_str());
+      const bool ok = JsonSettingsIO::loadRecentBooks(*this, json.c_str());
+      if (ok) restoreMissingProgress();
+      return ok;
     }
   }
 
   // Fall back to binary migration
   if (Storage.exists(RECENT_BOOKS_FILE_BIN)) {
     if (loadFromBinaryFile()) {
+      restoreMissingProgress();
       saveToFile();
       Storage.rename(RECENT_BOOKS_FILE_BIN, RECENT_BOOKS_FILE_BAK);
       LOG_DBG("RBS", "Migrated recent.bin to recent.json");

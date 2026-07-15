@@ -1712,7 +1712,14 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
-  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount);
+  // Whole-book percent rides along in the sidecar so the Home badge survives a
+  // lost recent.json (same math as the onExit RECENT_BOOKS.setProgress call).
+  int bookPercent = -1;
+  if (epub && epub->getBookSize() > 0) {
+    const float chapterProgress = pageCount > 0 ? static_cast<float>(currentPage) / pageCount : 0.0f;
+    bookPercent = clampPercent(static_cast<int>(epub->calculateProgress(spineIndex, chapterProgress) * 100.0f + 0.5f));
+  }
+  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, bookPercent);
 }
 
 // ── Grab-quote / highlight selection (ported from DX34) ──────────────────────

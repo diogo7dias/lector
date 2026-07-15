@@ -506,11 +506,16 @@ void TxtReaderActivity::renderStatusBar() const {
 }
 
 void TxtReaderActivity::saveProgress() const {
-  uint8_t data[4];
+  // Trailing byte 4 = whole-book percent (255 = unknown) so the Home [NN%]
+  // badge can be recovered from this sidecar if recent.json loses it. Old
+  // 4-byte files stay readable; old firmware ignores the extra byte.
+  uint8_t data[5];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
   data[2] = 0;
   data[3] = 0;
+  int pct = totalPages > 0 ? ((currentPage + 1) * 100) / totalPages : -1;
+  data[4] = (pct >= 0 && pct <= 100) ? static_cast<uint8_t>(pct) : 255;
   if (!ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data))) {
     LOG_ERR("TRS", "Failed to save progress: page %d", currentPage);
   }
