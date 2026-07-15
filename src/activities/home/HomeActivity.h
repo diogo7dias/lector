@@ -23,8 +23,10 @@ class HomeActivity final : public Activity {
   int scrollOffset = 0;
   int firstVisibleBookIdx = 0;
   int lastVisibleBookIdx = 0;
-  bool recentsLoading = false;
   bool recentsLoaded = false;
+  // Next recentBooks index the cover-thumb pump will examine (see
+  // pumpRecentCovers: one thumb generated per loop() pass).
+  size_t coverGenIndex = 0;
   bool firstRenderDone = false;
   // First paint after (re)entering Home does a FULL refresh to clear e-ink
   // ghosting left by the reader/menus; in-Home up/down nav stays on FAST_REFRESH
@@ -113,7 +115,7 @@ class HomeActivity final : public Activity {
   bool restoreCoverBuffer();  // Restore frame buffer from stored cover
   void freeCoverBuffer();     // Free the stored cover buffer
   void loadRecentBooks(int maxBooks);
-  void loadRecentCovers(int coverHeight);
+  void pumpRecentCovers(int coverHeight);
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
