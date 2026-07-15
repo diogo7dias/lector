@@ -44,7 +44,7 @@ void TextBlock::bindArenaPointers() {
   textArr = reinterpret_cast<const char*>(base + off);
 }
 
-TextBlock::TextBlock(const std::vector<std::string>& words, const std::vector<int16_t>& wordXpos,
+TextBlock::TextBlock(const std::vector<std::string_view>& words, const std::vector<int16_t>& wordXpos,
                      const std::vector<EpdFontFamily::Style>& wordStyles, const std::vector<uint8_t>& focusBoundary,
                      const std::vector<uint16_t>& focusSuffixX, const std::vector<uint16_t>& guideDotXOffset,
                      const BlockStyle& blockStyle)

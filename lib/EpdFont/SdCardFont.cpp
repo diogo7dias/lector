@@ -65,7 +65,9 @@ bool collectUniqueCodepoints(const char* text, uint32_t* codepoints, uint32_t& c
   return false;
 }
 
-const char* asCStr(const std::string& s) { return s.c_str(); }
+// Callers pass views that are NUL-terminated by construction (ParsedText word
+// pool allocates len+1 and writes the NUL), so .data() is safe here.
+const char* asCStr(const std::string_view s) { return s.data(); }
 const char* asCStr(const char* s) { return s; }
 
 }  // namespace
@@ -1258,7 +1260,7 @@ int SdCardFont::buildAdvanceTable(const char* utf8Text, uint8_t styleMask) {
   return buildAdvanceTableRange(&utf8Text, &utf8Text + 1, false, false, styleMask);
 }
 
-int SdCardFont::buildAdvanceTable(const std::vector<std::string>& words, bool includeHyphen, uint8_t styleMask) {
+int SdCardFont::buildAdvanceTable(const std::vector<std::string_view>& words, bool includeHyphen, uint8_t styleMask) {
   return buildAdvanceTableRange(words.begin(), words.end(), words.size() > 1, includeHyphen, styleMask);
 }
 

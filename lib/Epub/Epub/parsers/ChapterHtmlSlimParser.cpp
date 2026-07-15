@@ -11,6 +11,7 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <XmlParserUtils.h>
 #include <esp_heap_caps.h>
@@ -231,9 +232,12 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fontStyle = static_cast<EpdFontFamily::Style>(fontStyle | EpdFontFamily::SUB);
   }
 
-  // flush the buffer
+  // flush the buffer (currentTextBlock can be null after an OOM'd block start;
+  // the word is dropped, matching the drop-the-paragraph OOM policy)
   partWordBuffer[partWordBufferIndex] = '\0';
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  if (currentTextBlock) {
+    currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues);
+  }
   partWordBufferIndex = 0;
   nextWordContinues = false;
 }
@@ -270,8 +274,14 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,
-                                        guideDotsEnabled, blockStyle, firstLineIndentPx, wordSpacing));
+  // makeUniqueNoThrow, not bare new: with -fno-exceptions a failed bare new
+  // aborts instead of returning nullptr. On OOM the paragraph is dropped and
+  // the heap gate ends the build cleanly on the next chunk.
+  currentTextBlock = makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,
+                                                   guideDotsEnabled, blockStyle, firstLineIndentPx, wordSpacing);
+  if (!currentTextBlock) {
+    LOG_ERR("EHSP", "OOM: ParsedText for new block");
+  }
   wordsExtractedInBlock = 0;
 }
 
