@@ -85,6 +85,15 @@ class Section {
 
   Section(const std::shared_ptr<Epub>& epub, int spineIndex, GfxRenderer& renderer);
   ~Section();
+  // Side-effect-free probe: true if a cached section file exists for these
+  // exact layout parameters. Unlike loadSectionFile it never switches or
+  // prunes cache generations, so it is safe to call for several candidate
+  // parameter sets in a row.
+  bool hasCachedSectionFor(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
+                           uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
+                           uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled,
+                           int firstLineIndentPx, uint8_t wordSpacing, uint8_t paragraphSpacing) const;
+
   bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
                        uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,

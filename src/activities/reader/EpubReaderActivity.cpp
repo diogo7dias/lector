@@ -1446,6 +1446,47 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
     return true;
   }
 
+  // The floor tier missed. Before paying a multi-second rebuild, probe the
+  // higher tiers' cache generations: a session that degraded mid-book cached
+  // its chapters under the degraded tier's generation, and the floor resets
+  // to 0 on re-open (every wake is a cold boot), pointing the lookup at the
+  // wrong drawer. Adopting the degraded cache restores exactly the render
+  // state the book was in when it locked — a ~200 ms load instead of a
+  // rebuild. Probe with hasCachedSectionFor (side-effect free) first:
+  // loadSectionFile switches + prunes generations, so blind load attempts
+  // would delete the very generation a later tier needs.
+  LowMemoryRenderTier::Knobs lastProbed = floorKnobs;
+  for (int tier = lowMemoryTierFloor_ + 1; tier <= LowMemoryRenderTier::kMaxTier; ++tier) {
+    const LowMemoryRenderTier::Knobs knobs = LowMemoryRenderTier::apply(base, tier);
+    if (LowMemoryRenderTier::equal(knobs, lastProbed)) {
+      continue;
+    }
+    lastProbed = knobs;
+    if (!section.hasCachedSectionFor(fontId, lineCompression, SETTINGS.extraParagraphSpacing,
+                                     SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+                                     knobs.hyphenationEnabled, knobs.embeddedStyle, knobs.imageRendering,
+                                     knobs.focusReadingEnabled, knobs.guideDotsEnabled, firstLineIndentPx,
+                                     SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+      continue;
+    }
+    if (section.loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                                viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
+                                knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
+                                firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+      LOG_INF("ERS", "Adopted tier %d section cache (floor was %d); keeping that tier for this book", tier,
+              lowMemoryTierFloor_);
+      lowMemoryTierFloor_ = tier;
+      diagSectionWasBuild_ = false;
+      if (diagOverlayPending_) {
+        char adopted[16];
+        snprintf(adopted, sizeof(adopted), "adopt t%d", tier);
+        diagMissInfo_ = adopted;
+      }
+      diagSectionReadyMs_ = millis();
+      return true;
+    }
+  }
+
   LOG_DBG("ERS", "Cache not found, building...");
   diagSectionWasBuild_ = true;
   if (diagOverlayPending_) {
