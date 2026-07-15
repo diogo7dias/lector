@@ -11,6 +11,7 @@
 #include <JsonSettingsIO.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -312,13 +313,15 @@ void EpubReaderActivity::loop() {
     diagOverlayPending_ = false;
     const unsigned long sectMs = diagSectionReadyMs_ - diagEnterMs_;
     const unsigned long pressWaitMs = diagFirstPressMs_ ? diagSectionReadyMs_ - diagFirstPressMs_ : 0;
-    LOG_INF("DIAG", "WAKE usable=%lums (since boot) reader=%lums sect=%lums(%s) press-wait=%lums %s",
+    LOG_INF("DIAG", "WAKE usable=%lums (since boot) reader=%lums sect=%lums(%s) press-wait=%lums heap=%u/%u %s",
             diagSectionReadyMs_, diagSectionReadyMs_ - diagEnterMs_, sectMs, diagSectionWasBuild_ ? "build" : "cache",
-            pressWaitMs, diagMissInfo_.c_str());
+            pressWaitMs, (unsigned)ESP.getFreeHeap(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT),
+            diagMissInfo_.c_str());
     if (SETTINGS.wakeDiagnostics) {
       char line[128];
-      snprintf(line, sizeof(line), "boot>use %lums  sect %lums %s  press-wait %lums  %s", diagSectionReadyMs_, sectMs,
-               diagSectionWasBuild_ ? "build" : "cache", pressWaitMs, diagMissInfo_.c_str());
+      snprintf(line, sizeof(line), "boot>use %lums  sect %lums %s  press %lums  heap %u/%u  %s", diagSectionReadyMs_,
+               sectMs, diagSectionWasBuild_ ? "build" : "cache", pressWaitMs, (unsigned)ESP.getFreeHeap(),
+               (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_8BIT), diagMissInfo_.c_str());
       RenderLock lock(*this);
       const int h = renderer.getLineHeight(SMALL_FONT_ID) + 4;
       const int y = renderer.getScreenHeight() - h;
