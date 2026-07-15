@@ -7,6 +7,8 @@ on:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -45,6 +47,54 @@ jobs:
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
             .pio/build/gh_release/partitions.bin
+
+      # Attaches the firmware binaries to a GitHub Release for the tag so users
+      # who flash manually (esptool) can download them without the browser
+      # flasher. Creates the release if the tag has none, otherwise uploads the
+      # assets onto the existing one.
+      - name: Publish GitHub release with firmware assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          BUILD_DIR=.pio/build/gh_release
+          for f in firmware.bin bootloader.bin partitions.bin firmware.elf; do
+            test -f "$BUILD_DIR/$f" || { echo "missing $BUILD_DIR/$f" >&2; exit 1; }
+          done
+          ASSETS=("$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$BUILD_DIR/firmware.elf")
+          BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' | head -n1)"
+          if [ -n "$BOOT_APP0" ]; then
+            cp "$BOOT_APP0" "$BUILD_DIR/boot_app0.bin"
+            ASSETS+=("$BUILD_DIR/boot_app0.bin")
+          fi
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'EOF'
+          **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-wallpaper-converter/#flash) (Chrome/Edge, USB cable). One build serves both Xteink X3 and X4.
+
+          **Manual flash (esptool):**
+          ```
+          esptool.py --chip esp32c3 write_flash \
+            0x0 bootloader.bin \
+            0x8000 partitions.bin \
+            0xE000 boot_app0.bin \
+            0x10000 firmware.bin
+          ```
+          `firmware.elf` is for symbolizing crash reports, not for flashing.
+
+          ---
+          EOF
+          PRERELEASE_FLAG=""
+          case "$TAG" in *rc*|*RC*) PRERELEASE_FLAG="--prerelease" ;; esac
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "Lector $TAG" \
+              --notes-file "$NOTES_FILE" \
+              --generate-notes \
+              $PRERELEASE_FLAG
+          fi
 
       # Publishes the freshly built binaries into the wallpaper site so its
       # /flash page can serve the latest build to the browser flasher.
