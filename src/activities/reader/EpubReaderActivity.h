@@ -75,6 +75,7 @@ class EpubReaderActivity final : public Activity {
   // Wake diagnostics (SETTINGS.wakeDiagnostics): one-shot unlock-to-usable
   // timing, drawn over the first ready page and always logged.
   unsigned long diagEnterMs_ = 0;
+  std::string diagMissInfo_;
   unsigned long diagSectionReadyMs_ = 0;
   unsigned long diagFirstPressMs_ = 0;
   bool diagSectionWasBuild_ = false;
@@ -125,6 +126,12 @@ class EpubReaderActivity final : public Activity {
   // ladder (LowMemoryRenderTier.h) when a build aborts for lack of memory. Returns
   // false only on a genuine (non-memory) build failure or when even the lowest tier
   // cannot fit. Updates lowMemoryTierFloor_ on a successful degrade.
+  // Wake diagnostics: why did the section cache miss — was the file absent or
+  // stale, and does another kept generation still hold this spine (the
+  // wrong-drawer signature of the low-memory tier ladder or a layout-param
+  // wobble)? Cheap: one exists() plus a scan of the <=3 generation dirs.
+  std::string classifySectionMiss(const Section& section) const;
+
   bool buildSectionForRead(Section& section, uint16_t viewportWidth, uint16_t viewportHeight);
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.

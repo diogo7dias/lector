@@ -3,6 +3,7 @@
 #include <FontDecompressor.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#include <esp_heap_caps.h>
 
 #include <cstring>
 
@@ -62,7 +63,16 @@ void FontCacheManager::resetStats() {
 bool FontCacheManager::isScanning() const { return scanMode_ == ScanMode::Scanning; }
 
 void FontCacheManager::recordText(const char* text, int fontId, EpdFontFamily::Style style) {
-  scanText_ += text;
+  // Bounded append: the scan buffer was reserved once in PrewarmScope's ctor
+  // and must NEVER regrow — std::string growth uses the throwing operator
+  // new, and under -fno-exceptions an OOM there aborts (seen on device: X3
+  // crash mid-read with SD fonts once the advance tables had exhausted the
+  // heap). Dropping the tail just means fewer glyphs get prewarmed.
+  const size_t len = strlen(text);
+  if (scanText_.size() + len > scanText_.capacity()) {
+    return;
+  }
+  scanText_.append(text, len);
   if (scanFontId_ < 0) scanFontId_ = fontId;
   const uint8_t baseStyle = static_cast<uint8_t>(style) & 0x03;
   const unsigned char* p = reinterpret_cast<const unsigned char*>(text);
@@ -81,7 +91,16 @@ FontCacheManager::PrewarmScope::PrewarmScope(FontCacheManager& manager) : manage
   manager_->clearCache();
   manager_->resetStats();
   manager_->scanText_.clear();
-  manager_->scanText_.reserve(2048);  // Pre-allocate to avoid heap fragmentation from repeated concat
+  // One reservation, sized for a full page of UTF-8 text; recordText is
+  // bounded to this capacity so the string never regrows. Skip entirely when
+  // the heap is too starved for even this — string::reserve allocates with
+  // the throwing operator new, which aborts on OOM under -fno-exceptions
+  // (device crash 2026-07-14). Without the buffer the scan records nothing
+  // and prewarm is a no-op; glyphs still render, just uncached.
+  constexpr size_t SCAN_RESERVE = 4096;
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT) > SCAN_RESERVE + 8192) {
+    manager_->scanText_.reserve(SCAN_RESERVE);
+  }
   memset(manager_->scanStyleCounts_, 0, sizeof(manager_->scanStyleCounts_));
   manager_->scanFontId_ = -1;
 }
