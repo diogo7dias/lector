@@ -46,6 +46,13 @@ class HalGPIO {
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
 
+  // Edges latched by pumpWaitInput() while the loop task was blocked; folded
+  // into the was*() accessors for exactly one update() cycle.
+  uint8_t stickyPressed = 0;
+  uint8_t stickyReleased = 0;
+  uint8_t mergedPressed = 0;
+  uint8_t mergedReleased = 0;
+
  public:
   enum class DeviceType : uint8_t { X4, X3 };
 
@@ -64,6 +71,15 @@ class HalGPIO {
 
   // Button input methods
   void update();
+  // Input pump for blocking waits (installed as the display's busy-wait
+  // pump). Runs the debouncer so button transitions are observed while the
+  // loop task is blocked, and latches the resulting press/release edges:
+  // every InputManager::update() clears the previous call's events, so
+  // without the latch a tap that fits entirely inside a blocked window (a
+  // synchronous e-ink refresh is 1-2 s) is consumed unseen and the button
+  // feels dead. Latched edges are folded into the next update() and read
+  // like normal events. Not thread-safe - loop task only.
+  void pumpWaitInput();
   bool isPressed(uint8_t buttonIndex) const;
   bool wasPressed(uint8_t buttonIndex) const;
   bool wasAnyPressed() const;

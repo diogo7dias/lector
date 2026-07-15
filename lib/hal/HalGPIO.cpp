@@ -204,18 +204,33 @@ void HalGPIO::begin() {
 
 void HalGPIO::update() {
   inputMgr.update();
+  // Events latched during blocking waits surface for this one cycle.
+  mergedPressed = stickyPressed;
+  mergedReleased = stickyReleased;
+  stickyPressed = 0;
+  stickyReleased = 0;
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
+}
+
+void HalGPIO::pumpWaitInput() {
+  inputMgr.update();
+  for (uint8_t i = BTN_BACK; i <= BTN_POWER; i++) {
+    if (inputMgr.wasPressed(i)) stickyPressed |= static_cast<uint8_t>(1u << i);
+    if (inputMgr.wasReleased(i)) stickyReleased |= static_cast<uint8_t>(1u << i);
+  }
 }
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
 bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+  return inputMgr.wasPressed(buttonIndex) || (mergedPressed & (1u << buttonIndex));
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed() || mergedPressed != 0; }
 
 bool HalGPIO::isAnyPressed() const {
   for (uint8_t i = BTN_BACK; i <= BTN_POWER; i++) {
@@ -224,9 +239,11 @@ bool HalGPIO::isAnyPressed() const {
   return false;
 }
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+  return inputMgr.wasReleased(buttonIndex) || (mergedReleased & (1u << buttonIndex));
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased() || mergedReleased != 0; }
 
 unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 

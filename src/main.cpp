@@ -343,6 +343,20 @@ static void startSerialLogOnceUsbSettled() {
 static void startSerialLogOnceUsbSettled() {}
 #endif
 
+// Busy-wait input pump: installed into the display driver so button input
+// keeps being polled while a synchronous refresh blocks the loop task. The
+// buttons are ADC-polled with no interrupt path, so without this a quick tap
+// that starts and ends inside a blocking waveform (wake first paint is a
+// 1-2 s HALF refresh; the page becomes visible partway through) left no trace
+// and the device felt dead to the first press. Display waits also run on the
+// reader's render task; InputManager is not thread-safe, so only the loop
+// task pumps.
+static TaskHandle_t s_loopTaskHandle = nullptr;
+static void busyWaitInputPump() {
+  if (s_loopTaskHandle == nullptr || xTaskGetCurrentTaskHandle() != s_loopTaskHandle) return;
+  gpio.pumpWaitInput();
+}
+
 void setup() {
   t1 = millis();
 
@@ -357,6 +371,8 @@ void setup() {
   silentRebootTarget = 0;
 
   gpio.begin();
+  s_loopTaskHandle = xTaskGetCurrentTaskHandle();  // Arduino: setup+loop share this task
+  display.setBusyWaitPump(busyWaitInputPump);
   const unsigned long gpioSamplingStartedAt = millis();
   // Prime debounce immediately. Later samples are spread across real startup
   // work, replacing the dedicated 500 ms recovery-button wait below.

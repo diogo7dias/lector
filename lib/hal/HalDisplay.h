@@ -57,6 +57,8 @@ class HalDisplay {
   // display call).
   bool displayBufferAsync();
   void finishRefresh();
+  // Passthrough to EInkDisplay::setBusyWaitPump (see there).
+  void setBusyWaitPump(void (*pump)());
 
   // Windowed FAST refresh of a physical-panel rect (x and w byte-aligned).
   // Participates in the refresh policy: when the policy demands a periodic
