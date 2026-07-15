@@ -187,16 +187,23 @@ void ActivityManager::showTransitionBanner(const StrId label) {
   if (!currentActivity || RenderLock::peek()) {
     return;
   }
+  // Boot/sleep context: the screen holds a wallpaper or a restored page frame
+  // whose next repaint may be seamless or skipped entirely — a banner painted
+  // now could stay on the panel. Wake routing goes bannerless.
+  if (currentActivity->name == "Boot" || currentActivity->name == "Sleep") {
+    return;
+  }
   RenderLock lock;
   const char* text = I18n::getInstance().get(label);
+  // Full-width black strip with centered white text — same visual language as
+  // the boot screen's unlock banners.
   const int h = renderer.getLineHeight(UI_10_FONT_ID) + 8;
-  const int w = renderer.getTextWidth(UI_10_FONT_ID, text) + 24;
-  const int x = (renderer.getScreenWidth() - w) / 2;
-  renderer.fillRect(x, 0, w, h, true);
-  renderer.drawText(UI_10_FONT_ID, x + 12, 4, text, false);
-  // Detached: the activity switch executes while the panel drives the pill;
+  const int w = renderer.getScreenWidth();
+  renderer.fillRect(0, 0, w, h, true);
+  renderer.drawCenteredText(UI_10_FONT_ID, 4, text, false);
+  // Detached: the activity switch executes while the panel drives the strip;
   // the next activity's first draw joins the refresh (framebuffer contract).
-  renderer.displayWindowAsync(x, 0, w, h);
+  renderer.displayWindowAsync(0, 0, w, h);
 }
 
 void ActivityManager::goToFileTransfer() {
@@ -234,8 +241,10 @@ void ActivityManager::goToBrowser() {
   }
 }
 
-void ActivityManager::goToReader(std::string path) {
-  showTransitionBanner(StrId::STR_BANNER_OPENING_BOOK);
+void ActivityManager::goToReader(std::string path, const bool quiet) {
+  if (!quiet) {
+    showTransitionBanner(StrId::STR_BANNER_OPENING_BOOK);
+  }
   replaceActivity(makeUniqueNoThrow<ReaderActivity>(renderer, mappedInput, std::move(path)));
 }
 

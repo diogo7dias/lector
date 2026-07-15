@@ -95,7 +95,10 @@ class ActivityManager {
   void goToQRShare(std::string path);
   void goToRecentBooks();
   void goToBrowser();
-  void goToReader(std::string path);
+  // quiet = no transition banner. Used by the wake path: with a restored page
+  // frame the reader's first repaint may be skipped entirely (wake-frame
+  // handoff), so a banner painted over the frame would never be cleared.
+  void goToReader(std::string path, bool quiet = false);
   void goToSleep(bool fromTimeout = false);
   void goToBoot(std::string wallpaperPath = {});
   void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);

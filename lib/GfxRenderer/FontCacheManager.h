@@ -51,7 +51,15 @@ class FontCacheManager {
 
   enum class ScanMode : uint8_t { None, Scanning };
   ScanMode scanMode_ = ScanMode::None;
-  std::string scanText_;
+  // Fixed scan buffer: prewarm scanning must NEVER allocate. std::string
+  // growth uses the throwing operator new, and under -fno-exceptions an OOM
+  // there aborts (device crash 2026-07-14); gating the allocation on free
+  // heap instead just disabled prewarm on starved heaps and made pages crawl
+  // (uncached glyph rendering). 4KB covers a full page of UTF-8 text;
+  // overflow drops the tail (fewer prewarmed glyphs).
+  static constexpr size_t SCAN_TEXT_CAP = 4096;
+  char scanText_[SCAN_TEXT_CAP + 1] = {};
+  size_t scanTextLen_ = 0;
   uint32_t scanStyleCounts_[4] = {};
   int scanFontId_ = -1;
 };
