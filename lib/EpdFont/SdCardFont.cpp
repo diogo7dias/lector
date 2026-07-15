@@ -127,6 +127,8 @@ void SdCardFont::freeStyleAll(PerStyle& s) {
 void SdCardFont::freeAll() {
   clearOverflow();
   clearPersistentCache();
+  delete[] advScratch_;
+  advScratch_ = nullptr;
   for (uint8_t i = 0; i < MAX_STYLES; i++) {
     freeStyleAll(styles_[i]);
   }
@@ -1202,32 +1204,52 @@ int SdCardFont::buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, 
 
   unsigned long startMs = millis();
 
-  // +2 reserved slots for space and hyphen injected after the main scan.
-  static constexpr uint32_t MAX_UNIQUE_CODEPOINTS = 4096;
-  uint32_t* codepoints = new (std::nothrow) uint32_t[MAX_UNIQUE_CODEPOINTS + 2];
-  if (!codepoints) {
-    LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", MAX_UNIQUE_CODEPOINTS * 4);
-    return -1;
+  // One persistent scratch (see its declaration), flushed in chunks: when it
+  // fills, sort + fetch + reset and keep collecting. Duplicates across
+  // flushes are filtered by the already-cached check inside
+  // fetchAdvancesForCodepoints, so chunking costs at most a re-scan.
+  if (!advScratch_) {
+    // +2 reserved slots for space and hyphen injected after the main scan.
+    advScratch_ = new (std::nothrow) uint32_t[ADV_SCRATCH_CAP + 2];
+    if (!advScratch_) {
+      LOG_ERR("SDCF", "buildAdvanceTable: failed to allocate codepoint buffer (%u bytes)", ADV_SCRATCH_CAP * 4);
+      return -1;
+    }
   }
+  uint32_t* codepoints = advScratch_;
   uint32_t cpCount = 0;
-  bool hitCap = false;
+  int totalMissed = 0;
 
-  for (auto it = begin; it != end && !hitCap; ++it) {
-    hitCap = collectUniqueCodepoints(asCStr(*it), codepoints, cpCount, MAX_UNIQUE_CODEPOINTS);
+  const auto flush = [&]() {
+    if (cpCount == 0) return;
+    std::sort(codepoints, codepoints + cpCount);
+    totalMissed += fetchAdvancesForCodepoints(codepoints, cpCount, styleMask);
+    cpCount = 0;
+  };
+
+  for (auto it = begin; it != end; ++it) {
+    const char* word = asCStr(*it);
+    const uint32_t beforeCount = cpCount;
+    if (collectUniqueCodepoints(word, codepoints, cpCount, ADV_SCRATCH_CAP)) {
+      // Scratch full mid-word: flush and re-collect the word into the empty
+      // scratch (codepoints flushed a moment ago get filtered as cached by
+      // the fetch). A single word overflowing the EMPTY scratch (>1024
+      // unique codepoints in one word) cannot happen in practice; if it
+      // does, its tail is dropped with a log rather than looping.
+      flush();
+      if (beforeCount == 0 || collectUniqueCodepoints(word, codepoints, cpCount, ADV_SCRATCH_CAP)) {
+        LOG_ERR("SDCF", "buildAdvanceTable: unique codepoint cap (%u) hit, layout may be approximate", ADV_SCRATCH_CAP);
+        flush();
+      }
+    }
   }
 
   if (includeSpace && std::none_of(codepoints, codepoints + cpCount, [](uint32_t c) { return c == ' '; }))
     codepoints[cpCount++] = ' ';
   if (includeHyphen && std::none_of(codepoints, codepoints + cpCount, [](uint32_t c) { return c == '-'; }))
     codepoints[cpCount++] = '-';
+  flush();
 
-  if (hitCap) {
-    LOG_ERR("SDCF", "buildAdvanceTable: unique codepoint cap (%u) hit, layout may be approximate",
-            MAX_UNIQUE_CODEPOINTS);
-  }
-  std::sort(codepoints, codepoints + cpCount);
-  int totalMissed = fetchAdvancesForCodepoints(codepoints, cpCount, styleMask);
-  delete[] codepoints;
   stats_.prewarmTotalMs = millis() - startMs;
   return totalMissed;
 }

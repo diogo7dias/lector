@@ -228,6 +228,17 @@ class SdCardFont {
   static constexpr uint32_t ADVANCE_CACHE_LIMIT = 768;
   AdvanceEntry* advanceTable_[MAX_STYLES] = {};
   uint32_t advanceTableSize_[MAX_STYLES] = {};
+
+  // Reusable codepoint-collection scratch for buildAdvanceTableRange,
+  // allocated once on first use. The old code allocated a 16KB buffer on
+  // EVERY call (one call per laid-out paragraph): hundreds of 16KB
+  // alloc/free cycles per chapter interleaved with glyph loads chopped the
+  // heap into fragments — the largest-block starvation behind the
+  // 2026-07-14 device crash. One persistent 4KB block, flushed in chunks,
+  // replaces all of it. Sized just above ADVANCE_CACHE_LIMIT: collecting
+  // more uniques than the cache can hold is pointless.
+  static constexpr uint32_t ADV_SCRATCH_CAP = 1024;
+  uint32_t* advScratch_ = nullptr;  // ADV_SCRATCH_CAP + 2 entries (space/hyphen slots)
   bool advanceTableLookup(uint8_t styleIdx, uint32_t codepoint, uint16_t* outAdvance) const;
   // Merge sortedNew (sorted by codepoint, no overlap with existing) into the
   // advance table for styleIdx, preserving sort order; cap-truncates the tail.
