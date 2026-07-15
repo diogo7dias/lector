@@ -156,12 +156,12 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
 // ChapterHtmlSlimParser) is a complete type here. Any in-flight build is torn down.
 Section::~Section() { abandonBuild(); }
 
-void Section::selectGeneration(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                               const uint8_t imageRendering, const bool focusReadingEnabled,
-                               const bool guideDotsEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
-                               const uint8_t paragraphSpacing) {
+namespace {
+uint32_t layoutGenerationHash(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                              const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+                              const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
+                              const uint8_t imageRendering, const bool focusReadingEnabled, const bool guideDotsEnabled,
+                              const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
   uint32_t h = 2166136261u;
   h = fnvFoldPod(h, fontId);
   h = fnvFoldPod(h, lineCompression);
@@ -177,6 +177,20 @@ void Section::selectGeneration(const int fontId, const float lineCompression, co
   h = fnvFoldPod(h, firstLineIndentPx);
   h = fnvFoldPod(h, wordSpacing);
   h = fnvFoldPod(h, paragraphSpacing);
+  return h;
+}
+}  // namespace
+
+void Section::selectGeneration(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
+                               const uint8_t imageRendering, const bool focusReadingEnabled,
+                               const bool guideDotsEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
+                               const uint8_t paragraphSpacing) {
+  const uint32_t h =
+      layoutGenerationHash(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                           viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
+                           guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing);
 
   char genName[12];
   snprintf(genName, sizeof(genName), "%08x", static_cast<unsigned>(h));
@@ -185,6 +199,30 @@ void Section::selectGeneration(const int fontId, const float lineCompression, co
   prepareGeneration(cacheDir, genName);
   sectionDirPath = cacheDir + "/sections/" + genName;
   filePath = sectionDirPath + "/" + std::to_string(spineIndex) + ".bin";
+}
+
+bool Section::hasCachedSectionFor(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
+                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
+                                  const bool embeddedStyle, const uint8_t imageRendering,
+                                  const bool focusReadingEnabled, const bool guideDotsEnabled,
+                                  const int firstLineIndentPx, const uint8_t wordSpacing,
+                                  const uint8_t paragraphSpacing) const {
+  // Pure existence probe: no prepareGeneration, no marker switch, no prune,
+  // no member mutation. Callers scanning several parameter candidates (the
+  // low-memory tier adoption in buildSectionForRead) MUST use this first —
+  // loadSectionFile's generation switch prunes all but the newest two
+  // generation dirs, so probing by loading would delete the very drawer a
+  // later candidate needs.
+  const uint32_t h =
+      layoutGenerationHash(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                           viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
+                           guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing);
+  char genName[12];
+  snprintf(genName, sizeof(genName), "%08x", static_cast<unsigned>(h));
+  const std::string candidate =
+      epub->getCachePath() + "/sections/" + genName + "/" + std::to_string(spineIndex) + ".bin";
+  return Storage.exists(candidate.c_str());
 }
 
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
