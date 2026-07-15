@@ -560,7 +560,7 @@ void setup() {
     } else {
       APP_STATE.readerActivityLoadCount++;
       APP_STATE.saveToFile();
-      activityManager.goToReader(APP_STATE.openEpubPath);
+      activityManager.goToReader(APP_STATE.openEpubPath, /*quiet=*/true);
     }
   } else if (resume == BootResume::Silent) {
     // target == home (or reader with no open book): land on home — don't fall
