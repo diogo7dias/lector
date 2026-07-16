@@ -22,13 +22,13 @@ TEST(LayoutHeapGate, FragmentedHeapIsCritical) {
 TEST(LayoutHeapGate, FreeHeapBoundaryIsExclusive) {
   // Strictly below the free-heap floor is critical; exactly at the floor (with
   // ample contiguous room) is not.
-  EXPECT_TRUE(layoutHeapCritical(16 * 1024 - 1, 32 * 1024));
-  EXPECT_FALSE(layoutHeapCritical(16 * 1024, 32 * 1024));
+  EXPECT_TRUE(layoutHeapCritical(24 * 1024 - 1, 32 * 1024));
+  EXPECT_FALSE(layoutHeapCritical(24 * 1024, 32 * 1024));
 }
 
 TEST(LayoutHeapGate, LargestBlockBoundaryIsExclusive) {
-  EXPECT_TRUE(layoutHeapCritical(64 * 1024, 8 * 1024 - 1));
-  EXPECT_FALSE(layoutHeapCritical(64 * 1024, 8 * 1024));
+  EXPECT_TRUE(layoutHeapCritical(64 * 1024, 16 * 1024 - 1));
+  EXPECT_FALSE(layoutHeapCritical(64 * 1024, 16 * 1024));
 }
 
 TEST(LayoutHeapGate, ZeroHeapIsCritical) { EXPECT_TRUE(layoutHeapCritical(0, 0)); }

@@ -12,11 +12,14 @@
  *
  * Pure and host-testable (no Arduino / heap_caps), mirroring WholeFileReadGate.
  *
- * Thresholds are deliberately CONSERVATIVE. Today a trip ends the build as a
- * clean error with no automatic quality fallback, so the gate must never fire
- * during normal reading — only near genuine starvation. Once the render
- * fallback ladder lands (a trip degrades page quality and retries instead of
- * failing), these can be raised to catch OOM more proactively.
+ * Thresholds were shipped conservative (16 KB / 8 KB) while a trip still
+ * ended the build as a hard error. Both conditions changed: the render
+ * fallback ladder retries a tripped build at a degraded tier, and live X3
+ * session logs (2026-07-16) showed the old gate letting builds run to a
+ * 3.8 KB largest block — deep inside abort territory (per-paragraph scratch
+ * arenas alone want 4 KB, TextBlock arenas and glyph loads ride on top).
+ * Raised to 24 KB free / 16 KB largest: the ladder engages while allocations
+ * still succeed, instead of after paragraphs start dropping.
  */
 #pragma once
 
@@ -29,8 +32,8 @@ namespace crosspoint {
 // largest contiguous allocatable block (fragmentation, not just total, is what
 // actually fails an allocation).
 inline bool layoutHeapCritical(size_t freeHeap, size_t largestFreeBlock) {
-  constexpr size_t kMinFreeHeap = 16 * 1024;
-  constexpr size_t kMinLargestFreeBlock = 8 * 1024;
+  constexpr size_t kMinFreeHeap = 24 * 1024;
+  constexpr size_t kMinLargestFreeBlock = 16 * 1024;
   return freeHeap < kMinFreeHeap || largestFreeBlock < kMinLargestFreeBlock;
 }
 
