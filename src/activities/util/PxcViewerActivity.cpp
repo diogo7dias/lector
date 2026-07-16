@@ -54,7 +54,11 @@ void PxcViewerActivity::render() {
   // Render byte-for-byte like the lock screen (3-pass grayscale, panel-sized), now
   // with the hint band baked in. Returns false when the .pxc does not match this
   // screen (+/-1 px) or fails to open; only then do we show an error frame.
-  if (!renderPxcSleepScreen(renderer, filePath, drawHints, true, true, pxcViewerOverlayTiming())) {
+  // FULL base pass: the viewer paints straight over the file-browser list, and
+  // the HALF waveform leaves the old rows ghosting through the wallpaper
+  // (device photo, 2026-07-16). One deep-clean blink on entry, ghost-free.
+  if (!renderPxcSleepScreen(renderer, filePath, drawHints, true, true, pxcViewerOverlayTiming(),
+                            HalDisplay::FULL_REFRESH)) {
     const auto pageHeight = renderer.getScreenHeight();
     renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));
