@@ -136,7 +136,7 @@ void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, b
     einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
     return;
   }
-  if (gpio.deviceIsX3()) {
+  if (gpio.deviceIsX3() && !x3WindowedOverride_) {
     // X3 windowed refreshes are disabled: the UC81xx PTL window pass
     // intermittently corrupts the window region (vertical-streak noise band
     // over the selection rows, device photo evidence on v0.20-v0.27; the
@@ -145,6 +145,10 @@ void HalDisplay::displayWindow(uint16_t x, uint16_t y, uint16_t w, uint16_t h, b
     // this panel: portrait menu rows span the full gate width, so a PTL
     // window saves no waveform time over a full FAST pass - only the blink
     // area. X4 keeps windowed mode (SSD1677 RAM windows, no such fault).
+    // GARBLE HUNT: x3WindowedOverride_ (Wake Diagnostics setting, applied at
+    // boot) re-arms the real PTL window on X3 so a
+    // serial cable session can reproduce the fault with the SDK's
+    // "X3_OEM_FAST (PTL window)" markers in view. Leave it OFF for daily use.
     einkDisplay.displayBuffer(convertRefreshMode(RefreshMode::FAST_REFRESH), turnOffScreen);
     return;
   }
@@ -163,10 +167,11 @@ bool HalDisplay::displayWindowAsync(uint16_t x, uint16_t y, uint16_t w, uint16_t
     einkDisplay.displayBuffer(convertRefreshMode(mode), false);
     return false;
   }
-  if (gpio.deviceIsX3()) {
+  if (gpio.deviceIsX3() && !x3WindowedOverride_) {
     // See displayWindow(): X3 PTL window passes corrupt intermittently and
     // save no waveform time on this panel. Full-frame async FAST keeps the
     // detached-refresh benefits (input stays live) without the fault.
+    // Wake Diagnostics ON re-arms the window for the garble hunt (see above).
     return einkDisplay.displayBufferAsync();
   }
   return einkDisplay.displayWindowAsync(x, y, w, h);

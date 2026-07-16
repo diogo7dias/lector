@@ -414,6 +414,9 @@ void setup() {
   // presentation + routing read both). RECENT_BOOKS, KOREADER_STORE and
   // OPDS_STORE lazy-load from SD on first access inside their stores.
   SETTINGS.loadFromFile();
+  // Garble hunt: Wake Diagnostics re-arms real X3 PTL windowed refreshes so a
+  // serial session can reproduce the panel fault (applies at boot only).
+  display.setX3WindowedRefreshOverride(SETTINGS.wakeDiagnostics != 0);
   display.pumpBootReset();
   APP_STATE.loadFromFile();
   display.pumpBootReset();

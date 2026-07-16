@@ -102,6 +102,12 @@ class HalDisplay {
   void writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows);
   bool supportsStripGrayscale() const;
 
+  // GARBLE HUNT: re-arm real PTL windowed refreshes on X3 (normally routed to
+  // full-frame FAST, see displayWindow in the .cpp). Wired from
+  // SETTINGS.wakeDiagnostics at boot in main.cpp; takes effect next boot when
+  // the setting is toggled. Never enable outside a serial debug session.
+  void setX3WindowedRefreshOverride(const bool enable) { x3WindowedOverride_ = enable; }
+
   // Runtime geometry passthrough
   uint16_t getDisplayWidth() const;
   uint16_t getDisplayHeight() const;
@@ -113,6 +119,7 @@ class HalDisplay {
 
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
+  bool x3WindowedOverride_ = false;
 };
 
 extern HalDisplay display;
