@@ -6,6 +6,29 @@
 
 #include <cstring>
 
+#if defined(ESP_PLATFORM)
+#include <esp_heap_caps.h>
+#endif
+
+namespace {
+// True when growing a vector of `elemSize` items from `capacity` can be
+// satisfied by the largest free block with slack to spare. Host builds have a
+// real allocator and exceptions; the gate only matters on-device, where a
+// throwing vector growth under -fno-exceptions is an abort() (device crash
+// 2026-07-16: entries growth during the /opds/books parse with a ~5 KB
+// free-heap watermark).
+bool canGrowVector(const size_t capacity, const size_t elemSize) {
+#if defined(ESP_PLATFORM)
+  const size_t grown = (capacity ? capacity * 2 : 8) * elemSize;
+  return heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) >= grown + 4096;
+#else
+  (void)capacity;
+  (void)elemSize;
+  return true;
+#endif
+}
+}  // namespace
+
 OpdsParser::OpdsParser() {
   parser = XML_ParserCreate(nullptr);
   if (!parser) {
@@ -173,8 +196,10 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     if (!self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
       const size_t entryTextBytes = self->currentEntry.title.size() + self->currentEntry.author.size() +
                                     self->currentEntry.href.size() + self->currentEntry.id.size();
+      const bool growthImminent = self->entries.size() == self->entries.capacity();
       if (self->entries.size() >= MAX_ENTRIES ||
-          !memory::canGrowWithinLimit(self->retainedTextBytes, entryTextBytes, MAX_RETAINED_TEXT_BYTES)) {
+          !memory::canGrowWithinLimit(self->retainedTextBytes, entryTextBytes, MAX_RETAINED_TEXT_BYTES) ||
+          (growthImminent && !canGrowVector(self->entries.capacity(), sizeof(OpdsEntry)))) {
         self->errorOccured = true;
         XML_StopParser(self->parser, XML_FALSE);
         return;
