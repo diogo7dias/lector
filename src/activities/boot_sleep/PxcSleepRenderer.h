@@ -1,4 +1,6 @@
 #pragma once
+#include <HalDisplay.h>
+
 #include <functional>
 #include <string>
 
@@ -30,6 +32,12 @@ class GfxRenderer;
 // grayscale=false renders a single 1-bit (black/white) refresh of the wallpaper +
 // overlays, skipping the 3-pass grayscale pipeline. The unlock banner screen uses
 // this for a faster wake; the sleep screen and PXC viewer keep the full grayscale.
+//
+// baseRefresh selects the waveform of the first VISIBLE pass. The sleep path
+// keeps HALF (the panel was already deep-cleaned by the lock sequence); the PXC
+// viewer passes FULL_REFRESH because it paints straight over a file-browser
+// list and HALF leaves the old rows ghosting through the wallpaper.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path,
                           const std::function<void()>& extraOverlay = nullptr, bool drawInfoOverlay = true,
-                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass);
+                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass,
+                          HalDisplay::RefreshMode baseRefresh = HalDisplay::HALF_REFRESH);
