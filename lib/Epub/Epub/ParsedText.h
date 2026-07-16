@@ -73,6 +73,12 @@ class ParsedText {
   // caller drops the token/paragraph rather than crashing.
   std::string_view poolStore(const char* data, size_t len);
 
+  // Set when the last layoutAndExtractLines dropped the paragraph because a
+  // scratch/pool arena could not be allocated. The parser reads this to abort
+  // the whole build at the FIRST starved paragraph instead of grinding through
+  // (and dropping) every remaining paragraph before the heap gate trips.
+  bool lastLayoutOom_ = false;
+
   int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
   // Signed pixels to add to each real inter-word gap for the word-spacing setting.
   int wordSpacingDeltaPx(const GfxRenderer& renderer, int fontId) const;
@@ -119,4 +125,5 @@ class ParsedText {
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);
+  bool lastLayoutOom() const { return lastLayoutOom_; }
 };

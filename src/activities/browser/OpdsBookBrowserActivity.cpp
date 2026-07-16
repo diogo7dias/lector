@@ -162,7 +162,12 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 
   if (state == BrowserState::ERROR) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_ERROR_MSG));
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
+    // A long error line ("Failed to fetch feed (No response from server)") is
+    // wider than the panel; centering it puts x negative and every glyph pixel
+    // outside the framebuffer logs "!! Outside range" (~200 lines per render).
+    // Truncate to the page width like the DOWNLOADING branch does.
+    const auto errLine = renderer.truncatedText(UI_10_FONT_ID, errorMessage.c_str(), pageWidth - 20);
+    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errLine.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();

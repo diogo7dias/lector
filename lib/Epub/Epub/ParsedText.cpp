@@ -694,15 +694,18 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // of several churning std::vector allocations per paragraph. On arena OOM the
   // paragraph is dropped (logged) rather than aborting, matching how extractLine
   // already drops a line when the TextBlock arena cannot be allocated.
+  lastLayoutOom_ = false;
   Arena scratch;
   if (!scratch.init(4 * 1024)) {
     LOG_ERR("PTX", "Dropping paragraph: layout scratch arena OOM");
+    lastLayoutOom_ = true;
     return;
   }
 
   ArenaVector<uint16_t> wordWidths(scratch);
   if (!calculateWordWidths(wordWidths, renderer, fontId)) {
     LOG_ERR("PTX", "Dropping paragraph: word-width scratch OOM");
+    lastLayoutOom_ = true;
     return;
   }
 
@@ -718,6 +721,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   }
   if (!breaksOk) {
     LOG_ERR("PTX", "Dropping paragraph: line-break scratch OOM");
+    lastLayoutOom_ = true;
     return;
   }
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;

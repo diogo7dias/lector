@@ -1186,6 +1186,11 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
         [self](const std::shared_ptr<TextBlock>& textBlock) { self->addLineToPage(textBlock); }, false);
+    if (self->currentTextBlock->lastLayoutOom() && !self->lowMemoryAbort_) {
+      LOG_ERR("EHP", "Layout arena OOM - aborting build");
+      self->lowMemoryAbort_ = true;
+      XML_StopParser(self->xmlParser_, XML_FALSE);
+    }
   }
 }
 
@@ -1519,6 +1524,14 @@ void ChapterHtmlSlimParser::makePages() {
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
+  // A paragraph dropped for arena OOM means the heap is already starved: abort
+  // the build NOW (same path as the heap gate) instead of noisily dropping
+  // every following paragraph until the gate finally trips.
+  if (currentTextBlock->lastLayoutOom() && !lowMemoryAbort_) {
+    LOG_ERR("EHP", "Layout arena OOM - aborting build");
+    lowMemoryAbort_ = true;
+    XML_StopParser(xmlParser_, XML_FALSE);
+  }
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches
