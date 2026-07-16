@@ -51,13 +51,18 @@ class Section {
   struct BuildContext {
     std::string tmpHtmlPath;  // unzipped chapter HTML; referenced by parser, removed at finalize
     std::string partPath;     // "<section>.bin.part" being written; renamed over filePath on commit
-    std::vector<PageLutEntry> lut;
+    // Page LUT as a nothrow-grown flat array (a std::vector would abort() on a
+    // failed growth under -fno-exceptions); see ensurePageLutCapacity.
+    std::unique_ptr<PageLutEntry[]> lut;
+    uint16_t lutCapacity = 0;
+    uint16_t lutCount = 0;
+    bool lutFailed = false;          // LUT could not grow; buildSomeMore abandons the build
     CssParser* cssParser = nullptr;  // cleared at finalize/abandon
     std::unique_ptr<ChapterHtmlSlimParser> parser;
   };
   std::unique_ptr<BuildContext> build_;
   bool buildComplete_ = false;
-  uint16_t builtPageCount_ = 0;  // pages laid out by the active build (== build_->lut.size())
+  uint16_t builtPageCount_ = 0;  // pages laid out by the active build (== build_->lutCount)
   // True when the most recent build failed specifically because the heap ran
   // critically low during layout (as opposed to a parse/IO error). Captured from
   // the parser before the failed build is torn down; read via lastBuildWasLowMemory().

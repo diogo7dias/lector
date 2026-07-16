@@ -8,6 +8,10 @@
 
 namespace {
 
+// Element-count cap for deserialization: a corrupt count would otherwise drive
+// a huge reserve() (throwing growth aborts under -fno-exceptions).
+constexpr size_t MAX_PAGE_ELEMENTS = 1024;
+
 template <typename Predicate>
 void renderFilteredPageElements(const std::vector<std::shared_ptr<PageElement>>& elements, GfxRenderer& renderer,
                                 const int fontId, const int xOffset, const int yOffset, Predicate&& predicate) {
@@ -192,11 +196,22 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   uint16_t count;
-  serialization::readPod(file, count);
+  if (!serialization::tryReadPod(file, count)) {
+    LOG_ERR("PGE", "Deserialization failed: truncated element count");
+    return nullptr;
+  }
+  if (count > MAX_PAGE_ELEMENTS) {
+    LOG_ERR("PGE", "Deserialization failed: element count %u exceeds maximum", count);
+    return nullptr;
+  }
+  page->elements.reserve(count);
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;
-    serialization::readPod(file, tag);
+    if (!serialization::tryReadPod(file, tag)) {
+      LOG_ERR("PGE", "Deserialization failed: truncated element tag %u", i);
+      return nullptr;
+    }
 
     if (tag == TAG_PageLine) {
       auto pl = PageLine::deserialize(file);
@@ -224,7 +239,10 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
 
   // Deserialize footnotes
   uint16_t fnCount;
-  serialization::readPod(file, fnCount);
+  if (!serialization::tryReadPod(file, fnCount)) {
+    LOG_ERR("PGE", "Deserialization failed: truncated footnote count");
+    return nullptr;
+  }
   if (fnCount > MAX_FOOTNOTES_PER_PAGE) {
     LOG_ERR("PGE", "Invalid footnote count %u", fnCount);
     return nullptr;

@@ -30,6 +30,13 @@ void readPod(HalFile& file, T& value) {
   file.read(reinterpret_cast<uint8_t*>(&value), sizeof(T));
 }
 
+// Checked variant: false on a short read (truncated/corrupt file) so callers
+// can bail instead of consuming garbage.
+template <typename T>
+bool tryReadPod(HalFile& file, T& value) {
+  return file.read(reinterpret_cast<uint8_t*>(&value), sizeof(T)) == static_cast<int>(sizeof(T));
+}
+
 inline void writeString(std::ostream& os, const std::string& s) {
   const uint32_t len = s.size();
   writePod(os, len);
