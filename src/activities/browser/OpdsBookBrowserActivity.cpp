@@ -5,6 +5,7 @@
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
+#include <esp_heap_caps.h>
 
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -214,6 +215,23 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   if (server.url.empty()) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_NO_SERVER_URL);
+    requestUpdate();
+    return;
+  }
+
+  // Free the outgoing entry list BEFORE the fetch: TLS + parse need ~50 KB
+  // and the 2026-07-16 session log showed the free-heap watermark at 4.7 KB
+  // with the old list still retained. The loading screen is up anyway.
+  std::vector<OpdsEntry>().swap(entries);
+
+  // Pre-fetch heap gate: starting a TLS fetch on a fragmented heap walks
+  // every allocation in the parse past an abort() cliff. An error screen
+  // beats a crash; leaving and re-entering the browser frees the heap.
+  const size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
+  if (largestBlock < 20 * 1024) {
+    LOG_ERR("OPDS", "Heap too fragmented for a fetch (largest=%u)", static_cast<unsigned>(largestBlock));
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_MEMORY_ERROR);
     requestUpdate();
     return;
   }
