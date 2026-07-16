@@ -49,6 +49,12 @@ bool isRedirect(int status) {
 HttpDownloader::DownloadError runGet(const std::string& url, const std::string& username, const std::string& password,
                                      Sink& sink) {
   s_lastHttpStatus = 0;
+  // Diagnostic line for cable debug sessions: never logs the credentials
+  // themselves, but userLen/passLen expose the classic stale-password case
+  // (device password out of sync with the server after a server-side change).
+  LOG_INF("HTTP", "GET %s auth=%s userLen=%u passLen=%u", url.c_str(),
+          (!username.empty() && !password.empty()) ? "basic" : "none", static_cast<unsigned>(username.size()),
+          static_cast<unsigned>(password.size()));
   esp_http_client_config_t config = {};
   config.url = url.c_str();
   config.buffer_size = HTTP_RX_BUF;
@@ -88,7 +94,9 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
   int64_t contentLength = esp_http_client_fetch_headers(client);
   int status = esp_http_client_get_status_code(client);
-  for (int hop = 0; isRedirect(status) && hop < 5; ++hop) {
+  int hops = 0;
+  for (; isRedirect(status) && hops < 5; ++hops) {
+    LOG_INF("HTTP", "redirect %d, following (hop %d)", status, hops + 1);
     if (esp_http_client_set_redirection(client) != ESP_OK) break;
     err = esp_http_client_open(client, 0);
     if (err != ESP_OK) {
@@ -101,8 +109,13 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
 
   s_lastHttpStatus = status;
+  LOG_INF("HTTP", "status=%d contentLength=%lld hops=%d", status, static_cast<long long>(contentLength), hops);
   if (status != 200) {
-    LOG_ERR("HTTP", "unexpected status: %d", status);
+    if (status == 401 || status == 403) {
+      LOG_ERR("HTTP", "auth rejected (%d): device credentials likely stale, retype the server password", status);
+    } else {
+      LOG_ERR("HTTP", "unexpected status: %d", status);
+    }
     esp_http_client_cleanup(client);
     return HttpDownloader::HTTP_ERROR;
   }
@@ -125,7 +138,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     }
     const int read = esp_http_client_read(client, buf.get(), READ_CHUNK);
     if (read < 0) {
-      LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
+      LOG_ERR("HTTP", "read error after %zu bytes (errno %d)", sink.downloaded, esp_http_client_get_errno(client));
       esp_http_client_cleanup(client);
       return HttpDownloader::HTTP_ERROR;
     }
@@ -139,6 +152,9 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
 
   const bool complete = esp_http_client_is_complete_data_received(client);
+  // Body size is a strong parse-failure clue: a ~1KB "200 OK" body on a feed
+  // URL is usually an HTML login page, not an OPDS XML document.
+  LOG_INF("HTTP", "body done: %zu bytes, complete=%d", sink.downloaded, complete ? 1 : 0);
   esp_http_client_cleanup(client);
   if (!complete) {
     LOG_ERR("HTTP", "incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);

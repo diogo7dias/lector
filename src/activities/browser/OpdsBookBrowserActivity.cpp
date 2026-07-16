@@ -227,6 +227,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   }
 
   if (!parser) {
+    // Pair this with the preceding "HTTP body done: N bytes" line — a tiny
+    // 200 body that fails to parse is an HTML login page, not a feed.
+    LOG_ERR("OPDS", "feed parse failed (status=%d)", HttpDownloader::lastHttpStatus());
     state = BrowserState::ERROR;
     errorMessage = tr(STR_PARSE_FEED_FAILED);
     requestUpdate();
@@ -245,6 +248,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
   }
 
+  LOG_INF("OPDS", "feed ok: %u entries, next=%d prev=%d search=%d", static_cast<unsigned>(entries.size()),
+          nextUrl.empty() ? 0 : 1, prevUrl.empty() ? 0 : 1, searchTemplate.empty() ? 0 : 1);
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
