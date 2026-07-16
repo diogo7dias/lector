@@ -61,19 +61,45 @@ uint32_t fnvFoldPod(uint32_t h, const T& v) {
 // sections root on every section open.
 std::string s_preparedGenDir;
 
+// Generation cleanup runs from the reader's warm/prefetch pumps, i.e. on a
+// heap that can be starved and fragmented. Collecting names into a growing
+// std::vector<std::string> used the THROWING allocator: a bad_alloc during
+// vector growth abort()ed on device (crash report 2026-07-16, warming a cold
+// chapter). Both sweeps below collect at most kSweepBatch fixed-size names
+// per pass into ONE nothrow scratch buffer, close the directory handle,
+// delete the batch, and rescan; paths are built in fixed char buffers so no
+// allocation happens after the scratch check.
+constexpr size_t kSweepBatch = 16;
+constexpr size_t kSweepNameCap = 128;
+constexpr int kSweepMaxPasses = 64;  // backstop: an undeletable entry must not spin forever
+
 void cleanLegacyRootImages(const std::string& cacheDir) {
-  auto root = Storage.open(cacheDir.c_str());
-  if (!root || !root.isDirectory()) return;
-  std::vector<std::string> stale;
-  char name[128];
-  for (auto f = root.openNextFile(); f; f = root.openNextFile()) {
-    f.getName(name, sizeof(name));
-    if (!f.isDirectory() && strncmp(name, "img_", 4) == 0) {
-      stale.emplace_back(name);
-    }
+  auto scratch = makeUniqueNoThrow<char[]>(kSweepBatch * kSweepNameCap);
+  if (!scratch) {
+    LOG_ERR("SCT", "OOM: legacy image sweep scratch, deferring cleanup");
+    return;
   }
-  for (const auto& n : stale) {
-    Storage.remove((cacheDir + "/" + n).c_str());
+  for (int pass = 0; pass < kSweepMaxPasses; ++pass) {
+    size_t count = 0;
+    {
+      auto root = Storage.open(cacheDir.c_str());
+      if (!root || !root.isDirectory()) return;
+      char name[128];
+      for (auto f = root.openNextFile(); f && count < kSweepBatch; f = root.openNextFile()) {
+        f.getName(name, sizeof(name));
+        if (!f.isDirectory() && strncmp(name, "img_", 4) == 0) {
+          snprintf(scratch.get() + count * kSweepNameCap, kSweepNameCap, "%s", name);
+          ++count;
+        }
+      }
+    }  // directory handle closed before any remove
+    if (count == 0) return;
+    char path[224];
+    for (size_t i = 0; i < count; ++i) {
+      snprintf(path, sizeof(path), "%s/%s", cacheDir.c_str(), scratch.get() + i * kSweepNameCap);
+      Storage.remove(path);
+    }
+    if (count < kSweepBatch) return;  // that scan reached the end of the dir
   }
 }
 
@@ -108,25 +134,42 @@ void prepareGeneration(const std::string& cacheDir, const std::string& genName) 
     // The outgoing current becomes the kept previous; everything else goes,
     // including loose files from the pre-generation flat layout.
     const std::string keepPrev = current;
-    std::vector<std::pair<std::string, bool>> entries;
-    {
-      auto root = Storage.open(sectionsRoot.c_str());
-      if (root && root.isDirectory()) {
-        char name[128];
-        for (auto f = root.openNextFile(); f; f = root.openNextFile()) {
-          f.getName(name, sizeof(name));
-          entries.emplace_back(name, f.isDirectory());
+    // Same batched nothrow sweep as cleanLegacyRootImages (see comment there):
+    // entry names + an is-dir flag byte per slot, fixed scratch, no vector.
+    auto scratch = makeUniqueNoThrow<char[]>(kSweepBatch * (kSweepNameCap + 1));
+    if (scratch) {
+      for (int pass = 0; pass < kSweepMaxPasses; ++pass) {
+        size_t count = 0;
+        {
+          auto root = Storage.open(sectionsRoot.c_str());
+          if (!root || !root.isDirectory()) break;
+          char name[128];
+          for (auto f = root.openNextFile(); f && count < kSweepBatch; f = root.openNextFile()) {
+            f.getName(name, sizeof(name));
+            const bool isDir = f.isDirectory();
+            const bool keep = isDir ? (genName == name || keepPrev == name) : (strcmp(name, "gen.txt") == 0);
+            if (keep) continue;
+            char* slot = scratch.get() + count * (kSweepNameCap + 1);
+            slot[0] = isDir ? 1 : 0;
+            snprintf(slot + 1, kSweepNameCap, "%s", name);
+            ++count;
+          }
+        }  // directory handle closed before any remove
+        if (count == 0) break;
+        char path[224];
+        for (size_t i = 0; i < count; ++i) {
+          const char* slot = scratch.get() + i * (kSweepNameCap + 1);
+          snprintf(path, sizeof(path), "%s/%s", sectionsRoot.c_str(), slot + 1);
+          if (slot[0]) {
+            Storage.removeDir(path);
+          } else {
+            Storage.remove(path);
+          }
         }
+        if (count < kSweepBatch) break;
       }
-    }
-    for (const auto& [name, isDir] : entries) {
-      if (isDir) {
-        if (name != genName && name != keepPrev) {
-          Storage.removeDir((sectionsRoot + "/" + name).c_str());
-        }
-      } else if (name != "gen.txt") {
-        Storage.remove((sectionsRoot + "/" + name).c_str());
-      }
+    } else {
+      LOG_ERR("SCT", "OOM: generation sweep scratch, deferring cleanup");
     }
     cleanLegacyRootImages(cacheDir);
 
