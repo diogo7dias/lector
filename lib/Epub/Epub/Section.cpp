@@ -27,6 +27,7 @@ constexpr uint8_t SECTION_FILE_VERSION = 32;
 // leaves a ".part" file whose version (0) loadSectionFile rejects as unknown —
 // the section is simply rebuilt, never loaded half-written.
 constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
+constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) +
@@ -55,6 +56,30 @@ uint32_t fnvFold(uint32_t h, const void* data, size_t len) {
 template <typename T>
 uint32_t fnvFoldPod(uint32_t h, const T& v) {
   return fnvFold(h, &v, sizeof(v));
+}
+
+// Double the page LUT with the nothrow allocator (a std::vector push_back would
+// abort() on OOM under -fno-exceptions). Capped at UINT16_MAX entries to match
+// the on-disk uint16_t page count. Returns false when the LUT cannot grow.
+template <typename Entry>
+bool ensurePageLutCapacity(std::unique_ptr<Entry[]>& lut, uint16_t& lutCapacity, const uint16_t lutCount) {
+  if (lutCount < lutCapacity) return true;
+  if (lutCapacity == UINT16_MAX) return false;
+
+  uint32_t nextCapacity = static_cast<uint32_t>(lutCapacity) * 2U;
+  if (nextCapacity > UINT16_MAX) {
+    nextCapacity = UINT16_MAX;
+  }
+
+  auto grown = makeUniqueNoThrow<Entry[]>(nextCapacity);
+  if (!grown) return false;
+
+  for (uint16_t i = 0; i < lutCount; i++) {
+    grown[i] = lut[i];
+  }
+  lut = std::move(grown);
+  lutCapacity = static_cast<uint16_t>(nextCapacity);
+  return true;
 }
 
 // Generation dir already prepared this session; avoids re-scanning the
@@ -342,9 +367,8 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
 
   // Match parameters
   {
-    uint8_t version;
-    serialization::readPod(file, version);
-    if (version != SECTION_FILE_VERSION) {
+    uint8_t version = 0;
+    if (!serialization::tryReadPod(file, version) || version != SECTION_FILE_VERSION) {
       // Explicit close() required: member variable persists beyond function scope
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Unknown version %u", version);
@@ -394,7 +418,12 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     }
   }
 
-  serialization::readPod(file, pageCount);
+  if (!serialization::tryReadPod(file, pageCount)) {
+    file.close();
+    LOG_ERR("SCT", "Deserialization failed: truncated page count");
+    clearCache();
+    return false;
+  }
   // Explicit close() required: member variable persists beyond function scope
   file.close();
   LOG_DBG("SCT", "Deserialization succeeded: %d pages", pageCount);
@@ -556,15 +585,32 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   build_->partPath = partPath;
   build_->cssParser = cssParser;
 
+  build_->lut = makeUniqueNoThrow<PageLutEntry[]>(INITIAL_SECTION_PAGE_LUT_ENTRIES);
+  if (!build_->lut) {
+    LOG_ERR("SCT", "OOM: page LUT (%u entries)", INITIAL_SECTION_PAGE_LUT_ENTRIES);
+    abandonBuild();
+    return false;
+  }
+  build_->lutCapacity = INITIAL_SECTION_PAGE_LUT_ENTRIES;
+
   build_->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, build_->tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment,
       viewportWidth, viewportHeight, hyphenationEnabled, focusReadingEnabled, guideDotsEnabled, firstLineIndentPx,
       wordSpacing, paragraphSpacing,
       [this](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
-        if (build_) {
-          build_->lut.push_back({onPageComplete(std::move(page)), paragraphIndex, listItemIndex});
-          builtPageCount_ = static_cast<uint16_t>(build_->lut.size());
+        if (!build_ || build_->lutFailed) {
+          return;
         }
+        if (!ensurePageLutCapacity(build_->lut, build_->lutCapacity, build_->lutCount)) {
+          LOG_ERR("SCT", "Failed to grow section page LUT from %u entries", build_->lutCapacity);
+          // At the uint16 format cap this is a hard error; otherwise it is an
+          // OOM, so flag it low-memory and let the caller degrade tier + retry.
+          lastBuildLowMemory_ = build_->lutCapacity != UINT16_MAX;
+          build_->lutFailed = true;
+          return;
+        }
+        build_->lut[build_->lutCount++] = {onPageComplete(std::move(page)), paragraphIndex, listItemIndex};
+        builtPageCount_ = build_->lutCount;
       },
       embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser);
   if (!build_->parser) {
@@ -593,6 +639,14 @@ bool Section::buildSomeMore(const int maxPages) {
       return true;
     }
     const auto status = build_->parser->parseStep();
+    // The page callback marks lutFailed when the LUT cannot grow; the failure
+    // (and its lastBuildLowMemory_ classification) takes precedence over the
+    // parse status, so check it before anything else.
+    if (build_->lutFailed) {
+      LOG_ERR("SCT", "Abandoning build: page LUT exhausted");
+      abandonBuild();
+      return false;
+    }
     if (status == ChapterHtmlSlimParser::ParseStatus::More) {
       continue;
     }
@@ -608,6 +662,11 @@ bool Section::buildSomeMore(const int maxPages) {
     }
     // Done: flush the trailing page (fires the page callback a final time), then commit.
     build_->parser->finishParse();
+    if (build_->lutFailed) {
+      LOG_ERR("SCT", "Abandoning build: page LUT exhausted on final page");
+      abandonBuild();
+      return false;
+    }
     return finalizeBuild();
   }
 }
@@ -621,13 +680,13 @@ bool Section::finalizeBuild() {
 
   // Write the page LUT (byte offset of each serialized page).
   const uint32_t lutOffset = file.position();
-  for (const auto& entry : build_->lut) {
-    if (entry.fileOffset == 0) {
+  for (uint16_t i = 0; i < build_->lutCount; i++) {
+    if (build_->lut[i].fileOffset == 0) {
       LOG_ERR("SCT", "Failed to write LUT due to invalid page positions");
       abandonBuild();
       return false;
     }
-    serialization::writePod(file, entry.fileOffset);
+    serialization::writePod(file, build_->lut[i].fileOffset);
   }
 
   // Write anchor-to-page map for fragment navigation (e.g. footnote targets).
@@ -641,15 +700,15 @@ bool Section::finalizeBuild() {
 
   // Paragraph LUT (synthetic XPath p[N] -> page).
   const uint32_t paragraphLutOffset = file.position();
-  serialization::writePod(file, static_cast<uint16_t>(build_->lut.size()));
-  for (const auto& entry : build_->lut) {
-    serialization::writePod(file, entry.paragraphIndex);
+  serialization::writePod(file, build_->lutCount);
+  for (uint16_t i = 0; i < build_->lutCount; i++) {
+    serialization::writePod(file, build_->lut[i].paragraphIndex);
   }
 
   // Li LUT (running list-item index -> page); shares its count with the paragraph LUT.
   const uint32_t liLutFileOffset = static_cast<uint32_t>(file.position());
-  for (const auto& entry : build_->lut) {
-    serialization::writePod(file, entry.listItemIndex);
+  for (uint16_t i = 0; i < build_->lutCount; i++) {
+    serialization::writePod(file, build_->lut[i].listItemIndex);
   }
 
   // Patch header with final pageCount and the four trailer offsets.
@@ -727,13 +786,17 @@ uint16_t Section::estimatedTotalPages() const {
 }
 
 std::unique_ptr<Page> Section::loadPage(const int page) {
-  if (build_ && page >= 0 && static_cast<size_t>(page) < build_->lut.size()) {
+  if (build_ && page >= 0 && static_cast<uint16_t>(page) < build_->lutCount) {
     // Page already laid out by the active build: read it straight from the .part
     // using the in-RAM offset (the on-disk LUT/trailers are not committed yet).
     if (!Storage.openFileForRead("SCT", build_->partPath, file)) {
       return nullptr;
     }
-    file.seek(build_->lut[static_cast<size_t>(page)].fileOffset);
+    if (!file.seek(build_->lut[static_cast<size_t>(page)].fileOffset)) {
+      LOG_ERR("SCT", "Page load failed: seek in .part");
+      file.close();
+      return nullptr;
+    }
     auto p = Page::deserialize(file);
     file.close();
     return p;
@@ -750,13 +813,25 @@ std::unique_ptr<Page> Section::loadPageFromSectionFile() {
     return nullptr;
   }
 
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4);
+  auto closeAndReturnNull = [this]() -> std::unique_ptr<Page> {
+    file.close();
+    return nullptr;
+  };
+
+  if (!file.seek(HEADER_SIZE - sizeof(uint32_t) * 4)) {
+    LOG_ERR("SCT", "Page load failed: header seek");
+    return closeAndReturnNull();
+  }
   uint32_t lutOffset;
-  serialization::readPod(file, lutOffset);
-  file.seek(lutOffset + sizeof(uint32_t) * currentPage);
+  if (!serialization::tryReadPod(file, lutOffset) || !file.seek(lutOffset + sizeof(uint32_t) * currentPage)) {
+    LOG_ERR("SCT", "Page load failed: LUT offset");
+    return closeAndReturnNull();
+  }
   uint32_t pagePos;
-  serialization::readPod(file, pagePos);
-  file.seek(pagePos);
+  if (!serialization::tryReadPod(file, pagePos) || !file.seek(pagePos)) {
+    LOG_ERR("SCT", "Page load failed: page position");
+    return closeAndReturnNull();
+  }
 
   auto page = Page::deserialize(file);
   // Explicit close() required: member variable persists beyond function scope
@@ -795,9 +870,20 @@ std::optional<uint16_t> Section::getCachedPageCount() const {
     return std::nullopt;
   }
 
-  f.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(uint16_t));
+  // Trust the count only after the same version gate loadSectionFile applies;
+  // a stale-format file stores a different layout at the count's offset.
+  uint8_t version = 0;
+  if (!serialization::tryReadPod(f, version) || version != SECTION_FILE_VERSION) {
+    return std::nullopt;
+  }
+
+  if (!f.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(uint16_t))) {
+    return std::nullopt;
+  }
   uint16_t count;
-  serialization::readPod(f, count);
+  if (!serialization::tryReadPod(f, count)) {
+    return std::nullopt;
+  }
   return count;
 }
 

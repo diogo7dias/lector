@@ -308,15 +308,20 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
   uint8_t hasFocus;
   uint8_t hasGuideDots;
   uint16_t textBytes;
-  serialization::readPod(file, wc);
-  serialization::readPod(file, hasFocus);
-  serialization::readPod(file, hasGuideDots);
-  serialization::readPod(file, textBytes);
+  if (!serialization::tryReadPod(file, wc) || !serialization::tryReadPod(file, hasFocus) ||
+      !serialization::tryReadPod(file, hasGuideDots) || !serialization::tryReadPod(file, textBytes)) {
+    LOG_ERR("TXB", "Deserialization failed: truncated header");
+    return nullptr;
+  }
 
   // Sanity checks: cap the arena allocation and reject impossible geometry
   // (every word carries at least its NUL terminator).
   if (wc > 10000) {
     LOG_ERR("TXB", "Deserialization failed: word count %u exceeds maximum", wc);
+    return nullptr;
+  }
+  if (hasFocus > 1 || hasGuideDots > 1) {
+    LOG_ERR("TXB", "Deserialization failed: bad flag bytes %u/%u", hasFocus, hasGuideDots);
     return nullptr;
   }
   if ((wc == 0 && textBytes != 0) || (wc > 0 && textBytes < wc)) {
@@ -336,6 +341,14 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
 
   if (wc > 0) {
     const size_t size = arenaSize(wc, block->focusPresent, block->guideDotsPresent, textBytes);
+    // Reject a truncated file before allocating: the arena read below would
+    // otherwise burn a large allocation just to fail.
+    const size_t pos = file.position();
+    const size_t fileSize = file.size();
+    if (pos > fileSize || fileSize - pos < size) {
+      LOG_ERR("TXB", "Deserialization failed: arena %u bytes exceeds file remainder", static_cast<uint32_t>(size));
+      return nullptr;
+    }
     block->arena = makeUniqueNoThrow<uint8_t[]>(size);
     if (!block->arena) {
       LOG_ERR("TXB", "OOM: arena %u bytes", static_cast<uint32_t>(size));
@@ -366,20 +379,23 @@ std::unique_ptr<TextBlock> TextBlock::deserialize(HalFile& file) {
 
   // Style (alignment + margins/padding/indent)
   BlockStyle& blockStyle = block->blockStyle;
-  serialization::readPod(file, blockStyle.alignment);
-  serialization::readPod(file, blockStyle.textAlignDefined);
-  serialization::readPod(file, blockStyle.marginTop);
-  serialization::readPod(file, blockStyle.marginBottom);
-  serialization::readPod(file, blockStyle.marginLeft);
-  serialization::readPod(file, blockStyle.marginRight);
-  serialization::readPod(file, blockStyle.paddingTop);
-  serialization::readPod(file, blockStyle.paddingBottom);
-  serialization::readPod(file, blockStyle.paddingLeft);
-  serialization::readPod(file, blockStyle.paddingRight);
-  serialization::readPod(file, blockStyle.textIndent);
-  serialization::readPod(file, blockStyle.textIndentDefined);
-  serialization::readPod(file, blockStyle.isRtl);
-  serialization::readPod(file, blockStyle.directionDefined);
+  if (!serialization::tryReadPod(file, blockStyle.alignment) ||
+      !serialization::tryReadPod(file, blockStyle.textAlignDefined) ||
+      !serialization::tryReadPod(file, blockStyle.marginTop) ||
+      !serialization::tryReadPod(file, blockStyle.marginBottom) ||
+      !serialization::tryReadPod(file, blockStyle.marginLeft) ||
+      !serialization::tryReadPod(file, blockStyle.marginRight) ||
+      !serialization::tryReadPod(file, blockStyle.paddingTop) ||
+      !serialization::tryReadPod(file, blockStyle.paddingBottom) ||
+      !serialization::tryReadPod(file, blockStyle.paddingLeft) ||
+      !serialization::tryReadPod(file, blockStyle.paddingRight) ||
+      !serialization::tryReadPod(file, blockStyle.textIndent) ||
+      !serialization::tryReadPod(file, blockStyle.textIndentDefined) ||
+      !serialization::tryReadPod(file, blockStyle.isRtl) ||
+      !serialization::tryReadPod(file, blockStyle.directionDefined)) {
+    LOG_ERR("TXB", "Deserialization failed: truncated block style");
+    return nullptr;
+  }
 
   return block;
 }
