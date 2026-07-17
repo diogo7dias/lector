@@ -234,6 +234,7 @@ void SleepActivity::renderStatsDashboardSleepScreen(const bool wallpaper) const 
 }
 
 void SleepActivity::renderUntilDeathSleepScreen() const {
+  deepCleanPanel();
   // "Random Logo": show one of the full logo table (skull crests + extra user
   // logos) at random, full-frame and centered, with no moon/text indicator — just
   // the image the user sees on unlock. A fresh random pick every lock (hardware RNG).
@@ -255,7 +256,20 @@ void SleepActivity::renderUntilDeathSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
+// Blank FULL pass before painting a sleep face. Lock can happen over any
+// screen (browser, viewer, menus) and every sleep render below uses the
+// calibrated differential HALF/graybase waveforms, which leave the prior
+// content ghosting through the wallpaper for the whole sleep (device photo,
+// 2026-07-17). One deep clean costs ~1.5 s at lock; sleep is committed, so
+// there is no page-turn risk. The v0.11 popup skip removed the frame that
+// used to provide this clean incidentally.
+void SleepActivity::deepCleanPanel() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+}
+
 void SleepActivity::renderCustomSleepScreen() const {
+  deepCleanPanel();
   // Idle-prestaged planes first: streams the pre-converted wallpaper straight
   // into the framebuffer (no pxc decode at lock). Falls through to the normal
   // pick+render when no matching stage exists.
@@ -300,6 +314,7 @@ void SleepActivity::renderCustomSleepScreen() const {
 }
 
 void SleepActivity::renderDefaultSleepScreen() const {
+  deepCleanPanel();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 

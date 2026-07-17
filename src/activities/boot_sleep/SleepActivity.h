@@ -17,6 +17,8 @@ class SleepActivity final : public Activity {
   void renderLastScreenSleepScreen() const;
   void renderBlankSleepScreen() const;
   void renderUntilDeathSleepScreen() const;
+  // Blank FULL pass before a sleep face (ghost prevention; see .cpp comment).
+  void deepCleanPanel() const;
   void renderStatsDashboardSleepScreen(bool wallpaper) const;
 
   bool fromTimeout = false;

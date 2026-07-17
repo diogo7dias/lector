@@ -19,8 +19,7 @@
 #include "SleepInfoOverlay.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const std::function<void()>& extraOverlay,
-                          bool drawInfoOverlay, bool grayscale, const PxcOverlayTiming overlayTiming,
-                          const HalDisplay::RefreshMode baseRefresh) {
+                          bool drawInfoOverlay, bool grayscale, const PxcOverlayTiming overlayTiming) {
   HalFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
@@ -139,11 +138,11 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     // the LSB/MSB grayscale planes and the grayscale composite. Used by the unlock
     // banner screen, where wake speed matters more than a full grayscale wallpaper
     // (the sleep screen itself still renders full grayscale).
-    renderer.displayBuffer(baseRefresh);
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     return true;
   }
 
-  renderer.displayGrayscaleBase(baseRefresh);
+  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
