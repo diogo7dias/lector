@@ -133,6 +133,12 @@ class GfxRenderer {
   // Views must be NUL-terminated at data()+size() (ParsedText pool guarantees this).
   void ensureSdCardFontReady(int fontId, const std::vector<std::string_view>& words, bool includeHyphen,
                              uint8_t styleMask = 0x0F) const;
+  // Low-memory lever: free fontId's resident SD-font caches (mini glyph data,
+  // kern/ligature class tables, optionally the persistent advance table). The
+  // font stays registered and usable; later layout/render re-reads what it
+  // needs from SD. Returns false when fontId is not an SD font. Safe to call
+  // repeatedly (releasing an already-released font is a no-op).
+  bool releaseSdCardFontForLowMemory(int fontId, bool preserveAdvanceTable = false) const;
 
   // Orientation control (affects logical width/height and coordinate transforms)
   void setOrientation(const Orientation o) { orientation = o; }

@@ -69,6 +69,12 @@ class SdCardFont {
   // when font/size/family/glyph-table state changes.
   void clearPersistentCache();
 
+  // Low-memory lever: free every optional resident cache — mini glyph data,
+  // overflow ring, kern/ligature class tables, and (unless preserved) the
+  // persistent advance table. The font stays loaded and usable; later layout
+  // or rendering re-reads what it needs from SD. Safe to call repeatedly.
+  void releaseForLowMemory(bool preserveAdvanceTable = false);
+
   // Returns pointer to the managed EpdFont for a given style.
   // Returns nullptr if the style is not present.
   EpdFont* getEpdFont(uint8_t style = 0);

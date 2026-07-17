@@ -1002,6 +1002,23 @@ void SdCardFont::clearCache() {
   }
 }
 
+void SdCardFont::releaseForLowMemory(const bool preserveAdvanceTable) {
+  clearOverflow();
+  if (!preserveAdvanceTable) {
+    clearPersistentCache();
+  }
+
+  // Beyond clearCache(): also drop the kern/ligature class tables (~3KB x2 per
+  // style); loadStyleKernLigatureData() re-reads them from SD on the next full
+  // render prewarm.
+  for (uint8_t i = 0; i < MAX_STYLES; i++) {
+    if (!styles_[i].present) continue;
+    freeStyleMiniData(styles_[i]);
+    freeStyleKernLigatureData(styles_[i]);
+    applyGlyphMissCallback(i);
+  }
+}
+
 // --- Advance table ---
 
 void SdCardFont::clearPersistentCache() {

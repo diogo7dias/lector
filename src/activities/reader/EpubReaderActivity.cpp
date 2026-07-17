@@ -1532,6 +1532,11 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
       return false;
     }
     LOG_ERR("ERS", "Section build hit low memory at tier %d; descending", tier);
+    // Give the retry more headroom: drop the SD-font resident caches too.
+    // They rebuild from SD as the degraded-tier layout runs.
+    if (renderer.releaseSdCardFontForLowMemory(fontId)) {
+      LOG_INF("ERS", "Released SD font caches before tier retry");
+    }
   }
 
   LOG_ERR("ERS", "Section build failed even at the lowest render tier");
