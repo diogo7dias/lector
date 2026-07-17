@@ -4,6 +4,8 @@
 #include <HalStorage.h>
 #include <Memory.h>
 
+#include <optional>
+
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
@@ -27,7 +29,7 @@ bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasB
 
 bool ReaderActivity::isPxcFile(const std::string& path) { return FsHelpers::checkFileExtension(path, ".pxc"); }
 
-std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
+std::unique_ptr<Epub> ReaderActivity::loadEpub(GfxRenderer& renderer, const std::string& path) {
   if (!Storage.exists(path.c_str())) {
     LOG_ERR("READER", "File does not exist: %s", path.c_str());
     return nullptr;
@@ -38,7 +40,18 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     LOG_ERR("READER", "Failed to allocate EPUB object");
     return nullptr;
   }
-  if (epub->load(true, SETTINGS.embeddedStyle == 0)) {
+  // First open builds book.bin (container parse + spine/TOC index) — the zip
+  // inflate there is exactly what InflateStream's buildscratch claim feeds on.
+  const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
+  bool loaded;
+  {
+    // Lend the framebuffer to the index build; the panel holds its current
+    // image, and whichever reader activity follows redraws the full screen.
+    std::optional<GfxRenderer::FrameBufferLoan> loan;
+    if (uncached) loan.emplace(renderer);
+    loaded = epub->load(true, SETTINGS.embeddedStyle == 0);
+  }
+  if (loaded) {
     return epub;
   }
 
@@ -146,7 +159,7 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
-    auto epub = loadEpub(initialBookPath);
+    auto epub = loadEpub(renderer, initialBookPath);
     if (!epub) {
       onGoBack();
       return;
