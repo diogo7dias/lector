@@ -1504,7 +1504,15 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
     diagMissInfo_ = classifySectionMiss(section);
   }
   GUI.drawPopup(renderer, tr(STR_INDEXING));
-  const auto popupFn = [this]() { GUI.drawPopup(renderer, tr(STR_INDEXING)); };
+  // No popup redraws while the framebuffer is lent to the build below; the
+  // panel holds the popup displayed above (e-ink is persistent).
+  const auto popupFn = [this]() {
+    if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
+  };
+  // Lend the framebuffer's ~51 KB to the blocking build (the whole-spine
+  // inflate + layout is the memory peak). Restored (white) when this function
+  // returns, and render() repaints the full screen after.
+  GfxRenderer::FrameBufferLoan loan(renderer);
 
   // Descend the fallback ladder: build at the current floor first, then reduce one
   // render knob per rung on a low-memory abort, until it fits or the lowest tier
