@@ -2,7 +2,7 @@
 #include <Print.h>
 
 #include <algorithm>
-#include <deque>
+#include <memory>
 #include <vector>
 
 #include "Epub.h"
@@ -39,10 +39,24 @@ class ContentOpfParser final : public Print {
     uint16_t idLen;       // length for collision reduction
     uint32_t fileOffset;  // offset in .items.bin
   };
-  std::deque<ItemIndexEntry> itemIndex;
+  // Flat nothrow-growing array (was std::deque: its push_back growth uses the
+  // THROWING allocator, which abort()s on OOM under -fno-exceptions). The index
+  // is only an optimization; when it cannot grow it is dropped entirely and
+  // spine lookup falls back to the linear scan.
+  std::unique_ptr<ItemIndexEntry[]> itemIndex;
+  uint32_t itemIndexCapacity = 0;
+  uint32_t itemIndexCount = 0;
+  bool itemIndexFailed = false;
   bool useItemIndex = false;
 
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
+  static constexpr uint32_t ITEM_INDEX_INITIAL_ENTRIES = 128;
+  static constexpr uint32_t ITEM_INDEX_MAX_ENTRIES = 65535;
+
+  // Appends to the index with nothrow growth. On OOM (or at the entry cap) the
+  // whole index is released and itemIndexFailed set: a partial index would make
+  // the binary search silently miss items.
+  void pushItemIndexEntry(const ItemIndexEntry& entry);
 
   // FNV-1a hash function
   static uint32_t fnvHash(const std::string& s) {

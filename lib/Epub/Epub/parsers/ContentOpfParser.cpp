@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 #include <XmlParserUtils.h>
 
@@ -54,6 +55,36 @@ ContentOpfParser::~ContentOpfParser() {
   if (Storage.exists(itemCachePath.c_str())) {
     Storage.remove(itemCachePath.c_str());
   }
+}
+
+void ContentOpfParser::pushItemIndexEntry(const ItemIndexEntry& entry) {
+  if (itemIndexFailed) {
+    return;
+  }
+  if (itemIndexCount == itemIndexCapacity) {
+    uint32_t nextCapacity = itemIndexCapacity == 0 ? ITEM_INDEX_INITIAL_ENTRIES : itemIndexCapacity * 2;
+    if (nextCapacity > ITEM_INDEX_MAX_ENTRIES) {
+      nextCapacity = ITEM_INDEX_MAX_ENTRIES;
+    }
+    auto grown =
+        (itemIndexCapacity >= ITEM_INDEX_MAX_ENTRIES) ? nullptr : makeUniqueNoThrow<ItemIndexEntry[]>(nextCapacity);
+    if (!grown) {
+      // A partial index would make the binary search silently miss items, so
+      // drop it entirely; spine lookup falls back to the linear scan.
+      LOG_ERR("COF", "OOM growing item index at %u entries, falling back to linear lookup", itemIndexCount);
+      itemIndex.reset();
+      itemIndexCapacity = 0;
+      itemIndexCount = 0;
+      itemIndexFailed = true;
+      return;
+    }
+    for (uint32_t i = 0; i < itemIndexCount; i++) {
+      grown[i] = itemIndex[i];
+    }
+    itemIndex = std::move(grown);
+    itemIndexCapacity = nextCapacity;
+  }
+  itemIndex[itemIndexCount++] = entry;
 }
 
 size_t ContentOpfParser::write(const uint8_t data) { return write(&data, 1); }
@@ -146,12 +177,13 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
     }
 
     // Sort item index for binary search if we have enough items
-    if (self->itemIndex.size() >= LARGE_SPINE_THRESHOLD) {
-      std::sort(self->itemIndex.begin(), self->itemIndex.end(), [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-        return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-      });
+    if (!self->itemIndexFailed && self->itemIndexCount >= LARGE_SPINE_THRESHOLD) {
+      std::sort(self->itemIndex.get(), self->itemIndex.get() + self->itemIndexCount,
+                [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
+                  return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+                });
       self->useItemIndex = true;
-      LOG_DBG("COF", "Using fast index for %zu manifest items", self->itemIndex.size());
+      LOG_DBG("COF", "Using fast index for %u manifest items", self->itemIndexCount);
     }
     return;
   }
@@ -208,7 +240,7 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
       entry.idHash = fnvHash(itemId);
       entry.idLen = static_cast<uint16_t>(itemId.size());
       entry.fileOffset = static_cast<uint32_t>(self->tempItemStore.position());
-      self->itemIndex.push_back(entry);
+      self->pushItemIndexEntry(entry);
     }
 
     // Write items down to SD card
@@ -273,14 +305,16 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
             uint32_t targetHash = fnvHash(idref);
             uint16_t targetLen = static_cast<uint16_t>(idref.size());
 
-            auto it = std::lower_bound(self->itemIndex.begin(), self->itemIndex.end(),
-                                       ItemIndexEntry{targetHash, targetLen, 0},
-                                       [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
-                                         return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
-                                       });
+            const ItemIndexEntry* indexBegin = self->itemIndex.get();
+            const ItemIndexEntry* indexEnd = indexBegin + self->itemIndexCount;
+            const auto* it =
+                std::lower_bound(indexBegin, indexEnd, ItemIndexEntry{targetHash, targetLen, 0},
+                                 [](const ItemIndexEntry& a, const ItemIndexEntry& b) {
+                                   return a.idHash < b.idHash || (a.idHash == b.idHash && a.idLen < b.idLen);
+                                 });
 
             // Check for match (may need to check a few due to hash collisions)
-            while (it != self->itemIndex.end() && it->idHash == targetHash) {
+            while (it != indexEnd && it->idHash == targetHash) {
               self->tempItemStore.seek(it->fileOffset);
               std::string itemId;
               if (!serialization::readString(self->tempItemStore, itemId)) break;
