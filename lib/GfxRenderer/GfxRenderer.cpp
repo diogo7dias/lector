@@ -61,6 +61,15 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
   return &fontData->bitmap[glyph->dataOffset];
 }
 
+bool GfxRenderer::releaseSdCardFontForLowMemory(const int fontId, const bool preserveAdvanceTable) const {
+  const auto it = sdCardFonts_.find(fontId);
+  if (it == sdCardFonts_.end() || !it->second) {
+    return false;
+  }
+  it->second->releaseForLowMemory(preserveAdvanceTable);
+  return true;
+}
+
 void GfxRenderer::ensureSdCardFontReady(int fontId, const char* utf8Text, uint8_t styleMask) const {
   auto it = sdCardFonts_.find(fontId);
   if (it != sdCardFonts_.end()) {

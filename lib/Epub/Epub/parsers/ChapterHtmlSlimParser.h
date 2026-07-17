@@ -112,6 +112,9 @@ class ChapterHtmlSlimParser {
   // (see LayoutHeapGate.h). Lets the caller distinguish an out-of-memory abort from
   // other parse errors so it can degrade quality and retry rather than give up.
   bool lowMemoryAbort_ = false;
+  // One-shot latch: parseStep() releases the SD-font resident caches at most
+  // once per build before declaring a low-memory abort.
+  bool attemptedFontCacheRelease_ = false;
 
   void updateEffectiveInlineStyle();
   void startNewTextBlock(const BlockStyle& blockStyle);

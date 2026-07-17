@@ -550,6 +550,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
           std::string resolvedPath = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(self->contentBase + src));
 
           if (ImageDecoderFactory::isFormatSupported(resolvedPath)) {
+            // Image extraction + decode want large contiguous buffers. On a
+            // fragmented heap, free the SD-font caches first; the advance
+            // table is kept so text layout continues cheaply after the image.
+            if (heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) < 20 * 1024 &&
+                self->renderer.releaseSdCardFontForLowMemory(self->fontId, /*preserveAdvanceTable=*/true)) {
+              LOG_INF("EHP", "Released SD font caches before image extraction (largest=%u)",
+                      static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)));
+            }
+
             // Create a unique filename for the cached image
             std::string ext;
             size_t extPos = resolvedPath.rfind('.');
@@ -1382,11 +1391,27 @@ ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
   // cleanly with a distinguishable low-memory signal instead. See LayoutHeapGate.h.
   if (crosspoint::layoutHeapCritical(heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
                                      heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT))) {
-    LOG_ERR("EHP", "Low memory during layout (free=%u largest=%u) - aborting build",
-            static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DEFAULT)),
-            static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)));
-    lowMemoryAbort_ = true;
-    return ParseStatus::Error;
+    // Before giving up, pull the one lever we have: drop the SD-font resident
+    // caches (mini glyph data, kern class tables, advance table — tens of KB).
+    // One-shot per build; the caches rebuild from SD as layout continues.
+    bool stillCritical = true;
+    if (!attemptedFontCacheRelease_) {
+      attemptedFontCacheRelease_ = true;
+      if (renderer.releaseSdCardFontForLowMemory(fontId)) {
+        stillCritical = crosspoint::layoutHeapCritical(heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
+                                                       heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+        LOG_INF("EHP", "Released SD font caches during layout (free=%u largest=%u, critical=%d)",
+                static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DEFAULT)),
+                static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)), stillCritical ? 1 : 0);
+      }
+    }
+    if (stillCritical) {
+      LOG_ERR("EHP", "Low memory during layout (free=%u largest=%u) - aborting build",
+              static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_DEFAULT)),
+              static_cast<unsigned>(heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT)));
+      lowMemoryAbort_ = true;
+      return ParseStatus::Error;
+    }
   }
 
   void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
