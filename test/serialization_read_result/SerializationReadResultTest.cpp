@@ -6,9 +6,8 @@
 // misclassified. The LowMemory branch depends on the ESP32 heap and is
 // compiled out on the host (hasStringAllocationHeadroom returns true).
 
-#include <gtest/gtest.h>
-
 #include <Serialization.h>
+#include <gtest/gtest.h>
 
 #include <cstring>
 #include <string>
