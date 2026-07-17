@@ -54,11 +54,15 @@ void PxcViewerActivity::render() {
   // Render byte-for-byte like the lock screen (3-pass grayscale, panel-sized), now
   // with the hint band baked in. Returns false when the .pxc does not match this
   // screen (+/-1 px) or fails to open; only then do we show an error frame.
-  // FULL base pass: the viewer paints straight over the file-browser list, and
-  // the HALF waveform leaves the old rows ghosting through the wallpaper
-  // (device photo, 2026-07-16). One deep-clean blink on entry, ghost-free.
-  if (!renderPxcSleepScreen(renderer, filePath, drawHints, true, true, pxcViewerOverlayTiming(),
-                            HalDisplay::FULL_REFRESH)) {
+  // Blank FULL pass first: the viewer paints straight over the file-browser
+  // list, and the calibrated differential HALF/graybase passes leave the old
+  // rows ghosting through (device photos, 2026-07-16/17). A FULL *base* pass
+  // is not enough — on X3 the graybase waveform is fixed and only the HALF
+  // fallback path resyncs — so deep-clean the panel explicitly, then run the
+  // unchanged render sequence.
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  if (!renderPxcSleepScreen(renderer, filePath, drawHints, true, true, pxcViewerOverlayTiming())) {
     const auto pageHeight = renderer.getScreenHeight();
     renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));

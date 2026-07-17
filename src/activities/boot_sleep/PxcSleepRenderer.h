@@ -33,11 +33,11 @@ class GfxRenderer;
 // overlays, skipping the 3-pass grayscale pipeline. The unlock banner screen uses
 // this for a faster wake; the sleep screen and PXC viewer keep the full grayscale.
 //
-// baseRefresh selects the waveform of the first VISIBLE pass. The sleep path
-// keeps HALF (the panel was already deep-cleaned by the lock sequence); the PXC
-// viewer passes FULL_REFRESH because it paints straight over a file-browser
-// list and HALF leaves the old rows ghosting through the wallpaper.
+// Ghost note: every pass here uses the calibrated differential HALF/graybase
+// waveforms. Callers painting over arbitrary prior content (PXC viewer, sleep
+// faces) must deep-clean the panel FIRST (blank + FULL_REFRESH) or the old
+// content ghosts through; on X3 the graybase waveform is fixed, so a stronger
+// base mode cannot be selected here.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path,
                           const std::function<void()>& extraOverlay = nullptr, bool drawInfoOverlay = true,
-                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass,
-                          HalDisplay::RefreshMode baseRefresh = HalDisplay::HALF_REFRESH);
+                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass);
