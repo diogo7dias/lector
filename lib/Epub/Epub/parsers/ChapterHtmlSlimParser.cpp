@@ -201,8 +201,7 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
     if (currentPage && !currentPage->elements.empty()) {
       completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
       completedPageCount++;
-      currentPage.reset(new Page());
-      currentPageNextY = 0;
+      if (!allocCurrentPage()) return;
     }
   }
 
@@ -720,19 +719,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
                                        self->xpathListItemIndex);
                   self->completedPageCount++;
-                  self->currentPage.reset(new Page());
-                  if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create new page");
-                    return;
-                  }
-                  self->currentPageNextY = 0;
+                  if (!self->allocCurrentPage()) return;
                 } else if (!self->currentPage) {
-                  self->currentPage.reset(new Page());
-                  if (!self->currentPage) {
-                    LOG_ERR("EHP", "Failed to create initial page");
-                    return;
-                  }
-                  self->currentPageNextY = 0;
+                  if (!self->allocCurrentPage()) return;
                 }
 
                 // Apply top margin from container block
@@ -1489,19 +1478,29 @@ bool ChapterHtmlSlimParser::parseAndBuildPages() {
   return finishParse();
 }
 
+bool ChapterHtmlSlimParser::allocCurrentPage() {
+  currentPage.reset(new (std::nothrow) Page());
+  if (!currentPage) {
+    LOG_ERR("EHP", "OOM: Page - aborting build");
+    lowMemoryAbort_ = true;
+    XML_StopParser(xmlParser_, XML_FALSE);
+    return false;
+  }
+  currentPageNextY = 0;
+  return true;
+}
+
 void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!allocCurrentPage()) return;
   }
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!allocCurrentPage()) return;
   }
 
   // Track cumulative words to assign footnotes to the page containing their anchor
@@ -1526,8 +1525,7 @@ void ChapterHtmlSlimParser::makePages() {
   }
 
   if (!currentPage) {
-    currentPage.reset(new Page());
-    currentPageNextY = 0;
+    if (!allocCurrentPage()) return;
   }
 
   const int lineHeight = renderer.getLineHeight(fontId) * lineCompression;

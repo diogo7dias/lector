@@ -1249,7 +1249,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
-    section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
+    section = makeUniqueNoThrow<Section>(epub, currentSpineIndex, renderer);
+    if (!section) {
+      LOG_ERR("ERS", "OOM: Section for chapter %d", currentSpineIndex);
+      showBuildError();
+      return;
+    }
 
     if (!buildSectionForRead(*section, viewportWidth, viewportHeight)) {
       LOG_ERR("ERS", "Failed to build section for reading");

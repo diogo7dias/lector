@@ -117,6 +117,10 @@ class ChapterHtmlSlimParser {
   bool attemptedFontCacheRelease_ = false;
 
   void updateEffectiveInlineStyle();
+  // Allocate a fresh currentPage with the nothrow allocator (bare new would
+  // abort() on OOM under -fno-exceptions). On failure flags a low-memory
+  // abort, stops the parse and returns false so callers bail out.
+  bool allocCurrentPage();
   void startNewTextBlock(const BlockStyle& blockStyle);
   void flushPendingAnchor();
   void flushPartWordBuffer();
