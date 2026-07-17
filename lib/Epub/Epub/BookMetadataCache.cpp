@@ -380,26 +380,40 @@ bool BookMetadataCache::load() {
     return false;
   }
 
-  uint8_t version;
-  serialization::readPod(bookFile, version);
-  if (version != BOOK_CACHE_VERSION) {
+  uint8_t version = 0;
+  if (!serialization::tryReadPod(bookFile, version) || version != BOOK_CACHE_VERSION) {
     LOG_DBG("BMC", "Cache version mismatch: expected %d, got %d", BOOK_CACHE_VERSION, version);
     // Explicit close() required: member variable persists beyond function scope
     bookFile.close();
     return false;
   }
 
-  serialization::readPod(bookFile, lutOffset);
-  serialization::readPod(bookFile, spineCount);
-  serialization::readPod(bookFile, tocCount);
+  if (!serialization::tryReadPod(bookFile, lutOffset) || !serialization::tryReadPod(bookFile, spineCount) ||
+      !serialization::tryReadPod(bookFile, tocCount)) {
+    LOG_ERR("BMC", "Cache header truncated");
+    bookFile.close();
+    return false;
+  }
 
-  if (!serialization::readString(bookFile, coreMetadata.title) ||
-      !serialization::readString(bookFile, coreMetadata.author) ||
-      !serialization::readString(bookFile, coreMetadata.language) ||
-      !serialization::readString(bookFile, coreMetadata.coverItemHref) ||
-      !serialization::readString(bookFile, coreMetadata.textReferenceHref) ||
-      !serialization::readString(bookFile, coreMetadata.description)) {
-    LOG_ERR("BMC", "Cache metadata contains an invalid string");
+  lastLoadLowMemory_ = false;
+  std::string* metadataFields[] = {&coreMetadata.title,
+                                   &coreMetadata.author,
+                                   &coreMetadata.language,
+                                   &coreMetadata.coverItemHref,
+                                   &coreMetadata.textReferenceHref,
+                                   &coreMetadata.description};
+  for (auto* field : metadataFields) {
+    const auto status = serialization::readStringResult(bookFile, *field);
+    if (status == serialization::StringReadResult::Ok) continue;
+    if (status == serialization::StringReadResult::LowMemory) {
+      // The cache on disk is fine; the heap just cannot hold this string right
+      // now. Fail the load WITHOUT signalling corruption, or the caller would
+      // rebuild the whole cache under the same starved heap.
+      LOG_ERR("BMC", "Low heap loading cache metadata, retry later");
+      lastLoadLowMemory_ = true;
+    } else {
+      LOG_ERR("BMC", "Cache metadata contains an invalid string");
+    }
     bookFile.close();
     return false;
   }
@@ -421,10 +435,13 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
   }
 
   // Seek to spine LUT item, read from LUT and get out data
-  bookFile.seek(lutOffset + sizeof(uint32_t) * index);
-  uint32_t spineEntryPos;
-  serialization::readPod(bookFile, spineEntryPos);
-  bookFile.seek(spineEntryPos);
+  uint32_t spineEntryPos = 0;
+  if (!bookFile.seek(lutOffset + sizeof(uint32_t) * index) || !serialization::tryReadPod(bookFile, spineEntryPos) ||
+      !bookFile.seek(spineEntryPos)) {
+    LOG_ERR("BMC", "Corrupt spine LUT in cache");
+    healCorruptCache(bookFile);
+    return {};
+  }
   return readSpineEntry(bookFile);
 }
 
@@ -440,32 +457,64 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
   }
 
   // Seek to TOC LUT item, read from LUT and get out data
-  bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index);
-  uint32_t tocEntryPos;
-  serialization::readPod(bookFile, tocEntryPos);
-  bookFile.seek(tocEntryPos);
+  uint32_t tocEntryPos = 0;
+  if (!bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index) ||
+      !serialization::tryReadPod(bookFile, tocEntryPos) || !bookFile.seek(tocEntryPos)) {
+    LOG_ERR("BMC", "Corrupt TOC LUT in cache");
+    healCorruptCache(bookFile);
+    return {};
+  }
   return readTocEntry(bookFile);
 }
 
-BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(HalFile& file) const {
+BookMetadataCache::SpineEntry BookMetadataCache::readSpineEntry(HalFile& file) {
   SpineEntry entry;
-  if (!serialization::readString(file, entry.href)) {
-    LOG_ERR("BMC", "Invalid spine href in cache");
+  const auto status = serialization::readStringResult(file, entry.href);
+  if (status == serialization::StringReadResult::LowMemory) {
+    // The bytes on disk are fine; the heap cannot hold the string right now.
+    // Seen on device as a repeating "Invalid spine href in cache" during
+    // chapter warming — NOT corruption, so never delete the cache for this.
+    LOG_ERR("BMC", "Low heap reading spine href, retry later");
     return {};
   }
-  serialization::readPod(file, entry.cumulativeSize);
-  serialization::readPod(file, entry.tocIndex);
+  if (status == serialization::StringReadResult::Corrupt || !serialization::tryReadPod(file, entry.cumulativeSize) ||
+      !serialization::tryReadPod(file, entry.tocIndex)) {
+    LOG_ERR("BMC", "Corrupt spine entry in cache");
+    healCorruptCache(file);
+    return {};
+  }
   return entry;
 }
 
-BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(HalFile& file) const {
+BookMetadataCache::TocEntry BookMetadataCache::readTocEntry(HalFile& file) {
   TocEntry entry;
-  if (!serialization::readString(file, entry.title) || !serialization::readString(file, entry.href) ||
-      !serialization::readString(file, entry.anchor)) {
-    LOG_ERR("BMC", "Invalid TOC string in cache");
+  std::string* fields[] = {&entry.title, &entry.href, &entry.anchor};
+  for (auto* field : fields) {
+    const auto status = serialization::readStringResult(file, *field);
+    if (status == serialization::StringReadResult::Ok) continue;
+    if (status == serialization::StringReadResult::LowMemory) {
+      LOG_ERR("BMC", "Low heap reading TOC string, retry later");
+    } else {
+      LOG_ERR("BMC", "Corrupt TOC string in cache");
+      healCorruptCache(file);
+    }
     return {};
   }
-  serialization::readPod(file, entry.level);
-  serialization::readPod(file, entry.spineIndex);
+  if (!serialization::tryReadPod(file, entry.level) || !serialization::tryReadPod(file, entry.spineIndex)) {
+    LOG_ERR("BMC", "Corrupt TOC entry in cache");
+    healCorruptCache(file);
+    return {};
+  }
   return entry;
+}
+
+void BookMetadataCache::healCorruptCache(const HalFile& file) {
+  // Build-time reads run over the temp spine/toc files; a bad read there fails
+  // the build but must not touch the committed book.bin.
+  if (&file != &bookFile) return;
+  LOG_ERR("BMC", "Deleting corrupt book.bin; it will rebuild on next open");
+  // Explicit close() required before Storage.remove() on the same path
+  bookFile.close();
+  Storage.remove((cachePath + bookBinFile).c_str());
+  loaded = false;
 }
