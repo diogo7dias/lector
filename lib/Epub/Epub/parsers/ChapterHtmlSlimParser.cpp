@@ -34,6 +34,13 @@ constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
 // SD reads per chapter with no stack cost.
 constexpr size_t PARSE_BUFFER_SIZE = 4096;
 
+// Soft-flush thresholds for very long text blocks: lay out and consume all but the
+// last line once this many words are buffered, bounding per-block RAM. The CSS
+// variant flushes earlier because inline-style toggles fragment text into many tiny
+// tokens (upstream crosspoint-reader #2606; 320 words still exceeds a full page).
+constexpr size_t TEXT_BLOCK_SOFT_FLUSH_WORDS = 750;
+constexpr size_t TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS = 320;
+
 // Hard cap on the number of anchor IDs recorded per chapter. Legitimate navigation
 // anchors (TOC entries, footnotes, cross-references) rarely exceed a few hundred per
 // chapter. A runaway count usually means a converter injected machine-generated IDs on
@@ -1171,11 +1178,15 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     self->partWordBuffer[self->partWordBufferIndex++] = s[i];
   }
 
-  // If we have > 750 words buffered up, perform the layout and consume out all but the last line
-  // There should be enough here to build out 1-2 full pages and doing this will free up a lot of
-  // memory.
-  // Spotted when reading Intermezzo, there are some really long text blocks in there.
-  if (self->currentTextBlock->size() > 750) {
+  // If we have enough words buffered up, perform the layout and consume out all but the last
+  // line. There should be enough here to build out 1-2 full pages and doing this will free up
+  // a lot of memory (spotted when reading Intermezzo: some really long text blocks in there).
+  // With embedded CSS active, inline-style toggles fragment text into many tiny tokens, so
+  // flush earlier to keep per-block RAM bounded (upstream crosspoint-reader #2606); 320 words
+  // is still more than a full page at font size 14.
+  const size_t softFlushThreshold =
+      self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
+  if (self->currentTextBlock->size() > softFlushThreshold) {
     LOG_DBG("EHP", "Text block too long, splitting into multiple pages");
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();
     const uint16_t effectiveWidth = (horizontalInset < self->viewportWidth)
