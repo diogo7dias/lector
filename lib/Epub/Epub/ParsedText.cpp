@@ -11,6 +11,7 @@
 #include <BidiUtils.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -1468,10 +1469,12 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
 
   if (!lineHasFocusSplit && !lineHasGuideDot) {
     // TextBlock flattens the vectors into its arena; they stay owned here and die at return.
-    auto block = std::make_shared<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
-                                             std::vector<uint16_t>{}, std::vector<uint16_t>{}, blockStyle);
-    if (!block->valid()) {
-      LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
+    // makeSharedNoThrow (not make_shared): on a starved heap the shared_ptr allocation must
+    // return null and drop the line, not abort() under -fno-exceptions.
+    auto block = makeSharedNoThrow<TextBlock>(lineWords, lineXPos, lineWordStyles, std::vector<uint8_t>{},
+                                              std::vector<uint16_t>{}, std::vector<uint16_t>{}, blockStyle);
+    if (!block || !block->valid()) {
+      LOG_ERR("PTX", "Dropping line: TextBlock allocation failed");
       return;
     }
     processLine(std::move(block));
@@ -1539,10 +1542,10 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     }
   }
 
-  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outSuffixX, outGuideDotXOffset,
-                                           blockStyle);
-  if (!block->valid()) {
-    LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
+  auto block = makeSharedNoThrow<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outSuffixX, outGuideDotXOffset,
+                                            blockStyle);
+  if (!block || !block->valid()) {
+    LOG_ERR("PTX", "Dropping line: TextBlock allocation failed");
     return;
   }
   processLine(std::move(block));

@@ -734,14 +734,15 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // Apply top margin from container block
                 self->currentPageNextY += imageMarginTop;
 
-                // Create ImageBlock and add to page
-                auto imageBlock = std::make_shared<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
+                // Create ImageBlock and add to page. makeSharedNoThrow so a starved heap
+                // returns null (the checks below) instead of abort() under -fno-exceptions.
+                auto imageBlock = makeSharedNoThrow<ImageBlock>(cachedImagePath, displayWidth, displayHeight);
                 if (!imageBlock) {
                   LOG_ERR("EHP", "Failed to create ImageBlock");
                   return;
                 }
                 int xPos = (self->viewportWidth - displayWidth) / 2;
-                auto pageImage = std::make_shared<PageImage>(imageBlock, xPos, self->currentPageNextY);
+                auto pageImage = makeSharedNoThrow<PageImage>(imageBlock, xPos, self->currentPageNextY);
                 if (!pageImage) {
                   LOG_ERR("EHP", "Failed to create PageImage");
                   return;
@@ -1525,7 +1526,15 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
+  // makeSharedNoThrow so a starved heap drops the line instead of abort() under
+  // -fno-exceptions. Dropped here means currentPageNextY does not advance, so the
+  // page simply holds one fewer line rather than crashing the build.
+  auto pageLine = makeSharedNoThrow<PageLine>(line, xOffset, currentPageNextY);
+  if (!pageLine) {
+    LOG_ERR("EHP", "Dropping line: PageLine allocation failed");
+    return;
+  }
+  currentPage->elements.push_back(std::move(pageLine));
   currentPageNextY += lineHeight;
 }
 
