@@ -37,6 +37,13 @@ bool tryReadPod(HalFile& file, T& value) {
   return file.read(reinterpret_cast<uint8_t*>(&value), sizeof(T)) == static_cast<int>(sizeof(T));
 }
 
+// Checked variant: false on a short write (SD full / IO error) so cache
+// builders can abort instead of committing a truncated file.
+template <typename T>
+bool tryWritePod(HalFile& file, const T& value) {
+  return file.write(reinterpret_cast<const uint8_t*>(&value), sizeof(T)) == sizeof(T);
+}
+
 inline void writeString(std::ostream& os, const std::string& s) {
   const uint32_t len = s.size();
   writePod(os, len);
@@ -47,6 +54,13 @@ inline void writeString(HalFile& file, const std::string& s) {
   const uint32_t len = s.size();
   writePod(file, len);
   file.write(reinterpret_cast<const uint8_t*>(s.data()), len);
+}
+
+// Checked variant of writeString; false on any short write.
+inline bool tryWriteString(HalFile& file, const std::string& s) {
+  const uint32_t len = s.size();
+  if (!tryWritePod(file, len)) return false;
+  return len == 0 || file.write(reinterpret_cast<const uint8_t*>(s.data()), len) == len;
 }
 
 inline bool hasStringAllocationHeadroom(const size_t length) {
