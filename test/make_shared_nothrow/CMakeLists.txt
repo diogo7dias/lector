@@ -1,0 +1,4 @@
+add_executable(make_shared_nothrow_tests MakeSharedNoThrowTest.cpp)
+target_link_libraries(make_shared_nothrow_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(make_shared_nothrow_tests PRIVATE ${REPO_ROOT}/lib/Memory)
+gtest_discover_tests(make_shared_nothrow_tests)
