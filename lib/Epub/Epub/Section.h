@@ -68,7 +68,9 @@ class Section {
   // the parser before the failed build is torn down; read via lastBuildWasLowMemory().
   bool lastBuildLowMemory_ = false;
 
-  void writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
+  // Returns false on a short write (SD full / IO error) so the caller can abandon
+  // the .part instead of building on a truncated header.
+  bool writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
                               uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
                               bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled,
                               bool guideDotsEnabled, int firstLineIndentPx, uint8_t wordSpacing,

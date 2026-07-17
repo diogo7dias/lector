@@ -310,7 +310,7 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   return position;
 }
 
-void Section::writeSectionFileHeader(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
+bool Section::writeSectionFileHeader(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
                                      const uint8_t paragraphAlignment, const uint16_t viewportWidth,
                                      const uint16_t viewportHeight, const bool hyphenationEnabled,
                                      const bool embeddedStyle, const uint8_t imageRendering,
@@ -319,7 +319,7 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                      const uint8_t paragraphSpacing) {
   if (!file) {
     LOG_DBG("SCT", "File not open for writing header");
-    return;
+    return false;
   }
   static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
                                    sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
@@ -331,26 +331,24 @@ void Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                 "Header size mismatch");
   // Version byte starts as INCOMPLETE; createSectionFile stamps the real version
   // last, once the file is fully written, as the atomic commit point.
-  serialization::writePod(file, SECTION_FILE_INCOMPLETE_VERSION);
-  serialization::writePod(file, fontId);
-  serialization::writePod(file, lineCompression);
-  serialization::writePod(file, extraParagraphSpacing);
-  serialization::writePod(file, paragraphAlignment);
-  serialization::writePod(file, viewportWidth);
-  serialization::writePod(file, viewportHeight);
-  serialization::writePod(file, hyphenationEnabled);
-  serialization::writePod(file, embeddedStyle);
-  serialization::writePod(file, imageRendering);
-  serialization::writePod(file, focusReadingEnabled);
-  serialization::writePod(file, guideDotsEnabled);
-  serialization::writePod(file, firstLineIndentPx);
-  serialization::writePod(file, wordSpacing);
-  serialization::writePod(file, paragraphSpacing);
-  serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
-  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for LUT offset (patched later)
-  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for anchor map offset (patched later)
-  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for paragraph LUT offset (patched later)
-  serialization::writePod(file, static_cast<uint32_t>(0));  // Placeholder for li LUT offset (patched later)
+  const bool ok =
+      serialization::tryWritePod(file, SECTION_FILE_INCOMPLETE_VERSION) && serialization::tryWritePod(file, fontId) &&
+      serialization::tryWritePod(file, lineCompression) && serialization::tryWritePod(file, extraParagraphSpacing) &&
+      serialization::tryWritePod(file, paragraphAlignment) && serialization::tryWritePod(file, viewportWidth) &&
+      serialization::tryWritePod(file, viewportHeight) && serialization::tryWritePod(file, hyphenationEnabled) &&
+      serialization::tryWritePod(file, embeddedStyle) && serialization::tryWritePod(file, imageRendering) &&
+      serialization::tryWritePod(file, focusReadingEnabled) && serialization::tryWritePod(file, guideDotsEnabled) &&
+      serialization::tryWritePod(file, firstLineIndentPx) && serialization::tryWritePod(file, wordSpacing) &&
+      serialization::tryWritePod(file, paragraphSpacing) &&
+      // Placeholders for page count and the four trailer offsets (patched in finalizeBuild)
+      serialization::tryWritePod(file, pageCount) && serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
+      serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
+      serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
+      serialization::tryWritePod(file, static_cast<uint32_t>(0));
+  if (!ok) {
+    LOG_ERR("SCT", "Failed to write section header (SD full or IO error)");
+  }
+  return ok;
 }
 
 bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
@@ -532,9 +530,15 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     Storage.remove(tmpHtmlPath.c_str());
     return false;
   }
-  writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-                         viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
-                         guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing);
+  if (!writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
+                              viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
+                              guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing)) {
+    // Explicit close() required before Storage.remove() on the same path
+    file.close();
+    Storage.remove(partPath.c_str());
+    Storage.remove(tmpHtmlPath.c_str());
+    return false;
+  }
   pageCount = 0;
   builtPageCount_ = 0;
   buildComplete_ = false;
@@ -678,6 +682,10 @@ bool Section::finalizeBuild() {
   // The unzipped HTML is no longer needed once layout is complete.
   Storage.remove(build_->tmpHtmlPath.c_str());
 
+  // Every trailer write is checked: a short write here (SD full / IO error) must
+  // abandon the .part instead of stamping a truncated file as a valid cache.
+  bool writeOk = true;
+
   // Write the page LUT (byte offset of each serialized page).
   const uint32_t lutOffset = file.position();
   for (uint16_t i = 0; i < build_->lutCount; i++) {
@@ -686,44 +694,50 @@ bool Section::finalizeBuild() {
       abandonBuild();
       return false;
     }
-    serialization::writePod(file, build_->lut[i].fileOffset);
+    writeOk = writeOk && serialization::tryWritePod(file, build_->lut[i].fileOffset);
   }
 
   // Write anchor-to-page map for fragment navigation (e.g. footnote targets).
   const uint32_t anchorMapOffset = file.position();
   const auto& anchors = build_->parser->getAnchors();
-  serialization::writePod(file, static_cast<uint16_t>(anchors.size()));
+  writeOk = writeOk && serialization::tryWritePod(file, static_cast<uint16_t>(anchors.size()));
   for (const auto& [anchor, page] : anchors) {
-    serialization::writeString(file, anchor);
-    serialization::writePod(file, page);
+    writeOk = writeOk && serialization::tryWriteString(file, anchor) && serialization::tryWritePod(file, page);
   }
 
   // Paragraph LUT (synthetic XPath p[N] -> page).
   const uint32_t paragraphLutOffset = file.position();
-  serialization::writePod(file, build_->lutCount);
+  writeOk = writeOk && serialization::tryWritePod(file, build_->lutCount);
   for (uint16_t i = 0; i < build_->lutCount; i++) {
-    serialization::writePod(file, build_->lut[i].paragraphIndex);
+    writeOk = writeOk && serialization::tryWritePod(file, build_->lut[i].paragraphIndex);
   }
 
   // Li LUT (running list-item index -> page); shares its count with the paragraph LUT.
   const uint32_t liLutFileOffset = static_cast<uint32_t>(file.position());
   for (uint16_t i = 0; i < build_->lutCount; i++) {
-    serialization::writePod(file, build_->lut[i].listItemIndex);
+    writeOk = writeOk && serialization::tryWritePod(file, build_->lut[i].listItemIndex);
   }
 
   // Patch header with final pageCount and the four trailer offsets.
-  file.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(pageCount));
-  serialization::writePod(file, pageCount);
-  serialization::writePod(file, lutOffset);
-  serialization::writePod(file, anchorMapOffset);
-  serialization::writePod(file, paragraphLutOffset);
-  serialization::writePod(file, liLutFileOffset);
+  writeOk = writeOk && file.seek(HEADER_SIZE - sizeof(uint32_t) * 4 - sizeof(pageCount)) &&
+            serialization::tryWritePod(file, pageCount) && serialization::tryWritePod(file, lutOffset) &&
+            serialization::tryWritePod(file, anchorMapOffset) && serialization::tryWritePod(file, paragraphLutOffset) &&
+            serialization::tryWritePod(file, liLutFileOffset);
+
+  if (!writeOk) {
+    LOG_ERR("SCT", "Failed to write section trailer (SD full or IO error)");
+    abandonBuild();
+    return false;
+  }
 
   // Commit point: stamp the real version byte LAST, after every offset is patched.
   // A crash before this leaves the .part at INCOMPLETE (0), which loadSectionFile
   // rejects, so a partially written build is never mistaken for a finished cache.
-  file.seek(0);
-  serialization::writePod(file, SECTION_FILE_VERSION);
+  if (!file.seek(0) || !serialization::tryWritePod(file, SECTION_FILE_VERSION)) {
+    LOG_ERR("SCT", "Failed to stamp section version (SD full or IO error)");
+    abandonBuild();
+    return false;
+  }
   file.flush();
   // Explicit close() required before rename: SdFat cannot rename a path that still
   // has an open FsFile, and the member variable persists beyond function scope.
