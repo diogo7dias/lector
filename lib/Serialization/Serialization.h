@@ -102,27 +102,44 @@ inline bool readString(std::istream& is, std::string& s, const size_t maxBytes =
   return len == 0 || static_cast<bool>(is.read(s.data(), len));
 }
 
-inline bool readString(HalFile& file, std::string& s, const size_t maxBytes = DEFAULT_MAX_STRING_BYTES) {
+// Why a string read failed. Callers that cache-manage need the distinction:
+// Corrupt means the bytes on disk are bad (truncated file, garbage length) and
+// the cache should be rebuilt; LowMemory means the bytes are fine but the heap
+// cannot hold the string right now, so the read should simply be retried later.
+// Deleting a cache on LowMemory would throw away good data (and the rebuild
+// would run under the same starved heap).
+enum class StringReadResult : uint8_t { Ok, Corrupt, LowMemory };
+
+inline StringReadResult readStringResult(HalFile& file, std::string& s,
+                                         const size_t maxBytes = DEFAULT_MAX_STRING_BYTES) {
   uint32_t len = 0;
   if (file.read(&len, sizeof(len)) != sizeof(len)) {
     s.clear();
-    return false;
+    return StringReadResult::Corrupt;
   }
 
   const size_t position = file.position();
   const size_t fileSize = file.size();
   const size_t remaining = position <= fileSize ? fileSize - position : 0;
-  if (!isStringLengthValid(len, remaining, maxBytes) || !hasStringAllocationHeadroom(len)) {
+  if (!isStringLengthValid(len, remaining, maxBytes)) {
     s.clear();
-    return false;
+    return StringReadResult::Corrupt;
+  }
+  if (!hasStringAllocationHeadroom(len)) {
+    s.clear();
+    return StringReadResult::LowMemory;
   }
 
   s.resize(len);
-  if (len == 0) return true;
+  if (len == 0) return StringReadResult::Ok;
   if (file.read(s.data(), len) != static_cast<int>(len)) {
     s.clear();
-    return false;
+    return StringReadResult::Corrupt;
   }
-  return true;
+  return StringReadResult::Ok;
+}
+
+inline bool readString(HalFile& file, std::string& s, const size_t maxBytes = DEFAULT_MAX_STRING_BYTES) {
+  return readStringResult(file, s, maxBytes) == StringReadResult::Ok;
 }
 }  // namespace serialization

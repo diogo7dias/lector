@@ -79,8 +79,17 @@ class BookMetadataCache {
 
   uint32_t writeSpineEntry(HalFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(HalFile& file, const TocEntry& entry) const;
-  SpineEntry readSpineEntry(HalFile& file) const;
-  TocEntry readTocEntry(HalFile& file) const;
+  SpineEntry readSpineEntry(HalFile& file);
+  TocEntry readTocEntry(HalFile& file);
+  // Deletes book.bin so the next open rebuilds it — but ONLY when the corrupt
+  // read came from book.bin itself (build-time reads over the temp spine/toc
+  // files just fail the build). Low-memory read failures must never reach this.
+  void healCorruptCache(const HalFile& file);
+
+  // True when the most recent load() failed only because the heap was too
+  // starved to hold a metadata string (the cache on disk is fine). Callers use
+  // this to skip the expensive rebuild that a corrupt-cache failure triggers.
+  bool lastLoadLowMemory_ = false;
 
  public:
   BookMetadata coreMetadata;
@@ -110,4 +119,5 @@ class BookMetadataCache {
   int getSpineCount() const { return spineCount; }
   int getTocCount() const { return tocCount; }
   bool isLoaded() const { return loaded; }
+  bool lastLoadWasLowMemory() const { return lastLoadLowMemory_; }
 };

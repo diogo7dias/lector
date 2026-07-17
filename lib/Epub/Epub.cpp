@@ -480,6 +480,14 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
     return true;
   }
 
+  // Low-heap load failure: the cache on disk is fine, the heap just cannot hold
+  // a metadata string right now. Rebuilding here would re-parse the whole EPUB
+  // under the same starved heap — fail fast and let the caller retry instead.
+  if (bookMetadataCache->lastLoadWasLowMemory()) {
+    LOG_ERR("EBP", "Cache load failed due to low heap; skipping rebuild");
+    return false;
+  }
+
   // If we didn't load from cache above and we aren't allowed to build, fail now
   if (!buildIfMissing) {
     return false;
