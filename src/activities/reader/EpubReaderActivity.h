@@ -181,6 +181,10 @@ class EpubReaderActivity final : public Activity {
   // anchor / cached-progress / percent jump). Runs after a cache hit or a completed
   // sliced build. Requires final section->pageCount.
   void positionAfterSectionReady();
+  // Replace the on-screen "Indexing" popup with an explicit build-failure popup
+  // (corrupt EPUB, or OOM even at the lowest tier) so a failed build does not hang
+  // on a stale progress face. Clears the screen first.
+  void showBuildError();
   // If a chapter build is currently monopolizing the render task, ask it to stop
   // so the render lock frees in ~one parse step (or the next slice bails). Call
   // before any "abandon this chapter" press path (go home, file browser, chapter
