@@ -314,6 +314,25 @@ size_t moveToPauseByFavorite(bool favorites) {
   return moved;
 }
 
+size_t moveFavoritesToSleep() {
+  ensureConfigured();
+  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
+  ISleepFs* sfs = deps.fs;
+  if (!sfs) return 0;
+
+  // Bounded batches keep peak heap at kBatch names regardless of folder size;
+  // yield every kYieldEvery renames so a large sweep stays watchdog-safe.
+  constexpr size_t kBatch = 128;
+  constexpr size_t kYieldEvery = 16;
+  const size_t moved = moveSleepPauseImagesByFavorite(*sfs, deps.isFavorite, deps.onPathRenamed, /*moveFavorites=*/true,
+                                                      kBatch, kYieldEvery, []() {
+                                                        esp_task_wdt_reset();
+                                                        yield();
+                                                      });
+  if (moved > 0) v2::WallpaperPlaylistV2::instance().markFolderDirty();
+  return moved;
+}
+
 void reconcileIfDirty() {
   // V2: reconcile is heap-gated and runs lazily inside advance(). No-op here.
 }

@@ -110,6 +110,12 @@ size_t countByFavorite(bool favorites, size_t scanCap);
 // rebuilds on the next sleep. Returns the number of files actually moved.
 size_t moveToPauseByFavorite(bool favorites);
 
+// Move every favorite image in "/sleep pause" back into "/sleep" — the reverse
+// of moveToPauseByFavorite(true). Works in bounded batches (memory-safe on
+// 1000+ image folders) and yields to the watchdog during the run. Marks the
+// rotation dirty so it rebuilds on the next sleep. Returns files actually moved.
+size_t moveFavoritesToSleep();
+
 // No-op in the V2 default path — reconcile is heap-gated and runs from
 // inside advance(). Kept so the boot-route hook + ActivityRouter signature
 // stay valid without conditional plumbing at the call site.

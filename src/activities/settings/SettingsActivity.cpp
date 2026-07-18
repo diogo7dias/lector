@@ -87,6 +87,7 @@ void SettingsActivity::rebuildSettingsLists() {
   displaySettings.push_back(
       SettingInfo::Action(StrId::STR_MOVE_NONFAV_TO_PAUSE, SettingAction::MoveNonFavoritesToPause));
   displaySettings.push_back(SettingInfo::Action(StrId::STR_MOVE_FAV_TO_PAUSE, SettingAction::MoveFavoritesToPause));
+  displaySettings.push_back(SettingInfo::Action(StrId::STR_MOVE_FAV_TO_SLEEP, SettingAction::MoveFavoritesToSleep));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Update currentSettings pointer and count for the active category
@@ -395,6 +396,14 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::MoveFavoritesToPause: {
         GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
         const size_t moved = crosspoint::sleep::wallpaper::moveToPauseByFavorite(/*favorites=*/true);
+        GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
+        break;
+      }
+      case SettingAction::MoveFavoritesToSleep: {
+        // Reverse of MoveFavoritesToPause: bring favorites back from /sleep pause
+        // into /sleep. Show a working banner (draws synchronously) then the count.
+        GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
+        const size_t moved = crosspoint::sleep::wallpaper::moveFavoritesToSleep();
         GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
         break;
       }

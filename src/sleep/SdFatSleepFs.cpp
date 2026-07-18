@@ -14,6 +14,7 @@ namespace sleep {
 namespace {
 
 constexpr const char* kSleepDir = "/sleep";
+constexpr const char* kPauseDir = "/sleep pause";
 constexpr size_t kWdtResetInterval = 50;
 
 // Sleep wallpapers can be .bmp (legacy) or .pxc (pre-dithered 2bpp, faster
@@ -101,15 +102,19 @@ std::vector<std::string> SdFatSleepFs::listSleepBmps(size_t maxEntries) {
   return out;
 }
 
-void SdFatSleepFs::walkSleepBmps(const std::function<void(const char*, size_t, uint32_t)>& cb) {
-  auto dir = Storage.open(kSleepDir);
-  if (!dir || !dir.isDirectory()) {
-    if (dir) dir.close();
+namespace {
+// Shared streaming walk over one directory: invoke cb(name, len, mtime) per
+// accepted image, zero heap per file, feeding the watchdog periodically. Used
+// for both /sleep and /sleep pause so the two folders scan identically.
+void walkBmpsInDir(const char* dir, const std::function<void(const char*, size_t, uint32_t)>& cb) {
+  auto handle = Storage.open(dir);
+  if (!handle || !handle.isDirectory()) {
+    if (handle) handle.close();
     return;
   }
   size_t iter = 0;
   char name[256];
-  for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+  for (auto file = handle.openNextFile(); file; file = handle.openNextFile()) {
     if (!file.isDirectory()) {
       file.getName(name, sizeof(name));
       if (isBmpName(name)) {
@@ -128,7 +133,16 @@ void SdFatSleepFs::walkSleepBmps(const std::function<void(const char*, size_t, u
       yield();
     }
   }
-  dir.close();
+  handle.close();
+}
+}  // namespace
+
+void SdFatSleepFs::walkSleepBmps(const std::function<void(const char*, size_t, uint32_t)>& cb) {
+  walkBmpsInDir(kSleepDir, cb);
+}
+
+void SdFatSleepFs::walkPauseBmps(const std::function<void(const char*, size_t, uint32_t)>& cb) {
+  walkBmpsInDir(kPauseDir, cb);
 }
 
 std::vector<SleepBmpEntry> SdFatSleepFs::listSleepBmpsWithMtime(size_t maxEntries) {

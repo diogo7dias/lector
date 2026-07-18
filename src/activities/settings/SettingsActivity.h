@@ -26,6 +26,7 @@ enum class SettingAction {
   RandomizeSleepImages,
   MoveNonFavoritesToPause,
   MoveFavoritesToPause,
+  MoveFavoritesToSleep,
 };
 
 struct SettingInfo {
