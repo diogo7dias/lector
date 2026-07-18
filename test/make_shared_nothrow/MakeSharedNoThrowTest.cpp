@@ -10,6 +10,7 @@
 #include <Memory.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 #include <string>
 #include <utility>
@@ -68,6 +69,28 @@ TEST(MakeSharedNoThrow, MoveOnlyConstructionSupported) {
   ASSERT_TRUE(p);
   ASSERT_TRUE(*p);
   EXPECT_EQ(**p, 99);
+}
+
+TEST(MakeUniqueNoThrowArray, AllocatesAndZeroInitialises) {
+  auto buf = makeUniqueNoThrow<uint8_t[]>(64);
+  ASSERT_TRUE(buf);
+  for (int i = 0; i < 64; ++i) EXPECT_EQ(buf[i], 0) << "index " << i;
+  buf[10] = 0xAB;
+  EXPECT_EQ(buf[10], 0xAB);
+}
+
+TEST(MakeUniqueNoThrowArray, OverflowCountReturnsNull) {
+  // count * sizeof(Elem) would overflow size_t -> must return null, not wrap.
+  auto buf = makeUniqueNoThrow<uint32_t[]>(std::numeric_limits<size_t>::max() / 2);
+  EXPECT_FALSE(buf);
+}
+
+TEST(HeapCanAllocate, TrueForReasonableSizesOnHost) {
+  // On host there is no ESP32 heap API, so the guard must never block a normal
+  // allocation; it returns true and new(nothrow) does the real work.
+  EXPECT_TRUE(heapCanAllocate(0));
+  EXPECT_TRUE(heapCanAllocate(4096));
+  EXPECT_TRUE(heapCanAllocate(64 * 1024));
 }
 
 }  // namespace
