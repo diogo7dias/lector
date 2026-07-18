@@ -1101,6 +1101,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
   renderer.drawText(UI_10_FONT_ID, textX, textY, message, false);  // white text
   renderer.setPaperbackLook(false);
   renderer.displayWindow(0, y, pageWidth, h);  // just the strip; content below untouched
+  renderer.noteBannerShown();                  // arm the auto-clear timer (transient confirms/errors clear after ~1.5s)
   return Rect{0, y, pageWidth, h};
 }
 

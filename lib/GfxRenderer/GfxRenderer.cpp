@@ -1376,6 +1376,16 @@ void GfxRenderer::fillPolygon(const int* xPoints, const int* yPoints, int numPoi
 // For performance measurement (using static to allow "const" methods)
 static unsigned long start_ms = 0;
 
+void GfxRenderer::noteBannerShown() const {
+  bannerActive_ = true;
+  bannerShownMs_ = millis();
+}
+
+bool GfxRenderer::bannerAutoClearDue(const unsigned long nowMs) const {
+  // ~1.5s: long enough to read a confirm/result/error, short enough to not linger.
+  return bannerActive_ && (nowMs - bannerShownMs_ >= 1500UL);
+}
+
 void GfxRenderer::clearScreen(const uint8_t color) const {
   start_ms = millis();
   if (_stripActive) {
