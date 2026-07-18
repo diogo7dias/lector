@@ -8,6 +8,7 @@
 #include <cstring>
 
 #include "ButtonRemapActivity.h"
+#include "CleanStorageActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "FontSelectionActivity.h"
@@ -75,6 +76,7 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
@@ -361,6 +363,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ClearCache:
         startActivityForResult(makeUniqueNoThrow<ClearCacheActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::CleanStorage:
+        startActivityForResult(makeUniqueNoThrow<CleanStorageActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
         startActivityForResult(makeUniqueNoThrow<OtaUpdateActivity>(renderer, mappedInput), resultHandler);

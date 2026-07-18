@@ -1,0 +1,4 @@
+add_executable(orphan_cache_policy_tests OrphanCachePolicyTest.cpp)
+target_link_libraries(orphan_cache_policy_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+target_include_directories(orphan_cache_policy_tests PRIVATE ${REPO_ROOT}/src/util)
+gtest_discover_tests(orphan_cache_policy_tests)
