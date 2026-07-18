@@ -1079,58 +1079,45 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const PopupRefresh refresh) const {
-  // Lector popup = a full-width black banner with white centered text, matching
-  // the book-open "Opening..." banner. Height keeps the popup's top+bottom
-  // margin so fillPopupProgress still has room to draw a progress bar in the
-  // lower margin. Vertically centered on screen.
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int marginY = metrics.popupMarginY;
+  // Lector feedback banner: a thin full-width black strip pinned to the TOP of the
+  // screen (y=0), white centered text, 2px white inset edge. This replaces the old
+  // centered popup so a message never covers the content below it. Pushed as a
+  // windowed refresh: only the strip repaints, the screen underneath is left as-is
+  // (the banner overlays whatever the activity already painted). All ~30 former
+  // drawPopup call sites become this top strip with no per-site change.
+  (void)refresh;  // windowed strip is always a fast, cheap refresh; no HALF/clean variant needed
   const int pageWidth = renderer.getScreenWidth();
-  const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int h = textHeight + marginY * 2;
-  const int y = (renderer.getScreenHeight() - h) / 2;
+  const int textHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int h = textHeight + 8;
+  const int y = 0;
 
-  renderer.fillRect(0, y, pageWidth, h, true);  // black banner
-  renderer.drawRect(0, y, pageWidth, h, 2,
-                    false);  // 2px white inset border — separates the banner from what is behind it (height unchanged)
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message);
+  renderer.fillRect(0, y, pageWidth, h, true);      // black strip
+  renderer.drawRect(0, y, pageWidth, h, 2, false);  // 2px white inset edge (kept from the old popup)
+  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, message);
   const int textX = (pageWidth - textWidth) / 2;
   const int textY = y + (h - textHeight) / 2;
-  // Smear the white text +1px ("dark"/paperback look) so it reads heavier on the
-  // black banner, then restore so nothing else is affected.
+  // Smear the white text +1px ("dark"/paperback look) so it reads heavier on black.
   renderer.setPaperbackLook(true);
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, false);  // white text
+  renderer.drawText(UI_10_FONT_ID, textX, textY, message, false);  // white text
   renderer.setPaperbackLook(false);
-  // Result and warning banners default to a clean first paint. Short-lived
-  // loading banners may opt into FAST because the following content replaces
-  // them immediately; cleaning those banners only adds panel latency.
-  renderer.displayBuffer(refresh == PopupRefresh::Temporary ? HalDisplay::FAST_REFRESH : HalDisplay::HALF_REFRESH);
+  renderer.displayWindow(0, y, pageWidth, h);  // just the strip; content below untouched
   return Rect{0, y, pageWidth, h};
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int barHeight = metrics.popupProgressBarHeight;
-  const int barWidth =
-      std::max(0, layout.width - metrics.popupMarginX * 2);  // twice the margin in drawPopup to match text width
-  const int barX = layout.x + (layout.width - barWidth) / 2;
-  const int barY = layout.y + layout.height - metrics.popupMarginY / 2 - barHeight / 2 - 1;
-  if (barWidth <= 0 || barHeight <= 0) {
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return;
+  // A thin WHITE fill line along the bottom edge of the black top strip, growing
+  // left->right with progress. The strip was just repainted black by drawPopup, so
+  // we only draw the white fill portion. Only the strip repaints (windowed).
+  constexpr int barHeight = 3;
+  constexpr int inset = 3;  // stay clear of the 2px white edge
+  const int barX = layout.x + inset;
+  const int barW = layout.width - inset * 2;
+  const int barY = layout.y + layout.height - barHeight - 2;
+  if (barW > 0) {
+    const int fillW = barW * std::clamp(progress, 0, 100) / 100;
+    if (fillW > 0) renderer.fillRect(barX, barY, fillW, barHeight, false);  // white fill on black strip
   }
-
-  const int scaledProgress = metrics.popupProgressClampPercent ? std::clamp(progress, 0, 100) : progress;
-  const int fillWidth = barWidth * scaledProgress / 100;
-
-  if (metrics.popupProgressDrawOutline) {
-    renderer.drawRect(barX, barY, barWidth, barHeight, 1, metrics.popupProgressOutlineInverted);
-  }
-  if (fillWidth > 0) {
-    renderer.fillRect(barX, barY, fillWidth, barHeight, metrics.popupProgressFillInverted);
-  }
-
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+  renderer.displayWindow(layout.x, layout.y, layout.width, layout.height);
 }
 
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {

@@ -1627,23 +1627,13 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
   sectionBuildProgressPaintedMs_ = now;
   sectionBuildProgressPercent_ = percent;
 
-  // The indexing popup plus a thin progress bar beneath it. drawPopup repaints the
-  // whole popup box each time so the bar sits on a clean background.
-  GUI.drawPopup(renderer, tr(STR_INDEXING));
-  const int screenW = renderer.getScreenWidth();
-  const int screenH = renderer.getScreenHeight();
-  const int barW = screenW / 2;
-  const int barH = 10;
-  const int barX = (screenW - barW) / 2;
-  const int barY = screenH / 2 + 40;
-  renderer.drawRect(barX, barY, barW, barH, true);
-  const int fillW = (barW - 2) * percent / 100;
-  if (fillW > 0) renderer.fillRect(barX + 1, barY + 1, fillW, barH - 2, true);
-  // Push the bar strip synchronously: the refresh completes while the bar is still
-  // in the framebuffer, so the next build slice reclaiming the FB cannot leave a
-  // deferred sync that erases the bar (the cause of the "bar disappears between
-  // updates" flicker). Throttled above, so the added refresh time stays bounded.
-  renderer.displayWindow(barX, barY, barW, barH);
+  // Unified top banner: "Indexing" strip at the top with a thin fill line growing
+  // along its bottom edge. drawPopup repaints the strip each time (clean black
+  // background) and fillPopupProgress draws the white fill for `percent`. Both push
+  // only the strip synchronously, so the next build slice reclaiming the framebuffer
+  // cannot leave a deferred sync that erases it. Throttled above.
+  const Rect strip = GUI.drawPopup(renderer, tr(STR_INDEXING));
+  GUI.fillPopupProgress(renderer, strip, percent);
 }
 
 void EpubReaderActivity::showBuildError() {
