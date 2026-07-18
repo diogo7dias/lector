@@ -48,6 +48,31 @@ class EpubReaderActivity final : public Activity {
   // later chapters start already-degraded instead of re-descending each time. Reset
   // to 0 in onEnter when a book is opened. See LowMemoryRenderTier.h.
   int lowMemoryTierFloor_ = 0;
+
+  // Sliced foreground build of the on-screen chapter. On a cache miss the ~13s
+  // layout is driven a few pages per render() call instead of one blocking pass,
+  // so the render lock frees between slices (input stays live, Back cancels) and
+  // a progress bar is painted. Only the foreground miss build; prefetch/warm are
+  // separate one-shot pumps. slicedBuild_ captures the layout params so each slice
+  // and each low-memory tier restart re-issues Section::startBuild() identically.
+  struct SlicedBuildParams {
+    int fontId = 0;
+    float lineCompression = 1.0f;
+    int firstLineIndentPx = 0;
+    uint16_t viewportW = 0;
+    uint16_t viewportH = 0;
+    // Tier-0 (full quality) render knobs; a low-memory tier is applied on top per attempt.
+    uint8_t imageRendering = 0;
+    bool embeddedStyle = false;
+    bool hyphenationEnabled = false;
+    bool focusReadingEnabled = false;
+    bool guideDotsEnabled = false;
+  };
+  SlicedBuildParams slicedBuild_;
+  bool sectionBuildActive_ = false;                  // a sliced foreground build is in flight
+  int sectionBuildTier_ = 0;                         // render tier currently being built
+  unsigned long sectionBuildProgressPaintedMs_ = 0;  // last progress-bar refresh (throttle)
+
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -132,7 +157,40 @@ class EpubReaderActivity final : public Activity {
   // wobble)? Cheap: one exists() plus a scan of the <=3 generation dirs.
   std::string classifySectionMiss(const Section& section) const;
 
-  bool buildSectionForRead(Section& section, uint16_t viewportWidth, uint16_t viewportHeight);
+  // Fast synchronous cache load for `section`: the floor tier first, then a probe
+  // of degraded-tier cache generations. Returns true if a cache was adopted (the
+  // section is ready to position + paint); false means the chapter must be built.
+  bool loadSectionFromCache(Section& section, uint16_t viewportWidth, uint16_t viewportHeight);
+  // Prime the first-tier sliced build after a cache miss. Captures layout params in
+  // slicedBuild_, sets sectionBuildActive_, paints the initial (0%) progress face and
+  // requests the first slice. Returns false on a hard start failure.
+  bool beginSlicedBuild(uint16_t viewportWidth, uint16_t viewportHeight);
+  // (Re)start Section::startBuild() at render tier `tier` under a framebuffer loan,
+  // using slicedBuild_. Used to prime the build and to restart it a tier lower on a
+  // low-memory abort. Returns false when startBuild fails at that tier.
+  bool startBuildAtTier(int tier);
+  // Advance the in-flight sliced build by one slice (a few pages) under a per-slice
+  // framebuffer loan, descending the low-memory tier on OOM and painting progress.
+  // Returns true only when the build just completed (section positioned, ready to
+  // paint this render); false while still building or after a cancel/error bail.
+  bool advanceSectionBuild();
+  // Paint the "Indexing" progress bar for the current build fraction. Throttled to a
+  // few refreshes across a build unless `force` (initial face, tier change, done).
+  void paintBuildProgress(bool force);
+  // Resolve the on-screen page once a section is ready (pendingPageJump / nextPage /
+  // anchor / cached-progress / percent jump). Runs after a cache hit or a completed
+  // sliced build. Requires final section->pageCount.
+  void positionAfterSectionReady();
+  // Replace the on-screen "Indexing" popup with an explicit build-failure popup
+  // (corrupt EPUB, or OOM even at the lowest tier) so a failed build does not hang
+  // on a stale progress face. Clears the screen first.
+  void showBuildError();
+  // If a chapter build is currently monopolizing the render task, ask it to stop
+  // so the render lock frees in ~one parse step (or the next slice bails). Call
+  // before any "abandon this chapter" press path (go home, file browser, chapter
+  // skip) so it acts promptly instead of blocking for the full ~13s build. No-op
+  // when no build is in flight. Does not itself take the render lock.
+  void cancelInFlightBuild();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
