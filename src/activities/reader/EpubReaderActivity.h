@@ -72,6 +72,7 @@ class EpubReaderActivity final : public Activity {
   bool sectionBuildActive_ = false;                  // a sliced foreground build is in flight
   int sectionBuildTier_ = 0;                         // render tier currently being built
   unsigned long sectionBuildProgressPaintedMs_ = 0;  // last progress-bar refresh (throttle)
+  int sectionBuildProgressPercent_ = -100;           // last painted bar % (repaint only when it moves)
 
   int currentSpineIndex = 0;
   int nextPageNumber = 0;

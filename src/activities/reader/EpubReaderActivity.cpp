@@ -1504,8 +1504,9 @@ bool EpubReaderActivity::beginSlicedBuild(const uint16_t viewportWidth, const ui
   }
   sectionBuildActive_ = true;
   sectionBuildProgressPaintedMs_ = 0;
-  paintBuildProgress(/*force=*/true);  // initial indexing face at 0%
-  requestUpdate();                     // ask the render task for the first slice
+  sectionBuildProgressPercent_ = -100;  // force the first real update to paint
+  paintBuildProgress(/*force=*/true);   // initial indexing face at 0%
+  requestUpdate();                      // ask the render task for the first slice
   return true;
 }
 
@@ -1604,15 +1605,7 @@ bool EpubReaderActivity::advanceSectionBuild() {
 }
 
 void EpubReaderActivity::paintBuildProgress(const bool force) {
-  // Throttle: each e-ink partial refresh costs real time, so update the bar only a
-  // few times across a build unless forced (initial face, tier change).
-  constexpr unsigned long kProgressMinIntervalMs = 2000;
-  const unsigned long now = millis();
-  if (!force && sectionBuildProgressPaintedMs_ != 0 && now - sectionBuildProgressPaintedMs_ < kProgressMinIntervalMs) {
-    return;
-  }
   if (!renderer.hasFrameBuffer() || !section) return;  // FB still lent, or no section: skip
-  sectionBuildProgressPaintedMs_ = now;
 
   const uint16_t built = section->builtPages();
   const uint16_t total = section->estimatedTotalPages();
@@ -1621,6 +1614,18 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
     percent = static_cast<int>((static_cast<uint32_t>(built) * 100u) / total);
     if (percent > 99) percent = 99;  // never show 100% before the real page paints
   }
+
+  // Each e-ink refresh is a full-screen flash on X3, so repaint only when the bar
+  // would visibly move: at least +8% progress AND >=1.5s since the last paint.
+  // `force` (initial face, tier change) always paints. Keeps the flashes to a
+  // handful across a build instead of a constant blink.
+  const unsigned long now = millis();
+  if (!force) {
+    if (percent < sectionBuildProgressPercent_ + 8) return;
+    if (sectionBuildProgressPaintedMs_ != 0 && now - sectionBuildProgressPaintedMs_ < 1500) return;
+  }
+  sectionBuildProgressPaintedMs_ = now;
+  sectionBuildProgressPercent_ = percent;
 
   // The indexing popup plus a thin progress bar beneath it. drawPopup repaints the
   // whole popup box each time so the bar sits on a clean background.
@@ -1634,9 +1639,11 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
   renderer.drawRect(barX, barY, barW, barH, true);
   const int fillW = (barW - 2) * percent / 100;
   if (fillW > 0) renderer.fillRect(barX + 1, barY + 1, fillW, barH - 2, true);
-  // Push just the bar strip to the panel; async so input latches and the loop
-  // stays live during the waveform.
-  renderer.displayWindowAsync(barX, barY, barW, barH);
+  // Push the bar strip synchronously: the refresh completes while the bar is still
+  // in the framebuffer, so the next build slice reclaiming the FB cannot leave a
+  // deferred sync that erases the bar (the cause of the "bar disappears between
+  // updates" flicker). Throttled above, so the added refresh time stays bounded.
+  renderer.displayWindow(barX, barY, barW, barH);
 }
 
 void EpubReaderActivity::showBuildError() {
