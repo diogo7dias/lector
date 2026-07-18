@@ -59,13 +59,31 @@ struct Arena {
 
   // Allocate the first slab. Must be called before alloc(). Returns false on OOM.
   bool init(size_t slabBytes) {
-    slabSize = slabBytes;
-    head = current = allocSlab(slabBytes);
-    if (!head) {
+    if (!tryInit(slabBytes)) {
       LOG_ERR("Arena", "init failed (slab=%u bytes)", (unsigned)slabBytes);
       return false;
     }
     return true;
+  }
+
+  // Like init(), but on OOM retries with progressively smaller first slabs
+  // (preferred, preferred/2, ... down to the largest rung >= minBytes). Lets the
+  // arena start in a fragmented heap where one large contiguous slab is
+  // unavailable but several smaller gaps exist -- the arena simply grows more,
+  // smaller slabs on demand later. Returns false only if even a minBytes slab
+  // cannot be allocated. minBytes is clamped to at least 1 to bound the ladder.
+  bool initWithFallback(size_t preferred, size_t minBytes) {
+    if (minBytes < 1) minBytes = 1;
+    for (size_t bytes = preferred; bytes >= minBytes; bytes >>= 1) {
+      if (tryInit(bytes)) {
+        if (bytes != preferred) {
+          LOG_INF("Arena", "init fell back to slab=%u bytes (wanted %u)", (unsigned)bytes, (unsigned)preferred);
+        }
+        return true;
+      }
+    }
+    LOG_ERR("Arena", "init failed (slab ladder %u..%u bytes)", (unsigned)preferred, (unsigned)minBytes);
+    return false;
   }
 
   // Release all slabs. Arena is unusable until init() is called again.
@@ -140,14 +158,38 @@ struct Arena {
   }
 
  private:
+  // Allocate and install the first slab. Sets slabSize regardless so a later
+  // grow() uses the size that actually succeeded. Returns false on OOM without
+  // logging, so init()/initWithFallback() control the message.
+  bool tryInit(size_t slabBytes) {
+    slabSize = slabBytes;
+    head = current = allocSlab(slabBytes);
+    return head != nullptr;
+  }
+
   static ArenaSlab* allocSlab(size_t dataSize) {
-    auto* s = static_cast<ArenaSlab*>(::malloc(sizeof(ArenaSlab) + dataSize));
+    const size_t bytes = sizeof(ArenaSlab) + dataSize;
+#ifdef ARENA_ENABLE_TEST_HOOKS
+    // Host tests inject a failing allocator to exercise the OOM/fallback paths;
+    // the device heap never fails on host. Never defined in firmware builds.
+    auto* s = static_cast<ArenaSlab*>(testAllocHook ? testAllocHook(bytes) : ::malloc(bytes));
+#else
+    auto* s = static_cast<ArenaSlab*>(::malloc(bytes));
+#endif
     if (!s) return nullptr;
     s->next = nullptr;
     s->capacity = dataSize;
     s->offset = 0;
     return s;
   }
+
+#ifdef ARENA_ENABLE_TEST_HOOKS
+ public:
+  // Test-only: when set, replaces ::malloc for slab allocation. nullptr = real malloc.
+  static inline void* (*testAllocHook)(size_t) = nullptr;
+
+ private:
+#endif
 
   static void* tryAlloc(ArenaSlab* slab, size_t size, size_t align) {
     if (!slab) return nullptr;

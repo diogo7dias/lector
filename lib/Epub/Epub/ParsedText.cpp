@@ -396,7 +396,7 @@ int guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std:
 std::string_view ParsedText::poolStore(const char* data, const size_t len) {
   // Lazy init: paragraphs with no text (or dropped before any word) never pay
   // for a slab. 4 KiB covers a typical paragraph's word text in one slab.
-  if (!textPool_.head && !textPool_.init(4 * 1024)) {
+  if (!textPool_.head && !textPool_.initWithFallback(4 * 1024, 1 * 1024)) {
     LOG_ERR("PTX", "Word pool init OOM (%u bytes)", static_cast<unsigned>(len));
     return {};
   }
@@ -697,7 +697,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // already drops a line when the TextBlock arena cannot be allocated.
   lastLayoutOom_ = false;
   Arena scratch;
-  if (!scratch.init(4 * 1024)) {
+  if (!scratch.initWithFallback(4 * 1024, 1 * 1024)) {
     LOG_ERR("PTX", "Dropping paragraph: layout scratch arena OOM");
     lastLayoutOom_ = true;
     return;

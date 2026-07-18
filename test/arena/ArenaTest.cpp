@@ -214,4 +214,67 @@ TEST(ArenaVector, IterationVisitsAllElements) {
   EXPECT_EQ(sum, 15);
 }
 
+// --- Slab-fallback ladder (initWithFallback) ------------------------------
+//
+// On the device a heavy chapter can leave ~95KB free but no single block larger
+// than a few KB. initWithFallback() starts the arena in that fragmented heap by
+// trying smaller first slabs. Host malloc never fails, so these tests inject a
+// failing allocator via Arena::testAllocHook (ARENA_ENABLE_TEST_HOOKS) to
+// simulate the fragmentation.
+
+// slab requests (sizeof(ArenaSlab) + dataSize) at or above this fail.
+size_t gSlabFailAtOrAbove = SIZE_MAX;
+
+void* fragmentedAlloc(size_t bytes) { return bytes >= gSlabFailAtOrAbove ? nullptr : ::malloc(bytes); }
+
+struct ArenaFallback : ::testing::Test {
+  void SetUp() override { Arena::testAllocHook = fragmentedAlloc; }
+  void TearDown() override {
+    Arena::testAllocHook = nullptr;
+    gSlabFailAtOrAbove = SIZE_MAX;
+  }
+};
+
+TEST_F(ArenaFallback, UsesPreferredSlabWhenHeapHealthy) {
+  gSlabFailAtOrAbove = SIZE_MAX;  // nothing fails
+  Arena arena;
+  ASSERT_TRUE(arena.initWithFallback(4096, 1024));
+  EXPECT_EQ(arena.slabSize, 4096u);  // no fallback needed
+}
+
+TEST_F(ArenaFallback, FallsBackToSmallerSlabWhenLargeBlockUnavailable) {
+  // Only blocks smaller than ~1.5KB can be allocated: the 4096 and 2048 rungs
+  // fail, the 1024 rung succeeds.
+  gSlabFailAtOrAbove = 1500;
+  Arena arena;
+  ASSERT_TRUE(arena.initWithFallback(4096, 1024));
+  EXPECT_EQ(arena.slabSize, 1024u);
+  // The arena is fully usable on the fallback slab.
+  EXPECT_NE(arena.alloc(512, 1), nullptr);
+}
+
+TEST_F(ArenaFallback, FallsBackToMiddleRung) {
+  // Blocks up to ~3KB succeed: 4096 fails, 2048 succeeds.
+  gSlabFailAtOrAbove = 3000;
+  Arena arena;
+  ASSERT_TRUE(arena.initWithFallback(4096, 1024));
+  EXPECT_EQ(arena.slabSize, 2048u);
+}
+
+TEST_F(ArenaFallback, ReturnsFalseWhenEvenMinSlabFails) {
+  gSlabFailAtOrAbove = 1;  // every allocation fails
+  Arena arena;
+  EXPECT_FALSE(arena.initWithFallback(4096, 1024));
+  EXPECT_EQ(arena.head, nullptr);  // left uninitialized, no leak
+}
+
+TEST_F(ArenaFallback, HonorsMinBytesFloor) {
+  // A 1024-data slab (~1048 bytes with header) fails, but a 512-data slab
+  // (~536 bytes) would succeed. The ladder must stop at the 1024 floor and
+  // NOT descend to 512, so it returns false rather than using a tiny slab.
+  gSlabFailAtOrAbove = 600;
+  Arena arena;
+  EXPECT_FALSE(arena.initWithFallback(4096, 1024));
+}
+
 }  // namespace
