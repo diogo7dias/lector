@@ -278,7 +278,7 @@ bool Section::hasCachedSectionFor(const int fontId, const float lineCompression,
                                   const uint8_t paragraphSpacing) const {
   // Pure existence probe: no prepareGeneration, no marker switch, no prune,
   // no member mutation. Callers scanning several parameter candidates (the
-  // low-memory tier adoption in buildSectionForRead) MUST use this first —
+  // low-memory tier adoption in loadSectionFromCache) MUST use this first —
   // loadSectionFile's generation switch prunes all but the newest two
   // generation dirs, so probing by loading would delete the very drawer a
   // later candidate needs.

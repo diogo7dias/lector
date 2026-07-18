@@ -342,9 +342,11 @@ void EpubReaderActivity::loop() {
   // Waits for the render lock to be free so the replayed turn renders right
   // after the first page instead of racing it. A stale queue (user walked
   // away) is dropped rather than turning a page out of nowhere.
-  if (queuedPageTurn != 0 && section) {
+  if (queuedPageTurn != 0 && section && !sectionBuildActive_) {
     // LOCKED rule: no phantom clicks. A queued turn only replays if the press
-    // is fresh; anything older is dropped (the user re-presses).
+    // is fresh; anything older is dropped (the user re-presses). Never replay
+    // onto a section that is still building (sectionBuildActive_) -- its page
+    // count is not final yet; the turn waits until the build completes.
     if (millis() - queuedPageTurnAtMs > 600UL) {
       queuedPageTurn = 0;
     } else if (!RenderLock::peek() && currentSpineIndex < epub->getSpineItemsCount()) {
@@ -640,10 +642,11 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // No current section: the page is still building (typical right after a wake,
-  // when the restored frame is visible but the book engine is not ready yet).
-  // Queue the press instead of swallowing it; loop() replays it when ready.
-  if (!section) {
+  // No current section, or one still being laid out slice by slice: the page is
+  // not ready (typical right after a wake, or during a heavy chapter build).
+  // Queue the press instead of swallowing it; loop() replays it once the build
+  // completes and the section is ready.
+  if (!section || sectionBuildActive_) {
     queuedPageTurn = prevTriggered ? -1 : 1;
     queuedPageTurnAtMs = millis();
     if (diagFirstPressMs_ == 0) diagFirstPressMs_ = millis();
@@ -1090,11 +1093,12 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 }
 
 void EpubReaderActivity::cancelInFlightBuild() {
-  // RenderLock::peek() true means the render task is mid-render (the ~13s build).
-  // `section` is the object being built, so setting its cancel flag makes
-  // buildSomeMore() bail at the next parse step and release the lock. Only a flag
-  // write -- safe from the loop task without taking the lock ourselves.
-  if (section && RenderLock::peek()) {
+  // A build is in flight either as the old one-shot render (RenderLock::peek()) or
+  // as the sliced foreground build (sectionBuildActive_). `section` is the object
+  // being built, so setting its cancel flag makes the next buildSomeMore() bail and
+  // release the lock / end the slice loop. Only a flag write -- safe from the loop
+  // task without taking the render lock ourselves.
+  if (section && (sectionBuildActive_ || RenderLock::peek())) {
     section->requestBuildCancel();
   }
 }
@@ -1268,69 +1272,26 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       showBuildError();
       return;
     }
+    sectionBuildActive_ = false;  // fresh section: no slice in flight until beginSlicedBuild
 
-    if (!buildSectionForRead(*section, viewportWidth, viewportHeight)) {
-      // A user-cancelled build is not an error: drop the half-built section
-      // quietly and let the press that triggered the cancel (go home / chapter
-      // skip) proceed. render() runs again for whatever chapter that resolves to.
-      const bool cancelled = section->lastBuildWasCancelled();
-      section.reset();
-      if (cancelled) {
-        LOG_INF("ERS", "Section build cancelled; leaving chapter unbuilt");
+    if (loadSectionFromCache(*section, viewportWidth, viewportHeight)) {
+      positionAfterSectionReady();  // cache hit: page is ready to paint below
+    } else {
+      // Cache miss: drive the ~13s build a few pages per render() so input stays
+      // live (Back cancels) and a progress bar shows. beginSlicedBuild requests the
+      // first slice; advanceSectionBuild() (below) drives the rest across renders.
+      if (!beginSlicedBuild(viewportWidth, viewportHeight)) {
+        section.reset();
+        showBuildError();
         return;
       }
-      LOG_ERR("ERS", "Failed to build section for reading");
-      showBuildError();
-      return;
+      return;  // still building; nothing to paint yet
     }
-
-    if (pendingPageJump.has_value()) {
-      if (*pendingPageJump >= section->pageCount && section->pageCount > 0) {
-        section->currentPage = section->pageCount - 1;
-      } else {
-        section->currentPage = *pendingPageJump;
-      }
-      pendingPageJump.reset();
-    } else {
-      section->currentPage = nextPageNumber;
-      if (section->currentPage < 0) {
-        section->currentPage = 0;
-      } else if (section->currentPage >= section->pageCount && section->pageCount > 0) {
-        LOG_DBG("ERS", "Clamping cached page %d to %d", section->currentPage, section->pageCount - 1);
-        section->currentPage = section->pageCount - 1;
-      }
-    }
-
-    if (!pendingAnchor.empty()) {
-      if (const auto page = section->getPageForAnchor(pendingAnchor)) {
-        section->currentPage = *page;
-        LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), *page);
-      } else {
-        LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
-      }
-      pendingAnchor.clear();
-    }
-
-    // handles changes in reader settings and reset to approximate position based on cached progress
-    if (cachedChapterTotalPageCount > 0) {
-      // only goes to relative position if spine index matches cached value
-      if (currentSpineIndex == cachedSpineIndex && section->pageCount != cachedChapterTotalPageCount) {
-        float progress = static_cast<float>(section->currentPage) / static_cast<float>(cachedChapterTotalPageCount);
-        int newPage = static_cast<int>(progress * section->pageCount);
-        section->currentPage = newPage;
-      }
-      cachedChapterTotalPageCount = 0;  // resets to 0 to prevent reading cached progress again
-    }
-
-    if (pendingPercentJump && section->pageCount > 0) {
-      // Apply the pending percent jump now that we know the new section's page count.
-      int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
-      if (newPage >= section->pageCount) {
-        newPage = section->pageCount - 1;
-      }
-      section->currentPage = newPage;
-      pendingPercentJump = false;
-    }
+  } else if (sectionBuildActive_) {
+    // A sliced foreground build is in flight: advance it one slice. Only when it
+    // just completed does advanceSectionBuild() return true and we paint below;
+    // otherwise it has requested the next slice (or bailed) and we return.
+    if (!advanceSectionBuild()) return;
   }
 
   renderer.clearScreen();
@@ -1458,8 +1419,8 @@ std::string EpubReaderActivity::classifySectionMiss(const Section& section) cons
   return std::string(info);
 }
 
-bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t viewportWidth,
-                                             const uint16_t viewportHeight) {
+bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t viewportWidth,
+                                              const uint16_t viewportHeight) {
   const int fontId = SETTINGS.getReaderFontId();
   const float lineCompression = SETTINGS.getReaderLineCompression();
   const int firstLineIndentPx = firstLineIndentPxFor(viewportWidth);
@@ -1519,68 +1480,223 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
     }
   }
 
-  LOG_DBG("ERS", "Cache not found, building...");
+  // Cache miss: the caller (render) starts a sliced build via beginSlicedBuild so
+  // the ~13s layout runs a few pages per render() with a live progress bar.
+  return false;
+}
+
+bool EpubReaderActivity::beginSlicedBuild(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  if (!section) return false;
+  slicedBuild_.fontId = SETTINGS.getReaderFontId();
+  slicedBuild_.lineCompression = SETTINGS.getReaderLineCompression();
+  slicedBuild_.firstLineIndentPx = firstLineIndentPxFor(viewportWidth);
+  slicedBuild_.viewportW = viewportWidth;
+  slicedBuild_.viewportH = viewportHeight;
+  slicedBuild_.imageRendering = SETTINGS.imageRendering;
+  slicedBuild_.embeddedStyle = SETTINGS.embeddedStyle;
+  slicedBuild_.hyphenationEnabled = SETTINGS.hyphenationEnabled;
+  slicedBuild_.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+  slicedBuild_.guideDotsEnabled = SETTINGS.guideDotsEnabled;
+
+  LOG_DBG("ERS", "Cache not found, building (sliced)...");
   diagSectionWasBuild_ = true;
   if (diagOverlayPending_) {
-    diagMissInfo_ = classifySectionMiss(section);
+    diagMissInfo_ = classifySectionMiss(*section);
   }
-  GUI.drawPopup(renderer, tr(STR_INDEXING));
-  // No popup redraws while the framebuffer is lent to the build below; the
-  // panel holds the popup displayed above (e-ink is persistent).
-  const auto popupFn = [this]() {
-    if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
-  };
-  // Lend the framebuffer's ~51 KB to the blocking build (the whole-spine
-  // inflate + layout is the memory peak). Restored (white) when this function
-  // returns, and render() repaints the full screen after.
+
+  // Prime the build at the current floor tier. startBuildAtTier lends the
+  // framebuffer for the whole-spine inflate inside startBuild(), then releases it.
+  sectionBuildTier_ = lowMemoryTierFloor_;
+  if (!startBuildAtTier(sectionBuildTier_)) {
+    LOG_ERR("ERS", "Sliced build failed to start at tier %d", sectionBuildTier_);
+    return false;
+  }
+  sectionBuildActive_ = true;
+  sectionBuildProgressPaintedMs_ = 0;
+  paintBuildProgress(/*force=*/true);  // initial indexing face at 0%
+  requestUpdate();                     // ask the render task for the first slice
+  return true;
+}
+
+bool EpubReaderActivity::startBuildAtTier(const int tier) {
+  if (!section) return false;
+  const LowMemoryRenderTier::Knobs base{slicedBuild_.imageRendering, slicedBuild_.embeddedStyle,
+                                        slicedBuild_.hyphenationEnabled, slicedBuild_.focusReadingEnabled,
+                                        slicedBuild_.guideDotsEnabled};
+  const LowMemoryRenderTier::Knobs knobs = LowMemoryRenderTier::apply(base, tier);
+  // Lend the framebuffer's ~51 KB for the inflate peak inside startBuild(); the
+  // loan ends when this returns so the caller can paint the progress bar.
   GfxRenderer::FrameBufferLoan loan(renderer);
+  return section->startBuild(slicedBuild_.fontId, slicedBuild_.lineCompression, SETTINGS.extraParagraphSpacing,
+                             SETTINGS.paragraphAlignment, slicedBuild_.viewportW, slicedBuild_.viewportH,
+                             knobs.hyphenationEnabled, knobs.embeddedStyle, knobs.imageRendering,
+                             knobs.focusReadingEnabled, knobs.guideDotsEnabled, slicedBuild_.firstLineIndentPx,
+                             SETTINGS.wordSpacing, SETTINGS.paragraphSpacing);
+}
 
-  // Descend the fallback ladder: build at the current floor first, then reduce one
-  // render knob per rung on a low-memory abort, until it fits or the lowest tier
-  // fails. A non-memory failure is not retried. Tiers whose knobs equal the previous
-  // attempt (a reduction the user already applied) are skipped.
-  LowMemoryRenderTier::Knobs lastTried{};
-  bool haveLast = false;
-  for (int tier = lowMemoryTierFloor_; tier <= LowMemoryRenderTier::kMaxTier; ++tier) {
-    const LowMemoryRenderTier::Knobs knobs = LowMemoryRenderTier::apply(base, tier);
-    if (haveLast && LowMemoryRenderTier::equal(knobs, lastTried)) {
-      continue;
+bool EpubReaderActivity::advanceSectionBuild() {
+  if (!section) {
+    sectionBuildActive_ = false;
+    return false;
+  }
+  // Pages to lay out per slice. Small enough that the render lock frees often
+  // (input stays responsive), large enough that per-slice overhead stays modest.
+  constexpr int kBuildPagesPerSlice = 8;
+  bool ok;
+  {
+    // The build owns the framebuffer bytes for this slice's layout (image inflate
+    // may claim them); the loan ends here so the progress bar can use the FB.
+    GfxRenderer::FrameBufferLoan loan(renderer);
+    ok = section->buildSomeMore(kBuildPagesPerSlice);
+  }
+
+  if (!ok) {
+    if (section->lastBuildWasCancelled()) {
+      LOG_INF("ERS", "Sliced build cancelled; leaving chapter unbuilt");
+      sectionBuildActive_ = false;
+      section.reset();
+      return false;
     }
-    lastTried = knobs;
-    haveLast = true;
-
-    if (section.createSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
-                                  viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
-                                  knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
-                                  firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing, popupFn)) {
-      if (tier > lowMemoryTierFloor_) {
-        LOG_INF("ERS", "Low memory: degraded chapter render to tier %d for the rest of this book", tier);
-        lowMemoryTierFloor_ = tier;
+    if (section->lastBuildWasLowMemory() && sectionBuildTier_ < LowMemoryRenderTier::kMaxTier) {
+      // Descend to the next distinct render tier and restart the build from scratch.
+      // Skip tiers whose knobs match the current attempt (already-applied reductions).
+      const LowMemoryRenderTier::Knobs base{slicedBuild_.imageRendering, slicedBuild_.embeddedStyle,
+                                            slicedBuild_.hyphenationEnabled, slicedBuild_.focusReadingEnabled,
+                                            slicedBuild_.guideDotsEnabled};
+      const LowMemoryRenderTier::Knobs current = LowMemoryRenderTier::apply(base, sectionBuildTier_);
+      int nextTier = sectionBuildTier_ + 1;
+      while (nextTier <= LowMemoryRenderTier::kMaxTier &&
+             LowMemoryRenderTier::equal(LowMemoryRenderTier::apply(base, nextTier), current)) {
+        ++nextTier;
       }
-      diagSectionReadyMs_ = millis();
-      return true;
+      LOG_ERR("ERS", "Sliced build hit low memory at tier %d; descending to %d", sectionBuildTier_, nextTier);
+      // Give the retry more headroom: drop the SD-font resident caches too.
+      if (renderer.releaseSdCardFontForLowMemory(slicedBuild_.fontId)) {
+        LOG_INF("ERS", "Released SD font caches before tier retry");
+      }
+      if (nextTier > LowMemoryRenderTier::kMaxTier || !startBuildAtTier(nextTier)) {
+        LOG_ERR("ERS", "Sliced build failed even at the lowest render tier");
+        sectionBuildActive_ = false;
+        section.reset();
+        showBuildError();
+        return false;
+      }
+      sectionBuildTier_ = nextTier;
+      lowMemoryTierFloor_ = nextTier;  // stick the degrade for the rest of the book
+      paintBuildProgress(/*force=*/true);
+      requestUpdate();
+      return false;
     }
+    // Hard (non-memory) failure, or low memory with no tier left.
+    LOG_ERR("ERS", "Sliced build failed (tier %d)", sectionBuildTier_);
+    sectionBuildActive_ = false;
+    section.reset();
+    showBuildError();
+    return false;
+  }
 
-    // User asked to leave this chapter (Back / chapter skip): stop immediately,
-    // do not descend tiers or retry. render() bails quietly on lastBuildWasCancelled().
-    if (section.lastBuildWasCancelled()) {
-      LOG_INF("ERS", "Section build cancelled by user");
-      return false;
+  if (!section->isBuildComplete()) {
+    // More pages to lay out: show progress and come back next render.
+    paintBuildProgress(/*force=*/false);
+    requestUpdate();
+    return false;
+  }
+
+  // Build finished and committed.
+  if (sectionBuildTier_ > lowMemoryTierFloor_) {
+    lowMemoryTierFloor_ = sectionBuildTier_;
+  }
+  sectionBuildActive_ = false;
+  diagSectionReadyMs_ = millis();
+  positionAfterSectionReady();
+  return true;  // ready: render() falls through to paint the page this frame
+}
+
+void EpubReaderActivity::paintBuildProgress(const bool force) {
+  // Throttle: each e-ink partial refresh costs real time, so update the bar only a
+  // few times across a build unless forced (initial face, tier change).
+  constexpr unsigned long kProgressMinIntervalMs = 2000;
+  const unsigned long now = millis();
+  if (!force && sectionBuildProgressPaintedMs_ != 0 && now - sectionBuildProgressPaintedMs_ < kProgressMinIntervalMs) {
+    return;
+  }
+  if (!renderer.hasFrameBuffer() || !section) return;  // FB still lent, or no section: skip
+  sectionBuildProgressPaintedMs_ = now;
+
+  const uint16_t built = section->builtPages();
+  const uint16_t total = section->estimatedTotalPages();
+  int percent = 0;
+  if (total > 0) {
+    percent = static_cast<int>((static_cast<uint32_t>(built) * 100u) / total);
+    if (percent > 99) percent = 99;  // never show 100% before the real page paints
+  }
+
+  // The indexing popup plus a thin progress bar beneath it. drawPopup repaints the
+  // whole popup box each time so the bar sits on a clean background.
+  GUI.drawPopup(renderer, tr(STR_INDEXING));
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
+  const int barW = screenW / 2;
+  const int barH = 10;
+  const int barX = (screenW - barW) / 2;
+  const int barY = screenH / 2 + 40;
+  renderer.drawRect(barX, barY, barW, barH, true);
+  const int fillW = (barW - 2) * percent / 100;
+  if (fillW > 0) renderer.fillRect(barX + 1, barY + 1, fillW, barH - 2, true);
+  // Push just the bar strip to the panel; async so input latches and the loop
+  // stays live during the waveform.
+  renderer.displayWindowAsync(barX, barY, barW, barH);
+}
+
+void EpubReaderActivity::positionAfterSectionReady() {
+  if (!section) return;
+  if (pendingPageJump.has_value()) {
+    if (*pendingPageJump >= section->pageCount && section->pageCount > 0) {
+      section->currentPage = section->pageCount - 1;
+    } else {
+      section->currentPage = *pendingPageJump;
     }
-    if (!section.lastBuildWasLowMemory()) {
-      LOG_ERR("ERS", "Section build failed (not low memory)");
-      return false;
-    }
-    LOG_ERR("ERS", "Section build hit low memory at tier %d; descending", tier);
-    // Give the retry more headroom: drop the SD-font resident caches too.
-    // They rebuild from SD as the degraded-tier layout runs.
-    if (renderer.releaseSdCardFontForLowMemory(fontId)) {
-      LOG_INF("ERS", "Released SD font caches before tier retry");
+    pendingPageJump.reset();
+  } else {
+    section->currentPage = nextPageNumber;
+    if (section->currentPage < 0) {
+      section->currentPage = 0;
+    } else if (section->currentPage >= section->pageCount && section->pageCount > 0) {
+      LOG_DBG("ERS", "Clamping cached page %d to %d", section->currentPage, section->pageCount - 1);
+      section->currentPage = section->pageCount - 1;
     }
   }
 
-  LOG_ERR("ERS", "Section build failed even at the lowest render tier");
-  return false;
+  if (!pendingAnchor.empty()) {
+    if (const auto page = section->getPageForAnchor(pendingAnchor)) {
+      section->currentPage = *page;
+      LOG_DBG("ERS", "Resolved anchor '%s' to page %d", pendingAnchor.c_str(), *page);
+    } else {
+      LOG_DBG("ERS", "Anchor '%s' not found in section %d", pendingAnchor.c_str(), currentSpineIndex);
+    }
+    pendingAnchor.clear();
+  }
+
+  // handles changes in reader settings and reset to approximate position based on cached progress
+  if (cachedChapterTotalPageCount > 0) {
+    // only goes to relative position if spine index matches cached value
+    if (currentSpineIndex == cachedSpineIndex && section->pageCount != cachedChapterTotalPageCount) {
+      float progress = static_cast<float>(section->currentPage) / static_cast<float>(cachedChapterTotalPageCount);
+      int newPage = static_cast<int>(progress * section->pageCount);
+      section->currentPage = newPage;
+    }
+    cachedChapterTotalPageCount = 0;  // resets to 0 to prevent reading cached progress again
+  }
+
+  if (pendingPercentJump && section->pageCount > 0) {
+    // Apply the pending percent jump now that we know the new section's page count.
+    int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
+    if (newPage >= section->pageCount) {
+      newPage = section->pageCount - 1;
+    }
+    section->currentPage = newPage;
+    pendingPercentJump = false;
+  }
 }
 
 void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, const uint16_t viewportHeight) {
