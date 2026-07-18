@@ -6,6 +6,7 @@
 #include <I18n.h>
 #include <Memory.h>
 #include <esp_random.h>
+#include <esp_task_wdt.h>
 
 #include <algorithm>
 #include <iterator>
@@ -72,14 +73,27 @@ bool FileBrowserActivity::loadFiles(const SdFileIndex::CancelFn& cancel) {
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) return true;
 
+  // Pre-size for a typical folder so the first handful of push_backs do not each
+  // trigger a vector re-grow (allocate + copy + free — three heap ops that also
+  // fragment DRAM). Large folders bail to the SD index well before this matters.
+  files.reserve(64);
+
   root.rewindDirectory();
   size_t retainedNameBytes = 0;
   bool needsSdIndex = false;
+  size_t scanned = 0;
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     if (cancelRequested()) {
       root.close();
       files.clear();
       return false;
+    }
+    // Feed the watchdog and yield periodically: a folder can hold up to ~1024
+    // entries before the SD-index cutover, and the plain scan otherwise holds the
+    // task without a break, starving the UI/repaint and risking a WDT trip.
+    if ((++scanned % 64) == 0) {
+      esp_task_wdt_reset();
+      yield();
     }
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     const bool isDirectory = file.isDirectory();
