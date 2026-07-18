@@ -217,7 +217,10 @@ void ActivityManager::goToSettings() {
 }
 
 void ActivityManager::goToFileBrowser(std::string path) {
-  showTransitionBanner(StrId::STR_LOADING);
+  // "Opening folder..." stays on the panel through FileBrowserActivity's initial SD
+  // scan / index build (which can be slow for a big folder like /sleep pause), since
+  // no repaint happens until the list is ready.
+  showTransitionBanner(StrId::STR_BANNER_OPENING_FOLDER);
   replaceActivity(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 
