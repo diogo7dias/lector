@@ -234,6 +234,12 @@ class BaseTheme {
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message,
                          PopupRefresh refresh = PopupRefresh::Clean) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
+  // Draw the top feedback strip into the framebuffer WITHOUT refreshing it and
+  // without arming the auto-clear timer. For full-screen activities that render
+  // their own frame (clearScreen + displayBuffer) but want a progress message to
+  // appear as the top strip instead of centered text. drawPopup() is this plus a
+  // windowed refresh + noteBannerShown(). Returns the strip rect.
+  Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.

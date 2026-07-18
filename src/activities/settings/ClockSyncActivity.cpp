@@ -111,7 +111,8 @@ void ClockSyncActivity::render(RenderLock&&) {
 
   switch (state) {
     case SYNCING:
-      renderer.drawCenteredText(UI_12_FONT_ID, midY, tr(STR_CLOCK_SYNCING));
+      // Progress message as the top strip (SUCCESS / NO_WIFI / FAIL results stay centered).
+      GUI.drawBannerStrip(renderer, tr(STR_CLOCK_SYNCING));
       break;
     case SUCCESS: {
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_OK), true, EpdFontFamily::BOLD);

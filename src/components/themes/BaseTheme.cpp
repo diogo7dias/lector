@@ -1078,14 +1078,10 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   }
 }
 
-Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const PopupRefresh refresh) const {
-  // Lector feedback banner: a thin full-width black strip pinned to the TOP of the
-  // screen (y=0), white centered text, 2px white inset edge. This replaces the old
-  // centered popup so a message never covers the content below it. Pushed as a
-  // windowed refresh: only the strip repaints, the screen underneath is left as-is
-  // (the banner overlays whatever the activity already painted). All ~30 former
-  // drawPopup call sites become this top strip with no per-site change.
-  (void)refresh;  // windowed strip is always a fast, cheap refresh; no HALF/clean variant needed
+Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
+  // Thin full-width black strip pinned to the TOP of the screen (y=0), white
+  // centered text, 2px white inset edge. Draws into the framebuffer only; the
+  // caller is responsible for the refresh (and for the auto-clear arming).
   const int pageWidth = renderer.getScreenWidth();
   const int textHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int h = textHeight + 8;
@@ -1100,9 +1096,19 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
   renderer.setPaperbackLook(true);
   renderer.drawText(UI_10_FONT_ID, textX, textY, message, false);  // white text
   renderer.setPaperbackLook(false);
-  renderer.displayWindow(0, y, pageWidth, h);  // just the strip; content below untouched
-  renderer.noteBannerShown();                  // arm the auto-clear timer (transient confirms/errors clear after ~1.5s)
   return Rect{0, y, pageWidth, h};
+}
+
+Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const PopupRefresh refresh) const {
+  // Lector feedback banner: the top strip, replacing the old centered popup so a
+  // message never covers the content below it. Windowed refresh: only the strip
+  // repaints; the screen underneath is left as-is (the banner overlays whatever the
+  // activity already painted). All former drawPopup call sites become this top strip.
+  (void)refresh;  // windowed strip is always a fast, cheap refresh; no HALF/clean variant needed
+  const Rect strip = drawBannerStrip(renderer, message);
+  renderer.displayWindow(strip.x, strip.y, strip.width, strip.height);  // just the strip
+  renderer.noteBannerShown();  // arm the auto-clear timer (transient confirms/errors clear after ~1.5s)
+  return strip;
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {

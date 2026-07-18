@@ -42,7 +42,8 @@ void ClearCacheActivity::render(RenderLock&&) {
   }
 
   if (state == CLEARING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_CLEARING_CACHE));
+    // Progress message as the top strip (the result/warning states stay centered).
+    GUI.drawBannerStrip(renderer, tr(STR_CLEARING_CACHE));
     renderer.displayBuffer();
     return;
   }
