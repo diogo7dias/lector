@@ -295,18 +295,36 @@ size_t countByFavorite(bool favorites, size_t scanCap) {
   return countSleepImagesByFavorite(*sfs, deps.isFavorite, favorites, scanCap);
 }
 
-size_t moveToPauseByFavorite(bool favorites) {
+namespace {
+// Bounded batches keep peak heap at kBatch names regardless of folder size;
+// yield every kYieldEvery renames so a large sweep stays watchdog-safe. Fire the
+// progress callback every kProgressStep moves so a long move shows a rising count
+// (not too often — each repaint is a synchronous e-ink refresh).
+constexpr size_t kMoveBatch = 128;
+constexpr size_t kMoveYieldEvery = 16;
+constexpr size_t kMoveProgressStep = 32;
+
+// Wrap the reference-fixup callback with a running counter that also drives the
+// UI progress callback. Returns an OnRenamedFn; `reported` must outlive the move.
+OnRenamedFn makeCountingOnRenamed(const OnRenamedFn& base, const ProgressFn& onProgress, size_t& reported) {
+  return [&base, &onProgress, &reported](const std::string& from, const std::string& to) {
+    if (base) base(from, to);
+    ++reported;
+    if (onProgress && (reported % kMoveProgressStep == 0)) onProgress(reported);
+  };
+}
+}  // namespace
+
+size_t moveToPauseByFavorite(bool favorites, const ProgressFn& onProgress) {
   ensureConfigured();
   const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
   ISleepFs* sfs = deps.fs;
   if (!sfs) return 0;
 
-  // Bounded batches keep peak heap at kBatch names regardless of folder size;
-  // yield every kYieldEvery renames so a large sweep stays watchdog-safe.
-  constexpr size_t kBatch = 128;
-  constexpr size_t kYieldEvery = 16;
+  size_t reported = 0;
+  const OnRenamedFn onRenamed = makeCountingOnRenamed(deps.onPathRenamed, onProgress, reported);
   const size_t moved =
-      moveSleepImagesByFavorite(*sfs, deps.isFavorite, deps.onPathRenamed, favorites, kBatch, kYieldEvery, []() {
+      moveSleepImagesByFavorite(*sfs, deps.isFavorite, onRenamed, favorites, kMoveBatch, kMoveYieldEvery, []() {
         esp_task_wdt_reset();
         yield();
       });
@@ -314,18 +332,16 @@ size_t moveToPauseByFavorite(bool favorites) {
   return moved;
 }
 
-size_t moveFavoritesToSleep() {
+size_t moveFavoritesToSleep(const ProgressFn& onProgress) {
   ensureConfigured();
   const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
   ISleepFs* sfs = deps.fs;
   if (!sfs) return 0;
 
-  // Bounded batches keep peak heap at kBatch names regardless of folder size;
-  // yield every kYieldEvery renames so a large sweep stays watchdog-safe.
-  constexpr size_t kBatch = 128;
-  constexpr size_t kYieldEvery = 16;
-  const size_t moved = moveSleepPauseImagesByFavorite(*sfs, deps.isFavorite, deps.onPathRenamed, /*moveFavorites=*/true,
-                                                      kBatch, kYieldEvery, []() {
+  size_t reported = 0;
+  const OnRenamedFn onRenamed = makeCountingOnRenamed(deps.onPathRenamed, onProgress, reported);
+  const size_t moved = moveSleepPauseImagesByFavorite(*sfs, deps.isFavorite, onRenamed, /*moveFavorites=*/true,
+                                                      kMoveBatch, kMoveYieldEvery, []() {
                                                         esp_task_wdt_reset();
                                                         yield();
                                                       });

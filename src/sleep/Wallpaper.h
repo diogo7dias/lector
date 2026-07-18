@@ -104,17 +104,24 @@ size_t moveRandomToPause(size_t n);
 // prompt ("Move N wallpapers?"). Returns 0 if fs is unavailable.
 size_t countByFavorite(bool favorites, size_t scanCap);
 
+// Called periodically during a bulk move with the running count of files moved
+// so far, so the caller can update an on-screen "Moving... N" banner. A large
+// move is otherwise silent for many seconds and looks stuck.
+using ProgressFn = std::function<void(size_t movedSoFar)>;
+
 // Move every /sleep image whose favorite state matches `favorites` into
 // "/sleep pause". Works in bounded batches (memory-safe on 1000+ image folders)
-// and yields to the watchdog during the run. Marks the rotation dirty so it
-// rebuilds on the next sleep. Returns the number of files actually moved.
-size_t moveToPauseByFavorite(bool favorites);
+// and yields to the watchdog during the run. `onProgress` (nullable) fires every
+// few files with the running count. Marks the rotation dirty so it rebuilds on
+// the next sleep. Returns the number of files actually moved.
+size_t moveToPauseByFavorite(bool favorites, const ProgressFn& onProgress = nullptr);
 
 // Move every favorite image in "/sleep pause" back into "/sleep" — the reverse
 // of moveToPauseByFavorite(true). Works in bounded batches (memory-safe on
-// 1000+ image folders) and yields to the watchdog during the run. Marks the
-// rotation dirty so it rebuilds on the next sleep. Returns files actually moved.
-size_t moveFavoritesToSleep();
+// 1000+ image folders) and yields to the watchdog during the run. `onProgress`
+// (nullable) fires every few files with the running count. Marks the rotation
+// dirty so it rebuilds on the next sleep. Returns files actually moved.
+size_t moveFavoritesToSleep(const ProgressFn& onProgress = nullptr);
 
 // No-op in the V2 default path — reconcile is heap-gated and runs from
 // inside advance(). Kept so the boot-route hook + ActivityRouter signature
