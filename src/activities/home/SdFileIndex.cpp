@@ -93,7 +93,20 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
 
   HalFile output;
   if (!Storage.openFileForWrite("SDIDX", INDEX_PATH_A, output)) return false;
-  auto run = makeUniqueNoThrow<Record[]>(large_folder_index::SORT_RUN_RECORDS);
+
+  // Larger initial sorted runs mean fewer O(N) external-merge passes over the
+  // fixed 500-byte records — the merge is the dominant cost of indexing a big
+  // folder. Try a large run buffer and fall back on OOM down to the original
+  // 32-record size, so a fragmented heap never regresses below prior behavior
+  // (same graceful-ladder pattern as the layout Arena slab fallback). At file-
+  // browser time no EPUB layout is active, so the larger contiguous block is
+  // usually available.
+  size_t runRecords = large_folder_index::SORT_RUN_RECORDS_MAX;
+  auto run = makeUniqueNoThrow<Record[]>(runRecords);
+  while (!run && runRecords > large_folder_index::SORT_RUN_RECORDS) {
+    runRecords /= 2;
+    run = makeUniqueNoThrow<Record[]>(runRecords);
+  }
   if (!run) {
     LOG_ERR("SDIDX", "OOM: sort run buffer");
     directory.close();
@@ -145,7 +158,7 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
       ++directoryCount;
     }
     ++recordCount_;
-    if (runCount == large_folder_index::SORT_RUN_RECORDS && !flushRun()) {
+    if (runCount == runRecords && !flushRun()) {
       return abortBuild();
     }
     if ((++scanned % WDT_INTERVAL) == 0) esp_task_wdt_reset();
@@ -160,7 +173,7 @@ bool SdFileIndex::build(const std::string& directoryPath, const AcceptFn& accept
 
   const char* inputPath = INDEX_PATH_A;
   const char* outputPath = INDEX_PATH_B;
-  for (size_t width = large_folder_index::SORT_RUN_RECORDS; width < recordCount_; width *= 2) {
+  for (size_t width = runRecords; width < recordCount_; width *= 2) {
     if (!mergePass(inputPath, outputPath, recordCount_, width, cancel)) {
       clear();
       return false;

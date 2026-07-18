@@ -11,7 +11,13 @@ inline constexpr size_t IN_MEMORY_ENTRY_LIMIT = 1024;
 inline constexpr size_t IN_MEMORY_NAME_BYTES_LIMIT = 64 * 1024;
 inline constexpr size_t MAX_INDEX_ENTRIES = 20000;
 inline constexpr size_t MAX_SEARCH_RESULTS = 512;
+// Floor run size (original behavior) and the largest run the build tries first.
+// A 500-byte Record makes each run buffer runRecords*500 bytes; 128 records is
+// 64 KB, allocated only at file-browser time when no EPUB layout holds the heap.
+// Bigger runs mean fewer external-merge passes; build() ladders down 128->64->32
+// on OOM so a fragmented heap never regresses below the 32-record floor.
 inline constexpr size_t SORT_RUN_RECORDS = 32;
+inline constexpr size_t SORT_RUN_RECORDS_MAX = 128;
 
 inline constexpr bool shouldUseSdIndex(const size_t acceptedEntries) { return acceptedEntries > IN_MEMORY_ENTRY_LIMIT; }
 
