@@ -67,6 +67,16 @@ class Section {
   // critically low during layout (as opposed to a parse/IO error). Captured from
   // the parser before the failed build is torn down; read via lastBuildWasLowMemory().
   bool lastBuildLowMemory_ = false;
+  // Cooperative cancel. buildSomeMore() polls buildCancelRequested_ between parse
+  // steps and, when set, abandons the in-progress build so a foreground caller
+  // (the reader) reclaims the render lock in ~one parse step instead of blocking
+  // for the whole ~13s layout. volatile: it is set from the UI task while the
+  // render task runs the build (single core, so a plain flag is sufficient; the
+  // context switch is the barrier, volatile just stops the compiler caching it).
+  // lastBuildCancelled_ lets the caller tell a user-cancel apart from an error so
+  // it can bail quietly (no build-error screen).
+  volatile bool buildCancelRequested_ = false;
+  bool lastBuildCancelled_ = false;
 
   // Returns false on a short write (SD full / IO error) so the caller can abandon
   // the .part instead of building on a truncated header.
@@ -129,6 +139,14 @@ class Section {
   // abort during layout. Lets the caller degrade render quality and retry rather
   // than treat it as a hard error. Valid after a build call returns false.
   bool lastBuildWasLowMemory() const { return lastBuildLowMemory_; }
+  // Ask the active build to stop at the next parse step. Safe to call from another
+  // task (only writes a flag); a no-op if no build is in flight. The flag is
+  // cleared at the start of the next startBuild(), so it only affects the build
+  // that was running when it was set.
+  void requestBuildCancel() { buildCancelRequested_ = true; }
+  // True if the last build stopped because requestBuildCancel() was honored, as
+  // opposed to completing or failing. Valid after a build call returns false.
+  bool lastBuildWasCancelled() const { return lastBuildCancelled_; }
   void abandonBuild();
   // Best-known total page count: the exact pageCount once finalized, or a byte-ratio
   // extrapolation while a build is still in flight.

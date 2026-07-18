@@ -133,6 +133,12 @@ class EpubReaderActivity final : public Activity {
   std::string classifySectionMiss(const Section& section) const;
 
   bool buildSectionForRead(Section& section, uint16_t viewportWidth, uint16_t viewportHeight);
+  // If a chapter build is currently monopolizing the render task, ask it to stop
+  // so the render lock frees in ~one parse step. Call before any "abandon this
+  // chapter" press path (go home, file browser, chapter skip, boundary page turn)
+  // so it acts promptly instead of blocking for the full ~13s build. No-op when no
+  // build is in flight. Does not itself take the render lock.
+  void cancelInFlightBuild();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);

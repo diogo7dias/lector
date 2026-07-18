@@ -475,6 +475,10 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   // Abandon any prior in-progress build before starting a new one.
   abandonBuild();
   lastBuildLowMemory_ = false;
+  // Clear cancel state so a cancel aimed at a previous build never carries into
+  // this one; this build owns the flag from here until it ends.
+  buildCancelRequested_ = false;
+  lastBuildCancelled_ = false;
 
   selectGeneration(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
                    hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
@@ -638,6 +642,15 @@ bool Section::buildSomeMore(const int maxPages) {
   }
   const uint16_t startCount = builtPageCount_;
   while (true) {
+    // Cooperative cancel: a foreground caller (the reader) can abandon a heavy
+    // build so it reclaims the render lock promptly instead of waiting out the
+    // whole layout. Checked first so cancel always wins over the page budget.
+    if (buildCancelRequested_) {
+      LOG_INF("SCT", "Build cancelled by request after %u pages", (unsigned)builtPageCount_);
+      lastBuildCancelled_ = true;
+      abandonBuild();
+      return false;
+    }
     // Yield once this call has laid out its budget of pages; the build stays live.
     if (maxPages > 0 && static_cast<int>(builtPageCount_ - startCount) >= maxPages) {
       return true;

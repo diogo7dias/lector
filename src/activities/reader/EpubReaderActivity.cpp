@@ -532,6 +532,7 @@ void EpubReaderActivity::loop() {
 
   // Long press BACK (1s+) goes to file selection
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+    cancelInFlightBuild();  // don't sit through a heavy build before leaving
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
@@ -543,6 +544,7 @@ void EpubReaderActivity::loop() {
       restoreSavedPosition();
       return;
     }
+    cancelInFlightBuild();  // don't sit through a heavy build before going home
     onGoHome();
     return;
   }
@@ -614,6 +616,7 @@ void EpubReaderActivity::loop() {
     }
 
     // We don't want to delete the section mid-render, so grab the semaphore
+    cancelInFlightBuild();  // skipping chapters: abandon a heavy build so the lock frees fast
     {
       RenderLock lock(*this);
       nextPageNumber = 0;
@@ -1086,6 +1089,16 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   }
 }
 
+void EpubReaderActivity::cancelInFlightBuild() {
+  // RenderLock::peek() true means the render task is mid-render (the ~13s build).
+  // `section` is the object being built, so setting its cancel flag makes
+  // buildSomeMore() bail at the next parse step and release the lock. Only a flag
+  // write -- safe from the loop task without taking the lock ourselves.
+  if (section && RenderLock::peek()) {
+    section->requestBuildCancel();
+  }
+}
+
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   const bool reachesBookEnd = isForwardTurn && section && section->currentPage >= section->pageCount - 1 && epub &&
                               currentSpineIndex >= epub->getSpineItemsCount() - 1;
@@ -1257,8 +1270,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
 
     if (!buildSectionForRead(*section, viewportWidth, viewportHeight)) {
-      LOG_ERR("ERS", "Failed to build section for reading");
+      // A user-cancelled build is not an error: drop the half-built section
+      // quietly and let the press that triggered the cancel (go home / chapter
+      // skip) proceed. render() runs again for whatever chapter that resolves to.
+      const bool cancelled = section->lastBuildWasCancelled();
       section.reset();
+      if (cancelled) {
+        LOG_INF("ERS", "Section build cancelled; leaving chapter unbuilt");
+        return;
+      }
+      LOG_ERR("ERS", "Failed to build section for reading");
       showBuildError();
       return;
     }
@@ -1540,6 +1561,12 @@ bool EpubReaderActivity::buildSectionForRead(Section& section, const uint16_t vi
       return true;
     }
 
+    // User asked to leave this chapter (Back / chapter skip): stop immediately,
+    // do not descend tiers or retry. render() bails quietly on lastBuildWasCancelled().
+    if (section.lastBuildWasCancelled()) {
+      LOG_INF("ERS", "Section build cancelled by user");
+      return false;
+    }
     if (!section.lastBuildWasLowMemory()) {
       LOG_ERR("ERS", "Section build failed (not low memory)");
       return false;
