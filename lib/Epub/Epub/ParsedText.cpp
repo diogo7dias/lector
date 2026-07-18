@@ -9,6 +9,7 @@
 
 #include <Arena.h>
 #include <BidiUtils.h>
+#include <BuildScratch.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -27,6 +28,24 @@
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
 namespace {
+
+// RAII claim on the framebuffer build-scratch block for the per-paragraph layout
+// scratch arena. claim() returns the whole (large, never-fragmented) static
+// block if it is lent and unclaimed, else nullptr (an image inflate holds it, or
+// it is not lent -- e.g. dual-buffer/test builds), in which case layout falls
+// back to a heap arena. Releasing on destruction covers every early-return path
+// in layoutParagraph. Declare BEFORE the Arena so the arena (which points into
+// this block) is destroyed first, then the claim is released.
+struct BorrowedLayoutScratch {
+  uint8_t* base = nullptr;
+  size_t len = 0;
+  explicit BorrowedLayoutScratch(size_t minLen) { base = buildscratch::claim(minLen, &len); }
+  ~BorrowedLayoutScratch() {
+    if (base) buildscratch::release(base);
+  }
+  BorrowedLayoutScratch(const BorrowedLayoutScratch&) = delete;
+  BorrowedLayoutScratch& operator=(const BorrowedLayoutScratch&) = delete;
+};
 
 // Soft hyphen byte pattern used throughout EPUBs (UTF-8 for U+00AD).
 constexpr char SOFT_HYPHEN_UTF8[] = "\xC2\xAD";
@@ -696,8 +715,17 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   // paragraph is dropped (logged) rather than aborting, matching how extractLine
   // already drops a line when the TextBlock arena cannot be allocated.
   lastLayoutOom_ = false;
+  // Prefer the borrowed framebuffer build-scratch block for this paragraph's
+  // scratch: on a heavy chapter the heap is fragmented enough that a contiguous
+  // 4KB slab is often unavailable (paragraph then dropped -> blank page), but the
+  // ~52KB static loan always has room. Fall back to the heap ladder when an image
+  // inflate already holds the block or it is not lent. `borrow` is declared
+  // before `scratch` so the arena is torn down before the claim is released.
+  BorrowedLayoutScratch borrow(sizeof(ArenaSlab) + 1 * 1024);
   Arena scratch;
-  if (!scratch.initWithFallback(4 * 1024, 1 * 1024)) {
+  const bool scratchReady =
+      borrow.base ? scratch.initWithBuffer(borrow.base, borrow.len) : scratch.initWithFallback(4 * 1024, 1 * 1024);
+  if (!scratchReady) {
     LOG_ERR("PTX", "Dropping paragraph: layout scratch arena OOM");
     lastLayoutOom_ = true;
     return;

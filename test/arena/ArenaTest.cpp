@@ -277,4 +277,77 @@ TEST_F(ArenaFallback, HonorsMinBytesFloor) {
   EXPECT_FALSE(arena.initWithFallback(4096, 1024));
 }
 
+// ── initWithBuffer: lay a non-owning slab inside a caller buffer ──────────────
+
+TEST(ArenaBuffer, AllocatesFromCallerBufferAndDoesNotFreeIt) {
+  // A heap buffer we own and free ourselves: if the arena ever ::free'd it,
+  // the delete[] below would double-free (caught under sanitizers). Passing
+  // proves the arena treats the buffer as non-owning.
+  constexpr size_t kLen = 4096;
+  auto* buffer = new uint8_t[kLen];
+
+  {
+    Arena arena;
+    ASSERT_TRUE(arena.initWithBuffer(buffer, kLen));
+    EXPECT_TRUE(arena.headBorrowed_);
+
+    void* p = arena.alloc(64, 8);
+    ASSERT_NE(p, nullptr);
+    // The allocation lands inside the caller buffer.
+    const uintptr_t pv = reinterpret_cast<uintptr_t>(p);
+    EXPECT_GE(pv, reinterpret_cast<uintptr_t>(buffer));
+    EXPECT_LT(pv, reinterpret_cast<uintptr_t>(buffer) + kLen);
+    EXPECT_GE(arena.used(), 64u);
+  }  // arena.release() runs here; must NOT free `buffer`.
+
+  delete[] buffer;  // our free; a prior arena ::free would have double-freed
+}
+
+TEST(ArenaBuffer, AlignsHeaderInsideMisalignedBuffer) {
+  // Feed a deliberately misaligned start; the slab header must be placed at an
+  // aligned address (RISC-V faults on unaligned multi-byte access).
+  constexpr size_t kRaw = 4096;
+  auto* raw = new uint8_t[kRaw];
+  uint8_t* misaligned = raw + 1;  // 1-byte-off start
+
+  Arena arena;
+  ASSERT_TRUE(arena.initWithBuffer(misaligned, kRaw - 1));
+  EXPECT_EQ(reinterpret_cast<uintptr_t>(arena.head) % alignof(ArenaSlab), 0u);
+  void* p = arena.alloc(32, 4);
+  ASSERT_NE(p, nullptr);
+  EXPECT_EQ(reinterpret_cast<uintptr_t>(p) % 4u, 0u);
+
+  delete[] raw;
+}
+
+TEST(ArenaBuffer, RejectsBufferTooSmallForHeader) {
+  uint8_t tiny[4];
+  Arena arena;
+  EXPECT_FALSE(arena.initWithBuffer(tiny, sizeof(tiny)));
+  EXPECT_EQ(arena.head, nullptr);
+}
+
+TEST(ArenaBuffer, RejectsNullBuffer) {
+  Arena arena;
+  EXPECT_FALSE(arena.initWithBuffer(nullptr, 4096));
+}
+
+TEST(ArenaBuffer, ArenaVectorFillsFromBorrowedBuffer) {
+  // End-to-end: an ArenaVector (the layout scratch pattern) bumps within the
+  // borrowed buffer and reads back correctly.
+  constexpr size_t kLen = 2048;
+  auto* buffer = new uint8_t[kLen];
+
+  {
+    Arena arena;
+    ASSERT_TRUE(arena.initWithBuffer(buffer, kLen));
+    ArenaVector<uint16_t> v(arena);
+    for (uint16_t i = 0; i < 100; ++i) ASSERT_TRUE(v.push_back(i));
+    ASSERT_EQ(v.size(), 100u);
+    for (uint16_t i = 0; i < 100; ++i) EXPECT_EQ(v[i], i);
+  }
+
+  delete[] buffer;
+}
+
 }  // namespace

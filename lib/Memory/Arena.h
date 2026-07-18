@@ -51,6 +51,10 @@ struct Arena {
   ArenaSlab* head = nullptr;
   ArenaSlab* current = nullptr;
   size_t slabSize = 0;
+  // True when the first slab lives inside a caller-owned external buffer
+  // (initWithBuffer). release() must NOT ::free that slab -- the caller owns and
+  // reclaims the buffer. Grown slabs (if any) remain heap-owned and are freed.
+  bool headBorrowed_ = false;
 
   Arena() = default;
   ~Arena() { release(); }
@@ -86,16 +90,44 @@ struct Arena {
     return false;
   }
 
+  // Lay the first slab inside a caller-owned external buffer instead of the heap.
+  // The arena does NOT own or free this buffer: release()/clear() leave it
+  // intact and the caller must keep it alive for the arena's lifetime and
+  // reclaim it afterwards. Used to place the per-paragraph layout scratch inside
+  // the borrowed framebuffer build-scratch block (a large, never-fragmented
+  // static block), sidestepping the heap fragmentation that otherwise starves a
+  // contiguous 4KB slab on a heavy chapter. If the buffer ever fills, further
+  // slabs grow from the heap and are owned normally. The buffer is aligned up to
+  // ArenaSlab's alignment before the header is placed (RISC-V faults on
+  // unaligned access). Returns false if the buffer cannot hold a slab header.
+  bool initWithBuffer(uint8_t* buffer, size_t len) {
+    if (!buffer) return false;
+    const uintptr_t raw = reinterpret_cast<uintptr_t>(buffer);
+    const uintptr_t aligned = (raw + alignof(ArenaSlab) - 1u) & ~(uintptr_t)(alignof(ArenaSlab) - 1u);
+    const size_t pad = static_cast<size_t>(aligned - raw);
+    if (len < pad + sizeof(ArenaSlab)) return false;
+    auto* s = reinterpret_cast<ArenaSlab*>(aligned);
+    s->next = nullptr;
+    s->capacity = len - pad - sizeof(ArenaSlab);
+    s->offset = 0;
+    head = current = s;
+    slabSize = s->capacity;
+    headBorrowed_ = true;
+    return true;
+  }
+
   // Release all slabs. Arena is unusable until init() is called again.
   void release() {
     ArenaSlab* s = head;
     while (s) {
       ArenaSlab* n = s->next;
-      ::free(s);
+      // The borrowed first slab is caller-owned memory: drop it without ::free.
+      if (!(s == head && headBorrowed_)) ::free(s);
       s = n;
     }
     head = current = nullptr;
     slabSize = 0;
+    headBorrowed_ = false;
   }
 
   // Allocate `size` bytes aligned to `align` (must be a power of two).
@@ -162,6 +194,7 @@ struct Arena {
   // grow() uses the size that actually succeeded. Returns false on OOM without
   // logging, so init()/initWithFallback() control the message.
   bool tryInit(size_t slabBytes) {
+    headBorrowed_ = false;
     slabSize = slabBytes;
     head = current = allocSlab(slabBytes);
     return head != nullptr;
