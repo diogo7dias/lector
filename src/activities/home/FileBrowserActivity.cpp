@@ -112,6 +112,15 @@ bool FileBrowserActivity::loadFiles(const SdFileIndex::CancelFn& cancel) {
   if (needsSdIndex) {
     std::vector<std::string>().swap(files);
     folderHasBooks_ = false;
+    // Only large folders reach here, and the SD-index build below (an external
+    // merge sort over hundreds/thousands of 500-byte records) can take seconds.
+    // Paint the "Opening folder..." top strip now — synchronously, so it is on
+    // the panel before we block — so the user gets feedback during the wait.
+    // Navigating into a subfolder does not otherwise repaint any banner (only
+    // the first browser entry does, via ActivityManager::goToFileBrowser), so
+    // without this a slow /sleep pause open just looks frozen. Fast folders skip
+    // the SD index and never flash this strip.
+    GUI.drawPopup(renderer, tr(STR_BANNER_OPENING_FOLDER));
     if (sdIndex.build(basepath, accept, cancelRequested)) {
       sdMode = true;
       if (SETTINGS.bookBrowserRandomOrder && mode == Mode::Books) sdIndex.shuffleTail();
