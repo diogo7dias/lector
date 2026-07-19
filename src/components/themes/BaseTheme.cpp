@@ -1122,22 +1122,6 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
   return strip;
 }
 
-void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
-  // A thin WHITE fill line along the bottom edge of the black top strip, growing
-  // left->right with progress. The strip was just repainted black by drawPopup, so
-  // we only draw the white fill portion. Only the strip repaints (windowed).
-  constexpr int barHeight = 3;
-  constexpr int inset = 3;  // stay clear of the 2px white edge
-  const int barX = layout.x + inset;
-  const int barW = layout.width - inset * 2;
-  const int barY = layout.y + layout.height - barHeight - 2;
-  if (barW > 0) {
-    const int fillW = barW * std::clamp(progress, 0, 100) / 100;
-    if (fillW > 0) renderer.fillRect(barX, barY, fillW, barHeight, false);  // white fill on black strip
-  }
-  renderer.displayWindow(layout.x, layout.y, layout.width, layout.height);
-}
-
 void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progress) const {
   // Thick, high-contrast progress bar along the bottom of the screen. A white backing
   // band keeps it clean over page content, a 2px black outline shows the full track,

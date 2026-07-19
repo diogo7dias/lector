@@ -75,8 +75,8 @@ void BmpViewerActivity::onEnter() {
 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
-  Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary);
-  GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary);
+  GUI.fillBottomProgress(renderer, 20);  // Initial 20% progress
   // 1. Open the file
   if (Storage.openFileForRead("BMP", filePath, file)) {
     Bitmap bitmap(file, true);
@@ -119,7 +119,7 @@ void BmpViewerActivity::onEnter() {
       const auto labels =
           mappedInput.mapLabels(tr(STR_BACK), confirmLabel, (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
-      GUI.fillPopupProgress(renderer, popupRect, 50);
+      GUI.fillBottomProgress(renderer, 50);
 
       renderer.clearScreen();
       // Assuming drawBitmap defaults to 0,0 crop if omitted, or pass explicitly: drawBitmap(bitmap, x, y, pageWidth,

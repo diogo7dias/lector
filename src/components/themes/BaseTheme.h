@@ -233,7 +233,6 @@ class BaseTheme {
                               const std::function<UIIcon(int index)>& rowIcon) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message,
                          PopupRefresh refresh = PopupRefresh::Clean) const;
-  virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // Thick progress bar pinned to the BOTTOM of the screen, drawn over whatever the
   // activity painted and pushed windowed. High-contrast black-on-white so it reads
   // clearly on a reading page. Used by indexing instead of the thin white line inside
