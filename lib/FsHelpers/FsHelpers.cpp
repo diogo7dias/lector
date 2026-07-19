@@ -1,5 +1,9 @@
 #include "FsHelpers.h"
 
+#ifdef USE_RUST_FSHELPERS
+#include "fshelpers_rs.h"
+#endif
+
 #include <algorithm>
 #include <cctype>
 #include <cstdint>
@@ -81,6 +85,12 @@ std::string normalisePath(const std::string& path) {
 }
 
 bool naturalLess(const std::string_view str1, const std::string_view str2) {
+#ifdef USE_RUST_FSHELPERS
+  // Memory-safe Rust implementation (rust/fshelpers-rs). string_view is not
+  // null-terminated, so we pass (ptr, len) explicitly.
+  return fshelpers_natural_less(reinterpret_cast<const uint8_t*>(str1.data()), str1.size(),
+                                reinterpret_cast<const uint8_t*>(str2.data()), str2.size());
+#else
   // Naive natural sort: numeric-aware, case-insensitive
   // ctype functions require unsigned char values: passing a negative char (UTF-8
   // bytes above 0x7f with signed char) is undefined behavior
@@ -117,20 +127,33 @@ bool naturalLess(const std::string_view str1, const std::string_view str2) {
   }
 
   return pos1 == str1.size() && pos2 != str2.size();
+#endif
 }
 
 bool naturalFileLess(const std::string_view str1, const std::string_view str2) {
+#ifdef USE_RUST_FSHELPERS
+  return fshelpers_natural_file_less(reinterpret_cast<const uint8_t*>(str1.data()), str1.size(),
+                                     reinterpret_cast<const uint8_t*>(str2.data()), str2.size());
+#else
   // Directories first
   bool isDir1 = !str1.empty() && str1.back() == '/';
   bool isDir2 = !str2.empty() && str2.back() == '/';
   if (isDir1 != isDir2) return isDir1;
 
   return naturalLess(str1, str2);
+#endif
 }
 
 void sortFileList(std::vector<std::string>& strs) { std::sort(begin(strs), end(strs), naturalFileLess); }
 
 bool checkFileExtension(std::string_view fileName, const char* extension) {
+#ifdef USE_RUST_FSHELPERS
+  // Memory-safe Rust implementation (rust/fshelpers-rs). string_view is not
+  // null-terminated, so we pass (ptr, len) explicitly — never .data() to a C API.
+  return fshelpers_check_file_extension(reinterpret_cast<const uint8_t*>(fileName.data()),
+                                        fileName.length(),
+                                        reinterpret_cast<const uint8_t*>(extension), strlen(extension));
+#else
   const size_t extLen = strlen(extension);
   if (fileName.length() < extLen) {
     return false;
@@ -144,6 +167,7 @@ bool checkFileExtension(std::string_view fileName, const char* extension) {
     }
   }
   return true;
+#endif
 }
 
 bool hasJpgExtension(std::string_view fileName) {

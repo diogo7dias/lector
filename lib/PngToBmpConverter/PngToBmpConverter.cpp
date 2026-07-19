@@ -11,6 +11,10 @@
 
 #include "BitmapHelpers.h"
 
+#ifdef USE_RUST_FSHELPERS
+#include <fshelpers_rs.h>
+#endif
+
 // ============================================================================
 // IMAGE PROCESSING OPTIONS - Same as JpegToBmpConverter for consistency
 // ============================================================================
@@ -274,6 +278,16 @@ static bool decodeScanline(PngDecodeContext& ctx) {
   // Apply reverse filter
   const int bpp = ctx.bytesPerPixel;
 
+#ifdef USE_RUST_FSHELPERS
+  // Memory-safe Rust reverse-filter. Every access is bounds-checked, so a
+  // malformed image that mis-sizes a row cannot overrun currentRow/previousRow
+  // on the device; an unknown filter returns false, matching the switch default.
+  if (!fshelpers_png_unfilter_row(filterType, ctx.currentRow, ctx.rawRowBytes, ctx.previousRow,
+                                  ctx.rawRowBytes, static_cast<size_t>(bpp))) {
+    LOG_ERR("PNG", "Unknown filter type: %d", filterType);
+    return false;
+  }
+#else
   switch (filterType) {
     case PNG_FILTER_NONE:
       break;
@@ -311,6 +325,7 @@ static bool decodeScanline(PngDecodeContext& ctx) {
       LOG_ERR("PNG", "Unknown filter type: %d", filterType);
       return false;
   }
+#endif
 
   return true;
 }

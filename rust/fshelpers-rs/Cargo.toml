@@ -1,0 +1,20 @@
+[package]
+name = "fshelpers_rs"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[features]
+# Enabled only for the firmware build; makes the crate no_std + bare-metal panic.
+device = []
+
+[lib]
+# staticlib -> the .a linked into the firmware; rlib -> lets `cargo test` build a host harness.
+crate-type = ["staticlib", "rlib"]
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
