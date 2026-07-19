@@ -234,6 +234,11 @@ class BaseTheme {
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message,
                          PopupRefresh refresh = PopupRefresh::Clean) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
+  // Thick progress bar pinned to the BOTTOM of the screen, drawn over whatever the
+  // activity painted and pushed windowed. High-contrast black-on-white so it reads
+  // clearly on a reading page. Used by indexing instead of the thin white line inside
+  // the top banner.
+  virtual void fillBottomProgress(const GfxRenderer& renderer, const int progress) const;
   // Draw the top feedback strip into the framebuffer WITHOUT refreshing it and
   // without arming the auto-clear timer. For full-screen activities that render
   // their own frame (clearScreen + displayBuffer) but want a progress message to

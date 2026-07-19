@@ -1658,13 +1658,13 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
   sectionBuildProgressPaintedMs_ = now;
   sectionBuildProgressPercent_ = percent;
 
-  // Unified top banner: "Indexing" strip at the top with a thin fill line growing
-  // along its bottom edge. drawPopup repaints the strip each time (clean black
-  // background) and fillPopupProgress draws the white fill for `percent`. Both push
-  // only the strip synchronously, so the next build slice reclaiming the framebuffer
-  // cannot leave a deferred sync that erases it. Throttled above.
-  const Rect strip = GUI.drawPopup(renderer, tr(STR_INDEXING), PopupRefresh::Temporary);
-  GUI.fillPopupProgress(renderer, strip, percent);
+  // "Indexing" label strip at the top, plus a thick progress bar pinned to the BOTTOM
+  // of the screen (fillBottomProgress). drawPopup repaints the label each time (clean
+  // black background) and fillBottomProgress draws the bottom bar for `percent`. Both
+  // push synchronously, so the next build slice reclaiming the framebuffer cannot leave
+  // a deferred sync that erases them. Throttled above.
+  GUI.drawPopup(renderer, tr(STR_INDEXING), PopupRefresh::Temporary);
+  GUI.fillBottomProgress(renderer, percent);
 }
 
 void EpubReaderActivity::showBuildError() {

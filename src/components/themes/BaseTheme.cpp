@@ -1138,6 +1138,35 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayWindow(layout.x, layout.y, layout.width, layout.height);
 }
 
+void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progress) const {
+  // Thick, high-contrast progress bar along the bottom of the screen. A white backing
+  // band keeps it clean over page content, a 2px black outline shows the full track,
+  // and a black fill grows left->right for `progress`. Self-contained: draws and pushes
+  // its own region (windowed; a full-panel FAST on X3 where windows are disabled).
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  constexpr int barHeight = 16;     // thick, well visible
+  constexpr int sideMargin = 10;    // clear of the screen edges
+  constexpr int bottomMargin = 10;  // sits just above the bottom edge
+  constexpr int backingInset = 2;   // white halo around the bar
+  const int barX = sideMargin;
+  const int barW = pageWidth - sideMargin * 2;
+  const int barY = pageHeight - barHeight - bottomMargin;
+  if (barW <= 0) return;
+
+  renderer.fillRect(barX - backingInset, barY - backingInset, barW + backingInset * 2, barHeight + backingInset * 2,
+                    false);                                 // white backing halo
+  renderer.drawRect(barX, barY, barW, barHeight, 2, true);  // 2px black track outline
+  const int innerX = barX + 3;
+  const int innerW = barW - 6;
+  if (innerW > 0) {
+    const int fillW = innerW * std::clamp(progress, 0, 100) / 100;
+    if (fillW > 0) renderer.fillRect(innerX, barY + 3, fillW, barHeight - 6, true);  // black fill
+  }
+  renderer.displayWindow(barX - backingInset, barY - backingInset, barW + backingInset * 2,
+                         barHeight + backingInset * 2);
+}
+
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {
   if (!SETTINGS.sbEnabled) return;
 
