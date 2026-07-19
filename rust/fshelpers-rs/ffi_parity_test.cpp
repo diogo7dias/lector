@@ -38,6 +38,43 @@ static bool checkFileExtension_rust(std::string_view fileName, const char* exten
                                         reinterpret_cast<const uint8_t*>(extension), strlen(extension));
 }
 
+// --- Original C++ reference, copied verbatim from lib/FsHelpers/FsHelpers.cpp ---
+static bool naturalLess_cpp(const std::string_view str1, const std::string_view str2) {
+  const auto isDigit = [](const char c) { return isdigit(static_cast<unsigned char>(c)) != 0; };
+  size_t pos1 = 0;
+  size_t pos2 = 0;
+  while (pos1 < str1.size() && pos2 < str2.size()) {
+    if (isDigit(str1[pos1]) && isDigit(str2[pos2])) {
+      while (pos1 < str1.size() && str1[pos1] == '0') ++pos1;
+      while (pos2 < str2.size() && str2[pos2] == '0') ++pos2;
+      size_t end1 = pos1;
+      size_t end2 = pos2;
+      while (end1 < str1.size() && isDigit(str1[end1])) ++end1;
+      while (end2 < str2.size() && isDigit(str2[end2])) ++end2;
+      const size_t len1 = end1 - pos1;
+      const size_t len2 = end2 - pos2;
+      if (len1 != len2) return len1 < len2;
+      for (size_t i = 0; i < len1; ++i) {
+        if (str1[pos1 + i] != str2[pos2 + i]) return str1[pos1 + i] < str2[pos2 + i];
+      }
+      pos1 = end1;
+      pos2 = end2;
+    } else {
+      const int c1 = tolower(static_cast<unsigned char>(str1[pos1]));
+      const int c2 = tolower(static_cast<unsigned char>(str2[pos2]));
+      if (c1 != c2) return c1 < c2;
+      ++pos1;
+      ++pos2;
+    }
+  }
+  return pos1 == str1.size() && pos2 != str2.size();
+}
+
+static bool naturalLess_rust(std::string_view a, std::string_view b) {
+  return fshelpers_natural_less(reinterpret_cast<const uint8_t*>(a.data()), a.size(),
+                                reinterpret_cast<const uint8_t*>(b.data()), b.size());
+}
+
 int main() {
   long checks = 0, mismatches = 0;
 
@@ -80,6 +117,33 @@ int main() {
       c = static_cast<char>(v);
     }
     compare(std::string_view(name.data(), name.size()), ext.c_str());
+  }
+
+  // 3. naturalLess fuzz: random strings over a digit/letter-heavy alphabet (to
+  //    exercise the numeric path), plus occasional high bytes.
+  auto natcmp = [&](std::string_view a, std::string_view b) {
+    bool ca = naturalLess_cpp(a, b);
+    bool cb = naturalLess_rust(a, b);
+    checks++;
+    if (ca != cb) {
+      mismatches++;
+      if (mismatches <= 20) {
+        printf("NL MISMATCH a=\"%.*s\" b=\"%.*s\" cpp=%d rust=%d\n", (int)a.size(), a.data(),
+               (int)b.size(), b.data(), ca, cb);
+      }
+    }
+  };
+  static const char alpha[] = "0123456789000aAbBzZ._- \x80\xff";
+  const int alphaN = (int)sizeof(alpha) - 1;
+  std::uniform_int_distribution<int> nlLen(0, 16), alphaD(0, alphaN - 1);
+  auto mkstr = [&]() {
+    std::string s(nlLen(rng), '\0');
+    for (char& c : s) c = alpha[alphaD(rng)];
+    return s;
+  };
+  for (int iter = 0; iter < 500000; iter++) {
+    std::string a = mkstr(), b = mkstr();
+    natcmp(std::string_view(a.data(), a.size()), std::string_view(b.data(), b.size()));
   }
 
   printf("\nchecks=%ld mismatches=%ld\n", checks, mismatches);

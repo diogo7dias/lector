@@ -85,6 +85,12 @@ std::string normalisePath(const std::string& path) {
 }
 
 bool naturalLess(const std::string_view str1, const std::string_view str2) {
+#ifdef USE_RUST_FSHELPERS
+  // Memory-safe Rust implementation (rust/fshelpers-rs). string_view is not
+  // null-terminated, so we pass (ptr, len) explicitly.
+  return fshelpers_natural_less(reinterpret_cast<const uint8_t*>(str1.data()), str1.size(),
+                                reinterpret_cast<const uint8_t*>(str2.data()), str2.size());
+#else
   // Naive natural sort: numeric-aware, case-insensitive
   // ctype functions require unsigned char values: passing a negative char (UTF-8
   // bytes above 0x7f with signed char) is undefined behavior
@@ -121,6 +127,7 @@ bool naturalLess(const std::string_view str1, const std::string_view str2) {
   }
 
   return pos1 == str1.size() && pos2 != str2.size();
+#endif
 }
 
 bool naturalFileLess(const std::string_view str1, const std::string_view str2) {

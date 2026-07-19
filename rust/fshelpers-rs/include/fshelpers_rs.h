@@ -15,6 +15,11 @@ extern "C" {
 bool fshelpers_check_file_extension(const uint8_t* name_ptr, size_t name_len,
                                     const uint8_t* ext_ptr, size_t ext_len);
 
+// Numeric-aware, case-insensitive natural comparison; true when a orders before
+// b. Null pointers read as empty. Byte-exact mirror of C++ FsHelpers::naturalLess.
+bool fshelpers_natural_less(const uint8_t* a_ptr, size_t a_len, const uint8_t* b_ptr,
+                            size_t b_len);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
