@@ -25,7 +25,7 @@ class GfxRenderer;
 // and draws only into the two off-screen grayscale planes, so viewer controls
 // appear together with the completed image without an extra panel refresh.
 //
-// drawInfoOverlay gates the bottom-left filename / favorite badge. The sleep
+// drawInfoOverlay gates the bottom-left filename overlay. The sleep
 // screen and PXC viewer leave it on; the unlock banner screen passes false so its
 // own bottom banner doesn't collide with the filename box.
 //

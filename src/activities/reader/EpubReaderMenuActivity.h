@@ -33,7 +33,6 @@ class EpubReaderMenuActivity final : public Activity {
     VIEW_QUOTES,
     READING_STATS,
     // Sleep-wallpaper triage (only shown when a last-shown wallpaper exists).
-    WALLPAPER_FAVORITE,
     WALLPAPER_PAUSE_ROTATION,
     WALLPAPER_MOVE_PAUSE,
     WALLPAPER_DELETE
@@ -43,8 +42,7 @@ class EpubReaderMenuActivity final : public Activity {
                                   const std::string& author, const std::string& chapterName, const int currentPage,
                                   const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
                                   const bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
-                                  bool hasSleepWallpaper = false, bool wallpaperPaused = false,
-                                  bool wallpaperFavorited = false);
+                                  bool hasSleepWallpaper = false, bool wallpaperPaused = false);
 
   void onEnter() override;
   void onExit() override;
@@ -58,7 +56,7 @@ class EpubReaderMenuActivity final : public Activity {
   };
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
-                                              bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited);
+                                              bool hasSleepWallpaper, bool wallpaperPaused);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;

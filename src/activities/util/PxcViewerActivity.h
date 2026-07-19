@@ -15,7 +15,7 @@ class PxcViewerActivity final : public Activity {
   // can patch its in-memory list without a folder rescan, instead of rebuilding a
   // fresh browser via goToFileBrowser (the default, used by the ReaderActivity path).
   // The result is a FilePathResult: empty path = the file left this folder (moved or
-  // deleted); non-empty = still present, at this (possibly favorite-renamed) path.
+  // deleted); non-empty = still present, at this path.
   PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
                     bool resultMode = false);
 

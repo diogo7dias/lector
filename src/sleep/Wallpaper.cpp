@@ -11,10 +11,9 @@
 #include <vector>
 
 #include "../CrossPointState.h"
-#include "../util/FavoriteImage.h"
 #include "SdFatSleepFs.h"
-#include "SleepFavoriteMove.h"
 #include "SleepIndexPickPolicy.h"
+#include "SleepPathReferences.h"
 #include "SleepMoveSelection.h"
 #include "SleepWallpaperIndexStore.h"
 #include "WallpaperDirectPickPolicy.h"
@@ -59,16 +58,8 @@ void ensureConfigured() {
   // survives the deep-sleep boundary.
   d.saveAppState = []() { return APP_STATE.saveToFile(); };
   d.randomFn = [](long mod) -> long { return ::random(mod); };
-  d.isFavorite = [](const std::string& path) { return FavoriteImage::isFavoritePath(path); };
   d.onPathRenamed = [](const std::string& from, const std::string& to) {
-    FavoriteImage::replacePathReferences(from, to);
-  };
-  // Lets reconcile fold a favorite/unfavorite rename (x.bmp <-> x_F.bmp) back
-  // into its rotation slot instead of treating the renamed file as a fresh
-  // upload and re-showing it on the next lock.
-  d.favoriteCounterpartFn = [](const std::string& name) -> std::string {
-    return FavoriteImage::hasFavoriteSuffix(name) ? FavoriteImage::stripFavoriteSuffix(name)
-                                                  : FavoriteImage::addFavoriteSuffix(name);
+    crosspoint::sleep::replacePathReferences(from, to);
   };
   // Heap probe: the playlist's inner -fno-exceptions gates use this to bail
   // before any std::string::reserve that might bad_alloc-abort on a fragmented
@@ -81,12 +72,17 @@ void ensureConfigured() {
 // Retry budget for nextSleepFile's probe loop.
 constexpr int kNextSleepFileRetries = 5;
 
+std::string basenameOf(const std::string& path) {
+  const auto slashPos = path.find_last_of('/');
+  return (slashPos == std::string::npos) ? path : path.substr(slashPos + 1);
+}
+
 SleepPick makePickFromBasename(const std::string& basename) {
   SleepPick p;
   if (basename.empty()) return p;
   p.basename = basename;
   p.fullPath = "/sleep/" + basename;
-  p.displayName = FavoriteImage::displayNameForPath(p.fullPath);
+  p.displayName = basename;
   return p;
 }
 
@@ -128,7 +124,7 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
       Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str())) {
     SleepPick paused;
     paused.fullPath = APP_STATE.lastSleepWallpaperPath;
-    paused.displayName = FavoriteImage::displayNameForPath(paused.fullPath);
+    paused.displayName = basenameOf(paused.fullPath);
     paused.isPaused = true;
     if (probe(paused)) {
       return paused;
@@ -158,11 +154,7 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
   for (int attempt = 0; attempt < kNextSleepFileRetries && snap.count > 0; ++attempt) {
     auto picked = sleep_index_pick::pickNext(
         cursor, snap.count, entropy(), entropy(), [&](size_t i) { return reader.nameAt(i); },
-        [&](const std::string& n) { return Storage.exists(("/sleep/" + n).c_str()); },
-        [](const std::string& n) -> std::string {
-          return FavoriteImage::hasFavoriteSuffix(n) ? FavoriteImage::stripFavoriteSuffix(n)
-                                                     : FavoriteImage::addFavoriteSuffix(n);
-        });
+        [&](const std::string& n) { return Storage.exists(("/sleep/" + n).c_str()); });
     if (picked.needsRebuild && !rebuilt) {
       // Too many dead records: the folder changed a lot since the index was
       // built. Rebuild once and keep picking.
@@ -198,11 +190,11 @@ SleepPick nextSleepFile(const RenderProbe& probe) {
 
   // Root-level fallback ladder: /sleep is empty or every candidate failed to
   // render. PXC takes precedence over BMP.
-  for (const char* fallbackPath : {"/sleep.pxc", "/sleep_F.bmp", "/sleep.bmp"}) {
+  for (const char* fallbackPath : {"/sleep.pxc", "/sleep.bmp"}) {
     if (!Storage.exists(fallbackPath)) continue;
     SleepPick fb;
     fb.fullPath = fallbackPath;
-    fb.displayName = FavoriteImage::displayNameForPath(fallbackPath);
+    fb.displayName = basenameOf(fallbackPath);
     fb.isFallback = true;
     if (probe(fb)) {
       v2::WallpaperPlaylistV2::instance().rememberRendered(fb.fullPath, "");
@@ -287,68 +279,6 @@ size_t moveRandomToPause(size_t n) {
   return moved;
 }
 
-size_t countByFavorite(bool favorites, size_t scanCap) {
-  ensureConfigured();
-  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
-  ISleepFs* sfs = deps.fs;
-  if (!sfs) return 0;
-  return countSleepImagesByFavorite(*sfs, deps.isFavorite, favorites, scanCap);
-}
-
-namespace {
-// Bounded batches keep peak heap at kBatch names regardless of folder size;
-// yield every kYieldEvery renames so a large sweep stays watchdog-safe. Fire the
-// progress callback every kProgressStep moves so a long move shows a rising count
-// (not too often — each repaint is a synchronous e-ink refresh).
-constexpr size_t kMoveBatch = 128;
-constexpr size_t kMoveYieldEvery = 16;
-constexpr size_t kMoveProgressStep = 32;
-
-// Wrap the reference-fixup callback with a running counter that also drives the
-// UI progress callback. Returns an OnRenamedFn; `reported` must outlive the move.
-OnRenamedFn makeCountingOnRenamed(const OnRenamedFn& base, const ProgressFn& onProgress, size_t& reported) {
-  return [&base, &onProgress, &reported](const std::string& from, const std::string& to) {
-    if (base) base(from, to);
-    ++reported;
-    if (onProgress && (reported % kMoveProgressStep == 0)) onProgress(reported);
-  };
-}
-}  // namespace
-
-size_t moveToPauseByFavorite(bool favorites, const ProgressFn& onProgress) {
-  ensureConfigured();
-  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
-  ISleepFs* sfs = deps.fs;
-  if (!sfs) return 0;
-
-  size_t reported = 0;
-  const OnRenamedFn onRenamed = makeCountingOnRenamed(deps.onPathRenamed, onProgress, reported);
-  const size_t moved =
-      moveSleepImagesByFavorite(*sfs, deps.isFavorite, onRenamed, favorites, kMoveBatch, kMoveYieldEvery, []() {
-        esp_task_wdt_reset();
-        yield();
-      });
-  if (moved > 0) v2::WallpaperPlaylistV2::instance().markFolderDirty();
-  return moved;
-}
-
-size_t moveFavoritesToSleep(const ProgressFn& onProgress) {
-  ensureConfigured();
-  const auto& deps = v2::WallpaperPlaylistV2::instance().deps();
-  ISleepFs* sfs = deps.fs;
-  if (!sfs) return 0;
-
-  size_t reported = 0;
-  const OnRenamedFn onRenamed = makeCountingOnRenamed(deps.onPathRenamed, onProgress, reported);
-  const size_t moved = moveSleepPauseImagesByFavorite(*sfs, deps.isFavorite, onRenamed, /*moveFavorites=*/true,
-                                                      kMoveBatch, kMoveYieldEvery, []() {
-                                                        esp_task_wdt_reset();
-                                                        yield();
-                                                      });
-  if (moved > 0) v2::WallpaperPlaylistV2::instance().markFolderDirty();
-  return moved;
-}
-
 void reconcileIfDirty() {
   // V2: reconcile is heap-gated and runs lazily inside advance(). No-op here.
 }
@@ -364,10 +294,8 @@ void Configure(const Config& c) {
   d.lastRenderedPath = c.lastRenderedPath;
   d.saveAppState = c.saveAppState;
   d.randomFn = c.randomFn;
-  d.isFavorite = c.isFavorite;
   d.onPathRenamed = c.onPathRenamed;
   d.largestFreeBlockFn = c.largestFreeBlockFn;
-  d.favoriteCounterpartFn = c.favoriteCounterpartFn;
 
   v2::WallpaperPlaylistV2::instance().setDeps(d);
 }

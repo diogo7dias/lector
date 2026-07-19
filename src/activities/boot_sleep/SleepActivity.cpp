@@ -383,7 +383,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const std::str
     renderer.invertScreen();
   }
 
-  // Info overlay (filename / favorite badge), drawn after the invert filter so it
+  // Info overlay (filename), drawn after the invert filter so it
   // stays readable, and redrawn in every grayscale pass so it composites solid.
   drawSleepInfoOverlay(renderer, sourcePath);
 

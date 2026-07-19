@@ -39,11 +39,11 @@ constexpr size_t kSleepIndexMaxImages = 20000;
 
 // Outcome of nextSleepFile() — everything the caller needs to render the
 // picked wallpaper without consulting APP_STATE or recomputing the
-// favorite display name.
+// wallpaper display name.
 struct SleepPick {
   std::string fullPath;     // "/sleep/foo.bmp", "/sleep.pxc", or empty if none
   std::string basename;     // basename portion; empty for paused / root-fallback
-  std::string displayName;  // FavoriteImage::displayNameForPath(fullPath)
+  std::string displayName;  // human-facing name (the wallpaper's basename)
   bool isPaused = false;    // facade routed via paused-rotation branch
   bool isFallback = false;  // facade routed via /sleep.{pxc,bmp} root fallback
 
@@ -95,33 +95,9 @@ size_t countImages(size_t scanCap);
 
 // Move up to `n` randomly-chosen images from /sleep to "/sleep pause". Streams
 // the folder via reservoir sampling (O(n) heap), so it stays memory-safe on a
-// folder of 1000+ images. Favorites are included. Marks the rotation dirty so it
-// rebuilds on the next sleep. Returns the number of files actually moved.
+// folder of 1000+ images. Marks the rotation dirty so it rebuilds on the next
+// sleep. Returns the number of files actually moved.
 size_t moveRandomToPause(size_t n);
-
-// Count /sleep images whose favorite state matches `favorites` (true = favorites,
-// false = non-favorites), bounded by `scanCap`. Backs the Settings confirmation
-// prompt ("Move N wallpapers?"). Returns 0 if fs is unavailable.
-size_t countByFavorite(bool favorites, size_t scanCap);
-
-// Called periodically during a bulk move with the running count of files moved
-// so far, so the caller can update an on-screen "Moving... N" banner. A large
-// move is otherwise silent for many seconds and looks stuck.
-using ProgressFn = std::function<void(size_t movedSoFar)>;
-
-// Move every /sleep image whose favorite state matches `favorites` into
-// "/sleep pause". Works in bounded batches (memory-safe on 1000+ image folders)
-// and yields to the watchdog during the run. `onProgress` (nullable) fires every
-// few files with the running count. Marks the rotation dirty so it rebuilds on
-// the next sleep. Returns the number of files actually moved.
-size_t moveToPauseByFavorite(bool favorites, const ProgressFn& onProgress = nullptr);
-
-// Move every favorite image in "/sleep pause" back into "/sleep" — the reverse
-// of moveToPauseByFavorite(true). Works in bounded batches (memory-safe on
-// 1000+ image folders) and yields to the watchdog during the run. `onProgress`
-// (nullable) fires every few files with the running count. Marks the rotation
-// dirty so it rebuilds on the next sleep. Returns files actually moved.
-size_t moveFavoritesToSleep(const ProgressFn& onProgress = nullptr);
 
 // No-op in the V2 default path — reconcile is heap-gated and runs from
 // inside advance(). Kept so the boot-route hook + ActivityRouter signature
@@ -141,7 +117,6 @@ struct Config {
 
   std::function<bool()> saveAppState;
   std::function<long(long)> randomFn;
-  std::function<bool(const std::string&)> isFavorite;
   std::function<void(const std::string& /*from*/, const std::string& /*to*/)> onPathRenamed;
   // Optional host-test seam: returns the largest contiguous free heap block
   // in bytes. Production lazy init wires heap_caps_get_largest_free_block
@@ -149,11 +124,6 @@ struct Config {
   // fragmentation cliffs. If left unset, the playlist treats the heap as
   // unlimited — matches the pre-RFC #156 host behaviour.
   std::function<size_t()> largestFreeBlockFn;
-  // Maps a /sleep basename to its favorite-toggle counterpart (x.bmp <->
-  // x_F.bmp). Lets reconcile recognize a favorite rename as an in-place name
-  // change rather than a fresh upload. Production lazy init wires the
-  // FavoriteImage suffix helpers automatically; unset disables rename folding.
-  std::function<std::string(const std::string&)> favoriteCounterpartFn;
 };
 
 void Configure(const Config&);

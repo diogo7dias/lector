@@ -62,7 +62,7 @@ class Reader {
   HalFile file_;
 };
 
-// Mark the index stale (uploads, moves, deletes, favorite toggles, format
+// Mark the index stale (uploads, moves, deletes, format
 // switch). The next pumpIdle cycle — or, failing that, the next lock — rebuilds.
 void markDirty();
 bool isDirty();

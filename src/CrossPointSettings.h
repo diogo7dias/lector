@@ -210,13 +210,11 @@ class CrossPointSettings {
   // near the panel floor for a clean full-image swap). PXC only — BMP
   // wallpapers always render through the grayscale path.
   uint8_t sleepImageQuality = SLEEP_IMG_PRETTY;
-  // Overlay the wallpaper's filename on the sleep screen (bottom-left box). When
-  // off, showSleepFavoriteBadge instead draws a small "F" badge for favorites.
+  // Overlay the wallpaper's filename on the sleep screen (bottom-left box).
   uint8_t showSleepImageFilename = 0;
   // Draw a one-shot timing line over the first reader page after a wake
   // (unlock-to-usable breakdown) — a debugging aid, off by default.
   uint8_t wakeDiagnostics = 0;
-  uint8_t showSleepFavoriteBadge = 0;
   // Status bar: the legacy fixed-slot fields (statusBar / statusBar*) were removed
   // in favour of the per-item v2 model below. XTC keeps its own top/bottom overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;

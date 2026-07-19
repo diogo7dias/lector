@@ -14,7 +14,6 @@
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
 #include "util/ButtonResponsePolicy.h"
-#include "util/FavoriteImage.h"
 
 PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath,
                                      bool resultMode)
@@ -39,14 +38,13 @@ void PxcViewerActivity::returnToBrowser(bool removed) {
 }
 
 void PxcViewerActivity::render() {
-  // Button hints for the viewer: Back / Move (Confirm) / Delete (Left) / Fav (Right).
+  // Button hints for the viewer: Back / Move (Confirm) / Delete (Left).
   // The move label is empty for files outside /sleep so Confirm isn't a hidden action.
   const char* moveLabel =
       crosspoint::sleep::isUnderSleepDirs(filePath)
           ? (filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE))
           : "";
-  const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, tr(STR_DELETE), favLabel);
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), moveLabel, tr(STR_DELETE), "");
   // Solid black and white controls must be present in the visible BW base. The
   // later grayscale planes can shade existing pixels but cannot create new BW
   // controls, so use the reliable every-pass path.
@@ -107,21 +105,6 @@ void PxcViewerActivity::loop() {
             }
           }
         });
-    return;
-  }
-  // Right button toggles favorite by renaming the file (adds/strips the _F suffix),
-  // then returns to the /sleep browser (the file stays in the folder, just renamed).
-  // returnToBrowser(false) patches that one row in place — no folder rescan. On a
-  // rename failure it stays in the viewer and re-renders.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
-    const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
-    std::string updated;
-    if (FavoriteImage::setFavorite(filePath, makeFavorite, &updated) == FavoriteImage::SetFavoriteResult::Success) {
-      filePath = updated;
-      returnToBrowser(false);
-      return;
-    }
-    render();
     return;
   }
   // Confirm moves the wallpaper to the other folder and immediately returns to the

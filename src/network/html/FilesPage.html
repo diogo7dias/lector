@@ -140,12 +140,6 @@
     .delete-action-btn:hover {
       background-color: #c0392b;
     }
-    .move-favs-action-btn {
-      background-color: #d4a017;
-    }
-    .move-favs-action-btn:hover {
-      background-color: #b3860f;
-    }
     /* Upload modal */
     .modal-overlay {
       display: none;
@@ -261,17 +255,6 @@
       color: white;
       border-radius: 10px;
       font-size: 0.75em;
-    }
-    .fav-badge {
-      display: inline-block;
-      padding: 1px 6px;
-      margin-left: 6px;
-      background-color: #d4a017;
-      color: white;
-      border-radius: 10px;
-      font-size: 0.7em;
-      font-weight: bold;
-      vertical-align: middle;
     }
     .file-icon {
       margin-right: 8px;
@@ -1516,7 +1499,6 @@
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
-    <button class="action-btn move-favs-action-btn" onclick="openMoveFavoritesModal()">★ Move Favorites</button>
   </div>
 </div>
 
@@ -1767,22 +1749,6 @@
   </div>
 </div>
 
-<!-- Move Favorites Modal -->
-<div class="modal-overlay" id="moveFavoritesModal">
-  <div class="modal">
-    <button class="modal-close" onclick="closeMoveFavoritesModal()">&times;</button>
-    <h3>★ Move Favorites</h3>
-    <div class="folder-form">
-      <p class="file-info"><strong id="moveFavoritesCount"></strong> favorite wallpaper(s) in <strong id="moveFavoritesSource"></strong></p>
-      <p class="file-info">Move them to:</p>
-      <input type="text" id="moveFavoritesDest" class="folder-input" placeholder="/sleep pause">
-      <p class="file-info" id="moveFavoritesProgress" style="display:none;"></p>
-      <button class="rename-btn-confirm" id="moveFavoritesGo" onclick="confirmMoveFavorites()">Move</button>
-      <button class="delete-btn-cancel" onclick="closeMoveFavoritesModal()">Cancel</button>
-    </div>
-  </div>
-</div>
-
 <!-- Rename Modal -->
 <div class="modal-overlay" id="renameModal">
   <div class="modal">
@@ -1921,7 +1887,6 @@
           if (overlay.id === 'deleteModal') return closeDeleteModal();
           if (overlay.id === 'renameModal') return closeRenameModal();
           if (overlay.id === 'moveModal') return closeMoveModal();
-          if (overlay.id === 'moveFavoritesModal') return closeMoveFavoritesModal();
           overlay.classList.remove('open');
         }
       });
@@ -2036,9 +2001,6 @@
           fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : '📄'}</span>`;
           fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="/download?path=${encodeURIComponent(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
-          if (isFavoriteImageName(file.name)) {
-            fileTableContent += '<span class="fav-badge" title="Favorite wallpaper">★ F</span>';
-          }
           fileTableContent += '</td>';
           fileTableContent += file.isEpub ? '<td><span class="epub-badge">EPUB</span></td>' : `<td>${escapeHtml(file.name.split('.').pop().toUpperCase())}</td>`;
           fileTableContent += `<td>${formatFileSize(file.size)}</td>`;
@@ -2985,96 +2947,6 @@
   }
 
   // Toggle select-all checkbox
-  // --- Bulk "move favorites" ---------------------------------------------
-  // Collects every favorite-suffixed wallpaper in the current listing (from
-  // the rendered rows, so no extra request) and moves them via /movebatch in
-  // chunks — hundreds of files stay a handful of requests, and the ESP only
-  // ever parses a small JSON array at a time.
-
-  function listFavoritePathsInCurrentFolder() {
-    const paths = [];
-    document.querySelectorAll('.file-table tr').forEach(row => {
-      if (!row.querySelector('.fav-badge')) return;
-      const cb = row.querySelector('.select-item');
-      if (cb && cb.dataset.type === 'file') paths.push(decodeURIComponent(cb.dataset.path));
-    });
-    return paths;
-  }
-
-  function suggestedFavoritesDest() {
-    if (currentPath === '/sleep') return '/sleep pause';
-    if (currentPath === '/sleep pause' || currentPath.startsWith('/sleep pause/')) return '/sleep';
-    return '/sleep';
-  }
-
-  function openMoveFavoritesModal() {
-    const favs = listFavoritePathsInCurrentFolder();
-    if (favs.length === 0) {
-      alert('No favorite wallpapers (files ending in _F.pxc / _F.bmp) in this folder.');
-      return;
-    }
-    document.getElementById('moveFavoritesCount').textContent = favs.length;
-    document.getElementById('moveFavoritesSource').textContent = currentPath;
-    document.getElementById('moveFavoritesDest').value = suggestedFavoritesDest();
-    document.getElementById('moveFavoritesProgress').style.display = 'none';
-    document.getElementById('moveFavoritesGo').disabled = false;
-    document.getElementById('moveFavoritesModal').classList.add('open');
-  }
-
-  function closeMoveFavoritesModal() {
-    document.getElementById('moveFavoritesModal').classList.remove('open');
-  }
-
-  async function confirmMoveFavorites() {
-    const favs = listFavoritePathsInCurrentFolder();
-    let dest = document.getElementById('moveFavoritesDest').value.trim();
-    if (!dest.startsWith('/')) dest = '/' + dest;
-    if (favs.length === 0 || dest === currentPath) {
-      closeMoveFavoritesModal();
-      return;
-    }
-
-    const goBtn = document.getElementById('moveFavoritesGo');
-    const progress = document.getElementById('moveFavoritesProgress');
-    goBtn.disabled = true;
-    progress.style.display = 'block';
-
-    const CHUNK = 25;
-    let moved = 0, failed = 0;
-    try {
-      for (let i = 0; i < favs.length; i += CHUNK) {
-        progress.textContent = `Moving ${Math.min(i + CHUNK, favs.length)} / ${favs.length}…`;
-        const body = 'dest=' + encodeURIComponent(dest) +
-          '&paths=' + encodeURIComponent(JSON.stringify(favs.slice(i, i + CHUNK)));
-        const res = await fetch('/movebatch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: body
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const result = await res.json();
-        moved += result.moved || 0;
-        failed += result.failed || 0;
-      }
-    } catch (e) {
-      alert('Move failed: ' + e.message + (moved ? ` (${moved} already moved)` : ''));
-      window.location.reload();
-      return;
-    }
-    if (failed > 0) {
-      alert(`Moved ${moved}, but ${failed} failed (name collision or protected).`);
-    }
-    window.location.reload();
-  }
-
-  // Mirrors the firmware's FavoriteImage::hasFavoriteSuffix: an exact "_F"
-  // right before a .pxc/.bmp extension (extension case-insensitive, the "_F"
-  // itself case-sensitive).
-  function isFavoriteImageName(name) {
-    const m = name.match(/(_.)\.(pxc|bmp)$/i);
-    return !!m && m[1] === '_F';
-  }
-
   function toggleSelectAll(master) {
     const checked = master.checked;
     document.querySelectorAll('.select-item').forEach(cb => {

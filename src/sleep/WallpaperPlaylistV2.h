@@ -22,13 +22,9 @@
  *     is NEVER auto-shuffled; only the user-initiated reshuffle() (settings
  *     "shuffle now") randomizes.
  *   - New files added to /sleep get spliced at the FRONT of the buffer and
- *     cursor resets to 0, so freshly uploaded wallpapers show next. A
- *     favorite/unfavorite RENAME (same image, toggled _F suffix) is NOT a new
- *     file: reconcile() replaces the old name in place so the image keeps its
- *     rotation slot instead of jumping to the front and re-showing.
- *   - Strict cap at 500: on overflow, oldest-mtime non-favorites are pushed to
- *     /sleep pause. If favorites alone fill the cap, new uploads land in
- *     /sleep pause and a notification flag fires.
+ *     cursor resets to 0, so freshly uploaded wallpapers show next.
+ *   - Strict cap at 500: on overflow, the oldest-mtime images are pushed to
+ *     /sleep pause.
  */
 #pragma once
 
@@ -45,7 +41,7 @@ namespace crosspoint {
 namespace sleep {
 namespace v2 {
 
-// Hard cap on /sleep contents. Mirrors CrossPointState::SLEEP_FAVORITES_MAX.
+// Hard cap on /sleep contents.
 // One contiguous allocation of ~10 KB at this cap on the C3 — well under the
 // observed 26 KB min-largest-free-block low-water mark.
 constexpr size_t kSleepFolderCap = 500;
@@ -62,7 +58,6 @@ class WallpaperPlaylistV2 {
 
     std::function<bool()> saveAppState;
     std::function<long(long)> randomFn;
-    std::function<bool(const std::string&)> isFavorite;
     std::function<void(const std::string& /*from*/, const std::string& /*to*/)> onPathRenamed;
     // Returns the largest contiguous free heap block in bytes. Production
     // wires heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT). Host
@@ -70,26 +65,14 @@ class WallpaperPlaylistV2 {
     // assumes unlimited heap (treats every reserve as safe) — matches the
     // pre-RFC #156 host behaviour where the heap probe was ifdef'd out.
     std::function<size_t()> largestFreeBlockFn;
-    // Maps a /sleep basename to its favorite-toggle counterpart: "x.bmp" ->
-    // "x_F.bmp" and "x_F.bmp" -> "x.bmp". Lets reconcile() recognize a
-    // favorite/unfavorite RENAME (same image, toggled _F suffix) as distinct
-    // from a fresh upload, so it replaces the name in place and keeps the
-    // image's rotation slot instead of splicing it to the front. Returns the
-    // input unchanged for non-images. If unset, reconcile skips rename
-    // detection and treats a renamed file as new (pre-fix behaviour).
-    std::function<std::string(const std::string&)> favoriteCounterpartFn;
   };
 
-  // Outcome of the most recent reconcile, surfaced as data (RFC #145).
-  // Replaces the former onTrimMoved / onFavoritesCapBlocked callback slots,
-  // which were wired to noops in production and so could never reach the UI.
-  // The facade drains this after advance() and maps it onto persistent
-  // APP_STATE flags for the next-wake home warning / toast.
+  // Outcome of the most recent reconcile, surfaced as data (RFC #145). The
+  // facade drains this after advance() and maps it onto persistent APP_STATE
+  // flags for the next-wake home toast.
   struct Notice {
-    uint16_t movedToPause = 0;         // non-favorites demoted to /sleep pause this reconcile
-    bool favoritesCapBlocked = false;  // favorites alone saturate the 500 cap, new uploads blocked
-    bool reconciled = false;           // a reconcile actually ran, so favoritesCapBlocked is fresh
-    bool any() const { return movedToPause > 0 || favoritesCapBlocked; }
+    uint16_t movedToPause = 0;  // overflow images demoted to /sleep pause this reconcile
+    bool any() const { return movedToPause > 0; }
   };
 
   static WallpaperPlaylistV2& instance();
@@ -131,7 +114,7 @@ class WallpaperPlaylistV2 {
   void writeBuffer(const std::vector<std::string>& names, size_t cursor);
   std::string peekAtCursor() const;
   void advanceCursor();
-  uint16_t trimToCap(std::vector<SleepBmpEntry>& entries, bool& favoritesCapBlocked);
+  uint16_t trimToCap(std::vector<SleepBmpEntry>& entries);
 
   // Heap-cheap membership check: walk the '\n'-delimited names in buffer_ and
   // compare each line to `name` in place — zero allocation, no temporary needle
@@ -146,14 +129,6 @@ class WallpaperPlaylistV2 {
   // trimToCap so demoted files don't linger as stale queue entries that
   // advance() would otherwise prune one order-file rewrite at a time.
   bool removeNameFromBuffer(const std::string& name);
-
-  // Replace a whole-line entry `oldName` with `newName` in place, preserving
-  // its rotation slot and adjusting cursor_ for the length change if the entry
-  // sits before the cursor. Used by reconcile() to fold a favorite/unfavorite
-  // rename into the existing order rather than re-adding it at the front.
-  // Returns false (no change) if `oldName` is absent or the heap can't afford
-  // the (tiny) growth — the caller then treats the file as new, as before.
-  bool renameInBuffer(const std::string& oldName, const std::string& newName);
 
   // Probe the heap for a contiguous block large enough for `needBytes`
   // plus the standard 4 KB transient-growth headroom. Consults

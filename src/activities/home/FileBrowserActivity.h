@@ -83,7 +83,7 @@ class FileBrowserActivity final : public Activity {
 
   // Open a .pxc wallpaper in the viewer without tearing down this browser: launched
   // via startActivityForResult so we stay alive with `files` resident, then patch the
-  // one affected row in place on return (moved/deleted -> erased; favorite-renamed ->
+  // one affected row in place on return (moved/deleted -> erased; renamed ->
   // updated) instead of re-scanning the whole folder. The launch identity is the fast
   // path; a BMP sibling move resolves the changed sibling by its source name.
   void openPxcViewer(const std::string& path, const std::string& launchName, size_t launchFileIndex);

@@ -6,9 +6,13 @@
 
 #include "CrossPointSettings.h"
 #include "fontIds.h"
-#include "util/FavoriteImage.h"
 
 namespace {
+
+std::string basenameOf(const std::string& path) {
+  const auto slashPos = path.find_last_of('/');
+  return (slashPos == std::string::npos) ? path : path.substr(slashPos + 1);
+}
 
 // Filled box + text in the bottom-left safe corner. White text on a black box so
 // it reads over any wallpaper. Mirrors the DX34 geometry.
@@ -49,9 +53,6 @@ void drawSleepInfoOverlay(const GfxRenderer& renderer, const std::string& source
   if (sourcePath.empty()) return;
 
   if (SETTINGS.showSleepImageFilename) {
-    drawLabel(renderer, FavoriteImage::displayNameForPath(sourcePath));
-  } else if (SETTINGS.showSleepFavoriteBadge && FavoriteImage::isFavoritePath(sourcePath)) {
-    // Just "F" — the box border reads as the brackets.
-    drawLabel(renderer, "F");
+    drawLabel(renderer, basenameOf(sourcePath));
   }
 }

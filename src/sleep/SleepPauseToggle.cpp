@@ -3,9 +3,9 @@
 #include <HalStorage.h>
 
 #include "CrossPointState.h"
+#include "sleep/SleepPathReferences.h"
 #include "sleep/Wallpaper.h"
 #include "sleep/WallpaperDirectPickPolicy.h"
-#include "util/FavoriteImage.h"
 
 namespace crosspoint {
 namespace sleep {
@@ -45,7 +45,7 @@ SleepPauseToggleResult toggleSleepPause(const std::string& path) {
   if (!Storage.rename(path.c_str(), dst.c_str())) {
     return r;
   }
-  FavoriteImage::replacePathReferences(path, dst);
+  replacePathReferences(path, dst);
   // Moving a wallpaper OUT of /sleep means "stop showing this one" — clear the
   // paused-rotation flag so the sleep screen doesn't keep re-showing the file
   // from its new /sleep pause home (the reference fixup above repointed

@@ -14,10 +14,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const int totalPages, const int bookProgressPercent,
                                                const uint8_t currentOrientation, const bool hasFootnotes,
                                                const bool hasBookmarks, const bool hasQuotes, bool hasSleepWallpaper,
-                                               bool wallpaperPaused, bool wallpaperFavorited)
+                                               bool wallpaperPaused)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused,
-                               wallpaperFavorited)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -29,8 +28,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasBookmarks, bool hasQuotes,
                                                                                      bool hasSleepWallpaper,
-                                                                                     bool wallpaperPaused,
-                                                                                     bool wallpaperFavorited) {
+                                                                                     bool wallpaperPaused) {
   std::vector<MenuItem> items;
   items.reserve(16);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
@@ -68,7 +66,6 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   // Sleep-wallpaper triage — only when the device knows which wallpaper was last
   // shown (so the actions have a concrete target). Labels reflect current state.
   if (hasSleepWallpaper) {
-    items.push_back({MenuAction::WALLPAPER_FAVORITE, wallpaperFavorited ? StrId::STR_UNFAVORITE : StrId::STR_FAVORITE});
     items.push_back(
         {MenuAction::WALLPAPER_PAUSE_ROTATION, wallpaperPaused ? StrId::STR_TRIAGE_UNPAUSE : StrId::STR_TRIAGE_PAUSE});
     items.push_back({MenuAction::WALLPAPER_MOVE_PAUSE, StrId::STR_MOVE_TO_SLEEP_PAUSE});

@@ -24,9 +24,6 @@ enum class SettingAction {
   SdFirmwareUpdate,
   Language,
   RandomizeSleepImages,
-  MoveNonFavoritesToPause,
-  MoveFavoritesToPause,
-  MoveFavoritesToSleep,
 };
 
 struct SettingInfo {

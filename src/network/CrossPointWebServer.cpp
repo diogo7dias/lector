@@ -1012,8 +1012,8 @@ void CrossPointWebServer::handleMove() const {
 }
 
 // Batch file move: `paths` = JSON array of file paths, `dest` = one folder.
-// Backs the web UI's "move favorites" bulk action; the client chunks large
-// sets across several requests, so the per-request cap only bounds heap.
+// Backs the web UI's bulk move action; the client chunks large sets across
+// several requests, so the per-request cap only bounds heap.
 void CrossPointWebServer::handleMoveBatch() const {
   if (!server->hasArg("paths") || !server->hasArg("dest")) {
     server->send(400, "text/plain", "Missing paths or destination");

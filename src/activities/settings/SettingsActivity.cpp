@@ -84,10 +84,6 @@ void SettingsActivity::rebuildSettingsLists() {
   // other sleep-screen settings.
   displaySettings.push_back(
       SettingInfo::Action(StrId::STR_RANDOMIZE_SLEEP_IMAGES, SettingAction::RandomizeSleepImages));
-  displaySettings.push_back(
-      SettingInfo::Action(StrId::STR_MOVE_NONFAV_TO_PAUSE, SettingAction::MoveNonFavoritesToPause));
-  displaySettings.push_back(SettingInfo::Action(StrId::STR_MOVE_FAV_TO_PAUSE, SettingAction::MoveFavoritesToPause));
-  displaySettings.push_back(SettingInfo::Action(StrId::STR_MOVE_FAV_TO_SLEEP, SettingAction::MoveFavoritesToSleep));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Update currentSettings pointer and count for the active category
@@ -346,13 +342,6 @@ void SettingsActivity::toggleCurrentSetting() {
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
-    // Repaint the top banner with the running move count during a bulk wallpaper
-    // move. Passed to the move facades, which fire it every ~32 files.
-    const crosspoint::sleep::wallpaper::ProgressFn movePopup = [this](size_t n) {
-      GUI.drawPopup(renderer, (std::string(tr(STR_MOVING_WALLPAPERS)) + " " + std::to_string(n)).c_str(),
-                    PopupRefresh::Temporary);  // live counter: keep fast, no full clean pass per update
-    };
-
     switch (setting.action) {
       case SettingAction::RemapFrontButtons:
         startActivityForResult(makeUniqueNoThrow<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
@@ -389,29 +378,6 @@ void SettingsActivity::toggleCurrentSetting() {
         // confirmation banner. reshuffle() persists the new order itself.
         const bool shuffled = crosspoint::sleep::wallpaper::reshuffle();
         GUI.drawPopup(renderer, shuffled ? tr(STR_SLEEP_SHUFFLED) : tr(STR_SLEEP_SHUFFLE_EMPTY));
-        break;
-      }
-      case SettingAction::MoveNonFavoritesToPause: {
-        // Move all non-favorite wallpapers out of /sleep into /sleep pause. The
-        // move can touch thousands of files and take many seconds, so repaint the
-        // banner with a rising count as it goes — a static "Moving..." looks stuck.
-        GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
-        const size_t moved = crosspoint::sleep::wallpaper::moveToPauseByFavorite(/*favorites=*/false, movePopup);
-        GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
-        break;
-      }
-      case SettingAction::MoveFavoritesToPause: {
-        GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
-        const size_t moved = crosspoint::sleep::wallpaper::moveToPauseByFavorite(/*favorites=*/true, movePopup);
-        GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
-        break;
-      }
-      case SettingAction::MoveFavoritesToSleep: {
-        // Reverse of MoveFavoritesToPause: bring favorites back from /sleep pause
-        // into /sleep, with the same rising-count banner.
-        GUI.drawPopup(renderer, tr(STR_MOVING_WALLPAPERS));
-        const size_t moved = crosspoint::sleep::wallpaper::moveFavoritesToSleep(movePopup);
-        GUI.drawPopup(renderer, (std::string(tr(STR_MOVED)) + " " + std::to_string(moved)).c_str());
         break;
       }
       case SettingAction::None:

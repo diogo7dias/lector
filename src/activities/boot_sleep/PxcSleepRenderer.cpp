@@ -125,7 +125,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
 
   // OEM 3-pass grayscale, mirroring SleepActivity::renderBitmapSleepScreen:
   // BW silhouette base, then the LSB and MSB grayscale planes, then composite.
-  // The info overlay (filename / favorite badge) is redrawn in every pass so it
+  // The info overlay (filename) is redrawn in every pass so it
   // composites solid, exactly like the wallpaper itself.
   renderer.clearScreen();
   renderer.setRenderMode(GfxRenderer::BW);

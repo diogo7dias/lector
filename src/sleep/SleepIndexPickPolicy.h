@@ -4,9 +4,8 @@
 //
 // Given the persisted rotation cursor and the index size, walks the shuffled lap
 // (SleepRotationPolicy) to the next LIVE wallpaper: index records can go stale
-// between rebuilds (file deleted, moved to /sleep pause, or renamed by a
-// favorite toggle), so each candidate is verified through `exists` and — for
-// favorite renames — its counterpart name, preserving the image's rotation slot.
+// between rebuilds (file deleted or moved to /sleep pause), so each candidate is
+// verified through `exists`.
 //
 // Cursor semantics: the cursor is advanced PAST every slot this call inspects,
 // including the returned candidate. The caller persists the cursor only after a
@@ -34,11 +33,9 @@ struct Result {
 
 // nameAt(size_t physicalIndex) -> std::string  (empty = unreadable record)
 // exists(const std::string& basename) -> bool  (file present in /sleep)
-// counterpart(const std::string& basename) -> std::string  (favorite-toggled
-//   name, e.g. x.pxc <-> x_F.pxc; empty = no counterpart)
-template <typename NameAtFn, typename ExistsFn, typename CounterpartFn>
+template <typename NameAtFn, typename ExistsFn>
 Result pickNext(sleep_rotation::Cursor& cursor, const size_t count, const uint32_t randA, const uint32_t randB,
-                NameAtFn&& nameAt, ExistsFn&& exists, CounterpartFn&& counterpart) {
+                NameAtFn&& nameAt, ExistsFn&& exists) {
   Result result;
   if (count == 0) return result;
   if (sleep_rotation::needsReseed(cursor, count)) {
@@ -55,11 +52,6 @@ Result pickNext(sleep_rotation::Cursor& cursor, const size_t count, const uint32
     if (name.empty()) continue;
     if (exists(name)) {
       result.basename = std::move(name);
-      return result;
-    }
-    std::string alt = counterpart(name);
-    if (!alt.empty() && exists(alt)) {
-      result.basename = std::move(alt);
       return result;
     }
   }

@@ -94,10 +94,9 @@ struct ISleepFs {
   }
 
   // Same streaming walk as walkSleepBmps, but over the "/sleep pause" folder.
-  // Backs the "move favorites back to /sleep" action, which must stream the pause
-  // folder (potentially thousands of images) without materializing every name.
-  // Default impl is a no-op so fakes that do not model /sleep pause still link;
-  // the SD impl and the mover's test fake override it.
+  // Streams the pause folder (potentially thousands of images) without
+  // materializing every name. Default impl is a no-op so fakes that do not model
+  // /sleep pause still link; the SD impl overrides it.
   virtual void walkPauseBmps(const std::function<void(const char* /*name*/, size_t /*len*/, uint32_t /*mtime*/)>&) {}
 
   // Generic storage ops used during trim / rename bookkeeping.

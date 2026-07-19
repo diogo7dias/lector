@@ -181,78 +181,41 @@ void WallpaperPlaylistV2::advanceCursor() {
   }
 }
 
-uint16_t WallpaperPlaylistV2::trimToCap(std::vector<SleepBmpEntry>& entries, bool& favoritesCapBlocked) {
-  favoritesCapBlocked = false;
+uint16_t WallpaperPlaylistV2::trimToCap(std::vector<SleepBmpEntry>& entries) {
   if (entries.size() <= kSleepFolderCap) return 0;
 
-  // RFC #156 Bug A: the old trim partitioned `entries` into three transient
-  // vectors (nonFav + favs + surviving), peaking at ~3x the entry vector — the
-  // largest sleep-path allocation and the one most likely to bail on (or, if
-  // ever called ungated, abort) a fragmented heap. This rewrite works in place
-  // on the single `entries` vector, so peak is ~1x. Production reconcile still
-  // runs under the sleep-playlist heap gate; we keep a self-safety probe (now
-  // sized to that single vector) so an ungated future caller still bails rather
-  // than risk a bad_alloc under -fno-exceptions. Bail = no trim this cycle; the
-  // next reconcile retries once heap recovers and the over-cap files wait in
-  // /sleep meanwhile.
+  // Work in place on the single `entries` vector, so peak is ~1x. Production
+  // reconcile still runs under the sleep-playlist heap gate; we keep a
+  // self-safety probe (sized to that single vector) so an ungated future caller
+  // still bails rather than risk a bad_alloc under -fno-exceptions. Bail = no
+  // trim this cycle; the next reconcile retries once heap recovers and the
+  // over-cap files wait in /sleep meanwhile.
   if (!heapHasContiguous(entries.size() * sizeof(SleepBmpEntry))) {
     return 0;
   }
 
-  // Partition non-favorites to the front (favorites are never moved). isFavorite
-  // is evaluated once per entry. std::partition is in place — no temp vector;
-  // relative order is not relied upon (the favorites-saturated branch demotes
-  // every non-favorite regardless of order, and the normal branch re-sorts the
-  // non-favorite prefix by mtime below).
-  const auto firstFav = std::partition(entries.begin(), entries.end(), [this](const SleepBmpEntry& e) {
-    return !(deps_.isFavorite && deps_.isFavorite(makeSleepPath(e.name)));
-  });
-  const size_t nonFavCount = static_cast<size_t>(firstFav - entries.begin());
-  const size_t favCount = entries.size() - nonFavCount;
-
   if (deps_.fs) deps_.fs->mkdir(kSleepPauseDir);
 
-  // Favorites alone fill the cap: demote every non-favorite (e.g. a fresh
-  // upload that has nowhere to go) and keep only the favorites.
-  if (favCount >= kSleepFolderCap) {
-    favoritesCapBlocked = true;
-    uint16_t moved = 0;
-    for (size_t i = 0; i < nonFavCount; ++i) {
-      const std::string from = makeSleepPath(entries[i].name);
-      const std::string to = makePausePath(entries[i].name);
-      if (deps_.fs && deps_.fs->rename(from, to)) {
-        if (deps_.onPathRenamed) deps_.onPathRenamed(from, to);
-        // Purge the demoted name from the queue now — a stale entry would
-        // otherwise cost advance() a skip iteration on a later wake.
-        removeNameFromBuffer(entries[i].name);
-        ++moved;
-      }
-    }
-    entries.erase(entries.begin(), entries.begin() + nonFavCount);
-    return moved;
-  }
-
-  // Normal branch: demote the oldest-by-mtime non-favorites. Sort only the
-  // non-favorite prefix [0, nonFavCount) ascending; favorites in the tail stay
-  // put. Renames happen oldest-first, matching the previous behaviour.
-  std::sort(entries.begin(), entries.begin() + nonFavCount,
+  // Demote the oldest-by-mtime images. Sort ascending so renames happen
+  // oldest-first, then move the excess (size - cap) out to /sleep pause.
+  std::sort(entries.begin(), entries.end(),
             [](const SleepBmpEntry& a, const SleepBmpEntry& b) { return a.mtime < b.mtime; });
-  const size_t excess = entries.size() - kSleepFolderCap;
-  const size_t toMove = std::min(excess, nonFavCount);
+  const size_t toMove = entries.size() - kSleepFolderCap;
   uint16_t moved = 0;
   for (size_t i = 0; i < toMove; ++i) {
     const std::string from = makeSleepPath(entries[i].name);
     const std::string to = makePausePath(entries[i].name);
     if (deps_.fs && deps_.fs->rename(from, to)) {
       if (deps_.onPathRenamed) deps_.onPathRenamed(from, to);
-      // Purge from the queue immediately (see favorites branch above).
+      // Purge the demoted name from the queue now — a stale entry would
+      // otherwise cost advance() a skip iteration on a later wake.
       removeNameFromBuffer(entries[i].name);
       ++moved;
     }
   }
-  // Drop the moved entries; favorites + surviving non-favorites remain. Order of
-  // the survivors is irrelevant — the caller re-derives newFiles from this set
-  // and re-sorts before splicing.
+  // Drop the moved entries; the survivors remain. Order of the survivors is
+  // irrelevant — the caller re-derives newFiles from this set and re-sorts
+  // before splicing.
   entries.erase(entries.begin(), entries.begin() + toMove);
   return moved;
 }
@@ -312,48 +275,10 @@ bool WallpaperPlaylistV2::removeNameFromBuffer(const std::string& name) {
   return false;
 }
 
-bool WallpaperPlaylistV2::renameInBuffer(const std::string& oldName, const std::string& newName) {
-  if (oldName.empty() || newName.empty() || buffer_.empty()) return false;
-  const char* data = buffer_.data();
-  const size_t bsize = buffer_.size();
-  size_t start = 0;
-  while (start < bsize) {
-    size_t nl = buffer_.find('\n', start);
-    const size_t lineEnd = (nl == std::string::npos) ? bsize : nl;
-    if (lineEnd - start == oldName.size() && std::memcmp(data + start, oldName.data(), oldName.size()) == 0) {
-      const long delta = static_cast<long>(newName.size()) - static_cast<long>(oldName.size());
-      // Build is -fno-exceptions: a grow that reallocates could bad_alloc-abort.
-      // Probe before replacing; bail (no change) if the heap can't carry it so
-      // the caller falls back to treating the file as new.
-      if (delta > 0 && !heapHasContiguous(buffer_.size() + static_cast<size_t>(delta))) {
-        return false;
-      }
-      // Replace just the name chars (the trailing '\n' stays put). `data` is
-      // invalidated by any reallocation here, but we return immediately after.
-      buffer_.replace(start, oldName.size(), newName);
-      // cursor_ is always a line boundary (advanceCursor lands on nl+1 or
-      // buffer end), so the matched line is either wholly before the cursor or
-      // at/after it. Only a wholly-before line shifts the cursor's byte offset.
-      if (delta != 0 && start < cursor_) {
-        cursor_ = static_cast<size_t>(static_cast<long>(cursor_) + delta);
-      }
-      return true;
-    }
-    if (nl == std::string::npos) break;
-    start = nl + 1;
-  }
-  return false;
-}
-
 void WallpaperPlaylistV2::reconcile() {
   if (!deps_.fs) return;
   if (!ensureLoaded()) return;
   if (!dirty_) return;
-
-  // A reconcile is committed: the cap state recorded below is fresh, so the
-  // facade may safely clear a previously-persisted favorites-cap warning if we
-  // no longer trip the cap this pass.
-  pendingNotice_.reconciled = true;
 
   // Streaming walk: only retain NEW files (those not already in buffer_).
   // Heap cost is proportional to the delta (typically 0-3 entries on a normal
@@ -367,8 +292,8 @@ void WallpaperPlaylistV2::reconcile() {
   // Zero-allocation walk: the callback receives the name straight off the SD
   // layer's stack buffer (no per-file std::string), and nameIsInBuffer scans
   // buffer_ in place. Only genuinely new files (typically 0-3) materialize a
-  // string. The former per-file favorite probe here was dead (its count was
-  // never read) and cost a makeSleepPath allocation + isFavorite call on every
+  // string. The former per-file image probe here was dead (its count was
+  // never read) and cost a makeSleepPath allocation on every
   // one of the ~500 files — removed.
   bool newFilesTruncated = false;
   deps_.fs->walkSleepBmps([&](const char* name, size_t len, uint32_t mtime) {
@@ -388,7 +313,6 @@ void WallpaperPlaylistV2::reconcile() {
 
   // Trim path. Only enters here if /sleep is over the cap — gates the heavy
   // full-listing materialization on a count-only streaming pass first.
-  bool capBlocked = false;
   uint16_t moved = 0;
   // Heap-guard the trim path's full-listing alloc. listSleepBmpsWithMtime
   // materializes one contiguous vector of up to (cap+64) SleepBmpEntry — the
@@ -401,13 +325,12 @@ void WallpaperPlaylistV2::reconcile() {
     // If the listing itself hit its cap, files beyond it were never seen —
     // stay dirty so a later reconcile finishes the job.
     const bool listingCapHit = all.size() >= kSleepFolderCap + 64;
-    moved = trimToCap(all, capBlocked);
+    moved = trimToCap(all);
     // Record outcome as data; the facade drains it via takeNotice() after
-    // advance() and persists it for the next-wake home warning / toast.
-    pendingNotice_.favoritesCapBlocked = capBlocked;
+    // advance() and persists it for the next-wake home toast.
     pendingNotice_.movedToPause = moved;
-    // Re-derive newFiles after trim — some new arrivals may have been pushed
-    // to /sleep pause if the cap was favorites-saturated. Same 64-per-pass cap
+    // Re-derive newFiles after trim — some over-cap arrivals may have been
+    // pushed to /sleep pause. Same 64-per-pass cap
     // as the streaming walk above: a stale/lost order file makes every
     // survivor "new" (~500 entries), and an uncapped splice of that batch is
     // exactly the bad_alloc-abort shape the cap exists to prevent. Excess is
@@ -425,38 +348,14 @@ void WallpaperPlaylistV2::reconcile() {
     }
   }
 
-  // Fold favorite/unfavorite renames back into place. A "new" file whose
-  // favorite-counterpart (x.bmp <-> x_F.bmp) is already a rotation entry is the
-  // SAME image the user just (un)favorited, not a fresh upload. Splicing it to
-  // the front (new-on-top) would re-show it on the very next lock instead of
-  // advancing — the reported "favoriting re-shows the wallpaper" bug. Replace
-  // the old name in place so the image keeps its slot, and drop it from the
-  // front-splice batch. Genuinely-new files (no counterpart in the buffer) fall
-  // through to the splice below unchanged.
-  bool renamedAny = false;
-  if (deps_.favoriteCounterpartFn && !newFiles.empty()) {
-    std::vector<SleepBmpEntry> genuinelyNew;
-    genuinelyNew.reserve(newFiles.size());
-    for (auto& nf : newFiles) {
-      const std::string counterpart = deps_.favoriteCounterpartFn(nf.name);
-      if (!counterpart.empty() && counterpart != nf.name && nameIsInBuffer(counterpart) &&
-          renameInBuffer(counterpart, nf.name)) {
-        renamedAny = true;
-      } else {
-        genuinelyNew.push_back(std::move(nf));
-      }
-    }
-    newFiles = std::move(genuinelyNew);
-  }
-  // Persist in-place buffer surgery (favorite renames and/or trim purges) even
-  // when no splice follows — otherwise the purge lives only in RAM and the
-  // stale names resurface from the old order file on the next boot.
-  if (renamedAny || moved > 0) saveToDisk();
+  // Persist in-place buffer surgery (trim purges) even when no splice follows —
+  // otherwise the purge lives only in RAM and the stale names resurface from the
+  // old order file on the next boot.
+  if (moved > 0) saveToDisk();
 
   if (newFiles.empty()) {
-    // Either nothing new this pass, or every "new" file was an in-place rename.
-    // Truncation with an empty batch (heap too tight to retain even one entry):
-    // keep dirty_ so the next sleep retries.
+    // Nothing new this pass. Truncation with an empty batch (heap too tight to
+    // retain even one entry): keep dirty_ so the next sleep retries.
     dirty_ = newFilesTruncated;
     return;
   }
@@ -658,7 +557,7 @@ bool WallpaperPlaylistV2::reshuffle() {
     }
   }
   // Anti-repeat: after Fisher-Yates the just-shown name has a 1/N chance of
-  // landing at index 0. With small libraries (4-6 favorites) that produces
+  // landing at index 0. With small libraries (4-6 wallpapers) that produces
   // visible back-to-back repeats almost every lap. Rotate the just-shown name
   // to position 0 and start the cursor past it so the next advance() skips
   // it. Mirrors V1 migrateToSmall (WallpaperPlaylist.cpp).

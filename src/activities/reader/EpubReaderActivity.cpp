@@ -47,7 +47,7 @@
 #include "reading_stats/ReadingStatsPresentation.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonResponsePolicy.h"
-#include "util/FavoriteImage.h"
+#include "sleep/SleepPathReferences.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -486,14 +486,13 @@ void EpubReaderActivity::loop() {
       const std::string& lastWallpaper = APP_STATE.lastSleepWallpaperPath;
       const bool hasSleepWallpaper = !lastWallpaper.empty() && Storage.exists(lastWallpaper.c_str());
       const bool wallpaperPaused = APP_STATE.wallpaperRotationPaused;
-      const bool wallpaperFavorited = hasSleepWallpaper && FavoriteImage::isFavoritePath(lastWallpaper);
       // Opening the menu supersedes any press queued while the page was building.
       queuedPageTurn = 0;
       startActivityForResult(
           makeUniqueNoThrow<EpubReaderMenuActivity>(
               renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-              hasQuotes, hasSleepWallpaper, wallpaperPaused, wallpaperFavorited),
+              hasQuotes, hasSleepWallpaper, wallpaperPaused),
           [this](const ActivityResult& result) {
             // Always apply orientation change even if the menu was cancelled
             const auto& menu = std::get<MenuResult>(result.data);
@@ -952,22 +951,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // so the menu never returns these as a confirmed action. Listed here only
       // to keep the switch exhaustive.
       break;
-    case EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE: {
-      const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
-      if (!lastPath.empty()) {
-        const bool makeFavorite = !FavoriteImage::isFavoritePath(lastPath);
-        const auto result = FavoriteImage::setFavorite(lastPath, makeFavorite, nullptr);
-        if (result == FavoriteImage::SetFavoriteResult::RenameConflict) {
-          GUI.drawPopup(renderer, tr(STR_FAVORITE_NAME_EXISTS));
-        } else if (result != FavoriteImage::SetFavoriteResult::Success) {
-          GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
-        } else {
-          GUI.drawPopup(renderer, makeFavorite ? tr(STR_FAVORITED) : tr(STR_UNFAVORITED));
-        }
-      }
-      requestUpdate();
-      break;
-    }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_PAUSE_ROTATION: {
       APP_STATE.wallpaperRotationPaused = !APP_STATE.wallpaperRotationPaused;
       APP_STATE.saveToFile();
@@ -995,7 +978,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // (the rotation engine trims to /sleep pause the same way).
       const bool moved = Storage.rename(lastPath.c_str(), dstPath.c_str());
       if (moved) {
-        FavoriteImage::replacePathReferences(lastPath, dstPath);
+        crosspoint::sleep::replacePathReferences(lastPath, dstPath);
         APP_STATE.wallpaperRotationPaused = false;
         APP_STATE.saveToFile();
       }
@@ -1011,7 +994,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       const bool removed = Storage.remove(lastPath.c_str());
       if (removed) {
-        FavoriteImage::removePathReferences(lastPath);
+        crosspoint::sleep::removePathReferences(lastPath);
         APP_STATE.wallpaperRotationPaused = false;
         APP_STATE.saveToFile();
       }

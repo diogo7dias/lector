@@ -33,7 +33,6 @@ bool JsonSettingsIO::saveState(const CrossPointState& s, const char* path) {
   // no longer emitted. The loader still reads it so old state files load cleanly.
   doc["lastSleepWallpaperPath"] = s.lastSleepWallpaperPath;
   doc["wallpaperRotationPaused"] = s.wallpaperRotationPaused;
-  doc["sleepFavoritesCapReached"] = s.sleepFavoritesCapReached;
   doc["pendingSleepWallpapersMovedToPause"] = s.pendingSleepWallpapersMovedToPause;
   // Sleep wallpaper index rotation (index snapshot + shuffled-lap cursor).
   doc["sleepIndexCount"] = s.sleepIndexCount;
@@ -68,7 +67,6 @@ bool JsonSettingsIO::loadState(CrossPointState& s, const char* json) {
   s.lastDirectPickFilename = doc["lastDirectPickFilename"] | std::string("");
   s.lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
   s.wallpaperRotationPaused = doc["wallpaperRotationPaused"] | false;
-  s.sleepFavoritesCapReached = doc["sleepFavoritesCapReached"] | false;
   s.pendingSleepWallpapersMovedToPause = doc["pendingSleepWallpapersMovedToPause"] | static_cast<uint16_t>(0);
   // Sleep wallpaper index rotation (missing keys = pre-index firmware: the
   // zero count forces an index build on the first lock/idle after upgrade).
