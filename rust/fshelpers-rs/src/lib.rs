@@ -109,6 +109,32 @@ pub unsafe extern "C" fn fshelpers_natural_less(
     natural_less(slice_or_empty(a_ptr, a_len), slice_or_empty(b_ptr, b_len))
 }
 
+/// Directories-first natural ordering (mirror of C++ `FsHelpers::naturalFileLess`):
+/// a name ending in '/' is a directory and sorts before any file; within the same
+/// kind, order by `natural_less`.
+pub fn natural_file_less(a: &[u8], b: &[u8]) -> bool {
+    let is_dir1 = a.last() == Some(&b'/');
+    let is_dir2 = b.last() == Some(&b'/');
+    if is_dir1 != is_dir2 {
+        return is_dir1;
+    }
+    natural_less(a, b)
+}
+
+/// FFI entry point for `natural_file_less`. Null pointers read as empty slices.
+///
+/// # Safety
+/// `a_ptr`/`b_ptr` must each point to at least `a_len`/`b_len` bytes, or be null.
+#[no_mangle]
+pub unsafe extern "C" fn fshelpers_natural_file_less(
+    a_ptr: *const u8,
+    a_len: usize,
+    b_ptr: *const u8,
+    b_len: usize,
+) -> bool {
+    natural_file_less(slice_or_empty(a_ptr, a_len), slice_or_empty(b_ptr, b_len))
+}
+
 // no_std device build needs its own panic handler. Host build uses std's.
 #[cfg(feature = "device")]
 #[panic_handler]
@@ -119,7 +145,21 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 #[cfg(test)]
 mod tests {
     use super::check_file_extension as ext;
+    use super::natural_file_less as nfl;
     use super::natural_less as nl;
+
+    #[test]
+    fn dir_sorts_before_file() {
+        assert!(nfl(b"zebra/", b"apple")); // dir before file regardless of name
+        assert!(!nfl(b"apple", b"zebra/"));
+    }
+
+    #[test]
+    fn same_kind_uses_natural_order() {
+        assert!(nfl(b"file2", b"file10")); // both files -> numeric-aware
+        assert!(nfl(b"dir2/", b"dir10/")); // both dirs -> numeric-aware
+        assert!(!nfl(b"file10", b"file2"));
+    }
 
     #[test]
     fn natural_plain_alpha_order() {

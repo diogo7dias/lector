@@ -20,6 +20,11 @@ bool fshelpers_check_file_extension(const uint8_t* name_ptr, size_t name_len,
 bool fshelpers_natural_less(const uint8_t* a_ptr, size_t a_len, const uint8_t* b_ptr,
                             size_t b_len);
 
+// Directories-first natural ordering; a name ending in '/' sorts before any file.
+// Byte-exact mirror of C++ FsHelpers::naturalFileLess.
+bool fshelpers_natural_file_less(const uint8_t* a_ptr, size_t a_len, const uint8_t* b_ptr,
+                                 size_t b_len);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif

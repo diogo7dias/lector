@@ -75,6 +75,19 @@ static bool naturalLess_rust(std::string_view a, std::string_view b) {
                                 reinterpret_cast<const uint8_t*>(b.data()), b.size());
 }
 
+// --- Original C++ reference, copied verbatim from lib/FsHelpers/FsHelpers.cpp ---
+static bool naturalFileLess_cpp(const std::string_view str1, const std::string_view str2) {
+  bool isDir1 = !str1.empty() && str1.back() == '/';
+  bool isDir2 = !str2.empty() && str2.back() == '/';
+  if (isDir1 != isDir2) return isDir1;
+  return naturalLess_cpp(str1, str2);
+}
+
+static bool naturalFileLess_rust(std::string_view a, std::string_view b) {
+  return fshelpers_natural_file_less(reinterpret_cast<const uint8_t*>(a.data()), a.size(),
+                                     reinterpret_cast<const uint8_t*>(b.data()), b.size());
+}
+
 int main() {
   long checks = 0, mismatches = 0;
 
@@ -144,6 +157,28 @@ int main() {
   for (int iter = 0; iter < 500000; iter++) {
     std::string a = mkstr(), b = mkstr();
     natcmp(std::string_view(a.data(), a.size()), std::string_view(b.data(), b.size()));
+  }
+
+  // 4. naturalFileLess fuzz: same alphabet, with an occasional trailing '/' so the
+  //    directories-first branch is exercised on both sides.
+  auto natfilecmp = [&](std::string_view a, std::string_view b) {
+    bool ca = naturalFileLess_cpp(a, b);
+    bool cb = naturalFileLess_rust(a, b);
+    checks++;
+    if (ca != cb) {
+      mismatches++;
+      if (mismatches <= 20) {
+        printf("NFL MISMATCH a=\"%.*s\" b=\"%.*s\" cpp=%d rust=%d\n", (int)a.size(), a.data(),
+               (int)b.size(), b.data(), ca, cb);
+      }
+    }
+  };
+  std::uniform_int_distribution<int> slashD(0, 3);
+  for (int iter = 0; iter < 500000; iter++) {
+    std::string a = mkstr(), b = mkstr();
+    if (slashD(rng) == 0) a.push_back('/');
+    if (slashD(rng) == 0) b.push_back('/');
+    natfilecmp(std::string_view(a.data(), a.size()), std::string_view(b.data(), b.size()));
   }
 
   printf("\nchecks=%ld mismatches=%ld\n", checks, mismatches);
