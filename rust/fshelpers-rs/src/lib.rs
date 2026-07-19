@@ -135,6 +135,156 @@ pub unsafe extern "C" fn fshelpers_natural_file_less(
     natural_file_less(slice_or_empty(a_ptr, a_len), slice_or_empty(b_ptr, b_len))
 }
 
+// ---- UTF-8 decode (byte-exact mirror of lib/Utf8/Utf8.cpp) ----------------
+
+const REPLACEMENT_GLYPH: u32 = 0xFFFD;
+
+/// Mirror of C++ `utf8CodepointLen`: byte count implied by a lead byte
+/// (1 for ASCII or any invalid lead).
+#[inline]
+fn utf8_codepoint_len(c: u8) -> usize {
+    if c < 0x80 {
+        1
+    } else if c >> 5 == 0x6 {
+        2
+    } else if c >> 4 == 0xE {
+        3
+    } else if c >> 3 == 0x1E {
+        4
+    } else {
+        1
+    }
+}
+
+/// Bounds-safe mirror of C++ `utf8NextCodepoint`. `i` indexes into `s` and is
+/// advanced past the consumed bytes. Any index at or beyond the slice end reads
+/// as 0, matching how the C++ walks a NUL-terminated `c_str()` (the terminator
+/// fails the continuation check). Never reads out of bounds.
+fn utf8_next_codepoint(s: &[u8], i: &mut usize) -> u32 {
+    let at = |idx: usize| -> u8 { if idx < s.len() { s[idx] } else { 0 } };
+    let lead = at(*i);
+    if lead == 0 {
+        return 0;
+    }
+    let bytes = utf8_codepoint_len(lead);
+    if bytes == 1 && lead >= 0x80 {
+        *i += 1;
+        return REPLACEMENT_GLYPH;
+    }
+    if bytes == 1 {
+        *i += 1;
+        return lead as u32;
+    }
+    let start = *i;
+    for k in 1..bytes {
+        if at(start + k) & 0xC0 != 0x80 {
+            *i += k;
+            return REPLACEMENT_GLYPH;
+        }
+    }
+    let mask = (1u32 << (7 - bytes)) - 1;
+    let mut cp = (lead as u32) & mask;
+    for k in 1..bytes {
+        cp = (cp << 6) | (at(start + k) & 0x3F) as u32;
+    }
+    let overlong =
+        (bytes == 2 && cp < 0x80) || (bytes == 3 && cp < 0x800) || (bytes == 4 && cp < 0x10000);
+    let surrogate = (0xD800..=0xDFFF).contains(&cp);
+    if overlong || surrogate || cp > 0x10FFFF {
+        *i += 1;
+        return REPLACEMENT_GLYPH;
+    }
+    *i += bytes;
+    cp
+}
+
+/// Sanitize a filename into the caller-provided `out` buffer; returns the number
+/// of bytes written. Byte-exact mirror of C++ `StringUtils::sanitizeFilename`:
+/// skip leading spaces/dots, replace the reserved set (/ \ : * ? " < > |) with
+/// '_', drop control characters, keep printable ASCII and UTF-8, cap the byte
+/// budget at `max_bytes`, trim trailing spaces/dots, and fall back to "book"
+/// when the result is empty. `out` must have capacity >= max(max_bytes, 4).
+pub fn sanitize_filename(name: &[u8], max_bytes: usize, out: &mut [u8]) -> usize {
+    let mut len = 0usize;
+    let mut i = 0usize;
+
+    // Skip leading spaces and dots so they do not consume the byte budget.
+    while i < name.len() && (name[i] == b' ' || name[i] == b'.') {
+        i += 1;
+    }
+
+    // Walk whole UTF-8 codepoints; stop at a NUL (matching C++ c_str semantics).
+    while i < name.len() && name[i] != 0 {
+        let cp_start = i;
+        let cp = utf8_next_codepoint(name, &mut i);
+        if matches!(
+            cp,
+            0x2F | 0x5C | 0x3A | 0x2A | 0x3F | 0x22 | 0x3C | 0x3E | 0x7C
+        ) {
+            // Reserved filename characters -> '_'
+            if len + 1 > max_bytes {
+                break;
+            }
+            if len < out.len() {
+                out[len] = b'_';
+            }
+            len += 1;
+        } else if cp >= 128 || (32..127).contains(&cp) {
+            // Printable ASCII or any non-ASCII: append the original bytes.
+            let cp_bytes = i - cp_start;
+            if len + cp_bytes > max_bytes {
+                break;
+            }
+            let mut k = 0;
+            while k < cp_bytes {
+                if len < out.len() {
+                    out[len] = name[cp_start + k];
+                }
+                len += 1;
+                k += 1;
+            }
+        }
+        // else: control characters are dropped.
+    }
+
+    // Trim trailing spaces and dots.
+    while len > 0 && (out[len - 1] == b' ' || out[len - 1] == b'.') {
+        len -= 1;
+    }
+
+    if len == 0 {
+        let book = b"book";
+        let n = book.len().min(out.len());
+        out[..n].copy_from_slice(&book[..n]);
+        return book.len();
+    }
+    len
+}
+
+/// FFI entry point for `sanitize_filename`. Writes up to `out_cap` bytes at
+/// `out_ptr` and returns the result length. Null in/out read as empty.
+///
+/// # Safety
+/// `name_ptr` must point to `name_len` bytes (or be null); `out_ptr` must point
+/// to `out_cap` writable bytes (or be null). Caller should size `out_cap` to at
+/// least max(max_bytes, 4).
+#[no_mangle]
+pub unsafe extern "C" fn fshelpers_sanitize_filename(
+    name_ptr: *const u8,
+    name_len: usize,
+    max_bytes: usize,
+    out_ptr: *mut u8,
+    out_cap: usize,
+) -> usize {
+    let name = slice_or_empty(name_ptr, name_len);
+    let out: &mut [u8] = if out_ptr.is_null() || out_cap == 0 {
+        &mut []
+    } else {
+        core::slice::from_raw_parts_mut(out_ptr, out_cap)
+    };
+    sanitize_filename(name, max_bytes, out)
+}
+
 // no_std device build needs its own panic handler. Host build uses std's.
 #[cfg(feature = "device")]
 #[panic_handler]
@@ -159,6 +309,45 @@ mod tests {
         assert!(nfl(b"file2", b"file10")); // both files -> numeric-aware
         assert!(nfl(b"dir2/", b"dir10/")); // both dirs -> numeric-aware
         assert!(!nfl(b"file10", b"file2"));
+    }
+
+    fn san(name: &[u8], max: usize) -> std::string::String {
+        let mut buf = [0u8; 256];
+        let n = super::sanitize_filename(name, max, &mut buf);
+        std::string::String::from_utf8_lossy(&buf[..n]).into_owned()
+    }
+
+    #[test]
+    fn sanitize_replaces_illegal_chars() {
+        assert_eq!(san(b"a/b:c*d", 100), "a_b_c_d");
+        assert_eq!(san(b"a\\b?c\"d<e>f|g", 100), "a_b_c_d_e_f_g");
+    }
+
+    #[test]
+    fn sanitize_trims_leading_and_trailing() {
+        assert_eq!(san(b"  ..name", 100), "name");
+        assert_eq!(san(b"name.. ", 100), "name");
+    }
+
+    #[test]
+    fn sanitize_empty_falls_back_to_book() {
+        assert_eq!(san(b"", 100), "book");
+        assert_eq!(san(b"...   ", 100), "book");
+    }
+
+    #[test]
+    fn sanitize_drops_control_chars() {
+        assert_eq!(san(b"a\x01b\x1fc", 100), "abc");
+    }
+
+    #[test]
+    fn sanitize_keeps_utf8() {
+        assert_eq!(san("café".as_bytes(), 100), "café");
+    }
+
+    #[test]
+    fn sanitize_caps_at_max_bytes() {
+        assert_eq!(san(b"abcdefghij", 4), "abcd");
     }
 
     #[test]

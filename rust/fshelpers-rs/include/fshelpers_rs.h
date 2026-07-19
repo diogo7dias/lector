@@ -25,6 +25,12 @@ bool fshelpers_natural_less(const uint8_t* a_ptr, size_t a_len, const uint8_t* b
 bool fshelpers_natural_file_less(const uint8_t* a_ptr, size_t a_len, const uint8_t* b_ptr,
                                  size_t b_len);
 
+// Sanitize a filename into the caller buffer at out_ptr (capacity out_cap);
+// returns the result length. Byte-exact mirror of C++ StringUtils::sanitizeFilename.
+// Caller should size out_cap to at least max(max_bytes, 4).
+size_t fshelpers_sanitize_filename(const uint8_t* name_ptr, size_t name_len, size_t max_bytes,
+                                   uint8_t* out_ptr, size_t out_cap);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
