@@ -152,6 +152,54 @@ static std::string sanitizeFilename_rust(const std::string& name, size_t maxByte
   return out;
 }
 
+// --- PNG unfilter reference, copied verbatim from lib/PngToBmpConverter/PngToBmpConverter.cpp
+//     (paethPredictor + decodeScanline's reverse-filter switch). Operates on
+//     equal-length rows with bpp>=1, exactly as the decoder feeds it. ---
+static uint8_t paethPredictor_cpp(uint8_t a, uint8_t b, uint8_t c) {
+  int p = static_cast<int>(a) + b - c;
+  int pa = p > a ? p - a : a - p;
+  int pb = p > b ? p - b : b - p;
+  int pc = p > c ? p - c : c - p;
+  if (pa <= pb && pa <= pc) return a;
+  if (pb <= pc) return b;
+  return c;
+}
+
+// Returns true if the filter is valid (mirrors decodeScanline returning false on
+// an unknown filter). Reconstructs `cur` in place using `prev` (same length).
+static bool unfilterRow_cpp(uint8_t filter, std::vector<uint8_t>& cur,
+                            const std::vector<uint8_t>& prev, int bpp) {
+  const uint32_t rawRowBytes = static_cast<uint32_t>(cur.size());
+  switch (filter) {
+    case 0:
+      break;
+    case 1:  // Sub
+      for (uint32_t i = bpp; i < rawRowBytes; i++) cur[i] += cur[i - bpp];
+      break;
+    case 2:  // Up
+      for (uint32_t i = 0; i < rawRowBytes; i++) cur[i] += prev[i];
+      break;
+    case 3:  // Average
+      for (uint32_t i = 0; i < rawRowBytes; i++) {
+        uint8_t a = (i >= static_cast<uint32_t>(bpp)) ? cur[i - bpp] : 0;
+        uint8_t b = prev[i];
+        cur[i] += (a + b) / 2;
+      }
+      break;
+    case 4:  // Paeth
+      for (uint32_t i = 0; i < rawRowBytes; i++) {
+        uint8_t a = (i >= static_cast<uint32_t>(bpp)) ? cur[i - bpp] : 0;
+        uint8_t b = prev[i];
+        uint8_t c = (i >= static_cast<uint32_t>(bpp)) ? prev[i - bpp] : 0;
+        cur[i] += paethPredictor_cpp(a, b, c);
+      }
+      break;
+    default:
+      return false;
+  }
+  return true;
+}
+
 int main() {
   long checks = 0, mismatches = 0;
 
@@ -265,6 +313,36 @@ int main() {
     for (char& c : n) c = static_cast<char>(sanByte(rng));
     size_t mx = (iter % 7 == 0) ? 100 : static_cast<size_t>(sanMax(rng));
     sancmp(n, mx);
+  }
+
+  // 6. PNG unfilter fuzz: random rows + prev rows (equal length, as the decoder
+  //    feeds them), random filter incl. invalid, bpp in [1,8]. Compare the whole
+  //    reconstructed row and the bool result.
+  std::uniform_int_distribution<int> pngLen(0, 40), pngByte(0, 255), pngFilter(0, 7),
+      pngBpp(1, 8);
+  for (int iter = 0; iter < 500000; iter++) {
+    size_t len = static_cast<size_t>(pngLen(rng));
+    int bpp = pngBpp(rng);
+    uint8_t filter = static_cast<uint8_t>(pngFilter(rng));
+    std::vector<uint8_t> cur(len), prev(len), curR;
+    for (auto& b : cur) b = static_cast<uint8_t>(pngByte(rng));
+    for (auto& b : prev) b = static_cast<uint8_t>(pngByte(rng));
+    curR = cur;
+
+    bool okC = unfilterRow_cpp(filter, cur, prev, bpp);
+    bool okR = fshelpers_png_unfilter_row(filter, curR.empty() ? nullptr : curR.data(),
+                                          curR.size(), prev.empty() ? nullptr : prev.data(),
+                                          prev.size(), static_cast<size_t>(bpp));
+    checks++;
+    // On an unknown filter both report false and leave the row untouched; on a
+    // valid filter both reconstruct identically.
+    bool rowMatch = (filter > 4) ? true : (cur == curR);
+    if (okC != okR || !rowMatch) {
+      mismatches++;
+      if (mismatches <= 20) {
+        printf("PNG MISMATCH filter=%u bpp=%d len=%zu okC=%d okR=%d\n", filter, bpp, len, okC, okR);
+      }
+    }
   }
 
   printf("\nchecks=%ld mismatches=%ld\n", checks, mismatches);

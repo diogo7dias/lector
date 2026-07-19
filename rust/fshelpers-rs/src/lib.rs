@@ -285,6 +285,124 @@ pub unsafe extern "C" fn fshelpers_sanitize_filename(
     sanitize_filename(name, max_bytes, out)
 }
 
+// ---------------------------------------------------------------------------
+// PNG scanline unfilter (crash-prone: raw index math on untrusted image bytes)
+// ---------------------------------------------------------------------------
+
+/// PNG Paeth predictor. Byte-exact mirror of C++ `paethPredictor`.
+#[inline]
+fn paeth_predictor(a: u8, b: u8, c: u8) -> u8 {
+    let p = a as i32 + b as i32 - c as i32;
+    let pa = (p - a as i32).abs();
+    let pb = (p - b as i32).abs();
+    let pc = (p - c as i32).abs();
+    if pa <= pb && pa <= pc {
+        a
+    } else if pb <= pc {
+        b
+    } else {
+        c
+    }
+}
+
+/// Reverse one PNG scanline filter in place. `cur` is the filtered row (modified
+/// to the reconstructed row); `prev` is the already-reconstructed row above (all
+/// zero for the first row); `bpp` is the byte step between a pixel and its left
+/// neighbour. `filter` is 0=None 1=Sub 2=Up 3=Average 4=Paeth.
+///
+/// Byte-exact mirror of C++ `decodeScanline`'s reverse-filter switch for any
+/// valid input (`bpp >= 1`, `prev.len() >= cur.len()`), but every access is
+/// bounds-checked: a malformed image that mis-sizes rows or sends `bpp == 0`
+/// yields a clean `false` here instead of the out-of-bounds read / underflow a
+/// raw C++ pointer loop would take on the device. Returns `false` on an unknown
+/// filter or `bpp == 0`, matching a decode failure.
+pub fn png_unfilter_row(filter: u8, cur: &mut [u8], prev: &[u8], bpp: usize) -> bool {
+    let n = cur.len();
+    #[inline]
+    fn left(cur: &[u8], i: usize, bpp: usize) -> u8 {
+        if i >= bpp { cur[i - bpp] } else { 0 }
+    }
+    #[inline]
+    fn up(prev: &[u8], i: usize) -> u8 {
+        if i < prev.len() { prev[i] } else { 0 }
+    }
+    #[inline]
+    fn up_left(prev: &[u8], i: usize, bpp: usize) -> u8 {
+        if i >= bpp && (i - bpp) < prev.len() { prev[i - bpp] } else { 0 }
+    }
+
+    match filter {
+        0 => true, // None
+        1 => {
+            // Sub
+            if bpp == 0 {
+                return false;
+            }
+            for i in bpp..n {
+                cur[i] = cur[i].wrapping_add(cur[i - bpp]);
+            }
+            true
+        }
+        2 => {
+            // Up
+            for i in 0..n {
+                cur[i] = cur[i].wrapping_add(up(prev, i));
+            }
+            true
+        }
+        3 => {
+            // Average
+            if bpp == 0 {
+                return false;
+            }
+            for i in 0..n {
+                let a = left(cur, i, bpp) as u16;
+                let b = up(prev, i) as u16;
+                cur[i] = cur[i].wrapping_add(((a + b) / 2) as u8);
+            }
+            true
+        }
+        4 => {
+            // Paeth
+            if bpp == 0 {
+                return false;
+            }
+            for i in 0..n {
+                let a = left(cur, i, bpp);
+                let b = up(prev, i);
+                let c = up_left(prev, i, bpp);
+                cur[i] = cur[i].wrapping_add(paeth_predictor(a, b, c));
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+/// FFI entry point for [`png_unfilter_row`]. `cur_ptr`/`cur_len` is the in/out
+/// row; `prev_ptr`/`prev_len` the row above (may be null/empty for the top row).
+///
+/// # Safety
+/// `cur_ptr` must point to `cur_len` writable bytes (or be null → no-op empty),
+/// and `prev_ptr` to `prev_len` readable bytes (or null → empty).
+#[no_mangle]
+pub unsafe extern "C" fn fshelpers_png_unfilter_row(
+    filter: u8,
+    cur_ptr: *mut u8,
+    cur_len: usize,
+    prev_ptr: *const u8,
+    prev_len: usize,
+    bpp: usize,
+) -> bool {
+    let cur: &mut [u8] = if cur_ptr.is_null() || cur_len == 0 {
+        &mut []
+    } else {
+        core::slice::from_raw_parts_mut(cur_ptr, cur_len)
+    };
+    let prev = slice_or_empty(prev_ptr, prev_len);
+    png_unfilter_row(filter, cur, prev, bpp)
+}
+
 // no_std device build needs its own panic handler. Host build uses std's.
 #[cfg(feature = "device")]
 #[panic_handler]
@@ -297,6 +415,71 @@ mod tests {
     use super::check_file_extension as ext;
     use super::natural_file_less as nfl;
     use super::natural_less as nl;
+    use super::{paeth_predictor, png_unfilter_row};
+
+    #[test]
+    fn paeth_matches_spec() {
+        // pick a: equal distances -> a wins the tie
+        assert_eq!(paeth_predictor(10, 20, 15), 15); // p=15, pa=5 pb=5 pc=0 -> c
+        assert_eq!(paeth_predictor(0, 0, 0), 0);
+        assert_eq!(paeth_predictor(255, 0, 0), 255); // p=255 -> a
+    }
+
+    #[test]
+    fn unfilter_none_is_identity() {
+        let mut row = [1u8, 2, 3, 4];
+        assert!(png_unfilter_row(0, &mut row, &[0; 4], 1));
+        assert_eq!(row, [1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn unfilter_sub_reverses_sub() {
+        // Sub filter encodes cur[i] -= cur[i-bpp]; unfilter adds it back.
+        let orig = [10u8, 20, 35, 60];
+        let bpp = 1;
+        let mut filt = orig;
+        for i in (bpp..filt.len()).rev() {
+            filt[i] = filt[i].wrapping_sub(filt[i - bpp]);
+        }
+        assert!(png_unfilter_row(1, &mut filt, &[0; 4], bpp));
+        assert_eq!(filt, orig);
+    }
+
+    #[test]
+    fn unfilter_up_reverses_up() {
+        let prev = [5u8, 9, 2, 200];
+        let orig = [10u8, 20, 250, 60];
+        let mut filt = orig;
+        for i in 0..filt.len() {
+            filt[i] = filt[i].wrapping_sub(prev[i]);
+        }
+        assert!(png_unfilter_row(2, &mut filt, &prev, 3));
+        assert_eq!(filt, orig);
+    }
+
+    #[test]
+    fn unfilter_rejects_unknown_filter_and_zero_bpp() {
+        let mut row = [1u8, 2, 3];
+        assert!(!png_unfilter_row(9, &mut row, &[0; 3], 1)); // unknown filter
+        assert!(!png_unfilter_row(1, &mut row, &[0; 3], 0)); // Sub with bpp 0
+        assert!(!png_unfilter_row(4, &mut row, &[0; 3], 0)); // Paeth with bpp 0
+    }
+
+    #[test]
+    fn unfilter_safe_when_prev_too_short() {
+        // A malformed image can hand us a short/empty prev row: must not panic,
+        // missing prev bytes read as 0.
+        let mut row = [7u8, 7, 7, 7];
+        assert!(png_unfilter_row(2, &mut row, &[], 1)); // Up with empty prev -> +0
+        assert_eq!(row, [7, 7, 7, 7]);
+        let mut row2 = [7u8, 7, 7, 7];
+        assert!(png_unfilter_row(4, &mut row2, &[1u8], 2)); // Paeth, prev len 1
+    }
+
+    #[test]
+    fn unfilter_empty_row_ok() {
+        assert!(png_unfilter_row(4, &mut [], &[], 3));
+    }
 
     #[test]
     fn dir_sorts_before_file() {

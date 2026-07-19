@@ -31,6 +31,13 @@ bool fshelpers_natural_file_less(const uint8_t* a_ptr, size_t a_len, const uint8
 size_t fshelpers_sanitize_filename(const uint8_t* name_ptr, size_t name_len, size_t max_bytes,
                                    uint8_t* out_ptr, size_t out_cap);
 
+// Reverse one PNG scanline filter (0=None 1=Sub 2=Up 3=Average 4=Paeth) in place.
+// cur is the filtered row (reconstructed on return); prev is the row above (may be
+// null/empty for the top row); bpp is the byte step to the left pixel. Returns
+// false on an unknown filter or bpp==0. Bounds-checked (safe on malformed images).
+bool fshelpers_png_unfilter_row(uint8_t filter, uint8_t* cur_ptr, size_t cur_len,
+                                const uint8_t* prev_ptr, size_t prev_len, size_t bpp);
+
 #ifdef __cplusplus
 }  // extern "C"
 #endif
