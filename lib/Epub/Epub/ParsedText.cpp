@@ -555,6 +555,15 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
       newCapacity = 16;
     }
 
+    // Under -fno-exceptions a failed std::vector growth calls abort() (reboot).
+    // words (std::string_view) drives the contiguous demand; if the heap cannot
+    // back the growth, drop this word's tokens and degrade gracefully rather than
+    // crash. Returning before any push_back keeps the parallel arrays in lockstep,
+    // and leaves capacity unchanged so no later push_back in this call reallocates.
+    if (!heapCanAllocate(newCapacity * sizeof(std::string_view))) {
+      return;
+    }
+
     words.reserve(newCapacity);
     wordStyles.reserve(newCapacity);
     wordContinues.reserve(newCapacity);

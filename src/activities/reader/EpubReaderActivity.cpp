@@ -621,14 +621,21 @@ void EpubReaderActivity::loop() {
 
   if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
     if (statsTrackingActive) statsSession.pause(millis());
-    if (!nextTriggered && section && section->currentPage > 0) {
-      section->currentPage = 0;
-      requestUpdate();
-      return;
+    // Abandon a heavy in-flight build so the render lock frees fast, then touch
+    // section-> only under RenderLock: render() runs on the render task and can
+    // section.reset() on a page-load failure, so reading/writing section->currentPage
+    // here (main task) without the lock is a cross-task use-after-free.
+    cancelInFlightBuild();  // skipping chapters: abandon a heavy build so the lock frees fast
+    {
+      RenderLock lock(*this);
+      if (!nextTriggered && section && section->currentPage > 0) {
+        section->currentPage = 0;
+        requestUpdate();
+        return;
+      }
     }
 
-    // We don't want to delete the section mid-render, so grab the semaphore
-    cancelInFlightBuild();  // skipping chapters: abandon a heavy build so the lock frees fast
+    // Chapter boundary: rebuild the neighbouring section from scratch.
     {
       RenderLock lock(*this);
       nextPageNumber = 0;
@@ -657,6 +664,20 @@ void EpubReaderActivity::loop() {
   // Queue the press instead of swallowing it; loop() replays it once the build
   // completes and the section is ready.
   if (!section || sectionBuildActive_) {
+    queuedPageTurn = prevTriggered ? -1 : 1;
+    queuedPageTurnAtMs = millis();
+    if (diagFirstPressMs_ == 0) diagFirstPressMs_ = millis();
+    requestUpdate();
+    return;
+  }
+
+  // Direct page-turn press. render() runs on the render task holding RenderLock and
+  // can section.reset() on a page-load failure; pageTurn() reads/writes section-> on
+  // this (main) task. Only turn when the render lock is free -- the same guard the
+  // queued-turn (above) and auto-turn paths already use. If a render is in flight,
+  // queue the press so loop() replays it once the lock frees, instead of racing
+  // render()'s section access (cross-task use-after-free / reboot).
+  if (RenderLock::peek()) {
     queuedPageTurn = prevTriggered ? -1 : 1;
     queuedPageTurnAtMs = millis();
     if (diagFirstPressMs_ == 0) diagFirstPressMs_ = millis();

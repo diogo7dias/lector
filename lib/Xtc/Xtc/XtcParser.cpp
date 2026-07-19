@@ -10,6 +10,7 @@
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstring>
 
@@ -332,6 +333,13 @@ XtcError XtcParser::readChapters() {
     return XtcError::READ_ERROR;
   }
 
+  // reserve() uses the throwing allocator; even a capped count can exceed the
+  // largest free block under fragmentation and abort() (reboot). Degrade to
+  // no-chapters rather than crash.
+  if (!heapCanAllocate(static_cast<size_t>(chapterCount) * sizeof(ChapterInfo))) {
+    LOG_DBG("XTC", "Heap cannot back %u chapters, treating as no chapters", static_cast<unsigned>(chapterCount));
+    return XtcError::OK;
+  }
   m_chapters.reserve(chapterCount);
   std::vector<uint8_t> chapterBuf(chapterSize);
   for (size_t i = 0; i < chapterCount; i++) {

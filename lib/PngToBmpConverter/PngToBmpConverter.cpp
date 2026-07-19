@@ -440,6 +440,32 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     return false;
   }
 
+  // Reject bit depths illegal for the colour type (PNG spec Table 11.1). A bogus
+  // depth on a malformed cover (e.g. 0, or 16 on a palette image) would later
+  // divide by 8/bitDepth or mis-size the scanline in convertScanlineToGray,
+  // causing a divide-by-zero or an out-of-bounds heap read.
+  bool depthOk = false;
+  switch (colorType) {
+    case PNG_COLOR_GRAYSCALE:
+      depthOk = (bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8 || bitDepth == 16);
+      break;
+    case PNG_COLOR_RGB:
+    case PNG_COLOR_GRAYSCALE_ALPHA:
+    case PNG_COLOR_RGBA:
+      depthOk = (bitDepth == 8 || bitDepth == 16);
+      break;
+    case PNG_COLOR_PALETTE:
+      depthOk = (bitDepth == 1 || bitDepth == 2 || bitDepth == 4 || bitDepth == 8);
+      break;
+    default:
+      depthOk = false;  // unknown colour types are rejected by the switch below too
+      break;
+  }
+  if (!depthOk) {
+    LOG_ERR("PNG", "Illegal bit depth %u for color type %u", bitDepth, colorType);
+    return false;
+  }
+
   // Safety limits
   constexpr int MAX_IMAGE_WIDTH = 2048;
   constexpr int MAX_IMAGE_HEIGHT = 3072;

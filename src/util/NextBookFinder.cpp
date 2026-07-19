@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <esp_task_wdt.h>
 
 #include <algorithm>
 #include <string_view>
@@ -52,7 +53,15 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
   result.reserve(maxCount + 1);
   const auto less = [](const std::string& a, const std::string& b) { return FsHelpers::naturalLess(a, b); };
 
+  // A very large folder (thousands of entries) walked without yielding blocks the
+  // loop task past the 5s task watchdog. Feed it every WDT_INTERVAL entries, matching
+  // SdFileIndex's scan guard.
+  constexpr size_t WDT_INTERVAL = 256;
+  size_t scanned = 0;
   for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    if (scanned++ % WDT_INTERVAL == 0) {
+      esp_task_wdt_reset();
+    }
     if (file.isDirectory()) {
       continue;
     }

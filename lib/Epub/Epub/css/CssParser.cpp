@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <array>
@@ -810,7 +811,15 @@ bool CssParser::loadFromCache() {
   }
 
   // Size the bucket array up front to avoid incremental rehashes (each a full
-  // reallocation + copy) while inserting rules one at a time below.
+  // reallocation + copy) while inserting rules one at a time below. reserve() and
+  // the rehashes both need one contiguous bucket array; under -fno-exceptions an
+  // OOM there abort()s (reboot). If the heap cannot back it, skip this cache and
+  // let the caller re-parse the CSS from source.
+  if (!heapCanAllocate(static_cast<size_t>(ruleCount) * sizeof(void*) * 2)) {
+    LOG_DBG("CSS", "Heap cannot back %u cached rules; skipping cache", ruleCount);
+    rulesBySelector_.clear();
+    return false;
+  }
   rulesBySelector_.reserve(ruleCount);
 
   auto hasRemainingBytes = [&file](const size_t neededBytes) -> bool {
