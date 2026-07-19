@@ -454,14 +454,24 @@ void EpubReaderActivity::loop() {
       ignoreNextConfirmRelease = false;
     } else {
       if (statsTrackingActive) statsSession.pause(millis());
-      const int currentPage = section ? section->currentPage + 1 : 0;
-      const int totalPages = section ? section->pageCount : 0;
-      float bookProgress = 0.0f;
-      if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
-        const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-        bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+      int currentPage = 0;
+      int totalPages = 0;
+      int bookProgressPercent = 0;
+      {
+        // Snapshot section state under RenderLock. render() runs on the render task
+        // and can section.reset() on a page-load failure, so reading section-> here
+        // (main task) without the lock is a cross-task use-after-free.
+        RenderLock lock(*this);
+        currentPage = section ? section->currentPage + 1 : 0;
+        totalPages = section ? section->pageCount : 0;
+        float bookProgress = 0.0f;
+        if (epub->getBookSize() > 0 && section && section->pageCount > 0) {
+          const float chapterProgress =
+              static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
+          bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+        }
+        bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
       }
-      const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
       // Resolve the current chapter name for the menu header (mirrors the status
       // bar's CHAPTER_TITLE logic), falling back to "Unnamed" when there is no TOC.
       std::string chapterName = tr(STR_UNNAMED);

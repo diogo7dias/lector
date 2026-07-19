@@ -318,6 +318,16 @@ XtcError XtcParser::readChapters() {
     return XtcError::OK;
   }
 
+  // Reject implausible counts from a corrupt header. A bogus chapterOffset can make
+  // `available` span most of a multi-MB file, yielding tens of thousands of entries.
+  // reserve() below uses the THROWING vector allocator, which abort()s (reboots) on
+  // OOM under -fno-exceptions; no real book has more than a few hundred chapters.
+  constexpr size_t MAX_CHAPTERS = 1024;
+  if (chapterCount > MAX_CHAPTERS) {
+    LOG_DBG("XTC", "Chapter count %u implausible, treating as no chapters", static_cast<unsigned>(chapterCount));
+    return XtcError::OK;
+  }
+
   if (!m_file.seek64(chapterOffset)) {
     return XtcError::READ_ERROR;
   }

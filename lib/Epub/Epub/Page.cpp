@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Serialization.h>
 
 #include <new>
@@ -204,7 +205,14 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
     LOG_ERR("PGE", "Deserialization failed: element count %u exceeds maximum", count);
     return nullptr;
   }
-  page->elements.reserve(count);
+  // Guard the bulk reserve: `count` is capped at MAX_PAGE_ELEMENTS but a corrupt
+  // cache can still request up to ~8KB contiguous through the THROWING vector
+  // allocator, which abort()s (reboots) under -fno-exceptions on a fragmented heap.
+  // Skip the reserve when it will not fit; push_back then grows only as real
+  // elements are read (a truncated corrupt page bails on the first short read).
+  if (heapCanAllocate(static_cast<size_t>(count) * sizeof(std::shared_ptr<PageElement>))) {
+    page->elements.reserve(count);
+  }
 
   for (uint16_t i = 0; i < count; i++) {
     uint8_t tag;

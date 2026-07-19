@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -773,7 +774,12 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
     uint32_t codepoint;
     int32_t globalIndex;
   };
-  CpGlyphMapping* mappings = new (std::nothrow) CpGlyphMapping[cpCount];
+  // heapCanAllocate guards each per-page prewarm allocation: bare new(std::nothrow)[]
+  // can abort()/terminate() instead of returning null under a fragmented heap
+  // (device-confirmed). Pre-checking lets the existing degrade paths run instead.
+  CpGlyphMapping* mappings = heapCanAllocate(static_cast<size_t>(cpCount) * sizeof(CpGlyphMapping))
+                                 ? new (std::nothrow) CpGlyphMapping[cpCount]
+                                 : nullptr;
   if (!mappings) {
     LOG_ERR("SDCF", "Failed to allocate mapping array for style %u", styleIdx);
     return static_cast<int>(cpCount);
@@ -801,7 +807,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   freeStyleMiniData(s);
 
   uint32_t intervalCapacity = validCount;
-  s.miniIntervals = new (std::nothrow) EpdUnicodeInterval[intervalCapacity];
+  s.miniIntervals = heapCanAllocate(static_cast<size_t>(intervalCapacity) * sizeof(EpdUnicodeInterval))
+                        ? new (std::nothrow) EpdUnicodeInterval[intervalCapacity]
+                        : nullptr;
   if (!s.miniIntervals) {
     LOG_ERR("SDCF", "Failed to allocate mini intervals for style %u", styleIdx);
     delete[] mappings;
@@ -822,7 +830,9 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
 
   // Allocate mini glyph array
   s.miniGlyphCount = validCount;
-  s.miniGlyphs = new (std::nothrow) EpdGlyph[s.miniGlyphCount];
+  s.miniGlyphs = heapCanAllocate(static_cast<size_t>(s.miniGlyphCount) * sizeof(EpdGlyph))
+                     ? new (std::nothrow) EpdGlyph[s.miniGlyphCount]
+                     : nullptr;
   if (!s.miniGlyphs) {
     LOG_ERR("SDCF", "Failed to allocate mini glyphs for style %u", styleIdx);
     delete[] mappings;
@@ -831,7 +841,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
   }
 
   // Build sorted read order for sequential I/O
-  uint32_t* readOrder = new (std::nothrow) uint32_t[validCount];
+  const size_t readOrderBytes = static_cast<size_t>(validCount) * sizeof(uint32_t);
+  uint32_t* readOrder = heapCanAllocate(readOrderBytes) ? new (std::nothrow) uint32_t[validCount] : nullptr;
   if (!readOrder) {
     LOG_ERR("SDCF", "Failed to allocate read order for style %u", styleIdx);
     delete[] mappings;
@@ -895,7 +906,8 @@ int SdCardFont::prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint3
       totalBitmapSize += s.miniGlyphs[i].dataLength;
     }
 
-    s.miniBitmap = new (std::nothrow) uint8_t[totalBitmapSize > 0 ? totalBitmapSize : 1];
+    const uint32_t miniBitmapBytes = totalBitmapSize > 0 ? totalBitmapSize : 1;
+    s.miniBitmap = heapCanAllocate(miniBitmapBytes) ? new (std::nothrow) uint8_t[miniBitmapBytes] : nullptr;
     if (!s.miniBitmap) {
       LOG_ERR("SDCF", "Failed to allocate mini bitmap (%u bytes) for style %u", totalBitmapSize, styleIdx);
       delete[] readOrder;
@@ -1060,7 +1072,9 @@ void SdCardFont::mergeIntoAdvanceTable(uint8_t styleIdx, const AdvanceEntry* sor
   uint32_t mergedCap = oldSize + newCount;
   if (mergedCap > ADVANCE_CACHE_LIMIT) mergedCap = ADVANCE_CACHE_LIMIT;
 
-  AdvanceEntry* merged = new (std::nothrow) AdvanceEntry[mergedCap];
+  AdvanceEntry* merged = heapCanAllocate(static_cast<size_t>(mergedCap) * sizeof(AdvanceEntry))
+                             ? new (std::nothrow) AdvanceEntry[mergedCap]
+                             : nullptr;
   if (!merged) {
     LOG_ERR("SDCF", "mergeIntoAdvanceTable: alloc failed (%u entries) style %u", mergedCap, styleIdx);
     return;

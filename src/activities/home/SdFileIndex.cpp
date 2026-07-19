@@ -246,6 +246,9 @@ void SdFileIndex::shuffleTail() {
 size_t SdFileIndex::lowerBound(const std::string& name) const {
   if (sd_file_index_lookup::mode(shuffled_, renamedInPlace_) == sd_file_index_lookup::Mode::Linear) {
     for (size_t i = 0; i < count(); ++i) {
+      // Each nameAt() is a blocking SD seek+read; a large shuffled/renamed folder
+      // (up to MAX_INDEX_ENTRIES) would otherwise starve the task watchdog and reset.
+      if (i % WDT_INTERVAL == 0) esp_task_wdt_reset();
       if (nameAt(i) == name) return i;
     }
     return count();

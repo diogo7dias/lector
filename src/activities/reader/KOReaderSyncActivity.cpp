@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WiFi.h>
 #include <esp_sntp.h>
 #include <esp_wifi.h>
@@ -54,7 +55,14 @@ void syncTimeWithNTP() {
 void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
     LOG_DBG("KOSync", "Loading epub for progress mapping (heap: %u)", (unsigned)ESP.getFreeHeap());
-    epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
+    // makeSharedNoThrow: bare make_shared uses the throwing operator new, which
+    // abort()s (reboots) on OOM under -fno-exceptions. This path runs with WiFi/TLS
+    // buffers holding the heap, its most fragmented moment, so guard it.
+    epub = makeSharedNoThrow<Epub>(epubPath, "/.crosspoint");
+    if (!epub) {
+      LOG_ERR("KOSync", "OOM loading epub for progress mapping");
+      return;
+    }
     epub->setupCacheDir();
     // Load metadata only (no CSS needed for progress mapping, don't rebuild if cache is missing).
     if (!epub->load(false, true)) {
