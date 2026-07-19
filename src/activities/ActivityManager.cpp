@@ -47,9 +47,14 @@ void ActivityManager::renderTaskLoop() {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       currentActivity->render(std::move(lock));
     }
-    // A full render repaints over any transient banner, so disarm its auto-clear.
-    // Progress banners re-arm on their next render(), so they never expire early.
-    renderer.noteBannerConsumed();
+    // A full render repaints over a transient banner, but only disarm the
+    // auto-clear once the banner has had its ~1.5s minimum dwell. Otherwise a
+    // render firing right after drawPopup (a confirm handler's requestUpdate, or
+    // the reveal render after a menu pop) would expire the banner before it can be
+    // read. Progress banners re-arm each render, so they never expire early either.
+    if (renderer.bannerAutoClearDue(millis())) {
+      renderer.noteBannerConsumed();
+    }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
     taskENTER_CRITICAL(nullptr);

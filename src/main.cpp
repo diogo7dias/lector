@@ -136,7 +136,7 @@ void silentRestart() {
   // Without an overlay, users don't see the reboot and fire input through to
   // Home. Select on the default selectorIndex=0 then opens the most-recent
   // book, looking like a trampoline back to the reader they just exited.
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary);
   delay(50);
   ESP.restart();
 }
@@ -146,7 +146,7 @@ void silentRestartToReader() {
   silentRebootTarget = SILENT_REBOOT_TARGET_READER;
   silentRebootMagic = SILENT_REBOOT_MAGIC;
   LOG_DBG("MAIN", "Silent restart (target=reader)");
-  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary);
   delay(50);
   ESP.restart();
 }

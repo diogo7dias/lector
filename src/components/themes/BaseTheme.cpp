@@ -1101,12 +1101,23 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const PopupRefresh refresh) const {
   // Lector feedback banner: the top strip, replacing the old centered popup so a
-  // message never covers the content below it. Windowed refresh: only the strip
-  // repaints; the screen underneath is left as-is (the banner overlays whatever the
-  // activity already painted). All former drawPopup call sites become this top strip.
-  (void)refresh;  // windowed strip is always a fast, cheap refresh; no HALF/clean variant needed
+  // message never covers the content below it. The banner overlays whatever the
+  // activity already painted; all former drawPopup call sites become this top strip.
   const Rect strip = drawBannerStrip(renderer, message);
-  renderer.displayWindow(strip.x, strip.y, strip.width, strip.height);  // just the strip
+  if (refresh == PopupRefresh::Temporary) {
+    // Frequent / progress banners (live counters, indexing): cheap FAST push so
+    // rapid updates stay snappy. On X3 this is a full-panel FAST (windowed passes
+    // are disabled there); a stray digit ghost self-clears via the refresh policy.
+    renderer.displayWindow(strip.x, strip.y, strip.width, strip.height);
+  } else {
+    // One-shot confirm / info / error banners: a clean full-panel refresh. On X3
+    // the FAST path is a weak differential that intermittently ghosts the content
+    // sitting under the strip (bleed-through) — the promotion to a clean pass is
+    // gated on a GLOBAL refresh counter, which is why the same banner looks clean
+    // one time and smeared the next. HALF_REFRESH forces requestResync on X3 = a
+    // clean, ghost-free strip every time (same full-panel scope as the old FAST).
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
   renderer.noteBannerShown();  // arm the auto-clear timer (transient confirms/errors clear after ~1.5s)
   return strip;
 }

@@ -1642,7 +1642,7 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
   // background) and fillPopupProgress draws the white fill for `percent`. Both push
   // only the strip synchronously, so the next build slice reclaiming the framebuffer
   // cannot leave a deferred sync that erases it. Throttled above.
-  const Rect strip = GUI.drawPopup(renderer, tr(STR_INDEXING));
+  const Rect strip = GUI.drawPopup(renderer, tr(STR_INDEXING), PopupRefresh::Temporary);
   GUI.fillPopupProgress(renderer, strip, percent);
 }
 

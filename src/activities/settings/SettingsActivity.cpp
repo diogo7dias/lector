@@ -349,7 +349,8 @@ void SettingsActivity::toggleCurrentSetting() {
     // Repaint the top banner with the running move count during a bulk wallpaper
     // move. Passed to the move facades, which fire it every ~32 files.
     const crosspoint::sleep::wallpaper::ProgressFn movePopup = [this](size_t n) {
-      GUI.drawPopup(renderer, (std::string(tr(STR_MOVING_WALLPAPERS)) + " " + std::to_string(n)).c_str());
+      GUI.drawPopup(renderer, (std::string(tr(STR_MOVING_WALLPAPERS)) + " " + std::to_string(n)).c_str(),
+                    PopupRefresh::Temporary);  // live counter: keep fast, no full clean pass per update
     };
 
     switch (setting.action) {

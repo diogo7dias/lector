@@ -98,13 +98,15 @@ void HomeActivity::pumpRecentCovers(int coverHeight) {
       Epub epub(book.path, "/.crosspoint");
       // Skip loading css since we only need metadata here
       epub.load(false, true);
-      GUI.fillPopupProgress(renderer, GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)), progressPct);
+      GUI.fillPopupProgress(renderer, GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary),
+                            progressPct);
       success = epub.generateThumbBmp(coverHeight);
       attempted = true;
     } else if (FsHelpers::hasXtcExtension(book.path)) {
       Xtc xtc(book.path, "/.crosspoint");
       if (xtc.load()) {
-        GUI.fillPopupProgress(renderer, GUI.drawPopup(renderer, tr(STR_LOADING_POPUP)), progressPct);
+        GUI.fillPopupProgress(renderer, GUI.drawPopup(renderer, tr(STR_LOADING_POPUP), PopupRefresh::Temporary),
+                              progressPct);
         success = xtc.generateThumbBmp(coverHeight);
         attempted = true;
       }
