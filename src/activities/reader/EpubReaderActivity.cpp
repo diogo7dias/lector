@@ -277,7 +277,9 @@ void EpubReaderActivity::onExit() {
 
   // Tear down any in-flight next-chapter prefetch first so its ".part" is removed
   // (a committed prefetch cache is left in place for the next open).
-  prefetchSection_.reset();
+  for (auto& slot : prefetchSlots_) {
+    slot.section.reset();
+  }
   warmSection_.reset();
   section.reset();
   if (pendingReadFolderMove && epub) {
@@ -1204,14 +1206,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     currentSpineIndex = epub->getSpineItemsCount();
   }
 
-  // Drop a next-chapter prefetch that no longer matches where we are (any navigation
+  // Reshift the prefetch window to currentSpineIndex+1..+PREFETCH_AHEAD (any navigation
   // changed currentSpineIndex). Doing this BEFORE the section (re)build below releases
-  // the prefetch's open ".part" write handle first, so if we just crossed into the
-  // chapter it was building, that build is torn down cleanly before we rebuild the
-  // same spine here. A committed prefetch cache simply stays on disk for the reload.
-  if (prefetchSpineIndex_ != -1 && prefetchSpineIndex_ != currentSpineIndex + 1) {
-    prefetchSection_.reset();
-    prefetchSpineIndex_ = -1;
+  // the ".part" write handle of any slot we just crossed into, so that build is torn
+  // down cleanly before we rebuild the same spine here. Slots still inside the new
+  // window keep their already-built/committed state (no rebuild); a committed cache
+  // simply stays on disk for the reload.
+  for (auto& slot : prefetchSlots_) {
+    if (slot.spineIndex != -1 &&
+        (slot.spineIndex <= currentSpineIndex || slot.spineIndex > currentSpineIndex + PREFETCH_AHEAD)) {
+      slot.section.reset();
+      slot.spineIndex = -1;
+      slot.handled = false;
+    }
   }
   // Same hazard for the whole-book warmer: if the reader just crossed into the
   // chapter it is building, release its ".part" write handle before the
@@ -1747,65 +1754,110 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
     return;
   }
 
-  const int nextSpineIndex = currentSpineIndex + 1;
-  if (nextSpineIndex >= epub->getSpineItemsCount()) {
-    // Last chapter: nothing ahead to prefetch, but earlier chapters may still
-    // be cold for the current settings.
-    pumpWholeBookWarm(viewportWidth, viewportHeight);
+  const int spineCount = epub->getSpineItemsCount();
+  const int firstLineIndent = firstLineIndentPxFor(viewportWidth);
+
+  // 1) Service any in-flight build FIRST. At most one slot ever builds at a time
+  //    (each build holds a parser + layout arena; two would exceed the heap). Give
+  //    it a slice and stop for this turn. Reset any slot whose build has committed
+  //    (idle now) so its handle is freed and it counts as warm.
+  bool pumped = false;
+  for (auto& slot : prefetchSlots_) {
+    if (!slot.section) {
+      continue;
+    }
+    if (slot.section->isBuilding()) {
+      if (!slot.section->buildSomeMore(PREFETCH_PAGES_PER_TURN)) {
+        LOG_ERR("ERS", "Prefetch build failed for chapter: %d", slot.spineIndex);
+        slot.section.reset();  // arrival will rebuild from scratch
+        slot.handled = true;   // do not retry until we move on
+      }
+      pumped = true;  // an active build owns the pump slot this turn
+    } else {
+      // Build committed on a previous pump; the section is idle now.
+      LOG_DBG("ERS", "Prefetched chapter %d", slot.spineIndex);
+      slot.section.reset();
+      slot.handled = true;
+    }
+  }
+  if (pumped) {
     return;
   }
 
-  // First time targeting this next chapter from this position: decide once whether it is
-  // already cached or needs a build, then mark it handled (prefetchSpineIndex_) so a warm
-  // cache or a failed start is not re-probed every turn. The stale-prefetch guard at the
-  // top of render() clears prefetchSpineIndex_ when currentSpineIndex changes.
-  if (prefetchSpineIndex_ != nextSpineIndex) {
-    prefetchSpineIndex_ = nextSpineIndex;
-    prefetchSection_.reset();
+  // 2) No active build. Start the NEAREST not-yet-handled ahead chapter (only one),
+  //    nearest-first so +1 is warm before we look at +2/+3.
+  for (int k = 0; k < PREFETCH_AHEAD; k++) {
+    const int target = currentSpineIndex + 1 + k;
+    if (target >= spineCount) {
+      break;  // past the end of the book
+    }
+    // Find the slot already assigned to this target, if any.
+    PrefetchSlot* slot = nullptr;
+    for (auto& s : prefetchSlots_) {
+      if (s.spineIndex == target) {
+        slot = &s;
+        break;
+      }
+    }
+    if (slot && slot->handled) {
+      continue;  // already warm/committed for this target; look further ahead
+    }
+    if (!slot) {
+      // Claim a free slot (the render() window-reshift frees out-of-window slots).
+      for (auto& s : prefetchSlots_) {
+        if (s.spineIndex == -1) {
+          slot = &s;
+          break;
+        }
+      }
+    }
+    if (!slot) {
+      continue;  // no free slot this turn; try the next target
+    }
+    slot->spineIndex = target;
+    slot->handled = false;
+    slot->section.reset();
 
-    auto next = makeUniqueNoThrow<Section>(epub, nextSpineIndex, renderer);
+    auto next = makeUniqueNoThrow<Section>(epub, target, renderer);
     if (!next) {
-      LOG_ERR("ERS", "OOM: prefetch Section for chapter %d", nextSpineIndex);
+      LOG_ERR("ERS", "OOM: prefetch Section for chapter %d", target);
       return;
     }
     if (next->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                               SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
                               viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
                               SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
-                              firstLineIndentPxFor(viewportWidth), SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
-      return;  // already warm; drop the probe object, committed cache stays on disk
+                              firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+      slot->handled = true;  // already warm; drop the probe, look further ahead
+      continue;
     }
-    LOG_DBG("ERS", "Prefetching next chapter: %d", nextSpineIndex);
+    // Cold chapter. The immediate next chapter (+1) always prefetches, as before.
+    // The farther lookahead (+2, +3) yields when the heap is tight so it never
+    // competes with the reader for memory — the window shrinks automatically under
+    // pressure (nearest builds first, farther ones wait).
+    if (k >= 1 && ESP.getFreeHeap() < WARM_MIN_FREE_HEAP) {
+      return;
+    }
+    LOG_DBG("ERS", "Prefetching chapter: %d", target);
     if (!next->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
                           SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
                           SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
-                          SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled, firstLineIndentPxFor(viewportWidth),
+                          SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled, firstLineIndent,
                           SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
-      LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", nextSpineIndex);
-      return;  // marked handled; will not retry until we move on
+      LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", target);
+      slot->handled = true;  // will not retry until we move on
+      return;
     }
-    prefetchSection_ = std::move(next);
+    slot->section = std::move(next);
+    return;  // started a build; it owns the pump slot
   }
 
-  // Lay out another slice; on completion buildSomeMore commits the .part and the section
-  // goes idle (isBuilding() false), so we stop pumping it.
-  if (prefetchSection_ && prefetchSection_->isBuilding()) {
-    if (!prefetchSection_->buildSomeMore(PREFETCH_PAGES_PER_TURN)) {
-      LOG_ERR("ERS", "Prefetch build failed for chapter: %d", nextSpineIndex);
-      prefetchSection_.reset();  // arrival will rebuild from scratch
-    }
-    return;  // next-chapter build active: it keeps the pump slot
-  }
-
+  // 3) All ahead chapters warm/handled: warm the rest of the book opportunistically.
   pumpWholeBookWarm(viewportWidth, viewportHeight);
 }
 
 void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const uint16_t viewportHeight) {
   static constexpr int WARM_PAGES_PER_TURN = 8;
-  // Building a section runs the HTML parser + layout arena; stay out of the
-  // way when the heap is already tight (matches the spirit of the low-memory
-  // render ladder — warming is strictly optional work).
-  static constexpr uint32_t WARM_MIN_FREE_HEAP = 40000;
 
   const int spineCount = epub->getSpineItemsCount();
   if (spineCount <= 0) {
@@ -1871,9 +1923,10 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   }
 
   // Probe one chapter per pump (a warm probe is just an open + header check).
-  // Skip the chapter being read and the next one (the prefetch owns it).
-  while (warmScanSpine_ < spineCount &&
-         (warmScanSpine_ == currentSpineIndex || warmScanSpine_ == currentSpineIndex + 1)) {
+  // Skip the chapter being read and the next PREFETCH_AHEAD ones (the prefetch
+  // window owns them), so the two mechanisms never build the same spine twice.
+  while (warmScanSpine_ < spineCount && warmScanSpine_ >= currentSpineIndex &&
+         warmScanSpine_ <= currentSpineIndex + PREFETCH_AHEAD) {
     warmScanSpine_++;
   }
   if (warmScanSpine_ >= spineCount) {

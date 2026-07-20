@@ -4,6 +4,7 @@
 #include <Epub/FootnoteEntry.h>
 #include <Epub/Section.h>
 
+#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -22,15 +23,27 @@ class Page;
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
-  // Incremental background build of the NEXT chapter, pumped a few pages per page
-  // turn so its cache is warm (committed) by the time the reader crosses into it.
-  // Replaces the old blocking one-shot next-chapter index. Never read while it is
-  // building (its single file handle is mid-write); it is only ever committed here
-  // and re-loaded fresh on arrival. prefetchSpineIndex_ marks which next chapter is
-  // being handled this position (set even when the section pointer is null: warm
-  // cache found, or a build that failed to start — so we do not retry every turn).
-  std::unique_ptr<Section> prefetchSection_ = nullptr;
-  int prefetchSpineIndex_ = -1;
+  // Incremental background build of the next chapters, pumped a few pages per page
+  // turn so their caches are warm (committed) by the time the reader crosses in.
+  // A fixed pool of PREFETCH_AHEAD slots keeps currentSpineIndex+1..+PREFETCH_AHEAD
+  // warm; at most ONE slot builds at a time (nearest-first), so peak heap matches
+  // the old single-slot prefetch (each build holds a parser + layout arena — two
+  // at once would blow the 380KB heap). A slot is never read while building (its
+  // file handle is mid-write); it is only committed here and re-loaded fresh on
+  // arrival. spineIndex == -1 = empty; handled = the target is resolved (warm,
+  // committed, or a build that failed to start — do not re-probe every turn);
+  // section != null = an active or just-committed build (holds the ".part" handle).
+  static constexpr int PREFETCH_AHEAD = 3;
+  struct PrefetchSlot {
+    std::unique_ptr<Section> section = nullptr;
+    int spineIndex = -1;
+    bool handled = false;
+  };
+  std::array<PrefetchSlot, PREFETCH_AHEAD> prefetchSlots_;
+  // Building a section runs the HTML parser + layout arena; background prefetch/warm
+  // stays out of the way when the heap is already tight (matches the low-memory
+  // render ladder — this work is strictly optional).
+  static constexpr uint32_t WARM_MIN_FREE_HEAP = 40000;
   // Whole-book background warmer: once the next-chapter prefetch is idle, the
   // pump probes the remaining chapters one per turn and incrementally builds
   // any that are cold for the current layout settings, so chapter jumps land
