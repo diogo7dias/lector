@@ -48,12 +48,15 @@ class HalGPIO {
 
   // Edges latched by pumpWaitInput() while the loop task was blocked; folded
   // into the was*() accessors for exactly one update() cycle - but ONLY while
-  // fresh. LOCKED product rule (Diogo): a press acts promptly or not at all;
-  // an edge that would surface more than STICKY_FRESH_MS after the finger
-  // pressed is discarded, never replayed as a phantom click. Blocks longer
-  // than the window (promoted clean passes, cover grinds) simply lose the
-  // press - the user re-presses, which beats the device acting on its own.
-  static constexpr unsigned long STICKY_FRESH_MS = 500;
+  // fresh. Product rule (Diogo, 2026-07-20): a press made DURING a screen
+  // refresh must be caught, not dropped. A full-panel e-ink refresh blocks the
+  // loop for ~1-2s, so the previous 500ms freshness window silently ate any
+  // press landing inside a refresh ("clicks not being caught"). The window is
+  // now 3000ms - comfortably above the worst single blocking refresh - so a
+  // real press surfaces the instant the refresh ends. Still bounded so a truly
+  // ancient latch (never consumed within 3s, which does not happen in a normal
+  // block) cannot replay as a phantom click.
+  static constexpr unsigned long STICKY_FRESH_MS = 3000;
   uint8_t stickyPressed = 0;
   uint8_t stickyReleased = 0;
   unsigned long stickyLatchedAtMs = 0;

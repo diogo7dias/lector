@@ -343,11 +343,14 @@ void EpubReaderActivity::loop() {
   // after the first page instead of racing it. A stale queue (user walked
   // away) is dropped rather than turning a page out of nowhere.
   if (queuedPageTurn != 0 && section && !sectionBuildActive_) {
-    // LOCKED rule: no phantom clicks. A queued turn only replays if the press
-    // is fresh; anything older is dropped (the user re-presses). Never replay
-    // onto a section that is still building (sectionBuildActive_) -- its page
-    // count is not final yet; the turn waits until the build completes.
-    if (millis() - queuedPageTurnAtMs > 600UL) {
+    // A page turn pressed while the chapter was still building is honored once
+    // the build finishes (Diogo, 2026-07-20: catch the press, do not drop it).
+    // A chapter build can take a couple of seconds, and the old 600ms window
+    // dropped a turn the reader pressed at the start of that build -- the press
+    // was real, so we now hold it up to 3000ms (matching HalGPIO STICKY_FRESH_MS).
+    // Never replay onto a section that is still building (sectionBuildActive_) --
+    // its page count is not final yet; the turn waits until the build completes.
+    if (millis() - queuedPageTurnAtMs > 3000UL) {
       queuedPageTurn = 0;
     } else if (!RenderLock::peek() && currentSpineIndex < epub->getSpineItemsCount()) {
       const bool forward = queuedPageTurn > 0;
