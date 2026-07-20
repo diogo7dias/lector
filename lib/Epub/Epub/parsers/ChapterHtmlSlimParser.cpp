@@ -27,6 +27,7 @@
 #include "Epub/converters/ImageToFramebufferDecoder.h"
 #include "Epub/htmlEntities.h"
 #include "Epub/parsers/LayoutHeapGate.h"
+#include "Epub/parsers/PagePacker.h"
 
 // Minimum file size (in bytes) to show indexing popup - smaller chapters don't benefit from it
 constexpr size_t MIN_SIZE_FOR_POPUP = 10 * 1024;  // 10KB
@@ -323,9 +324,14 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
       std::max<int16_t>(1, static_cast<int16_t>(viewportWidth - blockStyle.totalHorizontalInset()));
   const int16_t width = std::max<int16_t>(1, static_cast<int16_t>(availableWidth / 4));
   const int16_t xPos = static_cast<int16_t>(blockStyle.leftInset() + ((availableWidth - width) / 2));
-  const int16_t totalHeight = static_cast<int16_t>(topSpacing + ruleThickness + bottomSpacing);
 
-  if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
+  // Same pure packer as text lines: a rule reserves topSpacing before + thickness
+  // + bottomSpacing after, and only breaks to a new page when the page is
+  // non-empty (cutIfNotEmpty=true) so it never orphans onto a fresh page.
+  const pagepack::PackDecision d = pagepack::packElement(currentPageNextY, currentPage->elements.empty(),
+                                                         viewportHeight, topSpacing, ruleThickness, bottomSpacing,
+                                                         /*cutIfNotEmpty=*/true);
+  if (d.cutPage) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     currentPage.reset(new (std::nothrow) Page());
@@ -333,19 +339,16 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
       LOG_ERR("EHP", "Failed to create page after horizontal-rule page break");
       return;
     }
-    currentPageNextY = 0;
   }
 
-  currentPageNextY += topSpacing;
-
   auto pageRule = std::shared_ptr<PageHorizontalRule>(
-      new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, currentPageNextY));
+      new (std::nothrow) PageHorizontalRule(width, ruleThickness, xPos, static_cast<int16_t>(d.yPos)));
   if (!pageRule) {
     LOG_ERR("EHP", "Failed to create PageHorizontalRule");
     return;
   }
   currentPage->elements.push_back(pageRule);
-  currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
+  currentPageNextY = static_cast<int16_t>(d.nextY);
 
   if (!pendingAnchorId.empty()) {
     anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
@@ -718,20 +721,22 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   }
                 }
 
-                // Create page for image - only break if image won't fit remaining space
-                if (self->currentPage && !self->currentPage->elements.empty() &&
-                    (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
-                     self->viewportHeight)) {
+                // Create page for image - only break if image won't fit remaining space.
+                // Same pure packer as lines/rules: reserve imageMarginTop before +
+                // displayHeight + imageMarginBottom after, break only on a non-empty page.
+                if (!self->currentPage) {
+                  if (!self->allocCurrentPage()) return;
+                }
+                const pagepack::PackDecision d =
+                    pagepack::packElement(self->currentPageNextY, self->currentPage->elements.empty(),
+                                          self->viewportHeight, imageMarginTop, displayHeight, imageMarginBottom,
+                                          /*cutIfNotEmpty=*/true);
+                if (d.cutPage) {
                   self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
                                        self->xpathListItemIndex);
                   self->completedPageCount++;
                   if (!self->allocCurrentPage()) return;
-                } else if (!self->currentPage) {
-                  if (!self->allocCurrentPage()) return;
                 }
-
-                // Apply top margin from container block
-                self->currentPageNextY += imageMarginTop;
 
                 // Create ImageBlock and add to page. makeSharedNoThrow so a starved heap
                 // returns null (the checks below) instead of abort() under -fno-exceptions.
@@ -741,13 +746,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                   return;
                 }
                 int xPos = (self->viewportWidth - displayWidth) / 2;
-                auto pageImage = makeSharedNoThrow<PageImage>(imageBlock, xPos, self->currentPageNextY);
+                auto pageImage = makeSharedNoThrow<PageImage>(imageBlock, xPos, static_cast<int16_t>(d.yPos));
                 if (!pageImage) {
                   LOG_ERR("EHP", "Failed to create PageImage");
                   return;
                 }
                 self->currentPage->elements.push_back(pageImage);
-                self->currentPageNextY += displayHeight + imageMarginBottom;
+                self->currentPageNextY = static_cast<int16_t>(d.nextY);
 
                 // The image consumed the empty block's accumulated vertical spacing.
                 // Reset the block so the Vertical merge in startNewTextBlock doesn't
@@ -1508,7 +1513,12 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     if (!allocCurrentPage()) return;
   }
 
-  if (currentPageNextY + lineHeight > viewportHeight) {
+  // A text line has no pre/post spacing of its own and breaks whenever it does
+  // not fit (cutIfNotEmpty=false), matching the original inline test exactly.
+  const pagepack::PackDecision d = pagepack::packElement(currentPageNextY, currentPage->elements.empty(),
+                                                         viewportHeight, /*pre=*/0, lineHeight, /*post=*/0,
+                                                         /*cutIfNotEmpty=*/false);
+  if (d.cutPage) {
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex);
     completedPageCount++;
     if (!allocCurrentPage()) return;
@@ -1528,13 +1538,13 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
   // makeSharedNoThrow so a starved heap drops the line instead of abort() under
   // -fno-exceptions. Dropped here means currentPageNextY does not advance, so the
   // page simply holds one fewer line rather than crashing the build.
-  auto pageLine = makeSharedNoThrow<PageLine>(line, xOffset, currentPageNextY);
+  auto pageLine = makeSharedNoThrow<PageLine>(line, xOffset, static_cast<int16_t>(d.yPos));
   if (!pageLine) {
     LOG_ERR("EHP", "Dropping line: PageLine allocation failed");
     return;
   }
   currentPage->elements.push_back(std::move(pageLine));
-  currentPageNextY += lineHeight;
+  currentPageNextY = static_cast<int16_t>(d.nextY);
 }
 
 void ChapterHtmlSlimParser::makePages() {

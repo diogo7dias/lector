@@ -1,0 +1,3 @@
+add_executable(page_packer_tests PagePackerTest.cpp)
+target_link_libraries(page_packer_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(page_packer_tests)
