@@ -69,6 +69,12 @@ class EpubReaderActivity final : public Activity {
   int eagerIndexBuiltChapters_ = 0;      // chapters confirmed cached/built (for the %)
   bool eagerIndexAnyBuilt_ = false;      // a real build ran this pass (gates the bar)
   uint32_t eagerIndexSettingsHash_ = 0;  // generation the pass is (re)armed for
+  // Persistent "this generation is fully indexed" marker on the SD card
+  // (<cachePath>/indexed.gen, 4 raw bytes = the generation hash). Written when the
+  // eager pass completes; read on open so reopening a fully-indexed book skips the
+  // whole-spine re-walk and stays instant.
+  uint32_t readIndexedGeneration() const;
+  void writeIndexedGeneration(uint32_t generationHash) const;
   // Low-memory render fallback ladder: the current degrade tier for this open book
   // (0 = full quality). Raised when a chapter build aborts for low memory and a
   // reduced-quality rebuild succeeds; it then sticks for the rest of the session so

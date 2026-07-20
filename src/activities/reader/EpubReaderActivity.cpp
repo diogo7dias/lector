@@ -1346,6 +1346,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (eagerIndexActive_) {
     if (!pumpEagerIndex(viewportWidth, viewportHeight)) return;  // still indexing (progress painted, requestUpdate done)
     eagerIndexActive_ = false;  // whole book built: fall through to paint the reading page
+    writeIndexedGeneration(eagerIndexSettingsHash_);  // remember it so reopen is instant
   }
 
   renderer.clearScreen();
@@ -2014,10 +2015,14 @@ uint32_t EpubReaderActivity::layoutSettingsHash(const uint16_t viewportWidth, co
 void EpubReaderActivity::armEagerIndex(const uint16_t viewportWidth, const uint16_t viewportHeight) {
   const uint32_t h = layoutSettingsHash(viewportWidth, viewportHeight);
   if (h == eagerIndexSettingsHash_) return;  // same generation: nothing to (re)arm
-  // Book just opened (hash was 0) or a layout setting changed: index the whole
-  // book for this generation. If every chapter is already cached, pumpEagerIndex
-  // walks them silently and finishes without a visible bar.
   eagerIndexSettingsHash_ = h;
+  // Persistent skip: a prior open already fully indexed this generation (marker on
+  // the SD card). Do NOT re-walk/re-probe the whole spine — reopening a fully
+  // indexed book stays instant instead of paying dozens of SD reads.
+  if (readIndexedGeneration() == h) return;  // leaves eagerIndexActive_ false
+  // Book just opened for a new generation (or a layout setting changed): index the
+  // whole book. If every chapter is already cached, pumpEagerIndex walks them
+  // silently and finishes without a visible bar.
   eagerIndexActive_ = true;
   eagerIndexSpine_ = 0;
   eagerIndexBuiltChapters_ = 0;
@@ -2137,6 +2142,23 @@ void EpubReaderActivity::paintEagerIndexProgress() {
   sectionBuildProgressPaintedMs_ = now;
   sectionBuildProgressPercent_ = percent;
   GUI.drawIndexingProgress(renderer, tr(STR_INDEXING), percent);
+}
+
+uint32_t EpubReaderActivity::readIndexedGeneration() const {
+  if (!epub) return 0;
+  HalFile f;
+  if (!Storage.openFileForRead("ERS", epub->getCachePath() + "/indexed.gen", f)) return 0;
+  uint32_t v = 0;
+  if (f.read(&v, sizeof(v)) != static_cast<int>(sizeof(v))) return 0;
+  return v;
+}
+
+void EpubReaderActivity::writeIndexedGeneration(uint32_t generationHash) const {
+  if (!epub) return;
+  HalFile f;
+  if (Storage.openFileForWrite("ERS", epub->getCachePath() + "/indexed.gen", f)) {
+    f.write(&generationHash, sizeof(generationHash));
+  }
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
