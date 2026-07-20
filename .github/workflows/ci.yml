@@ -146,6 +146,36 @@ jobs:
       - name: Run tests
         run: ctest --test-dir build/test --output-on-failure -j
 
+  # Guards the Rust helpers linked into the release build (-DUSE_RUST_FSHELPERS):
+  # host unit tests + the FFI differential fuzz that proves each ported function is
+  # byte-exact vs the original C++. Keeps the Rust path from rotting on every PR.
+  rust-tests:
+    name: Rust helpers (unit + FFI parity)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/fshelpers-rs/target
+          key: rust-host-${{ runner.os }}-${{ hashFiles('rust/fshelpers-rs/**/*.rs', 'rust/fshelpers-rs/Cargo.*') }}
+          restore-keys: rust-host-${{ runner.os }}-
+      - name: Unit tests (host)
+        working-directory: rust/fshelpers-rs
+        run: cargo test --release
+      - name: FFI differential parity fuzz
+        working-directory: rust/fshelpers-rs
+        run: |
+          set -euo pipefail
+          cargo build --release
+          c++ -std=c++20 -O2 ffi_parity_test.cpp target/release/libfshelpers_rs.a -o parity_test
+          ./parity_test
+
   # This job is used as the PR required actions check, allows for changes to other steps in the future without breaking
   # PR requirements.
   test-status:
@@ -155,6 +185,7 @@ jobs:
       - clang-format
       - cppcheck
       - unit-tests
+      - rust-tests
     if: always()
     runs-on: ubuntu-latest
     steps:

@@ -417,7 +417,12 @@ void HomeActivity::render(RenderLock&&) {
     constexpr int menuBottomGap = 8;
     const int menuY = pageHeight - metrics.buttonHintsHeight - menuBottomGap - menuBlockHeight;
 
-    int recentAreaY = metrics.topPadding + metrics.homeTopPadding;
+    // Small gap under the top status bar so the first recents row is not flush
+    // against it (the header ends at topPadding + homeTopPadding). Home-only:
+    // this is local to the home render; the list height (below) is derived from
+    // menuY - recentAreaY, so it shrinks from the top and never pushes the menu.
+    constexpr int recentAreaTopGap = 8;
+    int recentAreaY = metrics.topPadding + metrics.homeTopPadding + recentAreaTopGap;
     constexpr int recentAreaBottomGap = 8;
 
     // Over-limit warning card (selector slot 1): the first item in the recents band

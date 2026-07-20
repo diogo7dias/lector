@@ -34,6 +34,25 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
+      # The gh_release env builds with -DUSE_RUST_FSHELPERS, so the runner needs a
+      # Rust toolchain + the ESP32-C3 bare-metal target. scripts/build_rust.py runs
+      # `cargo build --release --features device --target riscv32imc-unknown-none-elf`
+      # and links libfshelpers_rs.a; without this step it aborts the build.
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: riscv32imc-unknown-none-elf
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/fshelpers-rs/target
+          key: rust-${{ runner.os }}-${{ hashFiles('rust/fshelpers-rs/**/*.rs', 'rust/fshelpers-rs/Cargo.*') }}
+          restore-keys: rust-${{ runner.os }}-
+
       - name: Build CrossPoint
         run: pio run -e gh_release
 
