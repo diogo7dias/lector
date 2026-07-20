@@ -5,6 +5,10 @@
 #include <cstdlib>
 #include <cstring>
 
+#ifdef USE_RUST_FSHELPERS
+#include "fshelpers_rs.h"
+#endif
+
 // ============================================================================
 // IMAGE PROCESSING OPTIONS
 // ============================================================================
@@ -223,14 +227,28 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     currentX++;
   };
 
-  uint8_t lum;
+  // Stage 1: unpack the raw pixel row into `width` 8-bit luminance values.
+  // Stage 2 (dither/pack) runs over that buffer below. Separating the two lets
+  // the untrusted-byte index math be a bounds-checked, fuzz-tested unit.
+  if (!lumRow_) {
+    lumRow_ = makeUniqueNoThrow<uint8_t[]>(width);
+    if (!lumRow_) return BmpReaderError::OomRowBuffer;
+  }
+  uint8_t* lum = lumRow_.get();
 
+#ifdef USE_RUST_FSHELPERS
+  // Memory-safe Rust unpack. Returns false on an unsupported bpp or a malformed
+  // (too-short) row — where the raw C++ pointer loop would read out of bounds.
+  if (!fshelpers_bmp_unpack_row(rowBuffer, static_cast<size_t>(rowBytes), bpp, static_cast<size_t>(width),
+                                paletteLum, sizeof(paletteLum), lum, static_cast<size_t>(width))) {
+    return BmpReaderError::UnsupportedBpp;
+  }
+#else
   switch (bpp) {
     case 32: {
       const uint8_t* p = rowBuffer;
       for (int x = 0; x < width; x++) {
-        lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
-        packPixel(lum);
+        lum[x] = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
         p += 4;
       }
       break;
@@ -238,45 +256,40 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     case 24: {
       const uint8_t* p = rowBuffer;
       for (int x = 0; x < width; x++) {
-        lum = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
-        packPixel(lum);
+        lum[x] = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
         p += 3;
       }
       break;
     }
     case 8: {
-      for (int x = 0; x < width; x++) {
-        packPixel(paletteLum[rowBuffer[x]]);
-      }
+      for (int x = 0; x < width; x++) lum[x] = paletteLum[rowBuffer[x]];
       break;
     }
     case 4: {
       for (int x = 0; x < width; x++) {
         const uint8_t nibble = (x & 1) ? (rowBuffer[x >> 1] & 0x0F) : (rowBuffer[x >> 1] >> 4);
-        packPixel(paletteLum[nibble]);
+        lum[x] = paletteLum[nibble];
       }
       break;
     }
     case 2: {
-      for (int x = 0; x < width; x++) {
-        lum = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
-        packPixel(lum);
-      }
+      for (int x = 0; x < width; x++) lum[x] = paletteLum[(rowBuffer[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
       break;
     }
     case 1: {
       for (int x = 0; x < width; x++) {
-        // Get palette index (0 or 1) from bit at position x
         const uint8_t palIndex = (rowBuffer[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0;
-        // Use palette lookup for proper black/white mapping
-        lum = paletteLum[palIndex];
-        packPixel(lum);
+        lum[x] = paletteLum[palIndex];
       }
       break;
     }
     default:
       return BmpReaderError::UnsupportedBpp;
   }
+#endif
+
+  // Stage 2: dither + pack the luminance row into the 2bpp output stream.
+  for (int x = 0; x < width; x++) packPixel(lum[x]);
 
   if (atkinsonDitherer)
     atkinsonDitherer->nextRow();

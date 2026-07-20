@@ -200,6 +200,57 @@ static bool unfilterRow_cpp(uint8_t filter, std::vector<uint8_t>& cur,
   return true;
 }
 
+// --- Original C++ reference, per-pixel formulas copied verbatim from the
+//     switch(bpp) in lib/GfxRenderer/Bitmap.cpp readNextRow. Bounds checks match
+//     the Rust helper so both agree on malformed (too-short / bad-bpp) inputs.
+static bool unpackRow_cpp(const std::vector<uint8_t>& row, uint16_t bpp, size_t width,
+                          const std::vector<uint8_t>& palette, std::vector<uint8_t>& out) {
+  if (width == 0) return true;
+  if (out.size() < width) return false;
+  const bool paletted = (bpp == 8 || bpp == 4 || bpp == 2 || bpp == 1);
+  if (paletted && palette.size() < 256) return false;
+  switch (bpp) {
+    case 32:
+      if (row.size() < width * 4) return false;
+      for (size_t x = 0; x < width; x++) {
+        const uint8_t* p = row.data() + x * 4;
+        out[x] = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+      }
+      return true;
+    case 24:
+      if (row.size() < width * 3) return false;
+      for (size_t x = 0; x < width; x++) {
+        const uint8_t* p = row.data() + x * 3;
+        out[x] = (77u * p[2] + 150u * p[1] + 29u * p[0]) >> 8;
+      }
+      return true;
+    case 8:
+      if (row.size() < width) return false;
+      for (size_t x = 0; x < width; x++) out[x] = palette[row[x]];
+      return true;
+    case 4:
+      if (row.size() < (width + 1) / 2) return false;
+      for (size_t x = 0; x < width; x++) {
+        const uint8_t nibble = (x & 1) ? (row[x >> 1] & 0x0F) : (row[x >> 1] >> 4);
+        out[x] = palette[nibble];
+      }
+      return true;
+    case 2:
+      if (row.size() < (width + 3) / 4) return false;
+      for (size_t x = 0; x < width; x++) out[x] = palette[(row[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03];
+      return true;
+    case 1:
+      if (row.size() < (width + 7) / 8) return false;
+      for (size_t x = 0; x < width; x++) {
+        const uint8_t palIndex = (row[x >> 3] & (0x80 >> (x & 7))) ? 1 : 0;
+        out[x] = palette[palIndex];
+      }
+      return true;
+    default:
+      return false;
+  }
+}
+
 int main() {
   long checks = 0, mismatches = 0;
 
@@ -341,6 +392,46 @@ int main() {
       mismatches++;
       if (mismatches <= 20) {
         printf("PNG MISMATCH filter=%u bpp=%d len=%zu okC=%d okR=%d\n", filter, bpp, len, okC, okR);
+      }
+    }
+  }
+
+  // 7. BMP row unpack fuzz: random bpp (valid 32/24/8/4/2/1 + invalid), width,
+  //    row length (deliberately sometimes too short), and palette length. Compare
+  //    the bool result and, when both succeed, the full luminance row.
+  const int bppChoices[] = {32, 24, 8, 4, 2, 1, 16, 0};
+  std::uniform_int_distribution<int> bmpW(0, 64), bmpByte(0, 255), bmpBppPick(0, 7),
+      bmpRowExtra(-4, 8), bmpPalLen(0, 300);
+  for (int iter = 0; iter < 500000; iter++) {
+    const uint16_t bpp = static_cast<uint16_t>(bppChoices[bmpBppPick(rng)]);
+    const size_t width = static_cast<size_t>(bmpW(rng));
+    size_t reqRow;
+    if (bpp == 32) reqRow = width * 4;
+    else if (bpp == 24) reqRow = width * 3;
+    else if (bpp == 8) reqRow = width;
+    else if (bpp == 4) reqRow = (width + 1) / 2;
+    else if (bpp == 2) reqRow = (width + 3) / 4;
+    else if (bpp == 1) reqRow = (width + 7) / 8;
+    else reqRow = width;
+    long rlen = static_cast<long>(reqRow) + bmpRowExtra(rng);
+    if (rlen < 0) rlen = 0;
+    std::vector<uint8_t> row(static_cast<size_t>(rlen));
+    for (auto& b : row) b = static_cast<uint8_t>(bmpByte(rng));
+    std::vector<uint8_t> palette(static_cast<size_t>(bmpPalLen(rng)));
+    for (auto& b : palette) b = static_cast<uint8_t>(bmpByte(rng));
+    std::vector<uint8_t> outC(width ? width : 1, 0), outR(width ? width : 1, 0);
+
+    bool okC = unpackRow_cpp(row, bpp, width, palette, outC);
+    bool okR = fshelpers_bmp_unpack_row(row.empty() ? nullptr : row.data(), row.size(), bpp, width,
+                                        palette.empty() ? nullptr : palette.data(), palette.size(),
+                                        outR.data(), outR.size());
+    checks++;
+    const bool outMatch = (okC && okR) ? (outC == outR) : true;
+    if (okC != okR || !outMatch) {
+      mismatches++;
+      if (mismatches <= 20) {
+        printf("BMP MISMATCH bpp=%u width=%zu rlen=%zu pal=%zu okC=%d okR=%d\n", bpp, width, row.size(),
+               palette.size(), okC, okR);
       }
     }
   }

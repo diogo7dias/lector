@@ -403,6 +403,137 @@ pub unsafe extern "C" fn fshelpers_png_unfilter_row(
     png_unfilter_row(filter, cur, prev, bpp)
 }
 
+// ---------------------------------------------------------------------------
+// BMP row unpack (crash-prone: raw index math on untrusted image bytes)
+// ---------------------------------------------------------------------------
+
+/// Unpack one BMP pixel row into `width` 8-bit luminance values. Byte-exact
+/// mirror of the `switch(bpp)` unpack in C++ `Bitmap::readNextRow`, for the
+/// supported depths 32/24/8/4/2/1, on any input long enough to hold the row.
+///
+/// 24/32-bit use the same BGR->luma formula `(77*R + 150*G + 29*B) >> 8`; the
+/// paletted depths (8/4/2/1) look the pixel's palette index up in `palette`
+/// (the 256-entry `paletteLum` table). Every access is bounds-checked: a
+/// malformed image whose row is too short for `width`, an unsupported `bpp`, or
+/// a palette shorter than 256 entries yields a clean `false` instead of the
+/// out-of-bounds read a raw C++ pointer loop would take on the device. On
+/// `true`, `out[0..width]` holds the luminance row.
+pub fn bmp_unpack_row(row: &[u8], bpp: u16, width: usize, palette: &[u8], out: &mut [u8]) -> bool {
+    if width == 0 {
+        return true; // empty row: nothing to unpack, matches the C++ no-op
+    }
+    if out.len() < width {
+        return false;
+    }
+    // Paletted depths index a 256-entry table; anything smaller is malformed.
+    if matches!(bpp, 8 | 4 | 2 | 1) && palette.len() < 256 {
+        return false;
+    }
+    match bpp {
+        32 => {
+            let need = match width.checked_mul(4) {
+                Some(v) => v,
+                None => return false,
+            };
+            if row.len() < need {
+                return false;
+            }
+            for x in 0..width {
+                let b = x * 4;
+                out[x] = ((77u32 * row[b + 2] as u32 + 150u32 * row[b + 1] as u32 + 29u32 * row[b] as u32) >> 8)
+                    as u8;
+            }
+            true
+        }
+        24 => {
+            let need = match width.checked_mul(3) {
+                Some(v) => v,
+                None => return false,
+            };
+            if row.len() < need {
+                return false;
+            }
+            for x in 0..width {
+                let b = x * 3;
+                out[x] = ((77u32 * row[b + 2] as u32 + 150u32 * row[b + 1] as u32 + 29u32 * row[b] as u32) >> 8)
+                    as u8;
+            }
+            true
+        }
+        8 => {
+            if row.len() < width {
+                return false;
+            }
+            for x in 0..width {
+                out[x] = palette[row[x] as usize];
+            }
+            true
+        }
+        4 => {
+            if row.len() < width.div_ceil(2) {
+                return false;
+            }
+            for x in 0..width {
+                let byte = row[x >> 1];
+                let nibble = if x & 1 == 1 { byte & 0x0F } else { byte >> 4 };
+                out[x] = palette[nibble as usize];
+            }
+            true
+        }
+        2 => {
+            if row.len() < width.div_ceil(4) {
+                return false;
+            }
+            for x in 0..width {
+                let idx = (row[x >> 2] >> (6 - ((x & 3) * 2))) & 0x03;
+                out[x] = palette[idx as usize];
+            }
+            true
+        }
+        1 => {
+            if row.len() < width.div_ceil(8) {
+                return false;
+            }
+            for x in 0..width {
+                let pal_index = usize::from(row[x >> 3] & (0x80 >> (x & 7)) != 0);
+                out[x] = palette[pal_index];
+            }
+            true
+        }
+        _ => false,
+    }
+}
+
+/// FFI entry point for [`bmp_unpack_row`]. `row_ptr`/`row_len` is the raw pixel
+/// row; `palette_ptr`/`palette_len` the 256-entry luminance table (may be
+/// null/empty for 24/32-bit); `out_ptr`/`out_cap` the caller-owned output
+/// (needs `width` bytes).
+///
+/// # Safety
+/// `row_ptr` must point to `row_len` readable bytes (or be null -> empty),
+/// `palette_ptr` to `palette_len` readable bytes (or null -> empty), and
+/// `out_ptr` to `out_cap` writable bytes (or null -> empty).
+#[no_mangle]
+pub unsafe extern "C" fn fshelpers_bmp_unpack_row(
+    row_ptr: *const u8,
+    row_len: usize,
+    bpp: u16,
+    width: usize,
+    palette_ptr: *const u8,
+    palette_len: usize,
+    out_ptr: *mut u8,
+    out_cap: usize,
+) -> bool {
+    let row = slice_or_empty(row_ptr, row_len);
+    let palette = slice_or_empty(palette_ptr, palette_len);
+    let out: &mut [u8] = if out_ptr.is_null() || out_cap == 0 {
+        &mut []
+    } else {
+        core::slice::from_raw_parts_mut(out_ptr, out_cap)
+    };
+    bmp_unpack_row(row, bpp, width, palette, out)
+}
+
 // no_std device build needs its own panic handler. Host build uses std's.
 #[cfg(feature = "device")]
 #[panic_handler]
@@ -416,6 +547,7 @@ mod tests {
     use super::natural_file_less as nfl;
     use super::natural_less as nl;
     use super::{paeth_predictor, png_unfilter_row};
+    use super::bmp_unpack_row;
 
     #[test]
     fn paeth_matches_spec() {
@@ -617,5 +749,98 @@ mod tests {
     fn non_ascii_bytes_pass_through_unchanged() {
         // "café.JPG" tail ".JPG" folds to ".jpg"; non-ascii bytes untouched.
         assert!(ext("café.JPG".as_bytes(), b".jpg"));
+    }
+
+    // --- bmp_unpack_row ---
+    fn ramp_palette() -> [u8; 256] {
+        let mut p = [0u8; 256];
+        for (i, v) in p.iter_mut().enumerate() {
+            *v = i as u8;
+        }
+        p
+    }
+
+    #[test]
+    fn bmp_32_bgr_luma() {
+        // one pixel B=10 G=20 R=30 X=0 -> (77*30 + 150*20 + 29*10)/256
+        let row = [10u8, 20, 30, 0];
+        let mut out = [0u8; 1];
+        assert!(bmp_unpack_row(&row, 32, 1, &[], &mut out));
+        assert_eq!(out[0], ((77u32 * 30 + 150 * 20 + 29 * 10) >> 8) as u8);
+    }
+
+    #[test]
+    fn bmp_24_bgr_luma() {
+        let row = [10u8, 20, 30];
+        let mut out = [0u8; 1];
+        assert!(bmp_unpack_row(&row, 24, 1, &[], &mut out));
+        assert_eq!(out[0], ((77u32 * 30 + 150 * 20 + 29 * 10) >> 8) as u8);
+    }
+
+    #[test]
+    fn bmp_8_palette() {
+        let pal = ramp_palette();
+        let row = [0u8, 5, 255, 128];
+        let mut out = [0u8; 4];
+        assert!(bmp_unpack_row(&row, 8, 4, &pal, &mut out));
+        assert_eq!(out, [0, 5, 255, 128]);
+    }
+
+    #[test]
+    fn bmp_4_nibbles_high_then_low() {
+        let pal = ramp_palette();
+        let row = [0xAB]; // x0 -> high nibble 0xA, x1 -> low nibble 0xB
+        let mut out = [0u8; 2];
+        assert!(bmp_unpack_row(&row, 4, 2, &pal, &mut out));
+        assert_eq!(out, [0x0A, 0x0B]);
+    }
+
+    #[test]
+    fn bmp_2_bits() {
+        let pal = ramp_palette();
+        let row = [0b11_10_01_00]; // x0=3 x1=2 x2=1 x3=0 (MSB first)
+        let mut out = [0u8; 4];
+        assert!(bmp_unpack_row(&row, 2, 4, &pal, &mut out));
+        assert_eq!(out, [3, 2, 1, 0]);
+    }
+
+    #[test]
+    fn bmp_1_bit_msb_first() {
+        let pal = ramp_palette();
+        let row = [0b1010_0000]; // x0=1 x1=0 x2=1 x3=0 ...
+        let mut out = [0u8; 4];
+        assert!(bmp_unpack_row(&row, 1, 4, &pal, &mut out));
+        assert_eq!(out, [1, 0, 1, 0]);
+    }
+
+    #[test]
+    fn bmp_bad_bpp_returns_false() {
+        let mut out = [0u8; 4];
+        assert!(!bmp_unpack_row(&[0u8; 16], 16, 4, &[], &mut out));
+    }
+
+    #[test]
+    fn bmp_short_row_returns_false() {
+        // 24-bit needs 3*width bytes; give too few.
+        let mut out = [0u8; 4];
+        assert!(!bmp_unpack_row(&[0u8; 5], 24, 4, &[], &mut out));
+    }
+
+    #[test]
+    fn bmp_short_out_returns_false() {
+        let mut out = [0u8; 1];
+        assert!(!bmp_unpack_row(&[0u8; 16], 8, 4, &ramp_palette(), &mut out));
+    }
+
+    #[test]
+    fn bmp_palette_too_small_returns_false() {
+        let mut out = [0u8; 4];
+        assert!(!bmp_unpack_row(&[0u8; 4], 8, 4, &[0u8; 100], &mut out));
+    }
+
+    #[test]
+    fn bmp_zero_width_is_noop_true() {
+        let mut out = [0u8; 0];
+        assert!(bmp_unpack_row(&[], 8, 0, &[], &mut out));
     }
 }

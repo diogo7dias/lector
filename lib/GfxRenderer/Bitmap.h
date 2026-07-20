@@ -101,4 +101,8 @@ class Bitmap {
 
   mutable std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
   mutable std::unique_ptr<FloydSteinbergDitherer> fsDitherer;
+
+  // Per-row 8-bit luminance scratch (width bytes), allocated once and reused.
+  // readNextRow unpacks the raw pixel row into this, then dithers/packs from it.
+  mutable std::unique_ptr<uint8_t[]> lumRow_;
 };
