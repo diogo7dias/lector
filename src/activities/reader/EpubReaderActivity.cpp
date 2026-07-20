@@ -340,11 +340,23 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Short-press Back cancels an in-progress eager whole-book index and drops
+  // straight into reading the current (already-built) chapter, instead of
+  // leaving the book. Holding Back still goes home via the handler further down.
+  if (eagerIndexActive_ && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
+    eagerIndexActive_ = false;
+    warmSection_.reset();
+    warmBuildSpine_ = -1;
+    requestUpdate();  // paint the reading page
+    return;
+  }
+
   // Replay a page press that arrived while the section was still building.
   // Waits for the render lock to be free so the replayed turn renders right
   // after the first page instead of racing it. A stale queue (user walked
   // away) is dropped rather than turning a page out of nowhere.
-  if (queuedPageTurn != 0 && section && !sectionBuildActive_) {
+  if (queuedPageTurn != 0 && section && !sectionBuildActive_ && !eagerIndexActive_) {
     // A page turn pressed while the chapter was still building is honored once
     // the build finishes (Diogo, 2026-07-20: catch the press, do not drop it).
     // A chapter build can take a couple of seconds, and the old 600ms window
@@ -668,7 +680,7 @@ void EpubReaderActivity::loop() {
   // not ready (typical right after a wake, or during a heavy chapter build).
   // Queue the press instead of swallowing it; loop() replays it once the build
   // completes and the section is ready.
-  if (!section || sectionBuildActive_) {
+  if (!section || sectionBuildActive_ || eagerIndexActive_) {
     queuedPageTurn = prevTriggered ? -1 : 1;
     queuedPageTurnAtMs = millis();
     if (diagFirstPressMs_ == 0) diagFirstPressMs_ = millis();
@@ -1326,6 +1338,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (!advanceSectionBuild()) return;
   }
 
+  // Eager whole-book index: the current chapter is ready above; now build every
+  // remaining chapter up front so all later flips are build-free. Arms on book
+  // open / settings change; a fully-cached book finishes instantly and silently.
+  // Back (short) cancels it in loop() and drops into reading the current chapter.
+  armEagerIndex(viewportWidth, viewportHeight);
+  if (eagerIndexActive_) {
+    if (!pumpEagerIndex(viewportWidth, viewportHeight)) return;  // still indexing (progress painted, requestUpdate done)
+    eagerIndexActive_ = false;  // whole book built: fall through to paint the reading page
+  }
+
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
@@ -1956,6 +1978,165 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   }
   warmSection_ = std::move(probe);
   warmBuildSpine_ = spine;
+}
+
+uint32_t EpubReaderActivity::layoutSettingsHash(const uint16_t viewportWidth, const uint16_t viewportHeight) const {
+  // Fold the 14 layout settings that name a cache generation — identical set and
+  // order to pumpWholeBookWarm's inline fold, so both agree on "generation changed".
+  uint32_t h = 2166136261u;
+  const auto fold = [&h](const void* p, size_t n) {
+    const auto* b = static_cast<const uint8_t*>(p);
+    for (size_t i = 0; i < n; i++) {
+      h ^= b[i];
+      h *= 16777619u;
+    }
+  };
+  const int fontId = SETTINGS.getReaderFontId();
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  const int firstLineIndent = firstLineIndentPxFor(viewportWidth);
+  fold(&fontId, sizeof(fontId));
+  fold(&lineCompression, sizeof(lineCompression));
+  fold(&SETTINGS.extraParagraphSpacing, sizeof(SETTINGS.extraParagraphSpacing));
+  fold(&SETTINGS.paragraphAlignment, sizeof(SETTINGS.paragraphAlignment));
+  fold(&viewportWidth, sizeof(viewportWidth));
+  fold(&viewportHeight, sizeof(viewportHeight));
+  fold(&SETTINGS.hyphenationEnabled, sizeof(SETTINGS.hyphenationEnabled));
+  fold(&SETTINGS.embeddedStyle, sizeof(SETTINGS.embeddedStyle));
+  fold(&SETTINGS.imageRendering, sizeof(SETTINGS.imageRendering));
+  fold(&SETTINGS.focusReadingEnabled, sizeof(SETTINGS.focusReadingEnabled));
+  fold(&SETTINGS.guideDotsEnabled, sizeof(SETTINGS.guideDotsEnabled));
+  fold(&firstLineIndent, sizeof(firstLineIndent));
+  fold(&SETTINGS.wordSpacing, sizeof(SETTINGS.wordSpacing));
+  fold(&SETTINGS.paragraphSpacing, sizeof(SETTINGS.paragraphSpacing));
+  return h;
+}
+
+void EpubReaderActivity::armEagerIndex(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  const uint32_t h = layoutSettingsHash(viewportWidth, viewportHeight);
+  if (h == eagerIndexSettingsHash_) return;  // same generation: nothing to (re)arm
+  // Book just opened (hash was 0) or a layout setting changed: index the whole
+  // book for this generation. If every chapter is already cached, pumpEagerIndex
+  // walks them silently and finishes without a visible bar.
+  eagerIndexSettingsHash_ = h;
+  eagerIndexActive_ = true;
+  eagerIndexSpine_ = 0;
+  eagerIndexBuiltChapters_ = 0;
+  eagerIndexAnyBuilt_ = false;
+  sectionBuildProgressPaintedMs_ = 0;  // fresh throttle for the whole-book bar
+  sectionBuildProgressPercent_ = -100;
+}
+
+bool EpubReaderActivity::pumpEagerIndex(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  constexpr int kPagesPerSlice = 8;
+  constexpr int kProbesPerPump = 32;  // cap cached-chapter probes so the lock frees
+  const int spineCount = epub->getSpineItemsCount();
+  if (spineCount <= 0) return true;
+
+  const int fontId = SETTINGS.getReaderFontId();
+  const float lineCompression = SETTINGS.getReaderLineCompression();
+  const int firstLineIndent = firstLineIndentPxFor(viewportWidth);
+
+  // 1. Pump the chapter currently being indexed (one 8-page slice, framebuffer lent
+  //    for the layout inflate — same shape as advanceSectionBuild/warm).
+  if (warmSection_ && warmSection_->isBuilding()) {
+    bool ok;
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      ok = warmSection_->buildSomeMore(kPagesPerSlice);
+    }
+    if (!ok) {
+      // Cancelled or failed (incl. low memory): skip this chapter (it stays lazy),
+      // never hang the pass.
+      LOG_ERR("ERS", "Eager index: chapter %d build failed; skipping", warmBuildSpine_);
+      warmSection_.reset();
+      warmBuildSpine_ = -1;
+    } else if (warmSection_->isBuildComplete()) {
+      LOG_DBG("ERS", "Eager index: built chapter %d", warmBuildSpine_);
+      warmSection_.reset();
+      warmBuildSpine_ = -1;
+      eagerIndexBuiltChapters_++;
+    }
+    paintEagerIndexProgress();
+    requestUpdate();
+    return false;
+  }
+  if (warmSection_) {  // safety: idle handle, drop it
+    warmSection_.reset();
+    warmBuildSpine_ = -1;
+  }
+
+  // 2. Walk to the next chapter that still needs building. Cached chapters and the
+  //    current chapter (already built as `section`) are counted done and skipped.
+  int probes = 0;
+  while (eagerIndexSpine_ < spineCount) {
+    const int spine = eagerIndexSpine_;
+    if (spine == currentSpineIndex) {
+      eagerIndexSpine_++;
+      eagerIndexBuiltChapters_++;
+      continue;
+    }
+    if (++probes > kProbesPerPump) {
+      // Give the render lock back; continue probing next render. Only paint if a
+      // real build has already started this pass (a fully-cached reopen stays silent).
+      if (eagerIndexAnyBuilt_) paintEagerIndexProgress();
+      requestUpdate();
+      return false;
+    }
+    auto probe = makeUniqueNoThrow<Section>(epub, spine, renderer);
+    if (!probe) {  // transient OOM: retry this spine next render
+      requestUpdate();
+      return false;
+    }
+    if (probe->loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                               viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                               SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
+                               firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+      eagerIndexSpine_++;
+      eagerIndexBuiltChapters_++;
+      continue;  // already built for this generation
+    }
+    // Cold chapter: start building it (lend the framebuffer for the inflate peak).
+    bool started;
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      started = probe->startBuild(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+                                  viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
+                                  SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
+                                  firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing);
+    }
+    if (!started) {
+      LOG_ERR("ERS", "Eager index: chapter %d failed to start; skipping", spine);
+      eagerIndexSpine_++;
+      continue;  // skip; stays lazy
+    }
+    warmSection_ = std::move(probe);
+    warmBuildSpine_ = spine;
+    eagerIndexSpine_++;
+    eagerIndexAnyBuilt_ = true;
+    paintEagerIndexProgress();
+    requestUpdate();
+    return false;
+  }
+
+  // Every spine chapter is built (or skipped). The pass is done.
+  return true;
+}
+
+void EpubReaderActivity::paintEagerIndexProgress() {
+  if (!renderer.hasFrameBuffer()) return;  // framebuffer still lent to a build slice
+  const int spineCount = epub->getSpineItemsCount();
+  int percent = spineCount > 0 ? (eagerIndexBuiltChapters_ * 100) / spineCount : 0;
+  if (percent > 99) percent = 99;  // never show 100% before the reading page paints
+  // Throttle like paintBuildProgress: repaint only on a real move AND >=1.5s since
+  // the last, so the whole-book pass keeps panel refreshes to a handful.
+  const unsigned long now = millis();
+  if (percent < sectionBuildProgressPercent_ + 8 && sectionBuildProgressPaintedMs_ != 0 &&
+      now - sectionBuildProgressPaintedMs_ < 1500) {
+    return;
+  }
+  sectionBuildProgressPaintedMs_ = now;
+  sectionBuildProgressPercent_ = percent;
+  GUI.drawIndexingProgress(renderer, tr(STR_INDEXING), percent);
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {

@@ -55,6 +55,20 @@ class EpubReaderActivity final : public Activity {
   int warmScanSpine_ = -1;   // next spine to probe (-1 = scan not started)
   bool warmScanComplete_ = false;
   uint32_t warmSettingsHash_ = 0;
+
+  // Eager whole-book index (Diogo, 2026-07-20): on opening a book, and again
+  // whenever a layout setting changes, build EVERY chapter up front behind the
+  // "Indexing" progress bar, so all later page flips are build-free. Reuses the
+  // warm build slot (warmSection_/warmBuildSpine_) for the chapter in flight.
+  // eagerIndexActive_ gates input (page turns queued, Back cancels) and defers
+  // the reading-page paint until the whole book is built. A fully-cached reopen
+  // walks the spine silently (no builds -> no visible bar) and drops straight
+  // into reading.
+  bool eagerIndexActive_ = false;
+  int eagerIndexSpine_ = 0;              // next spine to probe/build (0..spineCount)
+  int eagerIndexBuiltChapters_ = 0;      // chapters confirmed cached/built (for the %)
+  bool eagerIndexAnyBuilt_ = false;      // a real build ran this pass (gates the bar)
+  uint32_t eagerIndexSettingsHash_ = 0;  // generation the pass is (re)armed for
   // Low-memory render fallback ladder: the current degrade tier for this open book
   // (0 = full quality). Raised when a chapter build aborts for low memory and a
   // reduced-quality rebuild succeeds; it then sticks for the rest of the session so
@@ -161,6 +175,16 @@ class EpubReaderActivity final : public Activity {
   void renderStatusBar() const;
   void pumpNextChapterPrefetch(uint16_t viewportWidth, uint16_t viewportHeight);
   void pumpWholeBookWarm(uint16_t viewportWidth, uint16_t viewportHeight);
+  // Eager whole-book index. layoutSettingsHash folds the 14 layout settings that
+  // name a cache generation (same set as pumpWholeBookWarm). armEagerIndex (re)arms
+  // the pass when the generation changes (book open / settings change). pumpEagerIndex
+  // builds the next cold chapter one slice per call, self-driving via requestUpdate,
+  // and returns true once the whole book is built. paintEagerIndexProgress shows the
+  // whole-book "Indexing" bar (only once a real build has started).
+  uint32_t layoutSettingsHash(uint16_t viewportWidth, uint16_t viewportHeight) const;
+  void armEagerIndex(uint16_t viewportWidth, uint16_t viewportHeight);
+  bool pumpEagerIndex(uint16_t viewportWidth, uint16_t viewportHeight);
+  void paintEagerIndexProgress();
   // Loads or builds `section` for reading, descending the low-memory render tier
   // ladder (LowMemoryRenderTier.h) when a build aborts for lack of memory. Returns
   // false only on a genuine (non-memory) build failure or when even the lowest tier
