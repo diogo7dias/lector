@@ -1,0 +1,3 @@
+add_executable(repack_plan_tests RepackPlanTest.cpp)
+target_link_libraries(repack_plan_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(repack_plan_tests)
