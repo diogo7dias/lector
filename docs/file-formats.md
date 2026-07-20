@@ -94,6 +94,16 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+> **Current version: 33.** (The detailed ImHex pattern below documents v25 and is
+> stale on the exact header field list.) **v33** adds, between the settings block and
+> the `pageCount` + four trailer offsets: a `uint32 wrapKeyHash` (the 11 wrap-affecting
+> settings — everything except line spacing / viewport height / paragraph spacing —
+> so a sibling generation with the same value has identical wrapped lines and can be
+> re-packed without re-wrapping), a `uint8 packFlags` (bit0 reserved: section has a
+> viewport-height-dependent image), and a reserved `uint32` sidecar-trailer offset for
+> a future pack sidecar. These sit *before* the `pageCount`+offsets tail, so those keep
+> their positions. Page serialization is unchanged; v32 caches regenerate once.
+
 ### Version 25
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is

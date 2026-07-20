@@ -9,6 +9,7 @@
 #include "Page.h"
 #include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
+#include "parsers/WrapKey.h"
 
 namespace {
 // v27: words NFC-composed at layout time; bump invalidates NFD section caches.
@@ -20,7 +21,12 @@ namespace {
 //      flag (guide dots feature); serialized layout adds one byte per block.
 // v32: focus-reading bold length changed (FOCUS_READING_PERCENT 45 -> 43 for CrossInk
 //      parity); cached layouts differ, so old sections must regenerate.
-constexpr uint8_t SECTION_FILE_VERSION = 32;
+// v33: header gains wrapKeyHash (the 11-field wrap sub-key, WrapKey.h) + packFlags
+//      + a reserved 5th trailer offset for a future pack sidecar (the re-pack fast
+//      path). Additive header only; page serialization is unchanged. packFlags and
+//      the sidecar offset are reserved (written 0) in this step. Old sections
+//      regenerate once on first open.
+constexpr uint8_t SECTION_FILE_VERSION = 33;
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss
@@ -31,7 +37,12 @@ constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) +
-                                 sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                 sizeof(uint8_t) +
+                                 // v33: wrapKeyHash (uint32) + packFlags (uint8) + reserved sidecar
+                                 // trailer offset (uint32). Placed BEFORE the pageCount + 4 trailer
+                                 // offsets, so every HEADER_SIZE-relative tail seek stays valid.
+                                 sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t) +
+                                 sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t);
 
 // ---- Layout-settings cache generations -------------------------------------
@@ -326,9 +337,18 @@ bool Section::writeSectionFileHeader(const int fontId, const float lineCompressi
                                    sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
                                    sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(focusReadingEnabled) +
                                    sizeof(guideDotsEnabled) + sizeof(firstLineIndentPx) + sizeof(wordSpacing) +
-                                   sizeof(paragraphSpacing) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t),
+                                   sizeof(paragraphSpacing) +
+                                   // v33: wrapKeyHash (uint32) + packFlags (uint8) + reserved sidecar offset (uint32)
+                                   sizeof(uint32_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
+  // v33: the wrap-affecting sub-key of the layout cache key (WrapKey.h). Written
+  // now (all inputs known at build start); the future re-pack fast path reuses a
+  // sibling generation only when its stored wrapKeyHash matches the target's.
+  const uint32_t wrapKeyHash =
+      wrapkey::wrapKeyHash(fontId, extraParagraphSpacing, paragraphAlignment, viewportWidth, hyphenationEnabled,
+                           embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled, firstLineIndentPx,
+                           wordSpacing);
   // Version byte starts as INCOMPLETE; createSectionFile stamps the real version
   // last, once the file is fully written, as the atomic commit point.
   const bool ok =
@@ -340,6 +360,11 @@ bool Section::writeSectionFileHeader(const int fontId, const float lineCompressi
       serialization::tryWritePod(file, focusReadingEnabled) && serialization::tryWritePod(file, guideDotsEnabled) &&
       serialization::tryWritePod(file, firstLineIndentPx) && serialization::tryWritePod(file, wordSpacing) &&
       serialization::tryWritePod(file, paragraphSpacing) &&
+      // v33: wrapKeyHash now; packFlags + sidecar trailer offset reserved (0), to be
+      // populated when the re-pack sidecar is added. Placed BEFORE the pageCount +
+      // four trailer offsets so those keep their HEADER_SIZE-relative positions.
+      serialization::tryWritePod(file, wrapKeyHash) && serialization::tryWritePod(file, static_cast<uint8_t>(0)) &&
+      serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
       // Placeholders for page count and the four trailer offsets (patched in finalizeBuild)
       serialization::tryWritePod(file, pageCount) && serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
       serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
@@ -401,6 +426,18 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
     serialization::readPod(file, fileFirstLineIndentPx);
     serialization::readPod(file, fileWordSpacing);
     serialization::readPod(file, fileParagraphSpacing);
+    // v33: consume wrapKeyHash + packFlags + the reserved sidecar offset that sit
+    // between the settings and the page count, so the sequential read stays aligned.
+    // Not used yet (the re-pack reader will consume them in a later step).
+    uint32_t fileWrapKeyHash = 0;
+    uint8_t filePackFlags = 0;
+    uint32_t fileSidecarOffset = 0;
+    serialization::readPod(file, fileWrapKeyHash);
+    serialization::readPod(file, filePackFlags);
+    serialization::readPod(file, fileSidecarOffset);
+    (void)fileWrapKeyHash;
+    (void)filePackFlags;
+    (void)fileSidecarOffset;
 
     if (fontId != fileFontId || lineCompression != fileLineCompression ||
         extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
