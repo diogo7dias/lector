@@ -1,0 +1,3 @@
+add_executable(wrap_key_tests WrapKeyTest.cpp)
+target_link_libraries(wrap_key_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(wrap_key_tests)
