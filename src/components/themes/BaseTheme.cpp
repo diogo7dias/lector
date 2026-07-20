@@ -1092,10 +1092,11 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, message);
   const int textX = (pageWidth - textWidth) / 2;
   const int textY = y + (h - textHeight) / 2;
-  // Smear the white text +1px ("dark"/paperback look) so it reads heavier on black.
-  renderer.setPaperbackLook(true);
+  // Plain normal-weight white text. The old +1px "paperback" smear rendered a heavy
+  // bold under a clean full-panel refresh but blinked between bold/normal under the
+  // FAST windowed refresh path (X3), so the banner text looked inconsistently bold.
+  // Normal weight paints identically on every refresh path.
   renderer.drawText(UI_10_FONT_ID, textX, textY, message, false);  // white text
-  renderer.setPaperbackLook(false);
   return Rect{0, y, pageWidth, h};
 }
 
@@ -1122,11 +1123,12 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
   return strip;
 }
 
-void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progress) const {
+Rect BaseTheme::drawBottomProgressBar(const GfxRenderer& renderer, const int progress) const {
   // Thick, high-contrast progress bar along the bottom of the screen. A white backing
   // band keeps it clean over page content, a 2px black outline shows the full track,
-  // and a black fill grows left->right for `progress`. Self-contained: draws and pushes
-  // its own region (windowed; a full-panel FAST on X3 where windows are disabled).
+  // and a black fill grows left->right for `progress`. Draws into the framebuffer only
+  // and returns its region; the caller pushes (so the bar can be co-painted with the
+  // banner before either is refreshed). Returns a zero-size Rect if there is no room.
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   constexpr int barHeight = 16;     // thick, well visible
@@ -1136,7 +1138,7 @@ void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progre
   const int barX = sideMargin;
   const int barW = pageWidth - sideMargin * 2;
   const int barY = pageHeight - barHeight - bottomMargin;
-  if (barW <= 0) return;
+  if (barW <= 0) return Rect{0, 0, 0, 0};
 
   renderer.fillRect(barX - backingInset, barY - backingInset, barW + backingInset * 2, barHeight + backingInset * 2,
                     false);                                 // white backing halo
@@ -1147,8 +1149,30 @@ void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progre
     const int fillW = innerW * std::clamp(progress, 0, 100) / 100;
     if (fillW > 0) renderer.fillRect(innerX, barY + 3, fillW, barHeight - 6, true);  // black fill
   }
-  renderer.displayWindow(barX - backingInset, barY - backingInset, barW + backingInset * 2,
-                         barHeight + backingInset * 2);
+  return Rect{barX - backingInset, barY - backingInset, barW + backingInset * 2, barHeight + backingInset * 2};
+}
+
+void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progress) const {
+  // Self-contained: draw the bar and push its own region (windowed; a full-panel FAST
+  // on X3 where windows are disabled). For paths that show ONLY the bottom bar.
+  const Rect bar = drawBottomProgressBar(renderer, progress);
+  if (bar.width <= 0) return;
+  renderer.displayWindow(bar.x, bar.y, bar.width, bar.height);
+}
+
+void BaseTheme::drawIndexingProgress(const GfxRenderer& renderer, const char* message, const int progress) const {
+  // Indexing face: the "Indexing" banner strip (top) AND the progress bar (bottom),
+  // both drawn into the framebuffer FIRST, then pushed. Drawing both before either
+  // push is what keeps the bar from blinking out between updates: on X3 each
+  // displayWindow is a full-panel FAST, so if the banner pushed before the bar was
+  // redrawn, that push showed a frame with the bar missing (the build slice reuses
+  // the framebuffer between updates). With both already painted, every push carries
+  // banner + bar together.
+  const Rect strip = drawBannerStrip(renderer, message);
+  const Rect bar = drawBottomProgressBar(renderer, progress);
+  renderer.displayWindow(strip.x, strip.y, strip.width, strip.height);
+  if (bar.width > 0) renderer.displayWindow(bar.x, bar.y, bar.width, bar.height);
+  renderer.noteBannerShown();  // arm the auto-clear timer, same as drawPopup
 }
 
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {

@@ -238,6 +238,14 @@ class BaseTheme {
   // clearly on a reading page. Used by indexing instead of the thin white line inside
   // the top banner.
   virtual void fillBottomProgress(const GfxRenderer& renderer, const int progress) const;
+  // Draw the bottom progress bar into the framebuffer WITHOUT pushing it; returns its
+  // region (zero-size Rect if there is no room). Lets a caller co-paint the bar with
+  // another element before a single refresh. fillBottomProgress() is this plus a push.
+  Rect drawBottomProgressBar(const GfxRenderer& renderer, const int progress) const;
+  // Indexing face: paint the top banner strip AND the bottom progress bar, both into
+  // the framebuffer first, then push. Co-painting keeps the bar from blinking out
+  // between updates on the full-panel FAST (X3) refresh path.
+  void drawIndexingProgress(const GfxRenderer& renderer, const char* message, int progress) const;
   // Draw the top feedback strip into the framebuffer WITHOUT refreshing it and
   // without arming the auto-clear timer. For full-screen activities that render
   // their own frame (clearScreen + displayBuffer) but want a progress message to
