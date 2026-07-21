@@ -457,13 +457,18 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // with glyph-cache allocations, fragmenting the layout-time heap; a typical
   // paragraph fits in 64 tokens, so most paragraphs now grow zero times.
   if (words.empty() && words.capacity() == 0) {
+    // Guarded: under -fno-exceptions a failed reserve() abort()s (reboots). On a
+    // tight heap skip the pre-size — pushToken's guarded growth takes over.
     constexpr size_t kInitialWordCapacity = 64;
-    words.reserve(kInitialWordCapacity);
-    wordStyles.reserve(kInitialWordCapacity);
-    wordContinues.reserve(kInitialWordCapacity);
-    wordNoSpaceBefore.reserve(kInitialWordCapacity);
-    wordFocusBoundary.reserve(kInitialWordCapacity);
-    wordGuideDotBefore.reserve(kInitialWordCapacity);
+    constexpr size_t kPerTokenBytes = sizeof(std::string_view) + 5;  // six parallel vectors, approx
+    if (heapCanAllocate(kInitialWordCapacity * kPerTokenBytes)) {
+      words.reserve(kInitialWordCapacity);
+      wordStyles.reserve(kInitialWordCapacity);
+      wordContinues.reserve(kInitialWordCapacity);
+      wordNoSpaceBefore.reserve(kInitialWordCapacity);
+      wordFocusBoundary.reserve(kInitialWordCapacity);
+      wordGuideDotBefore.reserve(kInitialWordCapacity);
+    }
   }
   // token must already be pool-backed (poolStore). A default view (nullptr
   // data) signals pool OOM: the token is dropped, degrading rather than
@@ -473,6 +478,24 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     if (token.data() == nullptr) {
       guideDotBeforeNextToken = false;
       return;
+    }
+    if (words.size() == words.capacity()) {
+      // Guarded growth for the CJK token paths, which bypass the main path's
+      // capacity pre-check: an unchecked push_back growth abort()s on OOM under
+      // -fno-exceptions (this was the reader-settings crash-to-home). Drop the
+      // token and degrade, like the pool-OOM branch above.
+      size_t newCapacity = words.capacity() * 2;
+      if (newCapacity < 16) newCapacity = 16;
+      if (!heapCanAllocate(newCapacity * (sizeof(std::string_view) + 5))) {
+        guideDotBeforeNextToken = false;
+        return;
+      }
+      words.reserve(newCapacity);
+      wordStyles.reserve(newCapacity);
+      wordContinues.reserve(newCapacity);
+      wordNoSpaceBefore.reserve(newCapacity);
+      wordFocusBoundary.reserve(newCapacity);
+      wordGuideDotBefore.reserve(newCapacity);
     }
     words.push_back(token);
     wordStyles.push_back(baseStyle);
