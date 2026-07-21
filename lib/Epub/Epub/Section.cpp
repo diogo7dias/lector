@@ -29,7 +29,12 @@ constexpr uint8_t SECTION_FILE_VERSION = 33;
 // leaves a ".part" file whose version (0) loadSectionFile rejects as unknown —
 // the section is simply rebuilt, never loaded half-written.
 constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
-constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 1024;
+// Start small: most chapters fit well under 128 pages, and the LUT doubles on
+// demand (ensurePageLutCapacity). 1024 up-front cost 8KB of heap for every
+// chapter build — held across the whole build, exactly when the heap is most
+// fragmented. 128 entries = 1KB; a genuinely huge chapter pays a few doubling
+// copies instead.
+constexpr uint16_t INITIAL_SECTION_PAGE_LUT_ENTRIES = 128;
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(bool) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(bool) + sizeof(bool) + sizeof(int) + sizeof(uint8_t) +
