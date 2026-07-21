@@ -15,6 +15,7 @@ bool save(const KOReaderCredentialStore& store, const char* path) {
   doc["password_obf"] = obfuscation::obfuscateToBase64(store.getPassword());
   doc["serverUrl"] = store.getServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(store.getMatchMethod());
+  doc["syncBehavior"] = static_cast<uint8_t>(store.getSyncBehavior());
 
   String json;
   serializeJson(doc, json);
@@ -44,6 +45,16 @@ bool load(KOReaderCredentialStore& store, const char* json, bool* needsResave) {
 
   uint8_t method = doc["matchMethod"] | (uint8_t)0;
   store.setMatchMethod(static_cast<DocumentMatchMethod>(method));
+
+  // Migrate an older file without the key to ASK_EVERY_TIME so existing users keep
+  // the manual Apply/Upload prompt; a fresh store defaults to SMART (store field).
+  const auto behaviorValue = doc["syncBehavior"];
+  if (behaviorValue.isNull()) {
+    store.setSyncBehavior(KOReaderSyncBehavior::ASK_EVERY_TIME);
+    if (needsResave) *needsResave = true;
+  } else {
+    store.setSyncBehavior(static_cast<KOReaderSyncBehavior>(behaviorValue | (uint8_t)0));
+  }
 
   return true;
 }
