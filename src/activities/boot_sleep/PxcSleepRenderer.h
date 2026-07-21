@@ -38,6 +38,14 @@ class GfxRenderer;
 // faces) must deep-clean the panel FIRST (blank + FULL_REFRESH) or the old
 // content ghosts through; on X3 the graybase waveform is fixed, so a stronger
 // base mode cannot be selected here.
+//
+// oneBitRefresh selects the panel refresh for the grayscale=false (1-bit) path.
+// The default HALF_REFRESH is a clean base paint (wake banner, first indexing
+// face). Pass FAST_REFRESH to update in place: FAST is a differential, so when
+// the framebuffer is redrawn with only a small region changed (e.g. a progress
+// bar over an otherwise-identical image), only the changed pixels transition and
+// the rest of the image does not flash. Ignored on the grayscale path.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path,
                           const std::function<void()>& extraOverlay = nullptr, bool drawInfoOverlay = true,
-                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass);
+                          bool grayscale = true, PxcOverlayTiming overlayTiming = PxcOverlayTiming::EveryPass,
+                          HalDisplay::RefreshMode oneBitRefresh = HalDisplay::HALF_REFRESH);

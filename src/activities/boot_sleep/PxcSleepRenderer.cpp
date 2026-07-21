@@ -19,7 +19,8 @@
 #include "SleepInfoOverlay.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const std::function<void()>& extraOverlay,
-                          bool drawInfoOverlay, bool grayscale, const PxcOverlayTiming overlayTiming) {
+                          bool drawInfoOverlay, bool grayscale, const PxcOverlayTiming overlayTiming,
+                          const HalDisplay::RefreshMode oneBitRefresh) {
   HalFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
@@ -143,8 +144,10 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     // 1-bit fast path: a single BW refresh of the silhouette + overlays, skipping
     // the LSB/MSB grayscale planes and the grayscale composite. Used by the unlock
     // banner screen, where wake speed matters more than a full grayscale wallpaper
-    // (the sleep screen itself still renders full grayscale).
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    // (the sleep screen itself still renders full grayscale). The refresh mode is
+    // caller-selected (default HALF = clean base; FAST = in-place differential that
+    // leaves the unchanged image untouched — see header).
+    renderer.displayBuffer(oneBitRefresh);
     return true;
   }
 

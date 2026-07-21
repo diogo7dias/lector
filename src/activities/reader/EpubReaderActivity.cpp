@@ -1807,26 +1807,35 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
 
   // Wallpaper backdrop. The first paint of a build (force=true: the initial face
   // and each tier-descend restart) decodes the full .pxc and pushes image + banner
-  // + bar together. Every later throttled update (force=false) repaints ONLY the
-  // bottom progress bar and pushes just that strip via a windowed refresh, so the
-  // image and the top banner never flash or blink — e-ink holds them on the panel
-  // untouched.
+  // + bar together with a clean HALF base. Every later throttled update
+  // (force=false) updates the progress bar WITHOUT flashing the image or the top
+  // banner, by a different route on each panel:
   //
-  // The windowed bar-only update is X4-only. On X3 the panel's PTL window pass is
-  // disabled (it corrupts the region), so any push there is full-panel; a bar-only
-  // push would flash a framebuffer whose image bytes the build slices have since
-  // scribbled. On X3 we therefore keep re-decoding the whole image on every update
-  // so the unavoidable full-panel push always carries the image intact.
+  //  - X4 (SSD1677, true RAM windows): repaint only the bar and push just that
+  //    strip via a windowed refresh. The image + banner are never re-pushed;
+  //    e-ink holds them on the panel untouched.
+  //
+  //  - X3 (UC81xx): windowed BW refresh is disabled (its PTL window pass corrupts
+  //    the region), so the push is full-panel. Instead we re-decode the whole
+  //    image + banner + moved bar into the framebuffer and push a FAST refresh.
+  //    FAST is a differential: pixels that did not change (the entire image and
+  //    banner) get the WW/BB no-transition drive and do not flash; only the bar's
+  //    changed pixels move. The full re-decode is required so the differential
+  //    diffs against a framebuffer that still matches the last displayed frame
+  //    (the build slices scribble the image bytes between updates).
   //
   // Falls back to the plain indexing face if the decode fails (file deleted mid-
   // build, SD hiccup).
   if (!indexingBackdropPath_.empty()) {
     if (!force && !gpio.deviceIsX3()) {
-      // X4 incremental: draw the bar and push only its own window. The image and
-      // banner stay on the panel from the last full paint, so neither refreshes.
+      // X4 incremental: draw the bar and push only its own window.
       GUI.fillBottomProgress(renderer, percent);
       return;
     }
+    // force -> clean HALF base paint. X3 incremental -> FAST differential so the
+    // unchanged image + banner do not flash (only the bar's pixels transition).
+    const HalDisplay::RefreshMode oneBitRefresh =
+        force ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
     const int pct = percent;
     const bool ok = renderPxcSleepScreen(
         renderer, indexingBackdropPath_,
@@ -1834,7 +1843,7 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
           GUI.drawBannerStrip(renderer, tr(STR_INDEXING));
           GUI.drawBottomProgressBar(renderer, pct);
         },
-        /*drawInfoOverlay=*/false, /*grayscale=*/false);
+        /*drawInfoOverlay=*/false, /*grayscale=*/false, PxcOverlayTiming::EveryPass, oneBitRefresh);
     if (ok) return;
     indexingBackdropPath_.clear();
   }
