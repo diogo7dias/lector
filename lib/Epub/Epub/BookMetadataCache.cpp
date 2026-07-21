@@ -257,12 +257,13 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
     tocFile.close();
     return false;
   }
-  // NOTE: We intentionally skip calling loadAllFileStatSlims() here.
-  // For large EPUBs (2000+ chapters), pre-loading all ZIP central directory entries
-  // into memory causes OOM crashes on ESP32-C3's limited ~380KB RAM.
-  // Instead, for large books we use a one-pass batch lookup that scans the ZIP
-  // central directory once and matches against spine targets using hash comparison.
-  // This is O(n*log(m)) instead of O(n*m) while avoiding memory exhaustion.
+  // NOTE: Never pre-load all ZIP central directory entries into memory.
+  // For large EPUBs (2000+ chapters) that causes OOM crashes on ESP32-C3's
+  // limited ~380KB RAM (ZipFile's old loadAllFileStatSlims() was removed for
+  // this reason). Instead, for large books we use a one-pass batch lookup that
+  // scans the ZIP central directory once and matches against spine targets
+  // using hash comparison. This is O(n*log(m)) instead of O(n*m) while
+  // avoiding memory exhaustion.
   // See: https://github.com/crosspoint-reader/crosspoint-reader/issues/134
 
   std::deque<uint32_t> spineSizes;
