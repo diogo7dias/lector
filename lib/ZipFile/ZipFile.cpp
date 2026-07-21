@@ -52,67 +52,7 @@ size_t zipFillCallback(void* vctx, const uint8_t** data) {
 }
 }  // namespace
 
-bool ZipFile::loadAllFileStatSlims() {
-  const ScopedOpenClose zip{*this};
-  if (!zip) return false;
-
-  if (!loadZipDetails()) return false;
-
-  file.seek(zipDetails.centralDirOffset);
-
-  uint32_t sig;
-  char itemName[256];
-  fileStatSlimCache.clear();
-  fileStatSlimCache.reserve(zipDetails.totalEntries);
-
-  while (file.available()) {
-    file.read(&sig, 4);
-    if (sig != 0x02014b50) break;  // End of list
-
-    FileStatSlim fileStat = {};
-
-    file.seekCur(6);
-    file.read(&fileStat.method, 2);
-    file.seekCur(8);
-    file.read(&fileStat.compressedSize, 4);
-    file.read(&fileStat.uncompressedSize, 4);
-    uint16_t nameLen, m, k;
-    file.read(&nameLen, 2);
-    file.read(&m, 2);
-    file.read(&k, 2);
-    file.seekCur(8);
-    file.read(&fileStat.localHeaderOffset, 4);
-
-    if (nameLen < sizeof(itemName)) {
-      file.read(itemName, nameLen);
-      itemName[nameLen] = '\0';
-      fileStatSlimCache.emplace(itemName, fileStat);
-    } else {
-      // Skip over oversized entry names to avoid writing past fixed buffer.
-      file.seekCur(nameLen);
-    }
-
-    // Skip the rest of this entry (extra field + comment)
-    file.seekCur(m + k);
-  }
-
-  // Set cursor to start of central directory for sequential access
-  lastCentralDirPos = zipDetails.centralDirOffset;
-  lastCentralDirPosValid = true;
-
-  return true;
-}
-
 bool ZipFile::loadFileStatSlim(const char* filename, FileStatSlim* fileStat) {
-  if (!fileStatSlimCache.empty()) {
-    const auto it = fileStatSlimCache.find(filename);
-    if (it != fileStatSlimCache.end()) {
-      *fileStat = it->second;
-      return true;
-    }
-    return false;
-  }
-
   const ScopedOpenClose zip{*this};
   if (!zip) return false;
 

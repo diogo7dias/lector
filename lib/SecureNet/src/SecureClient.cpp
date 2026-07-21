@@ -110,6 +110,13 @@ int SecureClient::connectWithMethod(const char* host, uint16_t port, void* metho
   wolfSSL_SetIOReadCtx(ssl, &_transport);
   wolfSSL_SetIOWriteCtx(ssl, &_transport);
   wolfSSL_UseSNI(ssl, WOLFSSL_SNI_HOST_NAME, host, strlen(host));
+#if defined(HAVE_MAX_FRAGMENT)
+  // RFC 6066 Max Fragment Length: ask the peer to cap TLS records at 4KB so
+  // wolfSSL's input buffer stays ~4KB instead of growing toward a full 16KB
+  // record mid-session. Opportunistic: a server that ignores the extension
+  // simply sends full-size records and the buffer grows as before.
+  wolfSSL_UseMaxFragment(ssl, WOLFSSL_MFL_2_12);
+#endif
 #if defined(WOLFSSL_TLS13) && defined(HAVE_CURVE25519)
   // MEMFIX-PORT: pin the TLS 1.3 key_share to X25519. wolfSSL's default is a
   // P-256 share, generated with fast-math bignums that WOLFSSL_SMALL_STACK

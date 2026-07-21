@@ -24,9 +24,6 @@ struct OpdsEntry {
   std::string id;
 };
 
-// Legacy alias for backward compatibility
-using OpdsBook = OpdsEntry;
-
 /**
  * Parser for OPDS (Open Publication Distribution System) Atom feeds.
  * Uses the Expat XML parser to parse OPDS catalog entries.
@@ -72,12 +69,6 @@ class OpdsParser final : public Print {
   std::vector<OpdsEntry> getEntries() && { return std::move(entries); }
 
   /**
-   * Get only book entries (legacy compatibility).
-   * @return Vector of book entries
-   */
-  std::vector<OpdsEntry> getBooks() const;
-
-  /**
    * Clear all parsed entries.
    */
   void clear();
@@ -107,9 +98,13 @@ class OpdsParser final : public Print {
   bool inId = false;
 
   bool errorOccured = false;
-  static constexpr size_t MAX_ENTRIES = 128;
+  // Caps sized for an 800x480 list screen: a feed page never shows anywhere
+  // near 64 entries, and title/author/href text for 64 entries fits well
+  // inside 12KB. Keeping these low bounds the parser's resident footprint
+  // while WiFi + TLS (~60KB) are still up.
+  static constexpr size_t MAX_ENTRIES = 64;
   static constexpr size_t MAX_TEXT_BYTES = 1024;
   static constexpr size_t MAX_URL_BYTES = 2048;
-  static constexpr size_t MAX_RETAINED_TEXT_BYTES = 24 * 1024;
+  static constexpr size_t MAX_RETAINED_TEXT_BYTES = 12 * 1024;
   size_t retainedTextBytes = 0;
 };

@@ -172,7 +172,13 @@ class ChapterHtmlSlimParser {
         imageRendering(imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
-        tocAnchors(std::move(tocAnchors)) {}
+        tocAnchors(std::move(tocAnchors)) {
+    // Typical chapters carry a few dozen navigation anchors; reserving up front
+    // avoids the vector's doubling reallocations during the layout build, when
+    // the heap is at its most fragmented. Pathological span-per-paragraph books
+    // (Kobo/KePub converters) still grow toward MAX_ANCHORS_PER_CHAPTER.
+    anchorData.reserve(64);
+  }
 
   ~ChapterHtmlSlimParser() { abortParse(); }
 

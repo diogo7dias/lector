@@ -4,7 +4,6 @@
 #include <deque>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 class ZipFile {
  public:
@@ -44,7 +43,6 @@ class ZipFile {
   const std::string filePath;
   HalFile file;
   ZipDetails zipDetails = {0, 0, false};
-  std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
   // Cursor for sequential central-dir scanning optimization
   uint32_t lastCentralDirPos = 0;
@@ -62,7 +60,6 @@ class ZipFile {
   bool isOpen() const { return !!file; }
   bool open();
   bool close();
-  bool loadAllFileStatSlims();
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
@@ -75,13 +72,6 @@ class ZipFile {
 
   template <typename F>
   bool enumerateFilePaths(F&& callback) {
-    if (!fileStatSlimCache.empty()) {
-      for (const auto& entry : fileStatSlimCache) {
-        callback(std::string_view{entry.first});
-      }
-      return true;
-    }
-
     const bool wasOpen = isOpen();
     if (!wasOpen && !open()) {
       return false;
