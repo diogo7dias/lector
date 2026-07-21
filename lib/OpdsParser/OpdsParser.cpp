@@ -98,14 +98,6 @@ void OpdsParser::clear() {
   inEntry = inTitle = inAuthor = inAuthorName = inId = false;
 }
 
-std::vector<OpdsEntry> OpdsParser::getBooks() const {
-  std::vector<OpdsEntry> books;
-  for (const auto& entry : entries) {
-    if (entry.type == OpdsEntryType::BOOK) books.push_back(entry);
-  }
-  return books;
-}
-
 const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
   for (int i = 0; atts[i]; i += 2) {
     if (strcmp(atts[i], name) == 0) return atts[i + 1];
