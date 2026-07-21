@@ -55,7 +55,16 @@ bool isWantIo(const int err) {
 }
 }  // namespace
 
+#if defined(FREEINK_WOLFSSL_MEM_TRACE)
+// Defined in src/network/WolfSslGlue.cpp. Installs wolfSSL heap-tracing allocators
+// on first call so a fragmented-heap handshake failure logs the failing size.
+extern "C" void freeinkWolfMemTraceInit();
+#endif
+
 int SecureClient::connectWithMethod(const char* host, uint16_t port, void* method, const char* label) {
+#if defined(FREEINK_WOLFSSL_MEM_TRACE)
+  freeinkWolfMemTraceInit();
+#endif
 #if defined(FREEINK_WOLFSSL_DEBUG)
   // Routes wolfSSL's internal trace through wolfSSL_Arduino_Serial_Print (the
   // application provides that hook). Shows exactly where a handshake stalls.
