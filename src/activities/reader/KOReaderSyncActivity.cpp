@@ -269,6 +269,12 @@ void KOReaderSyncActivity::performUpload() {
     progress.metadata = std::move(meta);
   }
 
+  // Everything the PUT needs is now inside `progress`; release the Epub so its
+  // metadata cache is not resident during the fresh TLS handshake below — the
+  // heap's most fragmentation-sensitive moment. Every post-upload state only
+  // returns to the reader, which reloads the book itself.
+  epub.reset();
+
   const auto result = KOReaderSyncClient::updateProgress(progress);
 
   // Drop the radio while user reads the result; full teardown happens at silent reboot.
