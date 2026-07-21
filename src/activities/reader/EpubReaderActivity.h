@@ -14,6 +14,7 @@
 #include "EpubReaderMenuActivity.h"
 #include "HighlightController.h"
 #include "ProgressMapper.h"
+#include "ReaderPrefs.h"
 #include "activities/Activity.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/SdStatsFiles.h"
@@ -61,6 +62,28 @@ class EpubReaderActivity final : public Activity {
   // later chapters start already-degraded instead of re-descending each time. Reset
   // to 0 in onEnter when a book is opened. See LowMemoryRenderTier.h.
   int lowMemoryTierFloor_ = 0;
+
+  // Reader-tab layout settings this book renders with. For a "custom" book this is
+  // its own snapshot loaded from <cachePath>/reader_override.bin (decoupled from
+  // the global settings); otherwise it is a snapshot of the current global values
+  // taken at open. ALL layout reads in the reader go through prefs_ so the global
+  // CrossPointSettings singleton is never mutated for a per-book override. See
+  // ReaderPrefs. Populated in onEnter() by loadReaderPrefs().
+  ReaderPrefs prefs_;
+  bool prefsCustom_ = false;  // true when this book has its own reader_override.bin
+  std::string readerOverridePath() const { return epub->getCachePath() + "/reader_override.bin"; }
+  // Load prefs_ for this book: the per-book sidecar if present + valid (sets
+  // prefsCustom_), else a snapshot of the current global reader settings.
+  void loadReaderPrefs();
+  // Persist prefs to this book's reader_override.bin sidecar.
+  bool writeReaderOverride(const ReaderPrefs& p) const;
+  // Result callback from the in-book Reader-settings screen: capture edits, mark
+  // the book custom on any change, persist + re-layout.
+  void applyReaderSettingsEdit();
+  // Reset action: delete the sidecar, follow global settings again, re-layout.
+  void resetReaderPrefsToGlobal();
+  // Drop cached sections so render() rebuilds the current chapter under new prefs_.
+  void reloadForReaderPrefsChange();
 
   // Sliced foreground build of the on-screen chapter. On a cache miss the ~13s
   // layout is driven a few pages per render() call instead of one blocking pass,

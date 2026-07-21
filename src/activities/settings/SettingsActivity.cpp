@@ -111,9 +111,11 @@ void SettingsActivity::rebuildSettingsLists() {
 void SettingsActivity::onEnter() {
   Activity::onEnter();
 
-  // Reset selection to first category
-  selectedCategoryIndex = 0;
-  selectedSettingIndex = 0;
+  // Reset selection to first category. When locked to a category (in-book Reader
+  // tab), start on that category and on the first real setting (index 1) so the
+  // inert tab header is not the landing row.
+  selectedCategoryIndex = lockedCategory_ >= 0 ? lockedCategory_ : 0;
+  selectedSettingIndex = lockedCategory_ >= 0 ? 1 : 0;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
@@ -137,9 +139,12 @@ void SettingsActivity::loop() {
   // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-      hasChangedCategory = true;
-      requestUpdate();
+      // Locked to one category (in-book Reader tab): the tab header does not cycle.
+      if (lockedCategory_ < 0) {
+        selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
+        hasChangedCategory = true;
+        requestUpdate();
+      }
     } else {
       toggleCurrentSetting();
       requestUpdate();
@@ -151,6 +156,11 @@ void SettingsActivity::loop() {
     if (selectedSettingIndex > 0) {
       selectedSettingIndex = 0;
       requestUpdate();
+    } else if (lockedCategory_ >= 0) {
+      // In-book Reader tab: return to the reader, which captures the edited values
+      // into the book's per-book override. Do NOT save global here — the overlay
+      // guard keeps settings.json holding the global values.
+      finish();
     } else {
       SETTINGS.saveToFile();
       onGoHome();
@@ -169,17 +179,20 @@ void SettingsActivity::loop() {
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
+  // Category-jump (hold) is disabled when locked to a single category.
+  if (lockedCategory_ < 0) {
+    buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
+      hasChangedCategory = true;
+      selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+      requestUpdate();
+    });
 
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
+    buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
+      hasChangedCategory = true;
+      selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
+      requestUpdate();
+    });
+  }
 
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
@@ -568,9 +581,15 @@ void SettingsActivity::render(RenderLock&&) {
                  CROSSPOINT_VERSION);
 
   std::vector<TabInfo> tabs;
-  tabs.reserve(categoryCount);
-  for (int i = 0; i < categoryCount; i++) {
-    tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
+  if (lockedCategory_ >= 0) {
+    // Locked to one category (in-book Reader tab): show just that tab so it does
+    // not look switchable.
+    tabs.push_back({I18N.get(categoryNames[lockedCategory_]), true});
+  } else {
+    tabs.reserve(categoryCount);
+    for (int i = 0; i < categoryCount; i++) {
+      tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
+    }
   }
   GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
                  selectedSettingIndex == 0);
@@ -642,7 +661,8 @@ void SettingsActivity::render(RenderLock&&) {
   // timer) say "Select"; in-place toggles/values say "Toggle".
   const char* confirmLabel;
   if (selectedSettingIndex == 0) {
-    confirmLabel = I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount]);
+    // Locked: the header row does not switch categories, so no "next tab" hint.
+    confirmLabel = lockedCategory_ >= 0 ? "" : I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount]);
   } else {
     const auto& sel = (*currentSettings)[selectedSettingIndex - 1];
     const bool opensPicker = sel.type == SettingType::ENUM || sel.type == SettingType::STRING ||

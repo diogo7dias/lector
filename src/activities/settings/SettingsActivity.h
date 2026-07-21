@@ -177,9 +177,16 @@ class SettingsActivity final : public Activity {
   void rebuildSettingsLists();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
+  // When >= 0, the screen is locked to a single category (used by the in-book
+  // "Reader" tab, which opens this screen locked to the Reader category to edit a
+  // book's per-book reader settings). Category switching is disabled and Back
+  // returns to the caller via finish() instead of going home. -1 = normal
+  // top-level Settings (all four tabs, Back goes home).
+  int lockedCategory_ = -1;
+
  public:
-  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Settings", renderer, mappedInput) {}
+  explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, int lockedCategory = -1)
+      : Activity("Settings", renderer, mappedInput), lockedCategory_(lockedCategory) {}
   void onEnter() override;
   void onExit() override;
   void loop() override;

@@ -14,10 +14,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const int totalPages, const int bookProgressPercent,
                                                const uint8_t currentOrientation, const bool hasFootnotes,
                                                const bool hasBookmarks, const bool hasQuotes, bool hasSleepWallpaper,
-                                               bool wallpaperPaused, bool wallpaperFavorited)
+                                               bool wallpaperPaused, bool wallpaperFavorited, bool hasReaderOverride)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused,
-                               wallpaperFavorited)),
+                               wallpaperFavorited, hasReaderOverride)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -26,15 +26,19 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
 
-std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                     bool hasBookmarks, bool hasQuotes,
-                                                                                     bool hasSleepWallpaper,
-                                                                                     bool wallpaperPaused,
-                                                                                     bool wallpaperFavorited) {
+std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(
+    bool hasFootnotes, bool hasBookmarks, bool hasQuotes, bool hasSleepWallpaper, bool wallpaperPaused,
+    bool wallpaperFavorited, bool hasReaderOverride) {
   std::vector<MenuItem> items;
-  items.reserve(16);
+  items.reserve(18);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
+  // Per-book reader settings. "Reset" only appears once this book has its own
+  // override (otherwise it already follows the global settings).
+  items.push_back({MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS});
+  if (hasReaderOverride) {
+    items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
+  }
   items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
   items.push_back({MenuAction::HIGHLIGHT_QUOTE, StrId::STR_GRAB_QUOTE});
   if (hasQuotes) {

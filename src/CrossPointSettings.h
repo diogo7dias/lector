@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <iosfwd>
 
+#include "activities/reader/ReaderPrefs.h"
+
 class CrossPointSettings {
  private:
   // Private constructor for singleton
@@ -410,6 +412,23 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  // Resolve a reader font id from an explicit font size + SD font name, using the
+  // shared SD-font resolver. Lets a per-book ReaderPrefs resolve its own font id
+  // without duplicating the SD-resolver/built-in fallback logic. See ReaderPrefs.
+  int resolveReaderFontId(uint8_t size, const char* sdName) const;
+
+  // ── Per-book reader-settings edit overlay ──────────────────────────────────
+  // Copy the reader-tab layout fields from a ReaderPrefs into the live settings.
+  void applyReaderPrefs(const ReaderPrefs& p);
+  // While a book's in-book "Reader" tab is open, overlay its ReaderPrefs onto the
+  // live reader fields so the existing SettingsActivity (Reader category) edits
+  // them in place. saveToFile() persists the GLOBAL values (the backup taken here)
+  // throughout, so settings.json never captures a book's per-book values even if
+  // the caller — or a background task — saves mid-edit. See EpubReaderActivity.
+  void beginReaderEditOverlay(const ReaderPrefs& startValues);
+  // Capture the edited reader fields, restore the global backup, end the overlay.
+  ReaderPrefs endReaderEditOverlay();
+  bool readerEditOverlayActive() const { return readerEditOverlayActive_; }
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(HalFile& file, bool count_only = false) const;
@@ -423,6 +442,10 @@ class CrossPointSettings {
  private:
   bool loadFromBinaryFile();
   bool migrateLanguageBinaryFile();
+
+  // Per-book reader-settings edit overlay state (see beginReaderEditOverlay).
+  bool readerEditOverlayActive_ = false;
+  ReaderPrefs readerEditBackup_;
 
  public:
   float getReaderLineCompression() const;
