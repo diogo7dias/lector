@@ -117,6 +117,11 @@ class EpubReaderActivity final : public Activity {
   int sectionBuildTier_ = 0;                         // render tier currently being built
   unsigned long sectionBuildProgressPaintedMs_ = 0;  // last progress-bar refresh (throttle)
   int sectionBuildProgressPercent_ = -100;           // last painted bar % (repaint only when it moves)
+  // Random /sleep .pxc drawn behind the indexing face so the wait shows a
+  // wallpaper instead of a blank page. Empty = plain banner+bar face. Picked
+  // once per sliced build via a side-effect-free peek into the wallpaper index
+  // (never advances the sleep rotation cursor, never triggers an index build).
+  std::string indexingBackdropPath_;
 
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
@@ -214,6 +219,10 @@ class EpubReaderActivity final : public Activity {
   // using slicedBuild_. Used to prime the build and to restart it a tier lower on a
   // low-memory abort. Returns false when startBuild fails at that tier.
   bool startBuildAtTier(int tier);
+  // Sets indexingBackdropPath_ to a random /sleep .pxc via an O(1) peek into the
+  // prebuilt wallpaper index. Returns false (path empty) when no index/candidate
+  // exists — the indexing face then stays the plain banner+bar.
+  bool pickIndexingBackdrop();
   // Advance the in-flight sliced build by one slice (a few pages) under a per-slice
   // framebuffer loan, descending the low-memory tier on OOM and painting progress.
   // Returns true only when the build just completed (section positioned, ready to

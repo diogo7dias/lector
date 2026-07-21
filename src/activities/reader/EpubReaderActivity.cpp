@@ -12,6 +12,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <esp_heap_caps.h>
+#include <esp_random.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -40,12 +41,14 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "WakeFrameHandoff.h"
+#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/SettingsActivity.h"
 #include "components/StatusBar.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonResponsePolicy.h"
 #include "util/FavoriteImage.h"
@@ -1642,9 +1645,36 @@ bool EpubReaderActivity::beginSlicedBuild(const uint16_t viewportWidth, const ui
   sectionBuildActive_ = true;
   sectionBuildProgressPaintedMs_ = 0;
   sectionBuildProgressPercent_ = -100;  // force the first real update to paint
-  paintBuildProgress(/*force=*/true);   // initial indexing face at 0%
-  requestUpdate();                      // ask the render task for the first slice
+  if (pickIndexingBackdrop()) {
+    // Differential HALF waveforms ghost over arbitrary prior content (the sleep
+    // deep-clean rule), so blank + FULL once before the backdrop's first paint.
+    renderer.clearScreen();
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  }
+  paintBuildProgress(/*force=*/true);  // initial indexing face at 0%
+  requestUpdate();                     // ask the render task for the first slice
   return true;
+}
+
+bool EpubReaderActivity::pickIndexingBackdrop() {
+  namespace windex = crosspoint::sleep::windex;
+  indexingBackdropPath_.clear();
+  const uint32_t count = APP_STATE.sleepIndexCount;
+  if (count == 0) return false;
+  windex::Reader reader;
+  // Never buildBlocking here: a missing/stale index just means a plain face —
+  // the indexing wait must not grow a directory scan.
+  if (!reader.open()) return false;
+  for (int attempt = 0; attempt < 3; ++attempt) {
+    const std::string name = reader.nameAt(esp_random() % count);
+    // 1-bit backdrop path is .pxc-only (BMP wallpapers fall back to the plain face).
+    if (name.size() < 4 || strcasecmp(name.c_str() + name.size() - 4, ".pxc") != 0) continue;
+    std::string path = "/sleep/" + name;
+    if (!Storage.exists(path.c_str())) continue;
+    indexingBackdropPath_ = std::move(path);
+    return true;
+  }
+  return false;
 }
 
 bool EpubReaderActivity::startBuildAtTier(const int tier) {
@@ -1763,6 +1793,25 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
   }
   sectionBuildProgressPaintedMs_ = now;
   sectionBuildProgressPercent_ = percent;
+
+  // Wallpaper backdrop: redraw the picked /sleep .pxc (1-bit row-batch decode,
+  // ~4KB scratch) with the banner + bar composited via the overlay hook, pushed
+  // as one refresh. Redrawing the image on every throttled update is what keeps
+  // it on-panel on X3, where each push is a full-panel FAST and the build slices
+  // scribble the framebuffer between updates. Falls back to the plain face if
+  // the decode fails (file deleted mid-build, SD hiccup).
+  if (!indexingBackdropPath_.empty()) {
+    const int pct = percent;
+    const bool ok = renderPxcSleepScreen(
+        renderer, indexingBackdropPath_,
+        [&]() {
+          GUI.drawBannerStrip(renderer, tr(STR_INDEXING));
+          GUI.drawBottomProgressBar(renderer, pct);
+        },
+        /*drawInfoOverlay=*/false, /*grayscale=*/false);
+    if (ok) return;
+    indexingBackdropPath_.clear();
+  }
 
   // "Indexing" label strip at the top, plus a thick progress bar pinned to the BOTTOM
   // of the screen. drawIndexingProgress paints BOTH into the framebuffer before either
