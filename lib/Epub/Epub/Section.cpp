@@ -20,7 +20,9 @@ namespace {
 //      flag (guide dots feature); serialized layout adds one byte per block.
 // v32: focus-reading bold length changed (FOCUS_READING_PERCENT 45 -> 43 for CrossInk
 //      parity); cached layouts differ, so old sections must regenerate.
-constexpr uint8_t SECTION_FILE_VERSION = 32;
+// v33: force-split long runs (CJK) now mark word continuation (upstream #2652), so
+//      the wrapped layout differs; old sections must regenerate.
+constexpr uint8_t SECTION_FILE_VERSION = 33;
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss

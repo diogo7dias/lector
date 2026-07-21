@@ -246,6 +246,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
   }
   partWordBufferIndex = 0;
   nextWordContinues = false;
+  listItemBulletOnly = false;  // real text landed in the block; no longer bullet-only (#2589)
 }
 
 // start a new text block if needed
@@ -275,6 +276,17 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       return;
     }
 
+    // <li> deposited a bullet as the first word, so the block is non-empty. When a
+    // nested block child (<p>, <div>) opens, reuse the block instead of flushing the
+    // bullet to its own line — the bullet stays inline with the child text (#2589).
+    if (listItemBulletOnly) {
+      const auto style = currentTextBlock->getBlockStyle();
+      currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
+      listItemBulletOnly = false;
+      flushPendingAnchor();
+      return;
+    }
+
     makePages();
   }
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
@@ -289,6 +301,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
     LOG_ERR("EHSP", "OOM: ParsedText for new block");
   }
   wordsExtractedInBlock = 0;
+  listItemBulletOnly = false;
 }
 
 void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
@@ -917,6 +930,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
       if (strcmp(name, "li") == 0) {
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR);
+        self->listItemBulletOnly = true;  // bullet is the only word so far (#2589)
       }
     }
   } else if (matches(name, UNDERLINE_TAGS, std::size(UNDERLINE_TAGS))) {
@@ -1166,12 +1180,16 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
         }
         self->partWordBufferIndex = safeLen;
         self->flushPartWordBuffer();
+        // Force-split a long run (e.g. CJK): the pieces are one logical word, so
+        // mark continuation so wrap keeps them linked (upstream #2652).
+        self->nextWordContinues = true;
         for (int j = 0; j < overflow; j++) {
           self->partWordBuffer[j] = saved[j];
         }
         self->partWordBufferIndex = overflow;
       } else {
         self->flushPartWordBuffer();
+        self->nextWordContinues = true;
       }
     }
 
@@ -1331,6 +1349,13 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
         self->currentTextBlock->setBlockStyle(style.addBottom(self->blockStyleStack.back()));
       }
       self->blockStyleStack.pop_back();
+    }
+
+    // </li> closes: if the bullet never gained inline text (empty <li>, or one whose
+    // block children were flushed), clear the flag so the next sibling doesn't merge
+    // into this block (#2589).
+    if (strcmp(name, "li") == 0) {
+      self->listItemBulletOnly = false;
     }
   }
 }
