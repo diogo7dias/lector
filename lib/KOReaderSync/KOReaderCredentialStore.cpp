@@ -194,3 +194,9 @@ void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
   syncBehavior = behavior;
   LOG_DBG("KRS", "Set sync behavior: %s", behavior == KOReaderSyncBehavior::SMART ? "Smart" : "Ask");
 }
+
+void KOReaderCredentialStore::setSendMetadata(bool enabled) {
+  ensureLoaded();
+  sendMetadata = enabled;
+  LOG_DBG("KRS", "Set send metadata: %s", enabled ? "true" : "false");
+}

@@ -31,6 +31,7 @@ class KOReaderCredentialStore {
   // New stores default to SMART; stores migrated from an older file without this
   // key are set to ASK_EVERY_TIME on load so existing users keep manual confirm.
   KOReaderSyncBehavior syncBehavior = KOReaderSyncBehavior::SMART;
+  bool sendMetadata = false;  // Send document title/author/filename with progress uploads
 
   // Private constructor for singleton
   KOReaderCredentialStore() = default;
@@ -99,6 +100,13 @@ class KOReaderCredentialStore {
   KOReaderSyncBehavior getSyncBehavior() const {
     ensureLoaded();
     return syncBehavior;
+  }
+
+  // Send document metadata (title/author/filename) with progress uploads
+  void setSendMetadata(bool enabled);
+  bool getSendMetadata() const {
+    ensureLoaded();
+    return sendMetadata;
   }
 };
 

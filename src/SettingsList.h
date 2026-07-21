@@ -280,6 +280,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             },
             "koMatchMethod", StrId::STR_KOREADER_SYNC),
         SettingInfo::DynamicEnum(
+            StrId::STR_SEND_METADATA, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
+            [] { return KOREADER_STORE.getSendMetadata() ? (uint8_t)1 : (uint8_t)0; },
+            [](uint8_t v) {
+              KOREADER_STORE.setSendMetadata(v != 0);
+              KOREADER_STORE.saveToFile();
+            },
+            "koSendMetadata", StrId::STR_KOREADER_SYNC),
+        SettingInfo::DynamicEnum(
             StrId::STR_SYNC_BEHAVIOR, {StrId::STR_ASK_EVERY_TIME, StrId::STR_SMART_SYNC},
             [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncBehavior()); },
             [](uint8_t v) {

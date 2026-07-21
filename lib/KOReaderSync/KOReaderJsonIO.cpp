@@ -16,6 +16,7 @@ bool save(const KOReaderCredentialStore& store, const char* path) {
   doc["serverUrl"] = store.getServerUrl();
   doc["matchMethod"] = static_cast<uint8_t>(store.getMatchMethod());
   doc["syncBehavior"] = static_cast<uint8_t>(store.getSyncBehavior());
+  doc["sendMetadata"] = store.getSendMetadata();
 
   String json;
   serializeJson(doc, json);
@@ -55,6 +56,8 @@ bool load(KOReaderCredentialStore& store, const char* json, bool* needsResave) {
   } else {
     store.setSyncBehavior(static_cast<KOReaderSyncBehavior>(behaviorValue | (uint8_t)0));
   }
+
+  store.setSendMetadata(doc["sendMetadata"] | false);
 
   return true;
 }
