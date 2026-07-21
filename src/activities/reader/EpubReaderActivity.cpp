@@ -1805,13 +1805,28 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
   sectionBuildProgressPaintedMs_ = now;
   sectionBuildProgressPercent_ = percent;
 
-  // Wallpaper backdrop: redraw the picked /sleep .pxc (1-bit row-batch decode,
-  // ~4KB scratch) with the banner + bar composited via the overlay hook, pushed
-  // as one refresh. Redrawing the image on every throttled update is what keeps
-  // it on-panel on X3, where each push is a full-panel FAST and the build slices
-  // scribble the framebuffer between updates. Falls back to the plain face if
-  // the decode fails (file deleted mid-build, SD hiccup).
+  // Wallpaper backdrop. The first paint of a build (force=true: the initial face
+  // and each tier-descend restart) decodes the full .pxc and pushes image + banner
+  // + bar together. Every later throttled update (force=false) repaints ONLY the
+  // bottom progress bar and pushes just that strip via a windowed refresh, so the
+  // image and the top banner never flash or blink — e-ink holds them on the panel
+  // untouched.
+  //
+  // The windowed bar-only update is X4-only. On X3 the panel's PTL window pass is
+  // disabled (it corrupts the region), so any push there is full-panel; a bar-only
+  // push would flash a framebuffer whose image bytes the build slices have since
+  // scribbled. On X3 we therefore keep re-decoding the whole image on every update
+  // so the unavoidable full-panel push always carries the image intact.
+  //
+  // Falls back to the plain indexing face if the decode fails (file deleted mid-
+  // build, SD hiccup).
   if (!indexingBackdropPath_.empty()) {
+    if (!force && !gpio.deviceIsX3()) {
+      // X4 incremental: draw the bar and push only its own window. The image and
+      // banner stay on the panel from the last full paint, so neither refreshes.
+      GUI.fillBottomProgress(renderer, percent);
+      return;
+    }
     const int pct = percent;
     const bool ok = renderPxcSleepScreen(
         renderer, indexingBackdropPath_,
