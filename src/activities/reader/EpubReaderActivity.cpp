@@ -1947,7 +1947,12 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
   }
 
   // 3) All ahead chapters warm/handled: warm the rest of the book opportunistically.
-  pumpWholeBookWarm(viewportWidth, viewportHeight);
+  //    Skipped entirely when lookahead is disabled (PREFETCH_AHEAD == 0) so no
+  //    background build ever competes with input/render — index the current chapter
+  //    only; the next builds on demand when the reader crosses into it.
+  if (PREFETCH_AHEAD > 0) {
+    pumpWholeBookWarm(viewportWidth, viewportHeight);
+  }
 }
 
 void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const uint16_t viewportHeight) {

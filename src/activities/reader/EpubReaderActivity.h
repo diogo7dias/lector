@@ -34,7 +34,15 @@ class EpubReaderActivity final : public Activity {
   // arrival. spineIndex == -1 = empty; handled = the target is resolved (warm,
   // committed, or a build that failed to start — do not re-probe every turn);
   // section != null = an active or just-committed build (holds the ".part" handle).
-  static constexpr int PREFETCH_AHEAD = 3;
+  //
+  // PREFETCH_AHEAD == 0 (Diogo, 2026-07-21): index only the CURRENT chapter. On a
+  // single RISC-V core, background prefetch/warm builds contended with input+render
+  // during a page turn, so presses could sit dead for seconds while a build ran. The
+  // next chapter now builds on demand — when the reader crosses into it, render's
+  // loadSectionFromCache miss triggers a foreground sliced build with the progress
+  // bar. The slot pool + pump code is kept intact (empty at size 0) for an easy
+  // revert; raise this back to a small N to re-enable lookahead.
+  static constexpr int PREFETCH_AHEAD = 0;
   struct PrefetchSlot {
     std::unique_ptr<Section> section = nullptr;
     int spineIndex = -1;
