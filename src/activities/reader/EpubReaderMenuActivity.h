@@ -14,6 +14,8 @@ class EpubReaderMenuActivity final : public Activity {
   enum class MenuAction {
     SELECT_CHAPTER,
     BOOK_INFO,
+    READER_SETTINGS,        // open this book's per-book reader settings
+    RESET_READER_SETTINGS,  // clear this book's override, follow global again
     FOOTNOTES,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,
@@ -44,7 +46,7 @@ class EpubReaderMenuActivity final : public Activity {
                                   const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
                                   const bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
                                   bool hasSleepWallpaper = false, bool wallpaperPaused = false,
-                                  bool wallpaperFavorited = false);
+                                  bool wallpaperFavorited = false, bool hasReaderOverride = false);
 
   void onEnter() override;
   void onExit() override;
@@ -58,7 +60,8 @@ class EpubReaderMenuActivity final : public Activity {
   };
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
-                                              bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited);
+                                              bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited,
+                                              bool hasReaderOverride);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;

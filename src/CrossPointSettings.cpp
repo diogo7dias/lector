@@ -115,8 +115,8 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   guideDotsEnabled = p.guideDotsEnabled;
   imageRendering = p.imageRendering;
   orientation = p.orientation;
-  std::memcpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName));
-  sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
+  std::memset(sdFontFamilyName, 0, sizeof(sdFontFamilyName));
+  std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
 }
 
 void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues) {

@@ -75,6 +75,15 @@ class EpubReaderActivity final : public Activity {
   // Load prefs_ for this book: the per-book sidecar if present + valid (sets
   // prefsCustom_), else a snapshot of the current global reader settings.
   void loadReaderPrefs();
+  // Persist prefs to this book's reader_override.bin sidecar.
+  bool writeReaderOverride(const ReaderPrefs& p) const;
+  // Result callback from the in-book Reader-settings screen: capture edits, mark
+  // the book custom on any change, persist + re-layout.
+  void applyReaderSettingsEdit();
+  // Reset action: delete the sidecar, follow global settings again, re-layout.
+  void resetReaderPrefsToGlobal();
+  // Drop cached sections so render() rebuilds the current chapter under new prefs_.
+  void reloadForReaderPrefsChange();
 
   // Sliced foreground build of the on-screen chapter. On a cache miss the ~13s
   // layout is driven a few pages per render() call instead of one blocking pass,

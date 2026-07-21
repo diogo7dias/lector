@@ -64,7 +64,7 @@ int readerFontId(const ReaderPrefs& p);
 // CrossPointSettings::getReaderLineCompression (bounds 35..150). Pure — host testable.
 inline float readerLineCompression(const ReaderPrefs& p) {
   uint8_t pct = p.lineSpacingPercent;
-  if (pct < 35) pct = 35;   // CrossPointSettings::MIN_LINE_SPACING_PERCENT
+  if (pct < 35) pct = 35;    // CrossPointSettings::MIN_LINE_SPACING_PERCENT
   if (pct > 150) pct = 150;  // CrossPointSettings::MAX_LINE_SPACING_PERCENT
   return static_cast<float>(pct) / 100.0f;
 }

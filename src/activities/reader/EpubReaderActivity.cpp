@@ -40,6 +40,7 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "WakeFrameHandoff.h"
+#include "activities/settings/SettingsActivity.h"
 #include "components/StatusBar.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -74,6 +75,10 @@ int clampPercent(int percent) {
 
 // First-line indent now lives in ReaderPrefs (readerFirstLineIndentPx) so it is
 // resolved per-book from prefs_, not from the global settings singleton.
+
+// SettingsActivity category index of the Reader tab (categoryNames order is
+// {Display, Reader, Controls, System}). Used to open the in-book Reader tab.
+static constexpr int kReaderCategoryIndex = 1;
 
 // SD card folder finished books are moved into. Single source of truth for the path.
 // constexpr ⇒ lives in flash .rodata, no DRAM cost.
@@ -494,7 +499,7 @@ void EpubReaderActivity::loop() {
           makeUniqueNoThrow<EpubReaderMenuActivity>(
               renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-              hasQuotes, hasSleepWallpaper, wallpaperPaused, wallpaperFavorited),
+              hasQuotes, hasSleepWallpaper, wallpaperPaused, wallpaperFavorited, prefsCustom_),
           [this](const ActivityResult& result) {
             // Always apply orientation change even if the menu was cancelled
             const auto& menu = std::get<MenuResult>(result.data);
@@ -823,6 +828,22 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           makeUniqueNoThrow<BookInfoActivity>(renderer, mappedInput, epub->getTitle(), epub->getAuthor(),
                                               epub->getLanguage(), epub->getDescription(), coverPath),
           [this](const ActivityResult&) { requestUpdate(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::READER_SETTINGS: {
+      // Open the familiar settings screen locked to the Reader tab, editing this
+      // book's reader settings. beginReaderEditOverlay overlays the book's current
+      // values onto the live settings (guarded so the global file is untouched);
+      // the result callback captures the edits back into the book's override.
+      SETTINGS.beginReaderEditOverlay(prefs_);
+      startActivityForResult(
+          makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput, /*lockedCategory=*/kReaderCategoryIndex),
+          [this](const ActivityResult&) { applyReaderSettingsEdit(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::RESET_READER_SETTINGS: {
+      resetReaderPrefsToGlobal();
+      requestUpdate();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::READING_STATS: {
@@ -1463,6 +1484,70 @@ void EpubReaderActivity::loadReaderPrefs() {
   prefs_ = ReaderPrefs::fromGlobal();
 }
 
+bool EpubReaderActivity::writeReaderOverride(const ReaderPrefs& p) const {
+  HalFile f;
+  if (!Storage.openFileForWrite("ERS", readerOverridePath(), f)) {
+    LOG_ERR("ERS", "Failed to open reader_override.bin for write");
+    return false;
+  }
+  if (!writeReaderPrefs(f, p)) {
+    LOG_ERR("ERS", "Short write to reader_override.bin");
+    return false;
+  }
+  return true;
+}
+
+// Drop the current + prefetched/warm section objects so render() rebuilds the
+// on-screen chapter under the new prefs_ (mirrors applyOrientation's reflow).
+// The reading position is preserved by page number, like an orientation change.
+void EpubReaderActivity::reloadForReaderPrefsChange() {
+  RenderLock lock(*this);
+  if (section) {
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = section->pageCount;
+    nextPageNumber = section->currentPage;
+  }
+  for (auto& slot : prefetchSlots_) {
+    slot.section.reset();
+    slot.spineIndex = -1;
+    slot.handled = false;
+  }
+  warmSection_.reset();
+  warmBuildSpine_ = -1;
+  warmScanSpine_ = -1;
+  warmScanComplete_ = false;
+  warmSettingsHash_ = 0;
+  section.reset();
+}
+
+// Result callback from the in-book Reader-settings screen. Captures the edited
+// values out of the settings overlay. Per the "touch one -> whole book custom"
+// model, ANY change freezes the full snapshot as this book's override; no change
+// leaves the book exactly as it was.
+void EpubReaderActivity::applyReaderSettingsEdit() {
+  const ReaderPrefs edited = SETTINGS.endReaderEditOverlay();
+  const bool changed = std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) != 0;
+  if (!changed) {
+    requestUpdate();
+    return;
+  }
+  prefs_ = edited;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  ReaderUtils::applyOrientation(renderer, prefs_.orientation);
+  reloadForReaderPrefsChange();
+  requestUpdate();
+}
+
+// Clear this book's override so it follows the global reader settings again.
+void EpubReaderActivity::resetReaderPrefsToGlobal() {
+  Storage.remove(readerOverridePath().c_str());
+  prefsCustom_ = false;
+  prefs_ = ReaderPrefs::fromGlobal();
+  ReaderUtils::applyOrientation(renderer, prefs_.orientation);
+  reloadForReaderPrefsChange();
+}
+
 bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t viewportWidth,
                                               const uint16_t viewportHeight) {
   const int fontId = readerFontId(prefs_);
@@ -1499,11 +1584,10 @@ bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t v
       continue;
     }
     lastProbed = knobs;
-    if (!section.hasCachedSectionFor(fontId, lineCompression, prefs_.extraParagraphSpacing,
-                                     prefs_.paragraphAlignment, viewportWidth, viewportHeight,
-                                     knobs.hyphenationEnabled, knobs.embeddedStyle, knobs.imageRendering,
-                                     knobs.focusReadingEnabled, knobs.guideDotsEnabled, firstLineIndentPx,
-                                     prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    if (!section.hasCachedSectionFor(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
+                                     viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
+                                     knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
+                                     firstLineIndentPx, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       continue;
     }
     if (section.loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
@@ -1835,11 +1919,10 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       LOG_ERR("ERS", "OOM: prefetch Section for chapter %d", target);
       return;
     }
-    if (next->loadSectionFile(readerFontId(prefs_), readerLineCompression(prefs_),
-                              prefs_.extraParagraphSpacing, prefs_.paragraphAlignment, viewportWidth,
-                              viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
-                              prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled,
-                              firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    if (next->loadSectionFile(readerFontId(prefs_), readerLineCompression(prefs_), prefs_.extraParagraphSpacing,
+                              prefs_.paragraphAlignment, viewportWidth, viewportHeight, prefs_.hyphenationEnabled,
+                              prefs_.embeddedStyle, prefs_.imageRendering, prefs_.focusReadingEnabled,
+                              prefs_.guideDotsEnabled, firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       slot->handled = true;  // already warm; drop the probe, look further ahead
       continue;
     }
@@ -1851,11 +1934,10 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       return;
     }
     LOG_DBG("ERS", "Prefetching chapter: %d", target);
-    if (!next->startBuild(readerFontId(prefs_), readerLineCompression(prefs_),
-                          prefs_.extraParagraphSpacing, prefs_.paragraphAlignment, viewportWidth, viewportHeight,
-                          prefs_.hyphenationEnabled, prefs_.embeddedStyle, prefs_.imageRendering,
-                          prefs_.focusReadingEnabled, prefs_.guideDotsEnabled, firstLineIndent,
-                          prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    if (!next->startBuild(readerFontId(prefs_), readerLineCompression(prefs_), prefs_.extraParagraphSpacing,
+                          prefs_.paragraphAlignment, viewportWidth, viewportHeight, prefs_.hyphenationEnabled,
+                          prefs_.embeddedStyle, prefs_.imageRendering, prefs_.focusReadingEnabled,
+                          prefs_.guideDotsEnabled, firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", target);
       slot->handled = true;  // will not retry until we move on
       return;
@@ -1961,8 +2043,8 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   LOG_DBG("ERS", "Warming cold chapter %d", spine);
   if (!probe->startBuild(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
                          viewportWidth, viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
-                         prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled,
-                         firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+                         prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled, firstLineIndent,
+                         prefs_.wordSpacing, prefs_.paragraphSpacing)) {
     LOG_ERR("ERS", "Warm build failed to start for chapter %d", spine);
     return;  // cursor already advanced; skipped
   }

@@ -25,8 +25,11 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.guideDotsEnabled = SETTINGS.guideDotsEnabled;
   p.imageRendering = SETTINGS.imageRendering;
   p.orientation = SETTINGS.orientation;
-  std::memcpy(p.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(p.sdFontFamilyName));
-  p.sdFontFamilyName[sizeof(p.sdFontFamilyName) - 1] = '\0';
+  // Zero-pad then copy so the trailing bytes are canonical — the reader compares
+  // whole ReaderPrefs blobs (memcmp) to detect an edit, so stray bytes past the
+  // string terminator must not read as a change.
+  std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
+  std::strncpy(p.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(p.sdFontFamilyName) - 1);
   return p;
 }
 
