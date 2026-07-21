@@ -277,6 +277,17 @@ void EpubReaderActivity::onExit() {
   if (footnoteDepth > 0 && epub) {
     const SavedPosition& origin = savedPositions[0];
     saveProgress(origin.spineIndex, origin.pageNumber, 0);
+  } else if (epub && section && !sectionBuildActive_ &&
+             (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
+              section->pageCount != lastSavedPageCount)) {
+    // A page turn advances section->currentPage at input time, but the matching
+    // progress save only runs from the render task AFTER the new page paints.
+    // Locking or leaving the book in that window exited with the last turn
+    // unsaved, so the book reopened one page back. Flush the position here,
+    // while epub + section are still live (both reset below). Skipped while a
+    // sliced build is in flight: mid-build currentPage/pageCount are not the
+    // user's real position and would clobber the last good save.
+    saveProgress(currentSpineIndex, section->currentPage, section->pageCount);
   }
 
   // Tear down any in-flight next-chapter prefetch first so its ".part" is removed

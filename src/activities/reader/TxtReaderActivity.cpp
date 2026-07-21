@@ -69,6 +69,10 @@ void TxtReaderActivity::onExit() {
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
+  // Flush the last page turn: loop() saves only after renderPage(), so locking
+  // or leaving right after a turn could exit with the last turn unsaved and
+  // reopen one page back.
+  if (txt && currentPage < totalPages) saveProgress();
   txt.reset();
 }
 
