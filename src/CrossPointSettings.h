@@ -363,6 +363,14 @@ class CrossPointSettings {
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
   uint8_t moveFinishedToReadFolder = 0;
+  // OPDS download destination folder ("" = SD root). Global; edited from the OPDS
+  // server list. Persisted via a category-less SettingInfo::String in SettingsList.h,
+  // so it stays out of the on-device Settings screen (upstream #2571).
+  char opdsDownloadFolder[64] = "";
+  // On-disk filename format for OPDS downloads (0=Author-Title default, 1=Title-Author,
+  // 2=Title). See OpdsFilenameFormat. Category-less SettingInfo::Enum, cycled from the
+  // OPDS server list; hidden from the on-device Settings screen.
+  uint8_t opdsFilenameFormat = 0;
   // Reading statistics. Idle threshold is stored in 10-second units so the
   // full 30-second to 10-minute range fits in one persisted byte.
   uint8_t readingStatsEnabled = 1;

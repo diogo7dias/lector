@@ -6,7 +6,11 @@
 #include <base64.h>
 #include <esp_crt_bundle.h>
 #include <esp_http_client.h>
+#include <strings.h>
 
+#include <algorithm>
+#include <cctype>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <string>
@@ -35,7 +39,82 @@ struct Sink {
   bool* cancelFlag = nullptr;
   size_t total = 0;
   size_t downloaded = 0;
+  std::string contentDisposition;  // captured Content-Disposition header (upstream #2415)
 };
+
+// Capture the Content-Disposition response header so the caller can honor the
+// server-provided filename. esp_http_client delivers headers via this callback.
+esp_err_t httpEventHandler(esp_http_client_event_t* evt) {
+  if (evt->event_id == HTTP_EVENT_ON_HEADER && strcasecmp(evt->header_key, "Content-Disposition") == 0) {
+    if (auto* sink = static_cast<Sink*>(evt->user_data)) {
+      sink->contentDisposition = evt->header_value;
+    }
+  }
+  return ESP_OK;
+}
+
+std::string urlDecode(const std::string& str) {
+  std::string res;
+  res.reserve(str.size());
+  for (size_t i = 0; i < str.size(); i++) {
+    if (str[i] == '%' && i + 2 < str.size()) {
+      const unsigned char c1 = static_cast<unsigned char>(str[i + 1]);
+      const unsigned char c2 = static_cast<unsigned char>(str[i + 2]);
+      if (std::isxdigit(c1) && std::isxdigit(c2)) {
+        const char hex[3] = {str[i + 1], str[i + 2], '\0'};
+        res += static_cast<char>(strtol(hex, nullptr, 16));
+        i += 2;
+      } else {
+        res += str[i];
+      }
+    } else {
+      res += str[i];
+    }
+  }
+  return res;
+}
+
+// Extract the filename from a Content-Disposition header. Handles quoted/bare
+// filename= and RFC 5987 filename*=UTF-8''... (percent-decoded). Upstream #2415.
+std::string parseContentDisposition(const std::string& header) {
+  std::string lowerHeader = header;
+  std::transform(lowerHeader.begin(), lowerHeader.end(), lowerHeader.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+
+  bool isRfc5987 = false;
+  size_t pos = lowerHeader.find("filename*=");
+  if (pos != std::string::npos) {
+    isRfc5987 = true;
+    pos += 10;
+  } else {
+    pos = lowerHeader.find("filename=");
+    if (pos == std::string::npos) return "";
+    pos += 9;
+  }
+
+  std::string fn = header.substr(pos);
+  while (!fn.empty() && std::isspace(static_cast<unsigned char>(fn.front()))) fn.erase(fn.begin());
+  while (!fn.empty() && std::isspace(static_cast<unsigned char>(fn.back()))) fn.pop_back();
+
+  if (!fn.empty() && fn.front() == '"') {
+    fn = fn.substr(1);
+    const size_t q = fn.find('"');
+    if (q != std::string::npos) fn.resize(q);
+  } else if (!fn.empty()) {
+    const size_t space = fn.find_first_of("; \t\r\n");
+    if (space != std::string::npos) fn.resize(space);
+  }
+
+  if (isRfc5987) {
+    const size_t firstQuote = fn.find('\'');
+    if (firstQuote != std::string::npos) {
+      const size_t secondQuote = fn.find('\'', firstQuote + 1);
+      fn = (secondQuote != std::string::npos) ? fn.substr(secondQuote + 1) : fn.substr(firstQuote + 1);
+    }
+    return urlDecode(fn);
+  }
+  return fn;
+}
 
 bool isRedirect(int status) {
   return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
@@ -68,6 +147,8 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   // only because Arduino's ssl_client drives mbedtls directly.
   config.crt_bundle_attach = esp_crt_bundle_attach;
   config.keep_alive_enable = true;
+  config.event_handler = httpEventHandler;  // capture Content-Disposition (#2415)
+  config.user_data = &sink;
 
   esp_http_client_handle_t client = esp_http_client_init(&config);
   if (!client) {
@@ -92,6 +173,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     esp_http_client_cleanup(client);
     return HttpDownloader::HTTP_ERROR;
   }
+  sink.contentDisposition.clear();
   int64_t contentLength = esp_http_client_fetch_headers(client);
   int status = esp_http_client_get_status_code(client);
   int hops = 0;
@@ -104,6 +186,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
       esp_http_client_cleanup(client);
       return HttpDownloader::HTTP_ERROR;
     }
+    sink.contentDisposition.clear();  // only keep the final response's header (#2415)
     contentLength = esp_http_client_fetch_headers(client);
     status = esp_http_client_get_status_code(client);
   }
@@ -196,7 +279,8 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
-                                                             const std::string& username, const std::string& password) {
+                                                             const std::string& username, const std::string& password,
+                                                             std::string* serverFilename) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   if (Storage.exists(destPath.c_str())) {
@@ -228,5 +312,10 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     return HTTP_ERROR;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
+
+  if (serverFilename) {
+    *serverFilename = parseContentDisposition(sink.contentDisposition);
+    LOG_DBG("HTTP", "Server filename from Content-Disposition: %s", serverFilename->c_str());
+  }
   return OK;
 }

@@ -1,12 +1,14 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
 #include <esp_heap_caps.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -15,6 +17,7 @@
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
+#include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
 #include "util/UrlUtils.h"
 
@@ -321,10 +324,23 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
   std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  std::string filename =
-      "/" + StringUtils::sanitizeFilename((book.author.empty() ? "" : book.author + " - ") + book.title) + ".epub";
+  // opdsDownloadFolder is a null-terminated char[64]; use it directly. On mkdir
+  // failure, fall back to SD root so a download is never lost (upstream #2571).
+  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
+  bool haveFolder = folder[0] != '\0';
+  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
+    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
+    haveFolder = false;
+  }
+
+  std::string filename;
+  filename.reserve(96);
+  if (haveFolder) filename += folder;
+  filename += '/';
+  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
   LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
 
+  std::string serverFilename;
   const auto result = HttpDownloader::downloadToFile(
       downloadUrl, filename,
       [this](const size_t downloaded, const size_t total) {
@@ -332,9 +348,27 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
         downloadTotal = total;
         requestUpdate(true);
       },
-      nullptr, server.username, server.password);
+      nullptr, server.username, server.password, server.keepFilename ? &serverFilename : nullptr);
 
   if (result == HttpDownloader::OK) {
+    // When the server sends a filename (Content-Disposition) and this server is
+    // set to keep it, rename the download to that name in the same folder (#2415).
+    const std::string sanitizedServerFilename = StringUtils::sanitizeFilename(serverFilename);
+    if (server.keepFilename && !sanitizedServerFilename.empty()) {
+      std::string finalPath;
+      finalPath.reserve(96);
+      if (haveFolder) finalPath += folder;
+      finalPath += '/';
+      finalPath += sanitizedServerFilename;
+      if (finalPath != filename) {
+        if (Storage.exists(finalPath.c_str())) Storage.remove(finalPath.c_str());
+        if (Storage.rename(filename.c_str(), finalPath.c_str())) {
+          filename = finalPath;
+        } else {
+          LOG_ERR("OPDS", "rename to server filename failed, keeping %s", filename.c_str());
+        }
+      }
+    }
     clearBookCache(filename);
     state = BrowserState::BROWSING;
   } else if (result == HttpDownloader::HTTP_ERROR) {
