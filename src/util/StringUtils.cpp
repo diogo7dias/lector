@@ -17,8 +17,8 @@ std::string sanitizeFilename(const std::string& name, size_t maxBytes) {
   // into a caller buffer; the result never exceeds max(maxBytes, 4) ("book").
   const size_t cap = maxBytes < 4 ? 4 : maxBytes;
   std::string out(cap, '\0');
-  size_t n = fshelpers_sanitize_filename(reinterpret_cast<const uint8_t*>(name.data()), name.size(),
-                                         maxBytes, reinterpret_cast<uint8_t*>(&out[0]), out.size());
+  size_t n = fshelpers_sanitize_filename(reinterpret_cast<const uint8_t*>(name.data()), name.size(), maxBytes,
+                                         reinterpret_cast<uint8_t*>(&out[0]), out.size());
   if (n > out.size()) n = out.size();
   out.resize(n);
   return out;

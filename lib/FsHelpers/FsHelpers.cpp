@@ -150,8 +150,7 @@ bool checkFileExtension(std::string_view fileName, const char* extension) {
 #ifdef USE_RUST_FSHELPERS
   // Memory-safe Rust implementation (rust/fshelpers-rs). string_view is not
   // null-terminated, so we pass (ptr, len) explicitly — never .data() to a C API.
-  return fshelpers_check_file_extension(reinterpret_cast<const uint8_t*>(fileName.data()),
-                                        fileName.length(),
+  return fshelpers_check_file_extension(reinterpret_cast<const uint8_t*>(fileName.data()), fileName.length(),
                                         reinterpret_cast<const uint8_t*>(extension), strlen(extension));
 #else
   const size_t extLen = strlen(extension);

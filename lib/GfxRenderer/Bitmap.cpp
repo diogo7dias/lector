@@ -239,8 +239,8 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
 #ifdef USE_RUST_FSHELPERS
   // Memory-safe Rust unpack. Returns false on an unsupported bpp or a malformed
   // (too-short) row — where the raw C++ pointer loop would read out of bounds.
-  if (!fshelpers_bmp_unpack_row(rowBuffer, static_cast<size_t>(rowBytes), bpp, static_cast<size_t>(width),
-                                paletteLum, sizeof(paletteLum), lum, static_cast<size_t>(width))) {
+  if (!fshelpers_bmp_unpack_row(rowBuffer, static_cast<size_t>(rowBytes), bpp, static_cast<size_t>(width), paletteLum,
+                                sizeof(paletteLum), lum, static_cast<size_t>(width))) {
     return BmpReaderError::UnsupportedBpp;
   }
 #else

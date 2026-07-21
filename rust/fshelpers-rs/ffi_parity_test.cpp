@@ -34,8 +34,7 @@ static bool checkFileExtension_cpp(std::string_view fileName, const char* extens
 }
 
 static bool checkFileExtension_rust(std::string_view fileName, const char* extension) {
-  return fshelpers_check_file_extension(reinterpret_cast<const uint8_t*>(fileName.data()),
-                                        fileName.length(),
+  return fshelpers_check_file_extension(reinterpret_cast<const uint8_t*>(fileName.data()), fileName.length(),
                                         reinterpret_cast<const uint8_t*>(extension), strlen(extension));
 }
 
@@ -104,17 +103,28 @@ static uint32_t utf8NextCodepoint_ref(const unsigned char** string) {
   const unsigned char lead = **string;
   const int bytes = utf8CodepointLen_ref(lead);
   const uint8_t* chr = *string;
-  if (bytes == 1 && lead >= 0x80) { (*string)++; return REPLACEMENT_GLYPH_REF; }
-  if (bytes == 1) { (*string)++; return chr[0]; }
+  if (bytes == 1 && lead >= 0x80) {
+    (*string)++;
+    return REPLACEMENT_GLYPH_REF;
+  }
+  if (bytes == 1) {
+    (*string)++;
+    return chr[0];
+  }
   for (int i = 1; i < bytes; i++) {
-    if ((chr[i] & 0xC0) != 0x80) { *string += i; return REPLACEMENT_GLYPH_REF; }
+    if ((chr[i] & 0xC0) != 0x80) {
+      *string += i;
+      return REPLACEMENT_GLYPH_REF;
+    }
   }
   uint32_t cp = chr[0] & ((1 << (7 - bytes)) - 1);
   for (int i = 1; i < bytes; i++) cp = (cp << 6) | (chr[i] & 0x3F);
-  const bool overlong =
-      (bytes == 2 && cp < 0x80) || (bytes == 3 && cp < 0x800) || (bytes == 4 && cp < 0x10000);
+  const bool overlong = (bytes == 2 && cp < 0x80) || (bytes == 3 && cp < 0x800) || (bytes == 4 && cp < 0x10000);
   const bool surrogate = (cp >= 0xD800 && cp <= 0xDFFF);
-  if (overlong || surrogate || cp > 0x10FFFF) { (*string)++; return REPLACEMENT_GLYPH_REF; }
+  if (overlong || surrogate || cp > 0x10FFFF) {
+    (*string)++;
+    return REPLACEMENT_GLYPH_REF;
+  }
   *string += bytes;
   return cp;
 }
@@ -126,8 +136,8 @@ static std::string sanitizeFilename_cpp(const std::string& name, size_t maxBytes
   while (*text != 0) {
     const auto* cpStart = text;
     uint32_t cp = utf8NextCodepoint_ref(&text);
-    if (cp == '/' || cp == '\\' || cp == ':' || cp == '*' || cp == '?' || cp == '"' || cp == '<' ||
-        cp == '>' || cp == '|') {
+    if (cp == '/' || cp == '\\' || cp == ':' || cp == '*' || cp == '?' || cp == '"' || cp == '<' || cp == '>' ||
+        cp == '|') {
       if (result.length() + 1 > maxBytes) break;
       result += '_';
     } else if (cp >= 128 || (cp >= 32 && cp < 127)) {
@@ -137,16 +147,18 @@ static std::string sanitizeFilename_cpp(const std::string& name, size_t maxBytes
     }
   }
   size_t end = result.find_last_not_of(" .");
-  if (end != std::string::npos) result.resize(end + 1);
-  else result.clear();
+  if (end != std::string::npos)
+    result.resize(end + 1);
+  else
+    result.clear();
   return result.empty() ? "book" : result;
 }
 
 static std::string sanitizeFilename_rust(const std::string& name, size_t maxBytes) {
   size_t cap = maxBytes < 4 ? 4 : maxBytes;
   std::string out(cap, '\0');
-  size_t n = fshelpers_sanitize_filename(reinterpret_cast<const uint8_t*>(name.data()), name.size(),
-                                         maxBytes, reinterpret_cast<uint8_t*>(&out[0]), out.size());
+  size_t n = fshelpers_sanitize_filename(reinterpret_cast<const uint8_t*>(name.data()), name.size(), maxBytes,
+                                         reinterpret_cast<uint8_t*>(&out[0]), out.size());
   if (n > out.size()) n = out.size();
   out.resize(n);
   return out;
@@ -167,8 +179,7 @@ static uint8_t paethPredictor_cpp(uint8_t a, uint8_t b, uint8_t c) {
 
 // Returns true if the filter is valid (mirrors decodeScanline returning false on
 // an unknown filter). Reconstructs `cur` in place using `prev` (same length).
-static bool unfilterRow_cpp(uint8_t filter, std::vector<uint8_t>& cur,
-                            const std::vector<uint8_t>& prev, int bpp) {
+static bool unfilterRow_cpp(uint8_t filter, std::vector<uint8_t>& cur, const std::vector<uint8_t>& prev, int bpp) {
   const uint32_t rawRowBytes = static_cast<uint32_t>(cur.size());
   switch (filter) {
     case 0:
@@ -261,17 +272,15 @@ int main() {
     if (a != b) {
       mismatches++;
       if (mismatches <= 20) {
-        printf("MISMATCH name=\"%.*s\" ext=\"%s\" cpp=%d rust=%d\n", (int)name.size(), name.data(), ext,
-               a, b);
+        printf("MISMATCH name=\"%.*s\" ext=\"%s\" cpp=%d rust=%d\n", (int)name.size(), name.data(), ext, a, b);
       }
     }
   };
 
   // 1. Hand-picked edge cases (note: name may contain embedded NULs, so string_view length matters).
   const char* exts[] = {".jpg", ".jpeg", ".png", ".epub", ".xtc", ".xtch", ".txt", ".md", "", "."};
-  const char* names[] = {"photo.jpg", "PHOTO.JPG",  "photo.JpG", "photo.png", "book.EPUB",
-                         "jpg",       "",           ".md",       ".MD",       "a.b.c.txt",
-                         "café.JPG",  "noext",      "x",         "..",        "trailing."};
+  const char* names[] = {"photo.jpg", "PHOTO.JPG", "photo.JpG", "photo.png", "book.EPUB", "jpg", "",         ".md",
+                         ".MD",       "a.b.c.txt", "café.JPG",  "noext",     "x",         "..",  "trailing."};
   for (const char* n : names) {
     for (const char* e : exts) {
       compare(std::string_view(n), e);
@@ -304,8 +313,8 @@ int main() {
     if (ca != cb) {
       mismatches++;
       if (mismatches <= 20) {
-        printf("NL MISMATCH a=\"%.*s\" b=\"%.*s\" cpp=%d rust=%d\n", (int)a.size(), a.data(),
-               (int)b.size(), b.data(), ca, cb);
+        printf("NL MISMATCH a=\"%.*s\" b=\"%.*s\" cpp=%d rust=%d\n", (int)a.size(), a.data(), (int)b.size(), b.data(),
+               ca, cb);
       }
     }
   };
@@ -331,8 +340,8 @@ int main() {
     if (ca != cb) {
       mismatches++;
       if (mismatches <= 20) {
-        printf("NFL MISMATCH a=\"%.*s\" b=\"%.*s\" cpp=%d rust=%d\n", (int)a.size(), a.data(),
-               (int)b.size(), b.data(), ca, cb);
+        printf("NFL MISMATCH a=\"%.*s\" b=\"%.*s\" cpp=%d rust=%d\n", (int)a.size(), a.data(), (int)b.size(), b.data(),
+               ca, cb);
       }
     }
   };
@@ -353,8 +362,7 @@ int main() {
     if (ca != cb) {
       mismatches++;
       if (mismatches <= 20) {
-        printf("SAN MISMATCH len=%zu max=%zu cpp=\"%s\" rust=\"%s\"\n", n.size(), mx, ca.c_str(),
-               cb.c_str());
+        printf("SAN MISMATCH len=%zu max=%zu cpp=\"%s\" rust=\"%s\"\n", n.size(), mx, ca.c_str(), cb.c_str());
       }
     }
   };
@@ -369,8 +377,7 @@ int main() {
   // 6. PNG unfilter fuzz: random rows + prev rows (equal length, as the decoder
   //    feeds them), random filter incl. invalid, bpp in [1,8]. Compare the whole
   //    reconstructed row and the bool result.
-  std::uniform_int_distribution<int> pngLen(0, 40), pngByte(0, 255), pngFilter(0, 7),
-      pngBpp(1, 8);
+  std::uniform_int_distribution<int> pngLen(0, 40), pngByte(0, 255), pngFilter(0, 7), pngBpp(1, 8);
   for (int iter = 0; iter < 500000; iter++) {
     size_t len = static_cast<size_t>(pngLen(rng));
     int bpp = pngBpp(rng);
@@ -381,9 +388,8 @@ int main() {
     curR = cur;
 
     bool okC = unfilterRow_cpp(filter, cur, prev, bpp);
-    bool okR = fshelpers_png_unfilter_row(filter, curR.empty() ? nullptr : curR.data(),
-                                          curR.size(), prev.empty() ? nullptr : prev.data(),
-                                          prev.size(), static_cast<size_t>(bpp));
+    bool okR = fshelpers_png_unfilter_row(filter, curR.empty() ? nullptr : curR.data(), curR.size(),
+                                          prev.empty() ? nullptr : prev.data(), prev.size(), static_cast<size_t>(bpp));
     checks++;
     // On an unknown filter both report false and leave the row untouched; on a
     // valid filter both reconstruct identically.
@@ -400,19 +406,26 @@ int main() {
   //    row length (deliberately sometimes too short), and palette length. Compare
   //    the bool result and, when both succeed, the full luminance row.
   const int bppChoices[] = {32, 24, 8, 4, 2, 1, 16, 0};
-  std::uniform_int_distribution<int> bmpW(0, 64), bmpByte(0, 255), bmpBppPick(0, 7),
-      bmpRowExtra(-4, 8), bmpPalLen(0, 300);
+  std::uniform_int_distribution<int> bmpW(0, 64), bmpByte(0, 255), bmpBppPick(0, 7), bmpRowExtra(-4, 8),
+      bmpPalLen(0, 300);
   for (int iter = 0; iter < 500000; iter++) {
     const uint16_t bpp = static_cast<uint16_t>(bppChoices[bmpBppPick(rng)]);
     const size_t width = static_cast<size_t>(bmpW(rng));
     size_t reqRow;
-    if (bpp == 32) reqRow = width * 4;
-    else if (bpp == 24) reqRow = width * 3;
-    else if (bpp == 8) reqRow = width;
-    else if (bpp == 4) reqRow = (width + 1) / 2;
-    else if (bpp == 2) reqRow = (width + 3) / 4;
-    else if (bpp == 1) reqRow = (width + 7) / 8;
-    else reqRow = width;
+    if (bpp == 32)
+      reqRow = width * 4;
+    else if (bpp == 24)
+      reqRow = width * 3;
+    else if (bpp == 8)
+      reqRow = width;
+    else if (bpp == 4)
+      reqRow = (width + 1) / 2;
+    else if (bpp == 2)
+      reqRow = (width + 3) / 4;
+    else if (bpp == 1)
+      reqRow = (width + 7) / 8;
+    else
+      reqRow = width;
     long rlen = static_cast<long>(reqRow) + bmpRowExtra(rng);
     if (rlen < 0) rlen = 0;
     std::vector<uint8_t> row(static_cast<size_t>(rlen));
@@ -422,16 +435,16 @@ int main() {
     std::vector<uint8_t> outC(width ? width : 1, 0), outR(width ? width : 1, 0);
 
     bool okC = unpackRow_cpp(row, bpp, width, palette, outC);
-    bool okR = fshelpers_bmp_unpack_row(row.empty() ? nullptr : row.data(), row.size(), bpp, width,
-                                        palette.empty() ? nullptr : palette.data(), palette.size(),
-                                        outR.data(), outR.size());
+    bool okR =
+        fshelpers_bmp_unpack_row(row.empty() ? nullptr : row.data(), row.size(), bpp, width,
+                                 palette.empty() ? nullptr : palette.data(), palette.size(), outR.data(), outR.size());
     checks++;
     const bool outMatch = (okC && okR) ? (outC == outR) : true;
     if (okC != okR || !outMatch) {
       mismatches++;
       if (mismatches <= 20) {
-        printf("BMP MISMATCH bpp=%u width=%zu rlen=%zu pal=%zu okC=%d okR=%d\n", bpp, width, row.size(),
-               palette.size(), okC, okR);
+        printf("BMP MISMATCH bpp=%u width=%zu rlen=%zu pal=%zu okC=%d okR=%d\n", bpp, width, row.size(), palette.size(),
+               okC, okR);
       }
     }
   }

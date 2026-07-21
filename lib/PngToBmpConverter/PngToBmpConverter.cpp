@@ -282,8 +282,8 @@ static bool decodeScanline(PngDecodeContext& ctx) {
   // Memory-safe Rust reverse-filter. Every access is bounds-checked, so a
   // malformed image that mis-sizes a row cannot overrun currentRow/previousRow
   // on the device; an unknown filter returns false, matching the switch default.
-  if (!fshelpers_png_unfilter_row(filterType, ctx.currentRow, ctx.rawRowBytes, ctx.previousRow,
-                                  ctx.rawRowBytes, static_cast<size_t>(bpp))) {
+  if (!fshelpers_png_unfilter_row(filterType, ctx.currentRow, ctx.rawRowBytes, ctx.previousRow, ctx.rawRowBytes,
+                                  static_cast<size_t>(bpp))) {
     LOG_ERR("PNG", "Unknown filter type: %d", filterType);
     return false;
   }
