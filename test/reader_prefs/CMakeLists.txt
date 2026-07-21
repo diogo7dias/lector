@@ -1,0 +1,18 @@
+add_executable(ReaderPrefsTest
+  ReaderPrefsTest.cpp
+)
+
+# Current dir FIRST so <HalStorage.h> resolves to the host stub here (the
+# firmware version pulls in SD/Arduino headers that cannot build off-device).
+target_include_directories(ReaderPrefsTest PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  ${REPO_ROOT}/lib/Serialization
+  ${REPO_ROOT}/src/activities/reader
+)
+
+target_link_libraries(ReaderPrefsTest PRIVATE
+  crosspoint_test_common
+  GTest::gtest_main
+)
+
+gtest_discover_tests(ReaderPrefsTest)

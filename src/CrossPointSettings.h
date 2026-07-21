@@ -402,6 +402,10 @@ class CrossPointSettings {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  // Resolve a reader font id from an explicit font size + SD font name, using the
+  // shared SD-font resolver. Lets a per-book ReaderPrefs resolve its own font id
+  // without duplicating the SD-resolver/built-in fallback logic. See ReaderPrefs.
+  int resolveReaderFontId(uint8_t size, const char* sdName) const;
 
   // If count_only is true, returns the number of settings items that would be written.
   uint8_t writeSettings(HalFile& file, bool count_only = false) const;

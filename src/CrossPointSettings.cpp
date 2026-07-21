@@ -316,15 +316,17 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
-int CrossPointSettings::getReaderFontId() const {
+int CrossPointSettings::getReaderFontId() const { return resolveReaderFontId(fontSize, sdFontFamilyName); }
+
+int CrossPointSettings::resolveReaderFontId(uint8_t size, const char* sdName) const {
   // Check SD card font first
-  if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
-    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
+  if (sdName && sdName[0] != '\0' && sdFontIdResolver) {
+    int id = sdFontIdResolver(sdFontResolverCtx, sdName, size);
     if (id != 0) return id;
     // Fall through to built-in if SD font not found
   }
 
-  switch (fontSize) {
+  switch (size) {
     case SIZE_12:
       return BOOKERLY_12_FONT_ID;
     case SIZE_13:

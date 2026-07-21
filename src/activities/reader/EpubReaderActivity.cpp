@@ -72,17 +72,8 @@ int clampPercent(int percent) {
   return percent;
 }
 
-// First-line indent in pixels for the current settings + text-column width.
-// Returns -1 in "book" mode so the parser keeps the publisher/CSS indent;
-// otherwise maps the indent percentage onto 0..viewportWidth/2 (100% = the
-// column's horizontal middle). Fed into the Section cache key so a change
-// re-indexes the chapter.
-int firstLineIndentPxFor(const int viewportWidth) {
-  if (SETTINGS.firstLineIndentMode != CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
-    return -1;
-  }
-  return viewportWidth * SETTINGS.firstLineIndentPercent / 200;
-}
+// First-line indent now lives in ReaderPrefs (readerFirstLineIndentPx) so it is
+// resolved per-book from prefs_, not from the global settings singleton.
 
 // SD card folder finished books are moved into. Single source of truth for the path.
 // constexpr ⇒ lives in flash .rodata, no DRAM cost.
@@ -188,11 +179,16 @@ void EpubReaderActivity::onEnter() {
   diagEnterMs_ = millis();
   diagOverlayPending_ = true;  // logged always; drawn only when the setting is on
 
+  epub->setupCacheDir();
+
+  // Resolve this book's reader settings (its own custom snapshot, or a snapshot of
+  // the current global settings). Must run before applyOrientation + any layout so
+  // orientation and all layout math use the per-book values. Needs the cache dir.
+  loadReaderPrefs();
+
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
-  ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-
-  epub->setupCacheDir();
+  ReaderUtils::applyOrientation(renderer, prefs_.orientation);
   // A freshly opened book starts at full render quality; the low-memory ladder
   // only degrades it if a chapter build actually runs out of memory.
   lowMemoryTierFloor_ = 0;
@@ -1247,9 +1243,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                                    &orientedMarginLeft);
   // Uniform margins use screenMargin on every side; otherwise top/bottom are
   // independent while screenMargin stays the horizontal (left/right) margin.
-  const uint8_t horizontalMargin = SETTINGS.screenMargin;
-  const uint8_t topMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginTop;
-  const uint8_t bottomMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginBottom;
+  const uint8_t horizontalMargin = prefs_.screenMargin;
+  const uint8_t topMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginTop;
+  const uint8_t bottomMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginBottom;
   orientedMarginLeft += horizontalMargin;
   orientedMarginRight += horizontalMargin;
 
@@ -1451,20 +1447,36 @@ std::string EpubReaderActivity::classifySectionMiss(const Section& section) cons
   return std::string(info);
 }
 
+void EpubReaderActivity::loadReaderPrefs() {
+  prefsCustom_ = false;
+  HalFile f;
+  if (Storage.openFileForRead("ERS", readerOverridePath(), f)) {
+    ReaderPrefs loaded;
+    if (readReaderPrefs(f, loaded)) {
+      prefs_ = loaded;
+      prefsCustom_ = true;
+      LOG_DBG("ERS", "Loaded per-book reader override");
+      return;
+    }
+    LOG_ERR("ERS", "reader_override.bin present but unreadable; using global settings");
+  }
+  prefs_ = ReaderPrefs::fromGlobal();
+}
+
 bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t viewportWidth,
                                               const uint16_t viewportHeight) {
-  const int fontId = SETTINGS.getReaderFontId();
-  const float lineCompression = SETTINGS.getReaderLineCompression();
-  const int firstLineIndentPx = firstLineIndentPxFor(viewportWidth);
-  const LowMemoryRenderTier::Knobs base{SETTINGS.imageRendering, SETTINGS.embeddedStyle, SETTINGS.hyphenationEnabled,
-                                        SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled};
+  const int fontId = readerFontId(prefs_);
+  const float lineCompression = readerLineCompression(prefs_);
+  const int firstLineIndentPx = readerFirstLineIndentPx(prefs_, viewportWidth);
+  const LowMemoryRenderTier::Knobs base{prefs_.imageRendering, prefs_.embeddedStyle, prefs_.hyphenationEnabled,
+                                        prefs_.focusReadingEnabled, prefs_.guideDotsEnabled};
 
   // Try the cache first, at the tier this book has already degraded to (0 = full).
   const LowMemoryRenderTier::Knobs floorKnobs = LowMemoryRenderTier::apply(base, lowMemoryTierFloor_);
-  if (section.loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+  if (section.loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
                               viewportWidth, viewportHeight, floorKnobs.hyphenationEnabled, floorKnobs.embeddedStyle,
                               floorKnobs.imageRendering, floorKnobs.focusReadingEnabled, floorKnobs.guideDotsEnabled,
-                              firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+                              firstLineIndentPx, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
     LOG_DBG("ERS", "Cache found, skipping build...");
     diagSectionWasBuild_ = false;
     diagSectionReadyMs_ = millis();
@@ -1487,17 +1499,17 @@ bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t v
       continue;
     }
     lastProbed = knobs;
-    if (!section.hasCachedSectionFor(fontId, lineCompression, SETTINGS.extraParagraphSpacing,
-                                     SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
+    if (!section.hasCachedSectionFor(fontId, lineCompression, prefs_.extraParagraphSpacing,
+                                     prefs_.paragraphAlignment, viewportWidth, viewportHeight,
                                      knobs.hyphenationEnabled, knobs.embeddedStyle, knobs.imageRendering,
                                      knobs.focusReadingEnabled, knobs.guideDotsEnabled, firstLineIndentPx,
-                                     SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+                                     prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       continue;
     }
-    if (section.loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
+    if (section.loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
                                 viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
                                 knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
-                                firstLineIndentPx, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+                                firstLineIndentPx, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       LOG_INF("ERS", "Adopted tier %d section cache (floor was %d); keeping that tier for this book", tier,
               lowMemoryTierFloor_);
       lowMemoryTierFloor_ = tier;
@@ -1519,16 +1531,16 @@ bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t v
 
 bool EpubReaderActivity::beginSlicedBuild(const uint16_t viewportWidth, const uint16_t viewportHeight) {
   if (!section) return false;
-  slicedBuild_.fontId = SETTINGS.getReaderFontId();
-  slicedBuild_.lineCompression = SETTINGS.getReaderLineCompression();
-  slicedBuild_.firstLineIndentPx = firstLineIndentPxFor(viewportWidth);
+  slicedBuild_.fontId = readerFontId(prefs_);
+  slicedBuild_.lineCompression = readerLineCompression(prefs_);
+  slicedBuild_.firstLineIndentPx = readerFirstLineIndentPx(prefs_, viewportWidth);
   slicedBuild_.viewportW = viewportWidth;
   slicedBuild_.viewportH = viewportHeight;
-  slicedBuild_.imageRendering = SETTINGS.imageRendering;
-  slicedBuild_.embeddedStyle = SETTINGS.embeddedStyle;
-  slicedBuild_.hyphenationEnabled = SETTINGS.hyphenationEnabled;
-  slicedBuild_.focusReadingEnabled = SETTINGS.focusReadingEnabled;
-  slicedBuild_.guideDotsEnabled = SETTINGS.guideDotsEnabled;
+  slicedBuild_.imageRendering = prefs_.imageRendering;
+  slicedBuild_.embeddedStyle = prefs_.embeddedStyle;
+  slicedBuild_.hyphenationEnabled = prefs_.hyphenationEnabled;
+  slicedBuild_.focusReadingEnabled = prefs_.focusReadingEnabled;
+  slicedBuild_.guideDotsEnabled = prefs_.guideDotsEnabled;
 
   LOG_DBG("ERS", "Cache not found, building (sliced)...");
   diagSectionWasBuild_ = true;
@@ -1560,11 +1572,11 @@ bool EpubReaderActivity::startBuildAtTier(const int tier) {
   // Lend the framebuffer's ~51 KB for the inflate peak inside startBuild(); the
   // loan ends when this returns so the caller can paint the progress bar.
   GfxRenderer::FrameBufferLoan loan(renderer);
-  return section->startBuild(slicedBuild_.fontId, slicedBuild_.lineCompression, SETTINGS.extraParagraphSpacing,
-                             SETTINGS.paragraphAlignment, slicedBuild_.viewportW, slicedBuild_.viewportH,
+  return section->startBuild(slicedBuild_.fontId, slicedBuild_.lineCompression, prefs_.extraParagraphSpacing,
+                             prefs_.paragraphAlignment, slicedBuild_.viewportW, slicedBuild_.viewportH,
                              knobs.hyphenationEnabled, knobs.embeddedStyle, knobs.imageRendering,
                              knobs.focusReadingEnabled, knobs.guideDotsEnabled, slicedBuild_.firstLineIndentPx,
-                             SETTINGS.wordSpacing, SETTINGS.paragraphSpacing);
+                             prefs_.wordSpacing, prefs_.paragraphSpacing);
 }
 
 bool EpubReaderActivity::advanceSectionBuild() {
@@ -1755,7 +1767,7 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
   }
 
   const int spineCount = epub->getSpineItemsCount();
-  const int firstLineIndent = firstLineIndentPxFor(viewportWidth);
+  const int firstLineIndent = readerFirstLineIndentPx(prefs_, viewportWidth);
 
   // 1) Service any in-flight build FIRST. At most one slot ever builds at a time
   //    (each build holds a parser + layout arena; two would exceed the heap). Give
@@ -1823,11 +1835,11 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       LOG_ERR("ERS", "OOM: prefetch Section for chapter %d", target);
       return;
     }
-    if (next->loadSectionFile(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                              SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
-                              viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                              SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
-                              firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+    if (next->loadSectionFile(readerFontId(prefs_), readerLineCompression(prefs_),
+                              prefs_.extraParagraphSpacing, prefs_.paragraphAlignment, viewportWidth,
+                              viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
+                              prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled,
+                              firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       slot->handled = true;  // already warm; drop the probe, look further ahead
       continue;
     }
@@ -1839,11 +1851,11 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       return;
     }
     LOG_DBG("ERS", "Prefetching chapter: %d", target);
-    if (!next->startBuild(SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-                          SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-                          SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle, SETTINGS.imageRendering,
-                          SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled, firstLineIndent,
-                          SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+    if (!next->startBuild(readerFontId(prefs_), readerLineCompression(prefs_),
+                          prefs_.extraParagraphSpacing, prefs_.paragraphAlignment, viewportWidth, viewportHeight,
+                          prefs_.hyphenationEnabled, prefs_.embeddedStyle, prefs_.imageRendering,
+                          prefs_.focusReadingEnabled, prefs_.guideDotsEnabled, firstLineIndent,
+                          prefs_.wordSpacing, prefs_.paragraphSpacing)) {
       LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", target);
       slot->handled = true;  // will not retry until we move on
       return;
@@ -1874,23 +1886,23 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
       h *= 16777619u;
     }
   };
-  const int fontId = SETTINGS.getReaderFontId();
-  const float lineCompression = SETTINGS.getReaderLineCompression();
-  const int firstLineIndent = firstLineIndentPxFor(viewportWidth);
+  const int fontId = readerFontId(prefs_);
+  const float lineCompression = readerLineCompression(prefs_);
+  const int firstLineIndent = readerFirstLineIndentPx(prefs_, viewportWidth);
   fold(&fontId, sizeof(fontId));
   fold(&lineCompression, sizeof(lineCompression));
-  fold(&SETTINGS.extraParagraphSpacing, sizeof(SETTINGS.extraParagraphSpacing));
-  fold(&SETTINGS.paragraphAlignment, sizeof(SETTINGS.paragraphAlignment));
+  fold(&prefs_.extraParagraphSpacing, sizeof(prefs_.extraParagraphSpacing));
+  fold(&prefs_.paragraphAlignment, sizeof(prefs_.paragraphAlignment));
   fold(&viewportWidth, sizeof(viewportWidth));
   fold(&viewportHeight, sizeof(viewportHeight));
-  fold(&SETTINGS.hyphenationEnabled, sizeof(SETTINGS.hyphenationEnabled));
-  fold(&SETTINGS.embeddedStyle, sizeof(SETTINGS.embeddedStyle));
-  fold(&SETTINGS.imageRendering, sizeof(SETTINGS.imageRendering));
-  fold(&SETTINGS.focusReadingEnabled, sizeof(SETTINGS.focusReadingEnabled));
-  fold(&SETTINGS.guideDotsEnabled, sizeof(SETTINGS.guideDotsEnabled));
+  fold(&prefs_.hyphenationEnabled, sizeof(prefs_.hyphenationEnabled));
+  fold(&prefs_.embeddedStyle, sizeof(prefs_.embeddedStyle));
+  fold(&prefs_.imageRendering, sizeof(prefs_.imageRendering));
+  fold(&prefs_.focusReadingEnabled, sizeof(prefs_.focusReadingEnabled));
+  fold(&prefs_.guideDotsEnabled, sizeof(prefs_.guideDotsEnabled));
   fold(&firstLineIndent, sizeof(firstLineIndent));
-  fold(&SETTINGS.wordSpacing, sizeof(SETTINGS.wordSpacing));
-  fold(&SETTINGS.paragraphSpacing, sizeof(SETTINGS.paragraphSpacing));
+  fold(&prefs_.wordSpacing, sizeof(prefs_.wordSpacing));
+  fold(&prefs_.paragraphSpacing, sizeof(prefs_.paragraphSpacing));
   if (h != warmSettingsHash_) {
     warmSettingsHash_ = h;
     warmScanComplete_ = false;
@@ -1940,17 +1952,17 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   if (!probe) {
     return;
   }
-  if (probe->loadSectionFile(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
-                             viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                             SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
-                             firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+  if (probe->loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
+                             viewportWidth, viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
+                             prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled,
+                             firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
     return;  // already warm
   }
   LOG_DBG("ERS", "Warming cold chapter %d", spine);
-  if (!probe->startBuild(fontId, lineCompression, SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment,
-                         viewportWidth, viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.embeddedStyle,
-                         SETTINGS.imageRendering, SETTINGS.focusReadingEnabled, SETTINGS.guideDotsEnabled,
-                         firstLineIndent, SETTINGS.wordSpacing, SETTINGS.paragraphSpacing)) {
+  if (!probe->startBuild(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
+                         viewportWidth, viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
+                         prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled,
+                         firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
     LOG_ERR("ERS", "Warm build failed to start for chapter %d", spine);
     return;  // cursor already advanced; skipped
   }
@@ -2000,7 +2012,7 @@ void EpubReaderActivity::rebuildHighlightWordCache(const int xOffset, const int 
   std::vector<crosspoint::reader::WordPos> words;
   auto page = section ? section->loadPageFromSectionFile() : nullptr;
   if (page) {
-    const int fontId = SETTINGS.getReaderFontId();
+    const int fontId = readerFontId(prefs_);
     for (const auto& el : page->elements) {
       if (el->getTag() != TAG_PageLine) continue;
       const auto& line = static_cast<const PageLine&>(*el);
@@ -2224,7 +2236,7 @@ std::string EpubReaderActivity::extractQuoteText() {
 
   constexpr size_t kMaxQuoteLength = 8192;
   std::string result;
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = readerFontId(prefs_);
 
   // loadPageFromSectionFile() keys off section->currentPage; drive it across the
   // selected range and restore afterwards. Offsets don't affect the extracted
@@ -2366,7 +2378,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = readerFontId(prefs_);
 
   // Vertically distribute the page's leftover space so a full page of text isn't
   // pinned against the top status bar with all the slack pooling at the bottom
@@ -2375,7 +2387,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // half the leftover, capped at half a line so a short chapter-end page is only
   // nudged, never floated to the middle. Only the text/image content moves; the
   // reserved margins, status bars and grab-quote frame stay put.
-  const float lineCompression = SETTINGS.getReaderLineCompression();
+  const float lineCompression = readerLineCompression(prefs_);
   const int lineHeightPx = static_cast<int>(renderer.getLineHeight(fontId) * lineCompression);
   const int viewportHeightPx = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
   const int contentHeightPx = page->usedHeightPx(renderer, fontId, lineCompression);
