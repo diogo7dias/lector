@@ -214,6 +214,12 @@ void SleepActivity::renderStatsDashboardSleepScreen(const bool wallpaper) const 
   }
 
   if (coverPath.empty() || !Storage.exists(coverPath.c_str())) {
+    // Thumb generation is SD->SD image decode; the framebuffer is not needed
+    // until the render below, so lend its 48KB to the decoder. The PNG inflate
+    // window+state (~43KB) then comes from the loaned block instead of the
+    // heap at the sleep-entry low-water mark. Every render path after this
+    // block starts with a full clearScreen, so the scribbled buffer is fine.
+    GfxRenderer::FrameBufferLoan loan(renderer);
     if (FsHelpers::hasEpubExtension(path)) {
       Epub epub(path, "/.crosspoint");
       if (epub.load(false, true) && epub.generateThumbBmp(kDashboardCoverHeight)) {
@@ -444,7 +450,15 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastXtc.generateCoverBmp()) {
+    // Cover generation is SD->SD image decode; lend the framebuffer so decode
+    // buffers claim it instead of the heap. Scoped tightly: the loan MUST end
+    // before any render call (rendering with the buffer lent would crash).
+    bool coverOk;
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      coverOk = lastXtc.generateCoverBmp();
+    }
+    if (!coverOk) {
       LOG_ERR("SLP", "Failed to generate XTC cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
@@ -458,7 +472,12 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastTxt.generateCoverBmp()) {
+    bool coverOk;
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      coverOk = lastTxt.generateCoverBmp();
+    }
+    if (!coverOk) {
       LOG_ERR("SLP", "No cover image found for TXT file");
       return (this->*renderNoCoverSleepScreen)();
     }
@@ -473,7 +492,12 @@ void SleepActivity::renderCoverSleepScreen() const {
       return (this->*renderNoCoverSleepScreen)();
     }
 
-    if (!lastEpub.generateCoverBmp(cropped)) {
+    bool coverOk;
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      coverOk = lastEpub.generateCoverBmp(cropped);
+    }
+    if (!coverOk) {
       LOG_ERR("SLP", "Failed to generate cover bmp");
       return (this->*renderNoCoverSleepScreen)();
     }
