@@ -7,6 +7,7 @@
 
 #include "SleepWallpaperStage.h"
 
+#include <Esp.h>  // ESP.getFreeHeap / getMaxAllocHeap
 #include <GfxRenderer.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -46,6 +47,17 @@ constexpr int kRowsPerPump = 48;
 // Physical framebuffer rows per band; bounds scratch RAM at
 // bandRows * strideBytes per plane (X3: ~7.9 KB, three planes ~24 KB).
 constexpr int kBandRows = 80;
+
+// Do not BEGIN a prestage conversion below these heap floors. The conversion
+// holds ~24 KB of plane scratch for its duration; starting it when memory is
+// already tight competes with an active reader chapter build, whose layout
+// allocation is a throwing new that aborts the firmware on OOM. Above these
+// floors there is comfortable room for both; below, skip prewarm for this idle
+// cycle and let wake decode the wallpaper on demand (PxcSleepRenderer streams
+// row-by-row). Only gates the START (Phase::Pending) — a conversion already in
+// flight runs to completion, and its per-band scratch alloc is itself nothrow.
+constexpr uint32_t kMinFreeHeapToStage = 60000;
+constexpr uint32_t kMinBlockToStage = 40000;
 
 struct StageHeader {
   uint8_t quality = 0;
@@ -381,6 +393,12 @@ void pumpIdle(const uint16_t strideBytes, const uint16_t phyHeight) {
       if (!windex::idleComplete()) return;
       if (existingStageUsable(strideBytes, phyHeight)) {
         s_phase = Phase::Done;
+        return;
+      }
+      // Skip prewarm while free memory is low so the prestage never grabs its
+      // ~24 KB scratch out from under an active reader build. Stay Pending (do
+      // not mark Done) so a later idle tick retries once the heap recovers.
+      if (ESP.getFreeHeap() < kMinFreeHeapToStage || ESP.getMaxAllocHeap() < kMinBlockToStage) {
         return;
       }
       if (!startConversion(strideBytes, phyHeight)) {
