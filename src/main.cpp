@@ -42,9 +42,11 @@
 
 // getSettingsList() builds its ~60-entry SettingInfo list from a single braced
 // initializer-list; that backing array (all entries at once, each ~130 B with four
-// std::functions + vectors) lands on the loop task's stack during setup()'s settings
-// load. The Arduino default of 8 KB left almost no margin, and the status-bar v2
-// settings tipped it into a boot-time stack overflow. Give the loop task room.
+// std::functions + vectors) lands on the loop task's stack during EVERY call
+// (settings load in setup(), Settings screen open, web settings API). The list is
+// deliberately rebuilt per call instead of cached in a static — the cache cost
+// ~10 KB of DRAM for the whole runtime. The Arduino default of 8 KB stack left
+// almost no margin for the build spike; keep the loop task at 16 KB.
 SET_LOOP_TASK_STACK_SIZE(16 * 1024);
 
 GfxRenderer renderer(display);

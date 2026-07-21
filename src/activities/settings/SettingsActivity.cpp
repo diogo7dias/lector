@@ -42,10 +42,12 @@ void SettingsActivity::rebuildSettingsLists() {
   // reader activity ran — otherwise the font-family picker shows stale list.
   sdFontSystem.refreshIfDirty();
 
+  // The list is a fresh throwaway from getSettingsList(), so entries are moved
+  // out instead of deep-copied (each SettingInfo carries vectors + functors).
   for (auto& setting : getSettingsList(&sdFontSystem.registry())) {
     if (setting.category == StrId::STR_NONE_OPT) continue;
     if (setting.category == StrId::STR_CAT_DISPLAY) {
-      displaySettings.push_back(setting);
+      displaySettings.push_back(std::move(setting));
     } else if (setting.category == StrId::STR_CAT_READER) {
       // Top/Bottom margins only apply, and only show, when uniform margins are off.
       if ((setting.nameId == StrId::STR_SCREEN_MARGIN_TOP || setting.nameId == StrId::STR_SCREEN_MARGIN_BOTTOM) &&
@@ -57,15 +59,15 @@ void SettingsActivity::rebuildSettingsLists() {
           SETTINGS.firstLineIndentMode != CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
         continue;
       }
-      readerSettings.push_back(setting);
+      readerSettings.push_back(std::move(setting));
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
       }
-      controlsSettings.push_back(setting);
+      controlsSettings.push_back(std::move(setting));
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
-      systemSettings.push_back(setting);
+      systemSettings.push_back(std::move(setting));
     }
   }
 
