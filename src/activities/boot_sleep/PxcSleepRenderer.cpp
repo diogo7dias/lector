@@ -46,11 +46,17 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // instead of re-reading it from SD three times. At low sleep-entry heap this
   // ~90KB block often will not fit — that is expected, not an error; when it does
   // not fit we fall back to the per-pass row-batch SD reads below.
+  // The 1-bit path (grayscale=false: wake banner, indexing backdrop) decodes the
+  // payload exactly once, so the cache buys nothing there — skip the ~90KB
+  // attempt entirely and go straight to row-batch reads.
   const size_t payloadBytes = static_cast<size_t>(bytesPerRow) * pxcHeight;
-  auto frame = makeUniqueNoThrow<uint8_t[]>(payloadBytes);
-  if (frame) {
-    if (!file.seek(dataOffset) || file.read(frame.get(), payloadBytes) != static_cast<int>(payloadBytes)) {
-      frame.reset();
+  std::unique_ptr<uint8_t[]> frame;
+  if (grayscale) {
+    frame = makeUniqueNoThrow<uint8_t[]>(payloadBytes);
+    if (frame) {
+      if (!file.seek(dataOffset) || file.read(frame.get(), payloadBytes) != static_cast<int>(payloadBytes)) {
+        frame.reset();
+      }
     }
   }
   const uint8_t* const frameData = frame ? frame.get() : nullptr;
