@@ -12,8 +12,13 @@ OVERRIDES = f"""
 #ifndef HAVE_FFDHE_2048
 #define HAVE_FFDHE_2048
 #endif
+/* 8192 supports RSA-4096 verification (fp_mul products are 2x the modulus;
+ * Let's Encrypt's ISRG Root X1 is RSA-4096) plus FFDHE-2048. The previous
+ * 16384 made every WOLFSSL_SMALL_STACK fastmath temporary a ~2KB heap
+ * allocation during the handshake -- the most fragmentation-sensitive moment
+ * on this device; 8192 halves those temporaries. */
 #undef FP_MAX_BITS
-#define FP_MAX_BITS 16384
+#define FP_MAX_BITS 8192
 """
 
 
