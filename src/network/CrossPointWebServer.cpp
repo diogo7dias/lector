@@ -36,6 +36,18 @@ namespace {
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
+// Stack (in bytes) for the background "opdsweb" task that runs the OPDS TLS
+// fetch/download. A wolfSSL TLS 1.3 handshake parses the server cert chain
+// (GetCertName/GetASN_Items) and runs curve25519 field math (fe_sq/fe_invert)
+// entirely on the stack -- WOLFSSL_SMALL_STACK is intentionally NOT defined, so
+// the bignum temporaries are stack-resident, not heaped. The original 4096 was
+// half the proven-working main-loop stack (CONFIG_ARDUINO_LOOP_STACK_SIZE=8192,
+// where the on-device OPDS reader runs the same handshake) and overflowed mid-
+// handshake -> silent panic + reboot (v0.70.2 crash report). 12 KB clears the
+// handshake peak with margin and still fits inside the 20 KB largest-free-block
+// pre-gate below, so allocation failure degrades to a graceful 507, not a crash.
+constexpr uint32_t OPDS_TASK_STACK = 12288;
+
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
 
@@ -1895,7 +1907,7 @@ void CrossPointWebServer::handleOpdsBrowse() {
   opdsOp.browseUrl = server->hasArg("url") ? std::string(server->arg("url").c_str()) : std::string();
   opdsOp.state = OpdsOp::State::Fetching;  // set before task so a fast poll sees "fetching"
 
-  if (xTaskCreate(&opdsTaskTramp, "opdsweb", 4096, this, 1, &opdsOp.task) != pdPASS) {
+  if (xTaskCreate(&opdsTaskTramp, "opdsweb", OPDS_TASK_STACK, this, 1, &opdsOp.task) != pdPASS) {
     opdsOp.state = OpdsOp::State::Error;
     opdsOp.errorDetail = "could not start";
     server->send(507, "application/json", "{\"error\":\"task\"}");
@@ -1944,7 +1956,7 @@ void CrossPointWebServer::handleOpdsDownload() {
   opdsOp.entry.author = std::string(doc["author"] | "");
   opdsOp.state = OpdsOp::State::Downloading;
 
-  if (xTaskCreate(&opdsTaskTramp, "opdsweb", 4096, this, 1, &opdsOp.task) != pdPASS) {
+  if (xTaskCreate(&opdsTaskTramp, "opdsweb", OPDS_TASK_STACK, this, 1, &opdsOp.task) != pdPASS) {
     opdsOp.state = OpdsOp::State::Error;
     opdsOp.errorDetail = "could not start";
     server->send(507, "application/json", "{\"error\":\"task\"}");
