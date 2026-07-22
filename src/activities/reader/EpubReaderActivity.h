@@ -150,6 +150,12 @@ class EpubReaderActivity final : public Activity {
   unsigned long queuedPageTurnAtMs = 0UL;
   bool showBookmarkMessage = false;
   bool ignoreNextConfirmRelease = false;
+  // The in-book Reader-settings overlay (SettingsActivity) finishes on the Back PRESS
+  // edge; the matching release lands back in this reader's loop. Set on return from that
+  // overlay so the reader swallows that one stale Back release instead of treating it as
+  // its own Back (which would cancel the fresh re-index and jump home). See loop() and
+  // applyReaderSettingsEdit(); mirrors OpdsBookBrowserActivity::consumeBack.
+  bool ignoreBackUntilRelease_ = false;
   bool currentPageBookmarked = false;
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;

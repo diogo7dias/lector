@@ -569,15 +569,24 @@ void EpubReaderActivity::loop() {
     }
   }
 
+  // Swallow the stale Back release left by the in-book Reader-settings overlay, which
+  // closed on the press edge (see ignoreBackUntilRelease_). Captured before clearing so
+  // the release tick itself is also skipped, not just the held ticks before it.
+  const bool swallowBack = ignoreBackUntilRelease_;
+  if (ignoreBackUntilRelease_ && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    ignoreBackUntilRelease_ = false;
+  }
+
   // Long press BACK (1s+) goes to file selection
-  if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
+  if (!swallowBack && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+      mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
     cancelInFlightBuild();  // don't sit through a heavy build before leaving
     activityManager.goToFileBrowser(epub ? epub->getPath() : "");
     return;
   }
 
   // Short press BACK goes directly to home (or restores position if viewing footnote)
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!swallowBack && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       mappedInput.getHeldTime() < ReaderUtils::GO_HOME_MS) {
     if (footnoteDepth > 0) {
       restoreSavedPosition();
@@ -1540,6 +1549,10 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
 // model, ANY change freezes the full snapshot as this book's override; no change
 // leaves the book exactly as it was.
 void EpubReaderActivity::applyReaderSettingsEdit() {
+  // The overlay closed on the Back press; its release will arrive in loop(). Swallow it
+  // so it does not cancel the re-index below and send us home. Runs on every return from
+  // the overlay (Back is the only exit), whether or not any setting changed.
+  ignoreBackUntilRelease_ = true;
   const ReaderPrefs edited = SETTINGS.endReaderEditOverlay();
   const bool changed = std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) != 0;
   if (!changed) {
