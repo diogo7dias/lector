@@ -16,6 +16,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
+#include "network/OpdsClient.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsFilename.h"
 #include "util/StringUtils.h"
@@ -215,67 +216,50 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
-  if (server.url.empty()) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_NO_SERVER_URL);
-    requestUpdate();
-    return;
-  }
-
-  // Free the outgoing entry list BEFORE the fetch: TLS + parse need ~50 KB
-  // and the 2026-07-16 session log showed the free-heap watermark at 4.7 KB
-  // with the old list still retained. The loading screen is up anyway.
+  // Free the outgoing entry list BEFORE the fetch: TLS + parse need ~50 KB and
+  // the loading screen is up anyway. OpdsClient applies its own heap pre-gate.
   std::vector<OpdsEntry>().swap(entries);
 
-  // Pre-fetch heap gate: starting a TLS fetch on a fragmented heap walks
-  // every allocation in the parse past an abort() cliff. An error screen
-  // beats a crash; leaving and re-entering the browser frees the heap.
-  const size_t largestBlock = heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT);
-  if (largestBlock < 20 * 1024) {
-    LOG_ERR("OPDS", "Heap too fragmented for a fetch (largest=%u)", static_cast<unsigned>(largestBlock));
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_MEMORY_ERROR);
-    requestUpdate();
-    return;
-  }
-
-  std::string url = (path.find("http") == 0) ? path : UrlUtils::buildUrl(server.url, path);
-  LOG_DBG("OPDS", "Fetching: %s", url.c_str());
-  OpdsParser parser;
-  {
-    OpdsParserStream stream{parser};
-    if (!HttpDownloader::fetchUrl(url, stream, server.username, server.password)) {
+  OpdsClient::FeedResult result;
+  const auto status = OpdsClient::fetchFeed(server, path, result);
+  switch (status) {
+    case OpdsClient::FeedStatus::NoUrl:
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_NO_SERVER_URL);
+      requestUpdate();
+      return;
+    case OpdsClient::FeedStatus::HeapLow:
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_MEMORY_ERROR);
+      requestUpdate();
+      return;
+    case OpdsClient::FeedStatus::FetchFailed:
       state = BrowserState::ERROR;
       errorMessage = std::string(tr(STR_FETCH_FEED_FAILED)) + " (" + httpErrorDetail() + ")";
       requestUpdate();
       return;
-    }
+    case OpdsClient::FeedStatus::ParseFailed:
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_PARSE_FEED_FAILED);
+      requestUpdate();
+      return;
+    case OpdsClient::FeedStatus::Empty:
+    case OpdsClient::FeedStatus::OK:
+      break;
   }
 
-  if (!parser) {
-    // Pair this with the preceding "HTTP body done: N bytes" line — a tiny
-    // 200 body that fails to parse is an HTML login page, not a feed.
-    LOG_ERR("OPDS", "feed parse failed (status=%d)", HttpDownloader::lastHttpStatus());
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_PARSE_FEED_FAILED);
-    requestUpdate();
-    return;
+  searchTemplate = result.searchTemplate;
+  entries = std::move(result.entries);
+
+  if (!result.prevPageUrl.empty()) {
+    entries.insert(entries.begin(),
+                   OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", result.prevPageUrl, ""});
+  }
+  if (!result.nextPageUrl.empty()) {
+    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", result.nextPageUrl, ""});
   }
 
-  searchTemplate = parser.getSearchTemplate();
-  const auto& nextUrl = parser.getNextPageUrl();
-  const auto& prevUrl = parser.getPrevPageUrl();
-  entries = std::move(parser).getEntries();
-
-  if (!prevUrl.empty()) {
-    entries.insert(entries.begin(), OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_PREV_PAGE), "", prevUrl, ""});
-  }
-  if (!nextUrl.empty()) {
-    entries.push_back(OpdsEntry{OpdsEntryType::NAVIGATION, tr(STR_NEXT_PAGE), "", nextUrl, ""});
-  }
-
-  LOG_INF("OPDS", "feed ok: %u entries, next=%d prev=%d search=%d", static_cast<unsigned>(entries.size()),
-          nextUrl.empty() ? 0 : 1, prevUrl.empty() ? 0 : 1, searchTemplate.empty() ? 0 : 1);
+  LOG_INF("OPDS", "feed ok: %u entries", static_cast<unsigned>(entries.size()));
   selectorIndex = 0;
   state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
   if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
@@ -317,55 +301,20 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
-  // Build full download URL relative to the current feed, not the root server URL
+  // Resolve the book link against the current feed, then hand the whole
+  // download (folder, filename, keepFilename rename, cache clear) to OpdsClient.
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
-  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is a null-terminated char[64]; use it directly. On mkdir
-  // failure, fall back to SD root so a download is never lost (upstream #2571).
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
-    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
-  }
-
-  std::string filename;
-  filename.reserve(96);
-  if (haveFolder) filename += folder;
-  filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
-  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
-
-  std::string serverFilename;
-  const auto result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
+  std::string finalPath;
+  const auto result = OpdsClient::downloadBook(
+      server, feedUrl, book, finalPath,
       [this](const size_t downloaded, const size_t total) {
         downloadProgress = downloaded;
         downloadTotal = total;
         requestUpdate(true);
       },
-      nullptr, server.username, server.password, server.keepFilename ? &serverFilename : nullptr);
+      nullptr);
 
   if (result == HttpDownloader::OK) {
-    // When the server sends a filename (Content-Disposition) and this server is
-    // set to keep it, rename the download to that name in the same folder (#2415).
-    const std::string sanitizedServerFilename = StringUtils::sanitizeFilename(serverFilename);
-    if (server.keepFilename && !sanitizedServerFilename.empty()) {
-      std::string finalPath;
-      finalPath.reserve(96);
-      if (haveFolder) finalPath += folder;
-      finalPath += '/';
-      finalPath += sanitizedServerFilename;
-      if (finalPath != filename) {
-        if (Storage.exists(finalPath.c_str())) Storage.remove(finalPath.c_str());
-        if (Storage.rename(filename.c_str(), finalPath.c_str())) {
-          filename = finalPath;
-        } else {
-          LOG_ERR("OPDS", "rename to server filename failed, keeping %s", filename.c_str());
-        }
-      }
-    }
-    clearBookCache(filename);
     state = BrowserState::BROWSING;
   } else if (result == HttpDownloader::HTTP_ERROR) {
     state = BrowserState::ERROR;

@@ -7,6 +7,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
+#include <esp_heap_caps.h>
 #include <esp_random.h>
 #include <esp_task_wdt.h>
 
@@ -24,7 +25,9 @@
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
+#include "html/OpdsPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
+#include "html/js/cpauthJs.generated.h"
 #include "html/js/jszip_minJs.generated.h"
 #include "sleep/Wallpaper.h"
 #include "util/BookCacheUtils.h"
@@ -151,7 +154,9 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "Setting up routes...");
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
+  server->on("/opds", HTTP_GET, [this] { handleOpdsPage(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
+  server->on("/js/cpauth.js", HTTP_GET, [this] { handleCpAuthJs(); });
 
   // Access-control endpoints are public: the browser posts the on-device code
   // here to obtain a session cookie. Every data route below is requireAuth-gated.
@@ -260,6 +265,29 @@ void CrossPointWebServer::begin() {
     handleDeleteOpdsServer();
   });
 
+  // Browser-driven OPDS: browse a catalog and download a book to the SD. Each
+  // runs on a background task and is polled via /api/opds/status. STA mode only.
+  server->on("/api/opds/browse", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleOpdsBrowse();
+  });
+  server->on("/api/opds/status", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleOpdsStatus();
+  });
+  server->on("/api/opds/entries", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleOpdsEntries();
+  });
+  server->on("/api/opds/download", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleOpdsDownload();
+  });
+  server->on("/api/opds/download/cancel", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleOpdsCancel();
+  });
+
   // Wi-Fi credential endpoints
   server->on("/api/wifi", HTTP_GET, [this] {
     if (!requireAuth()) return;
@@ -353,6 +381,18 @@ void CrossPointWebServer::stop() {
   // Close any in-progress WebSocket upload and remove partial file
   if (wsUploadInProgress && wsUploadFile) {
     abortWsUpload("WEB");
+  }
+
+  // Stop any background OPDS task before tearing down — it reads opdsOp members
+  // and writes the SD via HalStorage. Ask it to cancel, wait, force-delete last.
+  if (opdsOp.task) {
+    opdsOp.cancel = true;
+    for (int i = 0; i < 250 && opdsOp.task; i++) vTaskDelay(pdMS_TO_TICKS(20));  // up to ~5s
+    if (opdsOp.task) {
+      LOG_ERR("WEB", "OPDS task did not stop in time; deleting");
+      vTaskDelete(opdsOp.task);
+      opdsOp.task = nullptr;
+    }
   }
 
   // Stop WebSocket server
@@ -540,6 +580,17 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
 }
 
 bool CrossPointWebServer::isEpubFile(const String& filename) const { return FsHelpers::hasEpubExtension(filename); }
+
+void CrossPointWebServer::handleOpdsPage() const {
+  sendHtmlContent(server.get(), OpdsPageHtml, sizeof(OpdsPageHtml));
+  LOG_DBG("WEB", "Served OPDS page");
+}
+
+void CrossPointWebServer::handleCpAuthJs() const {
+  server->sendHeader("Content-Encoding", "gzip");
+  server->send_P(200, "application/javascript", cpauthJs, sizeof(cpauthJs));
+  LOG_DBG("WEB", "Served cpauth.js");
+}
 
 void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
@@ -1770,6 +1821,222 @@ void CrossPointWebServer::handleDeleteOpdsServer() {
   OPDS_STORE.removeServer(static_cast<size_t>(idx));
   LOG_DBG("WEB", "Deleted OPDS server at index %d", idx);
   server->send(200, "text/plain", "OK");
+}
+
+// ---- Browser-driven OPDS (browse + download on a background task) ----
+
+void CrossPointWebServer::opdsTaskTramp(void* arg) { static_cast<CrossPointWebServer*>(arg)->runOpdsTask(); }
+
+void CrossPointWebServer::runOpdsTask() {
+  if (opdsOp.isDownload) {
+    opdsOp.state = OpdsOp::State::Downloading;
+    std::string finalPath;
+    const auto res = OpdsClient::downloadBook(
+        opdsOp.server, opdsOp.feedUrl, opdsOp.entry, finalPath,
+        [this](size_t d, size_t t) {
+          opdsOp.downloaded = d;
+          opdsOp.total = t;
+        },
+        &opdsOp.cancel);
+    opdsOp.httpStatus = HttpDownloader::lastHttpStatus();
+    if (res == HttpDownloader::OK) {
+      const size_t slash = finalPath.find_last_of('/');
+      opdsOp.finalName = (slash == std::string::npos) ? finalPath : finalPath.substr(slash + 1);
+      opdsOp.state = OpdsOp::State::Done;
+    } else {
+      opdsOp.errorDetail = (res == HttpDownloader::ABORTED) ? "cancelled" : "download failed";
+      opdsOp.state = OpdsOp::State::Error;
+    }
+  } else {
+    opdsOp.state = OpdsOp::State::Fetching;
+    OpdsClient::FeedResult result;
+    const auto st = OpdsClient::fetchFeed(opdsOp.server, opdsOp.browseUrl, result);
+    opdsOp.httpStatus = HttpDownloader::lastHttpStatus();
+    if (st == OpdsClient::FeedStatus::OK || st == OpdsClient::FeedStatus::Empty) {
+      opdsOp.feed = std::move(result);
+      opdsOp.state = OpdsOp::State::Done;  // set last: /api/opds/entries reads feed once Done
+    } else {
+      switch (st) {
+        case OpdsClient::FeedStatus::NoUrl:
+          opdsOp.errorDetail = "no server url";
+          break;
+        case OpdsClient::FeedStatus::HeapLow:
+          opdsOp.errorDetail = "device low on memory";
+          break;
+        case OpdsClient::FeedStatus::ParseFailed:
+          opdsOp.errorDetail = "could not read feed";
+          break;
+        default:
+          opdsOp.errorDetail = "fetch failed";
+          break;
+      }
+      opdsOp.state = OpdsOp::State::Error;
+    }
+  }
+  opdsOp.task = nullptr;  // cleared before self-delete so stop()'s wait loop unblocks
+  vTaskDelete(nullptr);
+}
+
+void CrossPointWebServer::handleOpdsBrowse() {
+  if (apMode) {
+    server->send(409, "application/json", "{\"error\":\"hotspot\"}");
+    return;
+  }
+  if (opdsBusy()) {
+    server->send(409, "application/json", "{\"error\":\"busy\"}");
+    return;
+  }
+  const int idx = server->hasArg("server") ? server->arg("server").toInt() : -1;
+  const OpdsServer* srv = (idx >= 0) ? OPDS_STORE.getServer(static_cast<size_t>(idx)) : nullptr;
+  if (!srv) {
+    server->send(404, "application/json", "{\"error\":\"no such server\"}");
+    return;
+  }
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) < 20 * 1024) {
+    server->send(507, "application/json", "{\"error\":\"lowmem\"}");
+    return;
+  }
+
+  opdsOp = OpdsOp{};  // safe: opdsBusy() ruled out a live task above
+  opdsOp.isDownload = false;
+  opdsOp.server = *srv;
+  opdsOp.browseUrl = server->hasArg("url") ? std::string(server->arg("url").c_str()) : std::string();
+  opdsOp.state = OpdsOp::State::Fetching;  // set before task so a fast poll sees "fetching"
+
+  if (xTaskCreate(&opdsTaskTramp, "opdsweb", 4096, this, 1, &opdsOp.task) != pdPASS) {
+    opdsOp.state = OpdsOp::State::Error;
+    opdsOp.errorDetail = "could not start";
+    server->send(507, "application/json", "{\"error\":\"task\"}");
+    return;
+  }
+  server->send(202, "application/json", "{\"state\":\"fetching\"}");
+}
+
+void CrossPointWebServer::handleOpdsDownload() {
+  if (apMode) {
+    server->send(409, "application/json", "{\"error\":\"hotspot\"}");
+    return;
+  }
+  if (opdsBusy()) {
+    server->send(409, "application/json", "{\"error\":\"busy\"}");
+    return;
+  }
+  JsonDocument doc;
+  if (!server->hasArg("plain") || deserializeJson(doc, server->arg("plain")) != DeserializationError::Ok) {
+    server->send(400, "application/json", "{\"error\":\"bad json\"}");
+    return;
+  }
+  const int idx = doc["server"] | -1;
+  const OpdsServer* srv = (idx >= 0) ? OPDS_STORE.getServer(static_cast<size_t>(idx)) : nullptr;
+  if (!srv) {
+    server->send(404, "application/json", "{\"error\":\"no such server\"}");
+    return;
+  }
+  const char* href = doc["href"] | "";
+  if (!href[0]) {
+    server->send(400, "application/json", "{\"error\":\"missing href\"}");
+    return;
+  }
+  if (heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT) < 20 * 1024) {
+    server->send(507, "application/json", "{\"error\":\"lowmem\"}");
+    return;
+  }
+
+  opdsOp = OpdsOp{};
+  opdsOp.isDownload = true;
+  opdsOp.server = *srv;
+  opdsOp.feedUrl = std::string(doc["feedUrl"] | "");
+  opdsOp.entry.type = OpdsEntryType::BOOK;
+  opdsOp.entry.href = href;
+  opdsOp.entry.title = std::string(doc["title"] | "");
+  opdsOp.entry.author = std::string(doc["author"] | "");
+  opdsOp.state = OpdsOp::State::Downloading;
+
+  if (xTaskCreate(&opdsTaskTramp, "opdsweb", 4096, this, 1, &opdsOp.task) != pdPASS) {
+    opdsOp.state = OpdsOp::State::Error;
+    opdsOp.errorDetail = "could not start";
+    server->send(507, "application/json", "{\"error\":\"task\"}");
+    return;
+  }
+  server->send(202, "application/json", "{\"state\":\"downloading\"}");
+}
+
+void CrossPointWebServer::handleOpdsStatus() const {
+  const char* st = "idle";
+  switch (opdsOp.state) {
+    case OpdsOp::State::Fetching:
+      st = "fetching";
+      break;
+    case OpdsOp::State::Downloading:
+      st = "downloading";
+      break;
+    case OpdsOp::State::Done:
+      st = "done";
+      break;
+    case OpdsOp::State::Error:
+      st = "error";
+      break;
+    default:
+      st = "idle";
+      break;
+  }
+  JsonDocument doc;
+  doc["state"] = st;
+  doc["isDownload"] = opdsOp.isDownload;
+  doc["downloaded"] = static_cast<unsigned long>(opdsOp.downloaded);
+  doc["total"] = static_cast<unsigned long>(opdsOp.total);
+  doc["httpStatus"] = opdsOp.httpStatus;
+  if (opdsOp.state == OpdsOp::State::Error) doc["error"] = opdsOp.errorDetail;
+  if (opdsOp.state == OpdsOp::State::Done && opdsOp.isDownload) doc["finalName"] = opdsOp.finalName;
+  String out;
+  serializeJson(doc, out);
+  server->send(200, "application/json", out);
+}
+
+void CrossPointWebServer::handleOpdsEntries() const {
+  if (opdsOp.isDownload || opdsOp.state != OpdsOp::State::Done) {
+    server->send(409, "application/json", "{\"error\":\"not ready\"}");
+    return;
+  }
+  server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server->send(200, "application/json", "");
+
+  // Meta (search + paging) first, then the entry array — streamed so the whole
+  // response is never held in memory at once (mirrors handleFileListData).
+  {
+    JsonDocument meta;
+    meta["searchTemplate"] = opdsOp.feed.searchTemplate;
+    meta["nextPageUrl"] = opdsOp.feed.nextPageUrl;
+    meta["prevPageUrl"] = opdsOp.feed.prevPageUrl;
+    String m;
+    serializeJson(meta, m);
+    server->sendContent("{\"meta\":");
+    server->sendContent(m);
+    server->sendContent(",\"entries\":[");
+  }
+
+  char output[768];
+  bool first = true;
+  JsonDocument doc;
+  for (const auto& e : opdsOp.feed.entries) {
+    doc.clear();
+    doc["type"] = (e.type == OpdsEntryType::BOOK) ? "book" : "nav";
+    doc["title"] = e.title;
+    doc["author"] = e.author;
+    doc["href"] = e.href;
+    const size_t n = serializeJson(doc, output, sizeof(output));
+    if (n >= sizeof(output)) continue;  // skip an oversized entry rather than send malformed JSON
+    if (!first) server->sendContent(",");
+    first = false;
+    server->sendContent(output);
+  }
+  server->sendContent("]}");
+  server->sendContent("");
+}
+
+void CrossPointWebServer::handleOpdsCancel() {
+  if (opdsBusy()) opdsOp.cancel = true;
+  server->send(200, "application/json", "{\"ok\":true}");
 }
 
 // ---- Wi-Fi Credentials API ----

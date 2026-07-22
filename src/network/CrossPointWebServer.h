@@ -5,11 +5,14 @@
 #include <NetworkUdp.h>
 #include <WebServer.h>
 #include <WebSocketsServer.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
 
 #include <memory>
 #include <string>
 
 #include "FontUploadPolicy.h"
+#include "network/OpdsClient.h"
 
 // Structure to hold file information
 struct FileInfo {
@@ -114,6 +117,8 @@ class CrossPointWebServer {
   // Request handlers
   void handleRoot() const;
   void handleJszip() const;
+  void handleCpAuthJs() const;
+  void handleOpdsPage() const;
   void handleNotFound() const;
   void handleStatus() const;
   void handleFileList() const;
@@ -161,6 +166,40 @@ class CrossPointWebServer {
   void handleGetOpdsServers() const;
   void handlePostOpdsServer();
   void handleDeleteOpdsServer();
+
+  // Browser-driven OPDS: browse a catalog and download a book on a short-lived
+  // background task (network + TLS block for seconds; must not stall the
+  // cooperative handleClient loop). Polled via /api/opds/status. STA mode only.
+  // One operation at a time — guarded by opdsBusy().
+  struct OpdsOp {
+    enum class State { Idle, Fetching, Downloading, Done, Error };
+    State state = State::Idle;
+    bool isDownload = false;
+    bool cancel = false;
+    size_t downloaded = 0;  // single-writer (task), 32-bit atomic read by poll
+    size_t total = 0;
+    int httpStatus = 0;
+    std::string errorDetail;
+    std::string finalName;
+    // Captured before the task starts:
+    OpdsServer server;
+    std::string feedUrl;          // download: feed the book link is relative to
+    std::string browseUrl;        // browse: feed URL/path to fetch
+    OpdsEntry entry;              // download
+    OpdsClient::FeedResult feed;  // browse output, consumed by /api/opds/entries
+    TaskHandle_t task = nullptr;
+  } opdsOp;
+
+  bool opdsBusy() const {
+    return opdsOp.state == OpdsOp::State::Fetching || opdsOp.state == OpdsOp::State::Downloading;
+  }
+  void handleOpdsBrowse();
+  void handleOpdsStatus() const;
+  void handleOpdsEntries() const;
+  void handleOpdsDownload();
+  void handleOpdsCancel();
+  void runOpdsTask();
+  static void opdsTaskTramp(void* arg);
 
   // Wi-Fi credential handlers
   void handleGetWifiNetworks() const;

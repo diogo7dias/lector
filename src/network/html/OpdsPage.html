@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OPDS — CrossPoint Reader</title>
+<style>
+  :root{--paper:#f3efe6;--surface:#fbf9f4;--surface2:#f0ebe0;--ink:#26231d;--soft:#5f5a4f;--faint:#8b8577;--line:#e2dccf;--accent:#236b63;--accentink:#fff;--danger:#a83c2c;--lamp:#c98a2e;}
+  @media (prefers-color-scheme:dark){:root{--paper:#151719;--surface:#1d2023;--surface2:#23272b;--ink:#e9e5db;--soft:#a8a296;--faint:#726d63;--line:#2b2f34;--accent:#52b7ab;--accentink:#0c1413;--danger:#e07a63;--lamp:#d9a04a;}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;line-height:1.45}
+  .wrap{max-width:720px;margin:0 auto;padding:16px 14px 48px}
+  h1{font-size:22px;margin:6px 0 4px}
+  .nav-links{display:flex;flex-wrap:wrap;gap:6px 14px;padding:10px 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px;font-size:14px}
+  .nav-links a{color:var(--soft);text-decoration:none}
+  .nav-links a.active{color:var(--accent);font-weight:700}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+  .btn{display:inline-flex;align-items:center;gap:6px;font:inherit;font-size:13.5px;font-weight:600;padding:8px 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accentink)}
+  .btn.small{padding:5px 9px;font-size:12.5px}
+  .btn:disabled{opacity:.5;cursor:default}
+  .row{display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid var(--line);cursor:default}
+  .row:last-child{border-bottom:0}
+  .row .meta{flex:1;min-width:0}
+  .row .name{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .sub{font-size:12px;color:var(--faint)}
+  .nav-row{cursor:pointer}
+  .nav-row:hover{background:var(--surface2)}
+  .crumbs{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:14px;color:var(--soft)}
+  .banner{padding:11px 12px;border-radius:10px;font-size:13px;margin-bottom:14px;background:color-mix(in srgb,var(--lamp) 16%,var(--surface));border:1px solid var(--line)}
+  .banner.err{background:color-mix(in srgb,var(--danger) 14%,var(--surface))}
+  .muted{color:var(--faint);font-size:13px;text-align:center;padding:14px}
+  input,textarea{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface2);color:var(--ink);width:100%;outline:none}
+  label{display:block;font-size:12px;color:var(--soft);margin:8px 0 3px}
+  .bar{height:6px;border-radius:99px;background:var(--line);overflow:hidden;margin-top:6px}
+  .bar>i{display:block;height:100%;background:var(--accent);width:0}
+  details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+</style>
+</head>
+<body>
+<script src="/js/cpauth.js"></script>
+<div class="wrap">
+  <h1>📚 OPDS</h1>
+  <div class="nav-links">
+    <a href="/">Home</a>
+    <a href="/files">File Manager</a>
+    <a href="/settings">Settings</a>
+    <a href="/fonts">Fonts</a>
+    <a href="/opds" class="active">OPDS</a>
+    <a href="https://diogo7dias.github.io/lector-wallpaper-converter/" target="_blank" rel="noopener">Image Converter</a>
+  </div>
+
+  <div id="hotspot" class="banner" hidden>OPDS needs the internet. You are in <b>Hotspot</b> mode, which has no internet. Reconnect the reader with <b>Join Network</b> to download books.</div>
+  <div id="err" class="banner err" hidden></div>
+
+  <!-- Server picker -->
+  <div id="serverCard" class="card">
+    <div style="font-weight:700;margin-bottom:8px">Your OPDS catalogs</div>
+    <div id="servers"><div class="muted">Loading…</div></div>
+    <details style="margin-top:12px">
+      <summary>Add a catalog</summary>
+      <div style="margin-top:10px">
+        <label>Name</label><input id="sName" placeholder="Standard Ebooks">
+        <label>URL</label><input id="sUrl" placeholder="https://standardebooks.org/opds">
+        <div class="grid2">
+          <div><label>Username (optional)</label><input id="sUser"></div>
+          <div><label>Password (optional)</label><input id="sPass" type="password"></div>
+        </div>
+        <button class="btn primary small" style="margin-top:10px" onclick="addServer()">Add catalog</button>
+      </div>
+    </details>
+  </div>
+
+  <!-- Browser -->
+  <div id="browseCard" class="card" hidden>
+    <div class="crumbs">
+      <button class="btn small" id="backBtn" onclick="goBack()">← Back</button>
+      <span id="crumbName"></span>
+    </div>
+    <div id="dlWrap" hidden>
+      <div class="row"><div class="meta"><div class="name" id="dlName">Downloading…</div><div class="bar"><i id="dlBar"></i></div></div><div id="dlPct" style="font-variant-numeric:tabular-nums;font-size:13px">0%</div></div>
+    </div>
+    <div id="entries"><div class="muted">Loading…</div></div>
+  </div>
+</div>
+
+<script>
+  var servers = [];
+  var cur = { idx: -1, feedUrl: '', name: '', searchTemplate: '' };
+  var navStack = [];
+  var polling = false;
+
+  function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function showErr(m){ var e=document.getElementById('err'); e.textContent=m; e.hidden=!m; }
+
+  function api(path, opts){ return fetch(path, opts).then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }).catch(function(){ return {status:r.status, body:{}}; }); }); }
+
+  // ---- Servers ----
+  function loadServers(){
+    api('/api/opds').then(function(res){
+      servers = Array.isArray(res.body) ? res.body : [];
+      var host = document.getElementById('servers');
+      if(!servers.length){ host.innerHTML = '<div class="muted">No catalogs yet. Add one below.</div>'; return; }
+      host.innerHTML = '';
+      servers.forEach(function(s){
+        var row = document.createElement('div'); row.className='row nav-row';
+        row.innerHTML = '<div class="meta"><div class="name">'+esc(s.name||s.url)+'</div><div class="sub">'+esc(s.url)+(s.hasPassword?' · login saved':'')+'</div></div><span class="btn small">Browse ›</span>';
+        row.onclick = function(){ startBrowse(s); };
+        host.appendChild(row);
+      });
+    });
+  }
+
+  function addServer(){
+    var name=document.getElementById('sName').value.trim();
+    var url=document.getElementById('sUrl').value.trim();
+    if(!url){ alert('Enter a catalog URL'); return; }
+    var payload = { name:name||url, url:url, username:document.getElementById('sUser').value, password:document.getElementById('sPass').value };
+    api('/api/opds', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+      .then(function(res){
+        if(res.status>=200 && res.status<300){ document.getElementById('sName').value=document.getElementById('sUrl').value=document.getElementById('sUser').value=document.getElementById('sPass').value=''; loadServers(); }
+        else showErr('Could not add catalog.');
+      });
+  }
+
+  // ---- Browse ----
+  function startBrowse(s){
+    cur = { idx: s.index, feedUrl: s.url, name: s.name||s.url, searchTemplate:'' };
+    navStack = [];
+    document.getElementById('serverCard').hidden = true;
+    document.getElementById('browseCard').hidden = false;
+    browse(s.url);
+  }
+
+  function browse(feedUrl){
+    showErr('');
+    document.getElementById('crumbName').textContent = cur.name;
+    document.getElementById('entries').innerHTML = '<div class="muted">Loading…</div>';
+    var q = '/api/opds/browse?server=' + cur.idx + '&url=' + encodeURIComponent(feedUrl||'');
+    api(q).then(function(res){
+      if(res.status === 409 && res.body.error === 'hotspot'){ document.getElementById('hotspot').hidden=false; document.getElementById('entries').innerHTML=''; return; }
+      if(res.status === 507){ document.getElementById('entries').innerHTML='<div class="muted">The reader is low on memory. Restart the reader and try again.</div>'; return; }
+      if(res.status !== 202){ document.getElementById('entries').innerHTML='<div class="muted">Could not start. '+(res.body.error||'')+'</div>'; return; }
+      cur.feedUrl = feedUrl;  // absolute URL of the feed we are viewing
+      pollUntilDone(function(st){
+        if(st.state === 'done'){ loadEntries(); }
+        else { document.getElementById('entries').innerHTML='<div class="muted">'+esc(st.error||'Failed to load feed.')+'</div>'; }
+      });
+    });
+  }
+
+  function pollUntilDone(cb){
+    if(polling) return; polling = true;
+    var tick = function(){
+      api('/api/opds/status').then(function(res){
+        var st = res.body || {};
+        if(st.state === 'fetching' || st.state === 'downloading'){ if(st.state==='downloading') updateDl(st); setTimeout(tick, 800); return; }
+        polling = false; cb(st);
+      }).catch(function(){ polling=false; });
+    };
+    tick();
+  }
+
+  function loadEntries(){
+    api('/api/opds/entries').then(function(res){
+      var meta = res.body.meta || {}; var entries = res.body.entries || [];
+      cur.searchTemplate = meta.searchTemplate || '';
+      var host = document.getElementById('entries'); host.innerHTML='';
+      if(meta.prevPageUrl) host.appendChild(navItem('‹ Previous page', meta.prevPageUrl));
+      if(!entries.length && !meta.nextPageUrl && !meta.prevPageUrl){ host.innerHTML='<div class="muted">Nothing here.</div>'; }
+      entries.forEach(function(e){
+        if(e.type === 'nav') host.appendChild(navItem('📁 ' + (e.title||'Untitled'), e.href));
+        else host.appendChild(bookItem(e));
+      });
+      if(meta.nextPageUrl) host.appendChild(navItem('Next page ›', meta.nextPageUrl));
+    });
+  }
+
+  function navItem(label, href){
+    var row = document.createElement('div'); row.className='row nav-row';
+    row.innerHTML = '<div class="meta"><div class="name">'+esc(label)+'</div></div><span class="btn small">Open ›</span>';
+    row.onclick = function(){ navStack.push(cur.feedUrl); browse(absUrl(href)); };
+    return row;
+  }
+
+  function bookItem(e){
+    var row = document.createElement('div'); row.className='row';
+    var sub = e.author ? esc(e.author) : '';
+    row.innerHTML = '<div class="meta"><div class="name">'+esc(e.title||'Untitled')+'</div><div class="sub">'+sub+'</div></div>';
+    var btn = document.createElement('button'); btn.className='btn primary small'; btn.textContent='Get';
+    btn.onclick = function(){ getBook(e, btn); };
+    row.appendChild(btn);
+    return row;
+  }
+
+  function absUrl(href){ try { return new URL(href, cur.feedUrl).href; } catch(_) { return href; } }
+
+  function goBack(){
+    if(navStack.length){ browse(navStack.pop()); }
+    else { document.getElementById('browseCard').hidden=true; document.getElementById('serverCard').hidden=false; }
+  }
+
+  // ---- Download ----
+  function updateDl(st){
+    document.getElementById('dlWrap').hidden = false;
+    var pct = st.total ? Math.round((st.downloaded*100)/st.total) : 0;
+    document.getElementById('dlBar').style.width = pct + '%';
+    document.getElementById('dlPct').textContent = pct + '%';
+  }
+
+  function getBook(e, btn){
+    showErr('');
+    btn.disabled = true; btn.textContent = '…';
+    document.getElementById('dlName').textContent = 'Downloading — ' + (e.title||'book');
+    document.getElementById('dlWrap').hidden = false;
+    document.getElementById('dlBar').style.width='0%'; document.getElementById('dlPct').textContent='0%';
+    var payload = { server: cur.idx, feedUrl: cur.feedUrl, href: e.href, title: e.title, author: e.author };
+    api('/api/opds/download', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+      .then(function(res){
+        if(res.status === 409 && res.body.error === 'hotspot'){ showErr('OPDS needs internet (hotspot mode has none).'); reset(btn); return; }
+        if(res.status === 507){ showErr('The reader is low on memory. Restart it and try again.'); reset(btn); return; }
+        if(res.status !== 202){ showErr('Could not start download.'); reset(btn); return; }
+        pollUntilDone(function(st){
+          document.getElementById('dlWrap').hidden = true;
+          if(st.state === 'done'){ btn.textContent='✓ Saved'; }
+          else { showErr('Download failed: ' + (st.error||'')); reset(btn); }
+        });
+      });
+  }
+  function reset(btn){ btn.disabled=false; btn.textContent='Get'; }
+
+  // ---- Init ----
+  api('/api/status').then(function(res){ if(res.body && res.body.mode === 'AP') document.getElementById('hotspot').hidden=false; }).catch(function(){});
+  loadServers();
+</script>
+</body>
+</html>
