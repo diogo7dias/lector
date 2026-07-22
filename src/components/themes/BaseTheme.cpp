@@ -1092,7 +1092,7 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   const int paintedHeight = h + y;
 
   renderer.fillRect(0, 0, pageWidth, paintedHeight, true);  // black backing reaches the physical edge
-  renderer.drawRect(0, y, pageWidth, h, 2, false);  // 2px white inset edge (kept from the old popup)
+  renderer.drawRect(0, y, pageWidth, h, 2, false);          // 2px white inset edge (kept from the old popup)
   const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, message);
   const int textX = (pageWidth - textWidth) / 2;
   const int textY = y + (h - textHeight) / 2;
