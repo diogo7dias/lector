@@ -99,6 +99,31 @@
 
   function esc(s){ return (s||'').replace(/[&<>"]/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function showErr(m){ var e=document.getElementById('err'); e.textContent=m; e.hidden=!m; }
+  // Turn the device error state into a full, human-readable explanation. The device
+  // already reports httpStatus over /api/opds/status; surface it plus a plain-English
+  // hint so a connection failure is diagnosable without a serial cable.
+  function opdsErrText(st){
+    var code = (st && typeof st.httpStatus === 'number') ? st.httpStatus : null;
+    var detail = (st && st.error) ? st.error : 'failed';
+    var hint = '';
+    if(code === null || code === 0){
+      hint = 'The reader never reached the server. Check the catalog URL, the reader’s WiFi signal, and that the reader has internet.';
+    } else if(code < 0){
+      hint = 'Secure connection failed (TLS handshake). Usually a weak WiFi signal or the reader is low on memory — move closer to the router or restart the reader and retry.';
+    } else if(code === 401){
+      hint = 'The server rejected the login (401). Check the username and password for this catalog.';
+    } else if(code === 403){
+      hint = 'The server refused access (403).';
+    } else if(code === 404){
+      hint = 'The server has no catalog at that address (404). Check the URL.';
+    } else if(code >= 500){
+      hint = 'The catalog server had an error (' + code + '). Try again later.';
+    } else {
+      hint = 'Unexpected server response (' + code + ').';
+    }
+    var codeLabel = (code === null) ? 'no response' : ('HTTP ' + code);
+    return esc(detail) + ' — ' + codeLabel + '. ' + esc(hint);
+  }
 
   function api(path, opts){ return fetch(path, opts).then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }).catch(function(){ return {status:r.status, body:{}}; }); }); }
 
@@ -151,7 +176,7 @@
       cur.feedUrl = feedUrl;  // absolute URL of the feed we are viewing
       pollUntilDone(function(st){
         if(st.state === 'done'){ loadEntries(); }
-        else { document.getElementById('entries').innerHTML='<div class="muted">'+esc(st.error||'Failed to load feed.')+'</div>'; }
+        else { document.getElementById('entries').innerHTML='<div class="muted">'+opdsErrText(st)+'</div>'; }
       });
     });
   }
@@ -230,7 +255,7 @@
         pollUntilDone(function(st){
           document.getElementById('dlWrap').hidden = true;
           if(st.state === 'done'){ btn.textContent='✓ Saved'; }
-          else { showErr('Download failed: ' + (st.error||'')); reset(btn); }
+          else { showErr('Download failed: ' + opdsErrText(st)); reset(btn); }
         });
       });
   }
