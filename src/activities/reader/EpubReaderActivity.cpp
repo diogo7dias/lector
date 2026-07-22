@@ -40,6 +40,7 @@
 #include "QuotesViewerActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
 #include "WakeFrameHandoff.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/SettingsActivity.h"
@@ -193,6 +194,13 @@ void EpubReaderActivity::onEnter() {
   // the current global settings). Must run before applyOrientation + any layout so
   // orientation and all layout math use the per-book values. Needs the cache dir.
   loadReaderPrefs();
+
+  // Sync the SD font manager to THIS book's resolved prefs. The launcher loaded
+  // the manager for the GLOBAL font/size; a per-book override may differ, and
+  // resolveFontId() returns whatever the manager currently holds. Without this,
+  // a book with a custom SD font renders the global font (or built-in) instead.
+  // No-op for built-in (Bookerly) prefs.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
 
   // Configure screen orientation based on settings
   // NOTE: This affects layout math and must be applied before any render calls.
@@ -1549,6 +1557,12 @@ void EpubReaderActivity::applyReaderSettingsEdit() {
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
   ReaderUtils::applyOrientation(renderer, prefs_.orientation);
+  // Load the newly-chosen SD font/size BEFORE the rebuild so readerFontId()
+  // resolves to the new font and produces a new layout hash. Otherwise the
+  // stale manager returns the old id, the cache key does not change, and the
+  // old-font section reloads — the in-book font/size change never appears.
+  // Runs while no build is active (settings-result callback), before requestUpdate.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
   reloadForReaderPrefsChange();
   requestUpdate();
 }
@@ -1559,6 +1573,7 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   prefsCustom_ = false;
   prefs_ = ReaderPrefs::fromGlobal();
   ReaderUtils::applyOrientation(renderer, prefs_.orientation);
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
   reloadForReaderPrefsChange();
 }
 
@@ -1656,12 +1671,13 @@ bool EpubReaderActivity::beginSlicedBuild(const uint16_t viewportWidth, const ui
   sectionBuildActive_ = true;
   sectionBuildProgressPaintedMs_ = 0;
   sectionBuildProgressPercent_ = -100;  // force the first real update to paint
-  if (pickIndexingBackdrop()) {
-    // Differential HALF waveforms ghost over arbitrary prior content (the sleep
-    // deep-clean rule), so blank + FULL once before the backdrop's first paint.
-    renderer.clearScreen();
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-  }
+  // Pick a wallpaper for the indexing face. The first paint (force) pushes a
+  // single FULL refresh that BOTH self-cleans any prior content (a FULL is a
+  // complete inversion cycle, so no ghost — the old separate blank + FULL white
+  // pass is gone, saving a whole ~1.5s white flash on X3) AND shows the image in
+  // one waveform. Previously it was blank+FULL(white) then HALF(image): two
+  // refreshes with a blank white screen in between.
+  pickIndexingBackdrop();
   paintBuildProgress(/*force=*/true);  // initial indexing face at 0%
   requestUpdate();                     // ask the render task for the first slice
   return true;
@@ -1832,10 +1848,12 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
       GUI.fillBottomProgress(renderer, percent);
       return;
     }
-    // force -> clean HALF base paint. X3 incremental -> FAST differential so the
-    // unchanged image + banner do not flash (only the bar's pixels transition).
+    // force -> single FULL refresh: self-cleans prior content (no separate blank
+    // pass) and paints the image in one waveform. X3 incremental -> FAST
+    // differential so the unchanged image + banner do not flash (only the bar's
+    // pixels transition).
     const HalDisplay::RefreshMode oneBitRefresh =
-        force ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+        force ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH;
     const int pct = percent;
     const bool ok = renderPxcSleepScreen(
         renderer, indexingBackdropPath_,

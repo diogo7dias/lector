@@ -25,6 +25,17 @@ class SdCardFontSystem {
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
 
+  /// Ensure a SPECIFIC family + size is loaded, independent of the global
+  /// SETTINGS reader fields. The reader uses this for per-book overrides
+  /// (prefs_), whose SD font family / size can differ from the global settings
+  /// the manager was last synced to. Without it, resolveFontId() returns the
+  /// globally-loaded font's id (or 0 -> built-in fallback) and an in-book font
+  /// or size change never takes effect. Unlike ensureLoaded(), a missing /
+  /// unloadable font here NEVER clears the global SETTINGS.sdFontFamilyName —
+  /// a per-book miss must not wipe the user's global font. `family` may be null
+  /// or empty to select "no SD font" (built-ins).
+  void ensureLoadedFor(GfxRenderer& renderer, const char* family, uint8_t sizeEnum);
+
   /// Resolve an SD card font ID from family name + fontSize enum.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
   int resolveFontId(const char* familyName, uint8_t fontSizeEnum) const;
