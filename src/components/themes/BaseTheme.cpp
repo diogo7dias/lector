@@ -609,6 +609,11 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+  // X4 crops the first few physical top rows. Shift the whole header down by the
+  // shared inset so every screen's top bar lands at the same visible Y and nothing
+  // clips off the top edge. X3 inset is 0, so its coordinates are unchanged.
+  rect.y += topEdgeInset(gpio.deviceIsX4());
+
   // Hide last battery draw. Wide enough to cover the larger UI_10 battery % text.
   constexpr int maxBatteryWidth = 100;
   renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
