@@ -18,7 +18,7 @@
 #include "KOReaderDocumentId.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
-#include "SilentRestart.h"
+#include "WifiSession.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -328,11 +328,7 @@ void KOReaderSyncActivity::onEnter() {
 void KOReaderSyncActivity::onExit() {
   Activity::onExit();
 
-  if (wifiActivated) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestartToReader();
-  }
+  if (wifiActivated) endWifiSession(WifiReboot::Reader);
 }
 
 void KOReaderSyncActivity::render(RenderLock&&) {

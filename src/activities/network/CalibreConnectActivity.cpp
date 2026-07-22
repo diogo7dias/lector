@@ -8,8 +8,8 @@
 #include <esp_task_wdt.h>
 
 #include "MappedInputManager.h"
-#include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
+#include "WifiSession.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -55,11 +55,7 @@ void CalibreConnectActivity::onExit() {
 
   MDNS.end();
 
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  if (WiFi.getMode() != WIFI_MODE_NULL) endWifiSession(WifiReboot::Home);
 }
 
 void CalibreConnectActivity::onWifiSelectionComplete(const bool connected) {

@@ -9,7 +9,7 @@
 #include <qrcode.h>
 
 #include "CrossPointState.h"
-#include "SilentRestart.h"
+#include "WifiSession.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
@@ -101,11 +101,7 @@ void QRShareActivity::onExit() {
 
   // Reclaim the WiFi/HTTP heap the same way file transfer does: tear the radio
   // down and silent-restart. Skipped when the radio was never brought up.
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestartToReader();  // launched from the reader — reboot back into the book
-  }
+  if (WiFi.getMode() != WIFI_MODE_NULL) endWifiSession(WifiReboot::Reader);
 }
 
 void QRShareActivity::loop() {
