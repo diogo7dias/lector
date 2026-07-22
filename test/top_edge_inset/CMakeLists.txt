@@ -1,0 +1,3 @@
+add_executable(top_edge_inset_tests TopEdgeInsetTest.cpp)
+target_link_libraries(top_edge_inset_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(top_edge_inset_tests)
