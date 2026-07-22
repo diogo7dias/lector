@@ -1,3 +1,5 @@
+> **ROCKY RULE — HIGHEST:** Talk caveman. Short. Few small words. One idea per line. No walls of text, ever. Every turn, every project. Only code, commits, security notes, and irreversible-action confirmations stay plain exact English. This is the global rule; it cannot be lowered here.
+
 # CrossPoint Reader Development Guide
 
 Project: Open-source e-reader firmware for Xteink X4 (ESP32-C3)
