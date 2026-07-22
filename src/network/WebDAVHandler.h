@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <WebServer.h>
 
+#include <string>
+
 class WebDAVHandler : public RequestHandler {
  public:
   // RequestHandler interface
@@ -11,12 +13,22 @@ class WebDAVHandler : public RequestHandler {
   void raw(WebServer& server, const String& uri, HTTPRaw& raw) override;
   bool handle(WebServer& server, HTTPMethod method, const String& uri) override;
 
+  // Same 4-digit code shown on the device screen; empty = auth disabled. When
+  // set, every WebDAV request must carry HTTP Basic credentials whose password
+  // equals this code (any username is accepted).
+  void setAuthCode(const std::string& code) { _authCode = code; }
+
  private:
   // PUT streaming state (raw() is called in chunks)
   HalFile _putFile;
   String _putPath;
   bool _putOk = false;
   bool _putExisted = false;
+
+  // Access control: HTTP Basic, password == _authCode (any username). Empty
+  // means auth is disabled (server not configured with a code).
+  std::string _authCode;
+  bool davAuthOk(WebServer& s) const;
 
   // WebDAV method handlers
   void handleOptions(WebServer& s);

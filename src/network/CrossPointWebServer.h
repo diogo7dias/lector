@@ -68,6 +68,13 @@ class CrossPointWebServer {
   // Get the port number
   uint16_t getPort() const { return port; }
 
+  // The 4-digit per-session access code shown on the device screen; the browser
+  // must echo it back (via /api/auth) before any file operation is allowed.
+  const char* getAuthCode() const { return authCode; }
+
+  // True when the server runs as an access point (hotspot) with no internet uplink.
+  bool isApMode() const { return apMode; }
+
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
@@ -78,6 +85,15 @@ class CrossPointWebServer {
   NetworkUDP udp;
   bool udpActive = false;
 
+  // Per-session access control, regenerated on every begin(). authCode is the
+  // 4-digit code drawn on the device screen; sessionToken is the opaque value
+  // handed to the browser as a cookie once the code is entered. A short lockout
+  // throttles brute-force guessing over the LAN.
+  char authCode[5] = {0};
+  std::string sessionToken;
+  uint8_t authFailCount = 0;
+  unsigned long authLockoutUntil = 0;
+
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
@@ -87,6 +103,13 @@ class CrossPointWebServer {
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
   String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
+
+  // Access control
+  bool isAuthed() const;          // does this request carry a valid session cookie?
+  bool requireAuth() const;       // isAuthed() else send 401; gate for every data route
+  void handleAuthStatus() const;  // GET  /api/auth  -> whether the code is still needed
+  void handleAuthSubmit();        // POST /api/auth  -> validate code, hand out the cookie
+  static bool validateWsHeader(String headerName, String headerValue);  // WS handshake gate
 
   // Request handlers
   void handleRoot() const;

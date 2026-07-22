@@ -7,6 +7,7 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
+#include <esp_random.h>
 #include <esp_task_wdt.h>
 
 #include <algorithm>
@@ -112,6 +113,18 @@ void CrossPointWebServer::begin() {
   // Store AP mode flag for later use (e.g., in handleStatus)
   apMode = isInApMode;
 
+  // Fresh per-session credentials. The 4-digit code is shown on the device
+  // screen; the browser posts it to /api/auth and receives the opaque session
+  // token as a cookie. esp_random() is the ESP32 hardware RNG.
+  snprintf(authCode, sizeof(authCode), "%04u", static_cast<unsigned>(esp_random() % 10000u));
+  char tokenBuf[33];
+  snprintf(tokenBuf, sizeof(tokenBuf), "%08lx%08lx%08lx%08lx", static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()), static_cast<unsigned long>(esp_random()),
+           static_cast<unsigned long>(esp_random()));
+  sessionToken = tokenBuf;
+  authFailCount = 0;
+  authLockoutUntil = 0;
+
   LOG_DBG("WEB", "[MEM] Free heap before begin: %d bytes", ESP.getFreeHeap());
   LOG_DBG("WEB", "Network mode: %s", apMode ? "AP" : "STA");
 
@@ -140,59 +153,140 @@ void CrossPointWebServer::begin() {
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
 
-  server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
-  server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
-  server->on("/api/dircount", HTTP_GET, [this] { handleDirCount(); });
-  server->on("/download", HTTP_GET, [this] { handleDownload(); });
+  // Access-control endpoints are public: the browser posts the on-device code
+  // here to obtain a session cookie. Every data route below is requireAuth-gated.
+  server->on("/api/auth", HTTP_GET, [this] { handleAuthStatus(); });
+  server->on("/api/auth", HTTP_POST, [this] { handleAuthSubmit(); });
 
-  // Upload endpoint with special handling for multipart form data
-  server->on("/upload", HTTP_POST, [this] { handleUploadPost(upload); }, [this] { handleUpload(upload); });
+  server->on("/api/status", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleStatus();
+  });
+  server->on("/api/files", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleFileListData();
+  });
+  server->on("/api/dircount", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleDirCount();
+  });
+  server->on("/download", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleDownload();
+  });
+
+  // Upload endpoint with special handling for multipart form data. The data
+  // callback (handleUpload) also checks the cookie at UPLOAD_FILE_START, so an
+  // unauthenticated upload never opens a file on the SD card.
+  server->on(
+      "/upload", HTTP_POST,
+      [this] {
+        if (!requireAuth()) return;
+        handleUploadPost(upload);
+      },
+      [this] { handleUpload(upload); });
 
   // Create folder endpoint
-  server->on("/mkdir", HTTP_POST, [this] { handleCreateFolder(); });
+  server->on("/mkdir", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleCreateFolder();
+  });
 
   // Rename file endpoint
-  server->on("/rename", HTTP_POST, [this] { handleRename(); });
+  server->on("/rename", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleRename();
+  });
 
   // Move file endpoint
-  server->on("/move", HTTP_POST, [this] { handleMove(); });
+  server->on("/move", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleMove();
+  });
 
   // Batch move endpoint (JSON array of file paths + one destination folder)
-  server->on("/movebatch", HTTP_POST, [this] { handleMoveBatch(); });
+  server->on("/movebatch", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleMoveBatch();
+  });
 
   // Delete file/folder endpoint
-  server->on("/delete", HTTP_POST, [this] { handleDelete(); });
+  server->on("/delete", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleDelete();
+  });
 
-  // Settings endpoints
+  // Settings endpoints (the HTML shell is public; the data API is gated)
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
-  server->on("/api/settings", HTTP_GET, [this] { handleGetSettings(); });
-  server->on("/api/settings", HTTP_POST, [this] { handlePostSettings(); });
+  server->on("/api/settings", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleGetSettings();
+  });
+  server->on("/api/settings", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handlePostSettings();
+  });
 
-  // Font management endpoints
+  // Font management endpoints (the HTML shell is public; the data API is gated).
+  // The upload data callback (handleFontUploadData) checks the cookie itself.
   server->on("/fonts", HTTP_GET, [this] { handleFontsPage(); });
-  server->on("/api/fonts", HTTP_GET, [this] { handleFontList(); });
-  server->on("/api/fonts/upload", HTTP_POST, [this] { handleFontUpload(); }, [this] { handleFontUploadData(); });
-  server->on("/api/fonts/delete", HTTP_POST, [this] { handleFontDelete(); });
+  server->on("/api/fonts", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleFontList();
+  });
+  server->on(
+      "/api/fonts/upload", HTTP_POST,
+      [this] {
+        if (!requireAuth()) return;
+        handleFontUpload();
+      },
+      [this] { handleFontUploadData(); });
+  server->on("/api/fonts/delete", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleFontDelete();
+  });
 
   // OPDS server endpoints
-  server->on("/api/opds", HTTP_GET, [this] { handleGetOpdsServers(); });
-  server->on("/api/opds", HTTP_POST, [this] { handlePostOpdsServer(); });
-  server->on("/api/opds/delete", HTTP_POST, [this] { handleDeleteOpdsServer(); });
+  server->on("/api/opds", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleGetOpdsServers();
+  });
+  server->on("/api/opds", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handlePostOpdsServer();
+  });
+  server->on("/api/opds/delete", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleDeleteOpdsServer();
+  });
 
   // Wi-Fi credential endpoints
-  server->on("/api/wifi", HTTP_GET, [this] { handleGetWifiNetworks(); });
-  server->on("/api/wifi", HTTP_POST, [this] { handlePostWifiNetwork(); });
-  server->on("/api/wifi/delete", HTTP_POST, [this] { handleDeleteWifiNetwork(); });
+  server->on("/api/wifi", HTTP_GET, [this] {
+    if (!requireAuth()) return;
+    handleGetWifiNetworks();
+  });
+  server->on("/api/wifi", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handlePostWifiNetwork();
+  });
+  server->on("/api/wifi/delete", HTTP_POST, [this] {
+    if (!requireAuth()) return;
+    handleDeleteWifiNetwork();
+  });
 
   server->onNotFound([this] { handleNotFound(); });
   LOG_DBG("WEB", "[MEM] Free heap after route setup: %d bytes", ESP.getFreeHeap());
 
   // Collect WebDAV headers and register handler
-  const char* davHeaders[] = {"Depth", "Destination", "Overwrite", "If", "Lock-Token", "Timeout"};
-  server->collectHeaders(davHeaders, 6);
+  // WebDAV headers plus the two auth headers: without registering "Authorization"
+  // and "Cookie" here, server->header() / authenticate() cannot read them.
+  const char* davHeaders[] = {"Depth",      "Destination", "Overwrite",     "If",
+                              "Lock-Token", "Timeout",     "Authorization", "Cookie"};
+  server->collectHeaders(davHeaders, 8);
   auto* webDavHandler = new (std::nothrow) WebDAVHandler();
   if (webDavHandler) {
-    server->addHandler(webDavHandler);  // WebServer owns and deletes the handler.
+    webDavHandler->setAuthCode(authCode);  // same code gates the drive mount (HTTP Basic)
+    server->addHandler(webDavHandler);     // WebServer owns and deletes the handler.
     LOG_DBG("WEB", "WebDAV handler initialized");
   } else {
     LOG_ERR("WEB", "OOM: WebDAV handler disabled");
@@ -207,6 +301,10 @@ void CrossPointWebServer::begin() {
     wsInstance = const_cast<CrossPointWebServer*>(this);
     wsServer->begin();
     wsServer->onEvent(wsEventCallback);
+    // Gate the upgrade: the handshake must carry our session cookie. "Cookie" is
+    // mandatory, so a request without it is rejected before any frame is read.
+    static const char* wsMandatoryHeaders[] = {"Cookie"};
+    wsServer->onValidateHttpHeader(validateWsHeader, wsMandatoryHeaders, 1);
     LOG_DBG("WEB", "WebSocket server started");
   } else {
     LOG_ERR("WEB", "OOM: WebSocket uploads disabled");
@@ -447,6 +545,87 @@ void CrossPointWebServer::handleFileList() const {
   sendHtmlContent(server.get(), FilesPageHtml, sizeof(FilesPageHtml));
 }
 
+bool CrossPointWebServer::isAuthed() const {
+  if (sessionToken.empty()) return true;  // auth not configured (server not fully started)
+  if (!server) return false;
+  const String cookie = server->header("Cookie");
+  if (cookie.isEmpty()) return false;
+  // Find "cp_session=<token>" among the "; "-separated cookie pairs.
+  const int idx = cookie.indexOf("cp_session=");
+  if (idx < 0) return false;
+  const int valStart = idx + 11;  // strlen("cp_session=")
+  const int semi = cookie.indexOf(';', valStart);
+  const String val = (semi < 0) ? cookie.substring(valStart) : cookie.substring(valStart, semi);
+  return val == sessionToken.c_str();
+}
+
+bool CrossPointWebServer::requireAuth() const {
+  if (isAuthed()) return true;
+  server->send(401, "application/json", "{\"error\":\"auth\"}");
+  return false;
+}
+
+void CrossPointWebServer::handleAuthStatus() const {
+  const unsigned long now = millis();
+  const bool locked = now < authLockoutUntil;
+  const unsigned long retry = locked ? (authLockoutUntil - now + 999) / 1000 : 0;
+  char out[128];
+  snprintf(out, sizeof(out), "{\"authRequired\":true,\"authenticated\":%s,\"lockedOut\":%s,\"retryAfter\":%lu}",
+           isAuthed() ? "true" : "false", locked ? "true" : "false", retry);
+  server->send(200, "application/json", out);
+}
+
+void CrossPointWebServer::handleAuthSubmit() {
+  // Reject while a lockout window is active.
+  const unsigned long now = millis();
+  if (now < authLockoutUntil) {
+    char out[64];
+    snprintf(out, sizeof(out), "{\"ok\":false,\"lockedOut\":true,\"retryAfter\":%lu}",
+             (authLockoutUntil - now + 999) / 1000);
+    server->send(429, "application/json", out);
+    return;
+  }
+
+  // Accept the code from a form field or a JSON body {"code":"1234"}.
+  String code;
+  if (server->hasArg("code")) {
+    code = server->arg("code");
+  } else if (server->hasArg("plain")) {
+    JsonDocument doc;
+    if (deserializeJson(doc, server->arg("plain")) == DeserializationError::Ok) {
+      code = String(static_cast<const char*>(doc["code"] | ""));
+    }
+  }
+  code.trim();
+
+  if (code.length() == 4 && code == authCode) {
+    authFailCount = 0;
+    const String cookie = "cp_session=" + String(sessionToken.c_str()) + "; Path=/; Max-Age=86400; SameSite=Lax";
+    server->sendHeader("Set-Cookie", cookie);
+    server->send(200, "application/json", "{\"ok\":true}");
+    return;
+  }
+
+  // Wrong code: throttle after a handful of tries so the LAN cannot brute-force
+  // all 10000 combinations quickly.
+  if (++authFailCount >= 5) {
+    authLockoutUntil = millis() + 30000;  // 30-second cooldown
+    authFailCount = 0;
+    server->send(429, "application/json", "{\"ok\":false,\"lockedOut\":true,\"retryAfter\":30}");
+    return;
+  }
+  server->send(401, "application/json", "{\"ok\":false,\"lockedOut\":false}");
+}
+
+bool CrossPointWebServer::validateWsHeader(String headerName, String headerValue) {
+  // Called per handshake header. Only the Cookie header is gated (and it is
+  // mandatory, so a request without it is already rejected); accept the rest.
+  if (!headerName.equalsIgnoreCase("Cookie")) return true;
+  if (!wsInstance || wsInstance->sessionToken.empty()) return false;
+  const String needle = "cp_session=" + String(wsInstance->sessionToken.c_str());
+  return headerValue.indexOf(needle) >= 0;
+}
+
 void CrossPointWebServer::handleFileListData() const {
   // Get current path from query string (default to root)
   String currentPath = "/";
@@ -624,6 +803,14 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
   if (upload.status == UPLOAD_FILE_START) {
     // Reset watchdog - this is the critical 1% crash point
     esp_task_wdt_reset();
+
+    // Reject an unauthenticated upload before anything is opened or written; the
+    // WRITE callbacks below only run while state.error is empty.
+    if (!isAuthed()) {
+      state.error = "unauthorized";
+      LOG_DBG("WEB", "[UPLOAD] Rejected: not authenticated");
+      return;
+    }
 
     state.fileName = upload.filename;
     state.size = 0;
@@ -1976,6 +2163,12 @@ void CrossPointWebServer::handleFontUploadData() {
   switch (upload.status) {
     case UPLOAD_FILE_START: {
       esp_task_wdt_reset();
+      // Reject an unauthenticated font upload before any temp file is created.
+      if (!isAuthed()) {
+        fontUpload.valid = false;
+        fontUpload.error = "unauthorized";
+        return;
+      }
       String family = server->arg("family");
       if (fontUpload.file) fontUpload.file.close();
       if (!fontUpload.tempPath.empty()) Storage.remove(fontUpload.tempPath.c_str());

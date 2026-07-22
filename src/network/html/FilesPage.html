@@ -1497,6 +1497,43 @@
   </style>
 </head>
 <body>
+<!-- Access-code gate (stopgap until the full redesign). Self-contained so it
+     does not depend on the page CSS/JS: on load it asks the server whether a
+     code is needed and, if so, blocks with an overlay until the code is entered. -->
+<div id="cpAuthGate" style="position:fixed;inset:0;z-index:99999;display:none;background:rgba(15,13,8,.72);align-items:center;justify-content:center;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif">
+  <div style="background:#fbf9f4;color:#26231d;max-width:340px;width:calc(100% - 36px);border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.35);padding:22px 20px;text-align:center">
+    <div style="font-size:17px;font-weight:700;margin-bottom:6px">Enter the access code</div>
+    <div style="font-size:13px;color:#5f5a4f;margin-bottom:16px">Look at your reader&rsquo;s screen &mdash; it shows a 4-digit code. Type it here once.</div>
+    <input id="cpAuthInput" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" aria-label="Access code"
+      style="width:150px;text-align:center;letter-spacing:10px;font-size:26px;font-weight:700;padding:10px 8px;border:1.5px solid #236b63;border-radius:12px;background:#f0ebe0;color:#26231d;outline:none" />
+    <div id="cpAuthMsg" style="min-height:18px;font-size:12.5px;color:#a83c2c;margin:10px 0 4px"></div>
+    <button id="cpAuthBtn" type="button" style="width:100%;font-size:15px;font-weight:700;padding:11px;border:0;border-radius:12px;background:#236b63;color:#fff;cursor:pointer">Unlock</button>
+  </div>
+</div>
+<script>
+(function(){
+  var gate=document.getElementById('cpAuthGate'),input=document.getElementById('cpAuthInput'),
+      msg=document.getElementById('cpAuthMsg'),btn=document.getElementById('cpAuthBtn');
+  function show(){gate.style.display='flex';setTimeout(function(){input.focus();},60);}
+  function submit(){
+    var code=(input.value||'').trim();
+    if(code.length!==4){msg.style.color='#a83c2c';msg.textContent='Enter 4 digits.';return;}
+    btn.disabled=true;msg.style.color='#5f5a4f';msg.textContent='Checking…';
+    fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'code='+encodeURIComponent(code)})
+      .then(function(r){return r.json().then(function(j){return {s:r.status,j:j};});})
+      .then(function(o){
+        if(o.s===200&&o.j.ok){location.reload();return;}
+        btn.disabled=false;msg.style.color='#a83c2c';
+        if(o.s===429||(o.j&&o.j.lockedOut)){msg.textContent='Too many tries. Wait '+((o.j&&o.j.retryAfter)||30)+'s.';}
+        else{msg.textContent='Wrong code. Try again.';input.value='';input.focus();}
+      })
+      .catch(function(){btn.disabled=false;msg.style.color='#a83c2c';msg.textContent='Network error.';});
+  }
+  btn.addEventListener('click',submit);
+  input.addEventListener('keydown',function(e){if(e.key==='Enter')submit();});
+  fetch('/api/auth').then(function(r){return r.json();}).then(function(j){if(j&&!j.authenticated)show();}).catch(function(){});
+})();
+</script>
 <h1>📚 CrossPoint Reader</h1>
 
 <div class="nav-links">

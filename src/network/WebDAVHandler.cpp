@@ -5,6 +5,8 @@
 #include <Logging.h>
 #include <esp_task_wdt.h>
 
+#include <new>
+
 #include "util/BookCacheUtils.h"
 #include "util/WebPath.h"
 
@@ -14,6 +16,17 @@ namespace {
 // as a fallback. The date is not critical for WebDAV Class 1 operations.
 const char* FIXED_DATE = "Thu, 01 Jan 2024 00:00:00 GMT";
 }  // namespace
+
+// ── Access control ───────────────────────────────────────────────────────────
+
+bool WebDAVHandler::davAuthOk(WebServer& s) const {
+  if (_authCode.empty()) return true;  // auth disabled
+  // Accept any username; the password must equal the on-device code. WebServer
+  // decodes the Basic header and compares the password in constant time. The
+  // returned String* is owned and deleted by the library.
+  return s.authenticate(
+      [this](HTTPAuthMethod, String, String*) -> String* { return new (std::nothrow) String(_authCode.c_str()); });
+}
 
 // ── RequestHandler interface ─────────────────────────────────────────────────
 
@@ -46,6 +59,12 @@ bool WebDAVHandler::canRaw(WebServer& server, const String& uri) {
 void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
   (void)uri;
   if (raw.status == RAW_START) {
+    // Refuse to open the temp file for an unauthenticated PUT; handle() then
+    // returns the 401 once the (ignored) body has drained.
+    if (!davAuthOk(server)) {
+      _putOk = false;
+      return;
+    }
     _putPath = getRequestPath(server);
     if (isProtectedPath(_putPath)) {
       _putOk = false;
@@ -116,6 +135,12 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
 
 bool WebDAVHandler::handle(WebServer& server, HTTPMethod method, const String& uri) {
   (void)uri;
+  // Every WebDAV verb requires HTTP Basic auth (password = on-device code). The
+  // 401 + WWW-Authenticate makes OS drive-mounts prompt for credentials.
+  if (!davAuthOk(server)) {
+    server.requestAuthentication(BASIC_AUTH, "CrossPoint");
+    return true;
+  }
   switch (method) {
     case HTTP_OPTIONS:
       handleOptions(server);

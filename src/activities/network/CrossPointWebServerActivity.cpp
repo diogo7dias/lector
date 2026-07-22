@@ -405,6 +405,17 @@ void CrossPointWebServerActivity::renderServerRunning() const {
 
   int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
   int height10 = renderer.getLineHeight(UI_10_FONT_ID);
+
+  // The 4-digit access code the browser must enter, shown once here in both
+  // modes. It is the one value the user has to read off this screen.
+  if (webServer && webServer->getAuthCode()[0] != '\0') {
+    const char* c = webServer->getAuthCode();
+    char band[48];
+    snprintf(band, sizeof(band), "%s  %c %c %c %c", tr(STR_WEB_ACCESS_CODE), c[0], c[1], c[2], c[3]);
+    renderer.drawCenteredText(UI_12_FONT_ID, startY, band, true, EpdFontFamily::BOLD);
+    startY += renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing * 2;
+  }
+
   if (isApMode) {
     // AP mode display
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_CONNECT_WIFI_HINT), true,
