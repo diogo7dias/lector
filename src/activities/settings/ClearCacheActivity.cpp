@@ -37,14 +37,14 @@ void ClearCacheActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CLEAR_BUTTON), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
   if (state == CLEARING) {
     // Progress message as the top strip (the result/warning states stay centered).
     GUI.drawBannerStrip(renderer, tr(STR_CLEARING_CACHE));
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -58,7 +58,7 @@ void ClearCacheActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -69,7 +69,7 @@ void ClearCacheActivity::render(RenderLock&&) {
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 }

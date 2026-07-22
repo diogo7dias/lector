@@ -523,7 +523,7 @@ void setup() {
         // Frame restored: swap the sleep moon for the loading icon.
         const auto pageHeight = renderer.getScreenHeight();
         renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        renderer.present(RefreshIntent::CleanFrame);
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
       }
@@ -733,7 +733,7 @@ void loop() {
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
     RenderLock lock;
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.

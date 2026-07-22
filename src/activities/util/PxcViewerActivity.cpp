@@ -61,13 +61,13 @@ void PxcViewerActivity::render() {
   // fallback path resyncs — so deep-clean the panel explicitly, then run the
   // unchanged render sequence.
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  renderer.present(RefreshIntent::DeepClean);
   if (!renderPxcSleepScreen(renderer, filePath, drawHints, true, true, pxcViewerOverlayTiming())) {
     const auto pageHeight = renderer.getScreenHeight();
     renderer.clearScreen();
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
   }
 }
 
@@ -82,7 +82,7 @@ void PxcViewerActivity::onExit() {
   // this intermediate blank frame makes review-and-move a single panel update.
   if (resultMode) return;
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }
 
 void PxcViewerActivity::loop() {

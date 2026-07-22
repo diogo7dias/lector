@@ -220,7 +220,7 @@ void ActivityManager::showTransitionBanner(const StrId label) {
   renderer.drawCenteredText(UI_10_FONT_ID, 4, text, false);
   // Detached: the activity switch executes while the panel drives the strip;
   // the next activity's first draw joins the refresh (framebuffer contract).
-  renderer.displayWindowAsync(0, 0, w, h);
+  renderer.present(RefreshIntent::TransientBand, 0, 0, w, h);
 }
 
 void ActivityManager::goToFileTransfer() {

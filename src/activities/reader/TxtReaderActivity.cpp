@@ -379,7 +379,7 @@ void TxtReaderActivity::render(RenderLock&&) {
   if (pageOffsets.empty()) {
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_FILE), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 

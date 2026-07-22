@@ -136,7 +136,7 @@ void OtaUpdateActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_POWER_ON_HINT));
   }
 
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }
 
 void OtaUpdateActivity::loop() {

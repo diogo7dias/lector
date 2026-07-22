@@ -134,5 +134,5 @@ void ClockSyncActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }

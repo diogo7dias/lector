@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 #include <HalDisplay.h>
+#include <RefreshIntent.h>
 
 namespace BidiUtils {
 // Paragraph base direction for the Unicode BiDi algorithm (UAX#9).
@@ -182,6 +183,16 @@ class GfxRenderer {
   // full displayBufferAsync; the fading-fix setting (panel power-off after
   // every refresh) forces the synchronous path.
   void displayWindowAsync(int x, int y, int width, int height) const;
+
+  // Intent-based present seam. Callers name WHY they want the panel updated
+  // (RefreshIntent) instead of hand-picking a FULL/HALF/FAST waveform; the
+  // refreshPlanFor() table maps the intent to a verb + waveform and this dispatches
+  // to the display verbs above. The X3/X4 panel quirks stay inside those verbs. Use
+  // the full-panel overload for non-windowed intents; the rect overload for the
+  // windowed intents (ProgressBar, TransientBand) — a full-panel intent passed a
+  // rect simply ignores it and paints full-panel.
+  void present(RefreshIntent intent) const;
+  void present(RefreshIntent intent, int x, int y, int width, int height) const;
 
   // Transient feedback-banner auto-clear. noteBannerShown() arms the timer when a
   // banner (drawPopup) is painted. bannerAutoClearDue() is polled by the main loop;

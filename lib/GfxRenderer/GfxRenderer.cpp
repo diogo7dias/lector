@@ -1442,6 +1442,55 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   display.displayBuffer(refreshMode, fadingFix);
 }
 
+static HalDisplay::RefreshMode waveToMode(const RefreshWave wave) {
+  switch (wave) {
+    case RefreshWave::Half:
+      return HalDisplay::HALF_REFRESH;
+    case RefreshWave::Full:
+      return HalDisplay::FULL_REFRESH;
+    case RefreshWave::Fast:
+    default:
+      return HalDisplay::FAST_REFRESH;
+  }
+}
+
+void GfxRenderer::present(const RefreshIntent intent) const {
+  const RefreshPlan plan = refreshPlanFor(intent);
+  switch (plan.verb) {
+    case RefreshVerb::BufferAsync:
+      displayBufferAsync();
+      return;
+    case RefreshVerb::GrayscaleBase:
+      displayGrayscaleBase(waveToMode(plan.wave));
+      return;
+    case RefreshVerb::Window:
+    case RefreshVerb::WindowAsync:
+      // A windowed intent presented full-panel (no rect): same waveform, whole panel.
+      displayBuffer(waveToMode(plan.wave));
+      return;
+    case RefreshVerb::Buffer:
+      displayBuffer(waveToMode(plan.wave));
+      return;
+  }
+}
+
+void GfxRenderer::present(const RefreshIntent intent, const int x, const int y, const int width,
+                          const int height) const {
+  const RefreshPlan plan = refreshPlanFor(intent);
+  switch (plan.verb) {
+    case RefreshVerb::Window:
+      displayWindow(x, y, width, height);
+      return;
+    case RefreshVerb::WindowAsync:
+      displayWindowAsync(x, y, width, height);
+      return;
+    default:
+      // A full-panel intent given a rect: ignore the rect, paint full-panel.
+      present(intent);
+      return;
+  }
+}
+
 std::string GfxRenderer::truncatedText(const int fontId, const char* text, const int maxWidth,
                                        const EpdFontFamily::Style style) const {
   if (!text || maxWidth <= 0) return "";

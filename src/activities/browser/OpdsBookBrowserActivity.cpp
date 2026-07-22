@@ -157,7 +157,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     GUI.drawBannerStrip(renderer, statusMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -171,7 +171,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errLine.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -186,7 +186,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       const int fillW = (strip.width - 6) * pct / 100;
       if (fillW > 0) renderer.fillRect(strip.x + 3, strip.y + strip.height - 5, fillW, 3, false);  // white fill
     }
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -211,7 +211,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
                         i != static_cast<size_t>(selectorIndex));
     }
   }
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {

@@ -251,5 +251,5 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
     }
   }
 
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }
