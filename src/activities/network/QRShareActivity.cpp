@@ -153,7 +153,7 @@ void QRShareActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   // HALF (ghost-cleanup) instead of the FAST default: this frame follows the
   // WiFi picker screens and the QR modules need crisp black/white for scanning.
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }
 
 bool QRShareActivity::startServer() {

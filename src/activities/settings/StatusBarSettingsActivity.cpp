@@ -327,5 +327,5 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
   // Periodic full refresh to neutralise X3 fast-refresh bloom (see header).
   const bool full = (renderCount % kFullRefreshEvery == 0);
   renderCount++;
-  renderer.displayBuffer(full ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  renderer.present(full ? RefreshIntent::DeepClean : RefreshIntent::MenuNav);
 }

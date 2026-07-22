@@ -768,7 +768,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   GUI.drawSideButtonHints(renderer, ">", "<");
 
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }
 
 void KeyboardEntryActivity::onComplete(std::string text) {

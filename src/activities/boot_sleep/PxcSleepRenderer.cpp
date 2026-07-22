@@ -151,7 +151,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     return true;
   }
 
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::GrayscaleClean);
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);

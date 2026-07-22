@@ -146,7 +146,7 @@ void ButtonRemapActivity::render(RenderLock&&) {
                       labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
                       labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
                       labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }
 
 void ButtonRemapActivity::applyTempMapping() {

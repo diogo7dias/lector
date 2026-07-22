@@ -454,9 +454,9 @@ bool renderStaged(GfxRenderer& renderer) {
   drawSleepInfoOverlay(renderer, h.path);
 
   if (!grayscale) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
   } else {
-    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::GrayscaleClean);
     // A failed LSB/MSB read past this point must not fall back to the
     // blocking path — the base refresh already repainted the panel — so
     // degrade to the silhouette-only image instead.

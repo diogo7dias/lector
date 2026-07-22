@@ -159,11 +159,11 @@ bool renderBitmap(GfxRenderer& renderer, const DashboardData& data, Bitmap& bitm
   drawChrome(renderer, data, layout, imageRect);
 
   if (!bitmap.hasGreyscale()) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
     return true;
   }
 
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::GrayscaleClean);
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
   drawImage();
@@ -217,7 +217,7 @@ bool renderPxc(GfxRenderer& renderer, const DashboardData& data, HalFile& file, 
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
   drawChrome(renderer, data, layout, imageRect);
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::GrayscaleClean);
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);

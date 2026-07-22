@@ -678,5 +678,5 @@ void SettingsActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }

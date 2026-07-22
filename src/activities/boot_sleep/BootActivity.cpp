@@ -106,5 +106,5 @@ void BootActivity::onEnter() {
   // content draws.
   renderer.clearScreen();
   drawUnlockBanners();
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }

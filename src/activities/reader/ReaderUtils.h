@@ -61,13 +61,13 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
 
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
   if (pagesUntilFullRefresh <= 1) {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
     pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     // Async: the render task returns while the panel still drives the
     // waveform (~0.45s on X3), so input polling and the prefetch pump run
     // during the refresh instead of after it. The next RenderLock joins.
-    renderer.displayBufferAsync();
+    renderer.present(RefreshIntent::PageTurn);
     pagesUntilFullRefresh--;
   }
 }

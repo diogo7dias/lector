@@ -228,5 +228,5 @@ void OpdsSettingsActivity::render(RenderLock&&) {
     GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
   }
 
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }

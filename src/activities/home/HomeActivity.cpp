@@ -221,7 +221,7 @@ void HomeActivity::loop() {
     const int y = renderer.getScreenHeight() - h;
     renderer.fillRect(0, y, renderer.getScreenWidth(), h, false);
     renderer.drawText(SMALL_FONT_ID, 4, y + 2, line, true);
-    renderer.displayWindowAsync(0, y, renderer.getScreenWidth(), h);
+    renderer.present(RefreshIntent::TransientBand, 0, y, renderer.getScreenWidth(), h);
   }
 
   const bool listLayout = SETTINGS.homeLayout == CrossPointSettings::HOME_LAYOUT_LIST;
@@ -468,7 +468,7 @@ void HomeActivity::render(RenderLock&&) {
     const char* backLabel = bookSelected ? tr(STR_REMOVE_BUTTON) : "";
     const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+    renderer.present(pendingFullRefresh ? RefreshIntent::DeepClean : RefreshIntent::MenuNav);
     pendingFullRefresh = false;
     if (wakeMenuReadyAt_ == 0) wakeMenuReadyAt_ = millis();
     drawSleepToasts();
@@ -514,7 +514,7 @@ void HomeActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer(pendingFullRefresh ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  renderer.present(pendingFullRefresh ? RefreshIntent::DeepClean : RefreshIntent::MenuNav);
   pendingFullRefresh = false;
   if (wakeMenuReadyAt_ == 0) wakeMenuReadyAt_ = millis();
   // Toasts only once the forced first re-render is behind us: the

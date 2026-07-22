@@ -205,7 +205,7 @@ void XtcReaderActivity::render(RenderLock&&) {
     endOfBookOptions.loadOnce(xtc->getPath());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -354,7 +354,7 @@ void XtcReaderActivity::renderPage() {
     LOG_ERR("XTR", "Failed to allocate page buffer (%lu bytes)", pageBufferSize);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_MEMORY_ERROR), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -366,7 +366,7 @@ void XtcReaderActivity::renderPage() {
     free(pageBuffer);
     renderer.clearScreen();
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_PAGE_LOAD_ERROR), true, EpdFontFamily::BOLD);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     return;
   }
 
@@ -427,13 +427,13 @@ void XtcReaderActivity::renderPage() {
       // Periodic ghost cleanup: scrub via the normal path, then run the
       // settle flavor of the grayscale base pass (DTM planes are equal after
       // the display sync, so only the gentle reinforcement cells fire).
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.present(RefreshIntent::CleanFrame);
       renderer.preconditionGrayscale();
       pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
     } else {
       // OEM grayscale pipeline base: differential "AA-pre-BW(mid)" update as
       // the page turn on X3; plain FAST refresh on X4 (previous behavior).
-      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+      renderer.present(RefreshIntent::GrayscaleDifferential);
       pagesUntilFullRefresh--;
     }
 

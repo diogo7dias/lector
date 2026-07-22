@@ -524,7 +524,7 @@ void WifiSelectionActivity::render(RenderLock&&) {
       break;
   }
 
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }
 
 void WifiSelectionActivity::renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const {

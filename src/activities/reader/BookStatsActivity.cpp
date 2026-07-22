@@ -309,5 +309,5 @@ void BookStatsActivity::render(RenderLock&&) {
                           ? mappedInput.mapLabels(tr(STR_BACK), tr(STR_STATS_RESET), "", tr(STR_STATS_MORE))
                           : mappedInput.mapLabels(tr(STR_BACK), tr(STR_STATS_RESET), tr(STR_STATS_BOOK), "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
+  renderer.present(RefreshIntent::MenuNav);
 }

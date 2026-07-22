@@ -259,7 +259,7 @@ void SleepActivity::renderUntilDeathSleepScreen() const {
 
   renderer.clearScreen();
   renderer.drawImage(logo, (pageWidth - kLogoSize) / 2, (pageHeight - kLogoSize) / 2, kLogoSize, kLogoSize);
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }
 
 // Blank FULL pass before painting a sleep face. Lock can happen over any
@@ -271,7 +271,7 @@ void SleepActivity::renderUntilDeathSleepScreen() const {
 // used to provide this clean incidentally.
 void SleepActivity::deepCleanPanel() const {
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  renderer.present(RefreshIntent::DeepClean);
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
@@ -334,7 +334,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
     renderer.invertScreen();
   }
 
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }
 
 void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const std::string& sourcePath) const {
@@ -398,9 +398,9 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const std::str
     // dedicated "AA-pre-BW(mid)" differential waveform, leaving every pixel
     // in the calibrated state the gray nudge refresh expects; on X4 it is a
     // plain HALF refresh (previous behavior).
-    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::GrayscaleClean);
   } else {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
   }
 
   if (hasGreyscale) {
@@ -523,10 +523,10 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderLastScreenSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
   renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  renderer.present(RefreshIntent::CleanFrame);
 }

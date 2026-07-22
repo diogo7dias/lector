@@ -358,7 +358,7 @@ void EpubReaderActivity::loop() {
       // dead time right after the page became visible (worse still on X3,
       // where windowed passes run as full-frame FAST). Input latches while
       // this drives and is handled the moment the loop comes back around.
-      renderer.displayWindowAsync(0, y, renderer.getScreenWidth(), h);
+      renderer.present(RefreshIntent::TransientBand, 0, y, renderer.getScreenWidth(), h);
       return;
     }
   }
@@ -1274,7 +1274,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     endOfBookOptions.loadOnce(epub->getPath());
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
@@ -1371,7 +1371,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::BOLD);
     renderStatusBar();
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
@@ -1381,7 +1381,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::BOLD);
     renderStatusBar();
-    renderer.displayBuffer();
+    renderer.present(RefreshIntent::MenuNav);
     automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
@@ -2583,7 +2583,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       renderer.drawRect(bx + t, by + t, bw - 2 * t, bh - 2 * t, true);
     }
     renderHighlights(*page, fontId, orientedMarginLeft, contentTop);
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);  // snappy cursor moves + instant confirm
+    renderer.present(RefreshIntent::MenuNav);  // snappy cursor moves + instant confirm
     renderer.setPaperbackLook(false);
     return;
   }
@@ -2629,14 +2629,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     int16_t imgX, imgY, imgW, imgH;
     if (page->getImageBoundingBox(imgX, imgY, imgW, imgH)) {
       renderer.fillRect(imgX + orientedMarginLeft, imgY + contentTop, imgW, imgH, false);
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      renderer.present(RefreshIntent::MenuNav);
 
       // Re-render page content to restore images into the blanked area
       // Status bar is not re-rendered here to avoid reading stale dynamic values (e.g. battery %)
       page->render(renderer, fontId, orientedMarginLeft, contentTop);
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      renderer.present(RefreshIntent::MenuNav);
     } else {
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+      renderer.present(RefreshIntent::CleanFrame);
     }
     // The image's own page is handled above and doesn't count toward the full
     // refresh cadence. But the grayscale pass below leaves gray charge in the

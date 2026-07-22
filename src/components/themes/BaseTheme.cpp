@@ -1109,7 +1109,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
     // Frequent / progress banners (live counters, indexing): cheap FAST push so
     // rapid updates stay snappy. On X3 this is a full-panel FAST (windowed passes
     // are disabled there); a stray digit ghost self-clears via the refresh policy.
-    renderer.displayWindow(strip.x, strip.y, strip.width, strip.height);
+    renderer.present(RefreshIntent::ProgressBar, strip.x, strip.y, strip.width, strip.height);
   } else {
     // One-shot confirm / info / error banners: a clean full-panel refresh. On X3
     // the FAST path is a weak differential that intermittently ghosts the content
@@ -1117,7 +1117,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
     // gated on a GLOBAL refresh counter, which is why the same banner looks clean
     // one time and smeared the next. HALF_REFRESH forces requestResync on X3 = a
     // clean, ghost-free strip every time (same full-panel scope as the old FAST).
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.present(RefreshIntent::CleanFrame);
   }
   renderer.noteBannerShown();  // arm the auto-clear timer (transient confirms/errors clear after ~1.5s)
   return strip;
@@ -1157,7 +1157,7 @@ void BaseTheme::fillBottomProgress(const GfxRenderer& renderer, const int progre
   // on X3 where windows are disabled). For paths that show ONLY the bottom bar.
   const Rect bar = drawBottomProgressBar(renderer, progress);
   if (bar.width <= 0) return;
-  renderer.displayWindow(bar.x, bar.y, bar.width, bar.height);
+  renderer.present(RefreshIntent::ProgressBar, bar.x, bar.y, bar.width, bar.height);
 }
 
 void BaseTheme::drawIndexingProgress(const GfxRenderer& renderer, const char* message, const int progress) const {
@@ -1170,8 +1170,8 @@ void BaseTheme::drawIndexingProgress(const GfxRenderer& renderer, const char* me
   // banner + bar together.
   const Rect strip = drawBannerStrip(renderer, message);
   const Rect bar = drawBottomProgressBar(renderer, progress);
-  renderer.displayWindow(strip.x, strip.y, strip.width, strip.height);
-  if (bar.width > 0) renderer.displayWindow(bar.x, bar.y, bar.width, bar.height);
+  renderer.present(RefreshIntent::ProgressBar, strip.x, strip.y, strip.width, strip.height);
+  if (bar.width > 0) renderer.present(RefreshIntent::ProgressBar, bar.x, bar.y, bar.width, bar.height);
   renderer.noteBannerShown();  // arm the auto-clear timer, same as drawPopup
 }
 
