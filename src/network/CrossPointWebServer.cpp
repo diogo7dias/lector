@@ -454,10 +454,19 @@ void CrossPointWebServer::handleFileListData() const {
     if (!currentPath.startsWith("/")) {
       currentPath = "/" + currentPath;
     }
+    // Canonicalise (resolves any ".." segments) before the guard below.
+    currentPath = normalizeWebPath(currentPath);
     // Remove trailing slash unless it's root
     if (currentPath.length() > 1 && currentPath.endsWith("/")) {
       currentPath = currentPath.substring(0, currentPath.length() - 1);
     }
+  }
+
+  // Per-segment guard: never list hidden/reserved areas (.crosspoint, etc.),
+  // and never let a "../" escape the SD root. Mirrors handleDownload.
+  if (isProtectedWebPath(currentPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
   }
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -633,6 +642,8 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       if (!state.path.startsWith("/")) {
         state.path = "/" + state.path;
       }
+      // Canonicalise (resolves any ".." segments) before use.
+      state.path = normalizeWebPath(state.path);
       // Remove trailing slash unless it's root
       if (state.path.length() > 1 && state.path.endsWith("/")) {
         state.path = state.path.substring(0, state.path.length() - 1);
@@ -644,10 +655,25 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
     LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
 
+    // A filename must be a single segment: reject separators so it cannot escape
+    // state.path (e.g. "../../secret"). Nothing is opened, so nothing is written.
+    if (state.fileName.isEmpty() || state.fileName.indexOf('/') >= 0 || state.fileName.indexOf('\\') >= 0) {
+      state.error = "Invalid file name";
+      LOG_DBG("WEB", "[UPLOAD] Rejected unsafe filename: %s", state.fileName.c_str());
+      return;
+    }
+
     // Create file path
     String filePath = state.path;
     if (!filePath.endsWith("/")) filePath += "/";
     filePath += state.fileName;
+
+    // Per-segment guard: never write into hidden/reserved areas (.crosspoint, etc.).
+    if (isProtectedWebPath(filePath)) {
+      state.error = "Cannot upload to protected location";
+      LOG_DBG("WEB", "[UPLOAD] Rejected protected path: %s", filePath.c_str());
+      return;
+    }
 
     // Check if file already exists - SD operations can be slow
     esp_task_wdt_reset();
@@ -767,6 +793,12 @@ void CrossPointWebServer::handleCreateFolder() const {
     server->send(400, "text/plain", "Folder name cannot be empty");
     return;
   }
+  // A folder name is a single segment: reject separators and dot-segments so it
+  // cannot climb out of parentPath or target a reserved area.
+  if (folderName.indexOf('/') >= 0 || folderName.indexOf('\\') >= 0 || folderName == "." || folderName == "..") {
+    server->send(400, "text/plain", "Invalid folder name");
+    return;
+  }
 
   // Get parent path
   String parentPath = "/";
@@ -775,6 +807,8 @@ void CrossPointWebServer::handleCreateFolder() const {
     if (!parentPath.startsWith("/")) {
       parentPath = "/" + parentPath;
     }
+    // Canonicalise (resolves any ".." segments) before use.
+    parentPath = normalizeWebPath(parentPath);
     if (parentPath.length() > 1 && parentPath.endsWith("/")) {
       parentPath = parentPath.substring(0, parentPath.length() - 1);
     }
@@ -784,6 +818,12 @@ void CrossPointWebServer::handleCreateFolder() const {
   String folderPath = parentPath;
   if (!folderPath.endsWith("/")) folderPath += "/";
   folderPath += folderName;
+
+  // Per-segment guard: never create inside hidden/reserved areas (.crosspoint, etc.).
+  if (isProtectedWebPath(folderPath)) {
+    server->send(403, "text/plain", "Cannot create in protected location");
+    return;
+  }
 
   LOG_DBG("WEB", "Creating folder: %s", folderPath.c_str());
 
@@ -1687,16 +1727,32 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           wsLastProgressSent = 0;
           wsUploadStartTime = millis();
 
-          // Ensure path is valid
+          // Ensure path is valid; canonicalise (resolves any ".." segments).
           if (!wsUploadPath.startsWith("/")) wsUploadPath = "/" + wsUploadPath;
+          wsUploadPath = normalizeWebPath(wsUploadPath);
           if (wsUploadPath.length() > 1 && wsUploadPath.endsWith("/")) {
             wsUploadPath = wsUploadPath.substring(0, wsUploadPath.length() - 1);
+          }
+
+          // A filename must be a single segment: reject separators so it cannot
+          // escape wsUploadPath. Nothing is opened here, so nothing is written.
+          if (wsUploadFileName.isEmpty() || wsUploadFileName.indexOf('/') >= 0 || wsUploadFileName.indexOf('\\') >= 0) {
+            LOG_DBG("WS", "START rejected: unsafe filename '%s'", wsUploadFileName.c_str());
+            wsServer->sendTXT(num, "ERROR:Invalid file name");
+            return;
           }
 
           // Build file path
           String filePath = wsUploadPath;
           if (!filePath.endsWith("/")) filePath += "/";
           filePath += wsUploadFileName;
+
+          // Per-segment guard: never write into hidden/reserved areas (.crosspoint, etc.).
+          if (isProtectedWebPath(filePath)) {
+            LOG_DBG("WS", "START rejected: protected path '%s'", filePath.c_str());
+            wsServer->sendTXT(num, "ERROR:Forbidden path");
+            return;
+          }
 
           LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
                   filePath.c_str());
