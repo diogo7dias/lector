@@ -151,6 +151,9 @@ class Section {
   // Best-known total page count: the exact pageCount once finalized, or a byte-ratio
   // extrapolation while a build is still in flight.
   uint16_t estimatedTotalPages() const;
+  // Pages laid out so far by the active build (0 before startBuild). Numerator for
+  // a build progress bar; estimatedTotalPages() is the denominator.
+  uint16_t builtPages() const { return builtPageCount_; }
 
   // Load a specific page: from the active build's .part via its in-RAM LUT if that
   // page is already laid out, else from the committed section file.
