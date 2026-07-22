@@ -61,6 +61,16 @@ class RecentBooksStore {
   void updatePath(const std::string& oldPath, const std::string& newPath, const std::string& oldCachePath,
                   const std::string& newCachePath);
 
+  // Move an opened book file into the flat /recents/ folder (feature gated by
+  // SETTINGS.moveOpenedToRecents). Reading progress is preserved by relocating
+  // the book's hash-keyed cache dir with it, and the _QUOTES.txt sidecar is
+  // carried along. Repoints this store's entry and APP_STATE.openEpubPath when
+  // they matched. Returns the new path, or the original path unchanged when the
+  // move is disabled, unnecessary (already under /recents/, or a non-book type),
+  // or fails — on failure the file and its progress are always left intact.
+  // Must run before the reader opens the book (no open handle on the file/cache).
+  std::string relocateOpenedBookToRecents(const std::string& bookPath);
+
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);
 

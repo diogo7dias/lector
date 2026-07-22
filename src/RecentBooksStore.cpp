@@ -9,7 +9,12 @@
 #include <Xtc.h>
 
 #include <algorithm>
+#include <functional>
 #include <iterator>
+
+#include "BookRelocation.h"
+#include "CrossPointSettings.h"
+#include "CrossPointState.h"
 
 namespace {
 constexpr uint8_t RECENT_BOOKS_FILE_VERSION = 3;
@@ -46,6 +51,24 @@ int readSidecarPercent(const std::string& bookPath) {
   const int got = f.read(buf, sizeof(buf));
   if (got < static_cast<int>(offset) + 1) return -1;
   return buf[offset] <= 100 ? buf[offset] : -1;
+}
+
+// The reader's hash-keyed cache dir for a book path, matching Epub.cpp / Txt.cpp
+// / Xtc.h exactly, or "" for a non-book extension. Because it is the same
+// std::hash the readers use, relocating this dir with the file lets a moved book
+// keep its rendered sections and reading position.
+std::string bookCacheDir(const std::string& bookPath) {
+  const char* prefix;
+  if (FsHelpers::hasEpubExtension(bookPath)) {
+    prefix = "/.crosspoint/epub_";
+  } else if (FsHelpers::hasXtcExtension(bookPath)) {
+    prefix = "/.crosspoint/xtc_";
+  } else if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
+    prefix = "/.crosspoint/txt_";
+  } else {
+    return "";
+  }
+  return prefix + std::to_string(std::hash<std::string>{}(bookPath));
 }
 }  // namespace
 
@@ -148,6 +171,65 @@ void RecentBooksStore::updatePath(const std::string& oldPath, const std::string&
     it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
   }
   saveToFile();
+}
+
+std::string RecentBooksStore::relocateOpenedBookToRecents(const std::string& bookPath) {
+  using namespace book_relocation;
+
+  if (SETTINGS.moveOpenedToRecents == 0) return bookPath;
+
+  // Only real book types have a hash-keyed cache dir; skip images/unknown types.
+  const std::string oldCache = bookCacheDir(bookPath);
+  if (oldCache.empty()) return bookPath;
+
+  // Already in /recents/ — nothing to do.
+  if (isUnderRecents(bookPath)) return bookPath;
+
+  Storage.mkdir(RECENTS_DIR);
+
+  // Destination keeps the filename; uniquify only against a DIFFERENT existing
+  // file so a same-named book from another folder does not clobber the first.
+  std::string dest = recentsDestPath(bookPath);
+  if (Storage.exists(dest.c_str())) {
+    const size_t dotPos = dest.rfind('.');
+    const std::string base = (dotPos != std::string::npos) ? dest.substr(0, dotPos) : dest;
+    const std::string ext = (dotPos != std::string::npos) ? dest.substr(dotPos) : "";
+    int suffix = 2;
+    do {
+      dest = base + " (" + std::to_string(suffix) + ")" + ext;
+      suffix++;
+    } while (Storage.exists(dest.c_str()) && suffix < 100);
+  }
+
+  // Move the book file first. On failure leave everything in place (no data loss).
+  if (!Storage.rename(bookPath.c_str(), dest.c_str())) {
+    LOG_ERR("RBS", "Move to recents failed: %s -> %s", bookPath.c_str(), dest.c_str());
+    return bookPath;
+  }
+
+  // Relocate the hash-keyed cache dir so the reading position + rendered sections
+  // survive (the cache dir name is derived from the file path hash).
+  const std::string newCache = bookCacheDir(dest);
+  if (Storage.exists(oldCache.c_str()) && !Storage.rename(oldCache.c_str(), newCache.c_str())) {
+    LOG_ERR("RBS", "Cache re-key failed (progress may reset): %s -> %s", oldCache.c_str(), newCache.c_str());
+  }
+
+  // Carry the saved-quotes sidecar along, if the book has one.
+  const std::string oldQuotes = quotesSidecarPath(bookPath);
+  const std::string newQuotes = quotesSidecarPath(dest);
+  if (Storage.exists(oldQuotes.c_str()) && !Storage.rename(oldQuotes.c_str(), newQuotes.c_str())) {
+    LOG_ERR("RBS", "Quotes sidecar move failed: %s -> %s", oldQuotes.c_str(), newQuotes.c_str());
+  }
+
+  // Repoint an existing recents entry (a resumed book) and the resume pointer.
+  updatePath(bookPath, dest, oldCache, newCache);
+  if (APP_STATE.openEpubPath == bookPath) {
+    APP_STATE.openEpubPath = dest;
+    APP_STATE.saveToFile();
+  }
+
+  LOG_INF("RBS", "Moved book to recents: %s -> %s", bookPath.c_str(), dest.c_str());
+  return dest;
 }
 
 bool RecentBooksStore::isMissing(const RecentBook& book) { return !Storage.exists(book.path.c_str()); }

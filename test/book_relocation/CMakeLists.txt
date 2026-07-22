@@ -1,0 +1,3 @@
+add_executable(book_relocation_tests BookRelocationTest.cpp)
+target_link_libraries(book_relocation_tests PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(book_relocation_tests)

@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
@@ -144,27 +145,35 @@ void ReaderActivity::onEnter() {
     onGoToBmpViewer(initialBookPath);
   } else if (isPxcFile(initialBookPath)) {
     onGoToPxcViewer(initialBookPath);
-  } else if (isXtcFile(initialBookPath)) {
-    auto xtc = loadXtc(initialBookPath);
-    if (!xtc) {
-      onGoBack();
-      return;
-    }
-    onGoToXtcReader(std::move(xtc));
-  } else if (isTxtFile(initialBookPath)) {
-    auto txt = loadTxt(initialBookPath);
-    if (!txt) {
-      onGoBack();
-      return;
-    }
-    onGoToTxtReader(std::move(txt));
   } else {
-    auto epub = loadEpub(renderer, initialBookPath);
-    if (!epub) {
-      onGoBack();
-      return;
+    // Real book (epub/txt/xtc). Optionally relocate it into /recents/ before it
+    // is opened — nothing has a handle on the file or its cache yet. The move
+    // carries reading progress + saved quotes; a no-op (feature off, already in
+    // /recents/, or a failed move) returns the original path unchanged.
+    const std::string bookPath = RECENT_BOOKS.relocateOpenedBookToRecents(initialBookPath);
+    currentBookPath = bookPath;
+    if (isXtcFile(bookPath)) {
+      auto xtc = loadXtc(bookPath);
+      if (!xtc) {
+        onGoBack();
+        return;
+      }
+      onGoToXtcReader(std::move(xtc));
+    } else if (isTxtFile(bookPath)) {
+      auto txt = loadTxt(bookPath);
+      if (!txt) {
+        onGoBack();
+        return;
+      }
+      onGoToTxtReader(std::move(txt));
+    } else {
+      auto epub = loadEpub(renderer, bookPath);
+      if (!epub) {
+        onGoBack();
+        return;
+      }
+      onGoToEpubReader(std::move(epub));
     }
-    onGoToEpubReader(std::move(epub));
   }
 }
 

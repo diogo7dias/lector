@@ -251,6 +251,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "removeReadBooksFromRecents", StrId::STR_CAT_SYSTEM));
   v.push_back(SettingInfo::Toggle(StrId::STR_MOVE_FINISHED_TO_READ, &CrossPointSettings::moveFinishedToReadFolder,
                                   "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
+  v.push_back(SettingInfo::Toggle(StrId::STR_MOVE_OPENED_TO_RECENTS, &CrossPointSettings::moveOpenedToRecents,
+                                  "moveOpenedToRecents", StrId::STR_CAT_SYSTEM));
   // OPDS download folder + filename format: persisted + web-exposed, but
   // category-less so they stay off the on-device Settings screen (edited via
   // the OPDS server list UI instead). Upstream #2571.

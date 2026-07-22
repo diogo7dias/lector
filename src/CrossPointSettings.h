@@ -365,6 +365,10 @@ class CrossPointSettings {
   uint8_t removeReadBooksFromRecents = 0;
   // Move epub to /Read/ folder on SD card when finished (0 = disabled, 1 = enabled)
   uint8_t moveFinishedToReadFolder = 0;
+  // Move a book file into the flat /recents/ folder the first time it is opened
+  // from elsewhere (0 = off, 1 = on). Reading progress (hash-keyed cache dir) and
+  // the _QUOTES.txt sidecar move with it, so nothing is lost. See BookRelocation.h.
+  uint8_t moveOpenedToRecents = 0;
   // OPDS download destination folder ("" = SD root). Global; edited from the OPDS
   // server list. Persisted via a category-less SettingInfo::String in SettingsList.h,
   // so it stays out of the on-device Settings screen (upstream #2571).
