@@ -1297,8 +1297,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   const uint8_t horizontalMargin = prefs_.screenMargin;
   const uint8_t topMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginTop;
   const uint8_t bottomMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginBottom;
-  orientedMarginLeft += horizontalMargin;
-  orientedMarginRight += horizontalMargin;
+  if (prefs_.dynamicMargins) {
+    // Auto-widen the horizontal margins toward a target ~62 characters per line,
+    // using the reader font's average glyph width as the yardstick. Floored at
+    // 10px (mode 1) or 20px (mode 2) and capped at 55px so a narrow orientation
+    // keeps a usable viewport. Replaces the fixed horizontal margin; the changed
+    // viewport width re-paginates via the section cache like any margin change.
+    const int fontId = readerFontId(prefs_);
+    const int sampleWidth = renderer.getTextWidth(fontId, "abcdefghijklmnopqrstuvwxyz");
+    const int avgCharWidth = (sampleWidth > 0) ? sampleWidth / 26 : 8;
+    const int targetTextWidth = 62 * avgCharWidth;
+    const int availableWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
+    const int minDynamicMargin = (prefs_.dynamicMargins >= 2) ? 20 : 10;
+    const int dynamicMargin = std::max(minDynamicMargin, std::min(55, (availableWidth - targetTextWidth) / 2));
+    orientedMarginLeft += dynamicMargin;
+    orientedMarginRight += dynamicMargin;
+  } else {
+    orientedMarginLeft += horizontalMargin;
+    orientedMarginRight += horizontalMargin;
+  }
 
   // v2 status bar reserves a band at the top and/or bottom edge (whichever holds
   // items). The band overlaps the reading margin (max, not sum), matching the old

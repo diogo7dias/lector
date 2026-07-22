@@ -17,6 +17,7 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.screenMargin = SETTINGS.screenMargin;
   p.screenMarginTop = SETTINGS.screenMarginTop;
   p.screenMarginBottom = SETTINGS.screenMarginBottom;
+  p.dynamicMargins = SETTINGS.dynamicMargins;
   p.firstLineIndentMode = SETTINGS.firstLineIndentMode;
   p.firstLineIndentPercent = SETTINGS.firstLineIndentPercent;
   p.hyphenationEnabled = SETTINGS.hyphenationEnabled;

@@ -300,6 +300,10 @@ class CrossPointSettings {
   uint8_t screenMarginTop = 5;
   uint8_t screenMarginBottom = 5;
   uint8_t uniformMargins = 1;  // 1 = all sides use screenMargin; 0 = separate H / Top / Bottom
+  // Auto-widen horizontal margins toward ~62 chars/line (0 = off, 1 = auto min 10px,
+  // 2 = auto min 20px). Overrides the fixed horizontal margin when on. Per-book via
+  // ReaderPrefs; changing it re-paginates (viewport width changes).
+  uint8_t dynamicMargins = 0;
   static constexpr uint8_t MIN_SCREEN_MARGIN = 0;
   static constexpr uint8_t MAX_SCREEN_MARGIN = 100;
 

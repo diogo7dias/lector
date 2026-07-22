@@ -21,7 +21,7 @@
 // sync. Adding/removing a field requires bumping VERSION (old sidecars then fall
 // back to the global snapshot, forcing a one-time re-index).
 struct ReaderPrefs {
-  static constexpr uint8_t VERSION = 1;
+  static constexpr uint8_t VERSION = 2;  // v2 adds dynamicMargins
 
   // Font
   uint8_t fontFamily = 0;  // CrossPointSettings::BOOKERLY
@@ -37,6 +37,7 @@ struct ReaderPrefs {
   uint8_t screenMargin = 5;
   uint8_t screenMarginTop = 5;
   uint8_t screenMarginBottom = 5;
+  uint8_t dynamicMargins = 0;  // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
   // First-line indent
   uint8_t firstLineIndentMode = 0;  // FIRST_LINE_INDENT_BOOK
   uint8_t firstLineIndentPercent = 0;
