@@ -10,6 +10,7 @@
 #include <esp_task_wdt.h>
 
 #include <algorithm>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -141,6 +142,7 @@ void CrossPointWebServer::begin() {
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
+  server->on("/api/dircount", HTTP_GET, [this] { handleDirCount(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
   // Upload endpoint with special handling for multipart form data
@@ -890,11 +892,8 @@ void CrossPointWebServer::handleRename() const {
     server->send(500, "text/plain", "Failed to open file");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be renamed");
-    return;
-  }
+  // Folders rename too: HalFile::rename() moves a directory node the same as a
+  // file (see WebDAV MOVE). No isDirectory guard.
 
   String parentPath = itemPath.substring(0, itemPath.lastIndexOf('/'));
   if (parentPath.isEmpty()) {
@@ -952,6 +951,11 @@ void CrossPointWebServer::handleMove() const {
     server->send(403, "text/plain", "Cannot move into protected folder");
     return;
   }
+  // Prevent moving a folder into itself or its own subtree (would loop/orphan).
+  if (destPath == itemPath || destPath.startsWith(itemPath + "/")) {
+    server->send(400, "text/plain", "Cannot move a folder into itself");
+    return;
+  }
 
   if (!Storage.exists(itemPath.c_str())) {
     server->send(404, "text/plain", "Item not found");
@@ -963,11 +967,8 @@ void CrossPointWebServer::handleMove() const {
     server->send(500, "text/plain", "Failed to open file");
     return;
   }
-  if (file.isDirectory()) {
-    file.close();
-    server->send(400, "text/plain", "Only files can be moved");
-    return;
-  }
+  // Folders move too: HalFile::rename() relocates a directory node (see WebDAV
+  // MOVE). No isDirectory guard.
 
   if (!Storage.exists(destPath.c_str())) {
     file.close();
@@ -1079,6 +1080,11 @@ void CrossPointWebServer::handleMoveBatch() const {
       failed++;
       continue;
     }
+    // Skip a folder that would move into itself or its own subtree.
+    if (destPath == itemPath || destPath.startsWith(itemPath + "/")) {
+      failed++;
+      continue;
+    }
 
     String newPath = destPath;
     if (!newPath.endsWith("/")) newPath += "/";
@@ -1090,11 +1096,11 @@ void CrossPointWebServer::handleMoveBatch() const {
     }
 
     HalFile file = Storage.open(itemPath.c_str());
-    if (!file || file.isDirectory()) {
-      if (file) file.close();
+    if (!file) {
       failed++;
       continue;
     }
+    // Folders move too (HalFile::rename relocates a directory node).
     clearBookCache(itemPath.c_str());
     const bool ok = file.rename(newPath.c_str());
     file.close();
@@ -1123,6 +1129,65 @@ void CrossPointWebServer::handleMoveBatch() const {
            static_cast<unsigned>(failed));
   LOG_DBG("WEB", "Batch move to %s: %s", destPath.c_str(), response);
   server->send(200, "application/json", response);
+}
+
+void CrossPointWebServer::handleDirCount() const {
+  String path = "/";
+  if (server->hasArg("path")) {
+    path = server->arg("path");
+    if (!path.startsWith("/")) path = "/" + path;
+    path = normalizeWebPath(path);
+    if (path.length() > 1 && path.endsWith("/")) {
+      path = path.substring(0, path.length() - 1);
+    }
+  }
+  if (isProtectedWebPath(path)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
+  }
+
+  // Recursively tally files and subfolders so the browser's delete confirmation
+  // can state the exact blast radius ("delete NAME and all N files inside").
+  // Iterative worklist (one directory open at a time) with hard caps, so a huge
+  // or deep tree cannot exhaust heap or file handles.
+  constexpr size_t kMaxEntries = 20000;  // total entries visited
+  constexpr size_t kMaxPending = 256;    // queued subdirectories
+  size_t files = 0, dirs = 0, visited = 0;
+  bool capped = false;
+
+  std::vector<String> pending;
+  pending.reserve(32);
+  pending.push_back(path);
+
+  while (!pending.empty()) {
+    const String dir = pending.back();
+    pending.pop_back();
+    esp_task_wdt_reset();
+    scanFiles(dir.c_str(), [&](const FileInfo& info) {
+      if (visited >= kMaxEntries) {
+        capped = true;
+        return;
+      }
+      visited++;
+      if (info.isDirectory) {
+        dirs++;
+        const String child = (dir == "/") ? ("/" + info.name) : (dir + "/" + info.name);
+        if (pending.size() < kMaxPending) {
+          pending.push_back(child);
+        } else {
+          capped = true;  // stop descending; the count stays a lower bound
+        }
+      } else {
+        files++;
+      }
+    });
+    if (visited >= kMaxEntries) break;
+  }
+
+  char out[80];
+  snprintf(out, sizeof(out), "{\"files\":%u,\"dirs\":%u,\"capped\":%s}", static_cast<unsigned>(files),
+           static_cast<unsigned>(dirs), capped ? "true" : "false");
+  server->send(200, "application/json", out);
 }
 
 void CrossPointWebServer::handleDelete() const {
@@ -1200,17 +1265,11 @@ void CrossPointWebServer::handleDelete() const {
     bool success = false;
     HalFile f = Storage.open(itemPath.c_str());
     if (f && f.isDirectory()) {
-      // For folders, ensure empty before removing
-      HalFile entry = f.openNextFile();
-      if (entry) {
-        entry.close();
-        f.close();
-        failedItems += itemPath + " (folder not empty); ";
-        allSuccess = false;
-        continue;
-      }
+      // Recursively remove the folder and everything inside it. The browser
+      // confirms "delete NAME and all N files inside" before calling this;
+      // Storage.removeDir walks the tree and feeds the watchdog per entry.
       f.close();
-      success = Storage.rmdir(itemPath.c_str());
+      success = Storage.removeDir(itemPath.c_str());
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
