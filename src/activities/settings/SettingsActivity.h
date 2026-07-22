@@ -52,11 +52,19 @@ struct SettingInfo {
   size_t stringOffset = 0;
   size_t stringMaxLen = 0;
 
-  // Dynamic accessors (for settings stored outside CrossPointSettings, e.g. KOReaderCredentialStore)
-  std::function<uint8_t()> valueGetter;
-  std::function<void(uint8_t)> valueSetter;
-  std::function<std::string()> stringGetter;
-  std::function<void(const std::string&)> stringSetter;
+  // Dynamic accessors (for settings stored outside CrossPointSettings, e.g.
+  // KOReaderCredentialStore, or the registry-aware font-family entry). Plain
+  // function pointers + one ctx, not std::function: the four std::function slots
+  // cost ~128B on every one of the ~76 entries even though only ~7 use them, and
+  // heap-allocated the font entry's captured family-list copy each call. Now zero
+  // heap closures and ~7KB off the per-call list. dynCtx carries the SD font
+  // registry to the font-family getter/setter so it stays registry-dependent
+  // exactly as before (nullptr => built-in only); nullptr for every other entry.
+  uint8_t (*valueGetter)(const void* ctx) = nullptr;
+  void (*valueSetter)(const void* ctx, uint8_t) = nullptr;
+  std::string (*stringGetter)(const void* ctx) = nullptr;
+  void (*stringSetter)(const void* ctx, const std::string&) = nullptr;
+  const void* dynCtx = nullptr;
 
   SettingInfo& withObfuscated() {
     obfuscated = true;
@@ -118,28 +126,28 @@ struct SettingInfo {
     return s;
   }
 
-  static SettingInfo DynamicEnum(StrId nameId, std::vector<StrId> values, std::function<uint8_t()> getter,
-                                 std::function<void(uint8_t)> setter, const char* key = nullptr,
+  static SettingInfo DynamicEnum(StrId nameId, std::vector<StrId> values, uint8_t (*getter)(const void*),
+                                 void (*setter)(const void*, uint8_t), const char* key = nullptr,
                                  StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
     s.nameId = nameId;
     s.type = SettingType::ENUM;
     s.enumValues = std::move(values);
-    s.valueGetter = std::move(getter);
-    s.valueSetter = std::move(setter);
+    s.valueGetter = getter;
+    s.valueSetter = setter;
     s.key = key;
     s.category = category;
     return s;
   }
 
-  static SettingInfo DynamicString(StrId nameId, std::function<std::string()> getter,
-                                   std::function<void(const std::string&)> setter, const char* key = nullptr,
+  static SettingInfo DynamicString(StrId nameId, std::string (*getter)(const void*),
+                                   void (*setter)(const void*, const std::string&), const char* key = nullptr,
                                    StrId category = StrId::STR_NONE_OPT) {
     SettingInfo s;
     s.nameId = nameId;
     s.type = SettingType::STRING;
-    s.stringGetter = std::move(getter);
-    s.stringSetter = std::move(setter);
+    s.stringGetter = getter;
+    s.stringSetter = setter;
     s.key = key;
     s.category = category;
     return s;

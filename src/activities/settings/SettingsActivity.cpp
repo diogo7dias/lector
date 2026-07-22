@@ -301,9 +301,10 @@ void SettingsActivity::toggleCurrentSetting() {
         options.reserve(setting.enumValues.size());
         for (const auto id : setting.enumValues) options.emplace_back(I18N.get(id));
       }
-      current = setting.valueGetter();
+      current = setting.valueGetter(setting.dynCtx);
       const auto setter = setting.valueSetter;
-      apply = [setter](uint8_t idx) { setter(idx); };
+      const auto* ctx = setting.dynCtx;
+      apply = [setter, ctx](uint8_t idx) { setter(ctx, idx); };
     } else {
       return;
     }
@@ -332,22 +333,23 @@ void SettingsActivity::toggleCurrentSetting() {
     // (stringOffset into SETTINGS) and dynamic getter/setter string settings.
     std::string initial;
     if (setting.stringGetter) {
-      initial = setting.stringGetter();
+      initial = setting.stringGetter(setting.dynCtx);
     } else if (setting.stringMaxLen > 0) {
       initial = reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
     }
     const size_t offset = setting.stringOffset;
     const size_t maxLen = setting.stringMaxLen;
     const auto stringSetter = setting.stringSetter;
+    const auto* stringCtx = setting.dynCtx;
     const size_t maxChars = maxLen > 0 ? maxLen - 1 : 63;
     startActivityForResult(
         makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)), initial,
                                                  maxChars, InputType::Text),
-        [this, offset, maxLen, stringSetter](const ActivityResult& result) {
+        [this, offset, maxLen, stringSetter, stringCtx](const ActivityResult& result) {
           if (!result.isCancelled) {
             const auto& kb = std::get<KeyboardResult>(result.data);
             if (stringSetter) {
-              stringSetter(kb.text);
+              stringSetter(stringCtx, kb.text);
             } else if (maxLen > 0) {
               char* dst = reinterpret_cast<char*>(reinterpret_cast<uint8_t*>(&SETTINGS) + offset);
               strncpy(dst, kb.text.c_str(), maxLen - 1);
@@ -614,7 +616,7 @@ void SettingsActivity::render(RenderLock&&) {
           const uint8_t value = SETTINGS.*(setting.valuePtr);
           valueText = I18N.get(setting.enumValues[value]);
         } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
-          const uint8_t value = setting.valueGetter();
+          const uint8_t value = setting.valueGetter(setting.dynCtx);
           if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
             valueText = setting.enumStringValues[value];
           } else if (value < setting.enumValues.size()) {
@@ -649,7 +651,7 @@ void SettingsActivity::render(RenderLock&&) {
           }
         } else if (setting.type == SettingType::STRING) {
           if (setting.stringGetter) {
-            valueText = setting.stringGetter();
+            valueText = setting.stringGetter(setting.dynCtx);
           } else if (setting.stringMaxLen > 0) {
             valueText =
                 reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);

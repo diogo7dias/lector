@@ -51,20 +51,17 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   s.key = "fontFamily";
   s.category = StrId::STR_CAT_READER;
 
-  // Capture registry families by copy for the lambdas
-  std::vector<std::string> sdFamilyNames;
-  if (registry) {
-    const auto& families = registry->getFamilies();
-    sdFamilyNames.reserve(families.size());
-    std::transform(families.begin(), families.end(), std::back_inserter(sdFamilyNames),
-                   [](const SdCardFontFamilyInfo& f) { return f.name; });
-  }
-
-  s.valueGetter = [sdFamilyNames]() -> uint8_t {
-    // If an SD card font is selected, find its index
-    if (SETTINGS.sdFontFamilyName[0] != '\0') {
-      for (int i = 0; i < static_cast<int>(sdFamilyNames.size()); i++) {
-        if (sdFamilyNames[i] == SETTINGS.sdFontFamilyName) {
+  // Getter/setter read the SD font registry LIVE via dynCtx (set below) instead of
+  // capturing a copy of the family names, so they stay plain function pointers (no
+  // heap closure). dynCtx = the registry passed to getSettingsList: nullptr (e.g.
+  // JsonSettingsIO) makes them built-in-only, exactly as the empty captured list did.
+  s.valueGetter = [](const void* ctx) -> uint8_t {
+    const auto* reg = static_cast<const SdCardFontRegistry*>(ctx);
+    // If an SD card font is selected, find its index in the live registry.
+    if (reg && SETTINGS.sdFontFamilyName[0] != '\0') {
+      const auto& families = reg->getFamilies();
+      for (int i = 0; i < static_cast<int>(families.size()); i++) {
+        if (families[i].name == SETTINGS.sdFontFamilyName) {
           return static_cast<uint8_t>(CrossPointSettings::BUILTIN_FONT_COUNT + i);
         }
       }
@@ -73,19 +70,23 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
     return SETTINGS.fontFamily < CrossPointSettings::BUILTIN_FONT_COUNT ? SETTINGS.fontFamily : 0;
   };
 
-  s.valueSetter = [sdFamilyNames](uint8_t v) {
+  s.valueSetter = [](const void* ctx, uint8_t v) {
     if (v < CrossPointSettings::BUILTIN_FONT_COUNT) {
       SETTINGS.fontFamily = v;
       SETTINGS.sdFontFamilyName[0] = '\0';
-    } else {
-      int sdIdx = v - CrossPointSettings::BUILTIN_FONT_COUNT;
-      if (sdIdx < static_cast<int>(sdFamilyNames.size())) {
-        strncpy(SETTINGS.sdFontFamilyName, sdFamilyNames[sdIdx].c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
-        SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-      }
+      return;
+    }
+    const auto* reg = static_cast<const SdCardFontRegistry*>(ctx);
+    if (!reg) return;
+    const auto& families = reg->getFamilies();
+    const int sdIdx = v - CrossPointSettings::BUILTIN_FONT_COUNT;
+    if (sdIdx < static_cast<int>(families.size())) {
+      strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
+      SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
     }
   };
 
+  s.dynCtx = registry;
   return s;
 }
 
@@ -266,46 +267,46 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       "readingStatsIdleUnits", StrId::STR_CAT_SYSTEM));
   // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
   v.push_back(SettingInfo::DynamicString(
-      StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },
-      [](const std::string& v) {
+      StrId::STR_KOREADER_USERNAME, [](const void*) { return KOREADER_STORE.getUsername(); },
+      [](const void*, const std::string& v) {
         KOREADER_STORE.setCredentials(v, KOREADER_STORE.getPassword());
         KOREADER_STORE.saveToFile();
       },
       "koUsername", StrId::STR_KOREADER_SYNC));
   v.push_back(SettingInfo::DynamicString(
-      StrId::STR_KOREADER_PASSWORD, [] { return KOREADER_STORE.getPassword(); },
-      [](const std::string& v) {
+      StrId::STR_KOREADER_PASSWORD, [](const void*) { return KOREADER_STORE.getPassword(); },
+      [](const void*, const std::string& v) {
         KOREADER_STORE.setCredentials(KOREADER_STORE.getUsername(), v);
         KOREADER_STORE.saveToFile();
       },
       "koPassword", StrId::STR_KOREADER_SYNC));
   v.push_back(SettingInfo::DynamicString(
-      StrId::STR_SYNC_SERVER_URL, [] { return KOREADER_STORE.getServerUrl(); },
-      [](const std::string& v) {
+      StrId::STR_SYNC_SERVER_URL, [](const void*) { return KOREADER_STORE.getServerUrl(); },
+      [](const void*, const std::string& v) {
         KOREADER_STORE.setServerUrl(v);
         KOREADER_STORE.saveToFile();
       },
       "koServerUrl", StrId::STR_KOREADER_SYNC));
   v.push_back(SettingInfo::DynamicEnum(
       StrId::STR_DOCUMENT_MATCHING, {StrId::STR_FILENAME, StrId::STR_BINARY},
-      [] { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
-      [](uint8_t v) {
+      [](const void*) { return static_cast<uint8_t>(KOREADER_STORE.getMatchMethod()); },
+      [](const void*, uint8_t v) {
         KOREADER_STORE.setMatchMethod(static_cast<DocumentMatchMethod>(v));
         KOREADER_STORE.saveToFile();
       },
       "koMatchMethod", StrId::STR_KOREADER_SYNC));
   v.push_back(SettingInfo::DynamicEnum(
       StrId::STR_SEND_METADATA, {StrId::STR_STATE_OFF, StrId::STR_STATE_ON},
-      [] { return KOREADER_STORE.getSendMetadata() ? (uint8_t)1 : (uint8_t)0; },
-      [](uint8_t v) {
+      [](const void*) { return KOREADER_STORE.getSendMetadata() ? (uint8_t)1 : (uint8_t)0; },
+      [](const void*, uint8_t v) {
         KOREADER_STORE.setSendMetadata(v != 0);
         KOREADER_STORE.saveToFile();
       },
       "koSendMetadata", StrId::STR_KOREADER_SYNC));
   v.push_back(SettingInfo::DynamicEnum(
       StrId::STR_SYNC_BEHAVIOR, {StrId::STR_ASK_EVERY_TIME, StrId::STR_SMART_SYNC},
-      [] { return static_cast<uint8_t>(KOREADER_STORE.getSyncBehavior()); },
-      [](uint8_t v) {
+      [](const void*) { return static_cast<uint8_t>(KOREADER_STORE.getSyncBehavior()); },
+      [](const void*, uint8_t v) {
         KOREADER_STORE.setSyncBehavior(static_cast<KOReaderSyncBehavior>(v));
         KOREADER_STORE.saveToFile();
       },
