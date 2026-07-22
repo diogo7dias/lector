@@ -83,6 +83,13 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
+  // Transient feedback-banner (drawPopup) auto-clear bookkeeping. Armed when a
+  // banner is painted; disarmed when a full render repaints over it or when the
+  // loop expires it after ~1.5s idle. Kept here (not in the theme) so both the
+  // draw path (theme) and the render/loop path (ActivityManager) can reach it.
+  mutable bool bannerActive_ = false;
+  mutable unsigned long bannerShownMs_ = 0;
+
   void renderChar(const EpdFontFamily& fontFamily, uint32_t cp, int* x, int* y, bool pixelState,
                   EpdFontFamily::Style style) const;
   void freeBwBufferChunks();
@@ -175,6 +182,15 @@ class GfxRenderer {
   // full displayBufferAsync; the fading-fix setting (panel power-off after
   // every refresh) forces the synchronous path.
   void displayWindowAsync(int x, int y, int width, int height) const;
+
+  // Transient feedback-banner auto-clear. noteBannerShown() arms the timer when a
+  // banner (drawPopup) is painted. bannerAutoClearDue() is polled by the main loop;
+  // when true, the loop repaints the current screen to remove the banner and calls
+  // noteBannerConsumed(). A full render also calls noteBannerConsumed() so progress
+  // banners (re-asserted every render) never expire here.
+  void noteBannerShown() const;
+  bool bannerAutoClearDue(unsigned long nowMs) const;
+  void noteBannerConsumed() const { bannerActive_ = false; }
   void invertScreen() const;
   void clearScreen(uint8_t color = 0xFF) const;
   void getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const;

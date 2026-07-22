@@ -47,6 +47,9 @@ void ActivityManager::renderTaskLoop() {
       HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
       currentActivity->render(std::move(lock));
     }
+    // A full render repaints over any transient banner, so disarm its auto-clear.
+    // Progress banners re-arm on their next render(), so they never expire early.
+    renderer.noteBannerConsumed();
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
     taskENTER_CRITICAL(nullptr);
@@ -63,6 +66,15 @@ void ActivityManager::loop() {
   if (currentActivity) {
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
+  }
+
+  // Expire a transient feedback banner (confirm/result/error) once it has been up
+  // ~1.5s: repaint the current screen to remove it. Progress banners re-assert every
+  // render (or block the loop), so they are never expired here. Skipped while a
+  // render is in flight so we do not stack an update on top of one.
+  if (currentActivity && !RenderLock::peek() && renderer.bannerAutoClearDue(millis())) {
+    renderer.noteBannerConsumed();
+    requestUpdate();
   }
 
   while (pendingAction != PendingAction::None) {
@@ -217,7 +229,10 @@ void ActivityManager::goToSettings() {
 }
 
 void ActivityManager::goToFileBrowser(std::string path) {
-  showTransitionBanner(StrId::STR_LOADING);
+  // "Opening folder..." stays on the panel through FileBrowserActivity's initial SD
+  // scan / index build (which can be slow for a big folder like /sleep pause), since
+  // no repaint happens until the list is ready.
+  showTransitionBanner(StrId::STR_BANNER_OPENING_FOLDER);
   replaceActivity(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
 }
 

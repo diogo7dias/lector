@@ -154,7 +154,8 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_12_FONT_ID, 15, headerTitle, true, EpdFontFamily::BOLD);
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
+    // Progress message as the top strip (the ERROR result stays centered).
+    GUI.drawBannerStrip(renderer, statusMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();
@@ -176,12 +177,15 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   }
 
   if (state == BrowserState::DOWNLOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
-    auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
+    // Progress as the top strip: "Downloading" with a thin fill line for the byte
+    // progress. Drawn into the framebuffer; the activity's displayBuffer pushes it.
+    const Rect strip = GUI.drawBannerStrip(renderer, tr(STR_DOWNLOADING));
     if (downloadTotal > 0) {
-      GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress,
-                          downloadTotal);
+      int pct = static_cast<int>((static_cast<uint64_t>(downloadProgress) * 100) / downloadTotal);
+      if (pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      const int fillW = (strip.width - 6) * pct / 100;
+      if (fillW > 0) renderer.fillRect(strip.x + 3, strip.y + strip.height - 5, fillW, 3, false);  // white fill
     }
     renderer.displayBuffer();
     return;
