@@ -6,10 +6,9 @@
 #include <esp_task_wdt.h>
 
 #include "util/BookCacheUtils.h"
+#include "util/WebPath.h"
 
 namespace {
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
-
 // RFC 1123 date format helper: "Sun, 06 Nov 1994 08:49:37 GMT"
 // ESP32 doesn't have real-time clock set by default, so we use a fixed epoch date
 // as a fallback. The date is not critical for WebDAV Class 1 operations.
@@ -227,16 +226,9 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       file.getName(name, sizeof(name));
       String fileName(name);
 
-      // Skip hidden/protected items
-      bool shouldHide = fileName.startsWith(".");
-      if (!shouldHide) {
-        for (const auto* item : HIDDEN_ITEMS) {
-          if (fileName.equals(item)) {
-            shouldHide = true;
-            break;
-          }
-        }
-      }
+      // Skip hidden dot-files and reserved system directories (shared list).
+      const bool shouldHide =
+          fileName.startsWith(".") || WebPath::isReservedName(std::string_view(fileName.c_str(), fileName.length()));
 
       if (!shouldHide) {
         String childPath = path;
@@ -534,6 +526,9 @@ void WebDAVHandler::handleMove(WebServer& s) {
   }
 
   if (dstExists) {
+    // Overwriting an existing book: drop its stale .crosspoint cache too, or the
+    // next open would read the old book's layout for the new file.
+    clearBookCache(dstPath.c_str());
     Storage.remove(dstPath.c_str());
   }
 
@@ -614,6 +609,9 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   }
 
   if (dstExists) {
+    // Overwriting an existing book: drop its stale .crosspoint cache too, or the
+    // next open would read the old book's layout for the new file.
+    clearBookCache(dstPath.c_str());
     Storage.remove(dstPath.c_str());
   }
 
@@ -684,20 +682,7 @@ void WebDAVHandler::handleUnlock(WebServer& s) {
 String WebDAVHandler::getRequestPath(WebServer& s) const {
   String uri = s.uri();
   String decoded = WebServer::urlDecode(uri);
-
-  // Normalize using FsHelpers
-  std::string normalized = FsHelpers::normalisePath(decoded.c_str());
-  String result = normalized.c_str();
-
-  if (result.isEmpty()) return "/";
-  if (!result.startsWith("/")) result = "/" + result;
-
-  // Remove trailing slash unless root
-  if (result.length() > 1 && result.endsWith("/")) {
-    result = result.substring(0, result.length() - 1);
-  }
-
-  return result;
+  return String(WebPath::normalize(std::string_view(decoded.c_str(), decoded.length())).c_str());
 }
 
 String WebDAVHandler::getDestinationPath(WebServer& s) const {
@@ -717,18 +702,7 @@ String WebDAVHandler::getDestinationPath(WebServer& s) const {
   }
 
   String decoded = WebServer::urlDecode(dest);
-  std::string normalized = FsHelpers::normalisePath(decoded.c_str());
-  String result = normalized.c_str();
-
-  if (result.isEmpty()) return "/";
-  if (!result.startsWith("/")) result = "/" + result;
-
-  // Remove trailing slash unless root
-  if (result.length() > 1 && result.endsWith("/")) {
-    result = result.substring(0, result.length() - 1);
-  }
-
-  return result;
+  return String(WebPath::normalize(std::string_view(decoded.c_str(), decoded.length())).c_str());
 }
 
 void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
@@ -759,29 +733,9 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
 }
 
 bool WebDAVHandler::isProtectedPath(const String& path) const {
-  // Check every segment of the path, not just the last one.
-  // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
-  int start = 0;
-  while (start < (int)path.length()) {
-    if (path.charAt(start) == '/') {
-      start++;
-      continue;
-    }
-    int end = path.indexOf('/', start);
-    if (end == -1) end = path.length();
-
-    String segment = path.substring(start, end);
-
-    if (segment.startsWith(".")) return true;
-
-    for (const auto* item : HIDDEN_ITEMS) {
-      if (segment.equals(item)) return true;
-    }
-
-    start = end + 1;
-  }
-
-  return false;
+  // Per-segment guard lives in the shared WebPath module so the web server and
+  // WebDAV can never drift on what "off-limits" means again.
+  return WebPath::isProtected(std::string_view(path.c_str(), path.length()));
 }
 
 int WebDAVHandler::getDepth(WebServer& s) const {

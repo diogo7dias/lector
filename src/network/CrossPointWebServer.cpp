@@ -26,11 +26,9 @@
 #include "html/js/jszip_minJs.generated.h"
 #include "sleep/Wallpaper.h"
 #include "util/BookCacheUtils.h"
+#include "util/WebPath.h"
 
 namespace {
-// Folders/files to hide from the web interface file browser
-// Note: Items starting with "." are automatically hidden
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -51,34 +49,16 @@ String wsLastCompleteName;
 size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
 
+// Thin adapter over WebPath::normalize so the many String-based call sites keep
+// working; the canonicalisation rule itself lives in the shared WebPath module.
 String normalizeWebPath(const String& inputPath) {
-  if (inputPath.isEmpty() || inputPath == "/") {
-    return "/";
-  }
-  std::string normalized = FsHelpers::normalisePath(inputPath.c_str());
-  String result = normalized.c_str();
-  if (result.isEmpty()) {
-    return "/";
-  }
-  if (!result.startsWith("/")) {
-    result = "/" + result;
-  }
-  if (result.length() > 1 && result.endsWith("/")) {
-    result = result.substring(0, result.length() - 1);
-  }
-  return result;
+  return String(WebPath::normalize(std::string_view(inputPath.c_str(), inputPath.length())).c_str());
 }
 
-bool isProtectedItemName(const String& name) {
-  if (name.startsWith(".")) {
-    return true;
-  }
-  for (const auto* item : HIDDEN_ITEMS) {
-    if (name.equals(item)) {
-      return true;
-    }
-  }
-  return false;
+// Small helper so the String-based handlers can call the shared per-segment
+// guard without repeating the string_view conversion.
+bool isProtectedWebPath(const String& path) {
+  return WebPath::isProtected(std::string_view(path.c_str(), path.length()));
 }
 
 void recoverFontBackup(const std::string& finalPath, const std::string& tempPath, const std::string& backupPath) {
@@ -430,18 +410,10 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     file.getName(name, sizeof(name));
     auto fileName = String(name);
 
-    // Skip hidden items (starting with ".")
-    bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
-
-    // Check against explicitly hidden items list
-    if (!shouldHide) {
-      for (const auto* item : HIDDEN_ITEMS) {
-        if (fileName.equals(item)) {
-          shouldHide = true;
-          break;
-        }
-      }
-    }
+    // Hide dot-files (unless the user opted to show them) and reserved system
+    // directories. Reserved-ness comes from the shared WebPath list.
+    const bool shouldHide = (!SETTINGS.showHiddenFiles && fileName.startsWith(".")) ||
+                            WebPath::isReservedName(std::string_view(fileName.c_str(), fileName.length()));
 
     if (!shouldHide) {
       FileInfo info;
@@ -538,16 +510,11 @@ void CrossPointWebServer::handleDownload() const {
     itemPath = "/" + itemPath;
   }
 
-  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (itemName.startsWith(".")) {
-    server->send(403, "text/plain", "Cannot access system files");
+  // Per-segment guard: a hidden or reserved segment anywhere in the path blocks
+  // the download, not just a hidden leaf.
+  if (isProtectedWebPath(itemPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
     return;
-  }
-  for (const auto* item : HIDDEN_ITEMS) {
-    if (itemName.equals(item)) {
-      server->send(403, "text/plain", "Cannot access protected items");
-      return;
-    }
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -858,13 +825,13 @@ void CrossPointWebServer::handleRename() const {
     server->send(400, "text/plain", "Invalid file name");
     return;
   }
-  if (isProtectedItemName(newName)) {
+  if (isProtectedWebPath(newName)) {
     server->send(403, "text/plain", "Cannot rename to protected name");
     return;
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (isProtectedItemName(itemName)) {
+  if (isProtectedWebPath(itemPath)) {
     server->send(403, "text/plain", "Cannot rename protected item");
     return;
   }
@@ -937,16 +904,13 @@ void CrossPointWebServer::handleMove() const {
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (isProtectedItemName(itemName)) {
+  if (isProtectedWebPath(itemPath)) {
     server->send(403, "text/plain", "Cannot move protected item");
     return;
   }
-  if (destPath != "/") {
-    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
-    if (isProtectedItemName(destName)) {
-      server->send(403, "text/plain", "Cannot move into protected folder");
-      return;
-    }
+  if (isProtectedWebPath(destPath)) {
+    server->send(403, "text/plain", "Cannot move into protected folder");
+    return;
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -1025,12 +989,9 @@ void CrossPointWebServer::handleMoveBatch() const {
     server->send(400, "text/plain", "Invalid destination");
     return;
   }
-  if (destPath != "/") {
-    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
-    if (isProtectedItemName(destName)) {
-      server->send(403, "text/plain", "Cannot move into protected folder");
-      return;
-    }
+  if (isProtectedWebPath(destPath)) {
+    server->send(403, "text/plain", "Cannot move into protected folder");
+    return;
   }
   if (!Storage.exists(destPath.c_str())) {
     server->send(404, "text/plain", "Destination not found");
@@ -1074,7 +1035,7 @@ void CrossPointWebServer::handleMoveBatch() const {
       continue;
     }
     const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-    if (isProtectedItemName(itemName) || !Storage.exists(itemPath.c_str())) {
+    if (isProtectedWebPath(itemPath) || !Storage.exists(itemPath.c_str())) {
       failed++;
       continue;
     }
@@ -1180,25 +1141,9 @@ void CrossPointWebServer::handleDelete() const {
       itemPath = "/" + itemPath;
     }
 
-    // Security check: prevent deletion of protected items
-    const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-
-    // Hidden/system files are protected
-    if (itemName.startsWith(".")) {
-      failedItems += itemPath + " (hidden/system file); ";
-      allSuccess = false;
-      continue;
-    }
-
-    // Check against explicitly protected items
-    bool isProtected = false;
-    for (const auto* item : HIDDEN_ITEMS) {
-      if (itemName.equals(item)) {
-        isProtected = true;
-        break;
-      }
-    }
-    if (isProtected) {
+    // Security check: a hidden or reserved segment anywhere in the path blocks
+    // deletion (shared per-segment rule).
+    if (isProtectedWebPath(itemPath)) {
       failedItems += itemPath + " (protected file); ";
       allSuccess = false;
       continue;
