@@ -2,6 +2,7 @@
 #include <EpdFontFamily.h>
 #include <Epub.h>
 #include <Epub/FootnoteEntry.h>
+#include <Epub/LayoutParams.h>
 #include <Epub/Section.h>
 
 #include <array>
@@ -97,22 +98,11 @@ class EpubReaderActivity final : public Activity {
   // layout is driven a few pages per render() call instead of one blocking pass,
   // so the render lock frees between slices (input stays live, Back cancels) and
   // a progress bar is painted. Only the foreground miss build; prefetch/warm are
-  // separate one-shot pumps. slicedBuild_ captures the layout params so each slice
+  // separate one-shot pumps. slicedBuildBase_ captures the layout key so each slice
   // and each low-memory tier restart re-issues Section::startBuild() identically.
-  struct SlicedBuildParams {
-    int fontId = 0;
-    float lineCompression = 1.0f;
-    int firstLineIndentPx = 0;
-    uint16_t viewportW = 0;
-    uint16_t viewportH = 0;
-    // Tier-0 (full quality) render knobs; a low-memory tier is applied on top per attempt.
-    uint8_t imageRendering = 0;
-    bool embeddedStyle = false;
-    bool hyphenationEnabled = false;
-    bool focusReadingEnabled = false;
-    bool guideDotsEnabled = false;
-  };
-  SlicedBuildParams slicedBuild_;
+  // Tier-0 (full quality) layout key for the in-flight sliced build, captured once
+  // at beginSlicedBuild; a low-memory tier is applied on top per attempt (withTier).
+  LayoutParams slicedBuildBase_;
   bool sectionBuildActive_ = false;                  // a sliced foreground build is in flight
   int sectionBuildTier_ = 0;                         // render tier currently being built
   unsigned long sectionBuildProgressPaintedMs_ = 0;  // last progress-bar refresh (throttle)
@@ -211,12 +201,19 @@ class EpubReaderActivity final : public Activity {
   // of degraded-tier cache generations. Returns true if a cache was adopted (the
   // section is ready to position + paint); false means the chapter must be built.
   bool loadSectionFromCache(Section& section, uint16_t viewportWidth, uint16_t viewportHeight);
+  // Build the tier-0 (full quality) LayoutParams for the current book prefs + viewport.
+  // Syncs the SD font manager to prefs_ FIRST (ensureLoadedFor) so the resolved fontId
+  // always matches the font that will render — this is what makes an in-book font/size
+  // change actually take effect instead of reloading a stale cached layout. Every
+  // section cache/build call in the reader goes through this, so the font can never be
+  // unsynced when the cache key is formed. A low-memory tier is layered on with withTier().
+  LayoutParams layoutParamsBase(uint16_t viewportWidth, uint16_t viewportHeight);
   // Prime the first-tier sliced build after a cache miss. Captures layout params in
-  // slicedBuild_, sets sectionBuildActive_, paints the initial (0%) progress face and
+  // slicedBuildBase_, sets sectionBuildActive_, paints the initial (0%) progress face and
   // requests the first slice. Returns false on a hard start failure.
   bool beginSlicedBuild(uint16_t viewportWidth, uint16_t viewportHeight);
   // (Re)start Section::startBuild() at render tier `tier` under a framebuffer loan,
-  // using slicedBuild_. Used to prime the build and to restart it a tier lower on a
+  // using slicedBuildBase_. Used to prime the build and to restart it a tier lower on a
   // low-memory abort. Returns false when startBuild fails at that tier.
   bool startBuildAtTier(int tier);
   // Sets indexingBackdropPath_ to a random /sleep .pxc via an O(1) peek into the

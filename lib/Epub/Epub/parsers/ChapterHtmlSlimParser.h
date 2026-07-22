@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "Epub/FootnoteEntry.h"
+#include "Epub/LayoutParams.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
@@ -138,38 +139,37 @@ class ChapterHtmlSlimParser {
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
+  // Layout inputs arrive as one LayoutParams (the same value that keys the
+  // section cache), so the construction site cannot silently drift out of order
+  // relative to the cache key. Individual members are still kept and simply
+  // copied out of `lp` here — the parser body is unchanged.
   explicit ChapterHtmlSlimParser(std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer,
-                                 const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                 const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                 const uint16_t viewportHeight, const bool hyphenationEnabled,
-                                 const bool focusReadingEnabled, const bool guideDotsEnabled,
-                                 const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing,
+                                 const LayoutParams& lp,
                                  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn,
-                                 const bool embeddedStyle, const std::string& contentBase,
-                                 const std::string& imageBasePath, const uint8_t imageRendering = 0,
+                                 const std::string& contentBase, const std::string& imageBasePath,
                                  std::vector<std::string> tocAnchors = {},
                                  const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
         renderer(renderer),
-        fontId(fontId),
-        lineCompression(lineCompression),
-        extraParagraphSpacing(extraParagraphSpacing),
-        paragraphAlignment(paragraphAlignment),
-        viewportWidth(viewportWidth),
-        viewportHeight(viewportHeight),
-        hyphenationEnabled(hyphenationEnabled),
-        focusReadingEnabled(focusReadingEnabled),
-        guideDotsEnabled(guideDotsEnabled),
-        firstLineIndentPx(firstLineIndentPx),
-        wordSpacing(wordSpacing),
-        paragraphSpacing(paragraphSpacing),
+        fontId(lp.fontId),
+        lineCompression(lp.lineCompression),
+        extraParagraphSpacing(lp.extraParagraphSpacing),
+        paragraphAlignment(lp.paragraphAlignment),
+        viewportWidth(lp.viewportWidth),
+        viewportHeight(lp.viewportHeight),
+        hyphenationEnabled(lp.hyphenationEnabled),
+        focusReadingEnabled(lp.focusReadingEnabled),
+        guideDotsEnabled(lp.guideDotsEnabled),
+        firstLineIndentPx(lp.firstLineIndentPx),
+        wordSpacing(lp.wordSpacing),
+        paragraphSpacing(lp.paragraphSpacing),
         completePageFn(completePageFn),
         popupFn(popupFn),
         cssParser(cssParser),
-        embeddedStyle(embeddedStyle),
-        imageRendering(imageRendering),
+        embeddedStyle(lp.embeddedStyle),
+        imageRendering(lp.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {

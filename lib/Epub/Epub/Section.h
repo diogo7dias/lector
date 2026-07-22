@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Epub.h"
+#include "LayoutParams.h"
 
 class Page;
 class GfxRenderer;
@@ -39,10 +40,7 @@ class Section {
   // Derive the generation from the layout settings and point filePath at it.
   // Also prepares the directory and prunes stale generations (once per
   // generation per session).
-  void selectGeneration(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                        uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                        uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
-                        uint8_t wordSpacing, uint8_t paragraphSpacing);
+  void selectGeneration(const LayoutParams& lp);
 
   // State of an in-progress incremental build. Non-null only while building; the
   // parser and HTML file stay live between buildSomeMore() calls so layout can be
@@ -80,11 +78,7 @@ class Section {
 
   // Returns false on a short write (SD full / IO error) so the caller can abandon
   // the .part instead of building on a truncated header.
-  bool writeSectionFileHeader(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                              uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled,
-                              bool embeddedStyle, uint8_t imageRendering, bool focusReadingEnabled,
-                              bool guideDotsEnabled, int firstLineIndentPx, uint8_t wordSpacing,
-                              uint8_t paragraphSpacing);
+  bool writeSectionFileHeader(const LayoutParams& lp);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
   // Writes the LUT + trailers, patches the header, stamps the real version byte and
   // atomically renames the .part into place. Consumes build_. Returns true on commit.
@@ -106,32 +100,20 @@ class Section {
   // exact layout parameters. Unlike loadSectionFile it never switches or
   // prunes cache generations, so it is safe to call for several candidate
   // parameter sets in a row.
-  bool hasCachedSectionFor(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                           uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                           uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled,
-                           int firstLineIndentPx, uint8_t wordSpacing, uint8_t paragraphSpacing) const;
+  bool hasCachedSectionFor(const LayoutParams& lp) const;
 
-  bool loadSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                       uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                       uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
-                       uint8_t wordSpacing, uint8_t paragraphSpacing);
+  bool loadSectionFile(const LayoutParams& lp);
   bool clearCache() const;
   // One-shot full build. Thin wrapper over startBuild() + buildSomeMore(0), retained
   // so existing callers are unaffected.
-  bool createSectionFile(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                         uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                         uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
-                         uint8_t wordSpacing, uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
+  bool createSectionFile(const LayoutParams& lp, const std::function<void()>& popupFn = nullptr);
 
   // Incremental build API. startBuild() streams the chapter HTML, opens the .part and
   // primes the parser without laying out any pages. buildSomeMore(maxPages) lays out
   // up to maxPages more pages (<= 0 = to completion), returning true while the build
   // is still viable; on reaching the end it flushes, finalizes and commits the cache.
   // A build is torn down (persist-less) by abandonBuild() and by the destructor.
-  bool startBuild(int fontId, float lineCompression, bool extraParagraphSpacing, uint8_t paragraphAlignment,
-                  uint16_t viewportWidth, uint16_t viewportHeight, bool hyphenationEnabled, bool embeddedStyle,
-                  uint8_t imageRendering, bool focusReadingEnabled, bool guideDotsEnabled, int firstLineIndentPx,
-                  uint8_t wordSpacing, uint8_t paragraphSpacing, const std::function<void()>& popupFn = nullptr);
+  bool startBuild(const LayoutParams& lp, const std::function<void()>& popupFn = nullptr);
   bool buildSomeMore(int maxPages);
   bool isBuilding() const { return static_cast<bool>(build_); }
   bool isBuildComplete() const { return buildComplete_; }

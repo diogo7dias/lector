@@ -1577,20 +1577,56 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   reloadForReaderPrefsChange();
 }
 
+// Apply the cumulative low-memory render reductions for `tier` onto a copy of the
+// tier-0 layout key. tier <= 0 returns base unchanged. Pure. Only the five knob
+// fields differ across tiers, so LayoutParams equality of two withTier() results is
+// exactly knob-equality (used to skip redundant tiers).
+static LayoutParams withTier(LayoutParams base, const int tier) {
+  const LowMemoryRenderTier::Knobs k =
+      LowMemoryRenderTier::apply({base.imageRendering, base.embeddedStyle, base.hyphenationEnabled,
+                                  base.focusReadingEnabled, base.guideDotsEnabled},
+                                 tier);
+  base.imageRendering = k.imageRendering;
+  base.embeddedStyle = k.embeddedStyle;
+  base.hyphenationEnabled = k.hyphenationEnabled;
+  base.focusReadingEnabled = k.focusReadingEnabled;
+  base.guideDotsEnabled = k.guideDotsEnabled;
+  return base;
+}
+
+LayoutParams EpubReaderActivity::layoutParamsBase(const uint16_t viewportWidth, const uint16_t viewportHeight) {
+  // Sync the SD font manager to THIS book's prefs BEFORE resolving the font id.
+  // resolveFontId returns the id of whatever font the manager currently holds; if it
+  // is still on the global font (or a stale point size), the id — and thus the cache
+  // key — never changes on an in-book font/size change, and the old-font section
+  // reloads as a cache hit. Idempotent when already loaded. Because every section
+  // cache/build call in the reader forms its key here, the font can never be unsynced
+  // when the key is made.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
+  LayoutParams lp;
+  lp.fontId = readerFontId(prefs_);
+  lp.lineCompression = readerLineCompression(prefs_);
+  lp.extraParagraphSpacing = prefs_.extraParagraphSpacing;
+  lp.paragraphAlignment = prefs_.paragraphAlignment;
+  lp.viewportWidth = viewportWidth;
+  lp.viewportHeight = viewportHeight;
+  lp.hyphenationEnabled = prefs_.hyphenationEnabled;
+  lp.embeddedStyle = prefs_.embeddedStyle;
+  lp.imageRendering = prefs_.imageRendering;
+  lp.focusReadingEnabled = prefs_.focusReadingEnabled;
+  lp.guideDotsEnabled = prefs_.guideDotsEnabled;
+  lp.firstLineIndentPx = readerFirstLineIndentPx(prefs_, viewportWidth);
+  lp.wordSpacing = prefs_.wordSpacing;
+  lp.paragraphSpacing = prefs_.paragraphSpacing;
+  return lp;
+}
+
 bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t viewportWidth,
                                               const uint16_t viewportHeight) {
-  const int fontId = readerFontId(prefs_);
-  const float lineCompression = readerLineCompression(prefs_);
-  const int firstLineIndentPx = readerFirstLineIndentPx(prefs_, viewportWidth);
-  const LowMemoryRenderTier::Knobs base{prefs_.imageRendering, prefs_.embeddedStyle, prefs_.hyphenationEnabled,
-                                        prefs_.focusReadingEnabled, prefs_.guideDotsEnabled};
+  const LayoutParams base = layoutParamsBase(viewportWidth, viewportHeight);
 
   // Try the cache first, at the tier this book has already degraded to (0 = full).
-  const LowMemoryRenderTier::Knobs floorKnobs = LowMemoryRenderTier::apply(base, lowMemoryTierFloor_);
-  if (section.loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
-                              viewportWidth, viewportHeight, floorKnobs.hyphenationEnabled, floorKnobs.embeddedStyle,
-                              floorKnobs.imageRendering, floorKnobs.focusReadingEnabled, floorKnobs.guideDotsEnabled,
-                              firstLineIndentPx, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+  if (section.loadSectionFile(withTier(base, lowMemoryTierFloor_))) {
     LOG_DBG("ERS", "Cache found, skipping build...");
     diagSectionWasBuild_ = false;
     diagSectionReadyMs_ = millis();
@@ -1606,23 +1642,17 @@ bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t v
   // rebuild. Probe with hasCachedSectionFor (side-effect free) first:
   // loadSectionFile switches + prunes generations, so blind load attempts
   // would delete the very generation a later tier needs.
-  LowMemoryRenderTier::Knobs lastProbed = floorKnobs;
+  LayoutParams lastProbed = withTier(base, lowMemoryTierFloor_);
   for (int tier = lowMemoryTierFloor_ + 1; tier <= LowMemoryRenderTier::kMaxTier; ++tier) {
-    const LowMemoryRenderTier::Knobs knobs = LowMemoryRenderTier::apply(base, tier);
-    if (LowMemoryRenderTier::equal(knobs, lastProbed)) {
+    const LayoutParams candidate = withTier(base, tier);
+    if (candidate == lastProbed) {
       continue;
     }
-    lastProbed = knobs;
-    if (!section.hasCachedSectionFor(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
-                                     viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
-                                     knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
-                                     firstLineIndentPx, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    lastProbed = candidate;
+    if (!section.hasCachedSectionFor(candidate)) {
       continue;
     }
-    if (section.loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
-                                viewportWidth, viewportHeight, knobs.hyphenationEnabled, knobs.embeddedStyle,
-                                knobs.imageRendering, knobs.focusReadingEnabled, knobs.guideDotsEnabled,
-                                firstLineIndentPx, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    if (section.loadSectionFile(candidate)) {
       LOG_INF("ERS", "Adopted tier %d section cache (floor was %d); keeping that tier for this book", tier,
               lowMemoryTierFloor_);
       lowMemoryTierFloor_ = tier;
@@ -1644,16 +1674,7 @@ bool EpubReaderActivity::loadSectionFromCache(Section& section, const uint16_t v
 
 bool EpubReaderActivity::beginSlicedBuild(const uint16_t viewportWidth, const uint16_t viewportHeight) {
   if (!section) return false;
-  slicedBuild_.fontId = readerFontId(prefs_);
-  slicedBuild_.lineCompression = readerLineCompression(prefs_);
-  slicedBuild_.firstLineIndentPx = readerFirstLineIndentPx(prefs_, viewportWidth);
-  slicedBuild_.viewportW = viewportWidth;
-  slicedBuild_.viewportH = viewportHeight;
-  slicedBuild_.imageRendering = prefs_.imageRendering;
-  slicedBuild_.embeddedStyle = prefs_.embeddedStyle;
-  slicedBuild_.hyphenationEnabled = prefs_.hyphenationEnabled;
-  slicedBuild_.focusReadingEnabled = prefs_.focusReadingEnabled;
-  slicedBuild_.guideDotsEnabled = prefs_.guideDotsEnabled;
+  slicedBuildBase_ = layoutParamsBase(viewportWidth, viewportHeight);
 
   LOG_DBG("ERS", "Cache not found, building (sliced)...");
   diagSectionWasBuild_ = true;
@@ -1706,18 +1727,10 @@ bool EpubReaderActivity::pickIndexingBackdrop() {
 
 bool EpubReaderActivity::startBuildAtTier(const int tier) {
   if (!section) return false;
-  const LowMemoryRenderTier::Knobs base{slicedBuild_.imageRendering, slicedBuild_.embeddedStyle,
-                                        slicedBuild_.hyphenationEnabled, slicedBuild_.focusReadingEnabled,
-                                        slicedBuild_.guideDotsEnabled};
-  const LowMemoryRenderTier::Knobs knobs = LowMemoryRenderTier::apply(base, tier);
   // Lend the framebuffer's ~51 KB for the inflate peak inside startBuild(); the
   // loan ends when this returns so the caller can paint the progress bar.
   GfxRenderer::FrameBufferLoan loan(renderer);
-  return section->startBuild(slicedBuild_.fontId, slicedBuild_.lineCompression, prefs_.extraParagraphSpacing,
-                             prefs_.paragraphAlignment, slicedBuild_.viewportW, slicedBuild_.viewportH,
-                             knobs.hyphenationEnabled, knobs.embeddedStyle, knobs.imageRendering,
-                             knobs.focusReadingEnabled, knobs.guideDotsEnabled, slicedBuild_.firstLineIndentPx,
-                             prefs_.wordSpacing, prefs_.paragraphSpacing);
+  return section->startBuild(withTier(slicedBuildBase_, tier));
 }
 
 bool EpubReaderActivity::advanceSectionBuild() {
@@ -1746,18 +1759,14 @@ bool EpubReaderActivity::advanceSectionBuild() {
     if (section->lastBuildWasLowMemory() && sectionBuildTier_ < LowMemoryRenderTier::kMaxTier) {
       // Descend to the next distinct render tier and restart the build from scratch.
       // Skip tiers whose knobs match the current attempt (already-applied reductions).
-      const LowMemoryRenderTier::Knobs base{slicedBuild_.imageRendering, slicedBuild_.embeddedStyle,
-                                            slicedBuild_.hyphenationEnabled, slicedBuild_.focusReadingEnabled,
-                                            slicedBuild_.guideDotsEnabled};
-      const LowMemoryRenderTier::Knobs current = LowMemoryRenderTier::apply(base, sectionBuildTier_);
+      const LayoutParams current = withTier(slicedBuildBase_, sectionBuildTier_);
       int nextTier = sectionBuildTier_ + 1;
-      while (nextTier <= LowMemoryRenderTier::kMaxTier &&
-             LowMemoryRenderTier::equal(LowMemoryRenderTier::apply(base, nextTier), current)) {
+      while (nextTier <= LowMemoryRenderTier::kMaxTier && withTier(slicedBuildBase_, nextTier) == current) {
         ++nextTier;
       }
       LOG_ERR("ERS", "Sliced build hit low memory at tier %d; descending to %d", sectionBuildTier_, nextTier);
       // Give the retry more headroom: drop the SD-font resident caches too.
-      if (renderer.releaseSdCardFontForLowMemory(slicedBuild_.fontId)) {
+      if (renderer.releaseSdCardFontForLowMemory(slicedBuildBase_.fontId)) {
         LOG_INF("ERS", "Released SD font caches before tier retry");
       }
       if (nextTier > LowMemoryRenderTier::kMaxTier || !startBuildAtTier(nextTier)) {
@@ -1852,8 +1861,7 @@ void EpubReaderActivity::paintBuildProgress(const bool force) {
     // pass) and paints the image in one waveform. X3 incremental -> FAST
     // differential so the unchanged image + banner do not flash (only the bar's
     // pixels transition).
-    const HalDisplay::RefreshMode oneBitRefresh =
-        force ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH;
+    const HalDisplay::RefreshMode oneBitRefresh = force ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH;
     const int pct = percent;
     const bool ok = renderPxcSleepScreen(
         renderer, indexingBackdropPath_,
@@ -1953,7 +1961,6 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
   }
 
   const int spineCount = epub->getSpineItemsCount();
-  const int firstLineIndent = readerFirstLineIndentPx(prefs_, viewportWidth);
 
   // 1) Service any in-flight build FIRST. At most one slot ever builds at a time
   //    (each build holds a parser + layout arena; two would exceed the heap). Give
@@ -2021,10 +2028,8 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       LOG_ERR("ERS", "OOM: prefetch Section for chapter %d", target);
       return;
     }
-    if (next->loadSectionFile(readerFontId(prefs_), readerLineCompression(prefs_), prefs_.extraParagraphSpacing,
-                              prefs_.paragraphAlignment, viewportWidth, viewportHeight, prefs_.hyphenationEnabled,
-                              prefs_.embeddedStyle, prefs_.imageRendering, prefs_.focusReadingEnabled,
-                              prefs_.guideDotsEnabled, firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    const LayoutParams base = layoutParamsBase(viewportWidth, viewportHeight);
+    if (next->loadSectionFile(base)) {
       slot->handled = true;  // already warm; drop the probe, look further ahead
       continue;
     }
@@ -2036,10 +2041,7 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       return;
     }
     LOG_DBG("ERS", "Prefetching chapter: %d", target);
-    if (!next->startBuild(readerFontId(prefs_), readerLineCompression(prefs_), prefs_.extraParagraphSpacing,
-                          prefs_.paragraphAlignment, viewportWidth, viewportHeight, prefs_.hyphenationEnabled,
-                          prefs_.embeddedStyle, prefs_.imageRendering, prefs_.focusReadingEnabled,
-                          prefs_.guideDotsEnabled, firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+    if (!next->startBuild(base)) {
       LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", target);
       slot->handled = true;  // will not retry until we move on
       return;
@@ -2066,32 +2068,11 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   }
 
   // Restart the scan whenever the layout settings change: the generation the
-  // previous scan warmed is no longer the one the reader loads from.
-  uint32_t h = 2166136261u;
-  const auto fold = [&h](const void* p, size_t n) {
-    const auto* b = static_cast<const uint8_t*>(p);
-    for (size_t i = 0; i < n; i++) {
-      h ^= b[i];
-      h *= 16777619u;
-    }
-  };
-  const int fontId = readerFontId(prefs_);
-  const float lineCompression = readerLineCompression(prefs_);
-  const int firstLineIndent = readerFirstLineIndentPx(prefs_, viewportWidth);
-  fold(&fontId, sizeof(fontId));
-  fold(&lineCompression, sizeof(lineCompression));
-  fold(&prefs_.extraParagraphSpacing, sizeof(prefs_.extraParagraphSpacing));
-  fold(&prefs_.paragraphAlignment, sizeof(prefs_.paragraphAlignment));
-  fold(&viewportWidth, sizeof(viewportWidth));
-  fold(&viewportHeight, sizeof(viewportHeight));
-  fold(&prefs_.hyphenationEnabled, sizeof(prefs_.hyphenationEnabled));
-  fold(&prefs_.embeddedStyle, sizeof(prefs_.embeddedStyle));
-  fold(&prefs_.imageRendering, sizeof(prefs_.imageRendering));
-  fold(&prefs_.focusReadingEnabled, sizeof(prefs_.focusReadingEnabled));
-  fold(&prefs_.guideDotsEnabled, sizeof(prefs_.guideDotsEnabled));
-  fold(&firstLineIndent, sizeof(firstLineIndent));
-  fold(&prefs_.wordSpacing, sizeof(prefs_.wordSpacing));
-  fold(&prefs_.paragraphSpacing, sizeof(prefs_.paragraphSpacing));
+  // previous scan warmed is no longer the one the reader loads from. The warm scan
+  // probes at tier 0, so the tier-0 layout key is exactly what identifies it — reuse
+  // LayoutParams::hash() instead of a second hand-rolled fingerprint of the same fields.
+  const LayoutParams base = layoutParamsBase(viewportWidth, viewportHeight);
+  const uint32_t h = base.hash();
   if (h != warmSettingsHash_) {
     warmSettingsHash_ = h;
     warmScanComplete_ = false;
@@ -2141,17 +2122,11 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   if (!probe) {
     return;
   }
-  if (probe->loadSectionFile(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
-                             viewportWidth, viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
-                             prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled,
-                             firstLineIndent, prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+  if (probe->loadSectionFile(base)) {
     return;  // already warm
   }
   LOG_DBG("ERS", "Warming cold chapter %d", spine);
-  if (!probe->startBuild(fontId, lineCompression, prefs_.extraParagraphSpacing, prefs_.paragraphAlignment,
-                         viewportWidth, viewportHeight, prefs_.hyphenationEnabled, prefs_.embeddedStyle,
-                         prefs_.imageRendering, prefs_.focusReadingEnabled, prefs_.guideDotsEnabled, firstLineIndent,
-                         prefs_.wordSpacing, prefs_.paragraphSpacing)) {
+  if (!probe->startBuild(base)) {
     LOG_ERR("ERS", "Warm build failed to start for chapter %d", spine);
     return;  // cursor already advanced; skipped
   }

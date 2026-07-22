@@ -22,7 +22,11 @@ namespace {
 //      parity); cached layouts differ, so old sections must regenerate.
 // v33: force-split long runs (CJK) now mark word continuation (upstream #2652), so
 //      the wrapped layout differs; old sections must regenerate.
-constexpr uint8_t SECTION_FILE_VERSION = 33;
+// v34: layout inputs consolidated into LayoutParams; the generation hash now also
+//      folds CssParser::CSS_CACHE_VERSION, so a CSS-engine change invalidates section
+//      caches too (previously only book.bin's css_rules.cache was versioned). The
+//      on-disk field order is unchanged; the bump forces the one-time re-index.
+constexpr uint8_t SECTION_FILE_VERSION = 34;
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss
@@ -232,40 +236,19 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
 Section::~Section() { abandonBuild(); }
 
 namespace {
-uint32_t layoutGenerationHash(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                              const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                              const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                              const uint8_t imageRendering, const bool focusReadingEnabled, const bool guideDotsEnabled,
-                              const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
-  uint32_t h = 2166136261u;
-  h = fnvFoldPod(h, fontId);
-  h = fnvFoldPod(h, lineCompression);
-  h = fnvFoldPod(h, extraParagraphSpacing);
-  h = fnvFoldPod(h, paragraphAlignment);
-  h = fnvFoldPod(h, viewportWidth);
-  h = fnvFoldPod(h, viewportHeight);
-  h = fnvFoldPod(h, hyphenationEnabled);
-  h = fnvFoldPod(h, embeddedStyle);
-  h = fnvFoldPod(h, imageRendering);
-  h = fnvFoldPod(h, focusReadingEnabled);
-  h = fnvFoldPod(h, guideDotsEnabled);
-  h = fnvFoldPod(h, firstLineIndentPx);
-  h = fnvFoldPod(h, wordSpacing);
-  h = fnvFoldPod(h, paragraphSpacing);
+// The section-cache generation id: the layout identity (LayoutParams::hash, which
+// folds every layout-affecting field) combined with the CSS-engine version, so a
+// CSS change lands the section in a fresh generation directory. This is the single
+// place that decides "which cache drawer does this layout live in".
+uint32_t generationHash(const LayoutParams& lp) {
+  uint32_t h = lp.hash();
+  h = fnvFoldPod(h, CssParser::CSS_CACHE_VERSION);
   return h;
 }
 }  // namespace
 
-void Section::selectGeneration(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                               const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                               const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                               const uint8_t imageRendering, const bool focusReadingEnabled,
-                               const bool guideDotsEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
-                               const uint8_t paragraphSpacing) {
-  const uint32_t h =
-      layoutGenerationHash(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-                           viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
-                           guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing);
+void Section::selectGeneration(const LayoutParams& lp) {
+  const uint32_t h = generationHash(lp);
 
   char genName[12];
   snprintf(genName, sizeof(genName), "%08x", static_cast<unsigned>(h));
@@ -276,23 +259,14 @@ void Section::selectGeneration(const int fontId, const float lineCompression, co
   filePath = sectionDirPath + "/" + std::to_string(spineIndex) + ".bin";
 }
 
-bool Section::hasCachedSectionFor(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                  const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                  const uint16_t viewportHeight, const bool hyphenationEnabled,
-                                  const bool embeddedStyle, const uint8_t imageRendering,
-                                  const bool focusReadingEnabled, const bool guideDotsEnabled,
-                                  const int firstLineIndentPx, const uint8_t wordSpacing,
-                                  const uint8_t paragraphSpacing) const {
+bool Section::hasCachedSectionFor(const LayoutParams& lp) const {
   // Pure existence probe: no prepareGeneration, no marker switch, no prune,
   // no member mutation. Callers scanning several parameter candidates (the
   // low-memory tier adoption in loadSectionFromCache) MUST use this first —
   // loadSectionFile's generation switch prunes all but the newest two
   // generation dirs, so probing by loading would delete the very drawer a
   // later candidate needs.
-  const uint32_t h =
-      layoutGenerationHash(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-                           viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
-                           guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing);
+  const uint32_t h = generationHash(lp);
   char genName[12];
   snprintf(genName, sizeof(genName), "%08x", static_cast<unsigned>(h));
   const std::string candidate =
@@ -317,36 +291,35 @@ uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   return position;
 }
 
-bool Section::writeSectionFileHeader(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                     const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                     const uint16_t viewportHeight, const bool hyphenationEnabled,
-                                     const bool embeddedStyle, const uint8_t imageRendering,
-                                     const bool focusReadingEnabled, const bool guideDotsEnabled,
-                                     const int firstLineIndentPx, const uint8_t wordSpacing,
-                                     const uint8_t paragraphSpacing) {
+bool Section::writeSectionFileHeader(const LayoutParams& lp) {
   if (!file) {
     LOG_DBG("SCT", "File not open for writing header");
     return false;
   }
-  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(fontId) + sizeof(lineCompression) +
-                                   sizeof(extraParagraphSpacing) + sizeof(paragraphAlignment) + sizeof(viewportWidth) +
-                                   sizeof(viewportHeight) + sizeof(pageCount) + sizeof(hyphenationEnabled) +
-                                   sizeof(embeddedStyle) + sizeof(imageRendering) + sizeof(focusReadingEnabled) +
-                                   sizeof(guideDotsEnabled) + sizeof(firstLineIndentPx) + sizeof(wordSpacing) +
-                                   sizeof(paragraphSpacing) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t),
+  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(lp.fontId) + sizeof(lp.lineCompression) +
+                                   sizeof(lp.extraParagraphSpacing) + sizeof(lp.paragraphAlignment) +
+                                   sizeof(lp.viewportWidth) + sizeof(lp.viewportHeight) + sizeof(pageCount) +
+                                   sizeof(lp.hyphenationEnabled) + sizeof(lp.embeddedStyle) +
+                                   sizeof(lp.imageRendering) + sizeof(lp.focusReadingEnabled) +
+                                   sizeof(lp.guideDotsEnabled) + sizeof(lp.firstLineIndentPx) + sizeof(lp.wordSpacing) +
+                                   sizeof(lp.paragraphSpacing) + sizeof(uint32_t) + sizeof(uint32_t) +
+                                   sizeof(uint32_t) + sizeof(uint32_t),
                 "Header size mismatch");
   // Version byte starts as INCOMPLETE; createSectionFile stamps the real version
   // last, once the file is fully written, as the atomic commit point.
+  // Field order below is LayoutParams' declaration order and MUST match the read
+  // order in loadSectionFile (a mismatch fails the compare and rebuilds — safe,
+  // never a stale hit).
   const bool ok =
-      serialization::tryWritePod(file, SECTION_FILE_INCOMPLETE_VERSION) && serialization::tryWritePod(file, fontId) &&
-      serialization::tryWritePod(file, lineCompression) && serialization::tryWritePod(file, extraParagraphSpacing) &&
-      serialization::tryWritePod(file, paragraphAlignment) && serialization::tryWritePod(file, viewportWidth) &&
-      serialization::tryWritePod(file, viewportHeight) && serialization::tryWritePod(file, hyphenationEnabled) &&
-      serialization::tryWritePod(file, embeddedStyle) && serialization::tryWritePod(file, imageRendering) &&
-      serialization::tryWritePod(file, focusReadingEnabled) && serialization::tryWritePod(file, guideDotsEnabled) &&
-      serialization::tryWritePod(file, firstLineIndentPx) && serialization::tryWritePod(file, wordSpacing) &&
-      serialization::tryWritePod(file, paragraphSpacing) &&
+      serialization::tryWritePod(file, SECTION_FILE_INCOMPLETE_VERSION) &&
+      serialization::tryWritePod(file, lp.fontId) && serialization::tryWritePod(file, lp.lineCompression) &&
+      serialization::tryWritePod(file, lp.extraParagraphSpacing) &&
+      serialization::tryWritePod(file, lp.paragraphAlignment) && serialization::tryWritePod(file, lp.viewportWidth) &&
+      serialization::tryWritePod(file, lp.viewportHeight) && serialization::tryWritePod(file, lp.hyphenationEnabled) &&
+      serialization::tryWritePod(file, lp.embeddedStyle) && serialization::tryWritePod(file, lp.imageRendering) &&
+      serialization::tryWritePod(file, lp.focusReadingEnabled) &&
+      serialization::tryWritePod(file, lp.guideDotsEnabled) && serialization::tryWritePod(file, lp.firstLineIndentPx) &&
+      serialization::tryWritePod(file, lp.wordSpacing) && serialization::tryWritePod(file, lp.paragraphSpacing) &&
       // Placeholders for page count and the four trailer offsets (patched in finalizeBuild)
       serialization::tryWritePod(file, pageCount) && serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
       serialization::tryWritePod(file, static_cast<uint32_t>(0)) &&
@@ -358,14 +331,8 @@ bool Section::writeSectionFileHeader(const int fontId, const float lineCompressi
   return ok;
 }
 
-bool Section::loadSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                              const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                              const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                              const uint8_t imageRendering, const bool focusReadingEnabled, const bool guideDotsEnabled,
-                              const int firstLineIndentPx, const uint8_t wordSpacing, const uint8_t paragraphSpacing) {
-  selectGeneration(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
-                   hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
-                   firstLineIndentPx, wordSpacing, paragraphSpacing);
+bool Section::loadSectionFile(const LayoutParams& lp) {
+  selectGeneration(lp);
   if (!Storage.openFileForRead("SCT", filePath, file)) {
     return false;
   }
@@ -381,41 +348,26 @@ bool Section::loadSectionFile(const int fontId, const float lineCompression, con
       return false;
     }
 
-    int fileFontId;
-    uint16_t fileViewportWidth, fileViewportHeight;
-    float fileLineCompression;
-    bool fileExtraParagraphSpacing;
-    uint8_t fileParagraphAlignment;
-    bool fileHyphenationEnabled;
-    bool fileEmbeddedStyle;
-    uint8_t fileImageRendering;
-    bool fileFocusReadingEnabled;
-    bool fileGuideDotsEnabled;
-    int fileFirstLineIndentPx;
-    uint8_t fileWordSpacing;
-    uint8_t fileParagraphSpacing;
-    serialization::readPod(file, fileFontId);
-    serialization::readPod(file, fileLineCompression);
-    serialization::readPod(file, fileExtraParagraphSpacing);
-    serialization::readPod(file, fileParagraphAlignment);
-    serialization::readPod(file, fileViewportWidth);
-    serialization::readPod(file, fileViewportHeight);
-    serialization::readPod(file, fileHyphenationEnabled);
-    serialization::readPod(file, fileEmbeddedStyle);
-    serialization::readPod(file, fileImageRendering);
-    serialization::readPod(file, fileFocusReadingEnabled);
-    serialization::readPod(file, fileGuideDotsEnabled);
-    serialization::readPod(file, fileFirstLineIndentPx);
-    serialization::readPod(file, fileWordSpacing);
-    serialization::readPod(file, fileParagraphSpacing);
+    // Read the stored layout identity, in the same field order writeSectionFileHeader
+    // wrote it, then compare fieldwise via the defaulted operator==. A dropped or
+    // reordered field can only cause a rebuild here, never a stale-layout cache hit.
+    LayoutParams fromFile;
+    serialization::readPod(file, fromFile.fontId);
+    serialization::readPod(file, fromFile.lineCompression);
+    serialization::readPod(file, fromFile.extraParagraphSpacing);
+    serialization::readPod(file, fromFile.paragraphAlignment);
+    serialization::readPod(file, fromFile.viewportWidth);
+    serialization::readPod(file, fromFile.viewportHeight);
+    serialization::readPod(file, fromFile.hyphenationEnabled);
+    serialization::readPod(file, fromFile.embeddedStyle);
+    serialization::readPod(file, fromFile.imageRendering);
+    serialization::readPod(file, fromFile.focusReadingEnabled);
+    serialization::readPod(file, fromFile.guideDotsEnabled);
+    serialization::readPod(file, fromFile.firstLineIndentPx);
+    serialization::readPod(file, fromFile.wordSpacing);
+    serialization::readPod(file, fromFile.paragraphSpacing);
 
-    if (fontId != fileFontId || lineCompression != fileLineCompression ||
-        extraParagraphSpacing != fileExtraParagraphSpacing || paragraphAlignment != fileParagraphAlignment ||
-        viewportWidth != fileViewportWidth || viewportHeight != fileViewportHeight ||
-        hyphenationEnabled != fileHyphenationEnabled || embeddedStyle != fileEmbeddedStyle ||
-        imageRendering != fileImageRendering || focusReadingEnabled != fileFocusReadingEnabled ||
-        guideDotsEnabled != fileGuideDotsEnabled || firstLineIndentPx != fileFirstLineIndentPx ||
-        wordSpacing != fileWordSpacing || paragraphSpacing != fileParagraphSpacing) {
+    if (!(fromFile == lp)) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();
@@ -458,27 +410,15 @@ bool Section::clearCache() const {
   return true;
 }
 
-bool Section::createSectionFile(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                                const uint8_t paragraphAlignment, const uint16_t viewportWidth,
-                                const uint16_t viewportHeight, const bool hyphenationEnabled, const bool embeddedStyle,
-                                const uint8_t imageRendering, const bool focusReadingEnabled,
-                                const bool guideDotsEnabled, const int firstLineIndentPx, const uint8_t wordSpacing,
-                                const uint8_t paragraphSpacing, const std::function<void()>& popupFn) {
+bool Section::createSectionFile(const LayoutParams& lp, const std::function<void()>& popupFn) {
   // One-shot: prime the build, then lay out every page and commit in a single call.
-  if (!startBuild(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
-                  hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
-                  firstLineIndentPx, wordSpacing, paragraphSpacing, popupFn)) {
+  if (!startBuild(lp, popupFn)) {
     return false;
   }
   return buildSomeMore(0);
 }
 
-bool Section::startBuild(const int fontId, const float lineCompression, const bool extraParagraphSpacing,
-                         const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
-                         const bool hyphenationEnabled, const bool embeddedStyle, const uint8_t imageRendering,
-                         const bool focusReadingEnabled, const bool guideDotsEnabled, const int firstLineIndentPx,
-                         const uint8_t wordSpacing, const uint8_t paragraphSpacing,
-                         const std::function<void()>& popupFn) {
+bool Section::startBuild(const LayoutParams& lp, const std::function<void()>& popupFn) {
   // Abandon any prior in-progress build before starting a new one.
   abandonBuild();
   lastBuildLowMemory_ = false;
@@ -487,9 +427,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   buildCancelRequested_ = false;
   lastBuildCancelled_ = false;
 
-  selectGeneration(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth, viewportHeight,
-                   hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled, guideDotsEnabled,
-                   firstLineIndentPx, wordSpacing, paragraphSpacing);
+  selectGeneration(lp);
 
   const auto localPath = epub->getSpineItem(spineIndex).href;
   const auto tmpHtmlPath = epub->getCachePath() + "/.tmp_" + std::to_string(spineIndex) + ".html";
@@ -541,9 +479,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
     Storage.remove(tmpHtmlPath.c_str());
     return false;
   }
-  if (!writeSectionFileHeader(fontId, lineCompression, extraParagraphSpacing, paragraphAlignment, viewportWidth,
-                              viewportHeight, hyphenationEnabled, embeddedStyle, imageRendering, focusReadingEnabled,
-                              guideDotsEnabled, firstLineIndentPx, wordSpacing, paragraphSpacing)) {
+  if (!writeSectionFileHeader(lp)) {
     // Explicit close() required before Storage.remove() on the same path
     file.close();
     Storage.remove(partPath.c_str());
@@ -563,7 +499,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   const std::string imageBasePath = sectionDirPath + "/img_" + std::to_string(spineIndex) + "_";
 
   CssParser* cssParser = nullptr;
-  if (embeddedStyle) {
+  if (lp.embeddedStyle) {
     cssParser = epub->getCssParser();
     if (cssParser) {
       if (!cssParser->loadFromCache()) {
@@ -609,9 +545,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
   build_->lutCapacity = INITIAL_SECTION_PAGE_LUT_ENTRIES;
 
   build_->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-      epub, build_->tmpHtmlPath, renderer, fontId, lineCompression, extraParagraphSpacing, paragraphAlignment,
-      viewportWidth, viewportHeight, hyphenationEnabled, focusReadingEnabled, guideDotsEnabled, firstLineIndentPx,
-      wordSpacing, paragraphSpacing,
+      epub, build_->tmpHtmlPath, renderer, lp,
       [this](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex) {
         if (!build_ || build_->lutFailed) {
           return;
@@ -627,7 +561,7 @@ bool Section::startBuild(const int fontId, const float lineCompression, const bo
         build_->lut[build_->lutCount++] = {onPageComplete(std::move(page)), paragraphIndex, listItemIndex};
         builtPageCount_ = build_->lutCount;
       },
-      embeddedStyle, contentBase, imageBasePath, imageRendering, std::move(tocAnchors), popupFn, cssParser);
+      contentBase, imageBasePath, std::move(tocAnchors), popupFn, cssParser);
   if (!build_->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     abandonBuild();
