@@ -31,8 +31,12 @@ class CrossPointSettings {
     RANDOM_LOGO_CUSTOM = 8,  // slept from reader -> custom wallpaper rotation; slept from elsewhere -> random logo
     STATS_DASHBOARD = 9,
     STATS_DASHBOARD_PLUS = 10,
+    FREEZE = 11,  // keep the last reader page on the panel, draw a thin frame
+    QUOTES = 12,  // show a random saved highlight/quote as the sleep screen
     SLEEP_SCREEN_MODE_COUNT
   };
+  // Frame colour drawn around the screen in the FREEZE sleep mode.
+  enum SLEEP_FRAME_COLOR { SLEEP_FRAME_BLACK = 0, SLEEP_FRAME_WHITE = 1, SLEEP_FRAME_COLOR_COUNT };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -199,6 +203,8 @@ class CrossPointSettings {
 
   // Sleep screen settings
   uint8_t sleepScreen = DARK;
+  // Frame colour for the FREEZE sleep mode (0 = black, 1 = white)
+  uint8_t sleepFrameColor = SLEEP_FRAME_BLACK;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

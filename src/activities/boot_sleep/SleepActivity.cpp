@@ -5,13 +5,17 @@
 #include <GfxRenderer.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Serialization.h>
 #include <Txt.h>
 #include <Xtc.h>
 #include <esp_random.h>
 #include <strings.h>
 
 #include <algorithm>
+#include <string>
+#include <vector>
 
+#include "BookRelocation.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
@@ -19,6 +23,7 @@
 #include "SleepInfoOverlay.h"
 #include "StatsDashboardPolicy.h"
 #include "StatsDashboardRenderer.h"
+#include "activities/reader/QuoteStorageLimits.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -49,6 +54,54 @@ RecentBook recentBookForPath(const std::string& path) {
   return found == books.end() ? RecentBook{path, fileNameFromPath(path), "", ""} : *found;
 }
 
+// One saved quote plus the book it came from, for the Quotes sleep screen.
+struct SleepQuote {
+  std::string text;
+  std::string book;
+};
+
+// Parse a <book>_QUOTES.txt sidecar (format: "[Chapter]\nquote text\n---\n\n",
+// mirroring QuotesViewerActivity::loadQuotes) and append each quote to `out`,
+// tagged with the book title. Size-guarded like the viewer; stops at maxTotal.
+void collectQuotesFromFile(const std::string& sidecar, const std::string& bookTitle, std::vector<SleepQuote>& out,
+                           size_t maxTotal) {
+  if (out.size() >= maxTotal || !Storage.exists(sidecar.c_str())) return;
+  HalFile file;
+  if (!Storage.openFileForRead("SLPQ", sidecar, file)) return;
+  const size_t fileSize = file.size();
+  if (fileSize == 0 || fileSize > quote_storage::MAX_FILE_BYTES ||
+      !serialization::hasStringAllocationHeadroom(fileSize * 2)) {
+    return;
+  }
+  std::string buf;
+  buf.resize(fileSize);
+  if (file.read(buf.data(), fileSize) != static_cast<int>(fileSize)) return;
+
+  size_t pos = 0;
+  while (pos < buf.size() && out.size() < maxTotal) {
+    while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r' || buf[pos] == ' ')) ++pos;
+    if (pos >= buf.size()) break;
+    if (buf[pos] == '[') {  // optional [Chapter] header, skipped for the sleep view
+      const auto close = buf.find(']', pos);
+      if (close != std::string::npos) {
+        pos = close + 1;
+        while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
+      }
+    }
+    std::string text;
+    const auto sep = buf.find("\n---", pos);
+    if (sep == std::string::npos) {
+      text = buf.substr(pos);
+    } else {
+      text = buf.substr(pos, sep - pos);
+      pos = sep + 4;
+    }
+    while (!text.empty() && (text.back() == '\n' || text.back() == '\r' || text.back() == ' ')) text.pop_back();
+    if (!text.empty()) out.push_back({std::move(text), bookTitle});
+    if (sep == std::string::npos) break;
+  }
+}
+
 }  // namespace
 
 void SleepActivity::onEnter() {
@@ -61,6 +114,12 @@ void SleepActivity::onEnter() {
 
   if (renderQuickResume) {
     return renderLastScreenSleepScreen();
+  }
+
+  // Freeze: keep the last reader page and draw a frame — routed before the
+  // "Entering sleep" popup so nothing overwrites the retained page.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::FREEZE) {
+    return renderFreezeSleepScreen();
   }
 
   // Custom-wallpaper path (both quality modes): skip the "Entering sleep"
@@ -113,6 +172,8 @@ void SleepActivity::onEnter() {
       return renderStatsDashboardSleepScreen(false);
     case (CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD_PLUS):
       return renderStatsDashboardSleepScreen(true);
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::QUOTES):
+      return renderQuotesSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
@@ -528,5 +589,56 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 
 void SleepActivity::renderBlankSleepScreen() const {
   renderer.clearScreen();
+  renderer.present(RefreshIntent::CleanFrame);
+}
+
+void SleepActivity::renderQuotesSleepScreen() const {
+  // Gather saved quotes from the recent books' _QUOTES.txt sidecars, pick one at
+  // random, and render it centered as the sleep screen. Falls back to the default
+  // sleep screen when no quotes are saved.
+  constexpr size_t kMaxQuotes = 64;
+  std::vector<SleepQuote> quotes;
+  for (const RecentBook& book : RECENT_BOOKS.getBooks()) {
+    if (quotes.size() >= kMaxQuotes) break;
+    collectQuotesFromFile(book_relocation::quotesSidecarPath(book.path), book.title, quotes, kMaxQuotes);
+  }
+  if (quotes.empty()) return renderDefaultSleepScreen();
+
+  const SleepQuote& pick = quotes[esp_random() % quotes.size()];
+
+  deepCleanPanel();
+  renderer.clearScreen();
+
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  constexpr int kSideMargin = 48;
+  constexpr int kMaxLines = 12;
+  const int maxWidth = pageWidth - 2 * kSideMargin;
+  const auto lines = renderer.wrappedText(UI_12_FONT_ID, pick.text.c_str(), maxWidth, kMaxLines);
+  const int lineH = renderer.getLineHeight(UI_12_FONT_ID);
+  const int attrH = pick.book.empty() ? 0 : renderer.getLineHeight(SMALL_FONT_ID) + 12;
+  const int blockH = static_cast<int>(lines.size()) * lineH + attrH;
+
+  int y = (pageHeight - blockH) / 2 + lineH;  // baseline of the first line
+  for (const auto& ln : lines) {
+    renderer.drawCenteredText(UI_12_FONT_ID, y, ln.c_str(), true);
+    y += lineH;
+  }
+  if (!pick.book.empty()) {
+    const std::string attribution = "— " + pick.book;
+    renderer.drawCenteredText(SMALL_FONT_ID, y + 12, attribution.c_str(), true);
+  }
+
+  renderer.present(RefreshIntent::CleanFrame);
+}
+
+void SleepActivity::renderFreezeSleepScreen() const {
+  // Keep the last rendered page on the panel (e-ink holds the framebuffer image;
+  // we did NOT clearScreen), then draw a 2px frame around the screen edge in the
+  // user's chosen colour. Black = true, white = false in drawRect's colour flag.
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  const bool black = SETTINGS.sleepFrameColor == CrossPointSettings::SLEEP_FRAME_BLACK;
+  renderer.drawRect(0, 0, w, h, 2, black);
   renderer.present(RefreshIntent::CleanFrame);
 }

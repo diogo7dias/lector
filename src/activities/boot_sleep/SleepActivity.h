@@ -16,6 +16,8 @@ class SleepActivity final : public Activity {
   void renderBitmapSleepScreen(const Bitmap& bitmap, const std::string& sourcePath = {}) const;
   void renderLastScreenSleepScreen() const;
   void renderBlankSleepScreen() const;
+  void renderFreezeSleepScreen() const;
+  void renderQuotesSleepScreen() const;
   void renderUntilDeathSleepScreen() const;
   // Blank FULL pass before a sleep face (ghost prevention; see .cpp comment).
   void deepCleanPanel() const;
