@@ -2,6 +2,7 @@
 
 #include <GfxRenderer.h>
 #include <HalClock.h>
+#include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -15,6 +16,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/ListWindowRefresh.h"
+#include "components/TopEdgeInset.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
@@ -1079,15 +1081,17 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
-  // Thin full-width black strip pinned to the TOP of the screen (y=0), white
-  // centered text, 2px white inset edge. Draws into the framebuffer only; the
-  // caller is responsible for the refresh (and for the auto-clear arming).
+  // Thin full-width black strip pinned to the TOP of the screen, white centered
+  // text, 2px white inset edge. X4 content starts below its cropped top rows while
+  // the black backing still reaches y=0. Draws into the framebuffer only; the caller
+  // is responsible for the refresh (and for the auto-clear arming).
   const int pageWidth = renderer.getScreenWidth();
   const int textHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int h = textHeight + 8;
-  const int y = 0;
+  const int y = topEdgeInset(gpio.deviceIsX4());
+  const int paintedHeight = h + y;
 
-  renderer.fillRect(0, y, pageWidth, h, true);      // black strip
+  renderer.fillRect(0, 0, pageWidth, paintedHeight, true);  // black backing reaches the physical edge
   renderer.drawRect(0, y, pageWidth, h, 2, false);  // 2px white inset edge (kept from the old popup)
   const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, message);
   const int textX = (pageWidth - textWidth) / 2;
@@ -1097,7 +1101,7 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   // FAST windowed refresh path (X3), so the banner text looked inconsistently bold.
   // Normal weight paints identically on every refresh path.
   renderer.drawText(UI_10_FONT_ID, textX, textY, message, false);  // white text
-  return Rect{0, y, pageWidth, h};
+  return Rect{0, 0, pageWidth, paintedHeight};
 }
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, const PopupRefresh refresh) const {

@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
@@ -22,6 +23,7 @@
 #include "activities/reader/ReaderUtils.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/TopEdgeInset.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/Wallpaper.h"
@@ -345,9 +347,10 @@ void HomeActivity::loop() {
 
 void HomeActivity::drawHomeTopLine(int pageWidth, bool pagesSelected) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  const int headerY = metrics.topPadding + topEdgeInset(gpio.deviceIsX4());
+  GUI.drawHeader(renderer, Rect{0, headerY, pageWidth, metrics.homeTopPadding}, nullptr);
   const std::string versionLabel = getHomeHeaderVersionLabel();
-  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, metrics.topPadding + 5, versionLabel.c_str());
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, headerY + 5, versionLabel.c_str());
 
   // Running "pages read" tally: a thin bordered "Pages" label tile + an inverted
   // count chip. Selectable (selector 0) — Confirm resets it to 0.
@@ -355,7 +358,7 @@ void HomeActivity::drawHomeTopLine(int pageWidth, bool pagesSelected) {
   std::string pagesLabel = tr(STR_HOME_PAGES_PREFIX);  // "Pages: " — drop trailing space for the tile.
   while (!pagesLabel.empty() && pagesLabel.back() == ' ') pagesLabel.pop_back();
   const std::string countText = std::to_string(APP_STATE.sessionPagesRead);
-  const int tileTextY = metrics.topPadding + 5;
+  const int tileTextY = headerY + 5;
   const int tilePad = 6;
   const int tileGap = 5;
   const int tileH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
@@ -385,7 +388,7 @@ void HomeActivity::drawHomeTopLine(int pageWidth, bool pagesSelected) {
       const int batteryTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "100%");
       const int batteryClusterLeft = batteryIconLeft - batteryTextWidth - 4;
       const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
-      renderer.drawText(UI_10_FONT_ID, batteryClusterLeft - 12 - clockWidth, metrics.topPadding + 5, timeBuf);
+      renderer.drawText(UI_10_FONT_ID, batteryClusterLeft - 12 - clockWidth, headerY + 5, timeBuf);
     }
   }
 }

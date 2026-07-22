@@ -1,6 +1,7 @@
 #include "BootActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 
 #include <cctype>
 #include <string>
@@ -9,6 +10,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
+#include "components/TopEdgeInset.h"
 #include "fontIds.h"
 
 namespace {
@@ -50,8 +52,8 @@ void BootActivity::drawUnlockBanners() const {
 
   // --- TOP banner: version (+ resuming book, up to 12 title rows) ---
   const int topH = pad * 2 + lh10 + (titleRows > 0 ? 4 + titleRows * lh10 : 0);
-  const int topY = 0;
-  renderer.fillRect(0, topY, pageWidth, topH, true);  // black banner, drawn every pass
+  const int topY = topEdgeInset(gpio.deviceIsX4());
+  renderer.fillRect(0, 0, pageWidth, topH + topY, true);  // black backing reaches the physical edge
 
   // --- BOTTOM banner: footer text ---
   const int botH = lh12 + pad * 2;
