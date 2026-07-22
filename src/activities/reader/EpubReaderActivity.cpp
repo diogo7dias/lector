@@ -2624,6 +2624,12 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, fontId, orientedMarginLeft, contentTop);
   renderStatusBar();
+  if (SETTINGS.debugBorders) {
+    // Diagnostic overlay: outline the text viewport so the margin/layout math is
+    // visible on-device. 1px black rect over the rendered page; not cached.
+    const int vpW = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
+    renderer.drawRect(orientedMarginLeft, orientedMarginTop, vpW, viewportHeightPx, 1, true);
+  }
   const auto tBwRender = millis();
 
   if (pageHasImages) {

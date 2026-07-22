@@ -142,10 +142,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   v.push_back(SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                                 {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                                 StrId::STR_CAT_DISPLAY));
-  v.push_back(SettingInfo::Enum(
-      StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-      {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
-      "refreshFrequency", StrId::STR_CAT_DISPLAY));
+  v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+                                {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
+                                 StrId::STR_PAGES_30, StrId::STR_NEVER},
+                                "refreshFrequency", StrId::STR_CAT_DISPLAY));
   // Theme picker removed: Lector is the only theme (see UI_THEME). uiTheme stays
   // as a field (defaults to LECTOR) but is no longer user-selectable.
   v.push_back(SettingInfo::Enum(StrId::STR_HOME_LAYOUT, &CrossPointSettings::homeLayout,
@@ -253,6 +253,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "moveFinishedToReadFolder", StrId::STR_CAT_SYSTEM));
   v.push_back(SettingInfo::Toggle(StrId::STR_MOVE_OPENED_TO_RECENTS, &CrossPointSettings::moveOpenedToRecents,
                                   "moveOpenedToRecents", StrId::STR_CAT_SYSTEM));
+  v.push_back(SettingInfo::Toggle(StrId::STR_DEBUG_BORDERS, &CrossPointSettings::debugBorders, "debugBorders",
+                                  StrId::STR_CAT_READER));
   // OPDS download folder + filename format: persisted + web-exposed, but
   // category-less so they stay off the on-device Settings screen (edited via
   // the OPDS server list UI instead). Upstream #2571.

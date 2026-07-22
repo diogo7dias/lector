@@ -147,6 +147,7 @@ class CrossPointSettings {
     REFRESH_10 = 2,
     REFRESH_15 = 3,
     REFRESH_30 = 4,
+    REFRESH_NEVER = 5,  // never auto full-refresh (getRefreshFrequency returns INT_MAX)
     REFRESH_FREQUENCY_COUNT
   };
 
@@ -287,6 +288,9 @@ class CrossPointSettings {
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
+  // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
+  // overlay after the page renders, so it never affects layout or the cache.
+  uint8_t debugBorders = 0;
 
   // Reader screen margin settings. screenMargin is the horizontal (left/right)
   // margin and also drives all four sides when uniformMargins is on. When
