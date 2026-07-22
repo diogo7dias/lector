@@ -5,7 +5,7 @@
 #include <WiFi.h>
 
 #include "MappedInputManager.h"
-#include "SilentRestart.h"
+#include "WifiSession.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -71,11 +71,7 @@ void OtaUpdateActivity::onExit() {
   // (loop() above) so the new firmware boots normally. Back-out paths land
   // here with wifi still active; silent-restart to free the LWIP/mbedTLS
   // fragmentation, same as the other wifi activities.
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  if (WiFi.getMode() != WIFI_MODE_NULL) endWifiSession(WifiReboot::Home);
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {

@@ -7,7 +7,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncClient.h"
 #include "MappedInputManager.h"
-#include "SilentRestart.h"
+#include "WifiSession.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -66,11 +66,7 @@ void KOReaderAuthActivity::onEnter() {
 void KOReaderAuthActivity::onExit() {
   Activity::onExit();
 
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  if (WiFi.getMode() != WIFI_MODE_NULL) endWifiSession(WifiReboot::Home);
 }
 
 void KOReaderAuthActivity::render(RenderLock&&) {

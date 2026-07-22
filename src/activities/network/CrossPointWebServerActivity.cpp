@@ -12,8 +12,8 @@
 
 #include "MappedInputManager.h"
 #include "NetworkModeSelectionActivity.h"
-#include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
+#include "WifiSession.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -97,15 +97,7 @@ void CrossPointWebServerActivity::onExit() {
   MDNS.end();
 
   // Skip reboot if WiFi was never activated (e.g. user backed out of mode selection).
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    if (isApMode) {
-      WiFi.softAPdisconnect(true);
-    } else {
-      WiFi.disconnect(false);
-    }
-    delay(30);
-    silentRestart();
-  }
+  if (WiFi.getMode() != WIFI_MODE_NULL) endWifiSession(WifiReboot::Home, isApMode);
 
   LOG_DBG("WEBACT", "Free heap at onExit end: %d bytes", ESP.getFreeHeap());
 }
