@@ -21,10 +21,9 @@ extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("W
 // once the failing allocation is identified.
 #if defined(FREEINK_NET_WOLFSSL) && defined(FREEINK_WOLFSSL_MEM_TRACE)
 #include <Esp.h>  // ESP.getFreeHeap / getMaxAllocHeap
+#include <wolfssl/wolfcrypt/memory.h>
 
 #include <cstdlib>
-
-#include <wolfssl/wolfcrypt/memory.h>
 
 // NOTE: <Logging.h> above #defines Serial -> MySerialImpl::instance, so raw
 // Serial.printf does not link in src/. Route the trace through LOG_ERR/LOG_INF
