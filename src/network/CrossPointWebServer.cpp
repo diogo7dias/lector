@@ -1289,7 +1289,7 @@ void CrossPointWebServer::handleGetSettings() const {
         if (s.valuePtr) {
           doc["value"] = static_cast<int>(SETTINGS.*(s.valuePtr));
         } else if (s.valueGetter) {
-          doc["value"] = static_cast<int>(s.valueGetter());
+          doc["value"] = static_cast<int>(s.valueGetter(s.dynCtx));
         }
         JsonArray options = doc["options"].to<JsonArray>();
         if (!s.enumStringValues.empty()) {
@@ -1316,7 +1316,7 @@ void CrossPointWebServer::handleGetSettings() const {
       case SettingType::STRING: {
         doc["type"] = "string";
         if (s.stringGetter) {
-          doc["value"] = s.stringGetter();
+          doc["value"] = s.stringGetter(s.dynCtx);
         } else if (s.stringMaxLen > 0) {
           doc["value"] = reinterpret_cast<const char*>(&SETTINGS) + s.stringOffset;
         }
@@ -1386,7 +1386,7 @@ void CrossPointWebServer::handlePostSettings() {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
           } else if (s.valueSetter) {
-            s.valueSetter(static_cast<uint8_t>(val));
+            s.valueSetter(s.dynCtx, static_cast<uint8_t>(val));
           }
           applied++;
         }
@@ -1405,7 +1405,7 @@ void CrossPointWebServer::handlePostSettings() {
       case SettingType::STRING: {
         const std::string val = doc[s.key].as<std::string>();
         if (s.stringSetter) {
-          s.stringSetter(val);
+          s.stringSetter(s.dynCtx, val);
         } else if (s.stringMaxLen > 0) {
           char* ptr = reinterpret_cast<char*>(&SETTINGS) + s.stringOffset;
           strncpy(ptr, val.c_str(), s.stringMaxLen - 1);
