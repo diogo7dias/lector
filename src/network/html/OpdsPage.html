@@ -36,6 +36,12 @@
   .bar>i{display:block;height:100%;background:var(--accent);width:0}
   details summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13.5px}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  /* ===== Ledger sharpen: square corners + tab-strip nav ===== */
+  .card,.btn,.cover,.bar,input,textarea{border-radius:0}
+  .nav-links{gap:0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:0}
+  .nav-links a{border-right:1px solid var(--line);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:7px 13px;color:var(--soft)}
+  .nav-links a.active{background:var(--ink);color:var(--paper);font-weight:700}
+  h1{border-bottom:2px solid var(--ink);padding-bottom:8px;font-weight:800}
 </style>
 </head>
 <body>

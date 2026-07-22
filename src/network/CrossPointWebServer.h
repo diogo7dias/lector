@@ -116,7 +116,6 @@ class CrossPointWebServer {
 
   // Request handlers
   void handleRoot() const;
-  void handleJszip() const;
   void handleCpAuthJs() const;
   void handleOpdsPage() const;
   void handleNotFound() const;

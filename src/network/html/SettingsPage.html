@@ -276,6 +276,28 @@
         width: unset;
       }
     }
+    /* ===== Ledger monochrome skin (overrides above; last-wins, no !important) ===== */
+    :root{--bg:#fff;--font-color:#111;--title-color:#111;--card-bg:#fff;--label-color:#666;--border-color:#dcdcdc;--accent-color:#111;--accent-hover-color:#000;--toggle-bg:#cfcfcf;}
+    @media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--font-color:#f2f2f2;--title-color:#f2f2f2;--card-bg:#111;--label-color:#a6a6a6;--border-color:#2a2a2a;--accent-color:#f2f2f2;--accent-hover-color:#fff;--toggle-bg:#3a3a3a;}}
+    body{font-size:13px}
+    h1{border-bottom:2px solid var(--font-color);font-weight:800;letter-spacing:.03em;font-size:20px}
+    h2{text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--label-color)}
+    .card{border-radius:0;box-shadow:none;border:1px solid var(--border-color)}
+    .nav-links{gap:0;border-top:1px solid var(--border-color);border-bottom:1px solid var(--border-color);flex-wrap:wrap;margin:16px 0}
+    .nav-links a{border-radius:0;border-right:1px solid var(--border-color);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:7px 13px}
+    .nav-links a.active{background:var(--accent-color);color:var(--bg)}
+    .nav-links a:not(.active):hover{background:var(--border-color);color:var(--font-color)}
+    .setting-control select,.setting-control input{border-radius:0;border:1px solid var(--border-color);background:var(--card-bg);color:var(--font-color)}
+    .save-btn,.btn-add,.btn-save-server{border-radius:0;background:var(--accent-color);color:var(--bg)}
+    .save-btn:hover,.btn-add:hover,.btn-save-server:hover{background:var(--accent-hover-color);color:var(--bg)}
+    .save-btn:disabled{background:var(--border-color);color:var(--label-color)}
+    .btn-small{border-radius:0}
+    .btn-delete{background:#8a1c1c;color:#fff}
+    .btn-delete:hover{background:#6f1414}
+    .opds-server{border-radius:0}
+    .message.success{background:var(--card-bg);color:var(--font-color);border:1px solid var(--font-color)}
+    .message.error{background:var(--card-bg);color:#8a1c1c;border:1px solid #8a1c1c}
+    .loader{border-color:var(--font-color);border-bottom-color:transparent}
   </style>
 </head>
 <body>

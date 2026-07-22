@@ -28,7 +28,6 @@
 #include "html/OpdsPageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/cpauthJs.generated.h"
-#include "html/js/jszip_minJs.generated.h"
 #include "sleep/Wallpaper.h"
 #include "util/BookCacheUtils.h"
 #include "util/WebPath.h"
@@ -155,7 +154,6 @@ void CrossPointWebServer::begin() {
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
   server->on("/opds", HTTP_GET, [this] { handleOpdsPage(); });
-  server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
   server->on("/js/cpauth.js", HTTP_GET, [this] { handleCpAuthJs(); });
 
   // Access-control endpoints are public: the browser posts the on-device code
@@ -497,12 +495,6 @@ static void sendHtmlContent(WebServer* server, const char* data, size_t len) {
 void CrossPointWebServer::handleRoot() const {
   sendHtmlContent(server.get(), HomePageHtml, sizeof(HomePageHtml));
   LOG_DBG("WEB", "Served root page");
-}
-
-void CrossPointWebServer::handleJszip() const {
-  server->sendHeader("Content-Encoding", "gzip");
-  server->send_P(200, "application/javascript", jszip_minJs, jszip_minJsCompressedSize);
-  LOG_DBG("WEB", "Served jszip.min.js");
 }
 
 void CrossPointWebServer::handleNotFound() const {

@@ -95,6 +95,30 @@
         background-color: var(--accent-hover-color);
         color: white;
       }
+      /* ===== Ledger monochrome skin (overrides above; last-wins, no !important) ===== */
+      :root{--bg:#fff;--font-color:#111;--title-color:#111;--card-bg:#fff;--label-color:#666;--border-color:#dcdcdc;--accent-color:#111;--accent-hover-color:#000;--toggle-bg:#cfcfcf;--danger-color:#8a1c1c;--danger-hover:#6f1414;}
+      @media (prefers-color-scheme:dark){:root{--bg:#0a0a0a;--font-color:#f2f2f2;--title-color:#f2f2f2;--card-bg:#111;--label-color:#a6a6a6;--border-color:#2a2a2a;--accent-color:#f2f2f2;--accent-hover-color:#fff;--toggle-bg:#3a3a3a;--danger-color:#e0745f;--danger-hover:#e0745f;}}
+      body{font-size:13px}
+      h1{border-bottom:2px solid var(--font-color);font-weight:800;letter-spacing:.03em;font-size:20px}
+      h2{text-transform:uppercase;font-size:13px;letter-spacing:.05em;color:var(--label-color)}
+      .card{border-radius:0;box-shadow:none;border:1px solid var(--border-color)}
+      .nav-links{gap:0;border-top:1px solid var(--border-color);border-bottom:1px solid var(--border-color);flex-wrap:wrap;margin:16px 0}
+      .nav-links a{border-radius:0;border-right:1px solid var(--border-color);font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:7px 13px}
+      .nav-links a.active{background:var(--accent-color);color:var(--bg)}
+      .nav-links a:not(.active):hover{background:var(--border-color);color:var(--font-color)}
+      input,select,textarea{border-radius:0}
+      .btn,.btn-small,.btn-primary,.btn-danger,.save-btn,.btn-add,.btn-save-server{border-radius:0}
+      .btn-primary,.save-btn,.btn-save-server,.btn-add{background:var(--accent-color);color:var(--bg)}
+      .btn-primary:hover,.save-btn:hover,.btn-save-server:hover,.btn-add:hover{background:var(--accent-hover-color);color:var(--bg)}
+      .save-btn:disabled{background:var(--border-color);color:var(--label-color)}
+      .btn-delete,.btn-danger{background:var(--danger-color);color:#fff}
+      .btn-delete:hover,.btn-danger:hover{background:var(--danger-hover);color:#fff}
+      .opds-server{border-radius:0}
+      .status{border-radius:0;background:var(--accent-color);color:var(--bg)}
+      .message,.status-ok,.status-err{border-radius:0}
+      .message.success,.status-ok{background:var(--card-bg);color:var(--font-color);border:1px solid var(--font-color)}
+      .message.error,.status-err{background:var(--card-bg);color:var(--danger-color);border:1px solid var(--danger-color)}
+      .loader{border-color:var(--font-color);border-bottom-color:transparent}
     </style>
   </head>
   <body>
