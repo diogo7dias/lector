@@ -95,6 +95,14 @@ class ChapterHtmlSlimParser {
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
+  // Paragraph-number marks: a running 1-based paragraph counter for this chapter,
+  // and a latch set when a block starts so only its FIRST emitted line is tagged
+  // with the ordinal (see makePages + addLineToPage). Per-parser => per-chapter,
+  // so counting resets each chapter (whole-book mode adds a chapter base offset
+  // in the reader). Empty blocks emit no line, so they consume no number (no gaps).
+  uint16_t paragraphOrdinal_ = 0;
+  bool nextLineStartsParagraph_ = false;
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;

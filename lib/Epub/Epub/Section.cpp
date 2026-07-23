@@ -26,7 +26,7 @@ namespace {
 //      folds CssParser::CSS_CACHE_VERSION, so a CSS-engine change invalidates section
 //      caches too (previously only book.bin's css_rules.cache was versioned). The
 //      on-disk field order is unchanged; the bump forces the one-time re-index.
-constexpr uint8_t SECTION_FILE_VERSION = 34;
+constexpr uint8_t SECTION_FILE_VERSION = 35;  // 35: PageLine stores paragraphOrdinal
 // Written into the version byte while a build is in flight. The real version is
 // stamped only after every page, LUT and offset has been written (see the commit
 // step in createSectionFile), so a build interrupted by a crash or power loss

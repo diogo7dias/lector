@@ -1637,6 +1637,31 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
   requestUpdate();
 }
 
+// Draw the optional paragraph-number marks in the left margin. Each paragraph's
+// first line carries a 1-based chapter-local ordinal (PageLine::paragraphOrdinal,
+// baked into the section cache); this draws it just left of the text, small, when
+// the setting is on. No reflow — purely an overlay. A number that would fall off
+// the left edge (margin too small) is skipped rather than clipped.
+void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int contentTop) {
+  if (SETTINGS.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
+  // Per-chapter uses the stored ordinal directly. Whole-book will add this
+  // chapter's base offset (sum of prior chapters' paragraph counts) here once
+  // per-section totals are indexed.
+  constexpr int kGap = 6;
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const uint16_t ord = line.getParagraphOrdinal();
+    if (ord == 0) continue;
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(ord));
+    const int numWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
+    const int x = marginLeft + line.xPos - kGap - numWidth;
+    if (x < 0) continue;  // margin too small — skip rather than draw off-screen
+    renderer.drawText(SMALL_FONT_ID, x, contentTop + line.yPos, buf, true);
+  }
+}
+
 // Apply a per-book Paperback Look change from the reader menu. Paperback only
 // changes ink weight, not layout, so no re-index — just persist the book's
 // override (touch -> whole book custom, like other reader settings) and repaint.
@@ -2700,6 +2725,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, fontId, orientedMarginLeft, contentTop);
   renderStatusBar();
+  drawParagraphNumbers(*page, orientedMarginLeft, contentTop);
   if (SETTINGS.debugBorders) {
     // Diagnostic overlay: outline the text viewport so the margin/layout math is
     // visible on-device. 1px black rect over the rendered page; not cached.

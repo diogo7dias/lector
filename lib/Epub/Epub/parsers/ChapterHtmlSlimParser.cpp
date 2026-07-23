@@ -1558,6 +1558,13 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
     LOG_ERR("EHP", "Dropping line: PageLine allocation failed");
     return;
   }
+  // Tag the first emitted line of each block with the next paragraph number. Done
+  // here (not in makePages) so a block that produces no lines consumes no ordinal.
+  if (nextLineStartsParagraph_) {
+    paragraphOrdinal_++;
+    pageLine->setParagraphOrdinal(paragraphOrdinal_);
+    nextLineStartsParagraph_ = false;
+  }
   currentPage->elements.push_back(std::move(pageLine));
   currentPageNextY += lineHeight;
 }
@@ -1588,6 +1595,8 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
+  // This block is one paragraph: latch so addLineToPage tags its first line.
+  nextLineStartsParagraph_ = true;
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
