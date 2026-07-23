@@ -51,8 +51,8 @@ Legend: [x] done · [~] in progress · [ ] todo
 - [x] **PXC sleep wallpaper** — `.pxc` accepted for the sleep/lock screen (on-demand decode,
       no staging). Info-overlay (filename/favorite badge) + PXC viewer + unlock-banner reuse
       to be ported later.
-- [ ] **9 — Per-book reader settings** (each book its own look; global default + override + reset).
-- [ ] **10 — Paragraph numbers** (TOP PRIORITY feature; per-book, in-book toggle; **keep 3 states: off / per-chapter / whole-book**).
+- [x] **9 — Per-book reader settings** (each book its own look; global default + override + reset). Commit `094ef02a`.
+- [~] **10 — Paragraph numbers** (TOP PRIORITY feature; per-book, in-book toggle; **keep 3 states: off / per-chapter / whole-book**). NEXT.
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
       PT hyphenation; Paperback heavier text; anti-alias fade off; first-line indent;
       word-spacing + paragraph-spacing sliders; "Bionic Reading" name.
@@ -103,9 +103,31 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   per-file header read. Recently-shown avoidance dropped (pure random, per Diogo). `.pxc`
   + `.bmp` both eligible. Builds clean.
 
+- **2026-07-23** — #9 per-book reader settings DONE (commit `094ef02a`). New
+  `src/activities/reader/ReaderPrefs.{h,cpp}` (POD snapshot: font/size/lineSpacing/
+  align/paraSpacing/margin/focus/hyphen/embedded/antiAlias/imageRendering/sdFont +
+  reserved paragraphNumbering; `[version][POD]` serialization; host tests in
+  `test/reader_prefs/`, 5, green). Reader holds `prefs_`/`prefsCustom_`, loads
+  `<cachePath>/reader_override.bin` on enter (else `fromGlobal()`), and lays out
+  exclusively through `prefs_` (added `CrossPointSettings::readerRenderSpec(w,h,prefs)`
+  + `getReaderFontId(prefs)` overloads; refactored resolvers). In-book editor REUSES
+  `TextSettingsActivity` via a guarded overlay in CrossPointSettings
+  (`beginReaderEditOverlay`/`endReaderEditOverlay`; overlay-aware `saveToFile()`
+  shadows the CRTP base so a book's values never reach settings.json). Menu rows
+  `READER_SETTINGS` (always) + `RESET_READER_SETTINGS` (only when custom). Orientation
+  stays GLOBAL (rotate is a device-level thing, not a per-book look). Device build
+  83.6% flash (unchanged). NOT device-tested yet.
+
 ## Next steps
 
-1. **#9 — per-book reader settings** (on CrossPoint indexing) — NEXT (after Diogo's compaction).
-2. #10 paragraph numbers (3 states) on top of #9.
-3. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity, unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo.
-4. First flashable test build once #9 + #10 land (bundle with themes + PXC).
+1. **#10 — paragraph numbers (3 states: off / per-chapter / whole-book)** — NEXT, on
+   top of #9. Field `ReaderPrefs.paragraphNumbering` already reserved. Plan: add
+   `CrossPointSettings::PARAGRAPH_NUMBERING` enum (shared value type); tag each
+   paragraph's first line with an ordinal in the HTML parser; store it on PageLine
+   and (de)serialize in the section cache (**bump SECTION_FILE_VERSION**); draw the
+   number in the left margin at render (no reflow); whole-book base = sum of prior
+   chapters' paragraph counts (persist per-spine counts). In-menu row cycles the 3
+   states and applies on close (touch → whole-book custom). GO_TO_PARAGRAPH jump is a
+   later nice-to-have, not part of the core #10.
+2. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity, unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo.
+3. First flashable test build once #10 lands (bundle themes + PXC + folders + wallpaper + per-book settings + paragraph numbers).
