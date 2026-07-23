@@ -609,10 +609,10 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
-  // X4 crops the first few physical top rows. Shift the whole header down by the
-  // shared inset so every screen's top bar lands at the same visible Y and nothing
-  // clips off the top edge. X3 inset is 0, so its coordinates are unchanged.
-  rect.y += topEdgeInset(gpio.deviceIsX4());
+  // The X4 top-edge crop is now folded into metrics.topPadding (UITheme), which is
+  // what every caller passes as rect.y, so the header already lands at the right
+  // visible Y on both devices — no per-header inset here (that used to double-shift
+  // once the content below started tracking topPadding too).
 
   // Hide last battery draw. Wide enough to cover the larger UI_10 battery % text.
   constexpr int maxBatteryWidth = 100;

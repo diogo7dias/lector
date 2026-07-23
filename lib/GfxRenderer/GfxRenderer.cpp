@@ -2069,30 +2069,35 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
+  // The X4 crop is at the PHYSICAL top edge, so add its inset to the physical-top
+  // margin only. This value is then mapped to whichever LOGICAL edge is physical-top
+  // in the current orientation, so the reader page + status bar clear the crop in
+  // every rotation. X3 leaves topEdgeInsetPx = 0.
+  const int physTop = VIEWABLE_MARGIN_TOP + topEdgeInsetPx;
   switch (orientation) {
     case Portrait:
-      *outTop = VIEWABLE_MARGIN_TOP;
+      *outTop = physTop;
       *outRight = VIEWABLE_MARGIN_RIGHT;
       *outBottom = VIEWABLE_MARGIN_BOTTOM;
       *outLeft = VIEWABLE_MARGIN_LEFT;
       break;
     case LandscapeClockwise:
       *outTop = VIEWABLE_MARGIN_LEFT;
-      *outRight = VIEWABLE_MARGIN_TOP;
+      *outRight = physTop;
       *outBottom = VIEWABLE_MARGIN_RIGHT;
       *outLeft = VIEWABLE_MARGIN_BOTTOM;
       break;
     case PortraitInverted:
       *outTop = VIEWABLE_MARGIN_BOTTOM;
       *outRight = VIEWABLE_MARGIN_LEFT;
-      *outBottom = VIEWABLE_MARGIN_TOP;
+      *outBottom = physTop;
       *outLeft = VIEWABLE_MARGIN_RIGHT;
       break;
     case LandscapeCounterClockwise:
       *outTop = VIEWABLE_MARGIN_RIGHT;
       *outRight = VIEWABLE_MARGIN_BOTTOM;
       *outBottom = VIEWABLE_MARGIN_LEFT;
-      *outLeft = VIEWABLE_MARGIN_TOP;
+      *outLeft = physTop;
       break;
   }
 }

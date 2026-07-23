@@ -47,6 +47,12 @@ class UITheme {
   static int getStatusBarV2TitleLines(const GfxRenderer& renderer, const char* title);
 
  private:
+  // Device-adjusted copy of the theme metrics: the base ThemeMetrics with the X4
+  // top-edge crop folded into topPadding, so every chrome screen (all of which
+  // derive their top from metrics.topPadding) shifts down uniformly on X4.
+  // Rebuilt in setTheme() (after the device type is known at boot). currentMetrics
+  // points at this, not the shared constexpr table.
+  ThemeMetrics deviceMetrics_{};
   const ThemeMetrics* currentMetrics;
   std::unique_ptr<BaseTheme> currentTheme;
 };

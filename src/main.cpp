@@ -32,6 +32,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#include "components/TopEdgeInset.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
@@ -390,6 +391,14 @@ void setup() {
   gpio.update();
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
+
+  // Device type is now known. Push the X4 top-edge crop inset into both top-origin
+  // systems so the whole X4 layout sits below the cropped rows, matching X3:
+  //   - renderer viewable top (reader page + reader status bar);
+  //   - chrome metrics.topPadding (headers/lists/settings) via the theme rebuild.
+  // Both no-op on X3 (inset 0). Done before any real layout is drawn.
+  renderer.setTopEdgeInset(topEdgeInset(gpio.deviceIsX4()));
+  UITheme::getInstance().reload();
 
   // Boot timing ledger checkpoint: hardware bring-up done (see BOOT ms line at
   // end of setup). Cheap millis() snapshots so every perf change can be proven

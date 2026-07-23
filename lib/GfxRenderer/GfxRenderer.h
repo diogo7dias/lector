@@ -46,6 +46,7 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  int topEdgeInsetPx = 0;  // extra physical-top inset (X4 crop); see setTopEdgeInset
   // "Paperback Look": when set, drawn body/status glyph pixels are smeared +1px
   // right and +1px down to fake heavier paperback ink. Plain bool owned by the
   // renderer (lib/ must not depend on src/); callers bracket it per region.
@@ -114,6 +115,14 @@ class GfxRenderer {
   static constexpr int VIEWABLE_MARGIN_RIGHT = 3;
   static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
   static constexpr int VIEWABLE_MARGIN_LEFT = 3;
+
+  // Extra inset (px) at the PHYSICAL top edge, added on top of VIEWABLE_MARGIN_TOP
+  // in getOrientedViewableTRBL. The X4 panel crops its first rows there, so the
+  // reader page + reader status bar must start below them; X3 leaves this 0. The
+  // value comes from topEdgeInset() (src) — injected here to keep lib free of the
+  // device/HAL dependency. Follows orientation because it feeds the physical-top
+  // margin, not a fixed logical edge.
+  void setTopEdgeInset(int px) { topEdgeInsetPx = px; }
 
   // Setup
   void begin();  // must be called right after display.begin()

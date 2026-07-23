@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 
 #include <memory>
@@ -10,6 +11,7 @@
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/StatusBar.h"
+#include "components/TopEdgeInset.h"
 #include "components/themes/BaseTheme.h"
 #include "components/themes/lector/LectorTheme.h"
 #include "fontIds.h"
@@ -31,7 +33,13 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME /*type*/) {
   // here; a stale index from a removed theme simply lands on Lector.
   LOG_DBG("UI", "Using Lector theme");
   currentTheme = std::make_unique<LectorTheme>();
-  currentMetrics = &BaseMetrics::values;
+  // Fold the X4 top-edge crop into topPadding so every chrome screen (header,
+  // tab bars, sub-headers, list/content areas — all derived from topPadding)
+  // shifts down together on X4 and matches X3's layout. Rebuilt here so a boot
+  // reload() after device detection picks up the correct device.
+  deviceMetrics_ = BaseMetrics::values;
+  deviceMetrics_.topPadding = chromeTopPadding(BaseMetrics::values.topPadding, gpio.deviceIsX4());
+  currentMetrics = &deviceMetrics_;
 }
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,

@@ -347,10 +347,10 @@ void HomeActivity::loop() {
 
 void HomeActivity::drawHomeTopLine(int pageWidth, bool pagesSelected) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  // drawHeader now applies the X4 top-edge inset itself, so pass the raw
-  // topPadding to it. headerY (with inset) still positions Home's own chrome
-  // below — version label + pages tile — so they line up with the header.
-  const int headerY = metrics.topPadding + topEdgeInset(gpio.deviceIsX4());
+  // metrics.topPadding already carries the X4 top-edge inset (UITheme folds it in),
+  // and the whole Home layout — version label, pages tile, book grid — derives its
+  // top from topPadding, so it all shifts together on X4. No per-site inset here.
+  const int headerY = metrics.topPadding;
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
   const std::string versionLabel = getHomeHeaderVersionLabel();
   renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, headerY + 5, versionLabel.c_str());
