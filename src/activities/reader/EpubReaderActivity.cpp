@@ -1704,6 +1704,9 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
   // per-section totals are indexed.
   constexpr int kGap = 5;
   const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  // The small UI font has no bold face, so thicken the number glyphs with the
+  // renderer's faux-bold (paperback look) for the whole batch, then reset.
+  renderer.setPaperbackLook(true);
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
     const auto& line = static_cast<const PageLine&>(*el);
@@ -1725,6 +1728,7 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     const int y = contentTop + line.yPos + (lineHeightPx - numLineHeight) / 2;
     renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
   }
+  renderer.setPaperbackLook(false);
 }
 
 // Apply a per-book Paperback Look change from the reader menu. Paperback only
