@@ -98,7 +98,7 @@ class EpubReaderActivity final : public Activity {
   void applyPaperbackLook(uint8_t body, uint8_t status);
 
   // Draw the optional paragraph-number margin marks over a rendered page.
-  void drawParagraphNumbers(const Page& page, int marginLeft, int contentTop);
+  void drawParagraphNumbers(const Page& page, int marginLeft, int contentTop, int lineHeightPx);
   // Reset action: delete the sidecar, follow global settings again, re-layout.
   void resetReaderPrefsToGlobal();
   // Drop cached sections so render() rebuilds the current chapter under new prefs_.

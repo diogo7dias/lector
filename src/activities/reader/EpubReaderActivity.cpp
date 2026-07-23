@@ -1642,23 +1642,34 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
 // baked into the section cache); this draws it just left of the text, small, when
 // the setting is on. No reflow — purely an overlay. A number that would fall off
 // the left edge (margin too small) is skipped rather than clipped.
-void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int contentTop) {
+void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int contentTop,
+                                              const int lineHeightPx) {
   if (SETTINGS.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
   // Per-chapter uses the stored ordinal directly. Whole-book will add this
   // chapter's base offset (sum of prior chapters' paragraph counts) here once
   // per-section totals are indexed.
-  constexpr int kGap = 6;
+  constexpr int kGap = 5;
+  const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
     const auto& line = static_cast<const PageLine&>(*el);
     const uint16_t ord = line.getParagraphOrdinal();
     if (ord == 0) continue;
+    const auto& block = line.getBlock();
+    if (!block || block->wordCount() == 0) continue;
+
     char buf[8];
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(ord));
     const int numWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
-    const int x = marginLeft + line.xPos - kGap - numWidth;
-    if (x < 0) continue;  // margin too small — skip rather than draw off-screen
-    renderer.drawText(SMALL_FONT_ID, x, contentTop + line.yPos, buf, true);
+    // Hug the first letter: the first line is indented, so anchor to the first
+    // word's real x (block leftInset + its intra-block xpos), not the margin.
+    const int firstLetterX = marginLeft + line.xPos + block->wordXpos(0);
+    const int x = firstLetterX - kGap - numWidth;
+    if (x < 0) continue;  // no room left of the first letter — skip, don't clip
+    // Center the small number vertically within the line's height (text y is the
+    // line top), so it sits level with the first letter instead of riding high.
+    const int y = contentTop + line.yPos + (lineHeightPx - numLineHeight) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
   }
 }
 
@@ -2725,7 +2736,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   page->render(renderer, fontId, orientedMarginLeft, contentTop);
   renderStatusBar();
-  drawParagraphNumbers(*page, orientedMarginLeft, contentTop);
+  drawParagraphNumbers(*page, orientedMarginLeft, contentTop, lineHeightPx);
   if (SETTINGS.debugBorders) {
     // Diagnostic overlay: outline the text viewport so the margin/layout math is
     // visible on-device. 1px black rect over the rendered page; not cached.

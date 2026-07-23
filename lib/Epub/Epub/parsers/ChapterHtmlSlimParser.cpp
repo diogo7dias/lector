@@ -904,6 +904,10 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
     self->startNewTextBlock(accumulated.withoutBottom());
+    // This block is a heading (title), not a paragraph — do not number it. Set
+    // AFTER startNewTextBlock (which flushed the previous block) so the flag
+    // describes THIS new heading block; makePages checks + clears it.
+    self->currentBlockIsHeading_ = true;
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
@@ -1595,8 +1599,10 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
-  // This block is one paragraph: latch so addLineToPage tags its first line.
-  nextLineStartsParagraph_ = true;
+  // Latch so addLineToPage tags this block's first line — unless it is a heading
+  // (titles are not numbered). Cleared here so the next block starts un-flagged.
+  nextLineStartsParagraph_ = !currentBlockIsHeading_;
+  currentBlockIsHeading_ = false;
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });

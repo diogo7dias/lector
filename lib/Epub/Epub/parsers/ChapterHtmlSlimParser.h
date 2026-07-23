@@ -102,6 +102,10 @@ class ChapterHtmlSlimParser {
   // in the reader). Empty blocks emit no line, so they consume no number (no gaps).
   uint16_t paragraphOrdinal_ = 0;
   bool nextLineStartsParagraph_ = false;
+  // True while the current block is a heading (h1-h6). Headings are titles, not
+  // paragraphs, so they are NOT numbered. Set when a header tag opens, checked
+  // and cleared in makePages (per-block flush).
+  bool currentBlockIsHeading_ = false;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
