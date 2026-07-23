@@ -29,6 +29,11 @@ namespace stage {
 // strideBytes/phyHeight come from the renderer (panel geometry).
 void pumpIdle(uint16_t strideBytes, uint16_t phyHeight);
 
+// True only while a stage conversion is actively running (its SD-bound decode/
+// write slice). The loop() idle branch keeps full CPU speed while this is true so
+// each slice finishes fast and the button poll is never starved between slices.
+bool isConverting();
+
 // Lock path: if a complete stage matching the current settings and panel
 // geometry exists, render it (planes + info overlay + the same refresh
 // sequence renderPxcSleepScreen uses) and consume the stage file. Returns

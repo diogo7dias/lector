@@ -767,22 +767,32 @@ void loop() {
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // Idle window: advance the sleep-wallpaper index scan a bounded slice at a
-      // time (a few ms per call) so the lock path never pays a folder scan. Runs
-      // to completion once per wake, then is a cheap no-op. Done before the
-      // power-saving throttle below; the pump takes its own full-speed lock.
+      // "Idle" here is the NORMAL state while reading: a page is read for many
+      // seconds with no button, so the loop lands in this branch constantly during
+      // reading. It used to make the device "go deaf" mid-read for two reasons:
+      //   1) heavy sleep-wallpaper staging (SD read/write + decode) ran between the
+      //      once-per-loop button poll, so a tap landing inside a slice was never
+      //      sampled, and the SD/SPI burst couples noise onto the button ADC lines
+      //      (now rejected by the median read in InputManager::getState);
+      //   2) the CPU was throttled to 40 MHz *while* that staging ran, so each
+      //      bounded slice took ~4x longer, widening the deaf window further.
+      // Fix: while a stage conversion (or the initial index scan) is actively
+      // running, hold FULL CPU speed so each slice finishes fast, and poll on a
+      // short delay. Only once that heavy work is done do we drop to the 40 MHz
+      // power-saving floor. The screen is static in this whole branch (no e-ink
+      // refresh in flight), so a fast poll here can never corrupt a waveform.
+      const bool heavyIdleWork = !crosspoint::sleep::windex::idleComplete() || crosspoint::sleep::stage::isConverting();
+      // setPowerSaving() no-ops when the state is unchanged, so this does not
+      // thrash the PLL — it flips once when staging starts and once when it ends.
+      powerManager.setPowerSaving(!heavyIdleWork);
+      // Advance the index scan a bounded slice, then pre-convert the next sleep
+      // wallpaper's planes to SD (both cheap no-ops once complete).
       crosspoint::sleep::windex::pumpIdle();
-      // Once the index has settled, pre-convert the next sleep wallpaper's
-      // planes to SD so the lock path streams them instead of decoding.
       crosspoint::sleep::stage::pumpIdle(renderer.getDisplayWidthBytes(), renderer.getDisplayHeight());
-      // Inactive for a while: throttle the CPU to save power. The screen is static in
-      // this state (no e-ink refresh in flight), so — unlike the active branch below —
-      // a short poll here cannot preempt a refresh mid-waveform. Keep it short (20ms,
-      // was 50ms) so the first page-turn press after a reading pause is noticed
-      // promptly; on user activity the top-of-loop handler restores full CPU speed
-      // before the page is drawn. Negligible extra draw (brief wake at 10 MHz).
-      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(20);
+      // Short poll while staging is heavy so buttons are sampled promptly between
+      // slices; a modest 10 ms (was 20) once truly idle so the first press after a
+      // long reading pause is still noticed quickly.
+      delay(heavyIdleWork ? 5 : 10);
     } else {
       // Short delay to prevent tight loop while still being responsive.
       // NOTE: keep this at 10ms. The render task shares priority 1 with this

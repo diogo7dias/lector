@@ -414,6 +414,8 @@ void pumpIdle(const uint16_t strideBytes, const uint16_t phyHeight) {
   }
 }
 
+bool isConverting() { return s_phase == Phase::Converting; }
+
 bool renderStaged(GfxRenderer& renderer) {
   if (!Storage.exists(kStagePath)) return false;
   HalFile f;
