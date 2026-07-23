@@ -235,6 +235,11 @@ void enterDeepSleep(bool fromTimeout = false) {
 
   const bool isQuickResumeSleep =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
+      // Freeze keeps the last reader page as its sleep screen, so it must use the
+      // keep-frame quick-resume path (save frame + seamless wake back into the
+      // reader). Without this it took the full-boot path and bounced to Home,
+      // which read as "won't lock". The frame border is still drawn in SleepActivity.
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::FREEZE ||
       (fromTimeout &&
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
   APP_STATE.showBootScreen = !isQuickResumeSleep;
