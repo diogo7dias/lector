@@ -528,14 +528,15 @@ void EpubReaderActivity::loop() {
               renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
               hasQuotes, hasSleepWallpaper, wallpaperPaused, wallpaperFavorited, prefsCustom_, prefs_.paperbackLookBody,
-              prefs_.paperbackLookStatus),
+              prefs_.paperbackLookStatus, prefs_.paragraphNumbering),
           [this](const ActivityResult& result) {
-            // Always apply orientation + paperback change even if the menu was cancelled
-            // (both are toggled live in the menu and returned on any exit).
+            // Always apply orientation + paperback + paragraph-number change even if the
+            // menu was cancelled (all are toggled live in the menu and returned on any exit).
             const auto& menu = std::get<MenuResult>(result.data);
             applyOrientation(menu.orientation);
             toggleAutoPageTurn(menu.pageTurnOption);
             applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
+            applyParagraphNumbering(menu.paragraphNumbering);
             if (!result.isCancelled) {
               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
             }
@@ -1128,6 +1129,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_LOOK:
     case EpubReaderMenuActivity::MenuAction::TOGGLE_PAPERBACK_STATUS:
+    case EpubReaderMenuActivity::MenuAction::TOGGLE_PARAGRAPH_NUMBERS:
     case EpubReaderMenuActivity::MenuAction::TOGGLE_RANDOM_ON_BOOT:
       // Handled in-place inside EpubReaderMenuActivity::loop() (flip + persist),
       // so the menu never returns these as a confirmed action. Listed here only
@@ -1751,13 +1753,12 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
 // the left edge (margin too small) is skipped rather than clipped.
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int contentTop,
                                               const int lineHeightPx) {
-  if (SETTINGS.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
+  if (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
   // Per-chapter uses the stored ordinal directly. Whole-book adds this chapter's
   // base offset — the sum of prior chapters' paragraph totals (0 for chapters not
   // yet indexed, so whole-book numbers finalize as the book is read through).
-  const uint32_t base = (SETTINGS.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK)
-                            ? wholeBookParagraphBase(currentSpineIndex)
-                            : 0;
+  const uint32_t base =
+      (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK) ? wholeBookParagraphBase(currentSpineIndex) : 0;
   constexpr int kGap = 5;
   const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   // The small UI font has no bold face, so thicken the number glyphs with the
@@ -1794,6 +1795,18 @@ void EpubReaderActivity::applyPaperbackLook(uint8_t body, uint8_t status) {
   if (body == prefs_.paperbackLookBody && status == prefs_.paperbackLookStatus) return;
   prefs_.paperbackLookBody = body;
   prefs_.paperbackLookStatus = status;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  requestUpdate();
+}
+
+// Apply a per-book paragraph-numbering change from the reader menu. Numbers are
+// stored in the page cache and drawn in the left margin (no reflow), so toggling
+// only changes drawing — persist the book's override (touch → whole book custom,
+// like other per-book reader settings) and repaint the current page.
+void EpubReaderActivity::applyParagraphNumbering(uint8_t mode) {
+  if (mode == prefs_.paragraphNumbering) return;
+  prefs_.paragraphNumbering = mode;
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
   requestUpdate();

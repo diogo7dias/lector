@@ -21,7 +21,7 @@
 // sync. Adding/removing a field requires bumping VERSION (old sidecars then fall
 // back to the global snapshot, forcing a one-time re-index).
 struct ReaderPrefs {
-  static constexpr uint8_t VERSION = 3;  // v2 adds dynamicMargins; v3 adds paperbackLook*
+  static constexpr uint8_t VERSION = 4;  // v2 dynamicMargins; v3 paperbackLook*; v4 paragraphNumbering
 
   // Font
   uint8_t fontFamily = 0;  // CrossPointSettings::BOOKERLY
@@ -50,6 +50,9 @@ struct ReaderPrefs {
   // Paperback Look (thicker ink) — per book, toggled from the in-book menu.
   uint8_t paperbackLookBody = 1;
   uint8_t paperbackLookStatus = 1;
+  // Paragraph numbering — per book, chosen from the in-book menu (off by default).
+  // 0 = off, 1 = per chapter (resets each chapter), 2 = whole book (continuous).
+  uint8_t paragraphNumbering = 0;  // CrossPointSettings::PARA_NUM_OFF
   // Orientation
   uint8_t orientation = 0;
   // SD font family name (empty = built-in). Fixed width so the struct stays POD.

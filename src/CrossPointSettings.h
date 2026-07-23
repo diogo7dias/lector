@@ -312,15 +312,16 @@ class CrossPointSettings {
   uint8_t dynamicMargins = 0;
   // Paragraph-number marks before each paragraph's first line, for cross-device
   // navigation ("go to chapter, paragraph N"). Numbers are stored in the page
-  // cache and drawn in the left margin (no reflow); this setting only toggles
-  // drawing, so switching it is instant (no re-index).
+  // cache and drawn in the left margin (no reflow); toggling only changes drawing,
+  // so switching is instant (no re-index). This is a PER-BOOK choice, stored in
+  // ReaderPrefs::paragraphNumbering and set from the in-book reader menu (not a
+  // global setting). The enum stays here as the shared value type.
   enum PARAGRAPH_NUMBERING {
     PARA_NUM_OFF = 0,
     PARA_NUM_CHAPTER = 1,  // number resets to 1 at each chapter (no full-book index)
     PARA_NUM_BOOK = 2,     // continuous across the whole book (needs a full-book index)
     PARAGRAPH_NUMBERING_COUNT
   };
-  uint8_t paragraphNumbering = PARA_NUM_OFF;
   static constexpr uint8_t MIN_SCREEN_MARGIN = 0;
   static constexpr uint8_t MAX_SCREEN_MARGIN = 100;
 

@@ -34,6 +34,7 @@ ReaderPrefs makeSample() {
   p.focusReadingEnabled = 1;
   p.guideDotsEnabled = 1;
   p.imageRendering = 2;
+  p.paragraphNumbering = 2;  // PARA_NUM_BOOK — non-default, so round-trip must preserve it
   p.orientation = 3;
   std::strncpy(p.sdFontFamilyName, "MyBookFont", sizeof(p.sdFontFamilyName) - 1);
   return p;
@@ -58,8 +59,17 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.focusReadingEnabled, b.focusReadingEnabled);
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);
   EXPECT_EQ(a.imageRendering, b.imageRendering);
+  EXPECT_EQ(a.paragraphNumbering, b.paragraphNumbering);
   EXPECT_EQ(a.orientation, b.orientation);
   EXPECT_STREQ(a.sdFontFamilyName, b.sdFontFamilyName);
+}
+
+// Paragraph numbering is per book and must default OFF (Diogo's requirement): a
+// freshly constructed ReaderPrefs shows no paragraph numbers until the reader
+// menu turns them on for that specific book.
+TEST(ReaderPrefs, ParagraphNumberingDefaultsOff) {
+  const ReaderPrefs p;
+  EXPECT_EQ(p.paragraphNumbering, 0);
 }
 
 // HalFile (device) path: write then read back is identical.

@@ -25,6 +25,9 @@ struct MenuResult {
   // reader on close (like orientation). Seeded from the book's current values.
   uint8_t paperbackBody = 1;
   uint8_t paperbackStatus = 1;
+  // Per-book paragraph numbering (0 off / 1 per-chapter / 2 whole-book), cycled
+  // live in the menu and applied by the reader on close. Seeded from the book.
+  uint8_t paragraphNumbering = 0;
 };
 
 struct ChapterResult {

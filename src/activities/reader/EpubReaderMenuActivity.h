@@ -26,6 +26,7 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_BOOKMARK,
     TOGGLE_PAPERBACK_LOOK,
     TOGGLE_PAPERBACK_STATUS,
+    TOGGLE_PARAGRAPH_NUMBERS,  // cycle off / per-chapter / whole-book (per book)
     TOGGLE_RANDOM_ON_BOOT,
     SCREENSHOT,
     DISPLAY_QR,
@@ -49,7 +50,8 @@ class EpubReaderMenuActivity final : public Activity {
                                   const bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
                                   bool hasSleepWallpaper = false, bool wallpaperPaused = false,
                                   bool wallpaperFavorited = false, bool hasReaderOverride = false,
-                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1);
+                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1,
+                                  uint8_t paragraphNumbering = 0);
 
   void onEnter() override;
   void onExit() override;
@@ -64,7 +66,7 @@ class EpubReaderMenuActivity final : public Activity {
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasQuotes,
                                               bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited,
-                                              bool hasReaderOverride);
+                                              bool hasReaderOverride, uint8_t paragraphNumbering);
 
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;
@@ -80,6 +82,10 @@ class EpubReaderMenuActivity final : public Activity {
   // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
   uint8_t selectedPaperbackBody = 1;
   uint8_t selectedPaperbackStatus = 1;
+  // Per-book paragraph numbering, cycled live in the menu; returned via MenuResult.
+  uint8_t selectedParagraphNumbering = 0;
+  const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER,
+                                                 StrId::STR_PARA_NUM_BOOK};
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};

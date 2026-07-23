@@ -97,6 +97,10 @@ class EpubReaderActivity final : public Activity {
   // Apply a per-book Paperback Look change returned from the reader menu.
   void applyPaperbackLook(uint8_t body, uint8_t status);
 
+  // Apply a per-book paragraph-numbering change (off / per-chapter / whole-book)
+  // returned from the reader menu.
+  void applyParagraphNumbering(uint8_t mode);
+
   // Draw the optional paragraph-number margin marks over a rendered page.
   void drawParagraphNumbers(const Page& page, int marginLeft, int contentTop, int lineHeightPx);
   // Reset action: delete the sidecar, follow global settings again, re-layout.

@@ -8,32 +8,31 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                               const std::string& title, const std::string& author,
-                                               const std::string& chapterName, const int currentPage,
-                                               const int totalPages, const int bookProgressPercent,
-                                               const uint8_t currentOrientation, const bool hasFootnotes,
-                                               const bool hasBookmarks, const bool hasQuotes, bool hasSleepWallpaper,
-                                               bool wallpaperPaused, bool wallpaperFavorited, bool hasReaderOverride,
-                                               uint8_t paperbackBody, uint8_t paperbackStatus)
+EpubReaderMenuActivity::EpubReaderMenuActivity(
+    GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
+    const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
+    const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasQuotes,
+    bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited, bool hasReaderOverride,
+    uint8_t paperbackBody, uint8_t paperbackStatus, uint8_t paragraphNumbering)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused,
-                               wallpaperFavorited, hasReaderOverride)),
+                               wallpaperFavorited, hasReaderOverride, paragraphNumbering)),
       title(title),
       author(author),
       chapterName(chapterName),
       pendingOrientation(currentOrientation),
       selectedPaperbackBody(paperbackBody),
       selectedPaperbackStatus(paperbackStatus),
+      selectedParagraphNumbering(paragraphNumbering),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(
     bool hasFootnotes, bool hasBookmarks, bool hasQuotes, bool hasSleepWallpaper, bool wallpaperPaused,
-    bool wallpaperFavorited, bool hasReaderOverride) {
+    bool wallpaperFavorited, bool hasReaderOverride, uint8_t paragraphNumbering) {
   std::vector<MenuItem> items;
-  items.reserve(18);
+  items.reserve(20);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
   // Per-book reader settings. "Reset" only appears once this book has its own
@@ -61,14 +60,18 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   // Paperback Look toggles — in-book pop-up menu only (not in global Settings/web).
   items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
   items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+  // Paragraph numbering — per book, cycled in place (off / per-chapter / whole-book).
+  items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
   // Open-random-book-on-boot toggle — surfaced in the in-book menu like the
   // paperback toggles; flips SETTINGS.openRandomRecentOnBoot in place.
   items.push_back({MenuAction::TOGGLE_RANDOM_ON_BOOT, StrId::STR_OPEN_RANDOM_ON_BOOT});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   // Auto Turn (Pages Per Minute) intentionally hidden from the in-book menu.
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
-  // Jump to a paragraph number — only meaningful when paragraph numbers are shown.
-  if (SETTINGS.paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
+  // Jump to a paragraph number — only meaningful when this book shows paragraph
+  // numbers. Uses the value the menu was opened with; toggle it on, reopen the
+  // menu, and the jump entry appears.
+  if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
     items.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
   }
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
@@ -140,6 +143,14 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
+    // Paragraph numbering cycles off → per-chapter → whole-book (per book). Flip in
+    // place like the paperback rows; the reader applies it to this book's
+    // ReaderPrefs on close (touch → whole book custom) and repaints.
+    if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
+      selectedParagraphNumbering = (selectedParagraphNumbering + 1) % CrossPointSettings::PARAGRAPH_NUMBERING_COUNT;
+      requestUpdate();
+      return;
+    }
     if (selectedAction == MenuAction::TOGGLE_RANDOM_ON_BOOT) {
       SETTINGS.openRandomRecentOnBoot = SETTINGS.openRandomRecentOnBoot ? 0 : 1;
       SETTINGS.saveToFile();
@@ -148,14 +159,18 @@ void EpubReaderMenuActivity::loop() {
     }
 
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
-                         selectedPaperbackBody, selectedPaperbackStatus});
+                         selectedPaperbackBody, selectedPaperbackStatus, selectedParagraphNumbering});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
-    result.data =
-        MenuResult{-1, pendingOrientation, selectedPageTurnOption, selectedPaperbackBody, selectedPaperbackStatus};
+    result.data = MenuResult{-1,
+                             pendingOrientation,
+                             selectedPageTurnOption,
+                             selectedPaperbackBody,
+                             selectedPaperbackStatus,
+                             selectedParagraphNumbering};
     setResult(std::move(result));
     finish();
     return;
@@ -234,6 +249,9 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
           return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
+          // Show the current mode (Off / Per Chapter / Whole Book) on the right edge.
+          return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
         } else if (value == MenuAction::TOGGLE_RANDOM_ON_BOOT) {
           return I18N.get(SETTINGS.openRandomRecentOnBoot ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else {

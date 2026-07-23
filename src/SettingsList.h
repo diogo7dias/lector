@@ -109,7 +109,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // but per-call construction runs from deep call sites (settings toggles,
   // SETTINGS.saveToFile via JsonSettingsIO) where a 10KB spike overflows the
   // 16KB loop-task stack. push_back keeps one ~130B temporary at a time.
-  v.reserve(84);
+  v.reserve(83);
   // --- Display ---
   v.push_back(
       SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
@@ -190,9 +190,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       SettingInfo::Enum(StrId::STR_DYNAMIC_MARGINS, &CrossPointSettings::dynamicMargins,
                         {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10, StrId::STR_DYNAMIC_MARGINS_20},
                         "dynamicMargins", StrId::STR_CAT_READER));
-  v.push_back(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBERS, &CrossPointSettings::paragraphNumbering,
-                                {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER, StrId::STR_PARA_NUM_BOOK},
-                                "paragraphNumbering", StrId::STR_CAT_READER));
+  // Paragraph numbering is a per-book choice set from the in-book reader menu
+  // (EpubReaderMenuActivity → ReaderPrefs::paragraphNumbering), not a global row.
   v.push_back(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
                                 {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
                                 StrId::STR_CAT_READER));
