@@ -216,4 +216,8 @@ class ChapterHtmlSlimParser {
 
   void addLineToPage(std::shared_ptr<TextBlock> line);
   const std::vector<std::pair<std::string, uint16_t>>& getAnchors() const { return anchorData; }
+
+  // Total numbered paragraphs (headings excluded) laid out in this chapter — the
+  // final per-chapter paragraph counter. Read after the build completes.
+  uint16_t getParagraphCount() const { return paragraphOrdinal_; }
 };

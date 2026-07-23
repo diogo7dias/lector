@@ -19,6 +19,7 @@ class EpubReaderMenuActivity final : public Activity {
     STEAL_LOOK,             // copy another book's reader settings onto this book
     FOOTNOTES,
     GO_TO_PERCENT,
+    GO_TO_PARAGRAPH,  // jump to a paragraph number within the current chapter
     AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,

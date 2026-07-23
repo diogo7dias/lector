@@ -633,6 +633,10 @@ bool Section::finalizeBuild() {
   if (!build_) {
     return false;
   }
+  // Capture the chapter's paragraph total before the parser is torn down.
+  if (build_->parser) {
+    paragraphCount = build_->parser->getParagraphCount();
+  }
   // The unzipped HTML is no longer needed once layout is complete.
   Storage.remove(build_->tmpHtmlPath.c_str());
 

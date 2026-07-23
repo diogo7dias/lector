@@ -93,6 +93,11 @@ class Section {
 
   uint16_t pageCount = 0;
   int currentPage = 0;
+  // Total numbered paragraphs (headings excluded) in this chapter, captured from
+  // the parser at build finalize. 0 until this section has been built this
+  // session (a cache load does not set it). Feeds the go-to-paragraph picker and
+  // whole-book paragraph numbering.
+  uint16_t paragraphCount = 0;
 
   Section(const std::shared_ptr<Epub>& epub, int spineIndex, GfxRenderer& renderer);
   ~Section();

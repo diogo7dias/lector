@@ -16,6 +16,7 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -44,6 +45,7 @@
 #include "StealLookActivity.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/SettingsActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/StatusBar.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -795,6 +797,37 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   }
 }
 
+// Jump to a paragraph number WITHIN the current chapter (the numbering shown by
+// the paragraph-number marks; ordinals are contiguous 1..N with headings skipped).
+// Scans the chapter's pages for the page whose lines carry that ordinal. A target
+// past the last paragraph lands on the last page.
+void EpubReaderActivity::jumpToParagraph(const int target) {
+  if (!section || section->pageCount == 0 || target < 1) {
+    requestUpdate();
+    return;
+  }
+  const int pages = section->pageCount;
+  int found = -1;
+  for (int p = 0; p < pages && found < 0; p++) {
+    auto page = section->loadPage(p);
+    if (!page) continue;
+    for (const auto& el : page->elements) {
+      if (el->getTag() != TAG_PageLine) continue;
+      if (static_cast<const PageLine&>(*el).getParagraphOrdinal() == static_cast<uint16_t>(target)) {
+        found = p;
+        break;
+      }
+    }
+  }
+  if (found < 0) found = pages - 1;  // beyond the last paragraph -> last page
+  {
+    RenderLock lock(*this);
+    section->currentPage = found;
+    nextPageNumber = found;
+  }
+  requestUpdate();
+}
+
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
     loadCachedBookmarks();
@@ -951,6 +984,27 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             if (!result.isCancelled) {
               jumpToPercent(std::get<PercentResult>(result.data).percent);
             }
+          });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH: {
+      // Ask for a paragraph number, then jump to it within the current chapter.
+      startActivityForResult(
+          makeUniqueNoThrow<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_GO_TO_PARAGRAPH)),
+                                                   std::string(), 6, InputType::Text),
+          [this](const ActivityResult& result) {
+            if (result.isCancelled) {
+              requestUpdate();
+              return;
+            }
+            if (const auto* kr = std::get_if<KeyboardResult>(&result.data)) {
+              const int n = atoi(kr->text.c_str());
+              if (n >= 1) {
+                jumpToParagraph(n);
+                return;
+              }
+            }
+            requestUpdate();
           });
       break;
     }

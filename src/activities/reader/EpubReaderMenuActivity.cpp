@@ -67,6 +67,10 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   // Auto Turn (Pages Per Minute) intentionally hidden from the in-book menu.
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+  // Jump to a paragraph number — only meaningful when paragraph numbers are shown.
+  if (SETTINGS.paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
+    items.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
+  }
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::SHARE_QR, StrId::STR_SHARE_BOOK});
