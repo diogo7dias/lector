@@ -10,6 +10,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "PxcSleepRenderer.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -76,6 +77,15 @@ void SleepActivity::renderCustomSleepScreen() const {
     file.close();
   }
 
+  // /sleep.pxc (Lector Wallpaper Converter format), same root-priority tier as
+  // /sleep.bmp. renderPxcSleepScreen opens the path itself and returns false when
+  // the file is absent/invalid, so we just try it and fall through on failure.
+  if (renderPxcSleepScreen(renderer, "/sleep.pxc")) {
+    LOG_DBG("SLP", "Loading: /sleep.pxc");
+    if (dir) dir.close();
+    return;
+  }
+
   if (dir && dir.isDirectory()) {
     sleepDir = "/.sleep";
   } else {
@@ -101,8 +111,15 @@ void SleepActivity::renderCustomSleepScreen() const {
         continue;
       }
 
+      if (hasPxcExtension(filename)) {
+        // .pxc wallpapers are validated at render time by renderPxcSleepScreen
+        // (header + panel-size check); accept by extension here.
+        files.emplace_back(filename);
+        dirFile.close();
+        continue;
+      }
       if (!FsHelpers::hasBmpExtension(filename)) {
-        LOG_DBG("SLP", "Skipping non-.bmp file name: %s", name);
+        LOG_DBG("SLP", "Skipping non-image file name: %s", name);
         dirFile.close();
         continue;
       }
@@ -129,18 +146,25 @@ void SleepActivity::renderCustomSleepScreen() const {
       APP_STATE.pushRecentSleep(randomFileIndex);
       APP_STATE.saveToFile();
       const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
-      HalFile randFile;
-      if (Storage.openFileForRead("SLP", filename, randFile)) {
-        LOG_DBG("SLP", "Randomly loading: %s/%s", sleepDir, files[randomFileIndex].c_str());
-        delay(100);
-        Bitmap bitmap(randFile, true);
-        if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-          renderBitmapSleepScreen(bitmap);
-          randFile.close();
+      LOG_DBG("SLP", "Randomly loading: %s", filename.c_str());
+      delay(100);
+      if (hasPxcExtension(files[randomFileIndex])) {
+        if (renderPxcSleepScreen(renderer, filename)) {
           dir.close();
           return;
         }
-        randFile.close();
+      } else {
+        HalFile randFile;
+        if (Storage.openFileForRead("SLP", filename, randFile)) {
+          Bitmap bitmap(randFile, true);
+          if (bitmap.parseHeaders() == BmpReaderError::Ok) {
+            renderBitmapSleepScreen(bitmap);
+            randFile.close();
+            dir.close();
+            return;
+          }
+          randFile.close();
+        }
       }
     }
   }

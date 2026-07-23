@@ -48,8 +48,9 @@ and restores upstream features we had dropped.
 
 Legend: [x] done · [~] in progress · [ ] todo
 
-- [ ] **PXC sleep wallpaper** (CURRENT PRIORITY, before 9/10). CrossPoint takes only
-      `.bmp`; add `.pxc` acceptance via `renderPxcSleepScreen` (on-demand decode, no staging).
+- [x] **PXC sleep wallpaper** — `.pxc` accepted for the sleep/lock screen (on-demand decode,
+      no staging). Info-overlay (filename/favorite badge) + PXC viewer + unlock-banner reuse
+      to be ported later.
 - [ ] **9 — Per-book reader settings** (each book its own look; global default + override + reset).
 - [ ] **10 — Paragraph numbers** (TOP PRIORITY feature; per-book, in-book toggle; **keep 3 states: off / per-chapter / whole-book**).
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
@@ -74,23 +75,20 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 - **2026-07-23** — Themes cut to a single "Lector" theme: removed Lyra / Lyra-3-Covers /
   RoundedRaff; kept CrossPoint "Classic" base, renamed enum `CLASSIC`→`LECTOR`; dropped the
   Settings theme picker. `BaseTheme`/`BaseMetrics` is the lector look canvas. Commit `02b81844`.
-
-## Current task — PXC sleep wallpaper
-
-- CrossPoint sleep code: `src/activities/boot_sleep/SleepActivity.{h,cpp}` — accepts `.bmp`
-  (`/sleep.bmp` + `.bmp` files via `FsHelpers::hasBmpExtension`), renders via `renderBitmapSleepScreen`.
-- Lector core to port: `src/activities/boot_sleep/PxcSleepRenderer.{h,cpp}`
-  (`renderPxcSleepScreen`, streams row-by-row) + `PxcOverlayTiming.h`. Uses grayscale plane
-  rendering that freeink-sdk provides. Also `PxcViewerActivity` (view a `.pxc`) if wanted.
-- Plan: add `.pxc` as an accepted wallpaper extension in `SleepActivity`; when the chosen
-  wallpaper is `.pxc`, call `renderPxcSleepScreen` instead of the BMP path. On-demand decode
-  only — do NOT bring `SleepWallpaperStage`/`SleepWallpaperIndexStore`.
-- `.pxc` files are produced by the Wallpaper Converter site (diogo7dias.github.io/lector-wallpaper-converter).
+- **2026-07-23** — PXC sleep wallpaper ported. New CrossPoint-native
+  `src/activities/boot_sleep/PxcSleepRenderer.{h,cpp}` (lean; mirrors `renderBitmapSleepScreen`'s
+  3-pass grayscale pipeline — `displayGrayscaleBase`/`setRenderMode`/`copyGrayscale*Buffers`/
+  `displayGrayBuffer` — feeding `.pxc` 2bpp pixels through the existing `DirectPixelWriter`).
+  `SleepActivity::renderCustomSleepScreen` now accepts `/sleep.pxc` and `.pxc` files in the
+  `/sleep` (or `/.sleep`) folder, branching to the PXC renderer by extension. On-demand decode
+  only; NO staging (`SleepWallpaperStage`/`IndexStore` deliberately NOT ported). `hasPxcExtension`
+  is a local inline in PxcSleepRenderer.h (keeps shared FsHelpers upstream-clean). Builds clean.
+  NOTE: `.pxc` must be authored at exact panel size (Lector Wallpaper Converter output); the
+  renderer rejects size mismatches and falls through to the next sleep screen.
 
 ## Next steps
 
-1. Port PXC sleep wallpaper (current task).
-2. Port #9 per-book reader settings (on CrossPoint indexing).
-3. Port #10 paragraph numbers (3 states) on top of #9.
-4. Continue down the niceties list.
-5. First flashable test build once PXC + 9 + 10 land.
+1. **#9 — per-book reader settings** (on CrossPoint indexing) — NEXT.
+2. #10 paragraph numbers (3 states) on top of #9.
+3. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity, unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo.
+4. First flashable test build once #9 + #10 land (bundle with themes + PXC).
