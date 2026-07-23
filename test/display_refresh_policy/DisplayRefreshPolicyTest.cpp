@@ -4,11 +4,15 @@
 
 using Mode = DisplayRefreshPolicy::Mode;
 
-TEST(DisplayRefreshPolicy, PromotesFirstFastRefreshAfterLongIdle) {
+TEST(DisplayRefreshPolicy, DoesNotPromoteFastAfterLongIdle) {
   DisplayRefreshPolicy policy;
 
+  // On an e-reader "idle" is the user reading the current page, which routinely
+  // exceeds a minute. Idle time must NOT trigger a clean, or nearly every real
+  // page turn is promoted from a fast async refresh to a slow blocking one.
   EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Fast);
-  EXPECT_EQ(policy.choose(Mode::Fast, 61001), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast, 5UL * 60000), Mode::Fast);
+  EXPECT_EQ(policy.choose(Mode::Fast, 20UL * 60000), Mode::Fast);
 }
 
 TEST(DisplayRefreshPolicy, BoundsConsecutiveFastRefreshes) {

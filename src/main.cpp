@@ -790,18 +790,36 @@ void loop() {
       // short delay. Only once that heavy work is done do we drop to the 40 MHz
       // power-saving floor. The screen is static in this whole branch (no e-ink
       // refresh in flight), so a fast poll here can never corrupt a waveform.
-      const bool heavyIdleWork = !crosspoint::sleep::windex::idleComplete() || crosspoint::sleep::stage::isConverting();
-      // setPowerSaving() no-ops when the state is unchanged, so this does not
-      // thrash the PLL — it flips once when staging starts and once when it ends.
-      powerManager.setPowerSaving(!heavyIdleWork);
-      // Advance the index scan a bounded slice, then pre-convert the next sleep
-      // wallpaper's planes to SD (both cheap no-ops once complete).
-      crosspoint::sleep::windex::pumpIdle();
-      crosspoint::sleep::stage::pumpIdle(renderer.getDisplayWidthBytes(), renderer.getDisplayHeight());
-      // Short poll while staging is heavy so buttons are sampled promptly between
-      // slices; a modest 10 ms (was 20) once truly idle so the first press after a
-      // long reading pause is still noticed quickly.
-      delay(heavyIdleWork ? 5 : 10);
+      // Do NOT run sleep-wallpaper staging while a book is open. The staging
+      // pumps do SD directory scans + decode/write slices that share
+      // storageMutex with the render task and run between the once-per-loop
+      // button poll; while the loop is parked inside one of those SD ops
+      // gpio.update() is not reached, so a press lands in the gap and is never
+      // sampled — the "buttons go dead while reading, worst right after wake"
+      // report (the per-wake /sleep rescan is the heaviest offender). Staging is
+      // a pure prewarm: when it is skipped, sleep entry simply decodes the
+      // wallpaper on demand (PxcSleepRenderer streams row-by-row). So we prewarm
+      // only on the home screen / menus, where the extra SD work cannot starve
+      // reading input.
+      if (!activityManager.isReaderActivity()) {
+        const bool heavyIdleWork =
+            !crosspoint::sleep::windex::idleComplete() || crosspoint::sleep::stage::isConverting();
+        // setPowerSaving() no-ops when the state is unchanged, so this does not
+        // thrash the PLL — it flips once when staging starts and once when it ends.
+        powerManager.setPowerSaving(!heavyIdleWork);
+        // Advance the index scan a bounded slice, then pre-convert the next sleep
+        // wallpaper's planes to SD (both cheap no-ops once complete).
+        crosspoint::sleep::windex::pumpIdle();
+        crosspoint::sleep::stage::pumpIdle(renderer.getDisplayWidthBytes(), renderer.getDisplayHeight());
+        // Short poll while staging is heavy so buttons are sampled promptly between
+        // slices; a modest 10 ms once truly idle.
+        delay(heavyIdleWork ? 5 : 10);
+      } else {
+        // Reading idle: behave like upstream — throttle the clock and wait,
+        // nothing between button polls.
+        powerManager.setPowerSaving(true);
+        delay(10);
+      }
     } else {
       // Short delay to prevent tight loop while still being responsive.
       // NOTE: keep this at 10ms. The render task shares priority 1 with this

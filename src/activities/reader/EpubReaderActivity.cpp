@@ -2277,7 +2277,13 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       return;
     }
     const LayoutParams base = layoutParamsBase(viewportWidth, viewportHeight);
-    if (next->loadSectionFile(base)) {
+    // Warm at the SAME tier the foreground reads. loadSectionFromCache reads at
+    // withTier(base, lowMemoryTierFloor_); if a mid-book memory dip raised the
+    // floor above 0, prefetching at tier 0 caches under a generation the reader
+    // never loads, so every chapter boundary would miss and pay a full rebuild.
+    // No-op while the floor is 0 (the common case): withTier(base, 0) == base.
+    const LayoutParams warm = withTier(base, lowMemoryTierFloor_);
+    if (next->loadSectionFile(warm)) {
       slot->handled = true;  // already warm; drop the probe, look further ahead
       continue;
     }
@@ -2289,7 +2295,7 @@ void EpubReaderActivity::pumpNextChapterPrefetch(const uint16_t viewportWidth, c
       return;
     }
     LOG_DBG("ERS", "Prefetching chapter: %d", target);
-    if (!next->startBuild(base)) {
+    if (!next->startBuild(warm)) {
       LOG_ERR("ERS", "Failed to start prefetch for chapter: %d", target);
       slot->handled = true;  // will not retry until we move on
       return;
@@ -2316,11 +2322,14 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   }
 
   // Restart the scan whenever the layout settings change: the generation the
-  // previous scan warmed is no longer the one the reader loads from. The warm scan
-  // probes at tier 0, so the tier-0 layout key is exactly what identifies it — reuse
-  // LayoutParams::hash() instead of a second hand-rolled fingerprint of the same fields.
+  // previous scan warmed is no longer the one the reader loads from. Warm at the
+  // reader's current tier floor (not tier 0) so the warmed generation matches what
+  // the foreground loads after a memory dip — see pumpNextChapterPrefetch. Keying
+  // the restart hash off the tiered params also restarts the scan when the floor
+  // changes. No-op while the floor is 0: withTier(base, 0) == base.
   const LayoutParams base = layoutParamsBase(viewportWidth, viewportHeight);
-  const uint32_t h = base.hash();
+  const LayoutParams warm = withTier(base, lowMemoryTierFloor_);
+  const uint32_t h = warm.hash();
   if (h != warmSettingsHash_) {
     warmSettingsHash_ = h;
     warmScanComplete_ = false;
@@ -2371,11 +2380,11 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   if (!probe) {
     return;
   }
-  if (probe->loadSectionFile(base)) {
+  if (probe->loadSectionFile(warm)) {
     return;  // already warm
   }
   LOG_DBG("ERS", "Warming cold chapter %d", spine);
-  if (!probe->startBuild(base)) {
+  if (!probe->startBuild(warm)) {
     LOG_ERR("ERS", "Warm build failed to start for chapter %d", spine);
     return;  // cursor already advanced; skipped
   }
