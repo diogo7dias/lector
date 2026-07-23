@@ -52,7 +52,7 @@ Legend: [x] done · [~] in progress · [ ] todo
       no staging). Info-overlay (filename/favorite badge) + PXC viewer + unlock-banner reuse
       to be ported later.
 - [x] **9 — Per-book reader settings** (each book its own look; global default + override + reset). Commit `094ef02a`.
-- [~] **10 — Paragraph numbers** (TOP PRIORITY feature; per-book, in-book toggle; **keep 3 states: off / per-chapter / whole-book**). NEXT.
+- [x] **10 — Paragraph numbers** (per-book in-menu toggle; 3 states: off / per-chapter / whole-book). Commit `fd6bef6d`.
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
       PT hyphenation; Paperback heavier text; anti-alias fade off; first-line indent;
       word-spacing + paragraph-spacing sliders; "Bionic Reading" name.
@@ -118,16 +118,31 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   stays GLOBAL (rotate is a device-level thing, not a per-book look). Device build
   83.6% flash (unchanged). NOT device-tested yet.
 
+- **2026-07-23** — #10 paragraph numbers DONE (commit `fd6bef6d`). Parser
+  (`ChapterHtmlSlimParser`) tags the FIRST line of each visible paragraph with a
+  per-chapter ordinal (`paragraphOrdinal_` armed at `makePages`, consumed at
+  `addLineToPage`); `PageLine` carries a `uint16 paragraphOrdinal`, (de)serialized in
+  the section cache. **`SECTION_FILE_VERSION` 32 → 33** (partial sentinel auto-follows);
+  pagination byte-identical, so indexing unchanged — the bump only forces the one-time
+  rebuild that bakes the field. Mode = `ReaderPrefs.paragraphNumbering` (per-book);
+  new reader-menu row "Paragraph Numbers" cycles Off / Per Chapter / Whole Book in
+  place, applied on menu exit (`applyParagraphNumbering`; touch → book custom).
+  `CrossPointSettings::PARAGRAPH_NUMBERING` enum = shared value type. Per-chapter =
+  baked ordinal (base 0). Whole-book base = sum of prior spines' counts, captured
+  render-side (`drawParagraphNumbers` records running max per spine) and persisted to
+  a `paragraph_counts.bin` sidecar; finalizes as read forward. Numbers drawn with
+  `SMALL_FONT_ID` left of `wordXpos(0)`, skipped if no margin room. Flash 83.7%.
+  Device build clean; host reader_prefs 5/5. NOT device-tested yet.
+
 ## Next steps
 
-1. **#10 — paragraph numbers (3 states: off / per-chapter / whole-book)** — NEXT, on
-   top of #9. Field `ReaderPrefs.paragraphNumbering` already reserved. Plan: add
-   `CrossPointSettings::PARAGRAPH_NUMBERING` enum (shared value type); tag each
-   paragraph's first line with an ordinal in the HTML parser; store it on PageLine
-   and (de)serialize in the section cache (**bump SECTION_FILE_VERSION**); draw the
-   number in the left margin at render (no reflow); whole-book base = sum of prior
-   chapters' paragraph counts (persist per-spine counts). In-menu row cycles the 3
-   states and applies on close (touch → whole-book custom). GO_TO_PARAGRAPH jump is a
-   later nice-to-have, not part of the core #10.
-2. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity, unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo.
-3. First flashable test build once #10 lands (bundle themes + PXC + folders + wallpaper + per-book settings + paragraph numbers).
+1. **First flashable test build** — bundle everything landed on `crosspoint-rebase`
+   (themes→Lector, PXC wallpaper, SD folders, random wallpaper, #9 per-book settings,
+   #10 paragraph numbers) and have Diogo device-test on the X4. Device tests owed:
+   per-book settings (change font in one book → only it changes; reset works),
+   paragraph numbers (all 3 modes; whole-book continues across chapters; section
+   caches rebuild once after the v33 bump).
+2. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity,
+   unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo, GO_TO_PARAGRAPH
+   jump (deferred nice-to-have that pairs with #10), fonts/typography, home layout,
+   status bar v2, Grab Quote, margins, WiFi browser/OPDS.
