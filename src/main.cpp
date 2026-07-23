@@ -306,6 +306,20 @@ void setup() {
 
   HalSystem::checkPanic();
 
+  // Lector: on first install (fresh SD) make sure the folders lector uses exist,
+  // so the user can drop files straight in (over WiFi or a card reader) without
+  // creating them by hand. ensureDirectoryExists is a quiet no-op when present.
+  //   /read        - opened books moved here (CrossPoint "move to read" folder)
+  //   /recents     - opened books moved here (lector "move to Recents")
+  //   /sleep       - sleep / lock wallpapers (.bmp / .pxc)
+  //   /sleep pause - wallpapers paused out of the rotation (note the space)
+  {
+    static constexpr const char* kLectorFolders[] = {"/read", "/recents", "/sleep", "/sleep pause"};
+    for (const char* folder : kLectorFolders) {
+      Storage.ensureDirectoryExists(folder);
+    }
+  }
+
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
   RECENT_BOOKS.loadFromFile();

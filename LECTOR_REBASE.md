@@ -86,9 +86,16 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   NOTE: `.pxc` must be authored at exact panel size (Lector Wallpaper Converter output); the
   renderer rejects size mismatches and falls through to the next sleep screen.
 
+- **2026-07-23** — Boot creates lector's SD folders on first install (idempotent
+  `Storage.ensureDirectoryExists`, in `main.cpp` right after `Storage.begin()`):
+  `/read` (opened books "move to read"), `/recents` (lector "move to Recents"),
+  `/sleep` (wallpapers, .bmp/.pxc), `/sleep pause` (paused wallpapers — note the space).
+  So a fresh SD is ready for drop-in without hand-creating folders. `READ_FOLDER="/read"`
+  and `RECENTS_DIR="/recents"` (BookRelocation.h) are the canonical names.
+
 ## Next steps
 
-1. **#9 — per-book reader settings** (on CrossPoint indexing) — NEXT.
+1. **#9 — per-book reader settings** (on CrossPoint indexing) — NEXT (after Diogo's compaction).
 2. #10 paragraph numbers (3 states) on top of #9.
 3. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity, unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo.
 4. First flashable test build once #9 + #10 land (bundle with themes + PXC).
