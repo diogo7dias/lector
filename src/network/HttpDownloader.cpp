@@ -275,7 +275,10 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       LOG_ERR("HTTP", "wolfSSL bad URL: %s", url.c_str());
       return HttpDownloader::HTTP_ERROR;
     }
-    http.addHeader("User-Agent", "CrossPoint-ESP32-" CROSSPOINT_VERSION);
+    // setUserAgent (not addHeader): SecureHttpClient always emits its own
+    // User-Agent line, so addHeader here produced TWO User-Agent headers, which
+    // strict servers (e.g. aiohttp-backed OPDS) reject with 400. Upstream #2661.
+    http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
     if (!username.empty() && !password.empty()) {
       const std::string credentials = username + ":" + password;
       const String encoded = base64::encode(credentials.c_str());
