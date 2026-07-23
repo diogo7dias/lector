@@ -53,23 +53,6 @@ int readSidecarPercent(const std::string& bookPath) {
   return buf[offset] <= 100 ? buf[offset] : -1;
 }
 
-// The reader's hash-keyed cache dir for a book path, matching Epub.cpp / Txt.cpp
-// / Xtc.h exactly, or "" for a non-book extension. Because it is the same
-// std::hash the readers use, relocating this dir with the file lets a moved book
-// keep its rendered sections and reading position.
-std::string bookCacheDir(const std::string& bookPath) {
-  const char* prefix;
-  if (FsHelpers::hasEpubExtension(bookPath)) {
-    prefix = "/.crosspoint/epub_";
-  } else if (FsHelpers::hasXtcExtension(bookPath)) {
-    prefix = "/.crosspoint/xtc_";
-  } else if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
-    prefix = "/.crosspoint/txt_";
-  } else {
-    return "";
-  }
-  return prefix + std::to_string(std::hash<std::string>{}(bookPath));
-}
 }  // namespace
 
 RecentBooksStore RecentBooksStore::instance;
@@ -171,6 +154,20 @@ void RecentBooksStore::updatePath(const std::string& oldPath, const std::string&
     it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
   }
   saveToFile();
+}
+
+std::string RecentBooksStore::bookCacheDir(const std::string& bookPath) {
+  const char* prefix;
+  if (FsHelpers::hasEpubExtension(bookPath)) {
+    prefix = "/.crosspoint/epub_";
+  } else if (FsHelpers::hasXtcExtension(bookPath)) {
+    prefix = "/.crosspoint/xtc_";
+  } else if (FsHelpers::hasTxtExtension(bookPath) || FsHelpers::hasMarkdownExtension(bookPath)) {
+    prefix = "/.crosspoint/txt_";
+  } else {
+    return "";
+  }
+  return prefix + std::to_string(std::hash<std::string>{}(bookPath));
 }
 
 std::string RecentBooksStore::relocateOpenedBookToRecents(const std::string& bookPath) {

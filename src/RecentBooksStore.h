@@ -71,6 +71,12 @@ class RecentBooksStore {
   // Must run before the reader opens the book (no open handle on the file/cache).
   std::string relocateOpenedBookToRecents(const std::string& bookPath);
 
+  // The reader's hash-keyed cache dir for a book path, matching Epub / Txt / Xtc
+  // exactly (e.g. "/.crosspoint/epub_<hash>"), or "" for a non-book extension.
+  // Same formula the readers use, so callers can locate a book's cached sidecars
+  // (progress.bin, reader_override.bin) without opening the book.
+  static std::string bookCacheDir(const std::string& bookPath);
+
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);
 

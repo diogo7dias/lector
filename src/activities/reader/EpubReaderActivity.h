@@ -89,6 +89,10 @@ class EpubReaderActivity final : public Activity {
   // Result callback from the in-book Reader-settings screen: capture edits, mark
   // the book custom on any change, persist + re-layout.
   void applyReaderSettingsEdit();
+
+  // Copy another book's reader settings onto this book (Steal Look). sourceCachePath
+  // is the chosen book's cache dir, holding its reader_override.bin.
+  void applyStolenLook(const std::string& sourceCachePath);
   // Reset action: delete the sidecar, follow global settings again, re-layout.
   void resetReaderPrefsToGlobal();
   // Drop cached sections so render() rebuilds the current chapter under new prefs_.

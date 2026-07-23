@@ -16,6 +16,7 @@ class EpubReaderMenuActivity final : public Activity {
     BOOK_INFO,
     READER_SETTINGS,        // open this book's per-book reader settings
     RESET_READER_SETTINGS,  // clear this book's override, follow global again
+    STEAL_LOOK,             // copy another book's reader settings onto this book
     FOOTNOTES,
     GO_TO_PERCENT,
     AUTO_PAGE_TURN,

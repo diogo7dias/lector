@@ -41,6 +41,7 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "StealLookActivity.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/SettingsActivity.h"
 #include "components/StatusBar.h"
@@ -876,6 +877,24 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::STEAL_LOOK: {
+      // Pick another book that has a custom look and copy its reader settings
+      // onto this book (one-time snapshot). The picker returns the source book's
+      // cache path (FilePathResult); an empty/cancelled result changes nothing.
+      startActivityForResult(makeUniqueNoThrow<StealLookActivity>(renderer, mappedInput, epub->getPath()),
+                             [this](const ActivityResult& res) {
+                               if (res.isCancelled) {
+                                 requestUpdate();
+                                 return;
+                               }
+                               if (const auto* fp = std::get_if<FilePathResult>(&res.data)) {
+                                 applyStolenLook(fp->path);
+                               } else {
+                                 requestUpdate();
+                               }
+                             });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::READING_STATS: {
       reading_stats::ReadingStatsData book;
       reading_stats::ReadingStatsData global;
@@ -1585,6 +1604,31 @@ void EpubReaderActivity::applyReaderSettingsEdit() {
   // stale manager returns the old id, the cache key does not change, and the
   // old-font section reloads — the in-book font/size change never appears.
   // Runs while no build is active (settings-result callback), before requestUpdate.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
+  reloadForReaderPrefsChange();
+  requestUpdate();
+}
+
+// Steal Look: copy another book's reader settings onto this book, once. Reads the
+// source book's reader_override.bin, freezes it as this book's override, and
+// re-lays-out — the same apply path as an in-book settings edit. sourceCachePath
+// is the chosen book's cache dir (from StealLookActivity).
+void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
+  ReaderPrefs stolen;
+  HalFile f;
+  if (!Storage.openFileForRead("ERS", sourceCachePath + "/reader_override.bin", f) || !readReaderPrefs(f, stolen)) {
+    LOG_ERR("ERS", "Steal Look: source reader_override.bin missing or unreadable");
+    requestUpdate();
+    return;
+  }
+  if (std::memcmp(&stolen, &prefs_, sizeof(ReaderPrefs)) == 0) {
+    requestUpdate();  // already identical — nothing to copy
+    return;
+  }
+  prefs_ = stolen;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  ReaderUtils::applyOrientation(renderer, prefs_.orientation);
   sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
   reloadForReaderPrefsChange();
   requestUpdate();

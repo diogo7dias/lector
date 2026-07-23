@@ -39,6 +39,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   if (hasReaderOverride) {
     items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
   }
+  // Copy another book's reader settings onto this one. The picker itself reports
+  // when no other book has a custom look, so the entry is always available.
+  items.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
   items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
   items.push_back({MenuAction::HIGHLIGHT_QUOTE, StrId::STR_GRAB_QUOTE});
   if (hasQuotes) {
