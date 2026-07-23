@@ -243,7 +243,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   return spec;
 }
 
-float CrossPointSettings::getReaderLineCompression() const {
+float CrossPointSettings::resolveLineCompression(const uint8_t fontFamily, const uint8_t lineSpacing,
+                                                 const char* sdFontFamilyName) {
   // SD card fonts use same compression as Bookerly (the most neutral values)
   if (sdFontFamilyName[0] != '\0') {
     switch (lineSpacing) {
@@ -282,6 +283,10 @@ float CrossPointSettings::getReaderLineCompression() const {
   }
 }
 
+float CrossPointSettings::getReaderLineCompression() const {
+  return resolveLineCompression(fontFamily, lineSpacing, sdFontFamilyName);
+}
+
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   if (sleepTimeoutMinutes >= SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
   const uint8_t minutes =
@@ -305,7 +310,8 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
-int CrossPointSettings::getReaderFontId() const {
+int CrossPointSettings::resolveReaderFontId(const uint8_t fontFamily, const uint8_t fontSize,
+                                            const char* sdFontFamilyName) const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
     int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
@@ -340,4 +346,76 @@ int CrossPointSettings::getReaderFontId() const {
           return NOTOSANS_18_FONT_ID;
       }
   }
+}
+
+int CrossPointSettings::getReaderFontId() const { return resolveReaderFontId(fontFamily, fontSize, sdFontFamilyName); }
+
+int CrossPointSettings::getReaderFontId(const ReaderPrefs& prefs) const {
+  return resolveReaderFontId(prefs.fontFamily, prefs.fontSize, prefs.sdFontFamilyName);
+}
+
+ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth, const uint16_t viewportHeight,
+                                                      const ReaderPrefs& prefs) const {
+  ReaderRenderSpec spec;
+  spec.fontId = resolveReaderFontId(prefs.fontFamily, prefs.fontSize, prefs.sdFontFamilyName);
+  spec.lineCompression = resolveLineCompression(prefs.fontFamily, prefs.lineSpacing, prefs.sdFontFamilyName);
+  spec.extraParagraphSpacing = prefs.extraParagraphSpacing != 0;
+  spec.paragraphAlignment = prefs.paragraphAlignment;
+  spec.viewportWidth = viewportWidth;
+  spec.viewportHeight = viewportHeight;
+  spec.hyphenationEnabled = prefs.hyphenationEnabled != 0;
+  spec.embeddedStyle = prefs.embeddedStyle != 0;
+  spec.imageRendering = prefs.imageRendering;
+  spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
+  return spec;
+}
+
+void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
+  fontFamily = p.fontFamily;
+  fontSize = p.fontSize;
+  lineSpacing = p.lineSpacing;
+  paragraphAlignment = p.paragraphAlignment;
+  extraParagraphSpacing = p.extraParagraphSpacing;
+  screenMargin = p.screenMargin;
+  focusReadingEnabled = p.focusReadingEnabled;
+  hyphenationEnabled = p.hyphenationEnabled;
+  embeddedStyle = p.embeddedStyle;
+  textAntiAliasing = p.textAntiAliasing;
+  imageRendering = p.imageRendering;
+  std::memset(sdFontFamilyName, 0, sizeof(sdFontFamilyName));
+  std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
+}
+
+void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues) {
+  if (!readerEditOverlayActive_) {
+    readerEditBackup_ = ReaderPrefs::fromGlobal();  // the true global reader values
+    readerEditOverlayActive_ = true;
+  }
+  applyReaderPrefs(startValues);  // editor starts from the book's current values
+}
+
+ReaderPrefs CrossPointSettings::endReaderEditOverlay() {
+  const ReaderPrefs edited = ReaderPrefs::fromGlobal();  // whatever the editor left on the live fields
+  if (readerEditOverlayActive_) {
+    applyReaderPrefs(readerEditBackup_);  // restore the true global values
+    readerEditOverlayActive_ = false;
+  }
+  return edited;
+}
+
+bool CrossPointSettings::saveToFile() const {
+  if (!readerEditOverlayActive_) {
+    return PersistableStore<CrossPointSettings>::saveToFile();
+  }
+  // A per-book reader edit is overlaid on the live reader fields. Persist the
+  // GLOBAL values (the backup) so settings.json never captures a book's per-book
+  // settings, even if a background task saves mid-edit. const_cast is safe: the
+  // singleton is a non-const object; this only transiently swaps its reader fields
+  // out for the write, then restores the overlay.
+  auto* self = const_cast<CrossPointSettings*>(this);
+  const ReaderPrefs overlaid = ReaderPrefs::fromGlobal();
+  self->applyReaderPrefs(readerEditBackup_);
+  const bool ok = PersistableStore<CrossPointSettings>::saveToFile();
+  self->applyReaderPrefs(overlaid);
+  return ok;
 }

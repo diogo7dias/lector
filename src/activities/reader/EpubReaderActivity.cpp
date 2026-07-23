@@ -12,6 +12,7 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include <iterator>
 #include <limits>
@@ -33,6 +34,8 @@
 #include "QrDisplayActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
+#include "activities/settings/TextSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
@@ -169,6 +172,10 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
 
+  // Load this book's per-book reader settings (or a snapshot of global) before any
+  // layout, so the first render already paginates through the right ReaderPrefs.
+  loadReaderPrefs();
+
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[6];
@@ -253,18 +260,19 @@ void EpubReaderActivity::openReaderMenu() {
     bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
   }
   const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
-  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(
-                             renderer, mappedInput, epub->getTitle(), currentPage, totalPages, bookProgressPercent,
-                             SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty()),
-                         [this](const ActivityResult& result) {
-                           // Always apply orientation change even if the menu was cancelled
-                           const auto& menu = std::get<MenuResult>(result.data);
-                           applyOrientation(menu.orientation);
-                           toggleAutoPageTurn(menu.pageTurnOption);
-                           if (!result.isCancelled) {
-                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-                           }
-                         });
+  startActivityForResult(
+      std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
+                                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
+                                               !cachedBookmarks.empty(), prefsCustom_),
+      [this](const ActivityResult& result) {
+        // Always apply orientation change even if the menu was cancelled
+        const auto& menu = std::get<MenuResult>(result.data);
+        applyOrientation(menu.orientation);
+        toggleAutoPageTurn(menu.pageTurnOption);
+        if (!result.isCancelled) {
+          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+        }
+      });
 }
 
 bool EpubReaderActivity::buildTickHeapGate() {
@@ -306,8 +314,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
-  orientedMarginLeft += SETTINGS.screenMargin;
+  orientedMarginTop += prefs_.screenMargin;
+  orientedMarginLeft += prefs_.screenMargin;
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                         orientedMarginLeft, orientedMarginTop),
@@ -346,7 +354,7 @@ void EpubReaderActivity::loop() {
           if (auto* fcm = renderer.getFontCacheManager()) {
             const auto t0 = millis();
             auto scope = fcm->createPrewarmScope();
-            p->render(renderer, SETTINGS.getReaderFontId(), 0, 0);  // scan only, no pixels
+            p->render(renderer, SETTINGS.getReaderFontId(prefs_), 0, 0);  // scan only, no pixels
             scope.endScanAndPrewarm();
             LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
           }
@@ -366,7 +374,7 @@ void EpubReaderActivity::loop() {
       section->currentPage + PARTIAL_REBUILD_START_MARGIN >= static_cast<int>(section->pageCount)) {
     RenderLock lock;
     // Reuse the last render's viewport so the extension paginates identically to the partial.
-    const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight);
+    const ReaderRenderSpec buildSpec = SETTINGS.readerRenderSpec(buildViewportWidth, buildViewportHeight, prefs_);
     if (!section->startBuild(buildSpec)) {
       // Not fatal: the partial keeps serving its pages; crossing the watermark falls back to
       // the blocking extension in render(). Don't retry every tick.
@@ -882,6 +890,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       addBookmark();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::READER_SETTINGS: {
+      // Overlay this book's values onto the live settings so the existing text
+      // settings screen edits them in place (guarded so global settings.json is
+      // untouched); the result callback captures the edits into the book override.
+      SETTINGS.beginReaderEditOverlay(prefs_);
+      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
+                             [this](const ActivityResult&) { applyReaderSettingsEdit(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::RESET_READER_SETTINGS: {
+      resetReaderPrefsToGlobal();
+      break;
+    }
   }
 }
 
@@ -962,6 +983,75 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     // Reset section to force re-layout in the new orientation.
     section.reset();
   }
+}
+
+std::string EpubReaderActivity::readerOverridePath() const { return epub->getCachePath() + "/reader_override.bin"; }
+
+void EpubReaderActivity::loadReaderPrefs() {
+  prefsCustom_ = false;
+  HalFile f;
+  if (Storage.openFileForRead("ERS", readerOverridePath(), f)) {
+    ReaderPrefs loaded;
+    if (readReaderPrefs(f, loaded)) {
+      prefs_ = loaded;
+      prefsCustom_ = true;
+      LOG_DBG("ERS", "Loaded per-book reader override");
+      return;
+    }
+    LOG_ERR("ERS", "reader_override.bin present but unreadable; using global settings");
+  }
+  prefs_ = ReaderPrefs::fromGlobal();
+}
+
+bool EpubReaderActivity::writeReaderOverride(const ReaderPrefs& p) const {
+  HalFile f;
+  if (!Storage.openFileForWrite("ERS", readerOverridePath(), f)) {
+    LOG_ERR("ERS", "Failed to open reader_override.bin for write");
+    return false;
+  }
+  if (!writeReaderPrefs(f, p)) {
+    LOG_ERR("ERS", "Short write to reader_override.bin");
+    return false;
+  }
+  return true;
+}
+
+void EpubReaderActivity::reloadForReaderPrefsChange() {
+  // Mirrors applyOrientation's reflow: keep the reading position, drop the section
+  // so the next render rebuilds it with the new ReaderPrefs (CrossPoint's section
+  // cache re-keys on the changed spec automatically — no cache machinery of ours).
+  RenderLock lock(*this);
+  if (section) {
+    cachedSpineIndex = currentSpineIndex;
+    cachedChapterTotalPageCount = section->pageCount;
+    nextPageNumber = section->currentPage;
+  }
+  section.reset();
+}
+
+void EpubReaderActivity::applyReaderSettingsEdit() {
+  ReaderPrefs edited = SETTINGS.endReaderEditOverlay();
+  // paragraphNumbering is a per-book in-menu toggle, not part of the Reader Settings
+  // screen, so it is not in the overlay round-trip; carry the book's value across.
+  edited.paragraphNumbering = prefs_.paragraphNumbering;
+  if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
+    // Opened the settings screen but changed nothing — leave the book as it was.
+    requestUpdate();
+    return;
+  }
+  prefs_ = edited;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  reloadForReaderPrefsChange();
+  requestUpdate();
+}
+
+void EpubReaderActivity::resetReaderPrefsToGlobal() {
+  Storage.remove(readerOverridePath().c_str());
+  prefs_ = ReaderPrefs::fromGlobal();
+  prefsCustom_ = false;
+  reloadForReaderPrefsChange();
+  requestUpdate();
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
@@ -1072,9 +1162,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
                                    &orientedMarginLeft);
-  orientedMarginTop += SETTINGS.screenMargin;
-  orientedMarginLeft += SETTINGS.screenMargin;
-  orientedMarginRight += SETTINGS.screenMargin;
+  orientedMarginTop += prefs_.screenMargin;
+  orientedMarginLeft += prefs_.screenMargin;
+  orientedMarginRight += prefs_.screenMargin;
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
 
@@ -1082,10 +1172,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
     orientedMarginBottom +=
-        std::max(SETTINGS.screenMargin,
+        std::max(prefs_.screenMargin,
                  static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
   } else {
-    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+    orientedMarginBottom += std::max(prefs_.screenMargin, statusBarHeight);
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -1094,7 +1184,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   buildViewportWidth = viewportWidth;
   buildViewportHeight = viewportHeight;
 
-  const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight);
+  const ReaderRenderSpec renderSpec = SETTINGS.readerRenderSpec(viewportWidth, viewportHeight, prefs_);
 
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
@@ -1460,7 +1550,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
                                         const int orientedMarginRight, const int orientedMarginBottom,
                                         const int orientedMarginLeft) {
   const auto t0 = millis();
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = SETTINGS.getReaderFontId(prefs_);
 
   // The image pixel-cache RAM slot lives for exactly one page render (it feeds
   // the BW double-refresh and every grayscale band pass); release it on every
@@ -1478,7 +1568,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   const bool pageHasImages = page->hasImages();
   const bool pageHasImagesNeedingDecode = pageHasImages && page->hasImagesNeedingDecode();
-  const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
+  const bool needsTextGrayscale = prefs_.textAntiAliasing;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
   const bool tiledGrayscale = needsAnyGrayscale && renderer.supportsStripGrayscale();
   // Whole-plane buffering only pays when the BW refresh genuinely runs async

@@ -9,11 +9,18 @@
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
+#include "ReaderPrefs.h"
 #include "activities/Activity.h"
 
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
+  // Per-book reader "look" settings. Loaded from <cachePath>/reader_override.bin on
+  // enter if present (prefsCustom_ = true), else a snapshot of the global settings.
+  // The reader lays out exclusively through prefs_, so the global singleton is never
+  // mutated for reading and a custom book stays decoupled from global changes.
+  ReaderPrefs prefs_;
+  bool prefsCustom_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -171,6 +178,16 @@ class EpubReaderActivity final : public Activity {
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();
   void applyOrientation(uint8_t orientation);
+  // Per-book reader settings (#9).
+  std::string readerOverridePath() const;
+  void loadReaderPrefs();
+  bool writeReaderOverride(const ReaderPrefs& p) const;
+  // Capture the in-book Reader Settings edit back into this book's override.
+  void applyReaderSettingsEdit();
+  // Delete this book's override and follow the global settings again.
+  void resetReaderPrefsToGlobal();
+  // Drop the section so the next render re-paginates with the new prefs, keeping position.
+  void reloadForReaderPrefsChange();
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();

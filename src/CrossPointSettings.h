@@ -5,6 +5,8 @@
 
 #include <cstdint>
 
+#include "activities/reader/ReaderPrefs.h"
+
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   // Private constructor for singleton
@@ -287,6 +289,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
   }
   int getReaderFontId() const;
+  // Per-book override: resolve the reader font id from a ReaderPrefs snapshot
+  // instead of the live global fields, so a custom book lays out through its own
+  // settings without ever mutating the global singleton.
+  int getReaderFontId(const ReaderPrefs& prefs) const;
 
   // Resolved status-bar composition. Consumers read the spec; only settings
   // editors read the raw fields.
@@ -327,6 +333,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // passing it in keeps a spec from ever existing in a half-filled state.
   // Unlocked for the same reason as statusBarSpec(); see the note above.
   ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
+  // Per-book override: build the spec from a ReaderPrefs snapshot. Every field the
+  // section cache keys on comes from prefs, so a custom book's cache is validated
+  // and rebuilt against its own settings by CrossPoint's own indexing.
+  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight, const ReaderPrefs& prefs) const;
 
   static const char* getFilePath() { return "/.crosspoint/settings.json"; }
   void toJson(JsonDocument& doc) const;
@@ -338,6 +348,29 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+
+  // ── Per-book reader-settings edit overlay ──────────────────────────────────
+  // Overlays a book's ReaderPrefs onto the live reader fields so the existing
+  // TextSettingsActivity edits them in place; endReaderEditOverlay() captures the
+  // result and restores the true global values. While an overlay is active,
+  // saveToFile() persists the global backup, never the book's overlaid values.
+  void applyReaderPrefs(const ReaderPrefs& p);
+  void beginReaderEditOverlay(const ReaderPrefs& startValues);
+  ReaderPrefs endReaderEditOverlay();
+  bool readerEditOverlayActive() const { return readerEditOverlayActive_; }
+
+  // Shadows PersistableStore::saveToFile so an active reader-edit overlay can never
+  // leak a book's per-book values into the global settings.json.
+  bool saveToFile() const;
+
+ private:
+  // Shared resolvers so getReaderFontId()/getReaderLineCompression() and their
+  // ReaderPrefs overloads compute font id / line compression from one code path.
+  int resolveReaderFontId(uint8_t fontFamily, uint8_t fontSize, const char* sdFontFamilyName) const;
+  static float resolveLineCompression(uint8_t fontFamily, uint8_t lineSpacing, const char* sdFontFamilyName);
+
+  bool readerEditOverlayActive_ = false;
+  ReaderPrefs readerEditBackup_;
 };
 
 // Helper macro to access settings
