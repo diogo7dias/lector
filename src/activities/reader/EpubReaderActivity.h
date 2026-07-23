@@ -93,6 +93,9 @@ class EpubReaderActivity final : public Activity {
   // Copy another book's reader settings onto this book (Steal Look). sourceCachePath
   // is the chosen book's cache dir, holding its reader_override.bin.
   void applyStolenLook(const std::string& sourceCachePath);
+
+  // Apply a per-book Paperback Look change returned from the reader menu.
+  void applyPaperbackLook(uint8_t body, uint8_t status);
   // Reset action: delete the sidecar, follow global settings again, re-layout.
   void resetReaderPrefsToGlobal();
   // Drop cached sections so render() rebuilds the current chapter under new prefs_.

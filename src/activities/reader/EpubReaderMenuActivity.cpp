@@ -14,7 +14,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const int totalPages, const int bookProgressPercent,
                                                const uint8_t currentOrientation, const bool hasFootnotes,
                                                const bool hasBookmarks, const bool hasQuotes, bool hasSleepWallpaper,
-                                               bool wallpaperPaused, bool wallpaperFavorited, bool hasReaderOverride)
+                                               bool wallpaperPaused, bool wallpaperFavorited, bool hasReaderOverride,
+                                               uint8_t paperbackBody, uint8_t paperbackStatus)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused,
                                wallpaperFavorited, hasReaderOverride)),
@@ -22,6 +23,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
       author(author),
       chapterName(chapterName),
       pendingOrientation(currentOrientation),
+      selectedPaperbackBody(paperbackBody),
+      selectedPaperbackStatus(paperbackStatus),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
@@ -119,18 +122,17 @@ void EpubReaderMenuActivity::loop() {
     }
 
     // Paperback Look toggles: flip in place (like the orientation/auto-turn rows
-    // above), persist immediately, and keep the menu open so the ON/OFF label
-    // updates like a checkbox. The reader auto-re-renders on menu close and picks
-    // up the new SETTINGS value, so the ink weight changes as soon as you exit.
+    // above) and keep the menu open so the ON/OFF label updates like a checkbox.
+    // Per book now — the flip lives on a local copy returned via MenuResult; the
+    // reader applies it to this book's ReaderPrefs on close (freezing the book's
+    // override), so the ink weight changes as soon as you exit.
     if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
-      SETTINGS.paperbackLookBody = SETTINGS.paperbackLookBody ? 0 : 1;
-      SETTINGS.saveToFile();
+      selectedPaperbackBody = selectedPaperbackBody ? 0 : 1;
       requestUpdate();
       return;
     }
     if (selectedAction == MenuAction::TOGGLE_PAPERBACK_STATUS) {
-      SETTINGS.paperbackLookStatus = SETTINGS.paperbackLookStatus ? 0 : 1;
-      SETTINGS.saveToFile();
+      selectedPaperbackStatus = selectedPaperbackStatus ? 0 : 1;
       requestUpdate();
       return;
     }
@@ -141,13 +143,15 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
+                         selectedPaperbackBody, selectedPaperbackStatus});
     finish();
     return;
   } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
-    result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+    result.data =
+        MenuResult{-1, pendingOrientation, selectedPageTurnOption, selectedPaperbackBody, selectedPaperbackStatus};
     setResult(std::move(result));
     finish();
     return;
@@ -222,10 +226,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           // Render current page turn value on the right edge of the content area.
           return pageTurnLabels[selectedPageTurnOption];
         } else if (value == MenuAction::TOGGLE_PAPERBACK_LOOK) {
-          // Show current ON/OFF state so the row reads like a checkbox.
-          return I18N.get(SETTINGS.paperbackLookBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+          // Show current ON/OFF state so the row reads like a checkbox (per book).
+          return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
-          return I18N.get(SETTINGS.paperbackLookStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+          return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_RANDOM_ON_BOOT) {
           return I18N.get(SETTINGS.openRandomRecentOnBoot ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else {

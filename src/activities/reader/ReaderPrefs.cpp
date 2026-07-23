@@ -25,6 +25,8 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.focusReadingEnabled = SETTINGS.focusReadingEnabled;
   p.guideDotsEnabled = SETTINGS.guideDotsEnabled;
   p.imageRendering = SETTINGS.imageRendering;
+  p.paperbackLookBody = SETTINGS.paperbackLookBody;
+  p.paperbackLookStatus = SETTINGS.paperbackLookStatus;
   p.orientation = SETTINGS.orientation;
   // Zero-pad then copy so the trailing bytes are canonical — the reader compares
   // whole ReaderPrefs blobs (memcmp) to detect an edit, so stray bytes past the

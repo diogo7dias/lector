@@ -521,12 +521,15 @@ void EpubReaderActivity::loop() {
           makeUniqueNoThrow<EpubReaderMenuActivity>(
               renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-              hasQuotes, hasSleepWallpaper, wallpaperPaused, wallpaperFavorited, prefsCustom_),
+              hasQuotes, hasSleepWallpaper, wallpaperPaused, wallpaperFavorited, prefsCustom_, prefs_.paperbackLookBody,
+              prefs_.paperbackLookStatus),
           [this](const ActivityResult& result) {
-            // Always apply orientation change even if the menu was cancelled
+            // Always apply orientation + paperback change even if the menu was cancelled
+            // (both are toggled live in the menu and returned on any exit).
             const auto& menu = std::get<MenuResult>(result.data);
             applyOrientation(menu.orientation);
             toggleAutoPageTurn(menu.pageTurnOption);
+            applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
             if (!result.isCancelled) {
               onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
             }
@@ -1634,6 +1637,18 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
   requestUpdate();
 }
 
+// Apply a per-book Paperback Look change from the reader menu. Paperback only
+// changes ink weight, not layout, so no re-index — just persist the book's
+// override (touch -> whole book custom, like other reader settings) and repaint.
+void EpubReaderActivity::applyPaperbackLook(uint8_t body, uint8_t status) {
+  if (body == prefs_.paperbackLookBody && status == prefs_.paperbackLookStatus) return;
+  prefs_.paperbackLookBody = body;
+  prefs_.paperbackLookStatus = status;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  requestUpdate();
+}
+
 // Clear this book's override so it follows the global reader settings again.
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
   Storage.remove(readerOverridePath().c_str());
@@ -2658,7 +2673,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   // Paperback Look (body): thicken the reader page glyphs while this frame's
   // body text is drawn. Reset to false at the end so the status bar (own flag)
   // and any following menu/overlay render thin. The scan pass draws nothing.
-  renderer.setPaperbackLook(SETTINGS.paperbackLookBody);
+  renderer.setPaperbackLook(prefs_.paperbackLookBody);
 
   // Font prewarm: scan pass accumulates text, then prewarm, then real render
   auto* fcm = renderer.getFontCacheManager();
@@ -2866,7 +2881,7 @@ void EpubReaderActivity::renderStatusBar() const {
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset
   // so nothing drawn afterwards inherits the smear.
-  renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
+  renderer.setPaperbackLook(prefs_.paperbackLookStatus);
   GUI.drawStatusBarV2(renderer, d);
   renderer.setPaperbackLook(false);
 }

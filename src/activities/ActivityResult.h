@@ -21,6 +21,10 @@ struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
+  // Per-book Paperback Look state, toggled live in the menu and applied by the
+  // reader on close (like orientation). Seeded from the book's current values.
+  uint8_t paperbackBody = 1;
+  uint8_t paperbackStatus = 1;
 };
 
 struct ChapterResult {
