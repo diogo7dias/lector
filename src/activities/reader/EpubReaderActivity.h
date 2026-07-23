@@ -125,6 +125,10 @@ class EpubReaderActivity final : public Activity {
 
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
+  // Whole-book paragraph numbering: per-spine paragraph totals (index = spine),
+  // loaded from a sidecar at book open and filled as chapters build. Summed for
+  // the whole-book base offset; 0 = that chapter is not yet indexed.
+  std::vector<uint16_t> sectionParagraphCounts_;
   std::optional<uint16_t> pendingPageJump;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
@@ -263,6 +267,13 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(int percent);
   // Jump to a paragraph number within the current chapter (paragraph-number nav).
   void jumpToParagraph(int target);
+
+  // Whole-book paragraph-number support: a per-book sidecar of per-chapter
+  // paragraph totals, summed into a base offset so numbering runs continuously.
+  std::string paragraphCountsSidecarPath() const;
+  void loadParagraphCounts();
+  void recordSectionParagraphCount(int spineIndex, uint16_t count);
+  uint32_t wholeBookParagraphBase(int spineIndex) const;
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.

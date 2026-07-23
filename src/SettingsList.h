@@ -191,8 +191,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                         {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10, StrId::STR_DYNAMIC_MARGINS_20},
                         "dynamicMargins", StrId::STR_CAT_READER));
   v.push_back(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBERS, &CrossPointSettings::paragraphNumbering,
-                                {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER}, "paragraphNumbering",
-                                StrId::STR_CAT_READER));
+                                {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER, StrId::STR_PARA_NUM_BOOK},
+                                "paragraphNumbering", StrId::STR_CAT_READER));
   v.push_back(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
                                 {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
                                 StrId::STR_CAT_READER));

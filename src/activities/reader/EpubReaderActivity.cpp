@@ -11,6 +11,7 @@
 #include <JsonSettingsIO.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <Serialization.h>
 #include <esp_heap_caps.h>
 #include <esp_random.h>
 #include <esp_system.h>
@@ -191,6 +192,9 @@ void EpubReaderActivity::onEnter() {
   diagOverlayPending_ = true;  // logged always; drawn only when the setting is on
 
   epub->setupCacheDir();
+
+  // Load this book's per-chapter paragraph totals (whole-book numbering base).
+  loadParagraphCounts();
 
   // Resolve this book's reader settings (its own custom snapshot, or a snapshot of
   // the current global settings). Must run before applyOrientation + any layout so
@@ -826,6 +830,55 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
     nextPageNumber = found;
   }
   requestUpdate();
+}
+
+// ── Whole-book paragraph numbering ──────────────────────────────────────────
+// Per-chapter paragraph totals persist in a tiny sidecar next to the book cache
+// so the whole-book base offset is stable across sessions. Chapters fill it in as
+// they build (a re-index captures the total); a chapter not yet built reads 0, so
+// whole-book numbers finalize as the book is read/warmed through.
+
+std::string EpubReaderActivity::paragraphCountsSidecarPath() const {
+  return epub ? (epub->getCachePath() + "/paragraphs.bin") : std::string();
+}
+
+void EpubReaderActivity::loadParagraphCounts() {
+  sectionParagraphCounts_.assign(epub ? std::max(0, epub->getSpineItemsCount()) : 0, 0);
+  const std::string path = paragraphCountsSidecarPath();
+  if (path.empty()) return;
+  HalFile f;
+  if (!Storage.openFileForRead("ERS", path, f)) return;  // no sidecar yet
+  uint8_t version = 0;
+  uint16_t count = 0;
+  if (!serialization::tryReadPod(f, version) || version != 1 || !serialization::tryReadPod(f, count)) return;
+  const uint16_t n = std::min<uint16_t>(count, static_cast<uint16_t>(sectionParagraphCounts_.size()));
+  for (uint16_t i = 0; i < n; i++) {
+    uint16_t v = 0;
+    if (!serialization::tryReadPod(f, v)) break;
+    sectionParagraphCounts_[i] = v;
+  }
+}
+
+void EpubReaderActivity::recordSectionParagraphCount(const int spineIndex, const uint16_t count) {
+  if (count == 0 || spineIndex < 0 || spineIndex >= static_cast<int>(sectionParagraphCounts_.size())) return;
+  if (sectionParagraphCounts_[spineIndex] == count) return;  // unchanged -> no SD write
+  sectionParagraphCounts_[spineIndex] = count;
+  const std::string path = paragraphCountsSidecarPath();
+  if (path.empty()) return;
+  HalFile f;
+  if (!Storage.openFileForWrite("ERS", path, f)) return;
+  const uint8_t version = 1;
+  const uint16_t n = static_cast<uint16_t>(sectionParagraphCounts_.size());
+  bool ok = serialization::tryWritePod(f, version) && serialization::tryWritePod(f, n);
+  for (uint16_t i = 0; ok && i < n; i++) ok = serialization::tryWritePod(f, sectionParagraphCounts_[i]);
+  if (!ok) LOG_ERR("ERS", "Failed to persist paragraph-counts sidecar");
+}
+
+uint32_t EpubReaderActivity::wholeBookParagraphBase(const int spineIndex) const {
+  uint32_t base = 0;
+  const int n = std::min(spineIndex, static_cast<int>(sectionParagraphCounts_.size()));
+  for (int i = 0; i < n; i++) base += sectionParagraphCounts_[i];
+  return base;
 }
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
@@ -1699,9 +1752,12 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int contentTop,
                                               const int lineHeightPx) {
   if (SETTINGS.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
-  // Per-chapter uses the stored ordinal directly. Whole-book will add this
-  // chapter's base offset (sum of prior chapters' paragraph counts) here once
-  // per-section totals are indexed.
+  // Per-chapter uses the stored ordinal directly. Whole-book adds this chapter's
+  // base offset — the sum of prior chapters' paragraph totals (0 for chapters not
+  // yet indexed, so whole-book numbers finalize as the book is read through).
+  const uint32_t base = (SETTINGS.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK)
+                            ? wholeBookParagraphBase(currentSpineIndex)
+                            : 0;
   constexpr int kGap = 5;
   const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
   // The small UI font has no bold face, so thicken the number glyphs with the
@@ -1715,8 +1771,8 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     const auto& block = line.getBlock();
     if (!block || block->wordCount() == 0) continue;
 
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(ord));
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(base + ord));
     const int numWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
     // Hug the first letter: the first line is indented, so anchor to the first
     // word's real x (block leftInset + its intra-block xpos), not the margin.
@@ -1978,6 +2034,9 @@ bool EpubReaderActivity::advanceSectionBuild() {
     lowMemoryTierFloor_ = sectionBuildTier_;
   }
   sectionBuildActive_ = false;
+  // Record this chapter's paragraph total (for whole-book numbering) now that the
+  // build captured it. A cache load leaves it 0, so this only fires on a real build.
+  if (section) recordSectionParagraphCount(currentSpineIndex, section->paragraphCount);
   diagSectionReadyMs_ = millis();
   positionAfterSectionReady();
   return true;  // ready: render() falls through to paint the page this frame
@@ -2269,6 +2328,7 @@ void EpubReaderActivity::pumpWholeBookWarm(const uint16_t viewportWidth, const u
   if (warmSection_) {
     // Build committed on the previous pump.
     LOG_DBG("ERS", "Warmed chapter %d", warmBuildSpine_);
+    recordSectionParagraphCount(warmBuildSpine_, warmSection_->paragraphCount);
     warmSection_.reset();
     warmBuildSpine_ = -1;
   }
