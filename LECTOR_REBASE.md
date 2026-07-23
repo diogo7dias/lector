@@ -93,6 +93,16 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   So a fresh SD is ready for drop-in without hand-creating folders. `READ_FOLDER="/read"`
   and `RECENTS_DIR="/recents"` (BookRelocation.h) are the canonical names.
 
+- **2026-07-23** — Sleep wallpaper pick made O(1)-memory for huge folders. The old
+  lector ordered playlist/index (`SleepWallpaperStage`/`IndexStore`/`WallpaperPlaylistV2`)
+  was NOT ported (it rescanned `/sleep` on the reading loop — a slow input-starver). The
+  CrossPoint base already picks random, but built a full `std::vector` of every filename
+  AND parsed every BMP header per sleep — bad for Diogo's 2000–3000 image `/sleep`.
+  Replaced with **reservoir sampling** in `SleepActivity::renderCustomSleepScreen`: one
+  directory pass, keeps the k-th valid file with prob 1/k, holds only the winner, no
+  per-file header read. Recently-shown avoidance dropped (pure random, per Diogo). `.pxc`
+  + `.bmp` both eligible. Builds clean.
+
 ## Next steps
 
 1. **#9 — per-book reader settings** (on CrossPoint indexing) — NEXT (after Diogo's compaction).

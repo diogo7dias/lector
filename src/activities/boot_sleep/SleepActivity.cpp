@@ -96,59 +96,31 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   if (sleepDir) {
-    std::vector<std::string> files;
+    // Pick ONE random wallpaper in a single directory pass (reservoir sampling):
+    // keep the k-th valid file with probability 1/k, so every file is equally
+    // likely, using O(1) memory (only the winning name) and NO per-file header
+    // read. This scales to thousands of wallpapers, where the old "list every
+    // file + validate every header + pick an index" approach would exhaust the
+    // low sleep-entry heap and open every file on the card. Recently-shown
+    // avoidance is intentionally dropped: with thousands of files a plain random
+    // pick effectively never repeats, and the ask was "just grab a random one".
+    std::string chosen;
+    uint32_t seen = 0;
     char name[500];
-    // collect all valid BMP files
     for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
-      if (dirFile.isDirectory()) {
-        dirFile.close();
-        continue;
-      }
+      const bool isDir = dirFile.isDirectory();
       dirFile.getName(name, sizeof(name));
-      auto filename = std::string(name);
-      if (filename[0] == '.') {
-        dirFile.close();
-        continue;
-      }
-
-      if (hasPxcExtension(filename)) {
-        // .pxc wallpapers are validated at render time by renderPxcSleepScreen
-        // (header + panel-size check); accept by extension here.
-        files.emplace_back(filename);
-        dirFile.close();
-        continue;
-      }
-      if (!FsHelpers::hasBmpExtension(filename)) {
-        LOG_DBG("SLP", "Skipping non-image file name: %s", name);
-        dirFile.close();
-        continue;
-      }
-      Bitmap bitmap(dirFile);
-      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        LOG_DBG("SLP", "Skipping invalid BMP file: %s", name);
-        dirFile.close();
-        continue;
-      }
-      files.emplace_back(filename);
-      dirFile.close();
+      dirFile.close();  // only the name is needed; never open/parse the file here
+      if (isDir || name[0] == '\0' || name[0] == '.') continue;
+      if (!hasPxcExtension(name) && !FsHelpers::hasBmpExtension(name)) continue;
+      ++seen;
+      if (random(static_cast<long>(seen)) == 0) chosen = name;
     }
-    const auto numFiles = files.size();
-    if (numFiles > 0) {
-      // Pick a random wallpaper, excluding recently shown ones.
-      // Window: up to SLEEP_RECENT_COUNT entries, capped at numFiles-1.
-      const uint16_t fileCount = static_cast<uint16_t>(std::min(numFiles, static_cast<size_t>(UINT16_MAX)));
-      const uint8_t window =
-          static_cast<uint8_t>(std::min(static_cast<size_t>(APP_STATE.recentSleepFill), numFiles - 1));
-      auto randomFileIndex = static_cast<uint16_t>(random(fileCount));
-      for (uint8_t attempt = 0; attempt < 20 && APP_STATE.isRecentSleep(randomFileIndex, window); attempt++) {
-        randomFileIndex = static_cast<uint16_t>(random(fileCount));
-      }
-      APP_STATE.pushRecentSleep(randomFileIndex);
-      APP_STATE.saveToFile();
-      const auto filename = std::string(sleepDir) + "/" + files[randomFileIndex];
+    if (!chosen.empty()) {
+      const auto filename = std::string(sleepDir) + "/" + chosen;
       LOG_DBG("SLP", "Randomly loading: %s", filename.c_str());
       delay(100);
-      if (hasPxcExtension(files[randomFileIndex])) {
+      if (hasPxcExtension(chosen)) {
         if (renderPxcSleepScreen(renderer, filename)) {
           dir.close();
           return;
