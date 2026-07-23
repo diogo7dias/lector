@@ -31,11 +31,17 @@ class PageElement {
 // a line from a block element
 class PageLine final : public PageElement {
   std::shared_ptr<TextBlock> block;
+  // Visible-paragraph ordinal of the FIRST line of a paragraph (0 = not a paragraph
+  // start). Baked into the section cache so the paragraph-numbers feature can draw it
+  // in the left margin at render time with no reflow. See ChapterHtmlSlimParser.
+  uint16_t paragraphOrdinal = 0;
 
  public:
   PageLine(std::shared_ptr<TextBlock> block, const int16_t xPos, const int16_t yPos)
       : PageElement(xPos, yPos), block(std::move(block)) {}
   const std::shared_ptr<TextBlock>& getBlock() const { return block; }
+  uint16_t getParagraphOrdinal() const { return paragraphOrdinal; }
+  void setParagraphOrdinal(const uint16_t ordinal) { paragraphOrdinal = ordinal; }
   void render(GfxRenderer& renderer, int fontId, int xOffset, int yOffset) override;
   bool serialize(HalFile& file) override;
   PageElementTag getTag() const override { return TAG_PageLine; }

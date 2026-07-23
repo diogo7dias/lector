@@ -12,6 +12,7 @@
 #include <esp_system.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <functional>
 #include <iterator>
@@ -47,6 +48,8 @@ namespace {
 constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
+// paragraph_counts.bin: [uint8 version][uint16 spineCount][uint16 count]*spineCount.
+constexpr uint8_t PARAGRAPH_COUNTS_VERSION = 1;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -175,6 +178,9 @@ void EpubReaderActivity::onEnter() {
   // Load this book's per-book reader settings (or a snapshot of global) before any
   // layout, so the first render already paginates through the right ReaderPrefs.
   loadReaderPrefs();
+  // Per-spine paragraph counts for whole-book numbering (sized to the spine; filled
+  // from the sidecar if present, else zeros that fill in as the book is read).
+  loadParagraphCounts();
 
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
@@ -231,6 +237,9 @@ void EpubReaderActivity::onExit() {
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
 
+  // Persist whole-book paragraph counts gathered this session (epub still valid here).
+  if (epub) saveParagraphCounts();
+
   // Leaving mid-footnote loses the in-RAM return stack on deep sleep; persist the
   // pre-footnote position so the book reopens at the link origin, not the footnote.
   if (footnoteDepth > 0 && epub) {
@@ -263,12 +272,13 @@ void EpubReaderActivity::openReaderMenu() {
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
                                                bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                                               !cachedBookmarks.empty(), prefsCustom_),
+                                               !cachedBookmarks.empty(), prefsCustom_, prefs_.paragraphNumbering),
       [this](const ActivityResult& result) {
-        // Always apply orientation change even if the menu was cancelled
+        // Always apply orientation / paragraph-number changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
         applyOrientation(menu.orientation);
         toggleAutoPageTurn(menu.pageTurnOption);
+        applyParagraphNumbering(menu.paragraphNumbering);
         if (!result.isCancelled) {
           onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
         }
@@ -1054,6 +1064,99 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   requestUpdate();
 }
 
+void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode) {
+  if (mode == prefs_.paragraphNumbering) return;
+  prefs_.paragraphNumbering = mode;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  // No re-layout: the ordinals are already baked into the page cache; only whether
+  // and how they are drawn changes, so a plain repaint suffices.
+  requestUpdate();
+}
+
+std::string EpubReaderActivity::paragraphCountsPath() const { return epub->getCachePath() + "/paragraph_counts.bin"; }
+
+uint32_t EpubReaderActivity::wholeBookParagraphBase(const int spineIndex) const {
+  uint32_t base = 0;
+  const int n = std::min(spineIndex, static_cast<int>(sectionParagraphCounts_.size()));
+  for (int i = 0; i < n; i++) base += sectionParagraphCounts_[i];
+  return base;
+}
+
+void EpubReaderActivity::loadParagraphCounts() {
+  const int spineCount = epub->getSpineItemsCount();
+  sectionParagraphCounts_.assign(spineCount > 0 ? static_cast<size_t>(spineCount) : 0, 0);
+  paragraphCountsDirty_ = false;
+  if (spineCount <= 0) return;
+
+  HalFile f;
+  if (!Storage.openFileForRead("PNM", paragraphCountsPath(), f)) return;
+  uint8_t version = 0;
+  uint16_t storedSpineCount = 0;
+  if (f.read(&version, 1) != 1 || version != PARAGRAPH_COUNTS_VERSION) return;
+  if (f.read(reinterpret_cast<uint8_t*>(&storedSpineCount), 2) != 2) return;
+  if (storedSpineCount != spineCount) return;  // spine changed (book edited) — rebuild counts
+  for (int i = 0; i < spineCount; i++) {
+    uint16_t c = 0;
+    if (f.read(reinterpret_cast<uint8_t*>(&c), 2) != 2) {
+      sectionParagraphCounts_.assign(static_cast<size_t>(spineCount), 0);  // truncated file — discard
+      return;
+    }
+    sectionParagraphCounts_[i] = c;
+  }
+}
+
+void EpubReaderActivity::saveParagraphCounts() {
+  if (!paragraphCountsDirty_ || sectionParagraphCounts_.empty()) return;
+  HalFile f;
+  if (!Storage.openFileForWrite("PNM", paragraphCountsPath(), f)) return;
+  const uint8_t version = PARAGRAPH_COUNTS_VERSION;
+  const uint16_t spineCount = static_cast<uint16_t>(sectionParagraphCounts_.size());
+  f.write(&version, 1);
+  f.write(reinterpret_cast<const uint8_t*>(&spineCount), 2);
+  for (const uint16_t c : sectionParagraphCounts_) {
+    f.write(reinterpret_cast<const uint8_t*>(&c), 2);
+  }
+  paragraphCountsDirty_ = false;
+}
+
+void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int marginTop,
+                                              const int fontId) {
+  if (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
+  const uint32_t base =
+      (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK) ? wholeBookParagraphBase(currentSpineIndex) : 0;
+  constexpr int kGap = 5;  // px between the number and the first letter
+  const int lineHeight = renderer.getLineHeight(fontId);
+  const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  uint16_t pageMaxOrdinal = 0;
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const uint16_t ord = line.getParagraphOrdinal();
+    if (ord == 0) continue;  // not a paragraph's first line
+    if (ord > pageMaxOrdinal) pageMaxOrdinal = ord;
+    const auto& block = line.getBlock();
+    if (!block || block->wordCount() == 0) continue;
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(base + ord));
+    const int numWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
+    // Right-align the number just left of the paragraph's first letter (wordXpos(0)
+    // is non-zero for centered/justified/RTL lines, so it is the correct anchor).
+    const int firstLetterX = marginLeft + line.xPos + block->wordXpos(0);
+    const int x = firstLetterX - kGap - numWidth;
+    if (x < 0) continue;  // no room in the margin — skip rather than clip into text
+    const int y = marginTop + line.yPos + (lineHeight - numLineHeight) / 2;
+    renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
+  }
+  // Capture this chapter's running-max paragraph count so a later chapter's whole-book
+  // base includes it. Finalizes as the book is read forward through each chapter.
+  if (currentSpineIndex >= 0 && currentSpineIndex < static_cast<int>(sectionParagraphCounts_.size()) &&
+      pageMaxOrdinal > sectionParagraphCounts_[currentSpineIndex]) {
+    sectionParagraphCounts_[currentSpineIndex] = pageMaxOrdinal;
+    paragraphCountsDirty_ = true;
+  }
+}
+
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
   if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
     automaticPageTurnActive = false;
@@ -1593,6 +1696,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   }
 
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  drawParagraphNumbers(*page, orientedMarginLeft, orientedMarginTop, fontId);
   renderStatusBar();
   const auto tBwRender = millis();
 

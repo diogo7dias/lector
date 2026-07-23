@@ -91,6 +91,13 @@ class ChapterHtmlSlimParser {
   uint16_t xpathParagraphIndex = 0;
   uint16_t xpathListItemIndex = 0;
 
+  // Paragraph-numbers feature: a per-chapter ordinal counting VISIBLE paragraphs
+  // (blocks that emit >=1 line), used to tag the first line of each paragraph.
+  // Fresh per section build (the parser is constructed once per build), so it
+  // resets to 0 at each chapter — the reader adds the whole-book base at render.
+  uint16_t paragraphOrdinal_ = 0;
+  bool pendingParagraphFirstLine_ = false;  // set at makePages(), consumed by the block's first line
+
   // Footnote link tracking
   bool insideFootnoteLink = false;
   int footnoteLinkDepth = -1;

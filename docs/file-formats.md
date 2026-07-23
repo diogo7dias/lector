@@ -90,16 +90,18 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 30
+### Version 33
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
-Version 30 is binary-identical to version 29. The version was bumped because
-Arabic contextual shaping changed text measurement (`getTextAdvanceX` now
-measures the shaped visual text), so word positions cached by v29 no longer
-match what `drawText` renders.
+Version 33 adds a `uint16 paragraphOrdinal` to each serialized `PageLine`
+(written after `yPos`, before the `TextBlock`): the visible-paragraph number of a
+paragraph's first line (0 = not a paragraph start), consumed by the paragraph-numbers
+reader feature. Pagination is byte-identical to v32; only the extra per-line field
+forces the one-time rebuild. (v31/v32 were the lazy-image-extraction changes; v30
+was binary-identical to v29, bumped for the Arabic-shaping measurement change.)
 
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:

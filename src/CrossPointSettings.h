@@ -158,6 +158,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
+  // Paragraph numbering mode. The value is per-book (ReaderPrefs::paragraphNumbering);
+  // this enum is only the shared value type. Numbers are baked into the page cache and
+  // drawn in the left margin at render time (no reflow), so switching is instant and
+  // needs no cache rebuild.
+  enum PARAGRAPH_NUMBERING {
+    PARA_NUM_OFF = 0,
+    PARA_NUM_CHAPTER = 1,  // resets to 1 at each chapter
+    PARA_NUM_BOOK = 2,     // continuous across the whole book
+    PARAGRAPH_NUMBERING_COUNT
+  };
+
   enum TILT_PAGE_TURN { TILT_OFF = 0, TILT_NORMAL = 1, TILT_NVERTED = 2, TILT_PAGE_TURN_COUNT };
 
   enum TOUCH_READER_CONTROLS { TOUCH_READER_OFF = 0, TOUCH_READER_ON = 1, TOUCH_READER_CONTROLS_COUNT };

@@ -20,7 +20,10 @@ namespace {
 // v32: ImageBlock serializes the book-internal source href after the cache path
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
-constexpr uint8_t SECTION_FILE_VERSION = 32;
+// v33: PageLine serializes a uint16 paragraphOrdinal (the visible-paragraph number
+//      of a paragraph's first line) for the paragraph-numbers feature. Pagination is
+//      byte-identical to v32; only the extra per-line field forces this one rebuild.
+constexpr uint8_t SECTION_FILE_VERSION = 33;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

@@ -12,6 +12,8 @@
 #include "ReaderPrefs.h"
 #include "activities/Activity.h"
 
+class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
+
 class EpubReaderActivity final : public Activity {
   std::shared_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
@@ -21,6 +23,11 @@ class EpubReaderActivity final : public Activity {
   // mutated for reading and a custom book stays decoupled from global changes.
   ReaderPrefs prefs_;
   bool prefsCustom_ = false;
+  // Paragraph numbers (#10): per-spine visible-paragraph counts for whole-book
+  // numbering, captured as pages render and persisted to paragraph_counts.bin so
+  // the whole-book base survives reopen. Finalizes as the book is read through.
+  std::vector<uint16_t> sectionParagraphCounts_;
+  bool paragraphCountsDirty_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -188,6 +195,13 @@ class EpubReaderActivity final : public Activity {
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.
   void reloadForReaderPrefsChange();
+  // Paragraph numbers (#10).
+  void applyParagraphNumbering(uint8_t mode);
+  void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
+  uint32_t wholeBookParagraphBase(int spineIndex) const;
+  std::string paragraphCountsPath() const;
+  void loadParagraphCounts();
+  void saveParagraphCounts();
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();

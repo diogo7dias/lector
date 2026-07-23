@@ -3,6 +3,7 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -11,11 +12,12 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks,
-                                               const bool hasReaderOverride)
+                                               const bool hasReaderOverride, const uint8_t paragraphNumbering)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride)),
       title(title),
       pendingOrientation(currentOrientation),
+      selectedParagraphNumbering(paragraphNumbering),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
@@ -24,7 +26,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                                                                                      bool hasBookmarks,
                                                                                      bool hasReaderOverride) {
   std::vector<MenuItem> items;
-  items.reserve(15);
+  items.reserve(16);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -40,6 +42,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   if (hasReaderOverride) {
     items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
   }
+  items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -61,7 +64,7 @@ void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 void EpubReaderMenuActivity::closeCancelled() {
   ActivityResult result;
   result.isCancelled = true;
-  result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption};
+  result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption, selectedParagraphNumbering};
   setResult(std::move(result));
   finish();
 }
@@ -118,7 +121,15 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption});
+    if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
+      // Cycle Off / Per Chapter / Whole Book in place; applied by the reader on exit.
+      selectedParagraphNumbering = (selectedParagraphNumbering + 1) % CrossPointSettings::PARAGRAPH_NUMBERING_COUNT;
+      requestUpdate();
+      return;
+    }
+
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
+                         selectedParagraphNumbering});
     finish();
   };
 
@@ -204,6 +215,9 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         } else if (value == MenuAction::AUTO_PAGE_TURN) {
           // Render current page turn value on the right edge of the content area.
           return pageTurnLabels[selectedPageTurnOption];
+        } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
+          // Render current paragraph-numbering mode on the right edge.
+          return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
         } else {
           return "";
         }

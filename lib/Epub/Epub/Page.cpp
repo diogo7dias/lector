@@ -27,6 +27,7 @@ void PageLine::render(GfxRenderer& renderer, const int fontId, const int xOffset
 bool PageLine::serialize(HalFile& file) {
   serialization::writePod(file, xPos);
   serialization::writePod(file, yPos);
+  serialization::writePod(file, paragraphOrdinal);
 
   // serialize TextBlock pointed to by PageLine
   return block->serialize(file);
@@ -35,8 +36,10 @@ bool PageLine::serialize(HalFile& file) {
 std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
   int16_t xPos;
   int16_t yPos;
+  uint16_t paragraphOrdinal;
   serialization::readPod(file, xPos);
   serialization::readPod(file, yPos);
+  serialization::readPod(file, paragraphOrdinal);
 
   auto tb = TextBlock::deserialize(file);
   if (!tb) {
@@ -49,6 +52,7 @@ std::unique_ptr<PageLine> PageLine::deserialize(HalFile& file) {
     LOG_ERR("PGE", "Deserialization failed: could not allocate PageLine");
     return nullptr;
   }
+  line->setParagraphOrdinal(paragraphOrdinal);
   return std::unique_ptr<PageLine>(line);
 }
 

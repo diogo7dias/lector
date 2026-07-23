@@ -26,14 +26,15 @@ class EpubReaderMenuActivity final : public Activity {
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
-    READER_SETTINGS,       // open this book's per-book reader settings
-    RESET_READER_SETTINGS  // clear this book's override, follow global again
+    READER_SETTINGS,          // open this book's per-book reader settings
+    RESET_READER_SETTINGS,    // clear this book's override, follow global again
+    TOGGLE_PARAGRAPH_NUMBERS  // cycle off / per-chapter / whole-book in place
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
-                                  bool hasReaderOverride = false);
+                                  bool hasReaderOverride = false, uint8_t paragraphNumbering = 0);
 
   void onEnter() override;
   void onExit() override;
@@ -63,8 +64,11 @@ class EpubReaderMenuActivity final : public Activity {
   std::string title = "Reader Menu";
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
+  uint8_t selectedParagraphNumbering = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
+  const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER,
+                                                 StrId::STR_PARA_NUM_BOOK};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;

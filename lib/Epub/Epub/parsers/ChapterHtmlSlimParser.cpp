@@ -1500,7 +1500,15 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line) {
 
   // Apply horizontal left inset (margin + padding) as x position offset
   const int16_t xOffset = line->getBlockStyle().leftInset();
-  currentPage->elements.push_back(std::make_shared<PageLine>(line, xOffset, currentPageNextY));
+  auto pageLine = std::make_shared<PageLine>(line, xOffset, currentPageNextY);
+  // Tag the first emitted line of each block with the next paragraph number. Done
+  // here (not in makePages) so a block that produces no lines consumes no ordinal.
+  if (pendingParagraphFirstLine_) {
+    paragraphOrdinal_++;
+    pageLine->setParagraphOrdinal(paragraphOrdinal_);
+    pendingParagraphFirstLine_ = false;
+  }
+  currentPage->elements.push_back(std::move(pageLine));
   currentPageNextY += lineHeight;
 }
 
@@ -1531,6 +1539,9 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
+  // This block is one visible paragraph: arm the ordinal so its first emitted line
+  // (if any) claims the next paragraph number. Blocks producing no line stay unarmed.
+  pendingParagraphFirstLine_ = true;
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });
