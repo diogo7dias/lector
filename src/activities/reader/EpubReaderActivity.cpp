@@ -283,11 +283,18 @@ void EpubReaderActivity::openReaderMenu() {
     bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
   }
   const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+  // Resolve the current chapter name for the menu header, falling back to "Unnamed"
+  // when the book has no TOC entry for this spine index.
+  std::string chapterName = tr(STR_UNNAMED);
+  const int menuTocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (menuTocIndex != -1) {
+    chapterName = epub->getTocItem(menuTocIndex).title;
+  }
   startActivityForResult(
-      std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
-                                               bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                                               !cachedBookmarks.empty(), prefsCustom_, prefs_.paragraphNumbering,
-                                               prefs_.paperbackLookBody, prefs_.paperbackLookStatus),
+      std::make_unique<EpubReaderMenuActivity>(
+          renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
+          bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
+          prefsCustom_, prefs_.paragraphNumbering, prefs_.paperbackLookBody, prefs_.paperbackLookStatus),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);

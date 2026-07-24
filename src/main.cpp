@@ -89,8 +89,14 @@ EpdFont ubuntu12RegularFont(&ubuntu_12_regular);
 EpdFont ubuntu12BoldFont(&ubuntu_12_bold);
 EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12BoldFont);
 
-// Cozette UI family — lector's default menu font (Latin + Cyrillic + Vietnamese; no
-// Arabic/Hebrew). Bound to UI_10/12_FONT_ID for every language except Arabic/Hebrew.
+EpdFont ubuntu14RegularFont(&ubuntu_14_regular);
+EpdFont ubuntu14BoldFont(&ubuntu_14_bold);
+EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14BoldFont);
+
+// Cozette UI family — lector's default menu font (Latin + Cyrillic + Greek + Vietnamese;
+// no Arabic/Hebrew). Sizes match the previous mature Lector: 10 = SMALL_FONT_ID,
+// 12 = UI_10_FONT_ID (list rows), 14 = UI_12_FONT_ID (header title). Bound for every
+// language except Arabic/Hebrew (which use the Ubuntu family at the same sizes).
 EpdFont cozette10RegularFont(&cozette_10_regular);
 EpdFont cozette10BoldFont(&cozette_10_bold);
 EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10BoldFont);
@@ -98,6 +104,10 @@ EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10BoldFont);
 EpdFont cozette12RegularFont(&cozette_12_regular);
 EpdFont cozette12BoldFont(&cozette_12_bold);
 EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12BoldFont);
+
+EpdFont cozette14RegularFont(&cozette_14_regular);
+EpdFont cozette14BoldFont(&cozette_14_bold);
+EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14BoldFont);
 
 // Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
 // family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
@@ -111,10 +121,15 @@ static bool uiLanguageNeedsUbuntu() {
 void bindUiFontsForLanguage(GfxRenderer& renderer) {
   const bool useUbuntu = uiLanguageNeedsUbuntu();
   // insertFont() ignores an already-registered id, so drop the old binding first.
+  // Sizes mirror the previous mature Lector (2px larger than the CrossPoint base):
+  // SMALL = 10, UI_10 (list rows) = 12, UI_12 (header title) = 14. Arabic/Hebrew use the
+  // Ubuntu family at the same sizes so their small text renders too (Cozette lacks AR/HE).
+  renderer.removeFont(SMALL_FONT_ID);
   renderer.removeFont(UI_10_FONT_ID);
   renderer.removeFont(UI_12_FONT_ID);
-  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
+  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
+  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
 }
 
 // measurement of power button press duration calibration value
@@ -258,10 +273,9 @@ void setupDisplayAndFonts(bool seamless = false) {
   // language-select native-name list and the Arabic/Hebrew UI.
   renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
   renderer.insertFont(UBUNTU_12_FONT_ID, ubuntu12FontFamily);
-  // Active UI ids: Cozette by default, Ubuntu for Arabic/Hebrew (honors the persisted
-  // SETTINGS.language already loaded at this point).
+  // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
+  // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);
-  renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);

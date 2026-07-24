@@ -36,10 +36,11 @@ class EpubReaderMenuActivity final : public Activity {
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const int currentPage, const int totalPages, const int bookProgressPercent,
-                                  const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
-                                  bool hasReaderOverride = false, uint8_t paragraphNumbering = 0,
-                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1);
+                                  const std::string& author, const std::string& chapterName, const int currentPage,
+                                  const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
+                                  const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
+                                  uint8_t paragraphNumbering = 0, uint8_t paperbackBody = 1,
+                                  uint8_t paperbackStatus = 1);
 
   void onEnter() override;
   void onExit() override;
@@ -67,6 +68,8 @@ class EpubReaderMenuActivity final : public Activity {
   // must not fall through to the menu's own Back/Confirm handlers.
   bool popupClosing = false;
   std::string title = "Reader Menu";
+  std::string author;
+  std::string chapterName;
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
   uint8_t selectedParagraphNumbering = 0;
