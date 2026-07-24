@@ -332,6 +332,35 @@ void EpubReaderActivity::showBuildPopup() {
   buildPopupPending = false;
 }
 
+void EpubReaderActivity::computeReaderMargins(int& top, int& right, int& bottom, int& left) const {
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  // Uniform margins use screenMargin on every side; otherwise top/bottom are
+  // independent while screenMargin stays the horizontal (left/right) margin.
+  const uint8_t topMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginTop;
+  const uint8_t bottomMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginBottom;
+  top += topMargin;
+  bottom += bottomMargin;
+  if (prefs_.dynamicMargins) {
+    // Auto-widen the horizontal margins toward a target ~62 characters per line,
+    // using the reader font's average glyph width as the yardstick. Floored at
+    // 10px (mode 1) or 20px (mode 2) and capped at 55px so a narrow orientation
+    // keeps a usable viewport. Replaces the fixed horizontal margin; the changed
+    // viewport width re-paginates via the section cache like any margin change.
+    const int fontId = SETTINGS.getReaderFontId(prefs_);
+    const int sampleWidth = renderer.getTextWidth(fontId, "abcdefghijklmnopqrstuvwxyz");
+    const int avgCharWidth = (sampleWidth > 0) ? sampleWidth / 26 : 8;
+    const int targetTextWidth = 62 * avgCharWidth;
+    const int availableWidth = renderer.getScreenWidth() - left - right;
+    const int minDynamicMargin = (prefs_.dynamicMargins >= 2) ? 20 : 10;
+    const int dynamicMargin = std::max(minDynamicMargin, std::min(55, (availableWidth - targetTextWidth) / 2));
+    left += dynamicMargin;
+    right += dynamicMargin;
+  } else {
+    left += prefs_.screenMargin;
+    right += prefs_.screenMargin;
+  }
+}
+
 void EpubReaderActivity::openDictionaryWordSelect() {
   if (SETTINGS.dictionaryName[0] == '\0') {
     showDictionaryMessage = true;
@@ -343,12 +372,9 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   auto page = section->loadPage(section->currentPage);
   if (!page) return;
 
-  // Word geometry must match render(): viewable-area margins plus screen margin.
+  // Word geometry must match render(): use the same per-book reader margins.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                   &orientedMarginLeft);
-  orientedMarginTop += prefs_.screenMargin;
-  orientedMarginLeft += prefs_.screenMargin;
+  computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                         orientedMarginLeft, orientedMarginTop),
@@ -360,12 +386,9 @@ void EpubReaderActivity::openQuoteGrab() {
   auto page = section->loadPage(section->currentPage);
   if (!page) return;
 
-  // Word geometry must match render(): viewable-area margins plus screen margin.
+  // Word geometry must match render(): use the same per-book reader margins.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                   &orientedMarginLeft);
-  orientedMarginTop += prefs_.screenMargin;
-  orientedMarginLeft += prefs_.screenMargin;
+  computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
   // Lay out the picker with this book's actual reader font (per-book prefs), so
   // the highlight boxes line up with the rendered glyphs.
@@ -1407,23 +1430,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Apply screen viewable areas and additional padding
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                   &orientedMarginLeft);
-  orientedMarginTop += prefs_.screenMargin;
-  orientedMarginLeft += prefs_.screenMargin;
-  orientedMarginRight += prefs_.screenMargin;
+  computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
+  // computeReaderMargins already folded the bottom reading margin into
+  // orientedMarginBottom. The status-bar band overlaps that margin (max, not sum),
+  // so only extend the bottom by however much the band exceeds the reading margin.
+  const uint8_t bottomMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginBottom;
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-
+  uint8_t bottomReserve;
   // reserves space for automatic page turn indicator when no status bar or progress bar only
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
-    orientedMarginBottom +=
-        std::max(prefs_.screenMargin,
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+    bottomReserve = static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin);
   } else {
-    orientedMarginBottom += std::max(prefs_.screenMargin, statusBarHeight);
+    bottomReserve = statusBarHeight;
   }
+  if (bottomReserve > bottomMargin) orientedMarginBottom += static_cast<int>(bottomReserve - bottomMargin);
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -1854,6 +1876,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderer.setPaperbackLook(false);
   drawParagraphNumbers(*page, orientedMarginLeft, orientedMarginTop, fontId);
+  if (SETTINGS.debugBorders) {
+    // Diagnostic: outline the text viewport on the BW base plane. Draw-only overlay,
+    // never affects layout or the section cache.
+    const int vpW = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
+    const int vpH = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
+    renderer.drawRect(orientedMarginLeft, orientedMarginTop, vpW, vpH);
+  }
   renderStatusBar();
   const auto tBwRender = millis();
 
