@@ -283,8 +283,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, blockStyle,
-                                        firstLineIndentMode, firstLineIndentPercent));
+  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,
+                                        guideDotsEnabled, blockStyle, firstLineIndentMode, firstLineIndentPercent));
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }

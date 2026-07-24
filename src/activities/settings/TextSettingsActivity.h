@@ -50,7 +50,7 @@ class TextSettingsActivity final : public Activity {
     DebugBorders,
     Count
   };
-  enum class StyleRow { FocusReading, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
+  enum class StyleRow { FocusReading, GuideDots, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
 
   void applyFamily(int listIndex);
   void applySize(int listIndex);

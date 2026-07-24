@@ -24,6 +24,10 @@ struct ReaderRenderSpec {
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
+  // Guide dots: draw a middle dot (U+00B7) in the widened gap between words as a
+  // reading aid. Widening the gap changes line breaks and page fill, so it is part
+  // of the cache key (restored old-lector model).
+  bool guideDotsEnabled = false;
   // First-line paragraph indent (restored old-lector model). mode: 0 = Book (respect
   // the CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
   // Both are part of the cache key.
