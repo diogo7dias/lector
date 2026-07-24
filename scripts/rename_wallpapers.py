@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rename a Lector wallpaper folder into short uppercase 8.3 names.
+"""Rename a Lector wallpaper folder into short 8.3 names.
 
 WHY
 ---
@@ -18,14 +18,21 @@ walking every file. That makes two things follow directly from short names:
     picked slightly more often.
 
 A name is stored in a single slot only when it fits classic 8.3 form: 1-8
-characters of base name, an optional 1-3 character extension, and UPPERCASE.
-Lowercase names can still cost a long-name slot depending on which operating
-system wrote them, which is why this script always writes uppercase.
+characters of base name and an optional 1-3 character extension. UPPERCASE is the
+default because it is the only form guaranteed to stay in one slot everywhere.
+Pass --lowercase for names like "a3f9.pxc": those rely on the FAT lowercase flags,
+which some systems ignore, storing a long-name slot instead.
 
 USAGE
 -----
-    python3 rename_wallpapers.py /Volumes/LECTOR/sleep              # dry run
-    python3 rename_wallpapers.py /Volumes/LECTOR/sleep --apply      # rename
+    python3 rename_wallpapers.py /Volumes/LECTOR/sleep                        # dry run
+    python3 rename_wallpapers.py /Volumes/LECTOR/sleep --apply                # rename
+    python3 rename_wallpapers.py /Volumes/LECTOR/sleep --lowercase --apply    # a3f9.pxc
+    python3 rename_wallpapers.py /Volumes/LECTOR/sleep --compact --apply      # shrink the directory
+
+Renaming alone does not shrink the directory: FAT only marks the old long-name
+slots deleted and never shortens the directory itself. Run --compact afterwards to
+move every file into a freshly created folder, which writes a tight directory.
 
 Dry run is the default and prints exactly what would happen. Nothing is touched
 until --apply is passed.
@@ -52,8 +59,9 @@ import re
 import string
 import sys
 
-# Extensions Lector accepts as a sleep wallpaper. Case-insensitive on input; always
-# written uppercase.
+# Extensions Lector accepts as a sleep wallpaper. Matched case-insensitively on input;
+# written uppercase by default, lowercase with --lowercase. The firmware compares
+# extensions case-insensitively either way.
 WALLPAPER_EXTS = {".pxc", ".bmp"}
 
 # Base name alphabet. Digits and uppercase letters only — every character here is
@@ -62,8 +70,9 @@ ALPHABET = string.digits + string.ascii_uppercase
 
 UNDO_FILENAME = "wallpaper-rename-map.csv"
 
-# Already-good: 1-8 base characters, a dot, 1-3 extension characters, all uppercase.
-GOOD_NAME = re.compile(r"^[0-9A-Z]{1,8}\.[0-9A-Z]{1,3}$")
+# Already-good: 1-8 base characters, a dot, 1-3 extension characters, single case.
+GOOD_NAME_UPPER = re.compile(r"^[0-9A-Z]{1,8}\.[0-9A-Z]{1,3}$")
+GOOD_NAME_LOWER = re.compile(r"^[0-9a-z]{1,8}\.[0-9a-z]{1,3}$")
 
 
 def is_metadata(name):
@@ -95,20 +104,25 @@ def name_length_for(count, length_arg):
     return 8
 
 
-def build_plan(folder, names, length, rng):
+def build_plan(folder, names, length, rng, lowercase=False):
     """List of (old, new) pairs. Skips files already in the target form."""
+    good = GOOD_NAME_LOWER if lowercase else GOOD_NAME_UPPER
+    alphabet = ALPHABET.lower() if lowercase else ALPHABET
+    # Compared case-folded: FAT cannot tell "A3F9.PXC" from "a3f9.pxc", so a name that
+    # differs only in case is still a collision.
     taken = {n.upper() for n in names}
     plan = []
     for old in names:
-        if GOOD_NAME.match(old):
+        if good.match(old):
             continue
-        ext = os.path.splitext(old)[1].upper()
+        ext = os.path.splitext(old)[1]
+        ext = ext.lower() if lowercase else ext.upper()
         while True:
-            base = "".join(rng.choice(ALPHABET) for _ in range(length))
+            base = "".join(rng.choice(alphabet) for _ in range(length))
             candidate = base + ext
-            if candidate not in taken:
+            if candidate.upper() not in taken:
                 break
-        taken.add(candidate)
+        taken.add(candidate.upper())
         plan.append((old, candidate))
     return plan
 
@@ -171,6 +185,75 @@ def run_undo(folder, map_path, apply_changes):
     return 0 if len(done) == len(plan) else 1
 
 
+def run_compact(folder, apply_changes):
+    """Rebuild the folder so its directory holds only live slots.
+
+    FAT never shrinks a directory. Renaming long names to short ones only marks the old
+    long-name slots deleted; the directory keeps its length and stays mostly dead slots.
+    That costs reads on every scan, and it re-introduces the fairness tilt for a picker
+    that lands on a random slot: a file sitting after a long run of dead slots gets
+    chosen more often.
+
+    Moving every file into a freshly created folder writes a new, tight directory.
+    """
+    parent = os.path.dirname(folder)
+    base = os.path.basename(folder)
+    staging = os.path.join(parent, base + "_compact")
+
+    entries = sorted(os.listdir(folder))
+    subdirs = [e for e in entries if os.path.isdir(os.path.join(folder, e))]
+    files = [e for e in entries if not os.path.isdir(os.path.join(folder, e))]
+    live_slots = sum(1 + (len(n) + 12) // 13 for n in files)
+
+    print("Folder:     %s" % folder)
+    print("Files:      %d" % len(files))
+    print("Subfolders: %d" % len(subdirs))
+    print("Rebuilt directory: ~%d slots (~%d KB)" % (live_slots, live_slots * 32 // 1024))
+    print("\nPlan:")
+    print("  1. create %s" % staging)
+    print("  2. move all %d files into it" % len(files))
+    print("  3. remove the empty %s" % folder)
+    print("  4. rename %s back to %s" % (staging, base))
+
+    if subdirs:
+        print("\nRefusing: %s contains subfolders (%s). Move them out first."
+              % (folder, ", ".join(subdirs[:5])), file=sys.stderr)
+        return 2
+    if os.path.exists(staging):
+        print("\nRefusing: %s already exists. Remove it first." % staging, file=sys.stderr)
+        return 2
+    if not files:
+        print("\nNothing to move.")
+        return 0
+    if not apply_changes:
+        print("\nDry run. Nothing was changed. Re-run with --apply to compact.")
+        return 0
+
+    print("\nCompacting...")
+    os.mkdir(staging)
+    moved = 0
+    for name in files:
+        try:
+            os.rename(os.path.join(folder, name), os.path.join(staging, name))
+        except OSError as err:
+            print("  FAILED to move %s: %s" % (name, err), file=sys.stderr)
+            continue
+        moved += 1
+        if len(files) >= 200 and moved % 100 == 0:
+            print("  %d / %d" % (moved, len(files)), flush=True)
+
+    remaining = os.listdir(folder)
+    if remaining:
+        print("\n%d file(s) could not be moved; leaving both folders in place." % len(remaining), file=sys.stderr)
+        print("Original: %s\nStaging:  %s" % (folder, staging), file=sys.stderr)
+        return 1
+
+    os.rmdir(folder)
+    os.rename(staging, folder)
+    print("\nMoved %d files. %s now has a fresh directory." % (moved, folder))
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Rename Lector wallpapers to short uppercase 8.3 names.")
     parser.add_argument("folder", help="wallpaper folder, e.g. /Volumes/LECTOR/sleep")
@@ -178,12 +261,22 @@ def main():
     parser.add_argument("--length", default="auto", help="base-name length, 2-8, or 'auto' (default)")
     parser.add_argument("--seed", type=int, default=None, help="random seed, for a reproducible run")
     parser.add_argument("--undo", metavar="MAP_CSV", help="restore original names from a rename map")
+    parser.add_argument("--lowercase", action="store_true",
+                        help="write lowercase names (a3f9.pxc) instead of uppercase (A3F9.PXC). "
+                             "Uppercase is the only form guaranteed to occupy a single directory "
+                             "slot on every system; lowercase relies on the FAT lowercase flags, "
+                             "which some systems ignore and store a long-name slot instead")
+    parser.add_argument("--compact", action="store_true",
+                        help="rebuild the folder so its directory drops the dead slots left by renaming")
     args = parser.parse_args()
 
     folder = os.path.abspath(os.path.expanduser(args.folder))
     if not os.path.isdir(folder):
         print("Not a folder: %s" % folder, file=sys.stderr)
         return 2
+
+    if args.compact:
+        return run_compact(folder, args.apply)
 
     if args.undo:
         return run_undo(folder, os.path.abspath(os.path.expanduser(args.undo)), args.apply)
@@ -195,7 +288,7 @@ def main():
 
     length = name_length_for(len(names), args.length)
     rng = random.Random(args.seed)
-    plan = build_plan(folder, names, length, rng)
+    plan = build_plan(folder, names, length, rng, args.lowercase)
 
     slots_before = sum(1 + (len(n) + 12) // 13 for n in names)
     slots_after = len(names)
@@ -203,7 +296,8 @@ def main():
     print("Folder:      %s" % folder)
     print("Wallpapers:  %d" % len(names))
     print("Already 8.3: %d" % (len(names) - len(plan)))
-    print("To rename:   %d  (base-name length %d)" % (len(plan), length))
+    print("To rename:   %d  (base-name length %d, %s)"
+          % (len(plan), length, "lowercase" if args.lowercase else "uppercase"))
     print("Directory:   ~%d slots -> ~%d slots  (%d KB -> %d KB)"
           % (slots_before, slots_after, slots_before * 32 // 1024, slots_after * 32 // 1024))
 
