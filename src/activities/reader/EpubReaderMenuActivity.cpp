@@ -40,6 +40,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   }
   items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
+  items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
   // Per-book reader settings. "Reset" only appears once this book has its own
   // override (otherwise it already follows the global settings).
   items.push_back({MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS});

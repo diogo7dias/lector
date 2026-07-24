@@ -31,7 +31,8 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PARAGRAPH_NUMBERS,  // cycle off / per-chapter / whole-book in place
     TOGGLE_PAPERBACK_LOOK,     // toggle heavier ink for reader body text
     TOGGLE_PAPERBACK_STATUS,   // toggle heavier ink for status bar text
-    GO_TO_PARAGRAPH            // jump to a paragraph number (only when numbering is on)
+    GO_TO_PARAGRAPH,           // jump to a paragraph number (only when numbering is on)
+    GRAB_QUOTE                 // pick a passage on the page and save it to <book>_QUOTES.txt
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,

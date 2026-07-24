@@ -85,7 +85,14 @@ Legend: [x] done · [~] in progress · [ ] todo
       settings/theme touch guards, `touchReaderControls` setting). Buttons only. Commit `32a9cff4`.
 - [ ] Home extras remaining: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
 - [ ] Status bar v2 (placeable 6-anchor items, title wrap/reflow, TXT reader on it).
-- [ ] Reader menu tidy + chapter header + **Grab Quote** (`<book>_QUOTES.txt`).
+- [x] **Grab Quote** — reader-menu "Grab Quote" opens a button-only word-range picker on the current
+      page (pick start word → pick end word → save). Saves `[chapter]\nquote\n---\n\n` to
+      `<book>_QUOTES.txt` next to the book (atomic tmp/bak rotation, 24 KB cap). New standalone
+      `QuoteSelectActivity` (modeled on `DictionaryWordSelectActivity`, NOT the old in-reader highlight
+      mode). Pure helpers in `QuoteText.h` + `GrowthBounds.h` (host-tested, 8 tests). **v1 = single page
+      only** (a quote must fit one page); cross-page selection + an on-device quotes browser + a "Saved"
+      toast + a long-press trigger are all future. Commit `<grabquote>`.
+- [ ] Reader menu tidy + chapter header (Grab Quote done above).
 - [ ] Margins: uniform toggle + independent top/bottom.
 - [ ] Sleep/boot: "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
 - [ ] UI polish: banner-style popups, throttled font-download progress.
@@ -203,6 +210,10 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   buttons (NavPrevious=Up+Left, NavNext=Down+Right — already mapped, no new wiring). Host 140/140,
   device build clean.
 
+- **2026-07-24** — Session: first-line indent slider (`66b5e270`), Vollkorn swap (`e1ae6e69`, flash
+  83.5%→70.3%), TXT progress % (`8be83e2f`), Grab Quote (`<grabquote>`). Word-spacing deferred (future).
+  Next requested = UI font swap (Ubuntu → TBD; keep Arabic/Hebrew/Vietnamese coverage).
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
@@ -215,11 +226,12 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
    Owed device checks: per-book settings; paragraph numbers (3 modes; whole-book across chapters;
    caches rebuild once after v33 bump); paperback look; home in-progress list (wrap, `[NN%]`,
    scroll arrows with >8 books, finished→/read); button-only nav incl. the 2 rightmost front buttons.
-2. **Small follow-ups:** (a) TXT reader now writes progress % on exit (commit `<txtpct>`) → home badge
+2. **Small follow-ups:** (a) TXT reader now writes progress % on exit (commit `8be83e2f`) → home badge
    works for TXT; comics/XTC intentionally still do NOT (per Diogo). (b) KeyboardEntry still holds inert
    freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding (no touch read) — trim later; (c) home does
    not filter 100%-finished books (removal handles it when `removeReadBooksFromRecents` fires at End-of-Book).
-3. **Remaining niceties:** fonts/typography, status bar v2, Grab Quote, margins, "Until Death"
+3. **Remaining niceties:** UI font swap (current UI font = Ubuntu 10/12 + Noto Sans 8 small; must keep
+   Arabic/Hebrew/Vietnamese glyph coverage) [NEXT per Diogo], status bar v2, margins, "Until Death"
    sleep screen, skull boot logo, open-random-on-boot, WiFi file browser + OPDS-in-browser,
    PXC info overlay / PxcViewerActivity.
 

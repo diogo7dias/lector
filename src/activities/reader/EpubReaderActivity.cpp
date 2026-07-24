@@ -34,6 +34,7 @@
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
+#include "QuoteSelectActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -345,6 +346,27 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                         orientedMarginLeft, orientedMarginTop),
                          [this](const ActivityResult&) { requestUpdate(); });
+}
+
+void EpubReaderActivity::openQuoteGrab() {
+  if (!section) return;
+  auto page = section->loadPage(section->currentPage);
+  if (!page) return;
+
+  // Word geometry must match render(): viewable-area margins plus screen margin.
+  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
+  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
+                                   &orientedMarginLeft);
+  orientedMarginTop += prefs_.screenMargin;
+  orientedMarginLeft += prefs_.screenMargin;
+
+  // Lay out the picker with this book's actual reader font (per-book prefs), so
+  // the highlight boxes line up with the rendered glyphs.
+  const int readerFontId = SETTINGS.getReaderFontId(prefs_);
+  startActivityForResult(
+      std::make_unique<QuoteSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
+                                            orientedMarginTop, epub, currentSpineIndex, readerFontId),
+      [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void EpubReaderActivity::loop() {
@@ -852,6 +874,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
       openDictionaryWordSelect();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE: {
+      openQuoteGrab();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH: {
