@@ -32,13 +32,35 @@ class TextSettingsActivity final : public Activity {
 
  private:
   // Row indices per tab. enum class (not plain enum) so a LayoutRow can't be
-  // silently confused with a StyleRow of equal value.
-  enum class LayoutRow { LineSpacing, ParaSpacing, Alignment, ScreenMargin, FirstLineIndent, Count };
+  // silently confused with a StyleRow of equal value. The Layout tab does NOT map
+  // 1:1 to the drawn list — visibleLayoutRows() hides rows that don't apply, so
+  // the drawn index is resolved through that list, never cast straight to LayoutRow.
+  enum class LayoutRow {
+    LineSpacing,
+    ParaSpacing,     // extraParagraphSpacing toggle (half-line block gap)
+    ParaSpacingPct,  // paragraphSpacing 0..150 % bar (stacks on top of ParaSpacing)
+    Alignment,
+    UniformMargins,      // toggle: all sides use screenMargin vs independent top/bottom
+    ScreenMargin,        // horizontal margin (also vertical when uniform)
+    ScreenMarginTop,     // only shown when uniform is off
+    ScreenMarginBottom,  // only shown when uniform is off
+    DynamicMargins,
+    IndentMode,     // Book vs Custom %
+    IndentPercent,  // only shown in Custom % mode
+    DebugBorders,
+    Count
+  };
   enum class StyleRow { FocusReading, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
 
   void applyFamily(int listIndex);
   void applySize(int listIndex);
-  void confirmLayoutRow(int row);
+  // The Layout tab hides rows that don't apply (top/bottom margins only when
+  // uniform is off; indent % only in Custom% mode), so the visible list is built
+  // from the live settings instead of being a fixed 1:1 with the enum.
+  std::vector<LayoutRow> visibleLayoutRows() const;
+  std::string layoutRowName(LayoutRow row) const;
+  bool isLayoutToggleRow(LayoutRow row) const;
+  void confirmLayoutRow(LayoutRow row);
   void confirmStyleRow(int row);
   // Applies the row at the given list index for the active tab (Confirm and tap share this).
   void activateRow(int row);
@@ -52,7 +74,7 @@ class TextSettingsActivity final : public Activity {
     int listHeight;
   };
   PaneGeometry paneGeometry() const;
-  std::string layoutValueText(int row) const;
+  std::string layoutValueText(LayoutRow row) const;
   std::string styleValueText(int row) const;
   // True when the focused list row is a setting the preview cannot reflect.
   bool focusedRowHasNoPreview() const;

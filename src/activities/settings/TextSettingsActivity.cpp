@@ -44,6 +44,12 @@ constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
 // First-line indent custom-% range (Book vs Custom% mode lives in CrossPointSettings).
 constexpr int INDENT_MIN = 0;
 constexpr int INDENT_MAX = CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT;
+constexpr int PARA_SPACING_MIN = 0;
+constexpr int PARA_SPACING_MAX = CrossPointSettings::MAX_PARAGRAPH_SPACING;
+// Dynamic margins picker (Off / mode 1 / mode 2) and first-line indent mode picker.
+constexpr StrId DYNAMIC_MARGINS_IDS[] = {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10,
+                                         StrId::STR_DYNAMIC_MARGINS_20};
+constexpr StrId INDENT_MODE_IDS[] = {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT};
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -181,18 +187,17 @@ void TextSettingsActivity::render(RenderLock&&) {
       break;
 
     case Tab::Layout: {
-      constexpr int LAYOUT_ROWS = static_cast<int>(LayoutRow::Count);
-      static constexpr StrId ROW_NAME_IDS[LAYOUT_ROWS] = {StrId::STR_LINE_SPACING, StrId::STR_EXTRA_SPACING,
-                                                          StrId::STR_ALIGNMENT, StrId::STR_SCREEN_MARGIN,
-                                                          StrId::STR_FIRST_LINE_INDENT};
+      const auto rows = visibleLayoutRows();
+      const int layoutRows = static_cast<int>(rows.size());
       GUI.drawList(
-          renderer, listRect, LAYOUT_ROWS, selectedItem,
-          [](int index) { return std::string(I18N.get(ROW_NAME_IDS[index])); }, nullptr, nullptr,
-          [this](int index) { return layoutValueText(index); }, true);
-      if (onTabBar)
+          renderer, listRect, layoutRows, selectedItem, [this, &rows](int index) { return layoutRowName(rows[index]); },
+          nullptr, nullptr, [this, &rows](int index) { return layoutValueText(rows[index]); }, true);
+      if (onTabBar) {
         confirmLabel = tr(STR_STYLE);
-      else  // Extra Paragraph Spacing toggles; the rest open a picker
-        confirmLabel = (selectedItem == static_cast<int>(LayoutRow::ParaSpacing)) ? tr(STR_TOGGLE) : tr(STR_SELECT);
+      } else if (selectedItem >= 0 && selectedItem < layoutRows) {
+        // Toggle rows say "Toggle"; bars and pickers say "Select".
+        confirmLabel = isLayoutToggleRow(rows[selectedItem]) ? tr(STR_TOGGLE) : tr(STR_SELECT);
+      }
       break;
     }
 
@@ -262,9 +267,11 @@ void TextSettingsActivity::activateRow(int row) {
         requestUpdate();
       }
       break;
-    case Tab::Layout:
-      confirmLayoutRow(row);
+    case Tab::Layout: {
+      const auto rows = visibleLayoutRows();
+      if (row >= 0 && row < static_cast<int>(rows.size())) confirmLayoutRow(rows[row]);
       break;
+    }
     case Tab::Style:
       confirmStyleRow(row);
       break;
@@ -283,57 +290,160 @@ void TextSettingsActivity::applySize(int listIndex) {
   sdFontSystem.ensureLoaded(renderer);
 }
 
-void TextSettingsActivity::confirmLayoutRow(int row) {
-  switch (static_cast<LayoutRow>(row)) {
+std::vector<TextSettingsActivity::LayoutRow> TextSettingsActivity::visibleLayoutRows() const {
+  std::vector<LayoutRow> rows;
+  rows.reserve(static_cast<int>(LayoutRow::Count));
+  rows.push_back(LayoutRow::LineSpacing);
+  rows.push_back(LayoutRow::ParaSpacing);
+  rows.push_back(LayoutRow::ParaSpacingPct);
+  rows.push_back(LayoutRow::Alignment);
+  rows.push_back(LayoutRow::UniformMargins);
+  rows.push_back(LayoutRow::ScreenMargin);
+  // Independent top/bottom margins only make sense when uniform margins are off.
+  if (!SETTINGS.uniformMargins) {
+    rows.push_back(LayoutRow::ScreenMarginTop);
+    rows.push_back(LayoutRow::ScreenMarginBottom);
+  }
+  rows.push_back(LayoutRow::DynamicMargins);
+  rows.push_back(LayoutRow::IndentMode);
+  // The custom-% bar only applies in Custom% mode; in Book mode the indent comes
+  // from the EPUB's own CSS, so there is nothing to tune.
+  if (SETTINGS.firstLineIndentMode == CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
+    rows.push_back(LayoutRow::IndentPercent);
+  }
+  rows.push_back(LayoutRow::DebugBorders);
+  return rows;
+}
+
+std::string TextSettingsActivity::layoutRowName(LayoutRow row) const {
+  switch (row) {
+    case LayoutRow::LineSpacing:
+      return I18N.get(StrId::STR_LINE_SPACING);
     case LayoutRow::ParaSpacing:
-      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
-      requestUpdate();
-      break;
+      return I18N.get(StrId::STR_EXTRA_SPACING);
+    case LayoutRow::ParaSpacingPct:
+      return I18N.get(StrId::STR_PARAGRAPH_SPACING);
+    case LayoutRow::Alignment:
+      return I18N.get(StrId::STR_ALIGNMENT);
+    case LayoutRow::UniformMargins:
+      return I18N.get(StrId::STR_UNIFORM_MARGINS);
+    case LayoutRow::ScreenMargin:
+      return I18N.get(StrId::STR_SCREEN_MARGIN);
+    case LayoutRow::ScreenMarginTop:
+      return I18N.get(StrId::STR_SCREEN_MARGIN_TOP);
+    case LayoutRow::ScreenMarginBottom:
+      return I18N.get(StrId::STR_SCREEN_MARGIN_BOTTOM);
+    case LayoutRow::DynamicMargins:
+      return I18N.get(StrId::STR_DYNAMIC_MARGINS);
+    case LayoutRow::IndentMode:
+      return I18N.get(StrId::STR_FIRST_LINE_INDENT);
+    case LayoutRow::IndentPercent:
+      return I18N.get(StrId::STR_FIRST_LINE_INDENT_PERCENT);
+    case LayoutRow::DebugBorders:
+      return I18N.get(StrId::STR_DEBUG_BORDERS);
+    default:
+      return "";
+  }
+}
+
+bool TextSettingsActivity::isLayoutToggleRow(LayoutRow row) const {
+  return row == LayoutRow::ParaSpacing || row == LayoutRow::UniformMargins || row == LayoutRow::DebugBorders;
+}
+
+void TextSettingsActivity::confirmLayoutRow(LayoutRow row) {
+  switch (row) {
     case LayoutRow::LineSpacing:
       valueBar_.show(StrId::STR_LINE_SPACING, CrossPointSettings::MIN_LINE_SPACING_PERCENT,
                      CrossPointSettings::MAX_LINE_SPACING_PERCENT, 1, 5, SETTINGS.lineSpacingPercent,
                      StrId::STR_VALUE_BAR_STEP_HINT,
                      [](int v) { SETTINGS.lineSpacingPercent = static_cast<uint8_t>(v); });
-      requestUpdate();
+      break;
+    case LayoutRow::ParaSpacing:
+      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
+      break;
+    case LayoutRow::ParaSpacingPct:
+      valueBar_.show(StrId::STR_PARAGRAPH_SPACING, PARA_SPACING_MIN, PARA_SPACING_MAX, 1, 5, SETTINGS.paragraphSpacing,
+                     StrId::STR_VALUE_BAR_STEP_HINT,
+                     [](int v) { SETTINGS.paragraphSpacing = static_cast<uint8_t>(v); });
       break;
     case LayoutRow::Alignment:
       optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
                         SETTINGS.paragraphAlignment,
                         [](int idx) { SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx); });
-      requestUpdate();
+      break;
+    case LayoutRow::UniformMargins:
+      SETTINGS.uniformMargins = !SETTINGS.uniformMargins;
       break;
     case LayoutRow::ScreenMargin:
       valueBar_.show(StrId::STR_SCREEN_MARGIN, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMargin,
                      StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMargin = static_cast<uint8_t>(v); });
-      requestUpdate();
       break;
-    case LayoutRow::FirstLineIndent:
+    case LayoutRow::ScreenMarginTop:
+      valueBar_.show(StrId::STR_SCREEN_MARGIN_TOP, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMarginTop,
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMarginTop = static_cast<uint8_t>(v); });
+      break;
+    case LayoutRow::ScreenMarginBottom:
+      valueBar_.show(StrId::STR_SCREEN_MARGIN_BOTTOM, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMarginBottom,
+                     StrId::STR_VALUE_BAR_STEP_HINT,
+                     [](int v) { SETTINGS.screenMarginBottom = static_cast<uint8_t>(v); });
+      break;
+    case LayoutRow::DynamicMargins:
+      optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
+                        static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins,
+                        [](int idx) { SETTINGS.dynamicMargins = static_cast<uint8_t>(idx); });
+      break;
+    case LayoutRow::IndentMode:
+      optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, INDENT_MODE_IDS, static_cast<int>(std::size(INDENT_MODE_IDS)),
+                        SETTINGS.firstLineIndentMode,
+                        [](int idx) { SETTINGS.firstLineIndentMode = static_cast<uint8_t>(idx); });
+      break;
+    case LayoutRow::IndentPercent:
       valueBar_.show(StrId::STR_FIRST_LINE_INDENT_PERCENT, INDENT_MIN, INDENT_MAX, 1, 5,
                      SETTINGS.firstLineIndentPercent, StrId::STR_VALUE_BAR_STEP_HINT,
                      [](int v) { SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(v); });
-      requestUpdate();
       break;
-
+    case LayoutRow::DebugBorders:
+      SETTINGS.debugBorders = !SETTINGS.debugBorders;
+      break;
     default:
       break;
   }
+  requestUpdate();
 }
 
-std::string TextSettingsActivity::layoutValueText(int row) const {
-  switch (static_cast<LayoutRow>(row)) {
+std::string TextSettingsActivity::layoutValueText(LayoutRow row) const {
+  switch (row) {
     case LayoutRow::LineSpacing:
       return std::to_string(SETTINGS.lineSpacingPercent);
     case LayoutRow::ParaSpacing:
       return SETTINGS.extraParagraphSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case LayoutRow::ParaSpacingPct:
+      return std::to_string(SETTINGS.paragraphSpacing);
     case LayoutRow::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
       return v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
     }
+    case LayoutRow::UniformMargins:
+      return SETTINGS.uniformMargins ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
-    case LayoutRow::FirstLineIndent:
+    case LayoutRow::ScreenMarginTop:
+      return std::to_string(SETTINGS.screenMarginTop);
+    case LayoutRow::ScreenMarginBottom:
+      return std::to_string(SETTINGS.screenMarginBottom);
+    case LayoutRow::DynamicMargins: {
+      const uint8_t v = SETTINGS.dynamicMargins;
+      return v < std::size(DYNAMIC_MARGINS_IDS) ? I18N.get(DYNAMIC_MARGINS_IDS[v])
+                                                : I18N.get(StrId::STR_DYNAMIC_MARGINS_OFF);
+    }
+    case LayoutRow::IndentMode: {
+      const uint8_t v = SETTINGS.firstLineIndentMode;
+      return v < std::size(INDENT_MODE_IDS) ? I18N.get(INDENT_MODE_IDS[v]) : I18N.get(StrId::STR_INDENT_BOOK);
+    }
+    case LayoutRow::IndentPercent:
       return std::to_string(SETTINGS.firstLineIndentPercent);
-
+    case LayoutRow::DebugBorders:
+      return SETTINGS.debugBorders ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     default:
       return "";
   }
@@ -399,7 +509,7 @@ int TextSettingsActivity::currentListSize() const {
     case Tab::Size:
       return static_cast<int>(sizes_.size());
     case Tab::Layout:
-      return static_cast<int>(LayoutRow::Count);
+      return static_cast<int>(visibleLayoutRows().size());
     case Tab::Style:
       return static_cast<int>(StyleRow::Count);
 
