@@ -228,11 +228,15 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
-**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149). Flash 73.1%.
-**Latest commits (newest first):** `1ec0f62b` version → "lector.c 0.0.1", `ff087973` Cozette UI font, `2932a5fb` grab-quote, `8be83e2f` txt%,
-`e1ae6e69` vollkorn, `66b5e270` first-line-indent, `32a9cff4` touch-removal, `a9266014` button-only home,
-`d00b5c4f` home polish, `5b795243` home list, `364c49f5` go-to-paragraph, `be2976d8` paperback,
-`fd6bef6d` #10, `094ef02a` #9, plus themes/PXC/folders/wallpaper.
+**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149). Flash ~77% (0.0.3).
+**Latest commits (newest first):** `4cd9f235` X4 sleep fix (1-bit .pxc), `edd1c533` UI font sizes + reader menu header,
+`1ec0f62b` version → "lector.c 0.0.1", `ff087973` Cozette UI font, `2932a5fb` grab-quote, `8be83e2f` txt%,
+`e1ae6e69` vollkorn, `66b5e270` first-line-indent, `32a9cff4` touch-removal, plus home/paragraph/paperback/#9/#10/themes/PXC.
+
+**RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without Diogo's
+explicit OK — the site push itself can auto-deploy Pages. Live site = **lector.c 0.0.1**. 0.0.2 was built then
+REVERTED off the site (font/header only). **0.0.3** (font/header + X4 sleep fix + diagnostic `[SLP]` logs) is built
++ committed to the branch but **NOT released** (Diogo: "dont flash yet").
 
 **Font pipeline note:** Vollkorn + Cozette were baked in a Python venv at
 `<scratchpad>/vollkorn/.venv` (fonttools + freetype-py). Ruby is absent on the box, so `fontIds.h`
@@ -240,30 +244,47 @@ was written by a Python re-implementation of `build-font-ids.sh`'s SHA256 formul
 content-derived, unique, nonzero — runtime only needs unique keys, so the pre-existing ubuntu-hash
 "drift" is harmless). Source TTFs + licences committed under `builtinFonts/source/{Vollkorn,Cozette}`.
 
-1. **PUBLISHED as "lector.c 0.0.1" (2026-07-24, commit `1ec0f62b`) — device test on X4 still OWED.**
-   Diogo named this line lector.c 0.0.1 and chose to **REPLACE Lector A** in the single flasher slot.
-   Built `pio run -e gh_release` (flash 72.5%, boot RAM 15.9%); the space in the version forced
-   single-quoting `-DCROSSPOINT_VERSION` in every release env. Published **MANUALLY** to
-   `lector-xteink-firmware` (this branch took upstream's `release.yml`, which has NO flasher-publish
-   robot — that robot lives only on `origin/main`); site commit `1e7af6b`, Pages rebuilt, live
-   `flash/version.txt` = "lector.c 0.0.1" at https://diogo7dias.github.io/lector-xteink-firmware/#flash.
-   Future lector.c releases: port the publish robot from `origin/main` into this branch, or keep
-   publishing by hand. Owed on-device checks: per-book settings; paragraph numbers (3 modes); paperback
-   look; home in-progress list; button-only nav incl. the 2 rightmost front buttons; **first-line
-   indent slider**; **Vollkorn re-layout + look** (caches rebuild once, section v33→34); **TXT `[NN%]`
-   badge**; **Grab Quote** (menu → pick start word → pick end word → confirm saves to
-   `<book>_QUOTES.txt`; Back cancels/steps back); **Cozette menus + language-switch font rebind**
-   (Arabic/Hebrew → Ubuntu, Russian → Cozette Cyrillic, Vietnamese → Cozette, and the language-picker
-   native names must NOT box).
+1. **BUILDS + OWED DEVICE TESTS (nothing past 0.0.1 is released).** lector.c 0.0.1 is live on the site
+   (owed device checks: per-book settings, paragraph numbers 3 modes, paperback, home list, button-only nav
+   incl. the 2 rightmost front buttons, first-line indent, Vollkorn look, TXT `[NN%]`, Grab Quote, Cozette
+   menus + language rebind). **0.0.3 built + on branch, awaiting flash:** (a) UI fonts +2px to match old
+   Lector (SMALL=Cozette10, list/UI_10=Cozette12, header/UI_12=Cozette14; AR/HE=Ubuntu at same sizes; baked
+   `cozette_14` + `ubuntu_14`) and the reader menu header now shows title / "by author" / chapter /
+   "page/pages | Book %"; (b) **X4 `.pxc` sleep FIX** — X4 froze on the "Entering sleep" popup because the
+   OEM 3-pass grayscale sleep stalls in the SDK's unbounded panel-BUSY wait on SSD1677, so X4 now renders
+   `.pxc` sleep 1-bit (X3 keeps grayscale). Test on X4: Sleep → Custom → `.pxc` shows (1-bit dithered), no
+   freeze; if it still freezes, a serial monitor shows the last `[SLP] pxc ...` stage.
+   **Publish path when Diogo OKs a release:** copy `.pio/build/gh_release/firmware.bin` (+ bootloader/partitions
+   if changed) into the local `lector-xteink-firmware` clone `flash/firmware/latest/`, stamp `flash/version.txt`
+   + both manifests, refresh the What's-new panels + version label, push, then
+   `gh api -X POST repos/diogo7dias/lector-xteink-firmware/pages/builds`; poll live `flash/version.txt`.
 2. **Small follow-ups:** (a) TXT writes progress % (`8be83e2f`); comics/XTC intentionally do NOT.
    (b) KeyboardEntry still holds inert freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding — trim.
    (c) home does not filter 100%-finished books (removal handles it at End-of-Book). (d) Grab Quote v1 =
    single-page only; cross-page + quotes-browser + "Saved" toast + long-press trigger = future.
    (e) NotoSerif source TTFs left in-tree but unused — trim later if desired.
+   (f) **TODO (Diogo asked to keep this): chase REAL X4 grayscale `.pxc` sleep.** X4 currently falls back to
+   1-bit dithered because the SDK's grayscale sleep pipeline stalls on SSD1677 (unbounded BUSY wait). Later:
+   fix the X4 grayscale sleep path (or add a bounded BUSY timeout in the SDK) so X4 gets 4-level gray like X3,
+   then flip `pxcGrayscale` back on for X4 in `SleepActivity::renderCustomSleepScreen`.
+   (g) Remove the temporary `[SLP]` `LOG_INF` stage markers in `PxcSleepRenderer.cpp` once the X4 sleep fix is
+   device-confirmed (they were added to pinpoint the freeze over serial).
 3. **Remaining niceties:** status bar v2, margins, "Until Death" sleep screen, skull boot logo,
    open-random-on-boot, WiFi file browser + OPDS-in-browser, PXC info overlay / PxcViewerActivity,
-   PT hyphenation, anti-alias fade off, paragraph-spacing slider, "Bionic Reading" name. No feature
-   requested after Cozette yet — ASK Diogo what is next (or cut the test build).
+   PT hyphenation, anti-alias fade off, paragraph-spacing slider, "Bionic Reading" name.
+4. **NEXT UP — reader settings (Diogo's pick 2026-07-24; he will choose one after compaction).** Current reader
+   settings: tabs Family / Size / Layout (LineSpacing, ParaSpacing, Alignment, ScreenMargin, FirstLineIndent) /
+   Style (FocusReading=bionic, Hyphenation, EmbeddedStyle, AntiAliasing); reader-menu toggles Paragraph Numbers,
+   Paperback Look/Status. Candidate reader-settings work to offer Diogo:
+   - **(A) Independent top/bottom/side margins** — split the single ScreenMargin into separate controls (niceties
+     list: "margins uniform + independent top/bottom"). Visible, self-contained.
+   - **(B) Reading Themes** — preset reader looks (font + spacing + margin bundles); a DX34 dropped feature
+     ([[project_lector_dx34_dropped_features]]).
+   - **(C) SD reading fonts** — make adding/selecting SD-card reading fonts smooth in the Family tab (Diogo wants
+     more fonts as SD, not baked in firmware).
+   - **(D) Word-spacing slider** — pairs with first-line indent; DEFERRED earlier (big diff in the justify hot
+     core, low payoff on justified text, which is what Diogo uses). Lowest value unless he wants non-justified.
+   - **(E) Bionic/Focus strength** — FocusReading exists as on/off; add an adjustable strength.
 
 **HARD CONSTRAINTS still in force:** never change the indexing (use CrossPoint's cache exactly);
 no sleep-wallpaper staging; keep diffs small for upstream merges; NEVER `git add -A` (stage
