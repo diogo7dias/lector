@@ -53,6 +53,7 @@ Legend: [x] done · [~] in progress · [ ] todo
       to be ported later.
 - [x] **9 — Per-book reader settings** (each book its own look; global default + override + reset). Commit `094ef02a`.
 - [x] **10 — Paragraph numbers** (per-book in-menu toggle; 3 states: off / per-chapter / whole-book). Commit `fd6bef6d`.
+- [x] **Go to Paragraph** — reader-menu jump to a paragraph number (gated on numbering on; correct in both modes, whole-book converts via sectionParagraphCounts_). Commit `364c49f5`.
 - [x] **Paperback Look** (heavier-ink double-strike smear) for reader body text + status
       bar; global default ON + per-book toggle. Commit `be2976d8`.
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
