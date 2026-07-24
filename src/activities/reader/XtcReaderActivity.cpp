@@ -241,7 +241,11 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   const int displayPage = static_cast<int>(currentPage) + 1;
   const float progress = pageCount > 0 ? (static_cast<float>(displayPage) * 100.0f) / pageCount : 0.0f;
   const auto pageInfo = getStatusBarInfo();
+  // Paperback Look (status bar, global): thicken only the status-bar glyphs, then reset.
+  // XTC pages are images (no reader text), so only the status bar takes the smear.
+  renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
   GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom);
+  renderer.setPaperbackLook(false);
 }
 
 void XtcReaderActivity::renderPage() {

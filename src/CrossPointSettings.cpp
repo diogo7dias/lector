@@ -91,6 +91,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  // Paperback Look — not in SettingsList (in-book menu only), persist manually.
+  doc["paperbackLookBody"] = paperbackLookBody;
+  doc["paperbackLookStatus"] = paperbackLookStatus;
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
@@ -194,6 +197,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+
+  // Paperback Look — not in SettingsList (in-book menu only). Absent key => default
+  // ON (1); clamp any stray value to a 0/1 boolean.
+  paperbackLookBody = clamp(doc["paperbackLookBody"] | (uint8_t)1, (uint8_t)2, (uint8_t)1);
+  paperbackLookStatus = clamp(doc["paperbackLookStatus"] | (uint8_t)1, (uint8_t)2, (uint8_t)1);
 
   // Language -- stored as code string for stability across enum reorders.
   if (doc["language"].is<const char*>()) {

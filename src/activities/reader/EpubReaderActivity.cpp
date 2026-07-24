@@ -272,13 +272,15 @@ void EpubReaderActivity::openReaderMenu() {
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, epub->getTitle(), currentPage, totalPages,
                                                bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(),
-                                               !cachedBookmarks.empty(), prefsCustom_, prefs_.paragraphNumbering),
+                                               !cachedBookmarks.empty(), prefsCustom_, prefs_.paragraphNumbering,
+                                               prefs_.paperbackLookBody, prefs_.paperbackLookStatus),
       [this](const ActivityResult& result) {
-        // Always apply orientation / paragraph-number changes even if cancelled
+        // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
         applyOrientation(menu.orientation);
         toggleAutoPageTurn(menu.pageTurnOption);
         applyParagraphNumbering(menu.paragraphNumbering);
+        applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
         if (!result.isCancelled) {
           onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
         }
@@ -1041,9 +1043,12 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
 
 void EpubReaderActivity::applyReaderSettingsEdit() {
   ReaderPrefs edited = SETTINGS.endReaderEditOverlay();
-  // paragraphNumbering is a per-book in-menu toggle, not part of the Reader Settings
-  // screen, so it is not in the overlay round-trip; carry the book's value across.
+  // paragraphNumbering and paperbackLook* are per-book in-menu toggles, not part of
+  // the Reader Settings screen, so they are not in the overlay round-trip; carry the
+  // book's values across so editing font/margins never resets them.
   edited.paragraphNumbering = prefs_.paragraphNumbering;
+  edited.paperbackLookBody = prefs_.paperbackLookBody;
+  edited.paperbackLookStatus = prefs_.paperbackLookStatus;
   if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
     // Opened the settings screen but changed nothing — leave the book as it was.
     requestUpdate();
@@ -1071,6 +1076,16 @@ void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode) {
   writeReaderOverride(prefs_);
   // No re-layout: the ordinals are already baked into the page cache; only whether
   // and how they are drawn changes, so a plain repaint suffices.
+  requestUpdate();
+}
+
+void EpubReaderActivity::applyPaperbackLook(const uint8_t body, const uint8_t status) {
+  if (body == prefs_.paperbackLookBody && status == prefs_.paperbackLookStatus) return;
+  prefs_.paperbackLookBody = body;
+  prefs_.paperbackLookStatus = status;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  // Paperback only changes ink weight, not layout — no re-index, just repaint.
   requestUpdate();
 }
 
@@ -1695,7 +1710,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     renderer.clearScreen();
   }
 
+  // Paperback Look (body): thicken the page glyphs on the BW base pass, then reset so
+  // the paragraph numbers, the status bar (its own flag) and any grayscale/overlay
+  // passes render thin. Image pages keep the thick text: the smear pixels set here
+  // persist through the image-area re-blank/re-render below.
+  renderer.setPaperbackLook(prefs_.paperbackLookBody);
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  renderer.setPaperbackLook(false);
   drawParagraphNumbers(*page, orientedMarginLeft, orientedMarginTop, fontId);
   renderStatusBar();
   const auto tBwRender = millis();
@@ -1959,8 +1980,12 @@ void EpubReaderActivity::renderStatusBar() const {
     title = epub->getTitle();
   }
 
+  // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so
+  // nothing drawn afterwards inherits the smear.
+  renderer.setPaperbackLook(prefs_.paperbackLookStatus);
   GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
                     section->isBuilding());
+  renderer.setPaperbackLook(false);
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

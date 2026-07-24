@@ -263,6 +263,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
+  // Paperback Look: smear drawn glyph pixels +1px right/+1px down for heavier ink.
+  // Two independent toggles, both default ON: body = reader page text (EPUB/TXT/XTC),
+  // status = the reading-screen status bar. The global values are the default that
+  // per-book ReaderPrefs seed from; the EPUB reader then uses its per-book copy, the
+  // TXT/XTC readers use these global values directly. Not in SettingsList (in-book
+  // menu toggle only), so persisted manually in toJson/fromJson.
+  uint8_t paperbackLookBody = 1;
+  uint8_t paperbackLookStatus = 1;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)

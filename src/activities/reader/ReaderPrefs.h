@@ -26,7 +26,7 @@
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  static constexpr uint8_t VERSION = 1;
+  static constexpr uint8_t VERSION = 2;  // v2: paperbackLookBody/Status
 
   // Font (Family/Size tabs)
   uint8_t fontFamily = 0;  // CrossPointSettings::NOTOSERIF
@@ -44,8 +44,13 @@ struct ReaderPrefs {
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
   uint8_t imageRendering = 0;  // CrossPointSettings::IMAGES_DISPLAY
   // Paragraph numbering — per-book, chosen from the in-book menu (off by default).
-  // 0 = off, 1 = per chapter, 2 = whole book. Reserved here; wired to drawing later.
+  // 0 = off, 1 = per chapter, 2 = whole book.
   uint8_t paragraphNumbering = 0;  // CrossPointSettings::PARA_NUM_OFF
+  // Paperback Look (heavier ink smear) — per book, toggled from the in-book menu,
+  // seeded from the global default (ON). Two independent flags: body = reader page
+  // text, status = the reading-screen status bar.
+  uint8_t paperbackLookBody = 1;
+  uint8_t paperbackLookStatus = 1;
   // SD card font family name (empty = built-in fontFamily). Fixed width keeps the struct POD.
   char sdFontFamilyName[32] = "";
 

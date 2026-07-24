@@ -12,12 +12,15 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const std::string& title, const int currentPage, const int totalPages,
                                                const int bookProgressPercent, const uint8_t currentOrientation,
                                                const bool hasFootnotes, const bool hasBookmarks,
-                                               const bool hasReaderOverride, const uint8_t paragraphNumbering)
+                                               const bool hasReaderOverride, const uint8_t paragraphNumbering,
+                                               const uint8_t paperbackBody, const uint8_t paperbackStatus)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride)),
       title(title),
       pendingOrientation(currentOrientation),
       selectedParagraphNumbering(paragraphNumbering),
+      selectedPaperbackBody(paperbackBody),
+      selectedPaperbackStatus(paperbackStatus),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
@@ -26,7 +29,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                                                                                      bool hasBookmarks,
                                                                                      bool hasReaderOverride) {
   std::vector<MenuItem> items;
-  items.reserve(16);
+  items.reserve(18);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   if (hasFootnotes) {
     items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
@@ -43,6 +46,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
   }
   items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
+  // Paperback Look toggles — in-book menu only (not in the global Settings screen).
+  items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
+  items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
@@ -64,7 +70,12 @@ void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
 void EpubReaderMenuActivity::closeCancelled() {
   ActivityResult result;
   result.isCancelled = true;
-  result.data = MenuResult{-1, pendingOrientation, selectedPageTurnOption, selectedParagraphNumbering};
+  result.data = MenuResult{-1,
+                           pendingOrientation,
+                           selectedPageTurnOption,
+                           selectedParagraphNumbering,
+                           selectedPaperbackBody,
+                           selectedPaperbackStatus};
   setResult(std::move(result));
   finish();
 }
@@ -128,8 +139,21 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
+    // Paperback Look toggles: flip in place (like the rows above) and keep the menu
+    // open so the ON/OFF label updates like a checkbox; the reader applies them on exit.
+    if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
+      selectedPaperbackBody = selectedPaperbackBody ? 0 : 1;
+      requestUpdate();
+      return;
+    }
+    if (selectedAction == MenuAction::TOGGLE_PAPERBACK_STATUS) {
+      selectedPaperbackStatus = selectedPaperbackStatus ? 0 : 1;
+      requestUpdate();
+      return;
+    }
+
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
-                         selectedParagraphNumbering});
+                         selectedParagraphNumbering, selectedPaperbackBody, selectedPaperbackStatus});
     finish();
   };
 
@@ -218,6 +242,10 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
           // Render current paragraph-numbering mode on the right edge.
           return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
+        } else if (value == MenuAction::TOGGLE_PAPERBACK_LOOK) {
+          return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
+          return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else {
           return "";
         }

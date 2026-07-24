@@ -26,6 +26,8 @@ ReaderPrefs makeSample() {
   p.textAntiAliasing = 0;
   p.imageRendering = 2;
   p.paragraphNumbering = 2;  // whole book
+  p.paperbackLookBody = 0;
+  p.paperbackLookStatus = 1;
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, "Bookerly", sizeof(p.sdFontFamilyName) - 1);
   return p;
@@ -44,6 +46,8 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.textAntiAliasing, b.textAntiAliasing);
   EXPECT_EQ(a.imageRendering, b.imageRendering);
   EXPECT_EQ(a.paragraphNumbering, b.paragraphNumbering);
+  EXPECT_EQ(a.paperbackLookBody, b.paperbackLookBody);
+  EXPECT_EQ(a.paperbackLookStatus, b.paperbackLookStatus);
   EXPECT_STREQ(a.sdFontFamilyName, b.sdFontFamilyName);
   // POD change-detection is a whole-blob memcmp, so the bytes must match exactly.
   EXPECT_EQ(0, std::memcmp(&a, &b, sizeof(ReaderPrefs)));

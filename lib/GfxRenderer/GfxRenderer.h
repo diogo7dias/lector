@@ -74,6 +74,11 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
+  // "Paperback Look": when set, drawn glyph pixels are smeared +1px right and
+  // +1px down (BW pass only) to fake heavier paperback ink. Plain bool owned by
+  // the renderer (lib/ must not depend on src/); callers bracket it per region.
+  mutable bool paperbackLook_ = false;
+
   // CJK UI font fallback map: primary (built-in, Latin-only) UI font id -> a
   // size-matched SD-card font id that carries CJK glyphs. When a string drawn
   // or measured with a mapped primary font contains a CJK codepoint the primary
@@ -195,6 +200,13 @@ class GfxRenderer {
   uint8_t* getWriteTarget() const { return _stripActive ? _stripBuf : frameBuffer; }
   int getWriteOriginY() const { return _stripActive ? _stripY0 : 0; }
   int getWriteRows() const { return _stripActive ? _stripRows : panelHeight; }
+
+  // Paperback Look control (heavier ink smear on drawn glyph pixels). Owned as a
+  // plain bool; reader activities bracket the body/status text regions only, and
+  // reset to false so menus/overlays render thin. const (mutates a mutable field)
+  // so it can be called on the const GfxRenderer& that layout/render code holds.
+  void setPaperbackLook(const bool v) const { paperbackLook_ = v; }
+  bool getPaperbackLook() const { return paperbackLook_; }
 
   // Drawing
   void drawPixel(int x, int y, bool state = true) const;

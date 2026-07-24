@@ -26,15 +26,18 @@ class EpubReaderMenuActivity final : public Activity {
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
-    READER_SETTINGS,          // open this book's per-book reader settings
-    RESET_READER_SETTINGS,    // clear this book's override, follow global again
-    TOGGLE_PARAGRAPH_NUMBERS  // cycle off / per-chapter / whole-book in place
+    READER_SETTINGS,           // open this book's per-book reader settings
+    RESET_READER_SETTINGS,     // clear this book's override, follow global again
+    TOGGLE_PARAGRAPH_NUMBERS,  // cycle off / per-chapter / whole-book in place
+    TOGGLE_PAPERBACK_LOOK,     // toggle heavier ink for reader body text
+    TOGGLE_PAPERBACK_STATUS    // toggle heavier ink for status bar text
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const int currentPage, const int totalPages, const int bookProgressPercent,
                                   const uint8_t currentOrientation, const bool hasFootnotes, bool hasBookmarks,
-                                  bool hasReaderOverride = false, uint8_t paragraphNumbering = 0);
+                                  bool hasReaderOverride = false, uint8_t paragraphNumbering = 0,
+                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1);
 
   void onEnter() override;
   void onExit() override;
@@ -65,6 +68,9 @@ class EpubReaderMenuActivity final : public Activity {
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
   uint8_t selectedParagraphNumbering = 0;
+  // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
+  uint8_t selectedPaperbackBody = 1;
+  uint8_t selectedPaperbackStatus = 1;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER,

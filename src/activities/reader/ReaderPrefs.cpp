@@ -19,6 +19,8 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.embeddedStyle = SETTINGS.embeddedStyle;
   p.textAntiAliasing = SETTINGS.textAntiAliasing;
   p.imageRendering = SETTINGS.imageRendering;
+  p.paperbackLookBody = SETTINGS.paperbackLookBody;
+  p.paperbackLookStatus = SETTINGS.paperbackLookStatus;
   // paragraphNumbering is per-book only (there is no global equivalent) — intentionally
   // NOT copied, so it always defaults OFF for a book that has never been customized.
   // Zero-pad then copy so the trailing bytes are canonical for whole-blob memcmp.

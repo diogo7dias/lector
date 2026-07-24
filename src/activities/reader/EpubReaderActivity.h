@@ -197,6 +197,8 @@ class EpubReaderActivity final : public Activity {
   void reloadForReaderPrefsChange();
   // Paragraph numbers (#10).
   void applyParagraphNumbering(uint8_t mode);
+  // Paperback Look: per-book heavier-ink toggles (body text + status bar).
+  void applyPaperbackLook(uint8_t body, uint8_t status);
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
   uint32_t wholeBookParagraphBase(int spineIndex) const;
   std::string paragraphCountsPath() const;
