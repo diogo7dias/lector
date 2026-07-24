@@ -10,11 +10,17 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   ReaderPrefs p;
   p.fontFamily = SETTINGS.fontFamily;
   p.fontSize = SETTINGS.fontSize;
-  p.lineSpacing = SETTINGS.lineSpacing;
+  p.lineSpacingPercent = SETTINGS.lineSpacingPercent;
   p.paragraphAlignment = SETTINGS.paragraphAlignment;
   p.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+  p.paragraphSpacing = SETTINGS.paragraphSpacing;
   p.screenMargin = SETTINGS.screenMargin;
+  p.screenMarginTop = SETTINGS.screenMarginTop;
+  p.screenMarginBottom = SETTINGS.screenMarginBottom;
+  p.uniformMargins = SETTINGS.uniformMargins;
+  p.dynamicMargins = SETTINGS.dynamicMargins;
   p.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+  p.guideDotsEnabled = SETTINGS.guideDotsEnabled;
   p.hyphenationEnabled = SETTINGS.hyphenationEnabled;
   p.embeddedStyle = SETTINGS.embeddedStyle;
   p.textAntiAliasing = SETTINGS.textAntiAliasing;

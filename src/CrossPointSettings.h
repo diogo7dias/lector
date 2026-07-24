@@ -205,6 +205,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 1;
+  // Reader paragraph spacing as a percentage of the line height (block gap between
+  // paragraphs; 0 = off). Restored granular control (old lector). Feeds the render
+  // spec, so a change rebuilds the section cache.
+  static constexpr uint8_t MAX_PARAGRAPH_SPACING = 150;
+  uint8_t paragraphSpacing = 0;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
@@ -224,7 +229,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Reader font settings
   uint8_t fontFamily = VOLLKORN;
   uint8_t fontSize = MEDIUM;
+  // Legacy coarse line-spacing enum (TIGHT/NORMAL/WIDE). Superseded by
+  // lineSpacingPercent below; retained so old saves still load and existing
+  // references stay valid. resolveLineCompression now reads the percent.
   uint8_t lineSpacing = NORMAL;
+  // Reader line spacing as a percentage of the font's natural line height (100 =
+  // natural). Restored granular control (old lector). The resolved line-compression
+  // float is part of the cache key, so a change rebuilds the section cache.
+  static constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
+  static constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
+  uint8_t lineSpacingPercent = 100;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
@@ -232,11 +246,23 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
 
-  // Reader screen margin settings
-  static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
-  static constexpr uint8_t SCREEN_MARGIN_MAX = 40;
-  static constexpr uint8_t SCREEN_MARGIN_STEP = 5;
-  uint8_t screenMargin = SCREEN_MARGIN_MIN;
+  // Reader screen margins. screenMargin is the horizontal (left/right) margin and,
+  // when uniformMargins is on, also drives top/bottom. With uniformMargins off,
+  // screenMarginTop/Bottom take over the vertical margins independently. Restored
+  // granular range (old lector). Margins feed the viewport, so a change rebuilds
+  // the section cache through the viewport dimensions (no cache-format bump needed).
+  static constexpr uint8_t SCREEN_MARGIN_MIN = 0;
+  static constexpr uint8_t SCREEN_MARGIN_MAX = 100;
+  static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
+  uint8_t screenMargin = 5;
+  uint8_t screenMarginTop = 5;
+  uint8_t screenMarginBottom = 5;
+  uint8_t uniformMargins = 1;  // 1 = all sides use screenMargin; 0 = separate H / Top / Bottom
+  // Auto-widen horizontal margins toward ~62 chars/line (0 = off, 1 = auto min 10px,
+  // 2 = auto min 20px). Overrides the fixed horizontal margin when on. Feeds the
+  // viewport width, so a change re-paginates.
+  static constexpr uint8_t DYNAMIC_MARGINS_COUNT = 3;
+  uint8_t dynamicMargins = 0;
 
   // First-line paragraph indent, expressed in space-widths (0 = no indent). Applied
   // to natural-aligned paragraphs that carry no explicit CSS text-indent. Feeds the
@@ -270,6 +296,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t embeddedStyle = 1;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
+  // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored
+  // (old lector). Feeds the render spec (changes word width), so it rebuilds the cache.
+  uint8_t guideDotsEnabled = 0;
+  // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
+  // overlay after the page renders, so it never affects layout or the cache.
+  uint8_t debugBorders = 0;
   // Paperback Look: smear drawn glyph pixels +1px right/+1px down for heavier ink.
   // Two independent toggles, both default ON: body = reader page text (EPUB/TXT/XTC),
   // status = the reading-screen status bar. The global values are the default that
@@ -393,7 +425,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Shared resolvers so getReaderFontId()/getReaderLineCompression() and their
   // ReaderPrefs overloads compute font id / line compression from one code path.
   int resolveReaderFontId(uint8_t fontFamily, uint8_t fontSize, const char* sdFontFamilyName) const;
-  static float resolveLineCompression(uint8_t fontFamily, uint8_t lineSpacing, const char* sdFontFamilyName);
+  // Line-height multiplier from a line-spacing percentage (100 = natural). Clamped
+  // to [MIN..MAX]_LINE_SPACING_PERCENT. Restored granular model (old lector).
+  static float resolveLineCompression(uint8_t lineSpacingPercent);
 
   bool readerEditOverlayActive_ = false;
   ReaderPrefs readerEditBackup_;

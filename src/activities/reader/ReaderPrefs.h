@@ -26,18 +26,24 @@
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  static constexpr uint8_t VERSION = 3;  // v3: firstLineIndent
+  static constexpr uint8_t VERSION = 4;  // v4: restored granular reader settings (line/para %, margins, guide dots)
 
   // Font (Family/Size tabs)
   uint8_t fontFamily = 0;  // CrossPointSettings::VOLLKORN
   uint8_t fontSize = 1;    // CrossPointSettings::MEDIUM
   // Layout tab
-  uint8_t lineSpacing = 1;         // CrossPointSettings::LINE_COMPRESSION NORMAL
-  uint8_t paragraphAlignment = 0;  // CrossPointSettings::JUSTIFIED
+  uint8_t lineSpacingPercent = 100;  // % of natural line height (restored granular)
+  uint8_t paragraphAlignment = 0;    // CrossPointSettings::JUSTIFIED
   uint8_t extraParagraphSpacing = 1;
-  uint8_t screenMargin = 5;  // CrossPointSettings::SCREEN_MARGIN_MIN
+  uint8_t paragraphSpacing = 0;  // % of line height (block gap; restored granular)
+  uint8_t screenMargin = 5;      // horizontal (left/right), also all sides when uniformMargins
+  uint8_t screenMarginTop = 5;
+  uint8_t screenMarginBottom = 5;
+  uint8_t uniformMargins = 1;  // 1 = all sides use screenMargin; 0 = separate H / Top / Bottom
+  uint8_t dynamicMargins = 0;  // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
   // Style tab
   uint8_t focusReadingEnabled = 0;
+  uint8_t guideDotsEnabled = 0;  // middle dot between words (restored)
   uint8_t hyphenationEnabled = 0;
   uint8_t embeddedStyle = 1;
   uint8_t textAntiAliasing = 1;

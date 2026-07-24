@@ -252,39 +252,14 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   return spec;
 }
 
-float CrossPointSettings::resolveLineCompression(const uint8_t fontFamily, const uint8_t lineSpacing,
-                                                 const char* sdFontFamilyName) {
-  // SD card fonts use same compression as Bookerly (the most neutral values)
-  if (sdFontFamilyName[0] != '\0') {
-    switch (lineSpacing) {
-      case TIGHT:
-        return 0.95f;
-      case NORMAL:
-      default:
-        return 1.0f;
-      case WIDE:
-        return 1.1f;
-    }
-  }
-
-  switch (fontFamily) {
-    case VOLLKORN:
-    default:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.95f;
-        case NORMAL:
-        default:
-          return 1.0f;
-        case WIDE:
-          return 1.1f;
-      }
-  }
+float CrossPointSettings::resolveLineCompression(const uint8_t lineSpacingPercent) {
+  uint8_t pct = lineSpacingPercent;
+  if (pct < MIN_LINE_SPACING_PERCENT) pct = MIN_LINE_SPACING_PERCENT;
+  if (pct > MAX_LINE_SPACING_PERCENT) pct = MAX_LINE_SPACING_PERCENT;
+  return static_cast<float>(pct) / 100.0f;
 }
 
-float CrossPointSettings::getReaderLineCompression() const {
-  return resolveLineCompression(fontFamily, lineSpacing, sdFontFamilyName);
-}
+float CrossPointSettings::getReaderLineCompression() const { return resolveLineCompression(lineSpacingPercent); }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   if (sleepTimeoutMinutes >= SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
@@ -345,7 +320,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
                                                       const ReaderPrefs& prefs) const {
   ReaderRenderSpec spec;
   spec.fontId = resolveReaderFontId(prefs.fontFamily, prefs.fontSize, prefs.sdFontFamilyName);
-  spec.lineCompression = resolveLineCompression(prefs.fontFamily, prefs.lineSpacing, prefs.sdFontFamilyName);
+  spec.lineCompression = resolveLineCompression(prefs.lineSpacingPercent);
   spec.extraParagraphSpacing = prefs.extraParagraphSpacing != 0;
   spec.paragraphAlignment = prefs.paragraphAlignment;
   spec.viewportWidth = viewportWidth;
@@ -361,12 +336,18 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   fontFamily = p.fontFamily;
   fontSize = p.fontSize;
-  lineSpacing = p.lineSpacing;
+  lineSpacingPercent = p.lineSpacingPercent;
   paragraphAlignment = p.paragraphAlignment;
   extraParagraphSpacing = p.extraParagraphSpacing;
+  paragraphSpacing = p.paragraphSpacing;
   screenMargin = p.screenMargin;
+  screenMarginTop = p.screenMarginTop;
+  screenMarginBottom = p.screenMarginBottom;
+  uniformMargins = p.uniformMargins;
+  dynamicMargins = p.dynamicMargins;
   firstLineIndent = p.firstLineIndent;
   focusReadingEnabled = p.focusReadingEnabled;
+  guideDotsEnabled = p.guideDotsEnabled;
   hyphenationEnabled = p.hyphenationEnabled;
   embeddedStyle = p.embeddedStyle;
   textAntiAliasing = p.textAntiAliasing;
