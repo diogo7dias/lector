@@ -68,14 +68,23 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
 // renderer.waitRefreshComplete() and must rebuild the differential baseline
 // before the next page turn (the tiled grayscale cleanup does).
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
-  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+  // Refresh Frequency = Never reports 0. Honour it here rather than at the counter,
+  // because several callers hard-set pagesUntilFullRefresh to 1 to force a cleanup
+  // pass (after an INDEXING popup, after an image page); the setting has to win over
+  // those too, or "Never" would still flash.
+  const int cycle = SETTINGS.getRefreshFrequency();
+  const bool never = cycle == 0;
+  const auto mode = (!never && pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
   if (async) {
     renderer.displayBufferAsync(mode);
   } else {
     renderer.displayBuffer(mode);
   }
+  if (never) {
+    return;
+  }
   if (pagesUntilFullRefresh <= 1) {
-    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+    pagesUntilFullRefresh = cycle;
   } else {
     pagesUntilFullRefresh--;
   }

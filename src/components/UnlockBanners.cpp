@@ -71,10 +71,6 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   renderer.drawRect(0, topY, pageWidth, topH, 2, false);  // 2px white inset border
   renderer.drawRect(0, botY, pageWidth, botH, 2, false);
 
-  // Dark/paperback text: smear the white glyphs +1px so they read heavier on the black
-  // banners (matches drawPopup). Restored after so nothing else is affected.
-  renderer.setPaperbackLook(true);
-
   const std::string version = std::string("Lector ") + CROSSPOINT_VERSION;
   renderer.drawCenteredText(UI_10_FONT_ID, topY + pad, version.c_str(), false);
   int titleY = topY + pad + lh10 + 4;
@@ -85,6 +81,4 @@ void drawUnlockBanners(GfxRenderer& renderer) {
 
   const char* footer = SETTINGS.customFooter[0] != '\0' ? SETTINGS.customFooter : "READ UNTIL YOU DIE.";
   renderer.drawCenteredText(UI_12_FONT_ID, botY + pad, footer, false);
-
-  renderer.setPaperbackLook(false);
 }

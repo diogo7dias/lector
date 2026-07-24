@@ -109,12 +109,12 @@ class ValueBarPopup {
     }
 
     int y = dialogY + innerPad;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, title.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, y, title.c_str(), true, EpdFontFamily::REGULAR);
     y += titleLH + gap;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", value_);
-    renderer.drawCenteredText(UI_12_FONT_ID, y, buf, true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_12_FONT_ID, y, buf, true, EpdFontFamily::REGULAR);
     y += valueLH + gap;
 
     const int barWidth = std::min(dialogW - innerPad * 2, 360);

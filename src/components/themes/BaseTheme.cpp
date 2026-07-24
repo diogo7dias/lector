@@ -450,8 +450,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
     auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
-                                                 EpdFontFamily::BOLD);
-    renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::BOLD);
+                                                 EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);
   }
 
   if (subtitle) {
@@ -493,8 +493,7 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
 
   for (const auto& tab : tabs) {
-    const int textWidth =
-        renderer.getTextWidth(UI_12_FONT_ID, tab.label, tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, tab.label, EpdFontFamily::REGULAR);
 
     // Draw underline for selected tab
     if (tab.selected) {
@@ -506,8 +505,7 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
     }
 
     // Draw tab label
-    renderer.drawText(UI_12_FONT_ID, currentX, rect.y, tab.label, !(tab.selected && selected),
-                      tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    renderer.drawText(UI_12_FONT_ID, currentX, rect.y, tab.label, !(tab.selected && selected), EpdFontFamily::REGULAR);
 
     currentX += textWidth + BaseMetrics::values.tabSpacing;
   }
@@ -522,8 +520,7 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
   for (size_t i = 0; i < tabs.size(); i++) {
     const auto& tab = tabs[i];
-    const int textWidth =
-        renderer.getTextWidth(UI_12_FONT_ID, tab.label, tab.selected ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+    const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, tab.label, EpdFontFamily::REGULAR);
     const int left = (i == 0) ? rect.x : currentX - BaseMetrics::values.tabSpacing / 2;
     const int right = currentX + textWidth + BaseMetrics::values.tabSpacing / 2;
     if (x >= left && x < right) {
@@ -1098,7 +1095,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int rowHeight = optionLineHeight + selectionVPadding * 2;
 
-  int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::BOLD);
+  int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::REGULAR);
   for (const auto& opt : options) {
     int w = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
     if (w > maxTextWidth) maxTextWidth = w;
@@ -1131,7 +1128,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   int y = dialogY + innerPadding;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::BOLD);
+  renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::REGULAR);
   y += titleLineHeight;
 
   if (metrics.optionPopupTitleSeparator) {

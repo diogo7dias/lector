@@ -120,7 +120,12 @@ enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Trans
 namespace BaseMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryHeight = 12,
-                                 .topPadding = 5,
+                                 // 5 px of chrome padding plus the X4's ~9 px physical top crop
+                                 // (GfxRenderer::VIEWABLE_MARGIN_TOP). Menu screens do not consult
+                                 // getOrientedViewableTRBL, so without this the header sits right on
+                                 // the panel edge. Every header y, content top and the per-page item
+                                 // reserve are expressed against topPadding, so they all shift together.
+                                 .topPadding = 14,
                                  .batteryBarHeight = 20,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
@@ -158,7 +163,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .popupMarginY = 15,
                                  .popupFrameThickness = 2,
                                  .popupCornerRadius = 0,
-                                 .popupTextBold = true,
+                                 // Menus and popups render at regular weight; only reader body text is thickened.
+                                 .popupTextBold = false,
                                  .popupTextInverted = true,
                                  .popupTextBaselineOffsetY = -2,
                                  .popupProgressBarHeight = 4,
@@ -172,7 +178,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupSelectionVPadding = 4,
                                  .optionPopupTitleGap = 10,
                                  .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = true,
+                                 .optionPopupOptionFontBold = false,
                                  .optionPopupSelectionRadius = 0,
                                  .optionPopupSelectionLight = false,
                                  .optionPopupDrawAllRows = false,

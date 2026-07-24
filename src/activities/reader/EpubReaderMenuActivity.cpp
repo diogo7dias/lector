@@ -193,11 +193,13 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   // symmetrically so the first line never runs under the battery cluster.
   const int batteryReserve = 12 + metrics.batteryWidth + renderer.getTextWidth(UI_10_FONT_ID, "100%") + 12;
   const int titleMaxWidth = screen.width - 2 * batteryReserve;
-  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::BOLD);
+  // Same size and weight as the author and chapter lines below: at UI_12 bold the
+  // title read as a heavy slab against the thin lines under it.
+  const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const auto titleLines = renderer.wrappedText(UI_10_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::REGULAR);
   int y = screen.y + metrics.topPadding + 5;
   for (const auto& line : titleLines) {
-    renderer.drawCenteredText(UI_12_FONT_ID, y, line.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), true, EpdFontFamily::REGULAR);
     y += titleLineHeight;
   }
   y += 2;
@@ -221,10 +223,12 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
     y += subLineHeight;
   }
 
-  // Progress summary — centered: "<page>/<pages>  |  Book: <pct>%".
+  // Progress summary — centered: "Pages: <page>/<pages>  |  Book: <pct>%". Both halves
+  // carry a label so neither reads as a bare number.
   std::string progressLine;
   if (totalPages > 0) {
-    progressLine = std::to_string(currentPage) + "/" + std::to_string(totalPages) + "  |  ";
+    progressLine =
+        std::string(tr(STR_PAGES_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + "  |  ";
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
   renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());

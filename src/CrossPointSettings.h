@@ -129,6 +129,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     REFRESH_10 = 2,
     REFRESH_15 = 3,
     REFRESH_30 = 4,
+    // Appended last so saved indices keep their meaning. getRefreshFrequency()
+    // reports 0 for this, which every caller reads as "never force a refresh".
+    REFRESH_NEVER = 5,
     REFRESH_FREQUENCY_COUNT
   };
 

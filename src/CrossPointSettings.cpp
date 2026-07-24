@@ -267,6 +267,8 @@ int CrossPointSettings::getRefreshFrequency() const {
       return 15;
     case REFRESH_30:
       return 30;
+    case REFRESH_NEVER:
+      return 0;  // 0 = never force a cleanup refresh; see ReaderUtils::displayWithRefreshCycle
   }
 }
 

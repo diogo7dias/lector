@@ -348,13 +348,15 @@ void XtcReaderActivity::renderPage() {
       }
     }
 
-    if (pagesUntilFullRefresh <= 1) {
+    // Refresh Frequency = Never reports 0; skip the periodic ghost cleanup entirely.
+    const int refreshCycle = SETTINGS.getRefreshFrequency();
+    if (refreshCycle != 0 && pagesUntilFullRefresh <= 1) {
       // Periodic ghost cleanup: scrub via the normal path, then run the
       // settle flavor of the grayscale base pass (DTM planes are equal after
       // the display sync, so only the gentle reinforcement cells fire).
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       renderer.preconditionGrayscale();
-      pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
+      pagesUntilFullRefresh = refreshCycle;
     } else {
       // OEM grayscale pipeline base: differential "AA-pre-BW(mid)" update as
       // the page turn on X3; plain FAST refresh on X4 (previous behavior).

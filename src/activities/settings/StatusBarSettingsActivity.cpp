@@ -324,8 +324,9 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
 
   if (pickerActive) renderPicker();
 
-  // Periodic full refresh to neutralise X3 fast-refresh bloom (see header).
-  const bool full = (renderCount % kFullRefreshEvery == 0);
-  renderCount++;
-  renderer.displayBuffer(full ? HalDisplay::FULL_REFRESH : HalDisplay::FAST_REFRESH);
+  // Plain fast refresh, same as every other settings screen. This screen used to
+  // force a FULL refresh every 6th render to bound X3 fast-refresh bloom, but a
+  // ~770 ms whole-screen flash every few button presses is far more intrusive than
+  // the ghosting it prevented, and Home already runs a full refresh on return.
+  renderer.displayBuffer();
 }
