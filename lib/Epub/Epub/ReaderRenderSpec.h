@@ -14,6 +14,9 @@ struct ReaderRenderSpec {
   int fontId = 0;
   float lineCompression = 1.0f;
   bool extraParagraphSpacing = false;
+  // Extra block gap after each paragraph, as a percentage of the line height (0 = none).
+  // Added on top of extraParagraphSpacing. Part of the cache key. Restored (old lector).
+  uint8_t paragraphSpacing = 0;
   uint8_t paragraphAlignment = 0;
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;

@@ -1569,4 +1569,9 @@ void ChapterHtmlSlimParser::makePages() {
   if (extraParagraphSpacing) {
     currentPageNextY += lineHeight / 2;
   }
+  // Granular paragraph spacing: an additional block gap as a percentage of the line
+  // height, stacked on top of extraParagraphSpacing (restored from old lector).
+  if (paragraphSpacing > 0) {
+    currentPageNextY += lineHeight * paragraphSpacing / 100;
+  }
 }
