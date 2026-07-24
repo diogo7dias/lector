@@ -2,6 +2,7 @@
 
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalGPIO.h>
 #include <Logging.h>
 
@@ -10,6 +11,7 @@
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
+#include "components/StatusBar.h"  // statusBarThicknessPx for the v2 height helpers
 #include "components/themes/BaseTheme.h"
 
 UITheme UITheme::instance;
@@ -114,20 +116,107 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   return File;
 }
 
+// Legacy height helpers, now expressed over the v2 per-item model. Still used by
+// the EPUB auto-page-turn logic to decide whether a text lane exists (vs only a
+// progress bar / nothing) so it can reserve space for the countdown indicator.
 int UITheme::getStatusBarHeight() {
-  const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
-  const auto sb = SETTINGS.statusBarSpec();
-
-  // Layout reservation is hardware-agnostic: pass clockAvailable=true so the
-  // reserved height does not depend on whether an RTC is present.
-  return (sb.textLaneVisible(true) ? (metrics.statusBarVerticalMargin) : 0) +
-         (sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0);
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const bool showText = SETTINGS.sbEnabled &&
+                        (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
+                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos);
+  return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
 }
 
 int UITheme::getProgressBarHeight() {
-  const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
-  const auto sb = SETTINGS.statusBarSpec();
-  return sb.showsProgressBar() ? (sb.progressBarHeightPx + metrics.progressBarMarginTop) : 0;
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const bool showProgressBar = SETTINGS.sbEnabled && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
+                                                      SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
+  return showProgressBar ? (statusBarThicknessPx(SETTINGS.sbBarThickness) + metrics.progressBarMarginTop) : 0;
+}
+
+namespace {
+bool sbAnchorTop(uint8_t a) {
+  return a == CrossPointSettings::SB_ANCHOR_TL || a == CrossPointSettings::SB_ANCHOR_TC ||
+         a == CrossPointSettings::SB_ANCHOR_TR;
+}
+bool sbAnchorBottom(uint8_t a) {
+  return a == CrossPointSettings::SB_ANCHOR_BL || a == CrossPointSettings::SB_ANCHOR_BC ||
+         a == CrossPointSettings::SB_ANCHOR_BR;
+}
+bool sbItemOn(uint8_t anchor, bool chapterOnly, bool hasChapters) {
+  return anchor != CrossPointSettings::SB_ANCHOR_OFF && (!chapterOnly || hasChapters);
+}
+// Whether any enabled text item lands on the requested band (top=true / bottom).
+// NOTE: this is the *native* anchor assignment; the rare title-driven reflow that
+// pushes a top item down to the bottom band is not reflected here (device-tuned
+// later), so a reserved band never disappears — at worst a bumped item may draw in
+// a band that was already reserved for its native residents.
+bool sbBandHasText(bool top, bool hasChapters) {
+  const bool clockAvailable = halClock.isAvailable();
+  const struct {
+    uint8_t anchor;
+    bool chapterOnly;
+    bool applicable;
+  } items[] = {
+      {SETTINGS.sbBatteryPos, false, true},   {SETTINGS.sbClockPos, false, clockAvailable},
+      {SETTINGS.sbTitlePos, false, true},  // title falls back to book title on chapterless books
+      {SETTINGS.sbPagePos, false, true},   // page falls back to book pages on chapterless books
+      {SETTINGS.sbBookPctPos, false, true},   {SETTINGS.sbChapterPctPos, true, true},
+      {SETTINGS.sbChapterNumPos, true, true},
+  };
+  for (const auto& it : items) {
+    if (!it.applicable) continue;
+    if (!sbItemOn(it.anchor, it.chapterOnly, hasChapters)) continue;
+    if (top ? sbAnchorTop(it.anchor) : sbAnchorBottom(it.anchor)) return true;
+  }
+  return false;
+}
+}  // namespace
+
+int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
+  if (!SETTINGS.sbEnabled) return 0;
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  int bars = 0;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
+  const bool hasText = sbBandHasText(true, hasChapters);
+  const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
+}
+
+int UITheme::getStatusBarV2BottomHeight(bool hasChapters, int extraTitleHeightPx) {
+  if (!SETTINGS.sbEnabled) return 0;
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  int bars = 0;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
+  const bool hasText = sbBandHasText(false, hasChapters);
+  const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
+}
+
+int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
+  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  int mt, mr, mb, ml;
+  renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
+  const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
+  const int rightEdge = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - mr;
+  return rightEdge - leftEdge;
+}
+
+int UITheme::getStatusBarV2TitleLines(const GfxRenderer& renderer, const char* title) {
+  if (!SETTINGS.sbEnabled || SETTINGS.sbTitlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
+  if (SETTINGS.sbTitleTruncate != 0) return 1;  // a clipping title stays one line
+  if (!title || title[0] == '\0') return 1;
+  const int bandWidth = getStatusBarV2BandWidth(renderer);
+  if (bandWidth <= 0) return 1;
+  // Safety ceiling: real book/chapter titles never approach this many UI_10 lines,
+  // but it bounds the reserved band (and the render loop) for a pathological title.
+  constexpr int kMaxTitleLines = 6;
+  const int lines = static_cast<int>(renderer.wrappedText(UI_10_FONT_ID, title, bandWidth, kMaxTitleLines).size());
+  return lines < 1 ? 1 : lines;
 }
 
 // Centered text implementation that takes the safe area into account

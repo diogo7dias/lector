@@ -33,19 +33,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
 
-  enum STATUS_BAR_PROGRESS_BAR {
-    BOOK_PROGRESS = 0,
-    CHAPTER_PROGRESS = 1,
-    HIDE_PROGRESS = 2,
-    STATUS_BAR_PROGRESS_BAR_COUNT
-  };
-  enum STATUS_BAR_PROGRESS_BAR_THICKNESS {
-    PROGRESS_BAR_THIN = 0,
-    PROGRESS_BAR_NORMAL = 1,
-    PROGRESS_BAR_THICK = 2,
-    STATUS_BAR_PROGRESS_BAR_THICKNESS_COUNT
-  };
-  enum STATUS_BAR_TITLE { BOOK_TITLE = 0, CHAPTER_TITLE = 1, HIDE_TITLE = 2, STATUS_BAR_TITLE_COUNT };
+  // Status bar: the legacy fixed-slot enums (STATUS_BAR_PROGRESS_BAR / _THICKNESS /
+  // _TITLE / _CLOCK_MODE) were removed with the v1 renderer. XTC keeps its own mode.
   enum XTC_STATUS_BAR_MODE {
     XTC_STATUS_BAR_HIDE = 0,
     XTC_STATUS_BAR_BOTTOM = 1,
@@ -53,7 +42,26 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     XTC_STATUS_BAR_MODE_COUNT
   };
 
-  enum STATUS_BAR_CLOCK_MODE { STATUS_BAR_CLOCK_HIDE = 0, STATUS_BAR_CLOCK_RIGHT = 1, STATUS_BAR_CLOCK_LEFT = 2 };
+  // --- Per-item status bar model (v2). Each text item is parked at one of six
+  // anchors (or Off). This is the only status-bar model. ---
+  enum STATUS_BAR_ANCHOR {
+    SB_ANCHOR_OFF = 0,
+    SB_ANCHOR_TL = 1,  // top-left
+    SB_ANCHOR_TC = 2,  // top-center
+    SB_ANCHOR_TR = 3,  // top-right
+    SB_ANCHOR_BL = 4,  // bottom-left
+    SB_ANCHOR_BC = 5,  // bottom-center
+    SB_ANCHOR_BR = 6,  // bottom-right
+    STATUS_BAR_ANCHOR_COUNT
+  };
+  enum STATUS_BAR_TITLE_SOURCE { SB_TITLE_BOOK = 0, SB_TITLE_CHAPTER = 1, STATUS_BAR_TITLE_SOURCE_COUNT };
+  enum STATUS_BAR_PAGE_FORMAT {
+    SB_PAGE_FRACTION = 0,  // "3/40"
+    SB_PAGE_LEFT = 1,      // "8 left"
+    STATUS_BAR_PAGE_FORMAT_COUNT
+  };
+  enum STATUS_BAR_EDGE { SB_EDGE_OFF = 0, SB_EDGE_TOP = 1, SB_EDGE_BOTTOM = 2, STATUS_BAR_EDGE_COUNT };
+  enum STATUS_BAR_BAR_THICKNESS { SB_BAR_SLIM = 0, SB_BAR_MEDIUM = 1, SB_BAR_FAT = 2, STATUS_BAR_BAR_THICKNESS_COUNT };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -184,16 +192,22 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
-  // Status bar settings
-  uint8_t statusBarChapterPageCount = 1;
-  uint8_t statusBarBookProgressPercentage = 1;
-  uint8_t statusBarProgressBar = HIDE_PROGRESS;
-  uint8_t statusBarProgressBarThickness = PROGRESS_BAR_NORMAL;
-  uint8_t statusBarTitle = CHAPTER_TITLE;
-  uint8_t statusBarBattery = 1;
+  // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  // Clock display in status bar (X3 only, requires DS3231 RTC)
-  uint8_t statusBarClock = STATUS_BAR_CLOCK_HIDE;
+  uint8_t sbEnabled = 1;                     // master on/off
+  uint8_t sbBatteryPos = SB_ANCHOR_BL;       // battery anchor
+  uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
+  uint8_t sbTitlePos = SB_ANCHOR_BC;         // title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
+  uint8_t sbTitleTruncate = 0;               // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
+  uint8_t sbPagePos = SB_ANCHOR_BR;          // page-in-chapter anchor
+  uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
+  uint8_t sbBookPctPos = SB_ANCHOR_BR;       // book % (B:NN%) anchor
+  uint8_t sbChapterPctPos = SB_ANCHOR_OFF;   // chapter % (C:NN%) anchor
+  uint8_t sbChapterNumPos = SB_ANCHOR_OFF;   // chapter #/total (Ch N/M) anchor
+  uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
+  uint8_t sbChapterBar = SB_EDGE_OFF;        // chapter progress bar edge
+  uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
@@ -353,44 +367,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // settings without ever mutating the global singleton.
   int getReaderFontId(const ReaderPrefs& prefs) const;
 
-  // Resolved status-bar composition. Consumers read the spec; only settings
-  // editors read the raw fields.
-  //
-  // Deliberately NOT built under storeMutex: every field it reads is a single
-  // byte, so a concurrent settings write can never produce a corrupt value —
-  // only a snapshot mixing pre- and post-change fields. That costs at most one
-  // e-ink frame drawn with a mixed status bar, which self-corrects on the next
-  // refresh. Locking here would instead put a mutex on the render path and
-  // stall it behind the SD write inside saveToFile(). Don't add one back.
-  struct StatusBarSpec {
-    bool showChapterPageCount = false;
-    bool showBookProgressPercent = false;
-    uint8_t titleMode = HIDE_TITLE;  // STATUS_BAR_TITLE
-    bool showBattery = false;
-    bool showBatteryPercent = false;
-    uint8_t clockMode = STATUS_BAR_CLOCK_HIDE;  // STATUS_BAR_CLOCK_MODE
-    bool clock12h = false;
-    uint8_t clockUtcOffsetQ = 48;             // 48 = UTC+0
-    uint8_t progressBarMode = HIDE_PROGRESS;  // STATUS_BAR_PROGRESS_BAR
-    uint8_t progressBarHeightPx = 0;          // (thickness+1)*2; 0 when the bar is hidden
-    uint8_t xtcMode = XTC_STATUS_BAR_HIDE;    // XTC_STATUS_BAR_MODE
-
-    bool showsProgressBar() const { return progressBarMode != HIDE_PROGRESS; }
-    bool showsTitle() const { return titleMode != HIDE_TITLE; }
-    bool showsClock() const { return clockMode != STATUS_BAR_CLOCK_HIDE; }
-    // Visibility of the text lane. Clock hardware presence is the caller's
-    // concern: pass halClock.isAvailable(), or true for layout reservation.
-    bool textLaneVisible(bool clockAvailable) const {
-      return showChapterPageCount || showBookProgressPercent || showsTitle() || showBattery ||
-             (showsClock() && clockAvailable);
-    }
-  };
-  StatusBarSpec statusBarSpec() const;
-
   // Resolved text-rendering configuration for the Epub layout engine. The
   // viewport is renderer/orientation-derived, so the caller supplies it —
   // passing it in keeps a spec from ever existing in a half-filled state.
-  // Unlocked for the same reason as statusBarSpec(); see the note above.
+  // Deliberately unlocked: every field it reads is a single byte, so a
+  // concurrent settings write can at worst produce a snapshot mixing pre- and
+  // post-change fields, self-correcting on the next refresh. Locking here would
+  // put a mutex on the render path and stall it behind saveToFile()'s SD write.
   ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
   // Per-book override: build the spec from a ReaderPrefs snapshot. Every field the
   // section cache keys on comes from prefs, so a custom book's cache is validated

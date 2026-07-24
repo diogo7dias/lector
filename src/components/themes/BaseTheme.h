@@ -6,7 +6,8 @@
 #include <string>
 #include <vector>
 
-#include "fontIds.h"  // UI_10_FONT_ID default for drawList
+#include "components/StatusBar.h"  // StatusBarData for the v2 status bar
+#include "fontIds.h"               // UI_10_FONT_ID default for drawList
 
 class GfxRenderer;
 struct RecentBook;
@@ -189,8 +190,8 @@ class BaseTheme {
 
   // Component drawing methods
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
-  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect,
-                       bool showPercentage = true) const;  // Left aligned (reader mode)
+  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
+                       int fontId = SMALL_FONT_ID) const;  // Left aligned (reader mode)
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
                         bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
@@ -231,10 +232,10 @@ class BaseTheme {
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
-  void drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage, const int pageCount,
-                     std::string title, const int paddingBottom = 0, const int textYOffset = 0,
-                     const bool fillMargin = true, const bool isPageBookmarked = false,
-                     const bool pageCountEstimated = false) const;
+  // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
+  // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
+  // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
+  void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const;
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;

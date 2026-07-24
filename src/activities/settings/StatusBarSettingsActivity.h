@@ -1,13 +1,14 @@
 #pragma once
-#include <freertos/FreeRTOS.h>
-#include <freertos/semphr.h>
-#include <freertos/task.h>
+#include <cstdint>
+#include <vector>
 
 #include "activities/Activity.h"
-#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
-// Reader status bar configuration activity
+// Reader status bar configuration activity (v2 per-item model). Each text item is
+// parked at one of six anchors (or Off) via a small in-place position picker; the
+// progress bars, thickness and title/page sub-options cycle in place. A live
+// preview of the real status bar is drawn at the bottom.
 class StatusBarSettingsActivity final : public Activity {
  public:
   explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -20,11 +21,27 @@ class StatusBarSettingsActivity final : public Activity {
 
  private:
   ButtonNavigator buttonNavigator;
-  OptionPopup optionPopup;
 
   int selectedIndex = 0;
-  // Decided in onEnter() based on halClock.isAvailable() so clock entries are hidden on X4.
-  int visibleItemCount = 0;
+  // The item ids that apply to this device (clock is X3-only), in display order.
+  std::vector<int> visibleItems;
+
+  // Every render is a fast refresh except every Nth, which is a full refresh. Fast
+  // refreshes accumulate charge ("bloom") on the X3 panel; without a periodic full
+  // refresh the leftover charge outlives the single full refresh Home does on
+  // return, leaving ghosting. Bounding accumulation here keeps Home clean.
+  int renderCount = 0;
+  static constexpr int kFullRefreshEvery = 6;
+
+  // In-place anchor picker overlay. When active, up/down move pickerIndex over the
+  // seven anchor choices (Off, TL, TC, TR, BL, BC, BR) and Confirm commits it to
+  // *pickerTarget; Back cancels.
+  bool pickerActive = false;
+  int pickerIndex = 0;
+  uint8_t* pickerTarget = nullptr;
 
   void handleSelection();
+  // Returns the SETTINGS anchor field for a position item, or nullptr for non-anchor items.
+  uint8_t* anchorFieldFor(int itemId) const;
+  void renderPicker();
 };

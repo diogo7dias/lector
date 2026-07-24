@@ -170,10 +170,10 @@ void XtcReaderActivity::render(RenderLock&&) {
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
-  const auto sb = SETTINGS.statusBarSpec();
   const int bookPageCount = static_cast<int>(xtc->getPageCount());
   const int bookPage = static_cast<int>(currentPage) + 1;
-  std::string title = sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE ? xtc->getTitle() : "";
+  // Default to the book title; prefer the current chapter name when chapters exist.
+  std::string title = xtc->getTitle();
 
   if (!xtc->hasChapters()) {
     return StatusBarInfo{bookPage, bookPageCount, std::move(title)};
@@ -188,8 +188,8 @@ XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
     return StatusBarInfo{bookPage, bookPageCount, std::move(title)};
   }
 
-  if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
-    title = chapterIt->name.empty() ? tr(STR_UNNAMED) : chapterIt->name;
+  if (!chapterIt->name.empty()) {
+    title = chapterIt->name;
   }
 
   return StatusBarInfo{static_cast<int>(currentPage - chapterIt->startPage) + 1,
@@ -197,16 +197,18 @@ XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
 }
 
 void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition position) const {
-  const auto sb = SETTINGS.statusBarSpec();
-  const bool drawBottom = sb.xtcMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_BOTTOM &&
+  const bool drawBottom = SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_BOTTOM &&
                           position == StatusBarOverlayPosition::Bottom;
-  const bool drawTop = sb.xtcMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP &&
+  const bool drawTop = SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP &&
                        position == StatusBarOverlayPosition::Top;
   if (!drawBottom && !drawTop) {
     return;
   }
 
-  const int statusBarHeight = UITheme::getInstance().getStatusBarHeight();
+  // XTC draws its own single-band overlay (independent of the EPUB v2 bar). Use the
+  // theme's status-bar vertical margin as the band height.
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int statusBarHeight = metrics.statusBarVerticalMargin;
   if (statusBarHeight <= 0) {
     return;
   }
@@ -216,7 +218,6 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
                                    &orientedMarginLeft);
 
   int clearY;
-  int paddingBottom = 0;
   if (position == StatusBarOverlayPosition::Bottom) {
     clearY = renderer.getScreenHeight() - orientedMarginBottom - statusBarHeight - 4;
     if (clearY < 0) {
@@ -224,7 +225,6 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
     }
   } else {
     clearY = orientedMarginTop;
-    paddingBottom = renderer.getScreenHeight() - statusBarHeight - orientedMarginBottom - orientedMarginTop - 4;
   }
   const int clearHeight = position == StatusBarOverlayPosition::Bottom
                               ? renderer.getScreenHeight() - orientedMarginBottom - clearY
@@ -233,15 +233,29 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
     renderer.fillRect(0, clearY, renderer.getScreenWidth(), clearHeight, false);
   }
 
+  // Self-contained bar: title on the left, "page/total  pct%" on the right.
   const int pageCount = static_cast<int>(xtc->getPageCount());
   const int displayPage = static_cast<int>(currentPage) + 1;
-  const float progress = pageCount > 0 ? (static_cast<float>(displayPage) * 100.0f) / pageCount : 0.0f;
-  const auto pageInfo = getStatusBarInfo();
-  // Paperback Look (status bar, global): thicken only the status-bar glyphs, then reset.
-  // XTC pages are images (no reader text), so only the status bar takes the smear.
-  renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
-  GUI.drawStatusBar(renderer, progress, pageInfo.currentPage, pageInfo.pageCount, pageInfo.title, paddingBottom);
-  renderer.setPaperbackLook(false);
+  const int pct = pageCount > 0 ? static_cast<int>((static_cast<float>(displayPage) * 100.0f) / pageCount + 0.5f) : 0;
+  const auto info = getStatusBarInfo();
+
+  const int fontId = UI_10_FONT_ID;
+  const int textY = clearY + 2;
+  const int leftX = orientedMarginLeft + metrics.statusBarHorizontalMargin + 1;
+  const int rightEdge = renderer.getScreenWidth() - orientedMarginRight - metrics.statusBarHorizontalMargin;
+
+  char rightBuf[32];
+  snprintf(rightBuf, sizeof(rightBuf), "%d/%d  %d%%", info.currentPage, info.pageCount, pct);
+  const int rightW = renderer.getTextWidth(fontId, rightBuf);
+  renderer.drawText(fontId, rightEdge - rightW, textY, rightBuf, true);
+
+  if (!info.title.empty()) {
+    const int titleMax = (rightEdge - rightW - 8) - leftX;
+    if (titleMax > 0) {
+      const std::string t = renderer.truncatedText(fontId, info.title.c_str(), titleMax);
+      renderer.drawText(fontId, leftX, textY, t.c_str(), true);
+    }
+  }
 }
 
 void XtcReaderActivity::renderPage() {
@@ -416,7 +430,7 @@ void XtcReaderActivity::renderPage() {
 
   free(pageBuffer);
 
-  if (SETTINGS.statusBarSpec().xtcMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP) {
+  if (SETTINGS.xtcStatusBarMode == CrossPointSettings::XTC_STATUS_BAR_MODE::XTC_STATUS_BAR_TOP) {
     renderStatusBarOverlay(StatusBarOverlayPosition::Top);
   } else {
     renderStatusBarOverlay(StatusBarOverlayPosition::Bottom);

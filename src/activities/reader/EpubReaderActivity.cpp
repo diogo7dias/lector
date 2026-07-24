@@ -1432,20 +1432,37 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
-  // computeReaderMargins already folded the bottom reading margin into
-  // orientedMarginBottom. The status-bar band overlaps that margin (max, not sum),
-  // so only extend the bottom by however much the band exceeds the reading margin.
-  const uint8_t bottomMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginBottom;
-  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-  uint8_t bottomReserve;
-  // reserves space for automatic page turn indicator when no status bar or progress bar only
-  if (automaticPageTurnActive &&
-      (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
-    bottomReserve = static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin);
-  } else {
-    bottomReserve = statusBarHeight;
+  // Status bar (v2 per-item): reserve top and/or bottom bands. computeReaderMargins
+  // already folded the reading margins into orientedMarginTop/Bottom; the band is
+  // ADDED on top of that (a real gap between the bar and the text), matching the
+  // additive left/right margins. Changing the band shifts the viewport, which
+  // re-paginates the section cache like any margin change.
+  // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
+  // height in whichever edge holds the title so the reading text is pushed clear.
+  // Auto page turn shows a one-line countdown in the title slot, so skip the wrap
+  // reservation then.
+  int sbTitleExtraPx = 0;
+  if (!automaticPageTurnActive && SETTINGS.sbEnabled && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
+      SETTINGS.sbTitleTruncate == 0) {
+    std::string sbTitle;
+    if (SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
+      const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+      if (tocIndex != -1) sbTitle = epub->getTocItem(tocIndex).title;
+      if (sbTitle.empty()) sbTitle = tr(STR_UNNAMED);
+    } else {
+      sbTitle = epub->getTitle();
+    }
+    const int lines = UITheme::getStatusBarV2TitleLines(renderer, sbTitle.c_str());
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   }
-  if (bottomReserve > bottomMargin) orientedMarginBottom += static_cast<int>(bottomReserve - bottomMargin);
+  const bool sbTitleTop = SETTINGS.sbTitlePos >= CrossPointSettings::SB_ANCHOR_TL &&
+                          SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true, sbTitleTop ? sbTitleExtraPx : 0);
+  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true, sbTitleTop ? 0 : sbTitleExtraPx);
+  // Auto page turn shows a one-line countdown in the title slot; reserve a top band for it.
+  const int autoTurnBand = automaticPageTurnActive ? UITheme::getInstance().getMetrics().statusBarVerticalMargin : 0;
+  orientedMarginTop += std::max<int>(sbTop, autoTurnBand);
+  orientedMarginBottom += sbBottom;
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
   const uint16_t viewportHeight = renderer.getScreenHeight() - orientedMarginTop - orientedMarginBottom;
@@ -2110,46 +2127,38 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 }
 
 void EpubReaderActivity::renderStatusBar() const {
-  // Calculate progress in book. Use the estimated total while a giant spine is still building so
-  // "page X of Y" and the progress bar don't read off the small build watermark.
-  const int currentPage = section->currentPage + 1;
-  const float pageCount = section->estimatedTotalPages();
-  const float sectionChapterProg = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) : 0;
-  const float bookProgress = epub->calculateProgress(currentSpineIndex, sectionChapterProg) * 100;
+  StatusBarData d;
+  d.hasChapters = true;  // EPUB spine sections + TOC always provide chapters
+  d.chapterPage = section->currentPage + 1;
+  // estimatedTotalPages() keeps "page X / Y" sane while a giant spine is still
+  // building (its live pageCount would read off the small build watermark).
+  d.chapterPages = static_cast<int>(section->estimatedTotalPages());
+  const float chapterProg = (d.chapterPages > 0) ? static_cast<float>(d.chapterPage) / d.chapterPages : 0.0f;
+  d.chapterPercent = static_cast<int>(chapterProg * 100 + 0.5f);
+  d.bookPercent = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProg) * 100 + 0.5f);
+  d.bookTitle = epub->getTitle();
+  d.chapterTotal = epub->getTocItemsCount();
 
-  std::string title;
+  const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  if (tocIndex != -1) {
+    d.chapterTitle = epub->getTocItem(tocIndex).title;
+    d.chapterNum = tocIndex + 1;
+  }
+  if (d.chapterTitle.empty()) d.chapterTitle = tr(STR_UNNAMED);
+  d.bookmarked = currentPageBookmarked;
 
-  int textYOffset = 0;
-  const auto sb = SETTINGS.statusBarSpec();
-
-  if (automaticPageTurnActive) {
-    title = tr(STR_AUTO_TURN_ENABLED) + std::to_string(60 * 1000 / pageTurnDuration);
-
-    // calculates textYOffset when rendering title in status bar
-    const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-
-    // offsets text if no status bar or progress bar only
-    if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
-      textYOffset += UITheme::getInstance().getMetrics().statusBarVerticalMargin;
-    }
-
-  } else if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::CHAPTER_TITLE) {
-    title = tr(STR_UNNAMED);
-    const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-    if (tocIndex != -1) {
-      const auto tocItem = epub->getTocItem(tocIndex);
-      title = tocItem.title;
-    }
-
-  } else if (sb.titleMode == CrossPointSettings::STATUS_BAR_TITLE::BOOK_TITLE) {
-    title = epub->getTitle();
+  // Auto page turn: show the countdown in the title slot (wherever the title is
+  // anchored). If the title item is off the countdown simply isn't shown.
+  if (automaticPageTurnActive && pageTurnDuration > 0) {
+    const std::string label = std::string(tr(STR_AUTO_TURN_ENABLED)) + std::to_string(60 * 1000 / pageTurnDuration);
+    d.bookTitle = label;
+    d.chapterTitle = label;
   }
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so
   // nothing drawn afterwards inherits the smear.
   renderer.setPaperbackLook(prefs_.paperbackLookStatus);
-  GUI.drawStatusBar(renderer, bookProgress, currentPage, pageCount, title, 0, textYOffset, true, currentPageBookmarked,
-                    section->isBuilding());
+  GUI.drawStatusBarV2(renderer, d);
   renderer.setPaperbackLook(false);
 }
 

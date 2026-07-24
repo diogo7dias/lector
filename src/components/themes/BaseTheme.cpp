@@ -170,14 +170,17 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
   }
 }
 
-void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
-  // Left aligned: icon on left, percentage on right (reader mode)
+void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage,
+                                const int fontId) const {
+  // Left aligned: icon on left, percentage on right (reader mode). fontId sizes the
+  // percentage text; the v2 status bar passes UI_10 so the drawn width matches the
+  // segment width it reserved, while UI headers keep the SMALL_FONT_ID default.
   const uint16_t percentage = powerManager.getBatteryPercentage();
   const int y = rect.y + 6;
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
+    renderer.drawText(fontId, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
@@ -848,145 +851,209 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
-void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, const int currentPage,
-                              const int pageCount, std::string title, const int paddingBottom, const int textYOffset,
-                              const bool fillMargin, const bool isPageBookmarked, const bool pageCountEstimated) const {
-  auto metrics = UITheme::getInstance().getMetrics();
-  int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  renderer.getOrientedViewableTRBL(&orientedMarginTop, &orientedMarginRight, &orientedMarginBottom,
-                                   &orientedMarginLeft);
-  const auto sb = SETTINGS.statusBarSpec();
-  const bool showStatusBarTextLane = sb.textLaneVisible(halClock.isAvailable());
+void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {
+  if (!SETTINGS.sbEnabled) return;
 
-  // Draw Progress Text
-  const auto screenHeight = renderer.getScreenHeight();
-  auto textY = screenHeight - UITheme::getInstance().getStatusBarHeight() - orientedMarginBottom - paddingBottom - 4;
+  const int f = UI_10_FONT_ID;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int mt, mr, mb, ml;
+  renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
+  const int screenW = renderer.getScreenWidth();
+  const int screenH = renderer.getScreenHeight();
 
-  const int leftClusterX = metrics.statusBarHorizontalMargin + orientedMarginLeft + 1;
-  const int rightClusterX = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - orientedMarginRight;
-  int leftClusterWidth = 0;
-  int rightClusterWidth = 0;
+  const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
+  const int rightEdge = screenW - metrics.statusBarHorizontalMargin - mr;
+  const int bandWidth = rightEdge - leftEdge;
+  const int lineH = renderer.getLineHeight(f);
+  // Separator between co-anchored items: a drawn vertical bar with equal gaps on
+  // each side. A " | " string looked lopsided because the '|' glyph sits
+  // off-centre in its monospace cell (wide gap before, tight after).
+  const int sepGap = 4;   // even gap each side of the bar
+  const int sepBarW = 1;  // bar thickness
+  const int sepW = sepGap + sepBarW + sepGap;
+  const bool showBattery = SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_NEVER;
 
-  if (sb.showBookProgressPercent || sb.showChapterPageCount) {
-    // Right aligned text for progress counter
-    char progressStr[32];
+  // --- Build the bar on the STACK: one fixed segment array per anchor. No heap in
+  // this render path (it runs on the lock-holding, stack-tight render task). Short
+  // items format into local char buffers; the title points at the caller's string.
+  // The layout + reflow live in the pure, host-tested `statusbar` module. ---
+  using statusbar::Seg;
+  statusbar::BarLayout L{};
+  int titleAnchorIdx = -1;  // set when the title item is actually placed
+  auto push = [&](uint8_t anchor, bool chapterOnly, const char* text, int width, bool isBattery) {
+    if (anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
+    if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
+    const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
+    if (idx < 0 || idx >= statusbar::kAnchorCount || L.counts[idx] >= statusbar::kMaxPerAnchor) return;
+    L.buckets[idx][L.counts[idx]++] = Seg{text, width, isBattery};
+  };
 
-    // Prefix the page count with "~" while a still-building spine only yields an estimated total.
-    const char* estimatePrefix = pageCountEstimated ? "~" : "";
+  char batBuf[8] = "";
+  char clkBuf[12] = "";
+  char pageBuf[20] = "";
+  char bookPctBuf[10] = "";
+  char chapPctBuf[10] = "";
+  char chapNumBuf[24] = "";
 
-    if (sb.showBookProgressPercent && sb.showChapterPageCount) {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d  %.0f%%", estimatePrefix, currentPage, pageCount,
-               bookProgress);
-    } else if (sb.showBookProgressPercent) {
-      snprintf(progressStr, sizeof(progressStr), "%.0f%%", bookProgress);
-    } else {
-      snprintf(progressStr, sizeof(progressStr), "%s%d/%d", estimatePrefix, currentPage, pageCount);
+  // Battery (icon + optional %)
+  {
+    int w = metrics.batteryWidth;
+    if (showBattery) {
+      snprintf(batBuf, sizeof(batBuf), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
+      w += batteryPercentSpacing + renderer.getTextWidth(f, batBuf);
     }
+    push(SETTINGS.sbBatteryPos, false, batBuf, w, true);
+  }
+  // Clock (X3 RTC only). Only read the RTC when the clock is actually placed, so a
+  // clock-off config doesn't do an I2C transaction every frame.
+  if (SETTINGS.sbClockPos != CrossPointSettings::SB_ANCHOR_OFF && halClock.isAvailable() &&
+      halClock.formatTime(clkBuf, sizeof(clkBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+    push(SETTINGS.sbClockPos, false, clkBuf, renderer.getTextWidth(f, clkBuf), false);
+  }
+  // Title (points at the caller's string; truncated at draw time if it overflows).
+  // Chapter source falls back to the book title on a chapterless book (TXT, flat
+  // XTC) so the title never silently vanishes there; hence the item is not
+  // chapter-only.
+  {
+    const bool chapterSrc = SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER;
+    const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
+    if (title[0] != '\0') {
+      push(SETTINGS.sbTitlePos, false, title, renderer.getTextWidth(f, title), false);
+      const int idx = static_cast<int>(SETTINGS.sbTitlePos) - 1;
+      if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && idx >= 0 && idx < statusbar::kAnchorCount)
+        titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
+    }
+  }
+  // Page in chapter ("3/40" or "8 left")
+  if (SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT) {
+    const int remaining = data.chapterPages - data.chapterPage;
+    snprintf(pageBuf, sizeof(pageBuf), "%d left", remaining > 0 ? remaining : 0);
+  } else {
+    snprintf(pageBuf, sizeof(pageBuf), "%d/%d", data.chapterPage, data.chapterPages);
+  }
+  // Page item is NOT chapter-only: on a chapterless book (TXT, flat XTC) the
+  // reader fills chapterPage/chapterPages with BOOK page/total so it still shows.
+  push(SETTINGS.sbPagePos, false, pageBuf, renderer.getTextWidth(f, pageBuf), false);
+  // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
+  snprintf(bookPctBuf, sizeof(bookPctBuf), "B:%d%%", data.bookPercent);
+  push(SETTINGS.sbBookPctPos, false, bookPctBuf, renderer.getTextWidth(f, bookPctBuf), false);
+  snprintf(chapPctBuf, sizeof(chapPctBuf), "C:%d%%", data.chapterPercent);
+  push(SETTINGS.sbChapterPctPos, true, chapPctBuf, renderer.getTextWidth(f, chapPctBuf), false);
+  snprintf(chapNumBuf, sizeof(chapNumBuf), "Ch %d/%d", data.chapterNum, data.chapterTotal);
+  push(SETTINGS.sbChapterNumPos, true, chapNumBuf, renderer.getTextWidth(f, chapNumBuf), false);
 
-    int progressTextWidth = renderer.getTextWidth(SMALL_FONT_ID, progressStr);
-    renderer.drawText(SMALL_FONT_ID, rightClusterX - progressTextWidth, textY, progressStr);
-
-    rightClusterWidth += progressTextWidth;
+  // --- Reflow: a greedy (truncate-OFF) title bumps overlapping same-band
+  // neighbours into the opposite band. Pure + allocation-free (see StatusBar.cpp).
+  // The opposite band may only *receive* bumped items when it already reserves
+  // height (has native text) — the band heights are computed pre-reflow from native
+  // anchors, so a bump into an unreserved band would draw over the reading text.
+  if (titleAnchorIdx >= 0 && SETTINGS.sbTitleTruncate == 0) {
+    const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
+    const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
+    statusbar::reflowTitle(L, titleAnchorIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
   }
 
-  // Draw Progress Bar
-  if (sb.showsProgressBar()) {
-    const int barMarginLeft = fillMargin ? 0 : orientedMarginLeft;
-    const int barMarginRight = fillMargin ? 0 : orientedMarginRight;
-    const int progressBarMaxWidth = renderer.getScreenWidth() - barMarginLeft - barMarginRight;
-    const int progressBarY = renderer.getScreenHeight() - orientedMarginBottom - sb.progressBarHeightPx -
-                             paddingBottom + (fillMargin ? 1 : 0);
-    size_t progress;
-    if (sb.progressBarMode == CrossPointSettings::STATUS_BAR_PROGRESS_BAR::BOOK_PROGRESS) {
-      progress = static_cast<size_t>(bookProgress);
-    } else {
-      // Chapter progress
-      progress = (pageCount > 0) ? (static_cast<float>(currentPage) / pageCount) * 100 : 0;
-    }
-    const int barWidth = progressBarMaxWidth * progress / 100;
-    const int barHeight = sb.progressBarHeightPx + (fillMargin ? orientedMarginBottom - 1 : 0);
-    renderer.fillRect(barMarginLeft, progressBarY, barWidth, barHeight, true);
+  // --- Progress bars (full width, flush to the edge) ------------------------
+  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  const int barLeft = ml;
+  const int barMaxW = screenW - ml - mr;
+  auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
+  auto drawEdgeBar = [&](int y, int pct) {
+    const int w = barMaxW * clampPct(pct) / 100;
+    if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
+  };
+
+  // Top edge: book bar then chapter bar flush to the top; text band below them.
+  int topStack = mt;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) {
+    drawEdgeBar(topStack, data.bookPercent);
+    topStack += barPx;
   }
-
-  // Draw Battery
-  const bool showBatteryPercentage = sb.showBatteryPercent;
-
-  if (sb.showBattery) {
-    GUI.drawBatteryLeft(renderer,
-                        Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
-                        showBatteryPercentage);
-    int batteryWidth = metrics.batteryWidth;
-
-    if (showBatteryPercentage) {
-      const uint16_t percentage = powerManager.getBatteryPercentage();
-      // width of icon + spacing + text for layout purposes
-      batteryWidth +=
-          batteryPercentSpacing + renderer.getTextWidth(SMALL_FONT_ID, (std::to_string(percentage) + "%").c_str());
-    }
-
-    leftClusterWidth += batteryWidth;
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
+    drawEdgeBar(topStack, data.chapterPercent);
+    topStack += barPx;
   }
+  const int topTextY = topStack + 2;
 
-  // Draw Clock (X3 only — DS3231 RTC)
-  if (sb.showsClock() && halClock.isAvailable()) {
-    char timeBuf[9];
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), sb.clockUtcOffsetQ, sb.clock12h)) {
-      int clockTextWidth = renderer.getTextWidth(SMALL_FONT_ID, timeBuf);
-      int clockX = 0;
-      // Position to the left or right of the progress text (with a small gap)
-      if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_LEFT) {
-        clockX = leftClusterX + leftClusterWidth + (leftClusterWidth > 0 ? 10 : 0);
-        leftClusterWidth += clockTextWidth + 10;
-      } else if (sb.clockMode == CrossPointSettings::STATUS_BAR_CLOCK_RIGHT) {
-        clockX = rightClusterX - rightClusterWidth - (rightClusterWidth > 0 ? 10 : 0) - clockTextWidth;
-        rightClusterWidth += clockTextWidth + 10;
+  // Bottom edge: bars flush to the bottom; text band above them.
+  int bottomStack = screenH - mb;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
+    bottomStack -= barPx;
+    drawEdgeBar(bottomStack, data.bookPercent);
+  }
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters) {
+    bottomStack -= barPx;
+    drawEdgeBar(bottomStack, data.chapterPercent);
+  }
+  const int bottomTextY = bottomStack - lineH - 2;
+
+  auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };
+
+  // --- Draw one anchor cluster (align: 0 left edge, 1 centered, 2 right edge) ---
+  auto drawAnchor = [&](int idx, int align, int y) {
+    if (L.counts[idx] == 0) return;
+    const int total = clusterW(idx);
+
+    // A lone centre segment (the title) that overflows clips to the space the
+    // left/right clusters of its band leave free.
+    if (align == 1 && L.counts[idx] == 1) {
+      const bool top = idx < 3;
+      const int lw = clusterW(top ? 0 : 3);
+      const int rw = clusterW(top ? 2 : 5);
+      const int avail = bandWidth - lw - rw - 20;
+      if (avail > 0 && total > avail) {
+        // Only reached by a truncate-ON title (the greedy truncate-OFF title is
+        // drawn wrapped above and its bucket emptied) -> clip with an ellipsis.
+        std::string clipped = renderer.truncatedText(f, L.buckets[idx][0].text, avail);
+        const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
+        renderer.drawText(f, cx, y, clipped.c_str());
+        return;
       }
-      renderer.drawText(SMALL_FONT_ID, clockX, textY, timeBuf);
-    }
-  }
-
-  // Draw Bookmark
-  if (showStatusBarTextLane && isPageBookmarked) {
-    const int bookmarkGap = leftClusterWidth > 0 ? bookmarkStatusIconGap : 0;
-    const int bookmarkX = leftClusterX + leftClusterWidth + bookmarkGap;
-    const int bookmarkY = textY + 5;
-    drawBookmarkStatusIcon(renderer, bookmarkX, bookmarkY);
-    leftClusterWidth += bookmarkStatusIconWidth + bookmarkGap;
-  }
-
-  // Draw Title
-  if (!title.empty()) {
-    textY -= textYOffset;
-    // Centered chapter title text
-    // Page width minus existing content with 30px padding on each side
-    const int rendererableScreenWidth =
-        renderer.getScreenWidth() - (metrics.statusBarHorizontalMargin * 2) - orientedMarginLeft - orientedMarginRight;
-
-    const int titleMarginLeft = leftClusterWidth + 30;
-    const int titleMarginRight = rightClusterWidth + 30;
-
-    // Attempt to center title on the screen, but if title is too wide then later we will center it within the
-    // available space.
-    int titleMarginLeftAdjusted = std::max(titleMarginLeft, titleMarginRight);
-    int availableTitleSpace = rendererableScreenWidth - 2 * titleMarginLeftAdjusted;
-
-    int titleWidth;
-    titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
-    if (titleWidth > availableTitleSpace) {
-      // Not enough space to center on the screen, center it within the remaining space instead
-      availableTitleSpace = rendererableScreenWidth - titleMarginLeft - titleMarginRight;
-      titleMarginLeftAdjusted = titleMarginLeft;
-    }
-    if (titleWidth > availableTitleSpace) {
-      title = renderer.truncatedText(SMALL_FONT_ID, title.c_str(), availableTitleSpace);
-      titleWidth = renderer.getTextWidth(SMALL_FONT_ID, title.c_str());
     }
 
-    renderer.drawText(SMALL_FONT_ID,
-                      titleMarginLeftAdjusted + metrics.statusBarHorizontalMargin + orientedMarginLeft +
-                          (availableTitleSpace - titleWidth) / 2,
-                      textY, title.c_str());
+    int x = (align == 0) ? leftEdge : (align == 2) ? (rightEdge - total) : (leftEdge + (bandWidth - total) / 2);
+    for (int i = 0; i < L.counts[idx]; i++) {
+      if (i > 0) {
+        // Vertical bar centred in the separator advance, equal gap each side.
+        x += sepGap;
+        renderer.drawLine(x, y + 2, x, y + lineH - 3, true);
+        x += sepBarW + sepGap;
+      }
+      const Seg& s = L.buckets[idx][i];
+      if (s.isBattery) {
+        drawBatteryLeft(renderer, Rect{x, y, metrics.batteryWidth, metrics.batteryHeight}, showBattery, f);
+      } else {
+        renderer.drawText(f, x, y, s.text);
+      }
+      x += s.width;
+    }
+  };
+
+  // A greedy (truncate-off) lone title wraps across as many lines as it needs and
+  // is drawn here, aligned to its anchor column (left/centre/right). The band's
+  // extra height was reserved by getStatusBarV2TitleLines at inset time. We empty
+  // its bucket so the generic pass below skips it. A truncate-ON title (or one
+  // sharing its anchor) falls through to drawAnchor's single-line ellipsis clip.
+  if (titleAnchorIdx >= 0 && SETTINGS.sbTitleTruncate == 0 && L.counts[titleAnchorIdx] == 1) {
+    const int col = titleAnchorIdx % 3;
+    const bool top = titleAnchorIdx < 3;
+    const auto lines = renderer.wrappedText(f, L.buckets[titleAnchorIdx][0].text, bandWidth, 6);
+    const int n = static_cast<int>(lines.size());
+    for (int i = 0; i < n; i++) {
+      const int lw = renderer.getTextWidth(f, lines[i].c_str());
+      const int x = (col == 0) ? leftEdge : (col == 2) ? (rightEdge - lw) : (leftEdge + (bandWidth - lw) / 2);
+      const int y = top ? (topTextY + i * lineH) : (bottomTextY - (n - 1 - i) * lineH);
+      renderer.drawText(f, x, y, lines[i].c_str());
+    }
+    L.counts[titleAnchorIdx] = 0;  // consumed; skip in the generic pass
   }
+
+  drawAnchor(0, 0, topTextY);     // TL
+  drawAnchor(1, 1, topTextY);     // TC
+  drawAnchor(2, 2, topTextY);     // TR
+  drawAnchor(3, 0, bottomTextY);  // BL
+  drawAnchor(4, 1, bottomTextY);  // BC
+  drawAnchor(5, 2, bottomTextY);  // BR
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {

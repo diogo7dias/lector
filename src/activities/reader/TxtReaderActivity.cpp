@@ -102,14 +102,34 @@ void TxtReaderActivity::initializeReader() {
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
+  // Uniform margins use screenMargin on every side; otherwise top/bottom are
+  // independent while screenMargin stays the horizontal margin. Changing any of
+  // these alters the viewport (and linesPerPage), which self-invalidates the page
+  // cache, so no extra cache-key field is needed beyond cachedScreenMargin.
+  const uint8_t topMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginTop;
+  const uint8_t bottomMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginBottom;
+
   // Calculate viewport dimensions
   renderer.getOrientedViewableTRBL(&cachedOrientedMarginTop, &cachedOrientedMarginRight, &cachedOrientedMarginBottom,
                                    &cachedOrientedMarginLeft);
-  cachedOrientedMarginTop += cachedScreenMargin;
+  // v2 status bar: reserve a band at the top and/or bottom edge (whichever holds
+  // items), overlapping the reading margin (max, not sum) like the old bottom bar.
+  // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
+  // book-source title wraps, needing extra band height.
+  int sbTitleExtraPx = 0;
+  if (SETTINGS.sbEnabled && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && SETTINGS.sbTitleTruncate == 0) {
+    // TXT resolves any title source to the book title (no chapters to fall back from).
+    const int lines = UITheme::getStatusBarV2TitleLines(renderer, txt->getTitle().c_str());
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+  }
+  const bool sbTitleTop = SETTINGS.sbTitlePos >= CrossPointSettings::SB_ANCHOR_TL &&
+                          SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(false, sbTitleTop ? sbTitleExtraPx : 0);
+  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(false, sbTitleTop ? 0 : sbTitleExtraPx);
+  cachedOrientedMarginTop += std::max<int>(topMargin, sbTop);
   cachedOrientedMarginLeft += cachedScreenMargin;
   cachedOrientedMarginRight += cachedScreenMargin;
-  cachedOrientedMarginBottom +=
-      std::max(cachedScreenMargin, static_cast<uint8_t>(UITheme::getInstance().getStatusBarHeight()));
+  cachedOrientedMarginBottom += std::max<int>(bottomMargin, sbBottom);
 
   viewportWidth = renderer.getScreenWidth() - cachedOrientedMarginLeft - cachedOrientedMarginRight;
   const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
@@ -417,14 +437,18 @@ void TxtReaderActivity::renderPage() {
 }
 
 void TxtReaderActivity::renderStatusBar() const {
-  const float progress = totalPages > 0 ? (currentPage + 1) * 100.0f / totalPages : 0;
-  std::string title;
-  if (SETTINGS.statusBarSpec().showsTitle()) {
-    title = txt->getTitle();
-  }
-  // Paperback Look (status bar, global): thicken only the status-bar glyphs, then reset.
+  // v2 bar. TXT is chapterless: the page item shows BOOK pages (chapterPage/Pages
+  // hold book page/total), chapter-only items hide, and the title (book source)
+  // can wrap. The band was reserved in the inset calc above.
+  StatusBarData d;
+  d.hasChapters = false;
+  d.chapterPage = static_cast<int>(currentPage) + 1;
+  d.chapterPages = static_cast<int>(totalPages);
+  d.bookPercent = totalPages > 0 ? static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
+  d.bookTitle = txt->getTitle();
+  // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
   renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
-  GUI.drawStatusBar(renderer, progress, currentPage + 1, totalPages, title);
+  GUI.drawStatusBarV2(renderer, d);
   renderer.setPaperbackLook(false);
 }
 
