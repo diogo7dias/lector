@@ -58,15 +58,21 @@ Legend: [x] done · [~] in progress · [ ] todo
       bar; global default ON + per-book toggle. Commit `be2976d8`.
 - [x] **First-line indent slider** — reader Layout setting (Text Settings + device Settings),
       per-book + global, 0–8 space-widths (default 3), applied to natural-aligned paragraphs
-      with no CSS text-indent. `SECTION_FILE_VERSION` 33→34; `ReaderPrefs` VERSION 2→3. Commit `<indent>`.
+      with no CSS text-indent. `SECTION_FILE_VERSION` 33→34; `ReaderPrefs` VERSION 2→3. Commit `66b5e270`.
 - [ ] **Word-spacing slider — FUTURE / deferred.** Skipped deliberately: it would spray a fixed
       addend across ~6 sites in the hottest layout code (line-break DP + justify spacer), a big
       diff in the exact file we keep matched to upstream, and the payoff is near-zero on justified
       text (the default) because justification already fills the line. Revisit only if left/ragged
       alignment becomes common. Threading path is identical to first-line indent if ever done.
-- [ ] Fonts/typography remaining: **Vollkorn swap** (drop Noto Serif/Sans built-ins, Vollkorn the
-      one built-in + default; others as SD fonts) [NEXT]; PT hyphenation; anti-alias fade off;
-      paragraph-spacing slider; "Bionic Reading" name.
+- [x] **Vollkorn swap** — Vollkorn is now the ONLY built-in reading family + the default; Noto Serif
+      and Noto Sans reading fonts dropped (users add more via SD-card fonts). Noto Sans survives only
+      as the 8pt small font, Ubuntu as the UI font. Font IDs renamed NOTOSERIF/NOTOSANS → VOLLKORN
+      (new hash values), so existing books re-lay-out once (Vollkorn metrics differ) with no section
+      version bump. `FONT_FAMILY` enum collapses to `{ VOLLKORN }`; old saved family indices migrate
+      to Vollkorn via the existing clamp. Baked scoped-to-Vollkorn only (4 sizes × 4 styles from the
+      OFL variable font, sliced to static Regular/Bold/Italic/BoldItalic). Flash 83.5% → 70.3%. Commit `<vollkorn>`.
+- [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; paragraph-spacing slider;
+      "Bionic Reading" name. (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
       "by INITIALS" + inline `[NN%]` black-bg badge (via ported `BaseTheme::drawRecentBookList`
       + `wrapText`); "N more above/below" scroll indicators; cap 13; cover tile/thumbnail

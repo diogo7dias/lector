@@ -188,7 +188,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
   if (storedFontFamily == LEGACY_OPENDYSLEXIC && sdFontFamilyName[0] == '\0') {
-    fontFamily = NOTOSERIF;
+    fontFamily = VOLLKORN;
     strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
     sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
     needsResave = true;
@@ -268,7 +268,7 @@ float CrossPointSettings::resolveLineCompression(const uint8_t fontFamily, const
   }
 
   switch (fontFamily) {
-    case NOTOSERIF:
+    case VOLLKORN:
     default:
       switch (lineSpacing) {
         case TIGHT:
@@ -278,16 +278,6 @@ float CrossPointSettings::resolveLineCompression(const uint8_t fontFamily, const
           return 1.0f;
         case WIDE:
           return 1.1f;
-      }
-    case NOTOSANS:
-      switch (lineSpacing) {
-        case TIGHT:
-          return 0.90f;
-        case NORMAL:
-        default:
-          return 0.95f;
-        case WIDE:
-          return 1.0f;
       }
   }
 }
@@ -329,30 +319,18 @@ int CrossPointSettings::resolveReaderFontId(const uint8_t fontFamily, const uint
   }
 
   switch (fontFamily) {
-    case NOTOSERIF:
+    case VOLLKORN:
     default:
       switch (fontSize) {
         case SMALL:
-          return NOTOSERIF_12_FONT_ID;
+          return VOLLKORN_12_FONT_ID;
         case MEDIUM:
         default:
-          return NOTOSERIF_14_FONT_ID;
+          return VOLLKORN_14_FONT_ID;
         case LARGE:
-          return NOTOSERIF_16_FONT_ID;
+          return VOLLKORN_16_FONT_ID;
         case EXTRA_LARGE:
-          return NOTOSERIF_18_FONT_ID;
-      }
-    case NOTOSANS:
-      switch (fontSize) {
-        case SMALL:
-          return NOTOSANS_12_FONT_ID;
-        case MEDIUM:
-        default:
-          return NOTOSANS_14_FONT_ID;
-        case LARGE:
-          return NOTOSANS_16_FONT_ID;
-        case EXTRA_LARGE:
-          return NOTOSANS_18_FONT_ID;
+          return VOLLKORN_18_FONT_ID;
       }
   }
 }

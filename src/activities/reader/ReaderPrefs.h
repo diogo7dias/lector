@@ -29,7 +29,7 @@ struct ReaderPrefs {
   static constexpr uint8_t VERSION = 3;  // v3: firstLineIndent
 
   // Font (Family/Size tabs)
-  uint8_t fontFamily = 0;  // CrossPointSettings::NOTOSERIF
+  uint8_t fontFamily = 0;  // CrossPointSettings::VOLLKORN
   uint8_t fontSize = 1;    // CrossPointSettings::MEDIUM
   // Layout tab
   uint8_t lineSpacing = 1;         // CrossPointSettings::LINE_COMPRESSION NORMAL
