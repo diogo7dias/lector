@@ -19,6 +19,91 @@
 #include "images/MoonIcon.h"
 #include "util/TaskWatchdog.h"
 
+namespace {
+
+// A FAT directory is a flat array of fixed-size slots, so a random wallpaper can be
+// reached by SEEKING to a random slot rather than walking every entry. SdFat's
+// openNext() reads from the directory's current position, which makes the jump legal:
+// it returns the first live entry at or after wherever the position was left.
+//
+// Cost is ~2*log2(entries) probes (roughly 25 reads for a 4000-file folder) instead of
+// one read per file. The old full walk took seconds on a large folder and could wedge
+// sleep entry outright.
+//
+// Fairness note: a file consumes one slot per 13 characters of long name, plus one, so
+// long-named files cover more slots and are picked slightly more often. Files named to
+// fit 8.3 (e.g. "A3F9.PXC") occupy exactly one slot each, which makes the pick exactly
+// uniform. scripts/rename_wallpapers.py renames a folder into that form.
+constexpr size_t DIR_SLOT_BYTES = 32;
+// 131072 slots — far past any real wallpaper folder, and only a bound for the doubling
+// probe, not an allocation.
+constexpr size_t MAX_DIR_BYTES = 4u * 1024u * 1024u;
+// After landing, how many slots to walk looking for a wallpaper before giving up. A
+// wallpaper folder is essentially all wallpapers, so this normally resolves in one step.
+constexpr int MAX_FORWARD_SLOTS = 512;
+
+bool isWallpaperName(const char* name) {
+  if (name[0] == '\0' || name[0] == '.') return false;
+  return hasPxcExtension(name) || FsHelpers::hasBmpExtension(name);
+}
+
+// True when at least one live directory entry exists at or after `offset`. Monotone in
+// `offset` (entries are contiguous and terminated by a free slot), which is what makes
+// the binary search below valid.
+bool entryExistsAt(HalFile& dir, const size_t offset) {
+  if (!dir.seekSet(offset)) return false;
+  auto probe = dir.openNextFile();
+  const bool found = static_cast<bool>(probe);
+  if (probe) probe.close();
+  return found;
+}
+
+// Random wallpaper name, or empty when the jump could not resolve one (caller falls
+// back to the full walk). `dir` is left at an arbitrary position.
+std::string pickWallpaperByJump(HalFile& dir) {
+  if (!entryExistsAt(dir, 0)) return {};
+
+  // Grow a bound until a probe lands past the last entry.
+  size_t lastLive = 0;
+  size_t past = DIR_SLOT_BYTES;
+  while (past < MAX_DIR_BYTES && entryExistsAt(dir, past)) {
+    lastLive = past;
+    past *= 2;
+  }
+  // Narrow to the last slot that still yields an entry.
+  while (past - lastLive > DIR_SLOT_BYTES) {
+    const size_t mid = ((lastLive + (past - lastLive) / 2) / DIR_SLOT_BYTES) * DIR_SLOT_BYTES;
+    if (mid == lastLive) break;
+    if (entryExistsAt(dir, mid)) {
+      lastLive = mid;
+    } else {
+      past = mid;
+    }
+  }
+
+  const uint32_t slots = static_cast<uint32_t>(lastLive / DIR_SLOT_BYTES) + 1;
+  size_t start = static_cast<size_t>(random(static_cast<long>(slots))) * DIR_SLOT_BYTES;
+
+  char name[256];  // FAT long-file-name maximum (255 characters plus terminator)
+  // Two passes: the landing slot may sit in a trailing run of non-wallpapers, in which
+  // case the walk runs off the end and restarts from the top.
+  for (int pass = 0; pass < 2; pass++) {
+    if (!dir.seekSet(start)) break;
+    for (int step = 0; step < MAX_FORWARD_SLOTS; step++) {
+      auto entry = dir.openNextFile();
+      if (!entry) break;  // end of directory — wrap
+      const bool isDir = entry.isDirectory();
+      entry.getName(name, sizeof(name));
+      entry.close();
+      if (!isDir && isWallpaperName(name)) return std::string(name);
+    }
+    start = 0;
+  }
+  return {};
+}
+
+}  // namespace
+
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
@@ -104,20 +189,22 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   if (sleepDir) {
-    // Pick ONE random wallpaper in a single directory pass (reservoir sampling):
-    // keep the k-th valid file with probability 1/k, so every file is equally
-    // likely, using O(1) memory (only the winning name) and NO per-file header
-    // read. This scales to thousands of wallpapers, where the old "list every
-    // file + validate every header + pick an index" approach would exhaust the
-    // low sleep-entry heap and open every file on the card. Recently-shown
-    // avoidance is intentionally dropped: with thousands of files a plain random
-    // pick effectively never repeats, and the ask was "just grab a random one".
-    std::string chosen;
+    // Fast path: seek straight to a random directory slot (see pickWallpaperByJump).
+    const uint32_t pickStartMs = millis();
+    std::string chosen = pickWallpaperByJump(dir);
+    if (!chosen.empty()) {
+      LOG_INF("SLP", "jump pick in %ums", static_cast<unsigned>(millis() - pickStartMs));
+    }
+
+    // Fallback: walk the whole folder with reservoir sampling — keep the k-th valid
+    // file with probability 1/k, so every file is equally likely, using O(1) memory
+    // and no per-file header read. Only reached when the jump cannot resolve a name.
     uint32_t seen = 0;
     uint32_t scanned = 0;
     const uint32_t scanStartMs = millis();
     char name[256];  // FAT long-file-name maximum (255 chars + terminator)
-    for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+    dir.rewindDirectory();
+    for (auto dirFile = chosen.empty() ? dir.openNextFile() : HalFile(); dirFile; dirFile = dir.openNextFile()) {
       // A wallpaper folder can hold thousands of files, and this walk runs inline on the
       // loop task while going to sleep. Without a periodic yield the task never returns
       // to the scheduler, the task watchdog has no chance to be fed, and sleep entry can
@@ -129,13 +216,14 @@ void SleepActivity::renderCustomSleepScreen() const {
       const bool isDir = dirFile.isDirectory();
       dirFile.getName(name, sizeof(name));
       dirFile.close();  // only the name is needed; never open/parse the file here
-      if (isDir || name[0] == '\0' || name[0] == '.') continue;
-      if (!hasPxcExtension(name) && !FsHelpers::hasBmpExtension(name)) continue;
+      if (isDir || !isWallpaperName(name)) continue;
       ++seen;
       if (random(static_cast<long>(seen)) == 0) chosen = name;
     }
-    LOG_INF("SLP", "scanned %u entries (%u wallpapers) in %ums", scanned, seen,
-            static_cast<unsigned>(millis() - scanStartMs));
+    if (scanned > 0) {
+      LOG_INF("SLP", "fallback scan: %u entries (%u wallpapers) in %ums", scanned, seen,
+              static_cast<unsigned>(millis() - scanStartMs));
+    }
     if (!chosen.empty()) {
       const auto filename = std::string(sleepDir) + "/" + chosen;
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
