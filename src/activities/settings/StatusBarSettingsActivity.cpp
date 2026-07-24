@@ -261,7 +261,7 @@ void StatusBarSettingsActivity::renderPicker() {
   renderer.drawRect(boxX, boxY, boxW, boxH, 2, true);
 
   UITheme::drawCenteredText(renderer, Rect{boxX, boxY, boxW, boxH}, UI_12_FONT_ID, boxY + 6, tr(STR_POSITION), true,
-                            EpdFontFamily::BOLD);
+                            EpdFontFamily::REGULAR);
 
   int y = boxY + titleH + 4;
   for (int i = 0; i < rows; i++) {

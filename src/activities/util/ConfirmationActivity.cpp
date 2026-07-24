@@ -16,7 +16,7 @@ void ConfirmationActivity::onEnter() {
   const int maxWidth = renderer.getScreenWidth() - (margin * 2);
 
   if (!heading.empty()) {
-    safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::BOLD);
+    safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::REGULAR);
   }
   if (!body.empty()) {
     safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
@@ -44,7 +44,7 @@ void ConfirmationActivity::render(RenderLock&& lock) {
   LOG_DBG("CONF", "currentY: %d", currentY);
   // Draw Heading
   if (!safeHeading.empty()) {
-    renderer.drawCenteredText(fontId, currentY, safeHeading.c_str(), true, EpdFontFamily::BOLD);
+    renderer.drawCenteredText(fontId, currentY, safeHeading.c_str(), true, EpdFontFamily::REGULAR);
     currentY += lineHeight + spacing;
   }
 

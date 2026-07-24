@@ -90,7 +90,7 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
     // No suggestions: the historical plain end screen. 3/8 of the screen height matches
     // the previous fixed position on the 480x800 panel and scales to other resolutions.
     renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() * 3 / 8, tr(STR_END_OF_BOOK), true,
-                              EpdFontFamily::BOLD);
+                              EpdFontFamily::REGULAR);
     return;
   }
 
@@ -104,7 +104,7 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   const int subtitleY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing;
   const int listTop = subtitleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
 
-  UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::BOLD);
+  UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::REGULAR);
   UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
 
   const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
