@@ -52,32 +52,6 @@ void EpubReaderChapterSelectionActivity::loop() {
     }
   };
 
-  auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
-  switch (handleListTouch(selectorIndex, totalItems, contentTop, contentHeight, false)) {
-    case ListTouchResult::Activated:
-      selectChapter();
-      return;
-    case ListTouchResult::Consumed:
-      return;
-    case ListTouchResult::None:
-      break;
-  }
-
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-    return;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     selectChapter();
   }

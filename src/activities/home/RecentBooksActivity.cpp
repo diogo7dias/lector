@@ -75,34 +75,11 @@ void RecentBooksActivity::loop() {
     }
   }
 
-  int touchSel = static_cast<int>(selectorIndex);
-  const auto listTouch =
-      handleListTouch(touchSel, static_cast<int>(recentBooks.size()), contentTop, contentHeight, true);
-  if (listTouch != ListTouchResult::None) {
-    selectorIndex = static_cast<size_t>(touchSel);
-    if (listTouch == ListTouchResult::Activated) {
-      LOG_DBG("RBA", "Tapped recent book: %s", recentBooks[selectorIndex].path.c_str());
-      onSelectBook(recentBooks[selectorIndex].path);
-    }
-    return;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     onGoHome();
   }
 
   int listSize = static_cast<int>(recentBooks.size());
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-    return;
-  }
 
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);

@@ -462,34 +462,6 @@ void FontDownloadActivity::loop() {
     const int listSize = listItemCount();
     const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-    if (!families_.empty()) {
-      const auto& metrics = UITheme::getInstance().getMetrics();
-      const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-      const int contentHeight =
-          renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-      switch (handleListTouch(selectedIndex_, listSize, contentTop, contentHeight, true)) {
-        case ListTouchResult::Activated:
-          activateSelected();
-          return;
-        case ListTouchResult::Consumed:
-          return;
-        case ListTouchResult::None:
-          break;
-      }
-
-      const auto swipe = mappedInput.wasSwipe();
-      if (swipe == MappedInputManager::SwipeDir::Up) {
-        selectedIndex_ = ButtonNavigator::nextPageIndex(selectedIndex_, listSize, pageItems);
-        requestUpdate();
-        return;
-      }
-      if (swipe == MappedInputManager::SwipeDir::Down) {
-        selectedIndex_ = ButtonNavigator::previousPageIndex(selectedIndex_, listSize, pageItems);
-        requestUpdate();
-        return;
-      }
-    }
-
     buttonNavigator_.onNextRelease([this, listSize] {
       selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
       requestUpdate();
@@ -515,10 +487,8 @@ void FontDownloadActivity::loop() {
       return;
     }
   } else if (state_ == COMPLETE) {
-    int x = 0;
-    int y = 0;
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(x, y)) {
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       {
         RenderLock lock(*this);
         state_ = FAMILY_LIST;
@@ -538,21 +508,6 @@ void FontDownloadActivity::loop() {
         requestUpdateAndWait();
         return;
       } else {
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-        }
-        requestUpdate();
-      }
-    } else {
-      int x = 0;
-      int y = 0;
-      if (mappedInput.wasScreenTapped(x, y)) {
-        if (downloadingFamilyIndex_ >= 0 && downloadingFamilyIndex_ < static_cast<int>(families_.size())) {
-          downloadFamily(families_[downloadingFamilyIndex_]);
-          requestUpdateAndWait();
-          return;
-        }
         {
           RenderLock lock(*this);
           state_ = FAMILY_LIST;

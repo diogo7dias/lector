@@ -5,7 +5,6 @@
 #include <HalGPIO.h>
 #include <HalTiltSensor.h>
 #include <Logging.h>
-#include <components/bars/tap-zones.h>
 
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
@@ -17,11 +16,6 @@ constexpr unsigned long GO_BACK_OR_HOME_MS = GO_HOME_MS;
 constexpr unsigned long SKIP_HOLD_MS = 700;
 constexpr unsigned long BOOKMARK_HOLD_MS = 400;
 constexpr unsigned long BOOKMARK_MESSAGE_DURATION_MS = 2500;
-
-enum ReaderTouchAction : freeink::ui::ActionId {
-  READER_TOUCH_PREV = 1,
-  READER_TOUCH_NEXT = 3,
-};
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
   switch (orientation) {
@@ -66,48 +60,6 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
                                           : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn ||
                                              input.wasReleased(nextButton)));
   return {prev, next, tiltPrev || tiltNext};
-}
-
-struct TouchPageTurn {
-  bool prev;
-  bool next;
-  unsigned long heldMs;
-};
-
-inline TouchPageTurn detectTouchPageTurn(GfxRenderer& renderer, const MappedInputManager& input) {
-  TouchPageTurn result{false, false, 0};
-  if (!SETTINGS.touchReaderControls || !input.hasTouch()) {
-    return result;
-  }
-
-  int x = 0;
-  int y = 0;
-  if (!input.wasScreenTapped(x, y)) {
-    return result;
-  }
-
-  const int16_t width = static_cast<int16_t>(renderer.getScreenWidth());
-  const int16_t height = static_cast<int16_t>(renderer.getScreenHeight());
-  const int16_t previousZoneWidth = width / 3;
-  const freeink::ui::TapZone zones[] = {
-      {freeink::ui::Rect{0, 0, previousZoneWidth, height}, READER_TOUCH_PREV},
-      {freeink::ui::Rect{previousZoneWidth, 0, static_cast<int16_t>(width - previousZoneWidth), height},
-       READER_TOUCH_NEXT},
-  };
-
-  for (const auto& zone : zones) {
-    if (!zone.enabled || !zone.rect.contains(static_cast<int16_t>(x), static_cast<int16_t>(y))) continue;
-    result.prev = zone.action == READER_TOUCH_PREV;
-    result.next = zone.action == READER_TOUCH_NEXT;
-    break;
-  }
-  result.heldMs = gpio.lastTouchHeldMs();
-  return result;
-}
-
-// Reader menu opens on a downward swipe from the top edge (replaces the old center tap-and-hold).
-inline bool isTouchMenuGesture(const MappedInputManager& input) {
-  return SETTINGS.touchReaderControls && input.hasTouch() && input.wasMenuGesture();
 }
 
 // One helper, blocking or deferred: the async form starts the refresh and

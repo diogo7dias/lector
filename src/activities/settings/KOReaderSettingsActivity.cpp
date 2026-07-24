@@ -41,18 +41,6 @@ void KOReaderSettingsActivity::loop() {
     return;
   }
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  int touchSel = static_cast<int>(selectedIndex);
-  const auto listTouch = handleListTouch(touchSel, MENU_ITEMS, contentTop, contentHeight, false);
-  if (listTouch != ListTouchResult::None) {
-    selectedIndex = static_cast<size_t>(touchSel);
-    if (listTouch == ListTouchResult::Activated) activateSelected();
-    return;
-  }
-
   // Handle navigation
   buttonNavigator.onNext([this] {
     selectedIndex = (selectedIndex + 1) % MENU_ITEMS;

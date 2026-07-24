@@ -209,20 +209,6 @@ void OtaUpdateActivity::runUpdateInstall() {
 
 void OtaUpdateActivity::loop() {
   if (state == WAITING_CONFIRMATION) {
-    int x = 0;
-    int y = 0;
-    if (mappedInput.wasScreenTapped(x, y)) {
-      const auto actionRects = getOtaActionRects(renderer);
-      if (contains(actionRects.cancel, x, y)) {
-        finish();
-        return;
-      }
-      if (contains(actionRects.update, x, y)) {
-        runUpdateInstall();
-        return;
-      }
-    }
-
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       runUpdateInstall();
       return;
@@ -236,18 +222,14 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == FAILED) {
-    int x = 0;
-    int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
     }
     return;
   }
 
   if (state == NO_UPDATE) {
-    int x = 0;
-    int y = 0;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
     }
     return;

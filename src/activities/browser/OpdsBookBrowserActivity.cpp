@@ -87,9 +87,7 @@ void OpdsBookBrowserActivity::loop() {
   }
 
   if (state == BrowserState::ERROR) {
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || mappedInput.wasScreenTapped(tx, ty)) {
+    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
         state = BrowserState::LOADING;
         statusMessage = tr(STR_LOADING);
@@ -129,44 +127,7 @@ void OpdsBookBrowserActivity::loop() {
       if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
     }
 
-    int tx = 0;
-    int ty = 0;
-    if (!searchTemplate.empty() && mappedInput.wasScreenTapped(tx, ty) && contains(searchIconRect(renderer), tx, ty)) {
-      launchSearch();
-      return;
-    }
-
     if (!entries.empty()) {
-      int row = -1;
-      const auto touch = mappedInput.rowTouch(row, /*top=*/60, /*rowStep=*/30, PAGE_ITEMS);
-      if (touch != MappedInputManager::RowTouch::None) {
-        const int touched = selectorIndex / PAGE_ITEMS * PAGE_ITEMS + row;
-        if (touched >= 0 && touched < static_cast<int>(entries.size())) {
-          if (touch == MappedInputManager::RowTouch::Down) {
-            if (selectorIndex != touched) {
-              selectorIndex = touched;
-              requestUpdate();
-            }
-          } else {
-            selectorIndex = touched;
-            activateSelected();
-          }
-          return;
-        }
-      }
-
-      const auto swipe = mappedInput.wasSwipe();
-      if (swipe == MappedInputManager::SwipeDir::Up) {
-        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
-        requestUpdate();
-        return;
-      }
-      if (swipe == MappedInputManager::SwipeDir::Down) {
-        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
-        requestUpdate();
-        return;
-      }
-
       buttonNavigator.onNextRelease([this] {
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
         requestUpdate();
@@ -214,9 +175,6 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
   if (state == BrowserState::ERROR) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_ERROR_MSG));
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
-    if (mappedInput.hasTouch()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 40, tr(STR_TAP_TO_RETRY));
-    }
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer();

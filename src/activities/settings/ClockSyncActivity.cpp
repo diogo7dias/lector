@@ -93,9 +93,7 @@ void ClockSyncActivity::loop() {
     return;
   }
 
-  int x = 0;
-  int y = 0;
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back) || mappedInput.wasScreenTapped(x, y)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
   }
 }

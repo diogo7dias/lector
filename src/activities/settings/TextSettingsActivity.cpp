@@ -96,67 +96,6 @@ TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
   return {previewTop, tabTop, listTop, listHeight};
 }
 
-bool TextSettingsActivity::handleTouch() {
-  // Inert on non-touch boards: the events simply never fire.
-  int tx = 0;
-  int ty = 0;
-  const auto geo = paneGeometry();
-  const int listCount = currentListSize();
-
-  // TODO: this tab-bar touch pass duplicates SettingsActivity's
-  // this will have to be refactored when a handleTabBarTouch() helper exist
-  // (similar to handleListTouch)
-  auto buildTabs = [this]() {
-    std::vector<TabInfo> tabs;
-    tabs.reserve(static_cast<int>(Tab::Count));
-    for (int t = 0; t < static_cast<int>(Tab::Count); t++) {
-      tabs.push_back({I18N.get(TAB_NAME_IDS[t]), tab_ == static_cast<Tab>(t)});
-    }
-    return tabs;
-  };
-  int tabHit = -1;
-  if ((mappedInput.wasScreenTouchDown(tx, ty) || mappedInput.wasScreenTapped(tx, ty)) &&
-      GUI.tabIndexFromPoint(renderer, Rect{0, geo.tabTop, renderer.getScreenWidth(), metrics_.tabBarHeight},
-                            buildTabs(), tx, ty, tabHit)) {
-    if (tab_ != static_cast<Tab>(tabHit)) {
-      tab_ = static_cast<Tab>(tabHit);
-      selectedIndex() = 0;
-      requestUpdate();
-    }
-    return true;
-  }
-
-  int row = std::max(0, selectedIndex() - 1);
-  switch (handleListTouch(row, listCount, geo.listTop, geo.listHeight, /*hasSubtitle=*/false)) {
-    case ListTouchResult::Activated:
-      selectedIndex() = row + 1;
-      activateRow(row);
-      return true;
-    case ListTouchResult::Consumed:
-      selectedIndex() = row + 1;
-      return true;
-    case ListTouchResult::None:
-      break;
-  }
-
-  // Vertical swipe pages the list (Family/Size); short lists just clamp.
-  const int pageItems = GUI.getListPageItems(geo.listHeight, false);
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectedIndex() =
-        selectedIndex() == 0 ? 1 : ButtonNavigator::nextPageIndex(selectedIndex(), listCount + 1, pageItems);
-    requestUpdate();
-    return true;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectedIndex() = ButtonNavigator::previousPageIndex(selectedIndex(), listCount + 1, pageItems);
-    requestUpdate();
-    return true;
-  }
-
-  return false;
-}
-
 void TextSettingsActivity::loop() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
@@ -174,8 +113,6 @@ void TextSettingsActivity::loop() {
     activateRow(selectedIndex() - 1);
     return;
   }
-
-  if (handleTouch()) return;
 
   const int ringSize = currentListSize() + 1;  // +1 for the tab bar at position 0
 

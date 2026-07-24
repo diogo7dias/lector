@@ -69,8 +69,6 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
-
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
@@ -99,7 +97,7 @@ void XtcReaderActivity::loop() {
   }
 
   // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) || ReaderUtils::isTouchMenuGesture(mappedInput)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     openChapterSelection();
   }
 
@@ -109,8 +107,6 @@ void XtcReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
-  prevTriggered = prevTriggered || touch.prev;
-  nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -132,7 +128,7 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = (touch.prev || touch.next) ? touch.heldMs : mappedInput.getHeldTime();
+  const unsigned long heldMs = mappedInput.getHeldTime();
   const bool skipPages =
       !fromTilt && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && heldMs > ReaderUtils::SKIP_HOLD_MS;
   const int skipAmount = skipPages ? 10 : 1;

@@ -83,50 +83,6 @@ void EpubReaderBookmarksActivity::loop() {
     return;
   }
 
-  const auto orientation = renderer.getOrientation();
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 40 : 0;
-  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int contentWidth = renderer.getScreenWidth() - hintGutterWidth;
-  const int contentY = isPortraitInverted ? 50 : 0;
-  const int listY = contentY + LINE_HEIGHT;
-  const int listHeight = getListHeight(renderer);
-  int tapped = 0;
-  int tx = 0;
-  int ty = 0;
-  if (mappedInput.wasScreenTouchDown(tx, ty) && tx >= contentX && tx < contentX + contentWidth &&
-      mappedInput.wasListItemTouchedDown(tapped, static_cast<int>(bookmarks.size()), selectorIndex, listY, listHeight,
-                                         true)) {
-    if (selectorIndex != tapped) {
-      selectorIndex = tapped;
-      requestUpdate();
-    }
-    return;
-  }
-  if (mappedInput.wasScreenTapped(tx, ty) && tx >= contentX && tx < contentX + contentWidth &&
-      mappedInput.wasListItemTapped(tapped, static_cast<int>(bookmarks.size()), selectorIndex, listY, listHeight,
-                                    true)) {
-    selectorIndex = tapped;
-    openBookmark();
-    return;
-  }
-
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up && !bookmarks.empty()) {
-    selectorIndex =
-        ButtonNavigator::nextPageIndex(selectorIndex, bookmarks.size(), GUI.getListPageItems(listHeight, true));
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down && !bookmarks.empty()) {
-    selectorIndex =
-        ButtonNavigator::previousPageIndex(selectorIndex, bookmarks.size(), GUI.getListPageItems(listHeight, true));
-    requestUpdate();
-    return;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
     openBookmark();
     return;

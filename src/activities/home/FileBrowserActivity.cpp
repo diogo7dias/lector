@@ -284,14 +284,6 @@ void FileBrowserActivity::loop() {
     return;
   };
 
-  int touchSel = static_cast<int>(selectorIndex);
-  const auto listTouch = handleListTouch(touchSel, static_cast<int>(files.size()), contentTop, contentHeight, false);
-  if (listTouch != ListTouchResult::None) {
-    selectorIndex = static_cast<size_t>(touchSel);
-    if (listTouch == ListTouchResult::Activated) activateSelected();
-    return;
-  }
-
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     activateSelected();
     return;
@@ -325,17 +317,6 @@ void FileBrowserActivity::loop() {
   }
 
   int listSize = static_cast<int>(files.size());
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-    return;
-  }
 
   buttonNavigator.onNextRelease([this, listSize] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);

@@ -82,33 +82,6 @@ void OpdsServerListActivity::loop() {
 
   const int itemCount = getItemCount();
   if (itemCount > 0) {
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-    const int contentHeight =
-        renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-    switch (handleListTouch(selectedIndex, itemCount, contentTop, contentHeight, true)) {
-      case ListTouchResult::Activated:
-        activateSelected();
-        return;
-      case ListTouchResult::Consumed:
-        return;
-      case ListTouchResult::None:
-        break;
-    }
-
-    const int pageItems = GUI.getListPageItems(contentHeight, true);
-    const auto swipe = mappedInput.wasSwipe();
-    if (swipe == MappedInputManager::SwipeDir::Up) {
-      selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, itemCount, pageItems);
-      requestUpdate();
-      return;
-    }
-    if (swipe == MappedInputManager::SwipeDir::Down) {
-      selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, itemCount, pageItems);
-      requestUpdate();
-      return;
-    }
-
     buttonNavigator.onNext([this, itemCount] {
       selectedIndex = ButtonNavigator::nextIndex(selectedIndex, itemCount);
       requestUpdate();
