@@ -26,7 +26,7 @@
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  static constexpr uint8_t VERSION = 4;  // v4: restored granular reader settings (line/para %, margins, guide dots)
+  static constexpr uint8_t VERSION = 5;  // v5: first-line indent Book/Custom% (was space-widths)
 
   // Font (Family/Size tabs)
   uint8_t fontFamily = 0;  // CrossPointSettings::VOLLKORN
@@ -57,9 +57,10 @@ struct ReaderPrefs {
   // text, status = the reading-screen status bar.
   uint8_t paperbackLookBody = 1;
   uint8_t paperbackLookStatus = 1;
-  // First-line paragraph indent, in space-widths (0 = none). Applied to natural-aligned
-  // paragraphs that carry no explicit CSS text-indent. Seeded from the global default.
-  uint8_t firstLineIndent = 3;
+  // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect
+  // CSS indent), 1 = Custom % of the column width. Seeded from the global default.
+  uint8_t firstLineIndentMode = 0;
+  uint8_t firstLineIndentPercent = 0;
   // SD card font family name (empty = built-in fontFamily). Fixed width keeps the struct POD.
   char sdFontFamilyName[32] = "";
 

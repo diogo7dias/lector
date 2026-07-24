@@ -249,7 +249,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.embeddedStyle = embeddedStyle != 0;
   spec.imageRendering = imageRendering;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
-  spec.firstLineIndent = firstLineIndent;
+  spec.firstLineIndentMode = firstLineIndentMode;
+  spec.firstLineIndentPercent = firstLineIndentPercent;
   return spec;
 }
 
@@ -331,7 +332,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.embeddedStyle = prefs.embeddedStyle != 0;
   spec.imageRendering = prefs.imageRendering;
   spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
-  spec.firstLineIndent = prefs.firstLineIndent;
+  spec.firstLineIndentMode = prefs.firstLineIndentMode;
+  spec.firstLineIndentPercent = prefs.firstLineIndentPercent;
   return spec;
 }
 
@@ -347,7 +349,8 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   screenMarginBottom = p.screenMarginBottom;
   uniformMargins = p.uniformMargins;
   dynamicMargins = p.dynamicMargins;
-  firstLineIndent = p.firstLineIndent;
+  firstLineIndentMode = p.firstLineIndentMode;
+  firstLineIndentPercent = p.firstLineIndentPercent;
   focusReadingEnabled = p.focusReadingEnabled;
   guideDotsEnabled = p.guideDotsEnabled;
   hyphenationEnabled = p.hyphenationEnabled;

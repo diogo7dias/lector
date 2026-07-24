@@ -182,10 +182,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             .withTextSettings(),
         // Granular line spacing as a percentage of natural line height (restored from
         // old lector; supersedes the coarse Tight/Normal/Wide enum).
-        SettingInfo::Value(StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,
-                           {CrossPointSettings::MIN_LINE_SPACING_PERCENT, CrossPointSettings::MAX_LINE_SPACING_PERCENT,
-                            5},
-                           "lineSpacingPercent", StrId::STR_CAT_READER)
+        SettingInfo::Value(
+            StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,
+            {CrossPointSettings::MIN_LINE_SPACING_PERCENT, CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5},
+            "lineSpacingPercent", StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Enum(StrId::STR_UNIFORM_MARGINS, &CrossPointSettings::uniformMargins,
                           {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "uniformMargins", StrId::STR_CAT_READER)
@@ -202,14 +202,19 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
                            "screenMarginBottom", StrId::STR_CAT_READER)
             .withTextSettings(),
-        SettingInfo::Enum(StrId::STR_DYNAMIC_MARGINS, &CrossPointSettings::dynamicMargins,
-                          {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10, StrId::STR_DYNAMIC_MARGINS_20},
-                          "dynamicMargins", StrId::STR_CAT_READER)
+        SettingInfo::Enum(
+            StrId::STR_DYNAMIC_MARGINS, &CrossPointSettings::dynamicMargins,
+            {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10, StrId::STR_DYNAMIC_MARGINS_20},
+            "dynamicMargins", StrId::STR_CAT_READER)
             .withTextSettings(),
-        SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndent,
-                           {CrossPointSettings::FIRST_LINE_INDENT_MIN, CrossPointSettings::FIRST_LINE_INDENT_MAX,
-                            CrossPointSettings::FIRST_LINE_INDENT_STEP},
-                           "firstLineIndent", StrId::STR_CAT_READER)
+        // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
+        SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
+                          {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
+                          StrId::STR_CAT_READER)
+            .withTextSettings(),
+        SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
+                           {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
+                           StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
                           {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
@@ -241,7 +246,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // Granular paragraph gap as a percentage of line height (restored from old lector).
         // Only applied when extraParagraphSpacing is on.
         SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
-                           {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing", StrId::STR_CAT_READER)
+                           {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
+                           StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)

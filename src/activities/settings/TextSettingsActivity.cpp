@@ -43,9 +43,11 @@ constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, St
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
 constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
 constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
-constexpr int INDENT_MIN = CrossPointSettings::FIRST_LINE_INDENT_MIN;
-constexpr int INDENT_MAX = CrossPointSettings::FIRST_LINE_INDENT_MAX;
-constexpr int INDENT_STEP = CrossPointSettings::FIRST_LINE_INDENT_STEP;
+// First-line indent is now Book/Custom% (see CrossPointSettings). This tab still edits
+// the custom percentage via the interim popup; batch 3 replaces it with the mode row + bar.
+constexpr int INDENT_MIN = 0;
+constexpr int INDENT_MAX = CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT;
+constexpr int INDENT_STEP = 5;
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -314,9 +316,10 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       std::vector<std::string> options;
       options.reserve((INDENT_MAX - INDENT_MIN) / INDENT_STEP + 1);
       for (int i = INDENT_MIN; i <= INDENT_MAX; i += INDENT_STEP) options.push_back(std::to_string(i));
-      const int cur = (std::clamp<int>(SETTINGS.firstLineIndent, INDENT_MIN, INDENT_MAX) - INDENT_MIN) / INDENT_STEP;
-      optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, options, cur, [](int idx) {
-        SETTINGS.firstLineIndent = static_cast<uint8_t>(INDENT_MIN + idx * INDENT_STEP);
+      const int cur =
+          (std::clamp<int>(SETTINGS.firstLineIndentPercent, INDENT_MIN, INDENT_MAX) - INDENT_MIN) / INDENT_STEP;
+      optionPopup_.show(StrId::STR_FIRST_LINE_INDENT_PERCENT, options, cur, [](int idx) {
+        SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(INDENT_MIN + idx * INDENT_STEP);
       });
       requestUpdate();
       break;
@@ -342,7 +345,7 @@ std::string TextSettingsActivity::layoutValueText(int row) const {
     case LayoutRow::ScreenMargin:
       return std::to_string(SETTINGS.screenMargin);
     case LayoutRow::FirstLineIndent:
-      return std::to_string(SETTINGS.firstLineIndent);
+      return std::to_string(SETTINGS.firstLineIndentPercent);
 
     default:
       return "";

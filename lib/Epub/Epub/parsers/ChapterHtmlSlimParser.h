@@ -50,7 +50,8 @@ class ChapterHtmlSlimParser {
   uint16_t viewportHeight;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
-  uint8_t firstLineIndent;
+  uint8_t firstLineIndentMode;
+  uint8_t firstLineIndentPercent;
   const CssParser* cssParser;
   bool embeddedStyle;
   uint8_t imageRendering;
@@ -140,7 +141,7 @@ class ChapterHtmlSlimParser {
                                  const uint8_t paragraphSpacing, const uint8_t paragraphAlignment,
                                  const uint16_t viewportWidth, const uint16_t viewportHeight,
                                  const bool hyphenationEnabled, const bool focusReadingEnabled,
-                                 const uint8_t firstLineIndent,
+                                 const uint8_t firstLineIndentMode, const uint8_t firstLineIndentPercent,
                                  const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t)>& completePageFn,
                                  const bool embeddedStyle, const std::string& contentBase,
                                  const std::string& imageBasePath, const uint8_t imageRendering = 0,
@@ -159,7 +160,8 @@ class ChapterHtmlSlimParser {
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
-        firstLineIndent(firstLineIndent),
+        firstLineIndentMode(firstLineIndentMode),
+        firstLineIndentPercent(firstLineIndentPercent),
         completePageFn(completePageFn),
         popupFn(popupFn),
         cssParser(cssParser),

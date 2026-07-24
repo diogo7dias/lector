@@ -22,9 +22,10 @@ class ParsedText {
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
-  // First-line paragraph indent in space-widths (0 = none). Used only for the default
-  // indent of natural-aligned paragraphs that carry no explicit CSS text-indent.
-  uint8_t firstLineIndent;
+  // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect the
+  // CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
+  uint8_t firstLineIndentMode;
+  uint8_t firstLineIndentPercent;
   bool isNaturalAlign;
   bool hasRtlWord;
   std::vector<std::string> reorderedWordsScratch;
@@ -35,7 +36,7 @@ class ParsedText {
   std::vector<bool> reorderedFocusSuffixScratch;
   std::vector<uint16_t> visualOrderScratch;
 
-  int resolveFirstLineIndent(bool isFirstLine, const GfxRenderer& renderer, int fontId) const;
+  int resolveFirstLineIndent(bool isFirstLine, int pageWidth, const GfxRenderer& renderer, int fontId) const;
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                         std::vector<bool>& noSpaceBeforeVec);
@@ -54,12 +55,13 @@ class ParsedText {
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
                       const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
-                      const uint8_t firstLineIndent = 3)
+                      const uint8_t firstLineIndentMode = 0, const uint8_t firstLineIndentPercent = 0)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
-        firstLineIndent(firstLineIndent),
+        firstLineIndentMode(firstLineIndentMode),
+        firstLineIndentPercent(firstLineIndentPercent),
         isNaturalAlign(false),
         hasRtlWord(false) {}
   ~ParsedText() = default;

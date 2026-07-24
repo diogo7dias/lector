@@ -450,22 +450,30 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   }
 }
 
-int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer& renderer, const int fontId) const {
+int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const int pageWidth, const GfxRenderer& renderer,
+                                       const int fontId) const {
+  (void)renderer;
+  (void)fontId;
   if (!isFirstLine || !isNaturalAlign) {
     return 0;
   }
+  // Custom % mode: a user indent as a percentage of the column width (0% flush,
+  // 100% = the column's horizontal middle), overriding any CSS indent.
+  if (firstLineIndentMode == 1) {
+    if (firstLineIndentPercent == 0) {
+      return 0;
+    }
+    return pageWidth * firstLineIndentPercent / 200;
+  }
+  // Book mode: respect the publisher/CSS indent. A hanging (negative) indent is kept;
+  // a positive indent is dropped when paragraph spacing already separates paragraphs.
   if (blockStyle.textIndentDefined) {
     if (blockStyle.textIndent < 0 || !extraParagraphSpacing) {
       return blockStyle.textIndent;
     }
     return 0;
   }
-  // No explicit CSS text-indent: use the user's First Line Indent setting, measured in
-  // space-widths (0 disables). Independent of paragraph spacing so the slider always bites.
-  if (firstLineIndent == 0) {
-    return 0;
-  }
-  return renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * firstLineIndent;
+  return 0;
 }
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
@@ -556,7 +564,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
     return {};
   }
 
-  const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
+  const int firstLineIndent = resolveFirstLineIndent(true, pageWidth, renderer, fontId);
 
   // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
   for (size_t i = 0; i < wordWidths.size(); ++i) {
@@ -669,7 +677,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
                                                             const int pageWidth, std::vector<uint16_t>& wordWidths,
                                                             std::vector<bool>& continuesVec,
                                                             std::vector<bool>& noSpaceBeforeVec) {
-  const int firstLineIndent = resolveFirstLineIndent(true, renderer, fontId);
+  const int firstLineIndent = resolveFirstLineIndent(true, pageWidth, renderer, fontId);
 
   std::vector<size_t> lineBreakIndices;
   size_t currentIndex = 0;
@@ -836,7 +844,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   const size_t lastBreakAt = breakIndex > 0 ? lineBreakIndices[breakIndex - 1] : 0;
   const size_t lineWordCount = lineBreak - lastBreakAt;
 
-  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, renderer, fontId);
+  const int firstLineIndent = resolveFirstLineIndent(breakIndex == 0, pageWidth, renderer, fontId);
 
   // Build line data by moving from the original vectors using index range
   std::vector<std::string> lineWords;

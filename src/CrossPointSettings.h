@@ -264,13 +264,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t DYNAMIC_MARGINS_COUNT = 3;
   uint8_t dynamicMargins = 0;
 
-  // First-line paragraph indent, expressed in space-widths (0 = no indent). Applied
-  // to natural-aligned paragraphs that carry no explicit CSS text-indent. Feeds the
-  // reader render spec, so a change rebuilds the section cache like any layout setting.
-  static constexpr uint8_t FIRST_LINE_INDENT_MIN = 0;
-  static constexpr uint8_t FIRST_LINE_INDENT_MAX = 8;
-  static constexpr uint8_t FIRST_LINE_INDENT_STEP = 1;
-  uint8_t firstLineIndent = 3;
+  // First-line paragraph indent (restored old-lector model). BOOK = respect the
+  // publisher/CSS indent; PERCENT = a custom indent as a percentage of the column
+  // width (0% = flush, 100% = start at the column's horizontal middle). Feeds the
+  // render spec, so a change rebuilds the section cache like any layout setting.
+  enum FIRST_LINE_INDENT_MODE : uint8_t { FIRST_LINE_INDENT_BOOK = 0, FIRST_LINE_INDENT_PERCENT = 1 };
+  static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
+  uint8_t firstLineIndentMode = FIRST_LINE_INDENT_BOOK;
+  uint8_t firstLineIndentPercent = 0;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.

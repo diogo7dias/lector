@@ -24,6 +24,9 @@ struct ReaderRenderSpec {
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
-  // First-line paragraph indent in space-widths (0 = none). Part of the cache key.
-  uint8_t firstLineIndent = 3;
+  // First-line paragraph indent (restored old-lector model). mode: 0 = Book (respect
+  // the CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
+  // Both are part of the cache key.
+  uint8_t firstLineIndentMode = 0;
+  uint8_t firstLineIndentPercent = 0;
 };
