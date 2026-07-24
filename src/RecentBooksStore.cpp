@@ -17,6 +17,7 @@ void RecentBooksStore::toJson(JsonDocument& doc) const {
     obj["title"] = book.title;
     obj["author"] = book.author;
     obj["coverBmpPath"] = book.coverBmpPath;
+    obj["progressPercent"] = book.progressPercent;
   }
 }
 
@@ -33,6 +34,7 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     book.title = obj["title"] | "";
     book.author = obj["author"] | "";
     book.coverBmpPath = obj["coverBmpPath"] | "";
+    book.progressPercent = obj["progressPercent"] | -1;
     recentBooks.push_back(book);
   }
 
@@ -45,15 +47,17 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
-  // Remove existing entry if present
+  // Remove existing entry if present, keeping its progress badge across the move-to-front.
+  int keepProgress = -1;
   auto it =
       std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
   if (it != recentBooks.end()) {
+    keepProgress = it->progressPercent;
     recentBooks.erase(it);
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath, keepProgress});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -74,6 +78,16 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+void RecentBooksStore::setProgress(const std::string& path, int percent) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) return;
+  const int clamped = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+  if (it->progressPercent == clamped) return;  // unchanged -> skip the SD write
+  it->progressPercent = clamped;
+  saveToFile();
 }
 
 bool RecentBooksStore::removeByPath(const std::string& path) {

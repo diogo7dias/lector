@@ -242,6 +242,17 @@ void EpubReaderActivity::onExit() {
   // Persist whole-book paragraph counts gathered this session (epub still valid here).
   if (epub) saveParagraphCounts();
 
+  // Update this book's home-list progress badge from the current position. One write
+  // per reading session (setProgress skips if unchanged), so no page-turn cost.
+  if (epub) {
+    const int curPage = section ? section->currentPage : nextPageNumber;
+    const int pageCnt = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+    const float chapterProgress = pageCnt > 0 ? static_cast<float>(curPage) / static_cast<float>(pageCnt) : 0.0f;
+    const int pct =
+        clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+    RECENT_BOOKS.setProgress(epub->getPath(), pct);
+  }
+
   // Leaving mid-footnote loses the in-RAM return stack on deep sleep; persist the
   // pre-footnote position so the book reopens at the link origin, not the footnote.
   if (footnoteDepth > 0 && epub) {
