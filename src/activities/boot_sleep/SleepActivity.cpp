@@ -17,6 +17,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "util/TaskWatchdog.h"
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
@@ -113,8 +114,18 @@ void SleepActivity::renderCustomSleepScreen() const {
     // pick effectively never repeats, and the ask was "just grab a random one".
     std::string chosen;
     uint32_t seen = 0;
-    char name[500];
+    uint32_t scanned = 0;
+    const uint32_t scanStartMs = millis();
+    char name[256];  // FAT long-file-name maximum (255 chars + terminator)
     for (auto dirFile = dir.openNextFile(); dirFile; dirFile = dir.openNextFile()) {
+      // A wallpaper folder can hold thousands of files, and this walk runs inline on the
+      // loop task while going to sleep. Without a periodic yield the task never returns
+      // to the scheduler, the task watchdog has no chance to be fed, and sleep entry can
+      // wedge hard enough to need a physical reset.
+      if ((++scanned & 0x3F) == 0) {
+        resetTaskWatchdogIfSubscribed();
+        vTaskDelay(1);
+      }
       const bool isDir = dirFile.isDirectory();
       dirFile.getName(name, sizeof(name));
       dirFile.close();  // only the name is needed; never open/parse the file here
@@ -123,6 +134,8 @@ void SleepActivity::renderCustomSleepScreen() const {
       ++seen;
       if (random(static_cast<long>(seen)) == 0) chosen = name;
     }
+    LOG_INF("SLP", "scanned %u entries (%u wallpapers) in %ums", scanned, seen,
+            static_cast<unsigned>(millis() - scanStartMs));
     if (!chosen.empty()) {
       const auto filename = std::string(sleepDir) + "/" + chosen;
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
