@@ -78,36 +78,36 @@ EpdFontFamily vollkorn18FontFamily(&vollkorn18RegularFont, &vollkorn18BoldFont, 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
+// The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
+// so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
+// arrangement: menu weight hierarchy comes from SIZE, not from a second cut. Emphasis in
+// the UI, if ever wanted, is the Paperback Look smear (GfxRenderer::setPaperbackLook),
+// which thickens whatever face is loaded and costs no flash.
+
 // Ubuntu UI family — the FULL-coverage fallback (Latin + Arabic + Hebrew + Vietnamese,
 // baked with the extra script intervals). Bound permanently to UBUNTU_10/12_FONT_ID and
 // used for Arabic/Hebrew UI and for the language-picker native-name list.
 EpdFont ubuntu10RegularFont(&ubuntu_10_regular);
-EpdFont ubuntu10BoldFont(&ubuntu_10_bold);
-EpdFontFamily ubuntu10FontFamily(&ubuntu10RegularFont, &ubuntu10BoldFont);
+EpdFontFamily ubuntu10FontFamily(&ubuntu10RegularFont, &ubuntu10RegularFont);
 
 EpdFont ubuntu12RegularFont(&ubuntu_12_regular);
-EpdFont ubuntu12BoldFont(&ubuntu_12_bold);
-EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12BoldFont);
+EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12RegularFont);
 
 EpdFont ubuntu14RegularFont(&ubuntu_14_regular);
-EpdFont ubuntu14BoldFont(&ubuntu_14_bold);
-EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14BoldFont);
+EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14RegularFont);
 
 // Cozette UI family — lector's default menu font (Latin + Cyrillic + Greek + Vietnamese;
 // no Arabic/Hebrew). Sizes match the previous mature Lector: 10 = SMALL_FONT_ID,
 // 12 = UI_10_FONT_ID (list rows), 14 = UI_12_FONT_ID (header title). Bound for every
 // language except Arabic/Hebrew (which use the Ubuntu family at the same sizes).
 EpdFont cozette10RegularFont(&cozette_10_regular);
-EpdFont cozette10BoldFont(&cozette_10_bold);
-EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10BoldFont);
+EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10RegularFont);
 
 EpdFont cozette12RegularFont(&cozette_12_regular);
-EpdFont cozette12BoldFont(&cozette_12_bold);
-EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12BoldFont);
+EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
 
 EpdFont cozette14RegularFont(&cozette_14_regular);
-EpdFont cozette14BoldFont(&cozette_14_bold);
-EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14BoldFont);
+EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
 
 // Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
 // family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
