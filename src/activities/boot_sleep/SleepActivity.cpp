@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Txt.h>
@@ -80,8 +81,12 @@ void SleepActivity::renderCustomSleepScreen() const {
   // /sleep.pxc (Lector Wallpaper Converter format), same root-priority tier as
   // /sleep.bmp. renderPxcSleepScreen opens the path itself and returns false when
   // the file is absent/invalid, so we just try it and fall through on failure.
-  if (renderPxcSleepScreen(renderer, "/sleep.pxc")) {
-    LOG_DBG("SLP", "Loading: /sleep.pxc");
+  // X3 renders .pxc in the OEM 3-pass grayscale pipeline; X4's SSD1677 stalls in that
+  // path at sleep (unbounded panel-BUSY wait), so X4 uses the 1-bit path — the same
+  // single HALF refresh the default/blank sleep screens use, which is known good on X4.
+  const bool pxcGrayscale = gpio.deviceIsX3();
+  if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale)) {
+    LOG_INF("SLP", "Loaded: /sleep.pxc");
     if (dir) dir.close();
     return;
   }
@@ -118,10 +123,10 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
     if (!chosen.empty()) {
       const auto filename = std::string(sleepDir) + "/" + chosen;
-      LOG_DBG("SLP", "Randomly loading: %s", filename.c_str());
+      LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       delay(100);
       if (hasPxcExtension(chosen)) {
-        if (renderPxcSleepScreen(renderer, filename)) {
+        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale)) {
           dir.close();
           return;
         }

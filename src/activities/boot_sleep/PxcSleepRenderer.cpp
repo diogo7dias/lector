@@ -37,6 +37,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     LOG_ERR("SLP", "pxc size %dx%d != screen %dx%d", pxcWidth, pxcHeight, screenWidth, screenHeight);
     return false;
   }
+  LOG_INF("SLP", "pxc %dx%d ok grayscale=%d", pxcWidth, pxcHeight, static_cast<int>(grayscale));
 
   const size_t dataOffset = file.position();
   const int bytesPerRow = (pxcWidth + 3) / 4;  // 2bpp, 4 px/byte
@@ -127,38 +128,51 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
 
   // OEM 3-pass grayscale, mirroring SleepActivity::renderBitmapSleepScreen: BW
   // silhouette base, then the LSB and MSB grayscale planes, then composite.
+  LOG_INF("SLP", "pxc decode BW begin");
   renderer.clearScreen();
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
+  LOG_INF("SLP", "pxc decode BW end");
 
   if (!grayscale) {
     // 1-bit fast path: a single refresh of the dithered silhouette, skipping the
     // LSB/MSB planes and the grayscale composite. Refresh mode is caller-selected.
+    LOG_INF("SLP", "pxc displayBuffer 1bit begin");
     renderer.displayBuffer(oneBitRefresh);
+    LOG_INF("SLP", "pxc displayBuffer 1bit end");
     return true;
   }
 
   // Clean base paint. displayGrayscaleBase's HALF waveform is the exact base the
   // gray-nudge LUT is calibrated against (see renderBitmapSleepScreen).
+  LOG_INF("SLP", "pxc grayBase begin");
   renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  LOG_INF("SLP", "pxc grayBase end");
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  LOG_INF("SLP", "pxc decode LSB begin");
   if (!decode()) {
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
+  LOG_INF("SLP", "pxc copyLSB begin");
   renderer.copyGrayscaleLsbBuffers();
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  LOG_INF("SLP", "pxc decode MSB begin");
   if (!decode()) {
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
+  LOG_INF("SLP", "pxc copyMSB begin");
   renderer.copyGrayscaleMsbBuffers();
 
+  LOG_INF("SLP", "pxc grayBuffer begin");
   renderer.displayGrayBuffer();
+  LOG_INF("SLP", "pxc grayBuffer end");
   renderer.setRenderMode(GfxRenderer::BW);
+  LOG_INF("SLP", "pxc done gray");
   return true;
 }
