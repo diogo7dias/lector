@@ -59,7 +59,9 @@ Legend: [x] done · [~] in progress · [ ] todo
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
       PT hyphenation; anti-alias fade off; first-line indent;
       word-spacing + paragraph-spacing sliders; "Bionic Reading" name.
-- [ ] Home: list layout (`homeLayout`), `[NN%]` badge, "Opening…" banner, pages counter + clock, Pages button.
+- [x] **Home in-progress list** — recents as a list (title, "by INITIALS", NN% badge)
+      via `drawList`; cover tile + thumbnail generation dropped (faster). Commit `5b795243`.
+- [ ] Home extras: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
 - [ ] Status bar v2 (placeable 6-anchor items, title wrap/reflow, TXT reader on it).
 - [ ] Reader menu tidy + chapter header + **Grab Quote** (`<book>_QUOTES.txt`).
 - [ ] Margins: uniform toggle + independent top/bottom.
@@ -149,6 +151,15 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   reader brackets the BW body render + `renderStatusBar`; TXT/XTC readers bracket their
   draws with the GLOBAL flags (XTC = images, status bar only). Host test extended (still
   5, green). Flash 83.7%. NOT device-tested.
+
+- **2026-07-24** — Go to Paragraph (`364c49f5`) + Home in-progress list (`5b795243`)
+  shipped. Go-to-Paragraph: reader-menu row gated on numbering-on, reuses
+  `KeyboardEntryActivity`; correct in both modes (whole-book converts via
+  `sectionParagraphCounts_`, cross-chapter defers `pendingParagraphScan_` to the render
+  path). Home: `RecentBook.progressPercent` (+ store `setProgress`, written on reader
+  exit), `StringUtils::authorInitials` (host-tested), `HomeActivity` render swapped to
+  `GUI.drawList` (title / "by INITIALS" / NN%); cover tile + thumbnail generation
+  removed (home opens no book now). TODO: TXT/XTC don't write % yet.
 
 ## Next steps
 
