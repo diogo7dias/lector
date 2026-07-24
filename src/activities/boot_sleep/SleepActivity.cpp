@@ -81,10 +81,12 @@ void SleepActivity::renderCustomSleepScreen() const {
   // /sleep.pxc (Lector Wallpaper Converter format), same root-priority tier as
   // /sleep.bmp. renderPxcSleepScreen opens the path itself and returns false when
   // the file is absent/invalid, so we just try it and fall through on failure.
-  // X3 renders .pxc in the OEM 3-pass grayscale pipeline; X4's SSD1677 stalls in that
-  // path at sleep (unbounded panel-BUSY wait), so X4 uses the 1-bit path — the same
-  // single HALF refresh the default/blank sleep screens use, which is known good on X4.
-  const bool pxcGrayscale = gpio.deviceIsX3();
+  // Both devices render .pxc through the OEM 3-pass grayscale pipeline, matching the
+  // BMP wallpaper and cover sleep screens. The X4 previously stalled here: its HALF
+  // sequence powers the panel rails down, and the grayscale refresh that follows then
+  // shared one activation with the rail ramp. Fixed at the driver-config level; see
+  // src/platform/LectorSsd1677Config.cpp.
+  constexpr bool pxcGrayscale = true;
   if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale)) {
     LOG_INF("SLP", "Loaded: /sleep.pxc");
     if (dir) dir.close();
