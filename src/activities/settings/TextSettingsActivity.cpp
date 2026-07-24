@@ -37,17 +37,13 @@ int findCurrentFontSizeIndex(uint8_t fontSize, size_t listSize) {
   return fontSize < listSize ? fontSize : 1;  // default MEDIUM
 }
 
-constexpr StrId LINE_SPACING_IDS[] = {StrId::STR_TIGHT, StrId::STR_NORMAL, StrId::STR_WIDE};
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
 constexpr int MARGIN_MIN = CrossPointSettings::SCREEN_MARGIN_MIN;
 constexpr int MARGIN_MAX = CrossPointSettings::SCREEN_MARGIN_MAX;
-constexpr int MARGIN_STEP = CrossPointSettings::SCREEN_MARGIN_STEP;
-// First-line indent is now Book/Custom% (see CrossPointSettings). This tab still edits
-// the custom percentage via the interim popup; batch 3 replaces it with the mode row + bar.
+// First-line indent custom-% range (Book vs Custom% mode lives in CrossPointSettings).
 constexpr int INDENT_MIN = 0;
 constexpr int INDENT_MAX = CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT;
-constexpr int INDENT_STEP = 5;
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -101,6 +97,7 @@ TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
 }
 
 void TextSettingsActivity::loop() {
+  if (valueBar_.handleInput(mappedInput, [this] { requestUpdate(); })) return;     // bar owns input while open
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -135,6 +132,7 @@ void TextSettingsActivity::loop() {
 }
 
 void TextSettingsActivity::render(RenderLock&&) {
+  if (valueBar_.processRender(renderer, mappedInput)) return;     // bar draws over the preview
   if (optionPopup_.processRender(renderer, mappedInput)) return;  // picker draws over everything
 
   renderer.clearScreen();
@@ -292,8 +290,10 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
       requestUpdate();
       break;
     case LayoutRow::LineSpacing:
-      optionPopup_.show(StrId::STR_LINE_SPACING, LINE_SPACING_IDS, static_cast<int>(std::size(LINE_SPACING_IDS)),
-                        SETTINGS.lineSpacing, [](int idx) { SETTINGS.lineSpacing = static_cast<uint8_t>(idx); });
+      valueBar_.show(StrId::STR_LINE_SPACING, CrossPointSettings::MIN_LINE_SPACING_PERCENT,
+                     CrossPointSettings::MAX_LINE_SPACING_PERCENT, 1, 5, SETTINGS.lineSpacingPercent,
+                     StrId::STR_VALUE_BAR_STEP_HINT,
+                     [](int v) { SETTINGS.lineSpacingPercent = static_cast<uint8_t>(v); });
       requestUpdate();
       break;
     case LayoutRow::Alignment:
@@ -302,28 +302,17 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
                         [](int idx) { SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx); });
       requestUpdate();
       break;
-    case LayoutRow::ScreenMargin: {
-      std::vector<std::string> options;
-      options.reserve((MARGIN_MAX - MARGIN_MIN) / MARGIN_STEP + 1);
-      for (int m = MARGIN_MIN; m <= MARGIN_MAX; m += MARGIN_STEP) options.push_back(std::to_string(m));
-      const int cur = (std::clamp<int>(SETTINGS.screenMargin, MARGIN_MIN, MARGIN_MAX) - MARGIN_MIN) / MARGIN_STEP;
-      optionPopup_.show(StrId::STR_SCREEN_MARGIN, options, cur,
-                        [](int idx) { SETTINGS.screenMargin = static_cast<uint8_t>(MARGIN_MIN + idx * MARGIN_STEP); });
+    case LayoutRow::ScreenMargin:
+      valueBar_.show(StrId::STR_SCREEN_MARGIN, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMargin,
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMargin = static_cast<uint8_t>(v); });
       requestUpdate();
       break;
-    }
-    case LayoutRow::FirstLineIndent: {
-      std::vector<std::string> options;
-      options.reserve((INDENT_MAX - INDENT_MIN) / INDENT_STEP + 1);
-      for (int i = INDENT_MIN; i <= INDENT_MAX; i += INDENT_STEP) options.push_back(std::to_string(i));
-      const int cur =
-          (std::clamp<int>(SETTINGS.firstLineIndentPercent, INDENT_MIN, INDENT_MAX) - INDENT_MIN) / INDENT_STEP;
-      optionPopup_.show(StrId::STR_FIRST_LINE_INDENT_PERCENT, options, cur, [](int idx) {
-        SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(INDENT_MIN + idx * INDENT_STEP);
-      });
+    case LayoutRow::FirstLineIndent:
+      valueBar_.show(StrId::STR_FIRST_LINE_INDENT_PERCENT, INDENT_MIN, INDENT_MAX, 1, 5,
+                     SETTINGS.firstLineIndentPercent, StrId::STR_VALUE_BAR_STEP_HINT,
+                     [](int v) { SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(v); });
       requestUpdate();
       break;
-    }
 
     default:
       break;
@@ -332,10 +321,8 @@ void TextSettingsActivity::confirmLayoutRow(int row) {
 
 std::string TextSettingsActivity::layoutValueText(int row) const {
   switch (static_cast<LayoutRow>(row)) {
-    case LayoutRow::LineSpacing: {
-      const uint8_t v = SETTINGS.lineSpacing;
-      return v < std::size(LINE_SPACING_IDS) ? I18N.get(LINE_SPACING_IDS[v]) : I18N.get(StrId::STR_NORMAL);
-    }
+    case LayoutRow::LineSpacing:
+      return std::to_string(SETTINGS.lineSpacingPercent);
     case LayoutRow::ParaSpacing:
       return SETTINGS.extraParagraphSpacing ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case LayoutRow::Alignment: {

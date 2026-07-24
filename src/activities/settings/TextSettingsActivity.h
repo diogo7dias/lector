@@ -9,6 +9,7 @@
 #include "TextSettingsPreview.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "components/ValueBarPopup.h"
 #include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
@@ -75,6 +76,7 @@ class TextSettingsActivity final : public Activity {
   const SdCardFontRegistry* registry_;
   ButtonNavigator buttonNavigator_;
   OptionPopup optionPopup_;
+  ValueBarPopup valueBar_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;
   textsettings::PreviewLayout previewLayout_;  // cached preview line layout; relaid only on setting/geometry change
