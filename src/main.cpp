@@ -31,8 +31,8 @@
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
+#include "components/UnlockBanners.h"
 #include "fontIds.h"
-#include "images/LoadingIcon.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -417,9 +417,11 @@ void setup() {
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
       if (loadSleepFrameBuffer()) {
-        // Frame restored: swap the sleep moon for the loading icon.
-        const auto pageHeight = renderer.getScreenHeight();
-        renderer.drawImage(LoadingIcon, 0, pageHeight - LOADINGICON_HEIGHT, LOADINGICON_WIDTH, LOADINGICON_HEIGHT);
+        // Frame restored: draw the wake/unlock banners over the retained wallpaper
+        // (version + resuming book on top, custom footer on the bottom), matching old
+        // lector. The banners are the loading face; input stays gated until the reader
+        // paints, so this does not change the "no phantom clicks" wake behavior.
+        drawUnlockBanners(renderer);
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash

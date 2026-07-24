@@ -24,6 +24,7 @@
 #include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -261,6 +262,37 @@ void SettingsActivity::toggleCurrentSetting() {
     } else {
       SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
     }
+  } else if (setting.type == SettingType::STRING) {
+    // Free-text entry via the on-screen keyboard. Handles both direct char[] fields
+    // (stringOffset into SETTINGS) and dynamic getter/setter string settings.
+    std::string initial;
+    if (setting.stringGetter) {
+      initial = setting.stringGetter();
+    } else if (setting.stringMaxLen > 0) {
+      initial = reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
+    }
+    const size_t offset = setting.stringOffset;
+    const size_t maxLen = setting.stringMaxLen;
+    const auto stringSetter = setting.stringSetter;
+    const size_t maxChars = maxLen > 0 ? maxLen - 1 : 63;
+    startActivityForResult(
+        std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(I18N.get(setting.nameId)), initial,
+                                                maxChars, InputType::Text),
+        [this, offset, maxLen, stringSetter](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            const auto& kb = std::get<KeyboardResult>(result.data);
+            if (stringSetter) {
+              stringSetter(kb.text);
+            } else if (maxLen > 0) {
+              char* dst = reinterpret_cast<char*>(reinterpret_cast<uint8_t*>(&SETTINGS) + offset);
+              strncpy(dst, kb.text.c_str(), maxLen - 1);
+              dst[maxLen - 1] = '\0';
+            }
+            SETTINGS.saveToFile();
+            rebuildSettingsLists();
+          }
+        });
+    return;
   } else if (setting.type == SettingType::ACTION) {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
@@ -417,6 +449,13 @@ void SettingsActivity::render(RenderLock&&) {
             }
           } else {
             valueText = std::to_string(SETTINGS.*(setting.valuePtr));
+          }
+        } else if (setting.type == SettingType::STRING) {
+          if (setting.stringGetter) {
+            valueText = setting.stringGetter();
+          } else if (setting.stringMaxLen > 0) {
+            valueText =
+                reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
           }
         }
         return valueText;

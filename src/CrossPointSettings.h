@@ -317,6 +317,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
   // overlay after the page renders, so it never affects layout or the cache.
   uint8_t debugBorders = 0;
+  // Custom text for the wake/unlock screen bottom banner (restored old lector).
+  // Empty = the default displayed string "READ UNTIL YOU DIE." (not stored here).
+  char customFooter[64] = "";
   // Paperback Look: smear drawn glyph pixels +1px right/+1px down for heavier ink.
   // Two independent toggles, both default ON: body = reader page text (EPUB/TXT/XTC),
   // status = the reading-screen status bar. The global values are the default that

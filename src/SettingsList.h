@@ -169,6 +169,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             "refreshFrequency", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
+        // Free-text footer shown on the wake/unlock screen bottom banner.
+        SettingInfo::String(StrId::STR_SLEEP_FOOTER_TEXT, &SETTINGS.customFooter[0], sizeof(SETTINGS.customFooter),
+                            "customFooter", StrId::STR_CAT_DISPLAY),
 
         // --- Reader ---
         // Built-in font-family entry. Replaced per-call with a registry-aware
