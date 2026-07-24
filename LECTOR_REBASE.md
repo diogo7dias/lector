@@ -64,7 +64,12 @@ Legend: [x] done · [~] in progress · [ ] todo
       + `wrapText`); "N more above/below" scroll indicators; cap 13; cover tile/thumbnail
       generation dropped (faster). Finished books auto-leave the list + move to /read
       (`removeReadBooksFromRecents` + `moveFinishedToReadFolder` now default ON). Commits `5b795243`, `d00b5c4f`.
-- [ ] Home extras: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle, per-row book touch.
+- [x] **Home extras:** finished-book auto-file to /read + auto-remove from list (defaults ON).
+- [x] **Touchscreen support REMOVED** — firmware is X3/X4 only (no touch). All touch/swipe/
+      gesture code stripped end to end (input manager API, HAL wrappers, every activity, reader
+      page-turn zones, keyboard cursor-tap, slider drags, clock touch buttons, option popup,
+      settings/theme touch guards, `touchReaderControls` setting). Buttons only. Commit `32a9cff4`.
+- [ ] Home extras remaining: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
 - [ ] Status bar v2 (placeable 6-anchor items, title wrap/reflow, TXT reader on it).
 - [ ] Reader menu tidy + chapter header + **Grab Quote** (`<book>_QUOTES.txt`).
 - [ ] Margins: uniform toggle + independent top/bottom.
@@ -164,15 +169,47 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   `GUI.drawList` (title / "by INITIALS" / NN%); cover tile + thumbnail generation
   removed (home opens no book now). TODO: TXT/XTC don't write % yet.
 
-## Next steps
+- **2026-07-24** — Home list polish + finished-book auto-file (`d00b5c4f`): full title
+  WRAPPED via ported `BaseTheme::drawRecentBookList` + `wrapText` (in BaseTheme.cpp; uses
+  `StringUtils::authorInitials`), inline `[NN%]` black-bg badge (flips to white chip on the
+  selected row), "N more above/below" indicators, cap 13, scroll state in HomeActivity.
+  `removeReadBooksFromRecents`=1 + `moveFinishedToReadFolder`=1 defaults ON. Then home made
+  button-only (`a9266014`).
+- **2026-07-24** — **ALL TOUCH REMOVED** (`32a9cff4`, 56 files). Firmware is X3/X4-only.
+  Stripped: `MappedInputManager` touch API + SwipeDir/RowTouch enums + touch-held state
+  (wasPressed/Released/getHeldTime now button-only); `HalGPIO` 8 touch wrappers +
+  `main.cpp` `wasTouchActivity`; `Activity` `handleListTouch`/`ListTouchResult`/
+  `handleHomeGesture` + `ActivityManager` home-swipe dispatch; every activity's touch
+  handler; `ReaderUtils` tap-zone helpers (`detectTouchPageTurn`/`isTouchMenuGesture`) +
+  the reader page-turn merges; slider drags (percent/interval `draggingBar`); ClockOffset
+  touch buttons; OptionPopup tap; KeyboardEntry cursor-tap/touchRouter loop; `touchReaderControls`
+  setting/enum; BoardConfig::hasTouch gates (front-remap + OTA now always shown); theme
+  hasTouch hint-suppression + metrics adjustment; i18n `STR_TOUCH_READER_CONTROLS`/`STR_TAP_TO_RETRY`.
+  Touch DRIVER stays in freeink-sdk (never read). Nav = side Up/Down + the 2 rightmost front
+  buttons (NavPrevious=Up+Left, NavNext=Down+Right — already mapped, no new wiring). Host 140/140,
+  device build clean.
 
-1. **First flashable test build** — bundle everything landed on `crosspoint-rebase`
-   (themes→Lector, PXC wallpaper, SD folders, random wallpaper, #9 per-book settings,
-   #10 paragraph numbers, Paperback Look) and have Diogo device-test on the X4. Device tests owed:
-   per-book settings (change font in one book → only it changes; reset works),
-   paragraph numbers (all 3 modes; whole-book continues across chapters; section
-   caches rebuild once after the v33 bump).
-2. Continue down the niceties list. Later: PXC info overlay, PxcViewerActivity,
-   unlock-banner 1-bit reuse, "Until Death" screen, skull boot logo, GO_TO_PARAGRAPH
-   jump (deferred nice-to-have that pairs with #10), fonts/typography, home layout,
-   status bar v2, Grab Quote, margins, WiFi browser/OPDS.
+## Next steps (RESUME HERE after compaction)
+
+**Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
+**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (140).
+**Latest commits (newest first):** `32a9cff4` touch-removal, `a9266014` button-only home,
+`d00b5c4f` home wrap/badge/scroll+auto-file, `5b795243` home list, `364c49f5` go-to-paragraph,
+`be2976d8` paperback, `fd6bef6d` #10, `094ef02a` #9, plus themes/PXC/folders/wallpaper.
+
+1. **First flashable test build + device test on X4** — bundle everything on `crosspoint-rebase`.
+   Owed device checks: per-book settings; paragraph numbers (3 modes; whole-book across chapters;
+   caches rebuild once after v33 bump); paperback look; home in-progress list (wrap, `[NN%]`,
+   scroll arrows with >8 books, finished→/read); button-only nav incl. the 2 rightmost front buttons.
+2. **Small follow-ups:** (a) TXT/XTC readers don't write progress % yet (only EPUB) → home badge
+   missing for those; (b) KeyboardEntry still holds inert freeink `InteractionBuffer`/`TouchHoldRouter`
+   scaffolding (no touch read) — trim later; (c) home does not filter 100%-finished books (removal
+   handles it when `removeReadBooksFromRecents` fires at End-of-Book).
+3. **Remaining niceties:** fonts/typography, status bar v2, Grab Quote, margins, "Until Death"
+   sleep screen, skull boot logo, open-random-on-boot, WiFi file browser + OPDS-in-browser,
+   PXC info overlay / PxcViewerActivity.
+
+**HARD CONSTRAINTS still in force:** never change the indexing (use CrossPoint's cache exactly);
+no sleep-wallpaper staging; keep diffs small for upstream merges; NEVER `git add -A` (stage
+tracked via `git add -u` or explicit paths); commit trailers required; auto-push after commit;
+Caveman voice ("Rocky"), plain English for code/commits/warnings; call user "Diogo".
