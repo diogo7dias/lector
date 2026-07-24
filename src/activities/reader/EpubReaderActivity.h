@@ -31,6 +31,9 @@ class EpubReaderActivity final : public Activity {
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
+  // Go to Paragraph: after a cross-chapter jump, the target local paragraph ordinal to
+  // scan for once the new section has loaded (consumed in the render path).
+  std::optional<uint16_t> pendingParagraphScan_;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;
@@ -177,6 +180,13 @@ class EpubReaderActivity final : public Activity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
+  // Jump to a paragraph number as shown by the paragraph-number marks. Per-chapter
+  // mode treats the number as a local ordinal; whole-book mode converts it to the
+  // owning chapter + local ordinal via sectionParagraphCounts_.
+  void jumpToParagraph(int target);
+  // First page of a loaded section whose lines reach the given per-chapter ordinal
+  // (returns the last page when the ordinal is past the chapter's paragraphs).
+  int findPageForOrdinal(Section& section, uint16_t ordinal) const;
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();

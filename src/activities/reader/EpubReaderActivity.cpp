@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <functional>
 #include <iterator>
@@ -37,6 +38,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookmarkUtil.h"
@@ -845,6 +847,25 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openDictionaryWordSelect();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH: {
+      // Ask for a paragraph number, then jump to it (the number shown by the marks).
+      startActivityForResult(
+          std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_GO_TO_PARAGRAPH)),
+                                                  std::string(), 6, InputType::Text),
+          [this](const ActivityResult& result) {
+            if (!result.isCancelled) {
+              if (const auto* kr = std::get_if<KeyboardResult>(&result.data)) {
+                const int n = atoi(kr->text.c_str());
+                if (n >= 1) {
+                  jumpToParagraph(n);
+                  return;
+                }
+              }
+            }
+            requestUpdate();
+          });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
         std::string fullText = section->getTextFromSectionFile();
@@ -1096,6 +1117,74 @@ uint32_t EpubReaderActivity::wholeBookParagraphBase(const int spineIndex) const 
   const int n = std::min(spineIndex, static_cast<int>(sectionParagraphCounts_.size()));
   for (int i = 0; i < n; i++) base += sectionParagraphCounts_[i];
   return base;
+}
+
+int EpubReaderActivity::findPageForOrdinal(Section& sec, const uint16_t ordinal) const {
+  const int pages = sec.pageCount;
+  for (int p = 0; p < pages; p++) {
+    auto page = sec.loadPage(p);
+    if (!page) continue;
+    for (const auto& el : page->elements) {
+      if (el->getTag() != TAG_PageLine) continue;
+      // Ordinals are contiguous and increase down the chapter, so the first page whose
+      // lines reach the target holds that paragraph's first line.
+      if (static_cast<const PageLine&>(*el).getParagraphOrdinal() >= ordinal) return p;
+    }
+  }
+  return pages > 0 ? pages - 1 : 0;  // past the last paragraph -> last page
+}
+
+void EpubReaderActivity::jumpToParagraph(const int target) {
+  if (!epub || target < 1) {
+    requestUpdate();
+    return;
+  }
+
+  int targetSpine = currentSpineIndex;
+  uint16_t localOrdinal = static_cast<uint16_t>(target);
+
+  if (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK) {
+    // Whole-book number: find the chapter whose [base, base+count) range contains it,
+    // using the per-spine counts gathered as the book is read. The displayed number
+    // uses the same base, so this matches what the reader sees. Counts for chapters not
+    // yet read are 0 (skipped); a target past the counted range falls back to the
+    // current chapter (best effort).
+    const int spineCount = epub->getSpineItemsCount();
+    const int known = std::min(spineCount, static_cast<int>(sectionParagraphCounts_.size()));
+    bool found = false;
+    for (int s = 0; s < known; s++) {
+      const uint16_t count = sectionParagraphCounts_[s];
+      if (count == 0) continue;
+      const uint32_t base = wholeBookParagraphBase(s);
+      if (static_cast<uint32_t>(target) <= base + count) {
+        targetSpine = s;
+        localOrdinal = static_cast<uint16_t>(target - base);
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      const uint32_t base = wholeBookParagraphBase(currentSpineIndex);
+      localOrdinal = (static_cast<uint32_t>(target) > base) ? static_cast<uint16_t>(target - base) : 1;
+    }
+  }
+  if (localOrdinal < 1) localOrdinal = 1;
+
+  if (targetSpine == currentSpineIndex && section) {
+    // Same chapter, section already loaded — scan and move within it.
+    const int page = findPageForOrdinal(*section, localOrdinal);
+    RenderLock lock(*this);
+    section->currentPage = page;
+    nextPageNumber = page;
+  } else {
+    // Different chapter — switch spine and defer the page scan until it loads.
+    RenderLock lock(*this);
+    currentSpineIndex = targetSpine;
+    nextPageNumber = 0;
+    pendingParagraphScan_ = localOrdinal;
+    section.reset();
+  }
+  requestUpdate();
 }
 
 void EpubReaderActivity::loadParagraphCounts() {
@@ -1487,6 +1576,13 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
       section->currentPage = newPage;
       pendingPercentJump = false;
+    }
+
+    if (pendingParagraphScan_.has_value() && section->pageCount > 0) {
+      // A cross-chapter Go-to-Paragraph landed in this freshly loaded section; scan it
+      // for the target local ordinal now that its pages exist.
+      section->currentPage = findPageForOrdinal(*section, *pendingParagraphScan_);
+      pendingParagraphScan_.reset();
     }
   }
 

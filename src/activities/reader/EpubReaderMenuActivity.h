@@ -30,7 +30,8 @@ class EpubReaderMenuActivity final : public Activity {
     RESET_READER_SETTINGS,     // clear this book's override, follow global again
     TOGGLE_PARAGRAPH_NUMBERS,  // cycle off / per-chapter / whole-book in place
     TOGGLE_PAPERBACK_LOOK,     // toggle heavier ink for reader body text
-    TOGGLE_PAPERBACK_STATUS    // toggle heavier ink for status bar text
+    TOGGLE_PAPERBACK_STATUS,   // toggle heavier ink for status bar text
+    GO_TO_PARAGRAPH            // jump to a paragraph number (only when numbering is on)
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
@@ -51,7 +52,8 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride);
+  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
+                                              uint8_t paragraphNumbering);
   void closeCancelled();
 
   // Fixed menu layout

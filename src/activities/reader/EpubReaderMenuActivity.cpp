@@ -15,7 +15,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
                                                const bool hasReaderOverride, const uint8_t paragraphNumbering,
                                                const uint8_t paperbackBody, const uint8_t paperbackStatus)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering)),
       title(title),
       pendingOrientation(currentOrientation),
       selectedParagraphNumbering(paragraphNumbering),
@@ -27,7 +27,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
                                                                                      bool hasBookmarks,
-                                                                                     bool hasReaderOverride) {
+                                                                                     bool hasReaderOverride,
+                                                                                     uint8_t paragraphNumbering) {
   std::vector<MenuItem> items;
   items.reserve(18);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
@@ -52,6 +53,11 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+  // Jump to a paragraph number — only meaningful when this book shows paragraph
+  // numbers. Toggle numbering on, reopen the menu, and this row appears.
+  if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
+    items.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
+  }
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
   items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
