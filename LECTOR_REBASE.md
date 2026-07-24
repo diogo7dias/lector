@@ -53,8 +53,10 @@ Legend: [x] done · [~] in progress · [ ] todo
       to be ported later.
 - [x] **9 — Per-book reader settings** (each book its own look; global default + override + reset). Commit `094ef02a`.
 - [x] **10 — Paragraph numbers** (per-book in-menu toggle; 3 states: off / per-chapter / whole-book). Commit `fd6bef6d`.
+- [x] **Paperback Look** (heavier-ink double-strike smear) for reader body text + status
+      bar; global default ON + per-book toggle. Commit `be2976d8`.
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
-      PT hyphenation; Paperback heavier text; anti-alias fade off; first-line indent;
+      PT hyphenation; anti-alias fade off; first-line indent;
       word-spacing + paragraph-spacing sliders; "Bionic Reading" name.
 - [ ] Home: list layout (`homeLayout`), `[NN%]` badge, "Opening…" banner, pages counter + clock, Pages button.
 - [ ] Status bar v2 (placeable 6-anchor items, title wrap/reflow, TXT reader on it).
@@ -134,11 +136,24 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   `SMALL_FONT_ID` left of `wordXpos(0)`, skipped if no margin room. Flash 83.7%.
   Device build clean; host reader_prefs 5/5. NOT device-tested yet.
 
+- **2026-07-24** — Paperback Look ported (commit `be2976d8`). `GfxRenderer` gains a
+  `mutable paperbackLook_` flag + `setPaperbackLook`/`getPaperbackLook`; the smear
+  (re-plot each lit glyph pixel +1 right/+1 down) lives in `renderCharImpl`'s 2-bit and
+  1-bit branches, **BW-guarded** so grayscale passes never thicken. Global defaults
+  `CrossPointSettings::paperbackLookBody/Status` (=1, persisted manually in toJson/
+  fromJson, not in the Settings screen); per-book override in `ReaderPrefs` (**VERSION
+  1→2**, seeded from global). Two reader-menu rows ("Paperback Look" / "Paperback Status
+  Bar") toggle like checkboxes, applied on exit via `applyPaperbackLook` (no re-index,
+  ink weight only; carried across a Reader Settings edit like paragraphNumbering). EPUB
+  reader brackets the BW body render + `renderStatusBar`; TXT/XTC readers bracket their
+  draws with the GLOBAL flags (XTC = images, status bar only). Host test extended (still
+  5, green). Flash 83.7%. NOT device-tested.
+
 ## Next steps
 
 1. **First flashable test build** — bundle everything landed on `crosspoint-rebase`
    (themes→Lector, PXC wallpaper, SD folders, random wallpaper, #9 per-book settings,
-   #10 paragraph numbers) and have Diogo device-test on the X4. Device tests owed:
+   #10 paragraph numbers, Paperback Look) and have Diogo device-test on the X4. Device tests owed:
    per-book settings (change font in one book → only it changes; reset works),
    paragraph numbers (all 3 modes; whole-book continues across chapters; section
    caches rebuild once after the v33 bump).
