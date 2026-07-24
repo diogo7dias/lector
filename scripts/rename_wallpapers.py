@@ -117,31 +117,41 @@ def apply_plan(folder, plan):
     """Rename via a temporary name so case-only changes work on case-insensitive
     filesystems. Returns the pairs that actually completed."""
     done = []
-    for index, (old, new) in enumerate(plan):
-        old_path = os.path.join(folder, old)
-        new_path = os.path.join(folder, new)
-        tmp_path = os.path.join(folder, "~RN%06d.TMP" % index)
-        try:
-            os.rename(old_path, tmp_path)
-            os.rename(tmp_path, new_path)
-        except OSError as err:
-            print("  FAILED %s -> %s: %s" % (old, new, err), file=sys.stderr)
-            if os.path.exists(tmp_path):
-                os.rename(tmp_path, old_path)
-            continue
-        done.append((old, new))
-    return done
-
-
-def write_undo_map(folder, done):
-    path = os.path.join(os.path.dirname(os.path.abspath(folder)), UNDO_FILENAME)
-    exists = os.path.exists(path)
-    with open(path, "a", newline="", encoding="utf-8") as handle:
+    # The undo map is written and flushed as each rename lands, never at the end. A run
+    # over thousands of files takes minutes, and a batch written only on completion would
+    # leave every already-renamed file unrecoverable if the run were interrupted or the
+    # card pulled.
+    map_path = undo_map_path(folder)
+    exists = os.path.exists(map_path)
+    with open(map_path, "a", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         if not exists:
             writer.writerow(["original_name", "new_name"])
-        writer.writerows(done)
-    return path
+            handle.flush()
+        total = len(plan)
+        for index, (old, new) in enumerate(plan):
+            old_path = os.path.join(folder, old)
+            new_path = os.path.join(folder, new)
+            tmp_path = os.path.join(folder, "~RN%06d.TMP" % index)
+            try:
+                os.rename(old_path, tmp_path)
+                os.rename(tmp_path, new_path)
+            except OSError as err:
+                print("  FAILED %s -> %s: %s" % (old, new, err), file=sys.stderr)
+                if os.path.exists(tmp_path):
+                    os.rename(tmp_path, old_path)
+                continue
+            writer.writerow([old, new])
+            handle.flush()
+            os.fsync(handle.fileno())
+            done.append((old, new))
+            if total >= 200 and (index + 1) % 100 == 0:
+                print("  %d / %d" % (index + 1, total), flush=True)
+    return done
+
+
+def undo_map_path(folder):
+    return os.path.join(os.path.dirname(os.path.abspath(folder)), UNDO_FILENAME)
 
 
 def run_undo(folder, map_path, apply_changes):
@@ -213,7 +223,7 @@ def main():
 
     print("\nRenaming...")
     done = apply_plan(folder, plan)
-    map_path = write_undo_map(folder, done) if done else None
+    map_path = undo_map_path(folder) if done else None
     print("Renamed %d of %d." % (len(done), len(plan)))
     if map_path:
         print("Undo map: %s" % map_path)
