@@ -9,13 +9,16 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <string>
+#include <vector>
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
+#include "util/StringUtils.h"
 
 // Internal constants
 namespace {
@@ -26,6 +29,80 @@ constexpr int bookmarkStatusIconWidth = 16;
 constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
 constexpr int bookmarkStatusIconTopCrop = 2;
+
+// Greedy word-wrap of input in the UI_10 font. Line 0 is wrapped to firstLineMaxWidth
+// (leaving room for an inline [NN%] badge), later lines to restMaxWidth. An over-long
+// single word is broken by character; a line that still will not fit is truncated.
+std::vector<std::string> wrapText(const GfxRenderer& renderer, const std::string& input, int firstLineMaxWidth,
+                                  int restMaxWidth) {
+  std::vector<std::string> lines;
+  if (input.empty()) {
+    lines.push_back("");
+    return lines;
+  }
+
+  size_t i = 0;
+  while (i < input.size()) {
+    while (i < input.size() && input[i] == ' ') i++;
+    if (i >= input.size()) break;
+
+    const int maxWidth = lines.empty() ? firstLineMaxWidth : restMaxWidth;
+    std::string line;
+    size_t lineEndPos = i;
+    while (lineEndPos < input.size()) {
+      size_t wordEnd = lineEndPos;
+      while (wordEnd < input.size() && input[wordEnd] != ' ') wordEnd++;
+      const std::string word = input.substr(lineEndPos, wordEnd - lineEndPos);
+      const std::string candidate = line.empty() ? word : (line + " " + word);
+
+      if (renderer.getTextWidth(UI_10_FONT_ID, candidate.c_str()) <= maxWidth) {
+        line = candidate;
+        lineEndPos = wordEnd;
+        while (lineEndPos < input.size() && input[lineEndPos] == ' ') lineEndPos++;
+        continue;
+      }
+
+      if (line.empty()) {
+        size_t fit = 1;
+        while (fit < word.size() && renderer.getTextWidth(UI_10_FONT_ID, word.substr(0, fit + 1).c_str()) <= maxWidth) {
+          fit++;
+        }
+        line = word.substr(0, fit);
+        lineEndPos += fit;
+      }
+      break;
+    }
+
+    if (line.empty()) {
+      line = renderer.truncatedText(UI_10_FONT_ID, input.substr(i).c_str(), maxWidth);
+      lines.push_back(line);
+      break;
+    }
+
+    lines.push_back(line);
+    i = lineEndPos;
+  }
+
+  if (lines.empty()) {
+    lines.push_back(renderer.truncatedText(UI_10_FONT_ID, input.c_str(), firstLineMaxWidth));
+  }
+  return lines;
+}
+
+// Draw a centered "N more above/below" indicator badge. formatKey's value must contain
+// a single "%d".
+void drawMoreIndicator(const GfxRenderer& renderer, int count, StrId formatKey, int centerX, int centerW, int y,
+                       int rowLineHeight) {
+  char buf[64];
+  std::snprintf(buf, sizeof(buf), I18N.get(formatKey), count);
+  const int textW = renderer.getTextWidth(UI_10_FONT_ID, buf);
+  const int badgeW = textW + 24;
+  const int badgeH = rowLineHeight + 6;
+  const int badgeX = centerX + (centerW - badgeW) / 2;
+  renderer.fillRect(badgeX, y, badgeW, badgeH);
+  const int textX = badgeX + (badgeW - textW) / 2;
+  renderer.drawText(UI_10_FONT_ID, textX, y + 3, buf, false);
+}
 
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
   constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
@@ -1037,4 +1114,157 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
     renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
   }
+}
+
+// Home in-progress list. Ported from the lector home's classic layout. Each book's
+// full title + " by INITIALS" wraps across as many lines as it needs; a [NN%] badge
+// with a black background sits inline on line 0 (it flips to a white chip on the
+// selected/inverted row so it stays legible). "N more above/below" indicators show
+// when the list scrolls. Returns the visible index range for the caller's scroll state.
+BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
+                                                 const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                                                 int scrollOffset) const {
+  constexpr int maxRowsCap = 30;
+  const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
+  constexpr int maxVisibleBooks = 8;
+  const int clampedOffset = std::max(0, std::min(scrollOffset, std::max(0, count - 1)));
+  constexpr int rowGap = 4;
+  const int rowLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  constexpr int rowsTopInset = 10;
+  constexpr int rowsBottomInset = 6;
+  const int rowsTopMinY = rect.y + rowsTopInset;
+  const int rowsBottomY = rect.y + rect.height - rowsBottomInset;
+  const int rowsAvailableHeight = rowsBottomY - rowsTopMinY;
+  const int availableRowW = std::max(1, rect.width - BaseMetrics::values.contentSidePadding * 2);
+  constexpr int maxRowW = 520;
+  const int rowW = std::min(availableRowW, maxRowW);
+  const int rowX = rect.x + (rect.width - rowW) / 2;
+  const int contentX = rowX + 10;
+  const int contentW = std::max(1, rowW - 20);
+
+  const int indicatorH = rowLineHeight + 8;
+  const bool reserveIndicators = count > 1;
+  const int effectiveTopY = rowsTopMinY + (reserveIndicators ? indicatorH : 0);
+  const int effectiveBottomY = rowsBottomY - (reserveIndicators ? indicatorH : 0);
+  const int contentHeight = effectiveBottomY - effectiveTopY;
+
+  if (rowsAvailableHeight <= 0 || contentHeight <= 0 || count == 0) {
+    return {0, 0, count};
+  }
+
+  struct BookEntry {
+    int bookIdx;
+    std::vector<std::string> lines;
+    int height;
+    int badgeW;  // 0 = no badge
+    std::string badgeText;
+  };
+  auto measureBook = [&](int idx) -> BookEntry {
+    int badgeW = 0;
+    std::string badgeText;
+    if (recentBooks[idx].progressPercent >= 0) {
+      char pctBuf[8];
+      std::snprintf(pctBuf, sizeof(pctBuf), "[%d%%]", recentBooks[idx].progressPercent);
+      badgeText = pctBuf;
+      badgeW = renderer.getTextWidth(UI_10_FONT_ID, pctBuf) + 8;  // chip padding
+    }
+    const int firstLineW = badgeW > 0 ? std::max(1, contentW - (badgeW + 6)) : contentW;
+    const std::string initials = StringUtils::authorInitials(recentBooks[idx].author);
+    const std::string rowText =
+        initials.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + initials);
+    auto lines = wrapText(renderer, rowText, firstLineW, contentW);
+    const int h = static_cast<int>(lines.size()) * rowLineHeight + 6;
+    return {idx, std::move(lines), h, badgeW, std::move(badgeText)};
+  };
+
+  auto buildVisibleEntries = [&](int startIdx) {
+    std::vector<BookEntry> entries;
+    int accumulated = 0;
+    for (int i = startIdx; i < count && static_cast<int>(entries.size()) < maxVisibleBooks; i++) {
+      auto entry = measureBook(i);
+      const int needed = accumulated + (entries.empty() ? 0 : rowGap) + entry.height;
+      if (needed > contentHeight) break;
+      accumulated = needed;
+      entries.push_back(std::move(entry));
+    }
+    return entries;
+  };
+
+  std::vector<BookEntry> visibleEntries = buildVisibleEntries(clampedOffset);
+
+  // If the selected book is below the visible range, walk back from it so it lands at
+  // the bottom with as many above as fit.
+  if (selectorIndex >= 0 && selectorIndex < count && !visibleEntries.empty()) {
+    const int lastVisibleIdx = visibleEntries.back().bookIdx;
+    if (selectorIndex > lastVisibleIdx) {
+      int totalH = measureBook(selectorIndex).height;
+      int newOffset = selectorIndex;
+      for (int i = selectorIndex - 1; i >= 0; i--) {
+        const int h = measureBook(i).height;
+        if (totalH + rowGap + h > contentHeight) break;
+        totalH += rowGap + h;
+        newOffset = i;
+      }
+      visibleEntries = buildVisibleEntries(newOffset);
+    }
+  }
+
+  if (visibleEntries.empty() && clampedOffset < count) {
+    visibleEntries.push_back(measureBook(clampedOffset));
+  }
+
+  const int firstVisible = visibleEntries.front().bookIdx;
+  const int lastVisible = visibleEntries.back().bookIdx;
+  const bool hasMoreAbove = firstVisible > 0;
+  const bool hasMoreBelow = lastVisible < count - 1;
+
+  int totalVisibleHeight = 0;
+  for (size_t i = 0; i < visibleEntries.size(); i++) {
+    totalVisibleHeight += visibleEntries[i].height;
+    if (i > 0) totalVisibleHeight += rowGap;
+  }
+  int rowY = effectiveTopY;
+  if (totalVisibleHeight < contentHeight) {
+    rowY += (contentHeight - totalVisibleHeight) / 2;
+  }
+
+  if (hasMoreAbove) {
+    drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rowX, rowW, rowsTopMinY, rowLineHeight);
+  }
+
+  for (const auto& entry : visibleEntries) {
+    const bool selected = (selectorIndex == entry.bookIdx);
+    if (selected) {
+      renderer.fillRect(rowX, rowY, rowW, entry.height, true);  // whole row inverted
+    }
+
+    // [NN%] badge on line 0: an inverted chip that flips with row selection so it
+    // stays legible on both grounds (black chip on an unselected row, white on the
+    // selected/inverted row).
+    int firstLineX = contentX;
+    if (entry.badgeW > 0) {
+      const int badgeH = rowLineHeight + 2;
+      const int badgeY = rowY + 3 + (rowLineHeight - badgeH) / 2;
+      renderer.fillRect(contentX, badgeY, entry.badgeW, badgeH, !selected);
+      renderer.drawText(UI_10_FONT_ID, contentX + 4, badgeY + (badgeH - rowLineHeight) / 2, entry.badgeText.c_str(),
+                        selected);
+      firstLineX = contentX + entry.badgeW + 6;
+    }
+
+    int baselineY = rowY + 3;
+    for (size_t li = 0; li < entry.lines.size(); li++) {
+      const int lineX = (li == 0) ? firstLineX : contentX;
+      renderer.drawText(UI_10_FONT_ID, lineX, baselineY, entry.lines[li].c_str(), !selected);
+      baselineY += rowLineHeight;
+    }
+
+    rowY += entry.height + rowGap;
+  }
+
+  if (hasMoreBelow) {
+    drawMoreIndicator(renderer, count - lastVisible - 1, StrId::STR_MORE_BELOW, rowX, rowW, effectiveBottomY + 2,
+                      rowLineHeight);
+  }
+
+  return {firstVisible, lastVisible, count};
 }

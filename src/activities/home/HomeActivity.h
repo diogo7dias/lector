@@ -12,6 +12,12 @@ struct Rect;
 class HomeActivity final : public Activity {
   ButtonNavigator buttonNavigator;
   int selectorIndex = 0;
+  // In-progress list scroll state: scrollOffset is the first index drawList starts
+  // from; firstVisible/lastVisible are the range it actually rendered this frame
+  // (variable row heights), used to keep the selected book on screen.
+  int scrollOffset = 0;
+  int firstVisibleBookIdx = 0;
+  int lastVisibleBookIdx = 0;
   bool hasOpdsServers = false;
   // Home can be entered while Back is still held (e.g. leaving Settings with
   // Back): ignore that stale release until a fresh press is seen here.

@@ -9,6 +9,14 @@
 class GfxRenderer;
 struct RecentBook;
 
+// Which recent-book indices the home list actually rendered this frame (variable
+// row heights + scrolling), so HomeActivity can keep the selected book on screen.
+struct BookListVisibility {
+  int firstVisible;  // index of the first fully-rendered book
+  int lastVisible;   // index of the last fully-rendered book (inclusive)
+  int totalCount;
+};
+
 struct Rect {
   int x;
   int y;
@@ -206,6 +214,13 @@ class BaseTheme {
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
+  // Home in-progress list: each book's full title + author initials wrapped across as
+  // many lines as it needs, with an inline [NN%] black-background badge, the selected
+  // row inverted, and "N more above/below" indicators when the list scrolls. Returns
+  // the visible index range so the caller can keep the selected book on screen.
+  virtual BookListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect,
+                                                const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                                                int scrollOffset) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;

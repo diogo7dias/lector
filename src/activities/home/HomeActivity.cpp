@@ -9,7 +9,6 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
-#include <cstdio>
 #include <cstring>
 #include <vector>
 
@@ -20,7 +19,6 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/StringUtils.h"
 
 int HomeActivity::getMenuItemCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
@@ -58,11 +56,12 @@ void HomeActivity::onEnter() {
 
   hasOpdsServers = OPDS_STORE.hasServers();
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  // Fill the in-progress list area with as many recent books as fit one page (the
-  // list replaced the single cover tile), instead of just the one cover book.
-  const int listRows = std::max(1, metrics.homeCoverTileHeight / metrics.listWithSubtitleRowHeight);
-  loadRecentBooks(listRows);
+  // Load every recent (in-progress) book, up to the store cap; drawList pages them
+  // (with up/down arrows) when there are more than fit the list area at once.
+  loadRecentBooks(RecentBooksStore::MAX_RECENT_BOOKS);
+  scrollOffset = 0;
+  firstVisibleBookIdx = 0;
+  lastVisibleBookIdx = 0;
 
   const auto base = static_cast<int>(recentBooks.size());
   selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
@@ -104,13 +103,25 @@ void HomeActivity::loop() {
     }
   };
 
-  buttonNavigator.onNext([this, menuCount] {
+  const int bookCount = static_cast<int>(recentBooks.size());
+  // Keep the selected book within the list's visible window as it moves. drawList
+  // clamps and reports the true firstVisible each render, so this only nudges.
+  buttonNavigator.onNext([this, menuCount, bookCount] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
+    if (selectorIndex < bookCount) {
+      if (selectorIndex > lastVisibleBookIdx) scrollOffset++;
+      if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
+      scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
+    }
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, menuCount] {
+  buttonNavigator.onPrevious([this, menuCount, bookCount] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
+    if (selectorIndex < bookCount) {
+      if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
+      scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
+    }
     requestUpdate();
   });
 
@@ -137,26 +148,14 @@ void HomeActivity::loop() {
     return;
   }
 
-  // Book-list row touch (mirrors the menu rowTouch below): tap-down selects a book
-  // row, tap activates it (opens the book). The list is loaded to fit one page, so a
-  // touched row maps directly to its book index.
-  if (!recentBooks.empty()) {
-    const int bookRowH = metrics.listWithSubtitleRowHeight;
-    int bookRow = -1;
-    const auto bookTouch = mappedInput.rowTouch(bookRow, metrics.homeTopPadding, bookRowH,
-                                                static_cast<int>(recentBooks.size()), 0, INT32_MAX, bookRowH);
-    if (bookTouch != MappedInputManager::RowTouch::None) {
-      if (bookTouch == MappedInputManager::RowTouch::Down) {
-        if (selectorIndex != bookRow) {
-          selectorIndex = bookRow;
-          requestUpdate();
-        }
-      } else {
-        selectorIndex = bookRow;
-        activateSelection();
-      }
-      return;
-    }
+  // Tap in the book-list area opens the highlighted book. Per-row touch selection is
+  // deliberately not done here: the rows have variable heights (wrapped titles) and
+  // scroll, so mapping a y to an exact book is unreliable — the side buttons move the
+  // selection, and a tap confirms it.
+  if (selectorIndex < bookCount &&
+      mappedInput.wasTapInRect(0, metrics.homeTopPadding, renderer.getScreenWidth(), metrics.homeCoverTileHeight)) {
+    activateSelection();
+    return;
   }
 
   const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
@@ -196,28 +195,17 @@ void HomeActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
 
-  // In-progress books as a list: title, "by INITIALS" subtitle, and an NN% badge on
-  // the right. Replaces the single cover tile — no per-book cover generation, so the
-  // home stays fast. drawList pages if there are more books than fit and inverts the
-  // selected row; a menu selection passes -1 here so no book row is highlighted.
+  // In-progress books as a list: each book's full title + " by INITIALS" wrapped over
+  // as many lines as it needs, with an inline [NN%] black-background badge, and
+  // "N more above/below" indicators when it scrolls. Replaces the single cover tile —
+  // no per-book cover generation, so the home stays fast. A menu selection passes -1
+  // so no book row is highlighted.
   const Rect bookRect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight};
   const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
-  GUI.drawList(
-      renderer, bookRect, static_cast<int>(recentBooks.size()), bookSelected,
-      [this](int i) { return recentBooks[i].title; },
-      [this](int i) {
-        const std::string initials = StringUtils::authorInitials(recentBooks[i].author);
-        return initials.empty() ? std::string() : std::string(tr(STR_BY_PREFIX)) + initials;
-      },
-      nullptr,
-      [this](int i) {
-        const int pct = recentBooks[i].progressPercent;
-        if (pct < 0) return std::string();
-        char buf[8];
-        snprintf(buf, sizeof(buf), "%d%%", pct);
-        return std::string(buf);
-      },
-      true);
+  const BookListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
+  firstVisibleBookIdx = vis.firstVisible;
+  lastVisibleBookIdx = vis.lastVisible;
+  scrollOffset = vis.firstVisible;
 
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
