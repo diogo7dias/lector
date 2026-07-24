@@ -2,7 +2,7 @@
 
 > Living document. Updated every step. This is the source of truth for the
 > lector re-base so work can resume after any context compaction.
-> Last updated: 2026-07-23.
+> Last updated: 2026-07-24.
 
 ## Goal
 
@@ -79,7 +79,7 @@ Legend: [x] done · [~] in progress · [ ] todo
       new `UBUNTU_10/12_FONT_ID`; the language-select list draws through it (new optional `itemFontId`
       param on `BaseTheme::drawList`) so Arabic/Hebrew native names never box. Baked Cozette 10/12
       reg+bold uncompressed (scoped to Cozette only; MIT licence in source/Cozette). No Korean/CJK UI
-      exists in the firmware (31 languages, none CJK). Flash 70.4%→73.1%. Commit `<cozette>`.
+      exists in the firmware (31 languages, none CJK). Flash 70.4%→73.1%. Commit `ff087973`.
 - [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; paragraph-spacing slider;
       "Bionic Reading" name. (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
@@ -221,29 +221,42 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 - **2026-07-24** — Session: first-line indent slider (`66b5e270`), Vollkorn swap (`e1ae6e69`, flash
   83.5%→70.3%), TXT progress % (`8be83e2f`), Grab Quote (`2932a5fb`), Cozette UI font
-  (`<cozette>`, flash →73.1%). Word-spacing deferred (future). Owed device tests: all of the above,
+  (`ff087973`, flash →73.1%). Word-spacing deferred (future). Owed device tests: all of the above,
   esp. Cozette rendering + language-switch font rebind (try Arabic/Hebrew → Ubuntu, Russian → Cozette
   Cyrillic, Vietnamese → Cozette) + the language-picker native names not boxing.
 
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
-**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (140).
-**Latest commits (newest first):** `32a9cff4` touch-removal, `a9266014` button-only home,
-`d00b5c4f` home wrap/badge/scroll+auto-file, `5b795243` home list, `364c49f5` go-to-paragraph,
-`be2976d8` paperback, `fd6bef6d` #10, `094ef02a` #9, plus themes/PXC/folders/wallpaper.
+**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149). Flash 73.1%.
+**Latest commits (newest first):** `ff087973` Cozette UI font, `2932a5fb` grab-quote, `8be83e2f` txt%,
+`e1ae6e69` vollkorn, `66b5e270` first-line-indent, `32a9cff4` touch-removal, `a9266014` button-only home,
+`d00b5c4f` home polish, `5b795243` home list, `364c49f5` go-to-paragraph, `be2976d8` paperback,
+`fd6bef6d` #10, `094ef02a` #9, plus themes/PXC/folders/wallpaper.
 
-1. **First flashable test build + device test on X4** — bundle everything on `crosspoint-rebase`.
-   Owed device checks: per-book settings; paragraph numbers (3 modes; whole-book across chapters;
-   caches rebuild once after v33 bump); paperback look; home in-progress list (wrap, `[NN%]`,
-   scroll arrows with >8 books, finished→/read); button-only nav incl. the 2 rightmost front buttons.
-2. **Small follow-ups:** (a) TXT reader now writes progress % on exit (commit `8be83e2f`) → home badge
-   works for TXT; comics/XTC intentionally still do NOT (per Diogo). (b) KeyboardEntry still holds inert
-   freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding (no touch read) — trim later; (c) home does
-   not filter 100%-finished books (removal handles it when `removeReadBooksFromRecents` fires at End-of-Book).
-3. **Remaining niceties:** status bar v2, margins, "Until Death"
-   sleep screen, skull boot logo, open-random-on-boot, WiFi file browser + OPDS-in-browser,
-   PXC info overlay / PxcViewerActivity.
+**Font pipeline note:** Vollkorn + Cozette were baked in a Python venv at
+`<scratchpad>/vollkorn/.venv` (fonttools + freetype-py). Ruby is absent on the box, so `fontIds.h`
+was written by a Python re-implementation of `build-font-ids.sh`'s SHA256 formula (values are
+content-derived, unique, nonzero — runtime only needs unique keys, so the pre-existing ubuntu-hash
+"drift" is harmless). Source TTFs + licences committed under `builtinFonts/source/{Vollkorn,Cozette}`.
+
+1. **First flashable test build + device test on X4** — bundle everything on `crosspoint-rebase`
+   (Diogo said "can't flash now"; wait for his word before cutting a build). Owed device checks:
+   per-book settings; paragraph numbers (3 modes); paperback look; home in-progress list;
+   button-only nav incl. the 2 rightmost front buttons; **first-line indent slider**; **Vollkorn
+   re-layout + look** (caches rebuild once, section v33→34); **TXT `[NN%]` badge**; **Grab Quote**
+   (menu → pick start word → pick end word → confirm saves to `<book>_QUOTES.txt`; Back cancels/steps
+   back); **Cozette menus + language-switch font rebind** (Arabic/Hebrew → Ubuntu, Russian → Cozette
+   Cyrillic, Vietnamese → Cozette, and the language-picker native names must NOT box).
+2. **Small follow-ups:** (a) TXT writes progress % (`8be83e2f`); comics/XTC intentionally do NOT.
+   (b) KeyboardEntry still holds inert freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding — trim.
+   (c) home does not filter 100%-finished books (removal handles it at End-of-Book). (d) Grab Quote v1 =
+   single-page only; cross-page + quotes-browser + "Saved" toast + long-press trigger = future.
+   (e) NotoSerif source TTFs left in-tree but unused — trim later if desired.
+3. **Remaining niceties:** status bar v2, margins, "Until Death" sleep screen, skull boot logo,
+   open-random-on-boot, WiFi file browser + OPDS-in-browser, PXC info overlay / PxcViewerActivity,
+   PT hyphenation, anti-alias fade off, paragraph-spacing slider, "Bionic Reading" name. No feature
+   requested after Cozette yet — ASK Diogo what is next (or cut the test build).
 
 **HARD CONSTRAINTS still in force:** never change the indexing (use CrossPoint's cache exactly);
 no sleep-wallpaper staging; keep diffs small for upstream merges; NEVER `git add -A` (stage
