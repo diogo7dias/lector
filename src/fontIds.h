@@ -5,8 +5,15 @@
 #define VOLLKORN_14_FONT_ID (-266107326)
 #define VOLLKORN_16_FONT_ID (385416782)
 #define VOLLKORN_18_FONT_ID (2100450296)
-#define UI_10_FONT_ID (22918846)
-#define UI_12_FONT_ID (1635686837)
+// Active UI font ids (menus/lists/hints). Bound at boot + on language change to
+// either the Cozette family (default, most languages) or the Ubuntu family
+// (Arabic/Hebrew fallback). The id VALUES are derived from the Cozette headers.
+#define UI_10_FONT_ID (-2061243555)
+#define UI_12_FONT_ID (1074320014)
+// Permanent Ubuntu ids: always bound to the Ubuntu family regardless of language.
+// Used by the language-select list so Arabic/Hebrew native names never box.
+#define UBUNTU_10_FONT_ID (-350896663)
+#define UBUNTU_12_FONT_ID (-884914451)
 #define SMALL_FONT_ID (674098198)
 
 // Font ID 0 is reserved as the "not found" sentinel.
@@ -17,4 +24,6 @@ static_assert(VOLLKORN_16_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(VOLLKORN_18_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UI_10_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UI_12_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UBUNTU_10_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(UBUNTU_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");

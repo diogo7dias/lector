@@ -26,6 +26,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "UiFont.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
@@ -77,13 +78,44 @@ EpdFontFamily vollkorn18FontFamily(&vollkorn18RegularFont, &vollkorn18BoldFont, 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
-EpdFont ui10RegularFont(&ubuntu_10_regular);
-EpdFont ui10BoldFont(&ubuntu_10_bold);
-EpdFontFamily ui10FontFamily(&ui10RegularFont, &ui10BoldFont);
+// Ubuntu UI family — the FULL-coverage fallback (Latin + Arabic + Hebrew + Vietnamese,
+// baked with the extra script intervals). Bound permanently to UBUNTU_10/12_FONT_ID and
+// used for Arabic/Hebrew UI and for the language-picker native-name list.
+EpdFont ubuntu10RegularFont(&ubuntu_10_regular);
+EpdFont ubuntu10BoldFont(&ubuntu_10_bold);
+EpdFontFamily ubuntu10FontFamily(&ubuntu10RegularFont, &ubuntu10BoldFont);
 
-EpdFont ui12RegularFont(&ubuntu_12_regular);
-EpdFont ui12BoldFont(&ubuntu_12_bold);
-EpdFontFamily ui12FontFamily(&ui12RegularFont, &ui12BoldFont);
+EpdFont ubuntu12RegularFont(&ubuntu_12_regular);
+EpdFont ubuntu12BoldFont(&ubuntu_12_bold);
+EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12BoldFont);
+
+// Cozette UI family — lector's default menu font (Latin + Cyrillic + Vietnamese; no
+// Arabic/Hebrew). Bound to UI_10/12_FONT_ID for every language except Arabic/Hebrew.
+EpdFont cozette10RegularFont(&cozette_10_regular);
+EpdFont cozette10BoldFont(&cozette_10_bold);
+EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10BoldFont);
+
+EpdFont cozette12RegularFont(&cozette_12_regular);
+EpdFont cozette12BoldFont(&cozette_12_bold);
+EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12BoldFont);
+
+// Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
+// family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
+// cmap) uses Cozette. Called at boot and on every in-app language change (declared
+// in UiFont.h so LanguageSelectActivity can rebind after a change).
+static bool uiLanguageNeedsUbuntu() {
+  const Language lang = I18n::getInstance().getLanguage();
+  return lang == Language::AR || lang == Language::HE;
+}
+
+void bindUiFontsForLanguage(GfxRenderer& renderer) {
+  const bool useUbuntu = uiLanguageNeedsUbuntu();
+  // insertFont() ignores an already-registered id, so drop the old binding first.
+  renderer.removeFont(UI_10_FONT_ID);
+  renderer.removeFont(UI_12_FONT_ID);
+  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
+}
 
 // measurement of power button press duration calibration value
 unsigned long t1 = 0;
@@ -222,8 +254,13 @@ void setupDisplayAndFonts(bool seamless = false) {
   renderer.insertFont(VOLLKORN_16_FONT_ID, vollkorn16FontFamily);
   renderer.insertFont(VOLLKORN_18_FONT_ID, vollkorn18FontFamily);
 #endif  // OMIT_FONTS
-  renderer.insertFont(UI_10_FONT_ID, ui10FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, ui12FontFamily);
+  // Permanent Ubuntu ids (full Latin/Arabic/Hebrew/Vietnamese coverage) for the
+  // language-select native-name list and the Arabic/Hebrew UI.
+  renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
+  renderer.insertFont(UBUNTU_12_FONT_ID, ubuntu12FontFamily);
+  // Active UI ids: Cozette by default, Ubuntu for Arabic/Hebrew (honors the persisted
+  // SETTINGS.language already loaded at this point).
+  bindUiFontsForLanguage(renderer);
   renderer.insertFont(SMALL_FONT_ID, smallFontFamily);
 
   // Discover and load SD card fonts

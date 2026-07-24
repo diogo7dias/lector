@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "UiFont.h"
 #include "fontIds.h"
 
 void LanguageSelectActivity::onEnter() {
@@ -69,6 +70,9 @@ void LanguageSelectActivity::handleSelection() {
   {
     RenderLock lock(*this);
     I18N.setLanguage(static_cast<Language>(langIndex));
+    // Rebind the UI font for the new language (Cozette, or Ubuntu for Arabic/Hebrew)
+    // so the menus repaint in the right script without a reboot.
+    bindUiFontsForLanguage(renderer);
   }
 
   SETTINGS.language = langIndex;
@@ -91,12 +95,15 @@ void LanguageSelectActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
   const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  // Native language names span Arabic, Hebrew, Cyrillic and Latin, so the list MUST use
+  // the full-coverage Ubuntu font (UBUNTU_10_FONT_ID) regardless of the active UI font —
+  // otherwise the Arabic/Hebrew names box out when Cozette is active.
   GUI.drawList(
       renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
       [this](int index) { return I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[index])); },
       nullptr, nullptr,
       [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SELECTED) : ""; },
-      true);
+      true, nullptr, UBUNTU_10_FONT_ID);
 
   // Button hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

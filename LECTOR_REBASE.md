@@ -71,6 +71,15 @@ Legend: [x] done · [~] in progress · [ ] todo
       version bump. `FONT_FAMILY` enum collapses to `{ VOLLKORN }`; old saved family indices migrate
       to Vollkorn via the existing clamp. Baked scoped-to-Vollkorn only (4 sizes × 4 styles from the
       OFL variable font, sliced to static Regular/Bold/Italic/BoldItalic). Flash 83.5% → 70.3%. Commit `e1ae6e69`.
+- [x] **Cozette UI font (language-conditional)** — Cozette is now the default menu font (Latin +
+      Cyrillic + Vietnamese, verified in its cmap); Arabic + Hebrew UI fall back to Ubuntu (Cozette
+      lacks those scripts). Active UI ids `UI_10/UI_12_FONT_ID` are REBOUND at boot + on every in-app
+      language change (`removeFont`+`insertFont`; `bindUiFontsForLanguage` in main.cpp, declared in
+      `UiFont.h`, called from `LanguageSelectActivity::handleSelection`). Ubuntu kept permanently under
+      new `UBUNTU_10/12_FONT_ID`; the language-select list draws through it (new optional `itemFontId`
+      param on `BaseTheme::drawList`) so Arabic/Hebrew native names never box. Baked Cozette 10/12
+      reg+bold uncompressed (scoped to Cozette only; MIT licence in source/Cozette). No Korean/CJK UI
+      exists in the firmware (31 languages, none CJK). Flash 70.4%→73.1%. Commit `<cozette>`.
 - [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; paragraph-spacing slider;
       "Bionic Reading" name. (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
@@ -91,7 +100,7 @@ Legend: [x] done · [~] in progress · [ ] todo
       `QuoteSelectActivity` (modeled on `DictionaryWordSelectActivity`, NOT the old in-reader highlight
       mode). Pure helpers in `QuoteText.h` + `GrowthBounds.h` (host-tested, 8 tests). **v1 = single page
       only** (a quote must fit one page); cross-page selection + an on-device quotes browser + a "Saved"
-      toast + a long-press trigger are all future. Commit `<grabquote>`.
+      toast + a long-press trigger are all future. Commit `2932a5fb`.
 - [ ] Reader menu tidy + chapter header (Grab Quote done above).
 - [ ] Margins: uniform toggle + independent top/bottom.
 - [ ] Sleep/boot: "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
@@ -211,8 +220,10 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   device build clean.
 
 - **2026-07-24** — Session: first-line indent slider (`66b5e270`), Vollkorn swap (`e1ae6e69`, flash
-  83.5%→70.3%), TXT progress % (`8be83e2f`), Grab Quote (`<grabquote>`). Word-spacing deferred (future).
-  Next requested = UI font swap (Ubuntu → TBD; keep Arabic/Hebrew/Vietnamese coverage).
+  83.5%→70.3%), TXT progress % (`8be83e2f`), Grab Quote (`2932a5fb`), Cozette UI font
+  (`<cozette>`, flash →73.1%). Word-spacing deferred (future). Owed device tests: all of the above,
+  esp. Cozette rendering + language-switch font rebind (try Arabic/Hebrew → Ubuntu, Russian → Cozette
+  Cyrillic, Vietnamese → Cozette) + the language-picker native names not boxing.
 
 ## Next steps (RESUME HERE after compaction)
 
@@ -230,8 +241,7 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
    works for TXT; comics/XTC intentionally still do NOT (per Diogo). (b) KeyboardEntry still holds inert
    freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding (no touch read) — trim later; (c) home does
    not filter 100%-finished books (removal handles it when `removeReadBooksFromRecents` fires at End-of-Book).
-3. **Remaining niceties:** UI font swap (current UI font = Ubuntu 10/12 + Noto Sans 8 small; must keep
-   Arabic/Hebrew/Vietnamese glyph coverage) [NEXT per Diogo], status bar v2, margins, "Until Death"
+3. **Remaining niceties:** status bar v2, margins, "Until Death"
    sleep screen, skull boot logo, open-random-on-boot, WiFi file browser + OPDS-in-browser,
    PXC info overlay / PxcViewerActivity.
 

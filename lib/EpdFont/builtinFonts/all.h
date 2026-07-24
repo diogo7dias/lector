@@ -17,6 +17,10 @@
 #include <builtinFonts/vollkorn_18_italic.h>
 #include <builtinFonts/vollkorn_18_regular.h>
 #include <builtinFonts/notosans_8_regular.h>
+#include <builtinFonts/cozette_10_bold.h>
+#include <builtinFonts/cozette_10_regular.h>
+#include <builtinFonts/cozette_12_bold.h>
+#include <builtinFonts/cozette_12_regular.h>
 #include <builtinFonts/ubuntu_10_bold.h>
 #include <builtinFonts/ubuntu_10_regular.h>
 #include <builtinFonts/ubuntu_12_bold.h>
