@@ -70,7 +70,7 @@ Legend: [x] done · [~] in progress · [ ] todo
       (new hash values), so existing books re-lay-out once (Vollkorn metrics differ) with no section
       version bump. `FONT_FAMILY` enum collapses to `{ VOLLKORN }`; old saved family indices migrate
       to Vollkorn via the existing clamp. Baked scoped-to-Vollkorn only (4 sizes × 4 styles from the
-      OFL variable font, sliced to static Regular/Bold/Italic/BoldItalic). Flash 83.5% → 70.3%. Commit `<vollkorn>`.
+      OFL variable font, sliced to static Regular/Bold/Italic/BoldItalic). Flash 83.5% → 70.3%. Commit `e1ae6e69`.
 - [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; paragraph-spacing slider;
       "Bionic Reading" name. (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
@@ -215,10 +215,10 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
    Owed device checks: per-book settings; paragraph numbers (3 modes; whole-book across chapters;
    caches rebuild once after v33 bump); paperback look; home in-progress list (wrap, `[NN%]`,
    scroll arrows with >8 books, finished→/read); button-only nav incl. the 2 rightmost front buttons.
-2. **Small follow-ups:** (a) TXT/XTC readers don't write progress % yet (only EPUB) → home badge
-   missing for those; (b) KeyboardEntry still holds inert freeink `InteractionBuffer`/`TouchHoldRouter`
-   scaffolding (no touch read) — trim later; (c) home does not filter 100%-finished books (removal
-   handles it when `removeReadBooksFromRecents` fires at End-of-Book).
+2. **Small follow-ups:** (a) TXT reader now writes progress % on exit (commit `<txtpct>`) → home badge
+   works for TXT; comics/XTC intentionally still do NOT (per Diogo). (b) KeyboardEntry still holds inert
+   freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding (no touch read) — trim later; (c) home does
+   not filter 100%-finished books (removal handles it when `removeReadBooksFromRecents` fires at End-of-Book).
 3. **Remaining niceties:** fonts/typography, status bar v2, Grab Quote, margins, "Until Death"
    sleep screen, skull boot logo, open-random-on-boot, WiFi file browser + OPDS-in-browser,
    PXC info overlay / PxcViewerActivity.

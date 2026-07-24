@@ -52,6 +52,15 @@ void TxtReaderActivity::onExit() {
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
+  // Persist reading progress % to the recents store so the home in-progress list shows a
+  // [NN%] badge for TXT books (EPUB writes this on exit too; comics/XTC intentionally do not).
+  // setProgress skips the SD write when unchanged, so this is cheap on every exit.
+  if (txt && totalPages > 0) {
+    int pct = static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f);
+    if (pct > 100) pct = 100;
+    RECENT_BOOKS.setProgress(txt->getPath(), pct);
+  }
+
   pageOffsets.clear();
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
