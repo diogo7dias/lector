@@ -229,7 +229,7 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149). Flash 73.1%.
-**Latest commits (newest first):** `ff087973` Cozette UI font, `2932a5fb` grab-quote, `8be83e2f` txt%,
+**Latest commits (newest first):** `1ec0f62b` version → "lector.c 0.0.1", `ff087973` Cozette UI font, `2932a5fb` grab-quote, `8be83e2f` txt%,
 `e1ae6e69` vollkorn, `66b5e270` first-line-indent, `32a9cff4` touch-removal, `a9266014` button-only home,
 `d00b5c4f` home polish, `5b795243` home list, `364c49f5` go-to-paragraph, `be2976d8` paperback,
 `fd6bef6d` #10, `094ef02a` #9, plus themes/PXC/folders/wallpaper.
@@ -240,14 +240,21 @@ was written by a Python re-implementation of `build-font-ids.sh`'s SHA256 formul
 content-derived, unique, nonzero — runtime only needs unique keys, so the pre-existing ubuntu-hash
 "drift" is harmless). Source TTFs + licences committed under `builtinFonts/source/{Vollkorn,Cozette}`.
 
-1. **First flashable test build + device test on X4** — bundle everything on `crosspoint-rebase`
-   (Diogo said "can't flash now"; wait for his word before cutting a build). Owed device checks:
-   per-book settings; paragraph numbers (3 modes); paperback look; home in-progress list;
-   button-only nav incl. the 2 rightmost front buttons; **first-line indent slider**; **Vollkorn
-   re-layout + look** (caches rebuild once, section v33→34); **TXT `[NN%]` badge**; **Grab Quote**
-   (menu → pick start word → pick end word → confirm saves to `<book>_QUOTES.txt`; Back cancels/steps
-   back); **Cozette menus + language-switch font rebind** (Arabic/Hebrew → Ubuntu, Russian → Cozette
-   Cyrillic, Vietnamese → Cozette, and the language-picker native names must NOT box).
+1. **PUBLISHED as "lector.c 0.0.1" (2026-07-24, commit `1ec0f62b`) — device test on X4 still OWED.**
+   Diogo named this line lector.c 0.0.1 and chose to **REPLACE Lector A** in the single flasher slot.
+   Built `pio run -e gh_release` (flash 72.5%, boot RAM 15.9%); the space in the version forced
+   single-quoting `-DCROSSPOINT_VERSION` in every release env. Published **MANUALLY** to
+   `lector-xteink-firmware` (this branch took upstream's `release.yml`, which has NO flasher-publish
+   robot — that robot lives only on `origin/main`); site commit `1e7af6b`, Pages rebuilt, live
+   `flash/version.txt` = "lector.c 0.0.1" at https://diogo7dias.github.io/lector-xteink-firmware/#flash.
+   Future lector.c releases: port the publish robot from `origin/main` into this branch, or keep
+   publishing by hand. Owed on-device checks: per-book settings; paragraph numbers (3 modes); paperback
+   look; home in-progress list; button-only nav incl. the 2 rightmost front buttons; **first-line
+   indent slider**; **Vollkorn re-layout + look** (caches rebuild once, section v33→34); **TXT `[NN%]`
+   badge**; **Grab Quote** (menu → pick start word → pick end word → confirm saves to
+   `<book>_QUOTES.txt`; Back cancels/steps back); **Cozette menus + language-switch font rebind**
+   (Arabic/Hebrew → Ubuntu, Russian → Cozette Cyrillic, Vietnamese → Cozette, and the language-picker
+   native names must NOT box).
 2. **Small follow-ups:** (a) TXT writes progress % (`8be83e2f`); comics/XTC intentionally do NOT.
    (b) KeyboardEntry still holds inert freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding — trim.
    (c) home does not filter 100%-finished books (removal handles it at End-of-Book). (d) Grab Quote v1 =
