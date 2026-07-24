@@ -79,6 +79,14 @@ def is_metadata(name):
     return name == ".DS_Store" or name.startswith("._") or name.startswith(".")
 
 
+def slots_for(name):
+    """Directory slots a name occupies: one short entry, plus one long-name entry per 13
+    characters when the name does not already fit classic 8.3 form."""
+    if GOOD_NAME_UPPER.match(name) or GOOD_NAME_LOWER.match(name):
+        return 1
+    return 1 + (len(name) + 12) // 13
+
+
 def wallpapers_in(folder):
     """Wallpaper file names in `folder`, sorted, excluding metadata and subfolders."""
     names = []
@@ -185,7 +193,7 @@ def run_undo(folder, map_path, apply_changes):
     return 0 if len(done) == len(plan) else 1
 
 
-def run_compact(folder, apply_changes):
+def run_compact(folder, apply_changes, strip_metadata=False):
     """Rebuild the folder so its directory holds only live slots.
 
     FAT never shrinks a directory. Renaming long names to short ones only marks the old
@@ -203,11 +211,20 @@ def run_compact(folder, apply_changes):
     entries = sorted(os.listdir(folder))
     subdirs = [e for e in entries if os.path.isdir(os.path.join(folder, e))]
     files = [e for e in entries if not os.path.isdir(os.path.join(folder, e))]
-    live_slots = sum(1 + (len(n) + 12) // 13 for n in files)
+    live_slots = sum(slots_for(n) for n in files)
+
+    junk = [e for e in files if is_metadata(e)]
+    junk_slots = sum(slots_for(n) for n in junk)
 
     print("Folder:     %s" % folder)
-    print("Files:      %d" % len(files))
+    print("Files:      %d  (%d macOS metadata)" % (len(files), len(junk)))
     print("Subfolders: %d" % len(subdirs))
+    if junk:
+        print("macOS writes a hidden '._NAME' companion per file on FAT to hold extended")
+        print("attributes. Lector never reads them and each costs ~%d slot(s); together they are"
+              % (junk_slots // max(len(junk), 1)))
+        print("~%d KB of this directory. Pass --strip-metadata to delete them here."
+              % (junk_slots * 32 // 1024))
     print("Rebuilt directory: ~%d slots (~%d KB)" % (live_slots, live_slots * 32 // 1024))
     print("\nPlan:")
     print("  1. create %s" % staging)
@@ -228,6 +245,15 @@ def run_compact(folder, apply_changes):
     if not apply_changes:
         print("\nDry run. Nothing was changed. Re-run with --apply to compact.")
         return 0
+
+    if strip_metadata and junk:
+        print("\nDeleting %d macOS metadata file(s)..." % len(junk))
+        for name in junk:
+            try:
+                os.remove(os.path.join(folder, name))
+            except OSError as err:
+                print("  FAILED to delete %s: %s" % (name, err), file=sys.stderr)
+        files = [e for e in files if not is_metadata(e)]
 
     print("\nCompacting...")
     os.mkdir(staging)
@@ -266,6 +292,10 @@ def main():
                              "Uppercase is the only form guaranteed to occupy a single directory "
                              "slot on every system; lowercase relies on the FAT lowercase flags, "
                              "which some systems ignore and store a long-name slot instead")
+    parser.add_argument("--strip-metadata", action="store_true",
+                        help="with --compact, also delete the macOS '._NAME' and .DS_Store files. "
+                             "They hold Finder extended attributes the reader never uses, and on a "
+                             "FAT card they double the directory")
     parser.add_argument("--compact", action="store_true",
                         help="rebuild the folder so its directory drops the dead slots left by renaming")
     args = parser.parse_args()
@@ -276,7 +306,7 @@ def main():
         return 2
 
     if args.compact:
-        return run_compact(folder, args.apply)
+        return run_compact(folder, args.apply, args.strip_metadata)
 
     if args.undo:
         return run_undo(folder, os.path.abspath(os.path.expanduser(args.undo)), args.apply)
@@ -290,7 +320,7 @@ def main():
     rng = random.Random(args.seed)
     plan = build_plan(folder, names, length, rng, args.lowercase)
 
-    slots_before = sum(1 + (len(n) + 12) // 13 for n in names)
+    slots_before = sum(slots_for(n) for n in names)
     slots_after = len(names)
 
     print("Folder:      %s" % folder)
