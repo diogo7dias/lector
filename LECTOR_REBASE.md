@@ -59,9 +59,12 @@ Legend: [x] done · [~] in progress · [ ] todo
 - [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
       PT hyphenation; anti-alias fade off; first-line indent;
       word-spacing + paragraph-spacing sliders; "Bionic Reading" name.
-- [x] **Home in-progress list** — recents as a list (title, "by INITIALS", NN% badge)
-      via `drawList`; cover tile + thumbnail generation dropped (faster). Commit `5b795243`.
-- [ ] Home extras: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
+- [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
+      "by INITIALS" + inline `[NN%]` black-bg badge (via ported `BaseTheme::drawRecentBookList`
+      + `wrapText`); "N more above/below" scroll indicators; cap 13; cover tile/thumbnail
+      generation dropped (faster). Finished books auto-leave the list + move to /read
+      (`removeReadBooksFromRecents` + `moveFinishedToReadFolder` now default ON). Commits `5b795243`, `d00b5c4f`.
+- [ ] Home extras: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle, per-row book touch.
 - [ ] Status bar v2 (placeable 6-anchor items, title wrap/reflow, TXT reader on it).
 - [ ] Reader menu tidy + chapter header + **Grab Quote** (`<book>_QUOTES.txt`).
 - [ ] Margins: uniform toggle + independent top/bottom.
