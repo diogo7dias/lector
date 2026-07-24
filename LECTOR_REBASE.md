@@ -56,9 +56,17 @@ Legend: [x] done · [~] in progress · [ ] todo
 - [x] **Go to Paragraph** — reader-menu jump to a paragraph number (gated on numbering on; correct in both modes, whole-book converts via sectionParagraphCounts_). Commit `364c49f5`.
 - [x] **Paperback Look** (heavier-ink double-strike smear) for reader body text + status
       bar; global default ON + per-book toggle. Commit `be2976d8`.
-- [ ] Fonts/typography: Bookerly, Georgia, Verdana, Merriweather (11–16); Cozette UI;
-      PT hyphenation; anti-alias fade off; first-line indent;
-      word-spacing + paragraph-spacing sliders; "Bionic Reading" name.
+- [x] **First-line indent slider** — reader Layout setting (Text Settings + device Settings),
+      per-book + global, 0–8 space-widths (default 3), applied to natural-aligned paragraphs
+      with no CSS text-indent. `SECTION_FILE_VERSION` 33→34; `ReaderPrefs` VERSION 2→3. Commit `<indent>`.
+- [ ] **Word-spacing slider — FUTURE / deferred.** Skipped deliberately: it would spray a fixed
+      addend across ~6 sites in the hottest layout code (line-break DP + justify spacer), a big
+      diff in the exact file we keep matched to upstream, and the payoff is near-zero on justified
+      text (the default) because justification already fills the line. Revisit only if left/ragged
+      alignment becomes common. Threading path is identical to first-line indent if ever done.
+- [ ] Fonts/typography remaining: **Vollkorn swap** (drop Noto Serif/Sans built-ins, Vollkorn the
+      one built-in + default; others as SD fonts) [NEXT]; PT hyphenation; anti-alias fade off;
+      paragraph-spacing slider; "Bionic Reading" name.
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
       "by INITIALS" + inline `[NN%]` black-bg badge (via ported `BaseTheme::drawRecentBookList`
       + `wrapText`); "N more above/below" scroll indicators; cap 13; cover tile/thumbnail

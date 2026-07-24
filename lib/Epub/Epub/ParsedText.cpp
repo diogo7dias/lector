@@ -460,10 +460,12 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
     }
     return 0;
   }
-  if (!extraParagraphSpacing) {
-    return renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * 3;
+  // No explicit CSS text-indent: use the user's First Line Indent setting, measured in
+  // space-widths (0 disables). Independent of paragraph spacing so the slider always bites.
+  if (firstLineIndent == 0) {
+    return 0;
   }
-  return 0;
+  return renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * firstLineIndent;
 }
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,

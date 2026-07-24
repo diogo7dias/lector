@@ -21,4 +21,6 @@ struct ReaderRenderSpec {
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
+  // First-line paragraph indent in space-widths (0 = none). Part of the cache key.
+  uint8_t firstLineIndent = 3;
 };

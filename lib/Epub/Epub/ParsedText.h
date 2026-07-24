@@ -22,6 +22,9 @@ class ParsedText {
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
+  // First-line paragraph indent in space-widths (0 = none). Used only for the default
+  // indent of natural-aligned paragraphs that carry no explicit CSS text-indent.
+  uint8_t firstLineIndent;
   bool isNaturalAlign;
   bool hasRtlWord;
   std::vector<std::string> reorderedWordsScratch;
@@ -50,11 +53,13 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle())
+                      const bool focusReadingEnabled = false, const BlockStyle& blockStyle = BlockStyle(),
+                      const uint8_t firstLineIndent = 3)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
+        firstLineIndent(firstLineIndent),
         isNaturalAlign(false),
         hasRtlWord(false) {}
   ~ParsedText() = default;

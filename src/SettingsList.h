@@ -188,6 +188,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             CrossPointSettings::SCREEN_MARGIN_STEP},
                            "screenMargin", StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndent,
+                           {CrossPointSettings::FIRST_LINE_INDENT_MIN, CrossPointSettings::FIRST_LINE_INDENT_MAX,
+                            CrossPointSettings::FIRST_LINE_INDENT_STEP},
+                           "firstLineIndent", StrId::STR_CAT_READER)
+            .withTextSettings(),
         SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
                           {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                            StrId::STR_BOOK_S_STYLE},
