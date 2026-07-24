@@ -74,7 +74,6 @@ void HomeActivity::onExit() { Activity::onExit(); }
 
 void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
-  const auto& metrics = UITheme::getInstance().getMetrics();
 
   auto activateSelection = [this] {
     if (selectorIndex < recentBooks.size()) {
@@ -125,18 +124,6 @@ void HomeActivity::loop() {
     requestUpdate();
   });
 
-  const auto swipe = mappedInput.wasSwipe();
-  if (swipe == MappedInputManager::SwipeDir::Up) {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount);
-    requestUpdate();
-    return;
-  }
-  if (swipe == MappedInputManager::SwipeDir::Down) {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount);
-    requestUpdate();
-    return;
-  }
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) backPressSeen = true;
 
   // Back is otherwise unused on the home menu: open the most recently read
@@ -145,39 +132,6 @@ void HomeActivity::loop() {
   // release of the Back press that closed the previous activity.
   if (mappedInput.wasReleased(MappedInputManager::Button::Back) && backPressSeen && !recentBooks.empty()) {
     onSelectBook(recentBooks[0].path);
-    return;
-  }
-
-  // Tap in the book-list area opens the highlighted book. Per-row touch selection is
-  // deliberately not done here: the rows have variable heights (wrapped titles) and
-  // scroll, so mapping a y to an exact book is unreliable — the side buttons move the
-  // selection, and a tap confirms it.
-  if (selectorIndex < bookCount &&
-      mappedInput.wasTapInRect(0, metrics.homeTopPadding, renderer.getScreenWidth(), metrics.homeCoverTileHeight)) {
-    activateSelection();
-    return;
-  }
-
-  const int menuTop = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
-  const int renderedMenuSelection =
-      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size();
-  const int renderedMenuCount =
-      menuCount - (metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
-  int menuRow = -1;
-  const auto menuTouch = mappedInput.rowTouch(menuRow, menuTop, metrics.menuRowHeight + metrics.menuSpacing,
-                                              renderedMenuCount, 0, INT32_MAX, metrics.menuRowHeight);
-  if (menuTouch != MappedInputManager::RowTouch::None) {
-    const int touchedIndex =
-        metrics.homeContinueReadingInMenu ? menuRow : menuRow + static_cast<int>(recentBooks.size());
-    if (menuTouch == MappedInputManager::RowTouch::Down) {
-      if (selectorIndex != touchedIndex) {
-        selectorIndex = touchedIndex;
-        requestUpdate();
-      }
-    } else {
-      selectorIndex = touchedIndex;
-      activateSelection();
-    }
     return;
   }
 
