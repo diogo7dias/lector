@@ -2,7 +2,7 @@
 
 > Living document. Updated every step. This is the source of truth for the
 > lector re-base so work can resume after any context compaction.
-> Last updated: 2026-07-24.
+> Last updated: 2026-07-25 (lector.c 0.0.7 live on the flasher site).
 
 ## Goal
 
@@ -49,8 +49,9 @@ and restores upstream features we had dropped.
 Legend: [x] done · [~] in progress · [ ] todo
 
 - [x] **PXC sleep wallpaper** — `.pxc` accepted for the sleep/lock screen (on-demand decode,
-      no staging). Info-overlay (filename/favorite badge) + PXC viewer + unlock-banner reuse
-      to be ported later.
+      no staging). Grayscale on X3 **and** X4 (X4 needed the panel rails powered up before the
+      gray LUT, `a5f33bef`). Unlock banners composite over the wallpaper on wake (`6742f344`).
+      Still to port: info-overlay (filename / favorite badge), PXC viewer, favourites + pause folder.
 - [x] **9 — Per-book reader settings** (each book its own look; global default + override + reset). Commit `094ef02a`.
 - [x] **10 — Paragraph numbers** (per-book in-menu toggle; 3 states: off / per-chapter / whole-book). Commit `fd6bef6d`.
 - [x] **Go to Paragraph** — reader-menu jump to a paragraph number (gated on numbering on; correct in both modes, whole-book converts via sectionParagraphCounts_). Commit `364c49f5`.
@@ -80,8 +81,14 @@ Legend: [x] done · [~] in progress · [ ] todo
       param on `BaseTheme::drawList`) so Arabic/Hebrew native names never box. Baked Cozette 10/12
       reg+bold uncompressed (scoped to Cozette only; MIT licence in source/Cozette). No Korean/CJK UI
       exists in the firmware (31 languages, none CJK). Flash 70.4%→73.1%. Commit `ff087973`.
-- [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; paragraph-spacing slider;
-      "Bionic Reading" name. (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
+- [x] **Granular reader settings** — the whole old-Lector reader data model restored and exposed in the
+      tabbed Text Settings UI: independent + dynamic margins, paragraph spacing as a %, first-line indent
+      Book/Custom%, and a reusable value-bar widget for every numeric row. Commits `b63215ff`, `9bd6e6b9`,
+      `b78f5d19`, `d5a18b17`, `b0a32fc4`, `d0377549`. Live preview honours every layout setting (`09d6ca89`).
+- [x] **Status bar v2** — per-item placement/customisation restored. Commit `6caefbfb`.
+- [x] **Guide dots** — middle dot drawn between words. Commit `71cd7679`.
+- [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; "Bionic Reading" name.
+      (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
       "by INITIALS" + inline `[NN%]` black-bg badge (via ported `BaseTheme::drawRecentBookList`
       + `wrapText`); "N more above/below" scroll indicators; cap 13; cover tile/thumbnail
@@ -92,8 +99,8 @@ Legend: [x] done · [~] in progress · [ ] todo
       gesture code stripped end to end (input manager API, HAL wrappers, every activity, reader
       page-turn zones, keyboard cursor-tap, slider drags, clock touch buttons, option popup,
       settings/theme touch guards, `touchReaderControls` setting). Buttons only. Commit `32a9cff4`.
+- [x] **Opened books filed into /recents** on the way out. Commit `997758e2`.
 - [ ] Home extras remaining: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
-- [ ] Status bar v2 (placeable 6-anchor items, title wrap/reflow, TXT reader on it).
 - [x] **Grab Quote** — reader-menu "Grab Quote" opens a button-only word-range picker on the current
       page (pick start word → pick end word → save). Saves `[chapter]\nquote\n---\n\n` to
       `<book>_QUOTES.txt` next to the book (atomic tmp/bak rotation, 24 KB cap). New standalone
@@ -101,12 +108,17 @@ Legend: [x] done · [~] in progress · [ ] todo
       mode). Pure helpers in `QuoteText.h` + `GrowthBounds.h` (host-tested, 8 tests). **v1 = single page
       only** (a quote must fit one page); cross-page selection + an on-device quotes browser + a "Saved"
       toast + a long-press trigger are all future. Commit `2932a5fb`.
-- [ ] Reader menu tidy + chapter header (Grab Quote done above).
-- [ ] Margins: uniform toggle + independent top/bottom.
+- [x] **Reader menu header** — title / "by author" / chapter / "page/pages | Book %". Commit `edd1c533`.
+- [x] **Margins** — uniform toggle + independent sides, plus dynamic margins. Commit `9bd6e6b9`.
 - [ ] Sleep/boot: "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
 - [ ] UI polish: banner-style popups, throttled font-download progress.
 - [ ] Misc: open-random-book-on-boot.
 - [ ] WiFi file browser + OPDS-in-browser (was on a branch in the old fork).
+- [ ] Wallpaper management: favourites + `/sleep pause` folder + move-by-favourite bulk actions +
+      filename/favorite info overlay + `PxcViewerActivity`. Old-fork sources: `src/sleep/SleepFavoriteMove.h`,
+      `src/util/FavoriteImage.h`, `src/activities/boot_sleep/SleepInfoOverlay.h`.
+- [ ] Book screens: `BookInfoActivity` (per-book detail), Reading Stats, `CleanStorageActivity`
+      (cache/orphan sweeper). All three exist on old `main`, none ported.
 
 **Dropped for good** (upstream has its own, usually better): custom `DisplayRefreshPolicy`,
 sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fixes.
@@ -225,18 +237,80 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   esp. Cozette rendering + language-switch font rebind (try Arabic/Hebrew → Ubuntu, Russian → Cozette
   Cyrillic, Vietnamese → Cozette) + the language-picker native names not boxing.
 
+- **2026-07-24 — released `lector.c 0.0.4`** (`0fb7f514`). The big reader-settings restoration, in
+  batches: data model (`b63215ff`), independent + dynamic margins and debug borders (`9bd6e6b9`),
+  granular paragraph spacing % (`b78f5d19`), first-line indent Book/Custom% (`d5a18b17`), value-bar
+  widget wired to the numeric rows (`b0a32fc4`), per-item status bar v2 (`6caefbfb`), every reader
+  setting exposed in the tabbed Text Settings UI (`d0377549`), guide dots (`71cd7679`), wake/unlock
+  banners with an editable footer (`d3b744a1`), and the **X4 grayscale sleep fix** (`a5f33bef`) — the
+  panel rails must be powered up before the gray LUT is loaded, which retires the earlier 1-bit X4
+  fallback. `pxcGrayscale` is now `true` on both panels and the temporary `[SLP]` markers are gone.
+
+- **2026-07-24 — released `lector.c 0.0.5`** (`997758e2`). Menu chrome lightened, page count labelled,
+  Refresh Frequency gains "Never" (`a3afaef8`); UI bold sweep finished (`6ec99797`) and then the bold UI
+  font cuts dropped for **~410 KB of flash** (`66e2484a`); sleep-wallpaper folder scan yields to the
+  watchdog (`35e4cf60`) and picks by seeking to a random directory slot instead of walking (`0db423eb`);
+  the host-side wallpaper rename script became one command doing all three steps, with incremental map
+  writes, `--compact`, `--lowercase`, and macOS-metadata stripping (`710c9fa1`, `ebef0668`, `bd9c8aa8`,
+  `bd7253e2`); opened books file into `/recents` on the way out (`997758e2`).
+
+- **2026-07-25 — released `lector.c 0.0.6`** (`1fca734e`). Wake banners now show on **every** wake and
+  hold for a beat (`43e6818a`); file browser wraps long names instead of ellipsising (`c05bc02b`); the
+  reader-settings live preview honours every layout setting (`09d6ca89`); a child screen's Back *release*
+  no longer throws the user out of the book (`65244e60` — the press/release split-click class).
+
+- **2026-07-25 — released `lector.c 0.0.7`** (`b216bd31`). Two device-reported bugs:
+  1. **Unlock kept the boot logo instead of the wallpaper** (`6742f344`). 0.0.6's banners were drawn by
+     `BootActivity`, which paints `Logo120`; a wallpaper sleep resolves to `BootResume::Splash`, so the
+     banners landed on the logo. Deep sleep is a chip reset, so the wake cannot know what the panel holds
+     unless it is written down: `CrossPointState::lastSleepWallpaperPath` now records the wallpaper the
+     sleep screen actually rendered, `main.cpp` starts the display **seamless** on that wake, and
+     `BootActivity` re-renders the `.pxc` 1-bit with the banners passed in as an overlay function pointer
+     so wallpaper + banners land in ONE refresh (no white flash). `.pxc` only; other formats still show
+     the logo screen.
+  2. **Per-book font size did not survive reopening a book** (`342cd4e6`). The per-book file was always
+     correct — which is why the settings screen kept showing the right value. `SdCardFontSystem` keeps
+     exactly **one** resident SD font size, chosen from the GLOBAL setting, and `resolveFontId()` returns
+     that resident id whatever size is asked for. Since the id is part of the section cache key, pages
+     built at the book's size were discarded and rebuilt at the global size on every open. New
+     `ensureLoadedFor(family, sizeEnum)` makes a book's own family+size resident before it lays out;
+     unlike `ensureLoaded()` it never clears the global selection on a missing family.
+     **Durable trap: the font LOAD is the authority, not `resolveFontId`.** Built-in Vollkorn was never
+     affected (the SD branch is skipped), so this bug only ever bit SD-card fonts.
+
+- **2026-07-25 — sleep-face ghosting fixed (unreleased).** Device photo: a `.pxc` wallpaper with the
+  Text Settings menu reading through it for the whole lock. Cause: every sleep face paints with a
+  differential waveform (HALF for logo/blank/bitmap, graybase + gray-nudge LUT for the grayscale
+  wallpaper pipeline), and a differential only transitions changed pixels, so the prior screen survives
+  underneath. The "Entering sleep" popup does not clean it either — `drawPopup` ends in a FAST_REFRESH,
+  also differential. Old lector solved this in v0.37.0 with `deepCleanPanel()`; the rebase's lean sleep
+  port never carried it. New `SleepActivity::deepCleanPanel()` (clearScreen + `FULL_REFRESH`) runs once
+  in `renderSleepScreen()` after the popup and before the face switch, so it covers custom / cover /
+  default / blank in one place. Quick-resume returns earlier and is deliberately NOT cleaned — that face
+  must keep the frame it inherits. Costs ~1.5 s and the multi-flash GC waveform upstream avoids for
+  sleep (#2471), but sleep is already committed at that point.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
-**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149). Flash ~77% (0.0.3).
-**Latest commits (newest first):** `4cd9f235` X4 sleep fix (1-bit .pxc), `edd1c533` UI font sizes + reader menu header,
-`1ec0f62b` version → "lector.c 0.0.1", `ff087973` Cozette UI font, `2932a5fb` grab-quote, `8be83e2f` txt%,
-`e1ae6e69` vollkorn, `66b5e270` first-line-indent, `32a9cff4` touch-removal, plus home/paragraph/paperback/#9/#10/themes/PXC.
+**Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
+**Sizes at 0.0.7:** `default` RAM 15.9% / Flash 71.6%; `gh_release` RAM 15.9% / Flash 71.0%
+(`firmware.bin` 4,667,536 bytes).
+**Live on the flasher site: `lector.c 0.0.7`.** Nothing is built-but-unreleased.
 
-**RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without Diogo's
-explicit OK — the site push itself can auto-deploy Pages. Live site = **lector.c 0.0.1**. 0.0.2 was built then
-REVERTED off the site (font/header only). **0.0.3** (font/header + X4 sleep fix + diagnostic `[SLP]` logs) is built
-+ committed to the branch but **NOT released** (Diogo: "dont flash yet").
+**RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without
+Diogo's explicit OK — the site push itself can auto-deploy Pages. Never flash the device without asking.
+
+**Publish path (manual — this branch inherited upstream's `release.yml`, which has no publish robot):**
+1. Bump `[crosspoint] version` in `platformio.ini`, commit, push.
+2. `pio run -e gh_release`; confirm the baked string with
+   `strings .pio/build/gh_release/firmware.bin | grep 'CrossPoint version'`.
+3. In the site clone `~/projects/lector-xteink-firmware`: `cmp` `bootloader.bin` / `partitions.bin`
+   against `flash/firmware/latest/` and leave them alone if identical; copy in the new `firmware.bin`.
+4. Stamp `flash/version.txt`, `flash/manifest-full.json`, `flash/manifest-update.json`; rewrite BOTH
+   "What's new" blocks in `index.html` (the update panel and the standalone whatsnew panel).
+5. `node --test` in the site repo, stage explicit paths only (never `git add -A`), commit, push.
+6. Poll live `flash/version.txt` until it serves the new version; check `content-length` on the binary.
 
 **Font pipeline note:** Vollkorn + Cozette were baked in a Python venv at
 `<scratchpad>/vollkorn/.venv` (fonttools + freetype-py). Ruby is absent on the box, so `fontIds.h`
@@ -244,47 +318,49 @@ was written by a Python re-implementation of `build-font-ids.sh`'s SHA256 formul
 content-derived, unique, nonzero — runtime only needs unique keys, so the pre-existing ubuntu-hash
 "drift" is harmless). Source TTFs + licences committed under `builtinFonts/source/{Vollkorn,Cozette}`.
 
-1. **BUILDS + OWED DEVICE TESTS (nothing past 0.0.1 is released).** lector.c 0.0.1 is live on the site
-   (owed device checks: per-book settings, paragraph numbers 3 modes, paperback, home list, button-only nav
-   incl. the 2 rightmost front buttons, first-line indent, Vollkorn look, TXT `[NN%]`, Grab Quote, Cozette
-   menus + language rebind). **0.0.3 built + on branch, awaiting flash:** (a) UI fonts +2px to match old
-   Lector (SMALL=Cozette10, list/UI_10=Cozette12, header/UI_12=Cozette14; AR/HE=Ubuntu at same sizes; baked
-   `cozette_14` + `ubuntu_14`) and the reader menu header now shows title / "by author" / chapter /
-   "page/pages | Book %"; (b) **X4 `.pxc` sleep FIX** — X4 froze on the "Entering sleep" popup because the
-   OEM 3-pass grayscale sleep stalls in the SDK's unbounded panel-BUSY wait on SSD1677, so X4 now renders
-   `.pxc` sleep 1-bit (X3 keeps grayscale). Test on X4: Sleep → Custom → `.pxc` shows (1-bit dithered), no
-   freeze; if it still freezes, a serial monitor shows the last `[SLP] pxc ...` stage.
-   **Publish path when Diogo OKs a release:** copy `.pio/build/gh_release/firmware.bin` (+ bootloader/partitions
-   if changed) into the local `lector-xteink-firmware` clone `flash/firmware/latest/`, stamp `flash/version.txt`
-   + both manifests, refresh the What's-new panels + version label, push, then
-   `gh api -X POST repos/diogo7dias/lector-xteink-firmware/pages/builds`; poll live `flash/version.txt`.
-2. **Small follow-ups:** (a) TXT writes progress % (`8be83e2f`); comics/XTC intentionally do NOT.
-   (b) KeyboardEntry still holds inert freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding — trim.
-   (c) home does not filter 100%-finished books (removal handles it at End-of-Book). (d) Grab Quote v1 =
-   single-page only; cross-page + quotes-browser + "Saved" toast + long-press trigger = future.
-   (e) NotoSerif source TTFs left in-tree but unused — trim later if desired.
-   (f) **TODO (Diogo asked to keep this): chase REAL X4 grayscale `.pxc` sleep.** X4 currently falls back to
-   1-bit dithered because the SDK's grayscale sleep pipeline stalls on SSD1677 (unbounded BUSY wait). Later:
-   fix the X4 grayscale sleep path (or add a bounded BUSY timeout in the SDK) so X4 gets 4-level gray like X3,
-   then flip `pxcGrayscale` back on for X4 in `SleepActivity::renderCustomSleepScreen`.
-   (g) Remove the temporary `[SLP]` `LOG_INF` stage markers in `PxcSleepRenderer.cpp` once the X4 sleep fix is
-   device-confirmed (they were added to pinpoint the freeze over serial).
-3. **Remaining niceties:** status bar v2, margins, "Until Death" sleep screen, skull boot logo,
-   open-random-on-boot, WiFi file browser + OPDS-in-browser, PXC info overlay / PxcViewerActivity,
-   PT hyphenation, anti-alias fade off, paragraph-spacing slider, "Bionic Reading" name.
-4. **NEXT UP — reader settings (Diogo's pick 2026-07-24; he will choose one after compaction).** Current reader
-   settings: tabs Family / Size / Layout (LineSpacing, ParaSpacing, Alignment, ScreenMargin, FirstLineIndent) /
-   Style (FocusReading=bionic, Hyphenation, EmbeddedStyle, AntiAliasing); reader-menu toggles Paragraph Numbers,
-   Paperback Look/Status. Candidate reader-settings work to offer Diogo:
-   - **(A) Independent top/bottom/side margins** — split the single ScreenMargin into separate controls (niceties
-     list: "margins uniform + independent top/bottom"). Visible, self-contained.
-   - **(B) Reading Themes** — preset reader looks (font + spacing + margin bundles); a DX34 dropped feature
-     ([[project_lector_dx34_dropped_features]]).
-   - **(C) SD reading fonts** — make adding/selecting SD-card reading fonts smooth in the Family tab (Diogo wants
-     more fonts as SD, not baked in firmware).
-   - **(D) Word-spacing slider** — pairs with first-line indent; DEFERRED earlier (big diff in the justify hot
-     core, low payoff on justified text, which is what Diogo uses). Lowest value unless he wants non-justified.
-   - **(E) Bionic/Focus strength** — FocusReading exists as on/off; add an adjustable strength.
+### 1. Owed device tests (nothing here is hardware-verified)
+
+Everything since 0.0.1 was built, host-tested and shipped, but **not** device-tested. Highest value first:
+- **Unreleased:** locking from any screen leaves NO ghost of that screen under the sleep face.
+- **0.0.7:** unlock keeps the `.pxc` wallpaper with banners on top (no logo, no white flash); a book's own
+  font size survives closing and reopening it (SD-card fonts only — the bug never touched Vollkorn).
+- **0.0.4/0.0.5:** X4 grayscale `.pxc` sleep (the rails fix — X4 should now show 4-level gray like X3, not
+  1-bit dither, and must not freeze on "Entering sleep"); the full reader-settings tab set; status bar v2;
+  guide dots; wallpaper pick speed on the 2000-3000 image `/sleep` folder.
+- **Older, still owed:** per-book settings, paragraph numbers (3 modes), paperback look, home list,
+  button-only nav incl. the 2 rightmost front buttons, first-line indent, Vollkorn look, TXT `[NN%]`,
+  Grab Quote, Cozette menus + language rebind (AR/HE → Ubuntu, RU/VI → Cozette).
+- Still owed off-device: run the wallpaper rename script on the **X3** card
+  (`python3 ~/Downloads/rename_wallpapers.py "/Volumes/X3CARD/sleep" --apply`, optionally `--lowercase`).
+
+### 2. Small follow-ups
+
+(a) TXT writes progress % (`8be83e2f`); comics/XTC intentionally do NOT.
+(b) `KeyboardEntryActivity` still holds inert freeink `InteractionBuffer`/`TouchHoldRouter` scaffolding — trim.
+(c) Home does not filter 100%-finished books (removal handles it at End-of-Book).
+(d) Grab Quote v1 = single-page only; cross-page + quotes-browser + "Saved" toast + long-press = future.
+(e) NotoSerif source TTFs left in-tree but unused — trim later if desired.
+(f) `CrossPointState::recentSleepImages` / `pushRecentSleep` / `isRecentSleep` are dead code here (no caller
+    outside the class) — they belong to the dropped recently-shown avoidance. Remove or wire up.
+(g) `readerEditOverlayActive_` can leak if `TextSettingsActivity` is popped by a stack-clearing
+    `Replace`/`goHome` instead of `finish()`. Not on any known path, and `saveToFile()` still protects
+    `settings.json`, but it is a real hole.
+
+### 3. Remaining niceties still to port from old lector
+
+Grouped by theme (see the checklist above for the full list):
+- **Wallpapers:** favourites + `/sleep pause` + move-by-favourite bulk actions, filename/favorite info
+  overlay, `PxcViewerActivity`. Old-fork sources: `src/sleep/SleepFavoriteMove.h`, `src/util/FavoriteImage.h`,
+  `src/activities/boot_sleep/SleepInfoOverlay.h`.
+- **Book screens:** `BookInfoActivity`, Reading Stats, `CleanStorageActivity`.
+- **Home extras:** "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
+- **Sleep/boot:** "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
+- **Networking:** WiFi file browser + OPDS-in-browser (was a branch in the old fork; a full 5-phase plan
+  already exists, including the path-traversal hardening and the PIN gate).
+- **Typography:** PT hyphenation, anti-alias fade off, "Bionic Reading" name, word-spacing slider (deferred).
+- **Misc:** open-random-book-on-boot, banner-style popups, throttled font-download progress.
+- **DX34 leftovers:** Reading Themes, Dark Mode and the rest of the dropped-features survey
+  ([[project_lector_dx34_dropped_features]]).
 
 **HARD CONSTRAINTS still in force:** never change the indexing (use CrossPoint's cache exactly);
 no sleep-wallpaper staging; keep diffs small for upstream merges; NEVER `git add -A` (stage
