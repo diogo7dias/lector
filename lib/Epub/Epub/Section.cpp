@@ -33,7 +33,10 @@ namespace {
 // v37: the render spec gains guideDotsEnabled (draw a middle dot in a widened inter-word gap).
 //      Widening the gap changes line breaks + page fill, and the on-disk TextBlock gains an
 //      optional per-word guideDotXOffset array, so both force a one-time rebuild.
-constexpr uint8_t SECTION_FILE_VERSION = 37;
+// v38: upstream's <ruby>/<rt> support (upstream numbered it v33; our numbering is
+//      already ahead, so it lands here). Every on-disk TextBlock gains a per-word ruby
+//      string, so the format changes on all books and forces a one-time rebuild.
+constexpr uint8_t SECTION_FILE_VERSION = 38;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

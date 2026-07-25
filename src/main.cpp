@@ -429,6 +429,7 @@ void setup() {
   const BootResume resume = isSilentReboot              ? BootResume::Silent
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
+  bool allowFastInitialReaderRefresh = false;
 
   // Unlock over the wallpaper: when this is a normal (non-quick-resume) deep-sleep wake
   // whose sleep screen was a .pxc wallpaper, re-render that wallpaper on the boot screen
@@ -468,8 +469,24 @@ void setup() {
         // (version + resuming book on top, custom footer on the bottom), matching old
         // lector. The banners are the loading face; input stays gated until the reader
         // paints, so this does not change the "no phantom clicks" wake behavior.
+        //
+        // Upstream paints a loading icon here instead. The face is ours; the refresh
+        // path below is upstream's (#2698) and is what stops the X3 flashing on the way
+        // in — only the banner pixels change, so only they are driven.
+        const bool useDifferentialRefresh = gpio.deviceIsX3();
+        if (useDifferentialRefresh) {
+          // begin() clears the X3 controller RAM, so restore the saved frame as
+          // the baseline before drawing the banners over it.
+          renderer.cleanupGrayscaleWithFrameBuffer();
+        }
         drawUnlockBanners(renderer);
-        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        if (useDifferentialRefresh) {
+          renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+          // The panel already holds the page; the reader's first paint can go over it.
+          allowFastInitialReaderRefresh = true;
+        } else {
+          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        }
         bannersPaintedMs = millis();
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
@@ -534,7 +551,7 @@ void setup() {
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
-    activityManager.goToReader(path);
+    activityManager.goToReader(path, allowFastInitialReaderRefresh);
   }
 
   if (resume == BootResume::Silent) {
@@ -648,8 +665,10 @@ void loop() {
   if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
     LOG_DBG("MAIN", "Manual screen refresh triggered");
-    RenderLock lock;
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    if (!activityManager.handleForcedRefresh()) {
+      RenderLock lock;
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    }
   }
 
   // Refresh the battery icon when USB is plugged or unplugged.
