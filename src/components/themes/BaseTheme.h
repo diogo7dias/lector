@@ -79,13 +79,10 @@ struct ThemeMetrics {
   int keyboardTextFieldWidthPercent;
   int keyboardWidthPercent;
 
-  float popupTopOffsetRatio;
   int popupMarginX;
   int popupMarginY;
   int popupFrameThickness;
   int popupCornerRadius;
-  bool popupTextBold;
-  bool popupTextInverted;
   int popupTextBaselineOffsetY;
   int popupProgressBarHeight;
   bool popupProgressDrawOutline;
@@ -158,20 +155,17 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardVerticalOffset = -13,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 94,
-                                 .popupTopOffsetRatio = 0.075f,
                                  .popupMarginX = 15,
                                  .popupMarginY = 15,
                                  .popupFrameThickness = 2,
                                  .popupCornerRadius = 0,
-                                 // Menus and popups render at regular weight; only reader body text is thickened.
-                                 .popupTextBold = false,
-                                 .popupTextInverted = true,
                                  .popupTextBaselineOffsetY = -2,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = false,
                                  .popupProgressClampPercent = false,
-                                 .popupProgressFillInverted = true,
-                                 .popupProgressOutlineInverted = true,
+                                 // White on the strip's black backing.
+                                 .popupProgressFillInverted = false,
+                                 .popupProgressOutlineInverted = false,
                                  .optionPopupItemSpacing = 6,
                                  .optionPopupInnerPadding = 16,
                                  .optionPopupSelectionHPadding = 8,
@@ -243,6 +237,10 @@ class BaseTheme {
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
+  // The one message surface: a full-width black strip below the top padding, with a
+  // white inset border and white centered text. Paints only — the caller picks the
+  // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
+  Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex) const;

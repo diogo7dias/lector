@@ -30,7 +30,8 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   const bool bwPass = renderer.getRenderMode() == GfxRenderer::BW;
 
   const int pad = 10;
-  const int lh12 = renderer.getLineHeight(UI_12_FONT_ID);
+  // Both banners share UI_10: the footer used to sit at UI_12 and read as a heavier,
+  // mismatched line against the version and title rows above it.
   const int lh10 = renderer.getLineHeight(UI_10_FONT_ID);
 
   std::string bookLine;
@@ -59,7 +60,7 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   renderer.fillRect(0, 0, pageWidth, topH + topY, true);  // black backing reaches the physical edge
 
   // --- BOTTOM banner: footer text ---
-  const int botH = lh12 + pad * 2;
+  const int botH = lh10 + pad * 2;
   const int botY = pageHeight - botH;
   renderer.fillRect(0, botY, pageWidth, botH, true);  // black banner, drawn every pass
 
@@ -80,5 +81,5 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   }
 
   const char* footer = SETTINGS.customFooter[0] != '\0' ? SETTINGS.customFooter : "READ UNTIL YOU DIE.";
-  renderer.drawCenteredText(UI_12_FONT_ID, botY + pad, footer, false);
+  renderer.drawCenteredText(UI_10_FONT_ID, botY + pad, footer, false);
 }

@@ -911,35 +911,30 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
   }
 }
 
-Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
+Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int marginX = metrics.popupMarginX;
   const int marginY = metrics.popupMarginY;
   const int frameThickness = metrics.popupFrameThickness;
-  const EpdFontFamily::Style popupFontFamily = metrics.popupTextBold ? EpdFontFamily::REGULAR : EpdFontFamily::REGULAR;
-  // Scale y position proportionally to screen height
-  const int y = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
-  const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, popupFontFamily);
+
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int w = textWidth + marginX * 2;
+  const int w = renderer.getScreenWidth();
   const int h = textHeight + marginY * 2;
-  const int x = (renderer.getScreenWidth() - w) / 2;
+  const int x = 0;
+  // Below the top padding, which is what keeps chrome clear of the X4's physical
+  // top crop. A strip drawn above it loses its first rows on that panel.
+  const int y = metrics.topPadding;
 
-  const bool useRoundedPopup = metrics.popupCornerRadius > 0;
-  if (useRoundedPopup) {
-    renderer.fillRoundedRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2,
-                             metrics.popupCornerRadius + frameThickness, Color::White);
-    renderer.fillRoundedRect(x, y, w, h, metrics.popupCornerRadius, Color::Black);
-  } else {
-    renderer.fillRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2, true);
-    renderer.fillRect(x, y, w, h, false);
-  }
-
-  const int textX = x + (w - textWidth) / 2;
-  const int textY = y + marginY + metrics.popupTextBaselineOffsetY;
-  renderer.drawText(UI_12_FONT_ID, textX, textY, message, metrics.popupTextInverted, popupFontFamily);
-  renderer.displayBuffer();
+  renderer.fillRect(x, y, w, h, true);                               // black backing
+  renderer.drawRect(x, y, w, h, frameThickness, false);              // white inset border
+  const int textY = y + marginY + metrics.popupTextBaselineOffsetY;  // white centered text
+  renderer.drawCenteredText(UI_12_FONT_ID, textY, message, false, EpdFontFamily::REGULAR);
   return Rect{x, y, w, h};
+}
+
+Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
+  const Rect layout = drawBannerStrip(renderer, message);
+  renderer.displayBuffer();
+  return layout;
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
