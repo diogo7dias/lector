@@ -140,14 +140,14 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   renderer.clearScreen();
   renderer.setRenderMode(GfxRenderer::BW);
   if (!decode()) return false;
+  // The overlay draws into the same framebuffer as the wallpaper, before the
+  // refresh, so the two land together (no intermediate wallpaper-only flash).
+  if (overlay != nullptr) overlay(renderer);
   stage("decode BW");
 
   if (!grayscale) {
     // 1-bit fast path: a single refresh of the dithered silhouette, skipping the
     // LSB/MSB planes and the grayscale composite. Refresh mode is caller-selected.
-    // The overlay draws into the same framebuffer first so wallpaper and overlay
-    // land together in one refresh (no intermediate wallpaper-only flash).
-    if (overlay != nullptr) overlay(renderer);
     renderer.displayBuffer(oneBitRefresh);
     stage("displayBuffer 1bit");
     return true;
@@ -166,6 +166,9 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
+  // Re-drawn per plane for the same reason the wallpaper is: a plane pass only
+  // carries the pixels written during that pass.
+  if (overlay != nullptr) overlay(renderer);
   renderer.copyGrayscaleLsbBuffers();
   stage("copyLSB");
 
@@ -175,6 +178,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     renderer.setRenderMode(GfxRenderer::BW);
     return false;
   }
+  if (overlay != nullptr) overlay(renderer);
   renderer.copyGrayscaleMsbBuffers();
   stage("copyMSB");
 

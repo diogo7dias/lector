@@ -36,10 +36,15 @@ inline bool hasPxcExtension(std::string_view fileName) {
 // selects that path's panel refresh (default HALF = clean base); it is ignored on
 // the grayscale path.
 //
-// overlay, when set, is called on the 1-bit path after the wallpaper has been decoded
-// into the framebuffer and before the refresh, so its drawing composites on top of the
-// wallpaper in the same single refresh (the wake banners use this). A plain function
-// pointer, not std::function: no heap, no per-signature code bloat.
+// overlay, when set, is called once per render pass, after the wallpaper has been
+// decoded into the framebuffer and before that pass is committed, so its drawing
+// composites on top of the wallpaper rather than arriving as a second refresh. On the
+// 1-bit path that is one call (the wake banners use this); on the grayscale path it is
+// three — BW base, LSB plane, MSB plane — because a plane pass only carries the pixels
+// written during that pass, exactly like the wallpaper itself. An overlay that should
+// stay solid black-and-white must therefore check GfxRenderer::getRenderMode() and draw
+// its 1-bit parts only in the BW pass (see SleepInfoOverlay). A plain function pointer,
+// not std::function: no heap, no per-signature code bloat.
 //
 // Decode is on demand (no pre-staging): the payload is read once into RAM when it
 // fits, else re-read in small row batches per pass, so it never OOM-bricks at the

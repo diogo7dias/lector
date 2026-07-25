@@ -15,6 +15,7 @@
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
 #include "RecentBooksStore.h"
+#include "SleepInfoOverlay.h"
 #include "StatsDashboardPolicy.h"
 #include "StatsDashboardRenderer.h"
 #include "activities/reader/ReaderUtils.h"
@@ -305,6 +306,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     Bitmap bitmap(file, true);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
+      const SleepInfoOverlayScope overlayScope("/sleep.bmp");
       renderBitmapSleepScreen(bitmap);
       APP_STATE.lastSleepWallpaperPath = "/sleep.bmp";
       file.close();
@@ -323,11 +325,14 @@ void SleepActivity::renderCustomSleepScreen() const {
   // shared one activation with the rail ramp. Fixed at the driver-config level; see
   // src/platform/LectorSsd1677Config.cpp.
   constexpr bool pxcGrayscale = true;
-  if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale)) {
-    LOG_INF("SLP", "Loaded: /sleep.pxc");
-    APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
-    if (dir) dir.close();
-    return;
+  {
+    const SleepInfoOverlayScope overlayScope("/sleep.pxc");
+    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
+      LOG_INF("SLP", "Loaded: /sleep.pxc");
+      APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
+      if (dir) dir.close();
+      return;
+    }
   }
 
   if (dir && dir.isDirectory()) {
@@ -379,8 +384,9 @@ void SleepActivity::renderCustomSleepScreen() const {
       const auto filename = std::string(sleepDir) + "/" + chosen;
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       delay(100);
+      const SleepInfoOverlayScope overlayScope(filename);
       if (hasPxcExtension(chosen)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale)) {
+        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
           APP_STATE.lastSleepWallpaperPath = filename;
           dir.close();
           return;
@@ -499,6 +505,11 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.invertScreen();
   }
 
+  // Drawn after the filter so the label is never inverted along with the image,
+  // and once per pass below for the same reason the bitmap is. No-ops unless a
+  // SleepInfoOverlayScope named a wallpaper, so the cover face draws nothing.
+  drawSleepInfoOverlay(renderer);
+
   if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
     // calibrated against the pixel state the single-pass HALF waveform leaves
@@ -514,12 +525,14 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    drawSleepInfoOverlay(renderer);
     renderer.copyGrayscaleLsbBuffers();
 
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
     renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
+    drawSleepInfoOverlay(renderer);
     renderer.copyGrayscaleMsbBuffers();
 
     renderer.displayGrayBuffer();

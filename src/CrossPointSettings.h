@@ -198,6 +198,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
   uint8_t sleepScreenCoverFilter = NO_FILTER;
+  // Draw the wallpaper's filename in the bottom-left corner of the sleep screen,
+  // with the _F favorite suffix stripped and favorites shown as "[F] name".
+  uint8_t showSleepImageFilename = 0;
+  // Draw a small "F" badge instead, for favorites only. Ignored when
+  // showSleepImageFilename is on, which already marks favorites.
+  uint8_t showSleepFavoriteBadge = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
   uint8_t sbEnabled = 1;                     // master on/off
