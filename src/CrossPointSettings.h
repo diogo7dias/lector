@@ -225,6 +225,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbBookPctPos = SB_ANCHOR_BR;       // book % (B:NN%) anchor
   uint8_t sbChapterPctPos = SB_ANCHOR_OFF;   // chapter % (C:NN%) anchor
   uint8_t sbChapterNumPos = SB_ANCHOR_OFF;   // chapter #/total (Ch N/M) anchor
+  uint8_t sbSessionPagesPos = SB_ANCHOR_OFF;  // pages turned this sitting (S:N) anchor
   uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_OFF;        // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat

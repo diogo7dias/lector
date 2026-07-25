@@ -123,7 +123,8 @@ int UITheme::getStatusBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const bool showText = SETTINGS.sbEnabled &&
                         (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
-                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos);
+                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos ||
+                         SETTINGS.sbSessionPagesPos);
   return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
 }
 
@@ -163,6 +164,7 @@ bool sbBandHasText(bool top, bool hasChapters) {
       {SETTINGS.sbPagePos, false, true},   // page falls back to book pages on chapterless books
       {SETTINGS.sbBookPctPos, false, true},   {SETTINGS.sbChapterPctPos, true, true},
       {SETTINGS.sbChapterNumPos, true, true},
+      {SETTINGS.sbSessionPagesPos, false, true},
   };
   for (const auto& it : items) {
     if (!it.applicable) continue;

@@ -25,6 +25,10 @@ struct StatusBarData {
   int chapterPercent = 0;  // 0..100
   std::string bookTitle;
   std::string chapterTitle;
+  // Pages turned since this book was opened. -1 = not tracked (reading statistics
+  // off, or a reader with no session), which hides the item rather than parking a
+  // permanent 0 on the bar.
+  int sessionPages = -1;
   bool bookmarked = false;
 };
 

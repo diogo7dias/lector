@@ -1007,6 +1007,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   char bookPctBuf[10] = "";
   char chapPctBuf[10] = "";
   char chapNumBuf[24] = "";
+  char sessionBuf[16] = "";
 
   // Battery (icon + optional %)
   {
@@ -1054,6 +1055,12 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   push(SETTINGS.sbChapterPctPos, true, chapPctBuf, renderer.getTextWidth(f, chapPctBuf), false);
   snprintf(chapNumBuf, sizeof(chapNumBuf), "Ch %d/%d", data.chapterNum, data.chapterTotal);
   push(SETTINGS.sbChapterNumPos, true, chapNumBuf, renderer.getTextWidth(f, chapNumBuf), false);
+  // Pages turned this sitting ("S:12"). Hidden when the reader reports no session,
+  // so it never sits at 0 pretending to count.
+  if (data.sessionPages >= 0) {
+    snprintf(sessionBuf, sizeof(sessionBuf), "S:%d", data.sessionPages);
+    push(SETTINGS.sbSessionPagesPos, false, sessionBuf, renderer.getTextWidth(f, sessionBuf), false);
+  }
 
   // --- Reflow: a greedy (truncate-OFF) title bumps overlapping same-band
   // neighbours into the opposite band. Pure + allocation-free (see StatusBar.cpp).

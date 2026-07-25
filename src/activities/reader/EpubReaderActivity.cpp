@@ -2429,6 +2429,9 @@ void EpubReaderActivity::renderStatusBar() const {
     d.chapterNum = tocIndex + 1;
   }
   if (d.chapterTitle.empty()) d.chapterTitle = tr(STR_UNNAMED);
+  // Pages turned this sitting. Left at -1 when statistics tracking is off, which
+  // hides the item instead of showing a 0 that will never move.
+  if (statsTrackingActive) d.sessionPages = static_cast<int>(statsSession.currentSession().pagesTurned);
   d.bookmarked = currentPageBookmarked;
 
   // Auto page turn: show the countdown in the title slot (wherever the title is
