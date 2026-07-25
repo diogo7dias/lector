@@ -26,6 +26,7 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsStore.h"
 #include "reading_stats/SdStatsFiles.h"
+#include "sleep/WallpaperNames.h"
 #include "util/TaskWatchdog.h"
 
 static_assert(CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD == stats_dashboard::kStatsDashboardMode);
@@ -65,10 +66,7 @@ constexpr size_t MAX_DIR_BYTES = 4u * 1024u * 1024u;
 // wallpaper folder is essentially all wallpapers, so this normally resolves in one step.
 constexpr int MAX_FORWARD_SLOTS = 512;
 
-bool isWallpaperName(const char* name) {
-  if (name[0] == '\0' || name[0] == '.') return false;
-  return hasPxcExtension(name) || FsHelpers::hasBmpExtension(name);
-}
+using crosspoint::sleep::isWallpaperName;
 
 // True when at least one live directory entry exists at or after `offset`. Monotone in
 // `offset` (entries are contiguous and terminated by a free slot), which is what makes
