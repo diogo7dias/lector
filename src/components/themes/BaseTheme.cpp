@@ -1217,37 +1217,29 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   const int optionCount = static_cast<int>(options.size());
   const int listHeight = rowHeight * optionCount + itemSpacing * (optionCount - 1);
-  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10,
-                               pageWidth - metrics.optionPopupDialogSideMargin * 2);
+  // Full width, like every other popup surface: one look for the whole firmware.
+  // maxTextWidth still decides nothing about the frame, but it is what tells the
+  // caller's options they will fit.
+  (void)maxTextWidth;
+  const int dialogW = pageWidth;
   const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
   const int dialogH = contentHeight + innerPadding * 2;
-  const int dialogX = (pageWidth - dialogW) / 2;
+  const int dialogX = 0;
   const int dialogY = (pageHeight - dialogH) / 2;
 
   const int frameThickness = metrics.popupFrameThickness;
-  const int frameRadius = metrics.popupCornerRadius;
 
-  if (frameRadius > 0) {
-    renderer.fillRoundedRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
-                             dialogH + frameThickness * 2, frameRadius + frameThickness, Color::White);
-    renderer.fillRoundedRect(dialogX, dialogY, dialogW, dialogH, frameRadius, Color::Black);
-    renderer.fillRoundedRect(dialogX + frameThickness, dialogY + frameThickness, dialogW - frameThickness * 2,
-                             dialogH - frameThickness * 2,
-                             frameRadius - frameThickness > 0 ? frameRadius - frameThickness : 0, Color::White);
-  } else {
-    renderer.fillRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
-                      dialogH + frameThickness * 2, true);
-    renderer.fillRect(dialogX, dialogY, dialogW, dialogH, false);
-  }
+  renderer.fillRect(dialogX, dialogY, dialogW, dialogH, true);                   // black backing
+  renderer.drawRect(dialogX, dialogY, dialogW, dialogH, frameThickness, false);  // white inset border
 
   int y = dialogY + innerPadding;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::REGULAR);
+  renderer.drawCenteredText(UI_12_FONT_ID, y, title, false, EpdFontFamily::REGULAR);
   y += titleLineHeight;
 
   if (metrics.optionPopupTitleSeparator) {
     const int sepY = y + metrics.optionPopupTitleGap / 2;
-    renderer.drawLine(dialogX + innerPadding, sepY, dialogX + dialogW - innerPadding, sepY, true);
+    renderer.drawLine(dialogX + innerPadding, sepY, dialogX + dialogW - innerPadding, sepY, false);
   }
 
   y += metrics.optionPopupTitleGap;
@@ -1261,28 +1253,20 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
 
-    if (metrics.optionPopupDrawAllRows || selected) {
-      Color rowColor;
-      if (selected) {
-        rowColor = metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black;
-      } else {
-        rowColor = Color::White;
-      }
+    // The panel is black, so the selected row is the one that gets painted: a white
+    // chip with black text. Unselected rows are white text straight on the backing.
+    if (selected) {
       if (selectionRadius > 0) {
-        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, rowColor);
+        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, Color::White);
       } else {
-        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
+        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, false);
       }
     }
 
     const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
     const int textY = itemY + (rowHeight - optionLineHeight) / 2;
     const int textX = itemRectX + (itemRectW - textW) / 2;
-    // Unselected items: text is dark (invert=true means draw on white bg).
-    // Selected on dark bg: text must be white (invert=false).
-    // Selected on light bg: text stays dark (invert=true).
-    const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
-    renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
+    renderer.drawText(optionFontId, textX, textY, labelText, selected, optionStyle);
   }
 }
 
