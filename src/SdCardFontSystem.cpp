@@ -62,6 +62,16 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
+  ensureLoadedImpl(renderer, SETTINGS.sdFontFamilyName, fontSizeEnumFromSettings(), /*ownsGlobalSelection=*/true);
+}
+
+void SdCardFontSystem::ensureLoadedFor(GfxRenderer& renderer, const char* familyName, uint8_t fontSizeEnum) {
+  if (fontSizeEnum >= CrossPointSettings::FONT_SIZE_COUNT) fontSizeEnum = 1;  // default to MEDIUM
+  ensureLoadedImpl(renderer, familyName, fontSizeEnum, /*ownsGlobalSelection=*/false);
+}
+
+void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wantedFamily, const uint8_t sizeEnum,
+                                        const bool ownsGlobalSelection) {
   // If the web server (or another task) installed/deleted fonts, re-discover.
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
@@ -72,9 +82,7 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
     registry_.discover();
   }
 
-  const char* wantedFamily = SETTINGS.sdFontFamilyName;
   const std::string& currentFamily = manager_.currentFamilyName();
-  const uint8_t sizeEnum = fontSizeEnumFromSettings();
 
   if (wantedFamily[0] == '\0') {
     if (!currentFamily.empty()) {
@@ -90,10 +98,12 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
   if (familyMatches) {
     const auto* family = registry_.findFamily(wantedFamily);
     if (!family) {
-      LOG_DBG("SDFS", "SD font family disappeared: %s (clearing)", wantedFamily);
+      LOG_DBG("SDFS", "SD font family disappeared: %s", wantedFamily);
       manager_.unloadAll(renderer);
-      SETTINGS.sdFontFamilyName[0] = '\0';
-      SETTINGS.saveToFile();
+      if (ownsGlobalSelection) {
+        SETTINGS.sdFontFamilyName[0] = '\0';
+        SETTINGS.saveToFile();
+      }
       return;
     }
     const auto* selected = family->findClosestReaderSize(sizeEnum);
@@ -113,14 +123,18 @@ void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
       setupUiFallbacks(renderer);
       LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);
     } else {
-      LOG_ERR("SDFS", "Failed to load SD font family: %s (clearing)", wantedFamily);
+      LOG_ERR("SDFS", "Failed to load SD font family: %s", wantedFamily);
+      if (ownsGlobalSelection) {
+        SETTINGS.sdFontFamilyName[0] = '\0';
+        SETTINGS.saveToFile();
+      }
+    }
+  } else {
+    LOG_DBG("SDFS", "SD font family not found: %s", wantedFamily);
+    if (ownsGlobalSelection) {
       SETTINGS.sdFontFamilyName[0] = '\0';
       SETTINGS.saveToFile();
     }
-  } else {
-    LOG_DBG("SDFS", "SD font family not found: %s (clearing)", wantedFamily);
-    SETTINGS.sdFontFamilyName[0] = '\0';
-    SETTINGS.saveToFile();
   }
 }
 
@@ -161,8 +175,13 @@ void SdCardFontSystem::setupUiFallbacks(GfxRenderer& renderer) {
 }
 
 int SdCardFontSystem::resolveFontId(const char* familyName, uint8_t /*fontSizeEnum*/) const {
-  // The manager loads exactly one size (closest to SETTINGS.fontSize), so the
-  // enum is implicit — always return the single loaded font ID for this family.
-  // ensureLoaded() must have been called with the current settings before this.
+  // The manager holds exactly one resident size, so the enum cannot be honoured here —
+  // this returns whatever size the last ensureLoaded()/ensureLoadedFor() made resident.
+  //
+  // That makes the load the authority, not this call. A caller laying out with per-book
+  // ReaderPrefs MUST call ensureLoadedFor(prefs.sdFontFamilyName, prefs.fontSize) first,
+  // or it silently gets the global size: the returned id then disagrees with the prefs it
+  // came from, and since the id is part of the section cache key, the cached pages are
+  // thrown away and rebuilt at the wrong size on every open.
   return manager_.getFontId(familyName);
 }

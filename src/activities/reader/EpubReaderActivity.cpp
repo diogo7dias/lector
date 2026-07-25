@@ -185,6 +185,13 @@ void EpubReaderActivity::onEnter() {
   // Load this book's per-book reader settings (or a snapshot of global) before any
   // layout, so the first render already paginates through the right ReaderPrefs.
   loadReaderPrefs();
+  // Only one SD font size is resident at a time, and the id resolver returns whichever
+  // that is regardless of the size asked for, so a book whose prefs differ from the
+  // global reader selection has to make its own size resident here. Without this the
+  // book laid out at the global size while its prefs (and the settings screen) said
+  // otherwise, and every open rebuilt the section cache against the mismatched id.
+  // No-op when the book's family and size already match what is loaded.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
   // Per-spine paragraph counts for whole-book numbering (sized to the spine; filled
   // from the sidecar if present, else zeros that fill in as the book is read).
   loadParagraphCounts();

@@ -17,10 +17,18 @@ class SdCardFontSystem {
   /// Discover SD card fonts and load user's saved selection. Call once during setup.
   void begin(GfxRenderer& renderer);
 
-  /// Ensure the correct SD font family is loaded for the current settings.
+  /// Ensure the correct SD font family is loaded for the current global settings.
   /// Call before entering the reader or after settings change.
   /// Also re-discovers if the registry has been marked dirty (e.g. by web upload).
   void ensureLoaded(GfxRenderer& renderer);
+
+  /// Per-book variant: make the resident SD font match one book's ReaderPrefs rather
+  /// than the global reader selection. Only one SD size is resident at a time and
+  /// resolveFontId() returns whichever that is, so a book with a per-book font family
+  /// or size must call this before it lays out, or it silently gets the global one.
+  /// Unlike ensureLoaded(), a missing family here never clears the global selection —
+  /// the book simply falls back to the built-in font.
+  void ensureLoadedFor(GfxRenderer& renderer, const char* familyName, uint8_t fontSizeEnum);
 
   /// Resolve an SD card font ID from family name + fontSize enum.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
@@ -52,6 +60,12 @@ class SdCardFontSystem {
   // No-op when no SD family is loaded. Safe to call repeatedly (sizes already
   // loaded are reused).
   void setupUiFallbacks(GfxRenderer& renderer);
+
+  // Shared body of ensureLoaded()/ensureLoadedFor(). ownsGlobalSelection tells it
+  // whether wantedFamily IS the global selection, and so whether a family that has
+  // gone missing should clear SETTINGS.sdFontFamilyName. A book's own family must
+  // never do that.
+  void ensureLoadedImpl(GfxRenderer& renderer, const char* wantedFamily, uint8_t sizeEnum, bool ownsGlobalSelection);
 
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;
