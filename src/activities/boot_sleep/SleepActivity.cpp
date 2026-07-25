@@ -153,13 +153,23 @@ void SleepActivity::renderSleepScreen() const {
     return renderLastScreenSleepScreen();
   }
 
-  // Show popup with reader orientation only when going to sleep from reader
-  if (APP_STATE.lastSleepFromReader) {
-    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-  } else {
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  // The "Entering sleep" popup is a progress note for a lock that takes a moment.
+  // A wallpaper lock does not need it: deepCleanPanel is about to blank the screen
+  // anyway, so the popup is one extra differential paint the user sees for an
+  // instant and then loses. The old fork skipped it on this path for the same
+  // reason (its directWallpaperLock).
+  const bool paintsWallpaper = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
+                               (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM &&
+                                !APP_STATE.lastSleepFromReader);
+  if (!paintsWallpaper) {
+    // Show popup with reader orientation only when going to sleep from reader
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    } else {
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    }
   }
 
   deepCleanPanel();
@@ -442,14 +452,29 @@ void SleepActivity::renderCustomSleepScreen() const {
 // does not provide the clean either — it ends in a FAST_REFRESH, which is also
 // differential.
 //
-// One blank FULL pass fixes it. FULL selects the multi-flash GC waveform that
-// upstream deliberately avoids for sleep (#2471's blinking complaint), and it
-// costs roughly 1.5 s, but at this point sleep is already committed: there is no
-// page turn to delay and the flashing is hidden behind the lock.
+// One blank FULL pass is not enough on a panel that has been used. Device test
+// 2026-07-25: locking to a wallpaper straight after a cold boot is perfectly
+// clean, while locking after normal use ghosts faintly — so the blank itself and
+// the driver are fine, and what defeats it is accumulated charge. The old fork
+// never let that build up: DisplayRefreshPolicy promoted every 13th consecutive
+// FAST to a cleaning refresh. The re-base dropped that policy on purpose, and it
+// stays dropped, because capping it would put a flash back into reading and the
+// Refresh Frequency setting offers "Never" precisely to avoid that.
+//
+// So the panel is cleaned here instead, where nothing is waiting: drive it to
+// black, then to white, each with the multi-flash GC waveform. The black pass is
+// what does the work — pushing every pixel to the opposite extreme releases the
+// charge a white-only pass leaves sitting in pixels that were already white.
+//
+// FULL is the waveform upstream deliberately avoids for sleep (#2471's blinking
+// complaint); two of them cost roughly 3 s. At this point sleep is committed:
+// there is no page turn to delay and the flashing is hidden behind the lock.
 //
 // Not called for the quick-resume face, which must keep the frame it inherits.
 void SleepActivity::deepCleanPanel() const {
-  renderer.clearScreen();
+  renderer.clearScreen(0x00);  // every pixel black
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  renderer.clearScreen();  // back to white (0xFF)
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
