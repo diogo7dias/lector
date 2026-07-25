@@ -2,7 +2,7 @@
 
 > Living document. Updated every step. This is the source of truth for the
 > lector re-base so work can resume after any context compaction.
-> Last updated: 2026-07-25 (lector.c 0.1.0 live on the flasher site).
+> Last updated: 2026-07-25 (lector.c 0.2.0 live on the flasher site).
 
 ## Goal
 
@@ -423,8 +423,19 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.1.0:** `default` RAM 16.0% / Flash 73.2%; `gh_release` `firmware.bin` 4,766,400 bytes.
-**Live on the flasher site: `lector.c 0.1.0`** (published 2026-07-25, firmware.bin 4,766,400 bytes; bootloader/partitions/boot_app0 byte-identical to 0.0.10 and left in place). Nothing is built-but-unreleased.
+**Sizes at 0.2.0:** `default` RAM 16.0% / Flash 73.3%; `gh_release` `firmware.bin` 4,777,536 bytes.
+**Live on the flasher site: `lector.c 0.2.0`** (published 2026-07-25, firmware.bin 4,777,536 bytes; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased.
+
+**0.2.0 = the first upstream merge on this branch.** `git merge upstream/develop` brought nine commits
+(upstream 1.5.0) and moved the `freeink-sdk` pointer to `ae68356`. Eight conflicts; the settlements are
+recorded in the merge commit message, and the rule that decided every one of them was: OUR feature stays,
+THEIR mechanism is folded around it. Notably `main.cpp` quick resume keeps our wake banners as the loading
+face but paints them through upstream's X3 differential path (#2698), and `EpubReaderActivity` takes their
+`manualRefreshPending` while still reading `textAntiAliasing` from the book's own prefs.
+Plus our own fix: paragraph numbering skips h1-h6 blocks and blocks with no letter or digit
+(`ParsedText::hasLetters`, `ChapterHtmlSlimParser::currentBlockIsHeading_`).
+`SECTION_FILE_VERSION` 37 -> 39 (38 = ruby, 39 = paragraph ordinals): each chapter re-lays out on first
+open. NOT host-tested — this branch has no ParsedText test harness; device test owed.
 
 **0.1.0 contents:** Portuguese hyphenation; text anti-aliasing default off (no grey fade per turn);
 Reading Themes (`ReaderPresetStore`, 8 named slots, JSON named keys never a `ReaderPrefs` blob);
