@@ -87,7 +87,7 @@ Legend: [x] done · [~] in progress · [ ] todo
       `b78f5d19`, `d5a18b17`, `b0a32fc4`, `d0377549`. Live preview honours every layout setting (`09d6ca89`).
 - [x] **Status bar v2** — per-item placement/customisation restored. Commit `6caefbfb`.
 - [x] **Guide dots** — middle dot drawn between words. Commit `71cd7679`.
-- [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off; "Bionic Reading" name.
+- [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off. ("Bionic Reading" name is DONE.)
       (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
       "by INITIALS" + inline `[NN%]` black-bg badge (via ported `BaseTheme::drawRecentBookList`
@@ -111,15 +111,14 @@ Legend: [x] done · [~] in progress · [ ] todo
       toast + a long-press trigger are all future. Commit `2932a5fb`.
 - [x] **Reader menu header** — title / "by author" / chapter / "page/pages | Book %". Commit `edd1c533`.
 - [x] **Margins** — uniform toggle + independent sides, plus dynamic margins. Commit `9bd6e6b9`.
-- [ ] Sleep faces: the rebase has 8, the old fork 13. Missing: `UNTIL_DEATH` (random logo),
-      `RANDOM_LOGO_CUSTOM`, `STATS_DASHBOARD_PLUS`, `FREEZE` (+ `sleepFrameColor`), `QUOTES`.
-- [ ] Boot: skull-crest logo (5 img) + segmented loader; open-random-book-on-boot
-      (old `SETTINGS.openRandomRecentOnBoot`, `main.cpp:586`).
-- [ ] Reader menu: Steal Look (`src/activities/reader/StealLookActivity.*`) and View Quotes
-      (`src/activities/reader/QuotesViewerActivity.*`). QR share is NOT missing — it is already here.
+- [ ] Sleep faces: the rebase has 9, the old fork 13. Missing: `UNTIL_DEATH` (random logo),
+      `RANDOM_LOGO_CUSTOM`, `STATS_DASHBOARD_PLUS`, `QUOTES`. FREEZE is DONE.
+- [ ] Boot: skull-crest logo (5 img) + segmented loader. Open-random-book-on-boot is DONE.
+- [x] Reader menu: Steal Look and View Quotes — DONE. QR share was never missing.
 - [ ] UI polish: throttled font-download progress. (Banner-style popups are done — every popup is now
       one full-width black strip, `BaseTheme::drawBannerStrip`.)
-- [ ] WiFi file browser + OPDS-in-browser (was on a branch in the old fork).
+- [ ] WiFi file browser (old fork branch, 5-phase plan). OPDS-in-the-web-page is CUT (Diogo,
+      2026-07-25) — the web pages were restyled black and white instead.
 - [x] Wallpaper management: favourites + `/sleep pause` + bulk move-by-favourite + info overlay +
       `PxcViewerActivity` + reader-menu Delete + BMP-viewer triage + Sleep Image Quality.
 - [x] **Clean Up Storage** — Settings action that removes only the cache directories whose book is gone,
@@ -521,6 +520,32 @@ Seven commits, all built (`pio run -e default` green, Flash 72.7%) and host-test
 Shipped as **lector.c 0.0.9** (2026-07-25). Device test owed on all of it. Cover/coverflow home layout was considered and **dropped on purpose**
 (Diogo, 2026-07-25): thumbnail generation is what made the old home slow, and the list already
 carries title + `[NN%]`.
+
+### 2c. Session 2026-07-25 (part two): OPDS, sleep ghost, five ports
+
+- **Sleep wallpaper ghosting FIXED** (`ba41d8c7`). Device test isolated it: locking after a cold boot
+  is clean, locking after use ghosts — so the blank and the driver are fine, and accumulated charge is
+  the cause. The old fork bounded it with `DisplayRefreshPolicy` (every 13th consecutive FAST promoted
+  to a clean refresh); that policy stays dropped, because capping FAST puts a flash back into reading
+  and Refresh Frequency's "Never" exists to prevent exactly that. `deepCleanPanel` now drives the panel
+  to black and back to white, two FULL passes. The black pass does the work. Also stops painting the
+  "Entering sleep" popup when the lock goes straight to a wallpaper (the old fork's directWallpaperLock).
+- **Built-in OPDS server** (`8b8c21f7`): `OpdsServerStore::seedBuiltInServers()` adds the shipped entry
+  once, guarded by `builtins_seeded` in opds.json — a deleted server stays deleted. NAME AND URL ONLY.
+  **Never compile credentials in**: this firmware is published as a public binary. The full `https://`
+  scheme is spelled out because `UrlUtils::ensureProtocol` defaults a bare host to `http://`, which is
+  what made adding it by hand fail against an HTTPS-only port.
+- **Open Random Book on Boot** (`bf471325`), **Bionic Reading** name (`ef373d5b`), **Freeze sleep face**
+  (`36ab41fe`, appended as mode 8 + `sleepFrameColor`; also joins `isQuickResumeSleep` or it wakes to
+  Home), **Steal Look** (`6f016d1f`, one-time snapshot; orientation deliberately NOT copied since it is
+  a device setting here), **View Quotes** (`d2be59c3`, `drawWrappedList`, delete via ConfirmationActivity).
+- **Web pages strictly black and white** (`a310924b`): all four under `src/network/html/` (NOT
+  `data/html/`, which does not exist here). Verified in headless Chromium against a mocked device API.
+- `[NN%]` chip spacing evened for real: `getTextWidth` returns an INK box whose left edge is clamped to
+  the pen, so the opening bracket's side bearing is inside the width while the right edge stops on the
+  last lit pixel. The trailing blank is 0, not the advance's leftover.
+
+All of the above is DEVICE-TEST GATED and unreleased; the site still serves 0.0.9.
 
 ### 3. Remaining niceties still to port from old lector
 
