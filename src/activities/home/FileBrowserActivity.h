@@ -41,11 +41,34 @@ class FileBrowserActivity final : public Activity {
   std::vector<std::string> files;
   std::unique_ptr<char[]> fileNameBuffer;
 
+  // In-folder search. `files` always holds the whole folder; when a search is running,
+  // `filtered` holds the ranked subset of indices into it and the list draws through
+  // that. The search rows are synthetic list rows above the entries, so the search is
+  // reachable with the same two buttons as everything else.
+  std::string searchQuery;
+  std::vector<int> filtered;
+  // Whether this folder holds anything to search. An all-folders folder gets no row.
+  bool folderHasEntries = false;
+
+  enum class RowKind { Search, ClearSearch, Entry };
+  bool searchActive() const { return !searchQuery.empty(); }
+  int headerRowCount() const;
+  int entryRowCount() const;
+  int totalRowCount() const;
+  RowKind rowKindAt(int row) const;
+  // Index into `files` for an Entry row; -1 for the synthetic rows.
+  int fileIndexAt(int row) const;
+  std::string rowTitle(int row) const;
+  std::string rowValue(int row) const;
+  void openSearchEntry();
+  void applySearch(const std::string& query);
+  void clearSearch();
+
   // Data loading
   void loadFiles();
   // Re-orders the files (never the folders) when the browser order setting is Random.
   void shuffleFilesIfRandomOrder();
-  size_t findEntry(const std::string& name) const;
+  size_t findEntryRow(const std::string& name) const;
 
  public:
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",

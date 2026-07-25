@@ -13,7 +13,9 @@
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
+#include "activities/home/LibrarySearch.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -25,6 +27,10 @@ namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
 }  // namespace
+
+// Defined below, next to the other list-label helpers.
+std::string getFileName(std::string filename);
+std::string getFileExtension(const std::string& filename);
 
 void FileBrowserActivity::loadFiles() {
   // Armed here rather than at each of the seven call sites, so every path into a
@@ -85,6 +91,79 @@ void FileBrowserActivity::loadFiles() {
   root.close();
   FsHelpers::sortFileList(files);
   shuffleFilesIfRandomOrder();
+
+  // A new folder is a new search scope, so any running search ends here rather than
+  // silently filtering a listing the user never searched.
+  searchQuery.clear();
+  filtered.clear();
+  folderHasEntries = !files.empty();
+}
+
+int FileBrowserActivity::headerRowCount() const {
+  if (mode != Mode::Books || !folderHasEntries) return 0;  // the firmware picker stays a plain list
+  return searchActive() ? 2 : 1;
+}
+
+int FileBrowserActivity::entryRowCount() const {
+  return static_cast<int>(searchActive() ? filtered.size() : files.size());
+}
+
+int FileBrowserActivity::totalRowCount() const { return headerRowCount() + entryRowCount(); }
+
+FileBrowserActivity::RowKind FileBrowserActivity::rowKindAt(const int row) const {
+  if (row >= headerRowCount()) return RowKind::Entry;
+  return row == 0 ? RowKind::Search : RowKind::ClearSearch;
+}
+
+int FileBrowserActivity::fileIndexAt(const int row) const {
+  const int entryRow = row - headerRowCount();
+  if (entryRow < 0 || entryRow >= entryRowCount()) return -1;
+  return searchActive() ? filtered[static_cast<size_t>(entryRow)] : entryRow;
+}
+
+std::string FileBrowserActivity::rowTitle(const int row) const {
+  switch (rowKindAt(row)) {
+    case RowKind::Search:
+      return searchActive() ? std::string(tr(STR_EDIT_SEARCH)) + " " + searchQuery
+                            : std::string(tr(STR_SEARCH_CURRENT_FOLDER));
+    case RowKind::ClearSearch:
+      return tr(STR_CLEAR_SEARCH);
+    case RowKind::Entry:
+      break;
+  }
+  const int index = fileIndexAt(row);
+  return index < 0 ? std::string() : getFileName(files[static_cast<size_t>(index)]);
+}
+
+std::string FileBrowserActivity::rowValue(const int row) const {
+  if (rowKindAt(row) != RowKind::Entry) return {};
+  const int index = fileIndexAt(row);
+  return index < 0 ? std::string() : getFileExtension(files[static_cast<size_t>(index)]);
+}
+
+void FileBrowserActivity::applySearch(const std::string& query) {
+  searchQuery = query;
+  filtered = searchActive() ? librarysearch::rankMatches(files, searchQuery) : std::vector<int>{};
+  // Land on the first result, which is the whole point of having searched.
+  selectorIndex = static_cast<size_t>(std::min(headerRowCount(), std::max(0, totalRowCount() - 1)));
+  scrollOffset = 0;
+  requestUpdate(true);
+}
+
+void FileBrowserActivity::clearSearch() { applySearch(std::string()); }
+
+void FileBrowserActivity::openSearchEntry() {
+  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput,
+                                                                 std::string(tr(STR_SEARCH_CURRENT_FOLDER)),
+                                                                 searchQuery, 64, InputType::Text),
+                         [this](const ActivityResult& res) {
+                           if (res.isCancelled) {
+                             requestUpdate(true);
+                             return;
+                           }
+                           const auto* kr = std::get_if<KeyboardResult>(&res.data);
+                           applySearch(kr ? kr->text : std::string());
+                         });
 }
 
 void FileBrowserActivity::shuffleFilesIfRandomOrder() {
@@ -133,7 +212,7 @@ void FileBrowserActivity::onEnter() {
 
     const auto pos = oldPath.find_last_of('/');
     const std::string fileName = oldPath.substr(pos + 1);
-    selectorIndex = findEntry(fileName);
+    selectorIndex = findEntryRow(fileName);
   } else {
     loadFiles();
   }
@@ -254,9 +333,20 @@ void FileBrowserActivity::loop() {
       lockNextConfirmRelease = false;
       return;
     }
-    if (files.empty()) return;
 
-    const std::string& entry = files[selectorIndex];
+    const int row = static_cast<int>(selectorIndex);
+    if (rowKindAt(row) == RowKind::Search) {
+      openSearchEntry();
+      return;
+    }
+    if (rowKindAt(row) == RowKind::ClearSearch) {
+      clearSearch();
+      return;
+    }
+
+    const int fileIndex = fileIndexAt(row);
+    if (fileIndex < 0) return;
+    const std::string& entry = files[static_cast<size_t>(fileIndex)];
     bool isDirectory = (entry.back() == '/');
 
     // Firmware picker: select file -> return path; navigate into directories normally.
@@ -287,11 +377,12 @@ void FileBrowserActivity::loop() {
           if (removeDirFile(fullPath)) {
             LOG_DBG("FileBrowser", "Deleted successfully");
             loadFiles();
-            if (files.empty()) {
+            const int rows = totalRowCount();
+            if (rows == 0) {
               selectorIndex = 0;
-            } else if (selectorIndex >= files.size()) {
+            } else if (selectorIndex >= static_cast<size_t>(rows)) {
               // Move selection to the new "last" item
-              selectorIndex = files.size() - 1;
+              selectorIndex = static_cast<size_t>(rows - 1);
             }
 
             requestUpdate(true);
@@ -340,7 +431,7 @@ void FileBrowserActivity::loop() {
 
         const auto pos = oldPath.find_last_of('/');
         const std::string dirName = oldPath.substr(pos + 1) + "/";
-        selectorIndex = findEntry(dirName);
+        selectorIndex = findEntryRow(dirName);
 
         requestUpdate();
       } else if (mode == Mode::PickFirmware) {
@@ -355,7 +446,7 @@ void FileBrowserActivity::loop() {
     }
   }
 
-  int listSize = static_cast<int>(files.size());
+  const int listSize = totalRowCount();
 
   // Keep the selection inside the drawn window. Moving past the bottom nudges the offset by
   // one and lets the draw settle the rest; jumping above the top snaps the offset to the
@@ -439,7 +530,7 @@ void FileBrowserActivity::render(RenderLock&&) {
   const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
-  if (files.empty()) {
+  if (totalRowCount() == 0) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
@@ -447,12 +538,17 @@ void FileBrowserActivity::render(RenderLock&&) {
     // with an ellipsis. Rows therefore vary in height, so the visible range comes back from
     // the draw and feeds the scroll offset.
     const ListVisibility vis = GUI.drawWrappedList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(files.size()),
-        static_cast<int>(selectorIndex), scrollOffset, [this](int index) { return getFileName(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); });
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalRowCount(), static_cast<int>(selectorIndex),
+        scrollOffset, [this](int row) { return rowTitle(row); }, [this](int row) { return rowValue(row); });
     firstVisibleIdx = vis.firstVisible;
     lastVisibleIdx = vis.lastVisible;
     scrollOffset = vis.firstVisible;
+    // A search that matched nothing still shows its two rows, so say so rather than
+    // leaving the user staring at an empty list wondering if the search ran.
+    if (searchActive() && filtered.empty()) {
+      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + contentHeight / 2,
+                        tr(STR_NO_FILES_FOUND));
+    }
   }
 
   // Full path display
@@ -486,17 +582,26 @@ void FileBrowserActivity::render(RenderLock&&) {
   const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && files[selectorIndex].back() != '/';
-  const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
-                                            files.empty() ? "" : tr(STR_DIR_DOWN));
+  const int selectedRow = static_cast<int>(selectorIndex);
+  const int selectedFile = fileIndexAt(selectedRow);
+  const bool selectingFirmwareFile =
+      mode == Mode::PickFirmware && selectedFile >= 0 && files[static_cast<size_t>(selectedFile)].back() != '/';
+  const bool listEmpty = totalRowCount() == 0;
+  const char* confirmLabel =
+      listEmpty ? ""
+                : (rowKindAt(selectedRow) != RowKind::Entry ? tr(STR_SELECT)
+                                                            : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN)));
+  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
+                                            listEmpty ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
 }
 
-size_t FileBrowserActivity::findEntry(const std::string& name) const {
+size_t FileBrowserActivity::findEntryRow(const std::string& name) const {
+  // Returns a LIST ROW, not an index into `files`: the search rows sit above the
+  // entries, so the two only coincide in a folder that has no rows above.
   for (size_t i = 0; i < files.size(); i++)
-    if (files[i] == name) return i;
+    if (files[i] == name) return static_cast<size_t>(headerRowCount()) + i;
   return 0;
 }
