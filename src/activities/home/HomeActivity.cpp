@@ -229,7 +229,13 @@ void HomeActivity::drawHomeHeaderExtras(const bool pagesSelected) const {
   const int tileH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
   const int tileY = textY - 3;
 
-  const int labelTileX = metrics.contentSidePadding;
+  // Firmware version at the left edge, which is where the old Lector home carried it.
+  // The Pages tile starts after it rather than at the padding.
+  const int versionX = metrics.contentSidePadding;
+  const int versionWidth = renderer.getTextWidth(UI_10_FONT_ID, CROSSPOINT_VERSION);
+  renderer.drawText(UI_10_FONT_ID, versionX, textY, CROSSPOINT_VERSION);
+
+  const int labelTileX = versionX + versionWidth + 14;
   const int labelTextW = renderer.getTextWidth(UI_10_FONT_ID, label.c_str());
   const int labelTileW = labelTextW + tilePad * 2;
   if (pagesSelected) {

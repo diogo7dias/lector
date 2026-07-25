@@ -72,8 +72,9 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   renderer.drawRect(0, topY, pageWidth, topH, 2, false);  // 2px white inset border
   renderer.drawRect(0, botY, pageWidth, botH, 2, false);
 
-  const std::string version = std::string("Lector ") + CROSSPOINT_VERSION;
-  renderer.drawCenteredText(UI_10_FONT_ID, topY + pad, version.c_str(), false);
+  // The version string already names the firmware ("lector.c 0.0.8"), so prefixing it
+  // with "Lector " read as "Lector lector.c 0.0.8".
+  renderer.drawCenteredText(UI_10_FONT_ID, topY + pad, CROSSPOINT_VERSION, false);
   int titleY = topY + pad + lh10 + 4;
   for (const std::string& line : titleLines) {
     renderer.drawCenteredText(UI_10_FONT_ID, titleY, line.c_str(), false);
