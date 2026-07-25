@@ -590,6 +590,27 @@ Diogo's request. What is now known, so nobody repeats it:
 - Untried next steps, in order: run three black/white cycles at lock instead of one (~4 s, hidden); or
   reinstate a FAST cap outside the reader only, leaving reading flash-free.
 
+**RESOLVED 2026-07-25 (later, unreleased) — the wipe was never the missing piece.** Diogo asked for
+"exactly what old lector did", so the two trees were compared directly instead of escalating further.
+Old lector's `deepCleanPanel` is `clearScreen(); present(RefreshIntent::DeepClean)`, and
+`refreshPlanFor(DeepClean)` is `{Buffer, Full}` — **one white FULL pass**. That is *weaker* than what
+this branch was already doing (black FULL + white FULL), and old lector did not ghost. So escalating
+the wipe was never going to work, and the three-cycle version tried before this was wasted motion.
+
+The real difference is `lib/hal/DisplayRefreshPolicy` — a hard cap (`MAX_CONSECUTIVE_FAST = 12`) inside
+`HalDisplay` that promotes the 13th consecutive FAST to a clean pass, **independently of the user's
+Refresh Frequency setting**. It was dropped in the rebase on the reasoning that capping FAST puts a
+flash back into reading; that reasoning was right about the cost and wrong about the trade, because the
+cost of not having it is this ghost. Ported verbatim, with its four host tests
+(`test/display_refresh_policy`), and wired into `displayBuffer`, `displayBufferAsync`,
+`refreshDisplay`, `displayGrayscaleBase` and `deepSleep()` to match the old call sites. A promoted
+async pass runs synchronously — the stronger waveform has multi-phase post-work. `deepCleanPanel` is
+back to the single white FULL.
+
+Rule to keep: **when a fork-only symptom appears after a re-base, diff against the pre-rebase tree
+before inventing a mechanism.** Two rounds of wipe escalation would have been skipped by reading
+`deepCleanPanel` in both trees first. Still owed: device confirmation from Diogo.
+
 ### 3. Remaining niceties still to port from old lector
 
 Grouped by theme (see the checklist above for the full list):
