@@ -244,7 +244,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // spec, so a change rebuilds the section cache.
   static constexpr uint8_t MAX_PARAGRAPH_SPACING = 150;
   uint8_t paragraphSpacing = 0;
-  uint8_t textAntiAliasing = 1;
+  // Off by default, as in the old fork. The grayscale text pass is imperceptible on
+  // this panel but costs a fading grey refresh on every page turn, which is very
+  // perceptible. The toggle is kept so it can still be tried; only the default moved.
+  uint8_t textAntiAliasing = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
   // EPUB reading orientation settings
