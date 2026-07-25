@@ -40,6 +40,21 @@ class OpdsServerStore : public PersistableStore<OpdsServerStore> {
   const OpdsServer* getServer(size_t index) const;
   size_t getCount() const { return servers.size(); }
   bool hasServers() const { return !servers.empty(); }
+
+  // Adds the servers this firmware ships with, once, so a fresh card arrives with
+  // the library already listed instead of the user typing a URL on a five-button
+  // keyboard. Only their name and URL are built in — NEVER credentials, because
+  // this firmware is published as a public binary and anything compiled into it is
+  // readable by anyone who downloads it. The user fills in username and password on
+  // the device, and those stay on their own card, obfuscated like any other entry.
+  //
+  // Runs only when the marker in the file is absent, so a server the user deletes
+  // stays deleted and a re-flash does not resurrect it.
+  void seedBuiltInServers();
+
+ private:
+  // Set once seedBuiltInServers has run, and persisted with the list.
+  bool builtInsSeeded = false;
 };
 
 #define OPDS_STORE OpdsServerStore::getInstance()

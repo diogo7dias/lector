@@ -6,7 +6,25 @@
 #include <algorithm>
 #include <cstring>
 
+namespace {
+
+// Servers this firmware ships with. Name and URL only — see seedBuiltInServers.
+struct BuiltInServer {
+  const char* name;
+  const char* url;
+};
+
+constexpr BuiltInServer BUILT_IN_SERVERS[] = {
+    // Calibre-Web's OPDS feed. The scheme is spelled out because UrlUtils::ensureProtocol
+    // defaults a bare host to http://, and this host answers on HTTPS only — a plain
+    // request to its TLS port fails rather than redirecting.
+    {"Kumedia Library", "https://kumedia.duckdns.org:8450/opds"},
+};
+
+}  // namespace
+
 void OpdsServerStore::toJson(JsonDocument& doc) const {
+  doc["builtins_seeded"] = builtInsSeeded;
   JsonArray arr = doc["servers"].to<JsonArray>();
   for (const auto& server : servers) {
     JsonObject obj = arr.add<JsonObject>();
@@ -21,6 +39,7 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
   // Tolerate a missing/invalid 'servers' key (treat as empty list); only a
   // JSON parse error is fatal. A null JsonArray iterates zero times.
   servers.clear();
+  builtInsSeeded = doc["builtins_seeded"] | false;
   JsonArrayConst arr = doc["servers"].as<JsonArrayConst>();
   servers.reserve(std::min(arr.size(), MAX_SERVERS));
   bool needsResave = false;
@@ -43,6 +62,27 @@ bool OpdsServerStore::fromJson(JsonVariantConst doc) {
   }
 
   return true;
+}
+
+void OpdsServerStore::seedBuiltInServers() {
+  if (builtInsSeeded) return;
+  builtInsSeeded = true;
+
+  for (const BuiltInServer& builtIn : BUILT_IN_SERVERS) {
+    if (servers.size() >= MAX_SERVERS) break;
+    // Skip one the user already added by hand, so seeding cannot double it up.
+    const bool alreadyPresent = std::any_of(servers.begin(), servers.end(),
+                                            [&](const OpdsServer& s) { return s.url == builtIn.url; });
+    if (alreadyPresent) continue;
+
+    OpdsServer server;
+    server.name = builtIn.name;
+    server.url = builtIn.url;  // username and password are left empty on purpose
+    servers.push_back(std::move(server));
+    LOG_INF("OPS", "Seeded built-in OPDS server: %s", builtIn.name);
+  }
+
+  saveToFile();
 }
 
 bool OpdsServerStore::addServer(const OpdsServer& server) {

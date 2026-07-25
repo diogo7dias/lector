@@ -350,6 +350,9 @@ void setup() {
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
+  // Adds the shipped library entry on a card that has never seen it, so it is there
+  // to fill credentials into rather than typed out on a five-button keyboard.
+  OPDS_STORE.seedBuiltInServers();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 
