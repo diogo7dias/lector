@@ -67,13 +67,18 @@ int clampPercent(int percent) {
 // SD card folder finished books are moved into. Single source of truth for the path.
 // constexpr ⇒ lives in flash .rodata, no DRAM cost.
 constexpr char READ_FOLDER[] = "/read";
+// Books that are opened but not finished are filed here, so /read holds only what is
+// done and /recents holds what is in progress.
+constexpr char RECENTS_FOLDER[] = "/recents";
 
-// True if path is inside READ_FOLDER (starts with "<READ_FOLDER>/"). Non-allocating so
+// True if path is directly inside `folder` (starts with "<folder>/"). Non-allocating so
 // it is cheap to call from loop(), and avoids reintroducing a separate "/Read/" literal.
-bool isInReadFolder(const std::string& path) {
-  constexpr size_t n = sizeof(READ_FOLDER) - 1;  // length of "/Read" (excludes NUL)
-  return path.size() > n && path.compare(0, n, READ_FOLDER) == 0 && path[n] == '/';
+bool isInFolder(const std::string& path, const char* folder) {
+  const size_t n = strlen(folder);
+  return path.size() > n && path.compare(0, n, folder) == 0 && path[n] == '/';
 }
+
+bool isInReadFolder(const std::string& path) { return isInFolder(path, READ_FOLDER); }
 
 struct ProgressRange {
   float start;
@@ -105,14 +110,14 @@ bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex
          bookmarkProgress - bookmarkProgressEpsilon <= pageRange.end;
 }
 
-// Pick a non-colliding destination path inside /Read/ for a finished book.
+// Pick a non-colliding destination path inside `folder` for a book being filed.
 // Mirrors the suffixing scheme used elsewhere: "name.epub" -> "name (2).epub", etc.
-std::string buildReadFolderDestination(const std::string& srcPath) {
+std::string buildFolderDestination(const std::string& srcPath, const char* folder) {
   const size_t lastSlash = srcPath.rfind('/');
   const std::string filename = (lastSlash != std::string::npos) ? srcPath.substr(lastSlash + 1) : srcPath;
 
-  Storage.mkdir(READ_FOLDER);
-  std::string dstPath = std::string(READ_FOLDER) + "/" + filename;
+  Storage.mkdir(folder);
+  std::string dstPath = std::string(folder) + "/" + filename;
   if (!Storage.exists(dstPath.c_str())) {
     return dstPath;
   }
@@ -122,20 +127,19 @@ std::string buildReadFolderDestination(const std::string& srcPath) {
   const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
   int suffix = 2;
   do {
-    dstPath = std::string(READ_FOLDER) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
+    dstPath = std::string(folder) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
     suffix++;
   } while (Storage.exists(dstPath.c_str()) && suffix < 100);
   return dstPath;
 }
 
-// Relocate a finished book and its cache dir into /read/, keep it in recents by
-// repointing its entry to the new path, and repoint the resume pointer too.
+// Relocate a book and its cache dir into `dstPath`, keep it in recents by repointing its
+// entry to the new path, and repoint the resume pointer too.
 // On rename failure: LOG_ERR and leave everything in place (no UI alert subsystem here).
-void moveFinishedBookToReadFolder(const std::string& srcPath, const std::string& dstPath,
-                                  const std::string& oldCachePath) {
-  LOG_INF("ERS", "Moving finished epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
+void moveBookToFolder(const std::string& srcPath, const std::string& dstPath, const std::string& oldCachePath) {
+  LOG_INF("ERS", "Filing epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
   if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
-    LOG_ERR("ERS", "Failed to move finished book to '/Read' folder");
+    LOG_ERR("ERS", "Failed to move book to '%s'", dstPath.c_str());
     return;
   }
 
@@ -262,12 +266,23 @@ void EpubReaderActivity::onExit() {
   }
 
   section.reset();
-  if (pendingReadFolderMove && epub) {
+  // File the book on the way out: finished books go to /read, anything else that was
+  // opened goes to /recents. A finished move wins, so a book never lands in both. The
+  // move is done after the Epub is released so no handle is open across the rename.
+  const char* fileInto = nullptr;
+  if (epub) {
+    if (pendingReadFolderMove) {
+      fileInto = READ_FOLDER;
+    } else if (SETTINGS.moveOpenedToRecentsFolder && !isInFolder(epub->getPath(), RECENTS_FOLDER)) {
+      fileInto = RECENTS_FOLDER;
+    }
+  }
+  if (fileInto) {
     const std::string srcPath = epub->getPath();
     const std::string oldCachePath = epub->getCachePath();
-    const std::string dstPath = buildReadFolderDestination(srcPath);
+    const std::string dstPath = buildFolderDestination(srcPath, fileInto);
     epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
-    moveFinishedBookToReadFolder(srcPath, dstPath, oldCachePath);
+    moveBookToFolder(srcPath, dstPath, oldCachePath);
   } else {
     epub.reset();
   }

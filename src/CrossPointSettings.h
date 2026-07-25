@@ -343,6 +343,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Move epub to /read folder on SD card when finished (0 = disabled, 1 = enabled).
   // Default ON: a finished book is filed away under /read.
   uint8_t moveFinishedToReadFolder = 1;
+  // Move epub to /recents folder on SD card when it is opened and left unfinished
+  // (0 = disabled, 1 = enabled). Default ON. Together with the setting above this keeps
+  // /recents holding what is in progress and /read holding what is done; a finished book
+  // goes to /read instead, so a book is never filed into both.
+  uint8_t moveOpenedToRecentsFolder = 1;
   // Short press Back goes to file browser instead of home (0 = disabled, 1 = enabled)
   uint8_t backShortToFileBrowser = 0;
   // Image rendering mode in EPUB reader
