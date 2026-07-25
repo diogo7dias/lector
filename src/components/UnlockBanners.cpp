@@ -69,8 +69,11 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   // in the LSB/MSB passes, greying the white pixels.
   if (!bwPass) return;
 
-  renderer.drawRect(0, topY, pageWidth, topH, 2, false);  // 2px white inset border
-  renderer.drawRect(0, botY, pageWidth, botH, 2, false);
+  // One rule per banner, on the edge that faces the page: the banners span the screen
+  // and reach its physical edges, so a full frame just boxes in a band.
+  constexpr int rule = 2;
+  renderer.fillRect(0, topY + topH - rule, pageWidth, rule, false);  // under the top banner
+  renderer.fillRect(0, botY, pageWidth, rule, false);                // over the bottom banner
 
   // The version string already names the firmware ("lector.c 0.0.8"), so prefixing it
   // with "Lector " read as "Lector lector.c 0.0.8".

@@ -924,8 +924,10 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   // top crop. A strip drawn above it loses its first rows on that panel.
   const int y = metrics.topPadding;
 
-  renderer.fillRect(x, y, w, h, true);                               // black backing
-  renderer.drawRect(x, y, w, h, frameThickness, false);              // white inset border
+  renderer.fillRect(x, y, w, h, true);  // black backing
+  // Bottom edge only. The strip spans the screen and its other three edges have nothing
+  // to be separated from; a full frame just draws a box around a band.
+  renderer.fillRect(x, y + h - frameThickness, w, frameThickness, false);
   const int textY = y + marginY + metrics.popupTextBaselineOffsetY;  // white centered text
   renderer.drawCenteredText(UI_12_FONT_ID, textY, message, false, EpdFontFamily::REGULAR);
   return Rect{x, y, w, h};
@@ -1271,6 +1273,40 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 }
 
 // Home in-progress list. Ported from the lector home's classic layout. Each book's
+// Width of a chip that hugs "[NN%]" evenly, and where the text sits inside it.
+//
+// Padding the chip by the same number of pixels on each side draws visibly lopsided,
+// because a glyph's advance is not its ink: '[' carries a left side bearing (4px of
+// blank in Cozette 12) while ']' leaves only its advance's trailing sliver on the
+// right. So the same 4px looked like 8 on the left and 5-ish on the right.
+//
+// This measures the blank the first and last glyph actually carry and takes it out of
+// the padding, so both sides show the same gap — the tighter, right-hand one. Read from
+// the font rather than hardcoded, since the UI font is rebound per language.
+void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx) {
+  constexpr int kGapToBracket = 4;  // the right-hand gap the chip already had
+  const int advanceW = renderer.getTextWidth(UI_10_FONT_ID, text);
+
+  int leftInk = 0;
+  int rightInk = 0;
+  const auto& fontMap = renderer.getFontMap();
+  const auto it = fontMap.find(UI_10_FONT_ID);
+  if (it != fontMap.end() && text[0] != '\0') {
+    const size_t len = std::strlen(text);
+    if (const EpdGlyph* first = it->second.getGlyph(static_cast<uint32_t>(text[0]))) {
+      leftInk = first->left;
+    }
+    if (const EpdGlyph* last = it->second.getGlyph(static_cast<uint32_t>(text[len - 1]))) {
+      rightInk = std::max(0, fp4::toPixel(last->advanceX) - last->left - last->width);
+    }
+  }
+
+  // The right-hand gap is the one to keep, so the target is what it already shows.
+  const int gap = kGapToBracket + rightInk;
+  *textDx = gap - leftInk;
+  *chipW = *textDx + advanceW - rightInk + gap;
+}
+
 // full title + " by INITIALS" wraps across as many lines as it needs; a [NN%] badge
 // with a black background sits inline on line 0 (it flips to a white chip on the
 // selected/inverted row so it stays legible). "N more above/below" indicators show
@@ -1311,16 +1347,18 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     std::vector<std::string> lines;
     int height;
     int badgeW;  // 0 = no badge
+    int badgeTextDx;  // where the text sits inside the chip (see badgeChipMetrics)
     std::string badgeText;
   };
   auto measureBook = [&](int idx) -> BookEntry {
     int badgeW = 0;
+    int badgeTextDx = 0;
     std::string badgeText;
     if (recentBooks[idx].progressPercent >= 0) {
       char pctBuf[8];
       std::snprintf(pctBuf, sizeof(pctBuf), "[%d%%]", recentBooks[idx].progressPercent);
       badgeText = pctBuf;
-      badgeW = renderer.getTextWidth(UI_10_FONT_ID, pctBuf) + 8;  // chip padding
+      badgeChipMetrics(renderer, pctBuf, &badgeW, &badgeTextDx);
     }
     const int firstLineW = badgeW > 0 ? std::max(1, contentW - (badgeW + 6)) : contentW;
     const std::string initials = StringUtils::authorInitials(recentBooks[idx].author);
@@ -1328,7 +1366,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
         initials.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + initials);
     auto lines = wrapText(renderer, rowText, firstLineW, contentW);
     const int h = static_cast<int>(lines.size()) * rowLineHeight + 6;
-    return {idx, std::move(lines), h, badgeW, std::move(badgeText)};
+    return {idx, std::move(lines), h, badgeW, badgeTextDx, std::move(badgeText)};
   };
 
   auto buildVisibleEntries = [&](int startIdx) {
@@ -1400,8 +1438,8 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
       const int badgeH = rowLineHeight + 2;
       const int badgeY = rowY + 3 + (rowLineHeight - badgeH) / 2;
       renderer.fillRect(contentX, badgeY, entry.badgeW, badgeH, !selected);
-      renderer.drawText(UI_10_FONT_ID, contentX + 4, badgeY + (badgeH - rowLineHeight) / 2, entry.badgeText.c_str(),
-                        selected);
+      renderer.drawText(UI_10_FONT_ID, contentX + entry.badgeTextDx, badgeY + (badgeH - rowLineHeight) / 2,
+                        entry.badgeText.c_str(), selected);
       firstLineX = contentX + entry.badgeW + 6;
     }
 
