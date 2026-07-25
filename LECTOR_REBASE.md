@@ -100,7 +100,8 @@ Legend: [x] done · [~] in progress · [ ] todo
       page-turn zones, keyboard cursor-tap, slider drags, clock touch buttons, option popup,
       settings/theme touch guards, `touchReaderControls` setting). Buttons only. Commit `32a9cff4`.
 - [x] **Opened books filed into /recents** on the way out. Commit `997758e2`.
-- [ ] Home extras remaining: "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
+- [x] Home extras: busy banner, pages counter + clock, firmware version label. Cover/list toggle dropped
+      on purpose (Diogo, 2026-07-25) — thumbnail generation is what made the old home slow.
 - [x] **Grab Quote** — reader-menu "Grab Quote" opens a button-only word-range picker on the current
       page (pick start word → pick end word → save). Saves `[chapter]\nquote\n---\n\n` to
       `<book>_QUOTES.txt` next to the book (atomic tmp/bak rotation, 24 KB cap). New standalone
@@ -110,13 +111,17 @@ Legend: [x] done · [~] in progress · [ ] todo
       toast + a long-press trigger are all future. Commit `2932a5fb`.
 - [x] **Reader menu header** — title / "by author" / chapter / "page/pages | Book %". Commit `edd1c533`.
 - [x] **Margins** — uniform toggle + independent sides, plus dynamic margins. Commit `9bd6e6b9`.
-- [ ] Sleep/boot: "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
-- [ ] UI polish: banner-style popups, throttled font-download progress.
-- [ ] Misc: open-random-book-on-boot.
+- [ ] Sleep faces: the rebase has 8, the old fork 13. Missing: `UNTIL_DEATH` (random logo),
+      `RANDOM_LOGO_CUSTOM`, `STATS_DASHBOARD_PLUS`, `FREEZE` (+ `sleepFrameColor`), `QUOTES`.
+- [ ] Boot: skull-crest logo (5 img) + segmented loader; open-random-book-on-boot
+      (old `SETTINGS.openRandomRecentOnBoot`, `main.cpp:586`).
+- [ ] Reader menu: Steal Look (`src/activities/reader/StealLookActivity.*`) and View Quotes
+      (`src/activities/reader/QuotesViewerActivity.*`). QR share is NOT missing — it is already here.
+- [ ] UI polish: throttled font-download progress. (Banner-style popups are done — every popup is now
+      one full-width black strip, `BaseTheme::drawBannerStrip`.)
 - [ ] WiFi file browser + OPDS-in-browser (was on a branch in the old fork).
-- [ ] Wallpaper management: favourites + `/sleep pause` folder + move-by-favourite bulk actions +
-      filename/favorite info overlay + `PxcViewerActivity`. Old-fork sources: `src/sleep/SleepFavoriteMove.h`,
-      `src/util/FavoriteImage.h`, `src/activities/boot_sleep/SleepInfoOverlay.h`.
+- [x] Wallpaper management: favourites + `/sleep pause` + bulk move-by-favourite + info overlay +
+      `PxcViewerActivity` + reader-menu Delete + BMP-viewer triage + Sleep Image Quality.
 - [x] **Clean Up Storage** — Settings action that removes only the cache directories whose book is gone,
       leaving every present book's progress alone. Commit `11d98cea`.
 - [x] **Book Info** — reader-menu screen with cover, title, author, language and a paged synopsis. Required
