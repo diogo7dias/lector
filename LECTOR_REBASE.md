@@ -399,8 +399,12 @@ Grouped by theme (see the checklist above for the full list):
 - **Wallpapers:** favourites + `/sleep pause` + move-by-favourite bulk actions, filename/favorite info
   overlay, `PxcViewerActivity`. Old-fork sources: `src/sleep/SleepFavoriteMove.h`, `src/util/FavoriteImage.h`,
   `src/activities/boot_sleep/SleepInfoOverlay.h`.
-- **Book screens:** `BookInfoActivity`, Reading Stats, `CleanStorageActivity`.
+- ~~**Book screens:** `BookInfoActivity`, Reading Stats, `CleanStorageActivity`~~ — DONE (`11d98cea`,
+  `d1a7f8d3`, `8a939fac`), plus the Stats Dashboard sleep face (`878ffba5`).
 - **Home extras:** "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
+  Note: the rebase home already lists recents with `[NN%]` badges, so only the banner, the counter/clock
+  and the Pages button are genuinely missing. The old home also carries `SdFileIndex` + library search
+  (2765 lines against the rebase's 1064) — that is a separate, much larger port, not an "extra".
 - **Sleep/boot:** "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
 - **Networking:** WiFi file browser + OPDS-in-browser (was a branch in the old fork; a full 5-phase plan
   already exists, including the path-traversal hardening and the PIN gate).
