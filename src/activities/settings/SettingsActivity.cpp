@@ -23,6 +23,7 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "WallpaperMoveActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -73,6 +74,14 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  // Wallpaper bulk moves sit under Display, next to the sleep-screen settings
+  // they act on, rather than under System with the cache tools.
+  displaySettings.push_back(
+      SettingInfo::Action(StrId::STR_PAUSE_FAVORITE_WALLPAPERS, SettingAction::PauseFavoriteWallpapers));
+  displaySettings.push_back(
+      SettingInfo::Action(StrId::STR_PAUSE_OTHER_WALLPAPERS, SettingAction::PauseOtherWallpapers));
+  displaySettings.push_back(
+      SettingInfo::Action(StrId::STR_RESTORE_PAUSED_WALLPAPERS, SettingAction::RestorePausedWallpapers));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -313,6 +322,21 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Network:
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+        break;
+      case SettingAction::PauseFavoriteWallpapers:
+        startActivityForResult(
+            std::make_unique<WallpaperMoveActivity>(renderer, mappedInput, WallpaperMoveActivity::Job::PauseFavorites),
+            resultHandler);
+        break;
+      case SettingAction::PauseOtherWallpapers:
+        startActivityForResult(
+            std::make_unique<WallpaperMoveActivity>(renderer, mappedInput, WallpaperMoveActivity::Job::PauseOthers),
+            resultHandler);
+        break;
+      case SettingAction::RestorePausedWallpapers:
+        startActivityForResult(std::make_unique<WallpaperMoveActivity>(renderer, mappedInput,
+                                                                       WallpaperMoveActivity::Job::RestoreAllPaused),
+                               resultHandler);
         break;
       case SettingAction::CleanStorage:
         startActivityForResult(std::make_unique<CleanStorageActivity>(renderer, mappedInput), resultHandler);
