@@ -331,6 +331,45 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
      date and the HAL only exposed hour/minute. It reads the SDK RTC and falls back to the system clock on
      boards without one, rejecting an unset clock rather than recording a reading day in 1970.
 
+- **2026-07-25** — **Wallpaper management ported** (option "A"), five commits. The whole group is
+  state-free by design: nothing new is persisted, because on a folder of thousands of images any
+  separate index or favourites list is one more thing that can drift out of sync with the files.
+  1. **Model** (`b9093fc4`). `src/util/FavoriteImage{,Names}` — a wallpaper is a favourite iff its
+     basename carries the `_F` suffix, so the state survives reboots, SD edits and card swaps.
+     `src/sleep/SleepPauseToggle` — `"/sleep pause"` is an ordinary folder the sleep screen does not
+     read from, so the file's location IS its rotation state. `src/sleep/SleepImageMove.h` — the bulk
+     mover, in bounded passes: stream the folder, retain at most `batchSize` names, rename that batch,
+     repeat. Peak heap is one batch, not the folder listing, which is the only reason a 3000-image
+     folder is safe here. A pass that matches files but moves none stops the run, so a permanently
+     un-movable file cannot spin forever. `isWallpaperName` moved out of `SleepActivity.cpp` into
+     `src/sleep/WallpaperNames.h` and now delegates to the same extension list the favourite toggle
+     uses — sleep screen, toggle and mover can no longer disagree about what a wallpaper is.
+     33 host tests in `test/sleep_favorites/` (mover runs against an in-memory fake).
+  2. **Sleep info overlay** (`2208c245`). Display toggles "Show Wallpaper Name" / "Show Favorite
+     Badge". **`renderPxcSleepScreen`'s `overlay` hook now fires once per pass** (BW base + LSB + MSB),
+     not only on the 1-bit path — a plane pass only carries the pixels written during that pass. The
+     overlay fills its black box in every pass but draws white text/border only in the BW pass, or the
+     1-bit glyph path sets both plane bits and the text comes out dark grey. Wake banners unaffected
+     (`BootActivity` renders 1-bit = one call). The hook has no context parameter, so the path reaches
+     the overlay through a `SleepInfoOverlayScope` guard, not a bare global.
+  3. **Reader menu** (`db956c03`). "Favorite Wallpaper" / "Pause This Wallpaper" rows appear high in
+     the menu when the last sleep screen was a wallpaper still on the card — the wake→menu→triage flow.
+     Pause is hidden for a fixed `/sleep.pxc`, which has no rotation folder to leave.
+  4. **On-device viewer** (`9ee64d61`). `.pxc` now lists in the file browser (`[F] name` for
+     favourites) and opens `PxcViewerActivity`: Back / Fav / Delete / Pause, Up-Down to step the folder.
+     Stepping uses `src/sleep/WallpaperNeighbour.h`, a streaming lexicographic lookup that retains one
+     candidate name — `BmpViewerActivity`'s sorted sibling vector would be one `std::string` per file
+     and is fatal here. Preview renders **1-bit, not 3-pass grayscale**: one pass is ~a third of the
+     panel time (what makes stepping usable) and the single overlay call composites the button hints
+     into the same refresh. Deep-cleans first or the browser list ghosts through.
+  5. **Bulk moves** (`7aaf2bc4`). Display actions Pause Favorites / Pause Others / Restore Paused.
+     Counts first (capped, so the prompt is prompt on a huge folder; past the cap it says "or more"),
+     confirms with the number, then moves; reports moved and stuck counts. Restore runs the favourites
+     pass then the non-favourites pass so every bulk move uses the one tested batching path.
+
+  NOT ported from the old fork: the rotation-pause *flag* (the rebase picks a random wallpaper every
+  sleep — there is no cursor to pause), and the `ISleepFs` playlist interface it hung off.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
@@ -363,6 +402,11 @@ content-derived, unique, nonzero — runtime only needs unique keys, so the pre-
 
 Everything since 0.0.1 was built, host-tested and shipped, but **not** device-tested. Highest value first:
 - **Unreleased:** locking from any screen leaves NO ghost of that screen under the sleep face.
+- **Unreleased (wallpapers):** Display · Show Wallpaper Name puts the filename bottom-left on a `.pxc`
+  sleep face without greying the text; reader menu · Favorite Wallpaper renames the file and the next
+  wake still shows it under the banners; file browser lists `.pxc` and opens the viewer; Up/Down steps
+  the folder at a usable speed on the real 2000-3000 image `/sleep`; Display · Pause Favorite Wallpapers
+  states a count, moves that many, and the sleep rotation stops showing them.
 - **Unreleased:** Settings · Clean Up Storage removes orphan caches only (delete a book, sweep, confirm the
   other books still open at their saved place); reader menu · Book Info shows cover/author/language/synopsis;
   reader menu · Reading Stats counts a session, and the numbers survive closing and reopening the book.
@@ -396,9 +440,8 @@ Everything since 0.0.1 was built, host-tested and shipped, but **not** device-te
 ### 3. Remaining niceties still to port from old lector
 
 Grouped by theme (see the checklist above for the full list):
-- **Wallpapers:** favourites + `/sleep pause` + move-by-favourite bulk actions, filename/favorite info
-  overlay, `PxcViewerActivity`. Old-fork sources: `src/sleep/SleepFavoriteMove.h`, `src/util/FavoriteImage.h`,
-  `src/activities/boot_sleep/SleepInfoOverlay.h`.
+- ~~**Wallpapers:** favourites + `/sleep pause` + move-by-favourite bulk actions, filename/favorite info
+  overlay, `PxcViewerActivity`~~ — DONE (`b9093fc4`, `2208c245`, `db956c03`, `9ee64d61`, `7aaf2bc4`).
 - ~~**Book screens:** `BookInfoActivity`, Reading Stats, `CleanStorageActivity`~~ — DONE (`11d98cea`,
   `d1a7f8d3`, `8a939fac`), plus the Stats Dashboard sleep face (`878ffba5`).
 - **Home extras:** "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
