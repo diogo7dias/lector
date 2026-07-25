@@ -118,6 +118,21 @@ void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int 
 
 }  // namespace
 
+int BaseTheme::batteryClusterWidth(const GfxRenderer& renderer) {
+  // "100%" rather than the live value: the reserve must not change width as the
+  // battery drains, or the things placed against it would shuffle sideways.
+  return batteryRightPadding + BaseMetrics::values.batteryWidth + batteryPercentSpacing +
+         renderer.getTextWidth(batteryPercentFontId, "100%");
+}
+
+int BaseTheme::batteryIconTop(const GfxRenderer& renderer, const Rect& rect, const int fontId) {
+  // Centre the icon in the line box of the text drawn at rect.y. Expressed from the
+  // font's own metrics rather than a fixed offset so the Ubuntu family (bound for
+  // Arabic/Hebrew, taller than Cozette) lands right too. For the default Cozette 12
+  // this evaluates to the +6 the code used before.
+  return rect.y + std::max(0, (renderer.getLineHeight(fontId) - rect.height) / 2);
+}
+
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
   // Top line
   renderer.drawLine(x + 1, y, x + battWidth - 3, y);
@@ -177,7 +192,7 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   // percentage text; the v2 status bar passes UI_10 so the drawn width matches the
   // segment width it reserved, while UI headers keep the SMALL_FONT_ID default.
   const uint16_t percentage = powerManager.getBatteryPercentage();
-  const int y = rect.y + 6;
+  const int y = batteryIconTop(renderer, rect, fontId);
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
@@ -193,12 +208,12 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   // Right aligned: percentage on left, icon on right (UI headers)
   // rect.x is already positioned for the icon (drawHeader calculated it)
   const uint16_t percentage = powerManager.getBatteryPercentage();
-  const int y = rect.y + 6;
+  const int y = batteryIconTop(renderer, rect, batteryPercentFontId);
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
+    const int textWidth = renderer.getTextWidth(batteryPercentFontId, percentageText.c_str());
+    renderer.drawText(batteryPercentFontId, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
@@ -342,7 +357,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowSubtitle,
                          const std::function<UIIcon(int index)>& rowIcon,
                          const std::function<std::string(int index)>& rowValue, bool highlightValue,
-                         const std::function<bool(int index)>& rowDimmed, int itemFontId) const {
+                         const std::function<bool(int index)>& rowDimmed, int itemFontId,
+                         const std::function<bool(int index)>& rowIsHeader) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rowHeight > 0 ? std::max(1, rect.height / rowHeight) : 1;
@@ -384,6 +400,22 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   const auto pageStartIndex = selectedIndex / pageItems * pageItems;
   for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
     const int itemY = rect.y + (i % pageItems) * rowHeight;
+
+    // Section heading: the label, then a rule filling the rest of the row's width so the
+    // eye reads it as a divider rather than as another option it could pick.
+    if (rowIsHeader != nullptr && rowIsHeader(i)) {
+      const std::string headingText = rowTitle(i);
+      const int headingX = rect.x + BaseMetrics::values.contentSidePadding;
+      renderer.drawText(itemFontId, headingX, itemY, headingText.c_str());
+      const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
+      const int ruleX = headingX + headingW + 8;
+      const int ruleRight = rect.x + contentWidth - BaseMetrics::values.contentSidePadding;
+      if (ruleRight > ruleX) {
+        renderer.drawLine(ruleX, itemY + renderer.getFontAscenderSize(itemFontId) / 2, ruleRight,
+                          itemY + renderer.getFontAscenderSize(itemFontId) / 2);
+      }
+      continue;
+    }
 
     int rowTextWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
     std::string valueText;
@@ -434,25 +466,30 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
-  // Hide last battery draw
-  constexpr int maxBatteryWidth = 80;
-  renderer.fillRect(rect.x + rect.width - maxBatteryWidth, rect.y + 5, maxBatteryWidth,
-                    BaseMetrics::values.batteryHeight + 10, false);
+  // Hide last battery draw. Both the width and the height come from the cluster's own
+  // metrics: a hardcoded box was narrower than the percentage text in the taller UI
+  // font, and started below the text's tallest glyphs, so a partial redraw left
+  // fragments of the previous reading behind.
+  const int clusterWidth = batteryClusterWidth(renderer);
+  renderer.fillRect(rect.x + rect.width - clusterWidth, rect.y, clusterWidth,
+                    renderer.getLineHeight(batteryPercentFontId) + 10, false);
 
   const bool showBatteryPercentage =
       SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   // Position icon at right edge, drawBatteryRight will place text to the left
-  const int batteryX = rect.x + rect.width - 12 - BaseMetrics::values.batteryWidth;
+  const int batteryX = rect.x + rect.width - batteryRightPadding - BaseMetrics::values.batteryWidth;
   drawBatteryRight(renderer,
                    Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
                    showBatteryPercentage);
 
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
-    auto truncatedTitle = renderer.truncatedText(UI_12_FONT_ID, title,
+    // Same size as the rows under it and as the home screen's own text. A step larger
+    // read as bold next to everything else on the screen.
+    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, title,
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_12_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);
   }
 
   if (subtitle) {
@@ -480,8 +517,8 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
   }
 
   auto truncatedLabel = renderer.truncatedText(
-      UI_12_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding - rightSpace, EpdFontFamily::REGULAR);
-  renderer.drawText(UI_12_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
+      UI_10_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding - rightSpace, EpdFontFamily::REGULAR);
+  renderer.drawText(UI_10_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
 }
 
 void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
@@ -489,12 +526,12 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
   constexpr int underlineHeight = 2;  // Height of selection underline
   constexpr int underlineGap = 4;     // Gap between text and underline
 
-  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
 
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
 
   for (const auto& tab : tabs) {
-    const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, tab.label, EpdFontFamily::REGULAR);
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
 
     // Draw underline for selected tab
     if (tab.selected) {
@@ -506,7 +543,7 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
     }
 
     // Draw tab label
-    renderer.drawText(UI_12_FONT_ID, currentX, rect.y, tab.label, !(tab.selected && selected), EpdFontFamily::REGULAR);
+    renderer.drawText(UI_10_FONT_ID, currentX, rect.y, tab.label, !(tab.selected && selected), EpdFontFamily::REGULAR);
 
     currentX += textWidth + BaseMetrics::values.tabSpacing;
   }
@@ -521,7 +558,7 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
   for (size_t i = 0; i < tabs.size(); i++) {
     const auto& tab = tabs[i];
-    const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, tab.label, EpdFontFamily::REGULAR);
+    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
     const int left = (i == 0) ? rect.x : currentX - BaseMetrics::values.tabSpacing / 2;
     const int right = currentX + textWidth + BaseMetrics::values.tabSpacing / 2;
     if (x >= left && x < right) {
@@ -944,9 +981,12 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   const int barWidth =
       std::max(0, layout.width - metrics.popupMarginX * 2);  // twice the margin in drawPopup to match text width
   const int barX = layout.x + (layout.width - barWidth) / 2;
-  // Centered in the blank between the text and the rule, so the bar rides inside the
-  // band rather than pushing it taller.
-  const int barY = layout.y + layout.height - banner::RULE - (banner::PAD - banner::RULE) / 2 - barHeight / 2;
+  // Centered in the blank between the text's line box and the rule, so the bar rides
+  // inside the band rather than pushing it taller. Derived from the band's own geometry
+  // so it follows banner::PAD instead of having to be retuned whenever the band changes.
+  const int gapTop = layout.y + banner::PAD + renderer.getLineHeight(banner::FONT_ID);
+  const int gapBottom = layout.y + layout.height - banner::RULE;
+  const int barY = gapTop + std::max(0, (gapBottom - gapTop - barHeight) / 2);
   if (barWidth <= 0 || barHeight <= 0) {
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return;
@@ -1208,9 +1248,10 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
-  const int optionFontId = metrics.optionPopupUseSmallFont ? UI_10_FONT_ID : UI_12_FONT_ID;
-  const EpdFontFamily::Style optionStyle =
-      metrics.optionPopupOptionFontBold ? EpdFontFamily::REGULAR : EpdFontFamily::REGULAR;
+  // One size for the whole popup, the same one the menu rows behind it use. The title
+  // used to be a step larger, which read as bold against the options under it.
+  constexpr int optionFontId = UI_10_FONT_ID;
+  constexpr EpdFontFamily::Style optionStyle = EpdFontFamily::REGULAR;
 
   const int itemSpacing = metrics.optionPopupItemSpacing;
   const int innerPadding = metrics.optionPopupInnerPadding;
@@ -1218,10 +1259,10 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const int selectionVPadding = metrics.optionPopupSelectionVPadding;
 
   const int optionLineHeight = renderer.getLineHeight(optionFontId);
-  const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int titleLineHeight = renderer.getLineHeight(optionFontId);
   const int rowHeight = optionLineHeight + selectionVPadding * 2;
 
-  int maxTextWidth = renderer.getTextWidth(UI_12_FONT_ID, title, EpdFontFamily::REGULAR);
+  int maxTextWidth = renderer.getTextWidth(optionFontId, title, optionStyle);
   for (const auto& opt : options) {
     int w = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
     if (w > maxTextWidth) maxTextWidth = w;
@@ -1254,7 +1295,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   int y = dialogY + innerPadding;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::REGULAR);
+  renderer.drawCenteredText(optionFontId, y, title, true, optionStyle);
   y += titleLineHeight;
 
   if (metrics.optionPopupTitleSeparator) {
@@ -1437,13 +1478,20 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     totalVisibleHeight += visibleEntries[i].height;
     if (i > 0) totalVisibleHeight += rowGap;
   }
-  int rowY = effectiveTopY;
-  if (totalVisibleHeight < contentHeight) {
-    rowY += (contentHeight - totalVisibleHeight) / 2;
-  }
+  // Centre the whole assembly — the "more above" chip, the rows, and the "more below"
+  // chip — as one block in the band. Pinning each chip to its band edge instead left
+  // the chip hard against the header while the rows floated in the middle, with the
+  // unused indicator band showing up as a hole at the other end. The row-fitting maths
+  // above still reserves both bands whenever the list can scroll, so the number of rows
+  // on screen does not change as the chips come and go.
+  const int aboveH = hasMoreAbove ? indicatorH : 0;
+  const int belowH = hasMoreBelow ? indicatorH : 0;
+  const int blockHeight = aboveH + totalVisibleHeight + belowH;
+  const int blockTop = rowsTopMinY + std::max(0, (rowsAvailableHeight - blockHeight) / 2);
+  int rowY = blockTop + aboveH;
 
   if (hasMoreAbove) {
-    drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rowX, rowW, rowsTopMinY, rowLineHeight);
+    drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rowX, rowW, blockTop, rowLineHeight);
   }
 
   for (const auto& entry : visibleEntries) {
@@ -1476,7 +1524,9 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
   }
 
   if (hasMoreBelow) {
-    drawMoreIndicator(renderer, count - lastVisible - 1, StrId::STR_MORE_BELOW, rowX, rowW, effectiveBottomY + 2,
+    // rowY has already advanced past the last row (plus its trailing gap), so the chip
+    // sits directly under the rows rather than at the far bottom of the band.
+    drawMoreIndicator(renderer, count - lastVisible - 1, StrId::STR_MORE_BELOW, rowX, rowW, rowY - rowGap + 2,
                       rowLineHeight);
   }
 

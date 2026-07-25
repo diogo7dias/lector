@@ -82,8 +82,8 @@ class ValueBarPopup {
     const int screenW = renderer.getScreenWidth();
     const int screenH = renderer.getScreenHeight();
 
-    const int titleLH = renderer.getLineHeight(UI_12_FONT_ID);
-    const int valueLH = renderer.getLineHeight(UI_12_FONT_ID);
+    const int titleLH = renderer.getLineHeight(UI_10_FONT_ID);
+    const int valueLH = renderer.getLineHeight(UI_10_FONT_ID);
     const int hintLH = renderer.getLineHeight(SMALL_FONT_ID);
     constexpr int barH = 16;
     const int gap = m.optionPopupTitleGap;
@@ -109,12 +109,12 @@ class ValueBarPopup {
     }
 
     int y = dialogY + innerPad;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, title.c_str(), true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, y, title.c_str(), true, EpdFontFamily::REGULAR);
     y += titleLH + gap;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", value_);
-    renderer.drawCenteredText(UI_12_FONT_ID, y, buf, true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, y, buf, true, EpdFontFamily::REGULAR);
     y += valueLH + gap;
 
     const int barWidth = std::min(dialogW - innerPad * 2, 360);

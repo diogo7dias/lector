@@ -18,8 +18,10 @@ namespace banner {
 // of the chrome.
 constexpr int FONT_ID = UI_10_FONT_ID;
 
-// Blank above and below the text.
-constexpr int PAD = 10;
+// Blank above and below the text. The band is PAD + one line box + PAD, so this is the
+// only number that sets its thickness: at UI_10 (line box 25px) the band is 2*PAD+25.
+// Kept small on purpose — the banner should read as a rule with a word on it, not a slab.
+constexpr int PAD = 6;
 
 // White rule on the page-facing edge. The band spans the screen and reaches its
 // physical edges, so a full frame would just box in a strip.

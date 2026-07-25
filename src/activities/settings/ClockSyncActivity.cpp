@@ -111,10 +111,10 @@ void ClockSyncActivity::render(RenderLock&&) {
 
   switch (state) {
     case SYNCING:
-      renderer.drawCenteredText(UI_12_FONT_ID, midY, tr(STR_CLOCK_SYNCING));
+      renderer.drawCenteredText(UI_10_FONT_ID, midY, tr(STR_CLOCK_SYNCING));
       break;
     case SUCCESS: {
-      renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_OK), true, EpdFontFamily::REGULAR);
+      renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_OK), true, EpdFontFamily::REGULAR);
       if (syncedTime[0] != '\0') {
         char line[32];
         snprintf(line, sizeof(line), "%s %s", tr(STR_CURRENT_TIME), syncedTime);
@@ -123,11 +123,11 @@ void ClockSyncActivity::render(RenderLock&&) {
       break;
     }
     case NO_WIFI:
-      renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_NO_WIFI), true, EpdFontFamily::REGULAR);
+      renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_NO_WIFI), true, EpdFontFamily::REGULAR);
       renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CLOCK_SYNC_NO_WIFI_HINT));
       break;
     case FAILED:
-      renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_FAIL), true, EpdFontFamily::REGULAR);
+      renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_FAIL), true, EpdFontFamily::REGULAR);
       renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CHECK_SERIAL_OUTPUT));
       break;
   }

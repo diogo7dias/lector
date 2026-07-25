@@ -25,6 +25,7 @@ enum ItemId {
   ITEM_BOOK_PCT,        // anchor
   ITEM_CHAPTER_PCT,     // anchor
   ITEM_CHAPTER_NUM,     // anchor
+  ITEM_SESSION_PAGES,   // anchor
   ITEM_BOOK_BAR,        // Off / Top / Bottom (cycle)
   ITEM_CHAPTER_BAR,     // Off / Top / Bottom (cycle)
   ITEM_BAR_THICKNESS,   // Slim / Medium / Fat (cycle)
@@ -55,6 +56,8 @@ StrId itemLabel(int id) {
       return StrId::STR_CHAPTER_PERCENT;
     case ITEM_CHAPTER_NUM:
       return StrId::STR_CHAPTER_NUMBER;
+    case ITEM_SESSION_PAGES:
+      return StrId::STR_SESSION_PAGES;
     case ITEM_BOOK_BAR:
       return StrId::STR_BOOK_BAR;
     case ITEM_CHAPTER_BAR:
@@ -101,6 +104,8 @@ uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) const {
       return &SETTINGS.sbChapterPctPos;
     case ITEM_CHAPTER_NUM:
       return &SETTINGS.sbChapterNumPos;
+    case ITEM_SESSION_PAGES:
+      return &SETTINGS.sbSessionPagesPos;
     default:
       return nullptr;
   }
@@ -130,6 +135,7 @@ void StatusBarSettingsActivity::onEnter() {
   clampField(SETTINGS.sbBookPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(SETTINGS.sbChapterPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(SETTINGS.sbChapterNumPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(SETTINGS.sbSessionPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(SETTINGS.sbTitleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
   clampField(SETTINGS.sbPageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
   clampField(SETTINGS.sbBookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
@@ -249,9 +255,9 @@ void StatusBarSettingsActivity::renderPicker() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int screenW = renderer.getScreenWidth();
   const int screenH = renderer.getScreenHeight();
-  const int rowH = renderer.getLineHeight(UI_12_FONT_ID) + 6;
+  const int rowH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
   const int rows = CrossPointSettings::STATUS_BAR_ANCHOR_COUNT;  // 7
-  const int titleH = renderer.getLineHeight(UI_12_FONT_ID) + 8;
+  const int titleH = renderer.getLineHeight(UI_10_FONT_ID) + 8;
   const int boxW = 200;
   const int boxH = titleH + rows * rowH + 12;
   const int boxX = (screenW - boxW) / 2;
@@ -260,7 +266,7 @@ void StatusBarSettingsActivity::renderPicker() {
   renderer.fillRect(boxX, boxY, boxW, boxH, false);  // white
   renderer.drawRect(boxX, boxY, boxW, boxH, 2, true);
 
-  UITheme::drawCenteredText(renderer, Rect{boxX, boxY, boxW, boxH}, UI_12_FONT_ID, boxY + 6, tr(STR_POSITION), true,
+  UITheme::drawCenteredText(renderer, Rect{boxX, boxY, boxW, boxH}, UI_10_FONT_ID, boxY + 6, tr(STR_POSITION), true,
                             EpdFontFamily::REGULAR);
 
   int y = boxY + titleH + 4;

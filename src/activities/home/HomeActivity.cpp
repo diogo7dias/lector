@@ -256,10 +256,11 @@ void HomeActivity::drawHomeHeaderExtras(const bool pagesSelected) const {
   if (!halClock.isAvailable()) return;
   char timeBuf[9];
   if (!halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) return;
-  const int batteryIconLeft = pageWidth - 12 - metrics.batteryWidth;
-  const int batteryTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "100%");
+  // Placed against the same cluster width drawHeader reserves, so the gap stays put
+  // whatever the UI font measures.
   const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
-  renderer.drawText(UI_10_FONT_ID, batteryIconLeft - batteryTextWidth - 4 - 12 - clockWidth, textY, timeBuf);
+  renderer.drawText(UI_10_FONT_ID, pageWidth - BaseTheme::batteryClusterWidth(renderer) - 12 - clockWidth, textY,
+                    timeBuf);
 }
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }

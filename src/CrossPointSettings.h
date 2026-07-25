@@ -348,10 +348,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Two independent toggles, both default ON: body = reader page text (EPUB/TXT/XTC),
   // status = the reading-screen status bar. The global values are the default that
   // per-book ReaderPrefs seed from; the EPUB reader then uses its per-book copy, the
-  // TXT/XTC readers use these global values directly. Not in SettingsList (in-book
-  // menu toggle only), so persisted manually in toJson/fromJson.
+  // TXT/XTC readers use these global values directly.
   uint8_t paperbackLookBody = 1;
   uint8_t paperbackLookStatus = 1;
+  // Default paragraph numbering for books that have no per-book override yet. A book
+  // already carrying its own reader_override.bin keeps whatever it was set to in the
+  // in-book menu; this only seeds the next book opened fresh.
+  uint8_t paragraphNumbering = PARA_NUM_OFF;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)

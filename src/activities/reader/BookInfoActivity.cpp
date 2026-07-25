@@ -60,7 +60,7 @@ void BookInfoActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight}, nullptr);
 
   // Title — wrapped, bold, centered (mirrors the reader menu header).
-  const int batteryReserve = 12 + metrics.batteryWidth + renderer.getTextWidth(UI_10_FONT_ID, "100%") + 12;
+  const int batteryReserve = BaseTheme::batteryClusterWidth(renderer) + 12;
   const int titleMaxWidth = screen.width - 2 * batteryReserve;
   const int titleLineHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, title.c_str(), titleMaxWidth, 4, EpdFontFamily::BOLD);

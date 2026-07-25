@@ -149,12 +149,12 @@ void ClockOffsetActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_UTC_OFFSET));
 
   const int centreY = pageHeight / 2 - 40;
-  auto widthOf = [&](const char* s) { return renderer.getTextWidth(UI_12_FONT_ID, s, EpdFontFamily::REGULAR); };
+  auto widthOf = [&](const char* s) { return renderer.getTextWidth(UI_10_FONT_ID, s, EpdFontFamily::REGULAR); };
   constexpr int fieldPaddingX = 6;
   constexpr int labelGap = 16;
   constexpr int fieldGap = 12;
   constexpr int colonGap = 5;
-  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   const int fieldHeight = lineHeight + 2;
 
   char signStr[2] = {sign == 1 ? '-' : '+', '\0'};
@@ -172,7 +172,7 @@ void ClockOffsetActivity::render(RenderLock&&) {
       labelWidth + labelGap + signBoxW + fieldGap + hoursBoxW + colonGap + colonWidth + colonGap + minutesBoxW;
 
   int x = (pageWidth - totalWidth) / 2;
-  renderer.drawText(UI_12_FONT_ID, x, centreY, "UTC", true, EpdFontFamily::REGULAR);
+  renderer.drawText(UI_10_FONT_ID, x, centreY, "UTC", true, EpdFontFamily::REGULAR);
   x += labelWidth + labelGap;
 
   auto drawField = [&](const char* text, const int boxX, const int boxWidth, const Field field) {
@@ -183,7 +183,7 @@ void ClockOffsetActivity::render(RenderLock&&) {
       renderer.drawRect(boxX + 1, centreY + 1, boxWidth - 2, fieldHeight - 2, true);
     }
     const int textX = boxX + (boxWidth - widthOf(text)) / 2;
-    renderer.drawText(UI_12_FONT_ID, textX, centreY, text, true, EpdFontFamily::REGULAR);
+    renderer.drawText(UI_10_FONT_ID, textX, centreY, text, true, EpdFontFamily::REGULAR);
   };
 
   drawField(signStr, x, signBoxW, FIELD_SIGN);
@@ -192,7 +192,7 @@ void ClockOffsetActivity::render(RenderLock&&) {
   drawField(hoursStr, x, hoursBoxW, FIELD_HOURS);
   x += hoursBoxW + colonGap;
 
-  renderer.drawText(UI_12_FONT_ID, x, centreY, ":", true, EpdFontFamily::REGULAR);
+  renderer.drawText(UI_10_FONT_ID, x, centreY, ":", true, EpdFontFamily::REGULAR);
   x += colonWidth + colonGap;
 
   drawField(minutesStr, x, minutesBoxW, FIELD_MINUTES);

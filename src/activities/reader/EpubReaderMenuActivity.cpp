@@ -32,23 +32,65 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, bool hasSleepWallpaper,
     bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes) {
   std::vector<MenuItem> items;
-  items.reserve(22);
+  items.reserve(32);
+  const auto section = [&items](StrId label) { items.push_back({MenuAction::SECTION, label}); };
+
+  // --- Navigate: everything that moves the reading position ---------------------
+  section(StrId::STR_SEC_NAVIGATE);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
-  items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
-  items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
-  if (hasFootnotes) {
-    items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+  // Jump to a paragraph number — only meaningful when this book shows paragraph
+  // numbers. Toggle numbering on, reopen the menu, and this row appears.
+  if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
+    items.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
   }
   if (hasBookmarks) {
     items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
   items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
-  // Wallpaper triage, placed high because it is the whole point: the user wakes
-  // the device straight from the lock screen into this menu, so the wallpaper
-  // they just saw is the one these rows act on. Absent when the last sleep screen
-  // was not a wallpaper, or the file has since left the card. "Pause" is offered
-  // only for a wallpaper that lives in a folder it can be moved out of.
+  if (hasFootnotes) {
+    items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+  }
+
+  // --- This Book: what the book says about itself, and what you take out of it ---
+  section(StrId::STR_SEC_THIS_BOOK);
+  items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
+  items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
+  items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
+  items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
+  // Reading the quotes back only makes sense once this book has a sidecar to read;
+  // the caller checks for the file so this stays free of storage access.
+  if (hasQuotes) {
+    items.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
+  }
+  // Undoing the open belongs with the book itself, not with the device tools, and it
+  // sits last here because it is the one row that leaves the book.
+  items.push_back({MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK});
+
+  // --- Look: everything that changes how the page is drawn ----------------------
+  section(StrId::STR_SEC_LOOK);
+  // Per-book reader settings. "Reset" only appears once this book has its own
+  // override (otherwise it already follows the global settings).
+  items.push_back({MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS});
+  if (hasReaderOverride) {
+    items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
+  }
+  // Sits with the reader settings because that is what it changes: it copies another
+  // book's look onto this one, once. The picker itself reports when nothing qualifies.
+  items.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
+  // Same cluster for the same reason: a saved look applied to this book. Steal Look
+  // takes one from another book, this takes one from the named sets on the card.
+  items.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
+  items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
+  items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
+  items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+  items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+
+  // --- Sleep Screen: triage for the wallpaper the lock screen just showed -------
+  // Absent when the last sleep screen was not a wallpaper, or the file has since left
+  // the card. "Pause" is offered only for a wallpaper in a folder it can move out of.
   if (hasSleepWallpaper) {
+    section(StrId::STR_SEC_SLEEP_SCREEN);
     items.push_back({MenuAction::WALLPAPER_FAVORITE,
                      wallpaperFavorited ? StrId::STR_UNFAVORITE_WALLPAPER : StrId::STR_FAVORITE_WALLPAPER});
     if (wallpaperPausable) {
@@ -63,50 +105,33 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     // reached by waking the device — a stray press should not land on it.
     items.push_back({MenuAction::WALLPAPER_DELETE, StrId::STR_DELETE_WALLPAPER});
   }
-  items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
-  items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
-  // Reading the quotes back only makes sense once this book has a sidecar to read;
-  // the caller checks for the file so this stays free of storage access.
-  if (hasQuotes) {
-    items.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
-  }
-  // Per-book reader settings. "Reset" only appears once this book has its own
-  // override (otherwise it already follows the global settings).
-  items.push_back({MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS});
-  if (hasReaderOverride) {
-    items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
-  }
-  // Sits with the reader settings because that is what it changes: it copies another
-  // book's look onto this one, once. The picker itself reports when nothing qualifies.
-  items.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
-  // Same cluster for the same reason: a saved look applied to this book. Steal Look
-  // takes one from another book, this takes one from the named sets on the card.
-  items.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
-  items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
-  // Paperback Look toggles — in-book menu only (not in the global Settings screen).
-  items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
-  items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
-  items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+
+  // --- Device: everything that is not about this book ---------------------------
+  section(StrId::STR_SEC_DEVICE);
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
-  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
-  // Jump to a paragraph number — only meaningful when this book shows paragraph
-  // numbers. Toggle numbering on, reopen the menu, and this row appears.
-  if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
-    items.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
-  }
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
-  // For a book opened by accident: drop it from the home list and undo the filing
-  // that opening it did, so its file goes back to the card root. Leaves the book.
-  items.push_back({MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK});
-  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
+  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   return items;
+}
+
+int EpubReaderMenuActivity::firstSelectableFrom(int index, const bool forward) const {
+  const int count = static_cast<int>(menuItems.size());
+  if (count == 0) return 0;
+  // Bounded by count so a list that somehow held only headings cannot spin forever.
+  for (int steps = 0; steps < count; steps++) {
+    if (!isSection(index)) return index;
+    index = forward ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
+  }
+  return index;
 }
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
+  // Index 0 is the first section heading, so open on the first real option under it.
+  selectedIndex = firstSelectableFrom(0, true);
   requestUpdate();
 }
 
@@ -152,6 +177,7 @@ void EpubReaderMenuActivity::loop() {
 
   auto activateSelected = [this] {
     const auto selectedAction = menuItems[selectedIndex].action;
+    if (selectedAction == MenuAction::SECTION) return;  // heading row: nothing to activate
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
                        pendingOrientation, [this](int idx) {
@@ -199,12 +225,14 @@ void EpubReaderMenuActivity::loop() {
 
   // Handle navigation
   buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    selectedIndex =
+        firstSelectableFrom(ButtonNavigator::nextIndex(selectedIndex, static_cast<int>(menuItems.size())), true);
     requestUpdate();
   });
 
   buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size()));
+    selectedIndex =
+        firstSelectableFrom(ButtonNavigator::previousIndex(selectedIndex, static_cast<int>(menuItems.size())), false);
     requestUpdate();
   });
 
@@ -228,7 +256,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
 
   // Wrap the book title over multiple centered lines. Reserve space on both sides
   // symmetrically so the first line never runs under the battery cluster.
-  const int batteryReserve = 12 + metrics.batteryWidth + renderer.getTextWidth(UI_10_FONT_ID, "100%") + 12;
+  const int batteryReserve = BaseTheme::batteryClusterWidth(renderer) + 12;
   const int titleMaxWidth = screen.width - 2 * batteryReserve;
   // Same size and weight as the author and chapter lines below: at UI_12 bold the
   // title read as a heavy slab against the thin lines under it.
@@ -296,7 +324,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return "";
         }
       },
-      true);
+      true, nullptr, UI_10_FONT_ID, [this](int index) { return isSection(index); });
 
   // Footer / Hints
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

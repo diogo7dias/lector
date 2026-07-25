@@ -49,8 +49,8 @@ struct ReaderPrefs {
   uint8_t textAntiAliasing = 0;  // see CrossPointSettings: the grey fade per page is not worth it
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
   uint8_t imageRendering = 0;  // CrossPointSettings::IMAGES_DISPLAY
-  // Paragraph numbering — per-book, chosen from the in-book menu (off by default).
-  // 0 = off, 1 = per chapter, 2 = whole book.
+  // Paragraph numbering — per-book, seeded from the global default and then overridable
+  // from the in-book menu. 0 = off, 1 = per chapter, 2 = whole book.
   uint8_t paragraphNumbering = 0;  // CrossPointSettings::PARA_NUM_OFF
   // Paperback Look (heavier ink smear) — per book, toggled from the in-book menu,
   // seeded from the global default (ON). Two independent flags: body = reader page

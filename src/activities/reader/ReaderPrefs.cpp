@@ -29,8 +29,7 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.paperbackLookStatus = SETTINGS.paperbackLookStatus;
   p.firstLineIndentMode = SETTINGS.firstLineIndentMode;
   p.firstLineIndentPercent = SETTINGS.firstLineIndentPercent;
-  // paragraphNumbering is per-book only (there is no global equivalent) — intentionally
-  // NOT copied, so it always defaults OFF for a book that has never been customized.
+  p.paragraphNumbering = SETTINGS.paragraphNumbering;
   // Zero-pad then copy so the trailing bytes are canonical for whole-blob memcmp.
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(p.sdFontFamilyName) - 1);

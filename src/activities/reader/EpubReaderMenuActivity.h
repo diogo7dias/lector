@@ -42,7 +42,8 @@ class EpubReaderMenuActivity final : public Activity {
     WALLPAPER_HOLD,            // stop picking a new wallpaper each sleep; keep this one
     WALLPAPER_DELETE,          // delete that wallpaper file from the card, behind a confirmation
     REMOVE_FROM_RECENTS,       // drop this book from the home list and put its file back at the card root
-    VIEW_QUOTES                // browse (and delete) the quotes saved in <book>_QUOTES.txt
+    VIEW_QUOTES,               // browse (and delete) the quotes saved in <book>_QUOTES.txt
+    SECTION                    // not an action: a heading row. Never selectable, never returned.
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
@@ -68,6 +69,12 @@ class EpubReaderMenuActivity final : public Activity {
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
                                               uint8_t paragraphNumbering, bool hasSleepWallpaper,
                                               bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
+  bool isSection(int index) const {
+    return index >= 0 && index < static_cast<int>(menuItems.size()) && menuItems[index].action == MenuAction::SECTION;
+  }
+  // Step the selection past any heading rows. Headings are drawn in the list but are not
+  // options, so Up/Down must jump over them rather than stopping on a dead row.
+  int firstSelectableFrom(int index, bool forward) const;
   void closeCancelled();
 
   // Fixed menu layout

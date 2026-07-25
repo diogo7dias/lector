@@ -93,8 +93,6 @@ struct ThemeMetrics {
   int optionPopupSelectionHPadding;
   int optionPopupSelectionVPadding;
   int optionPopupTitleGap;
-  bool optionPopupUseSmallFont;
-  bool optionPopupOptionFontBold;
   int optionPopupSelectionRadius;
   bool optionPopupSelectionLight;
   bool optionPopupDrawAllRows;
@@ -167,8 +165,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupSelectionHPadding = 8,
                                  .optionPopupSelectionVPadding = 4,
                                  .optionPopupTitleGap = 10,
-                                 .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = false,
                                  .optionPopupSelectionRadius = 0,
                                  .optionPopupSelectionLight = false,
                                  .optionPopupDrawAllRows = false,
@@ -187,7 +183,7 @@ class BaseTheme {
   // Component drawing methods
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
-                       int fontId = SMALL_FONT_ID) const;  // Left aligned (reader mode)
+                       int fontId = UI_10_FONT_ID) const;  // Left aligned (reader mode)
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
                         bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
@@ -201,8 +197,13 @@ class BaseTheme {
                         const std::function<std::string(int index)>& rowSubtitle = nullptr,
                         const std::function<UIIcon(int index)>& rowIcon = nullptr,
                         const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
-                        const std::function<bool(int index)>& rowDimmed = nullptr,
-                        int itemFontId = UI_10_FONT_ID) const;
+                        const std::function<bool(int index)>& rowDimmed = nullptr, int itemFontId = UI_10_FONT_ID,
+                        // Rows for which this returns true are section headings: a label
+                        // with a rule running out to the right edge, never selectable and
+                        // never highlighted. They occupy a normal row slot, so paging and
+                        // the selection maths are unchanged. The caller is responsible for
+                        // skipping them when moving the selection.
+                        const std::function<bool(int index)>& rowIsHeader = nullptr) const;
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
@@ -252,6 +253,20 @@ class BaseTheme {
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;
+  // Gap between the battery icon and the right edge of the header.
+  static constexpr int batteryRightPadding = 12;
+  // Font of the battery percentage. It shares a row with the version string, the
+  // Pages tile and the clock on the home header, and with every other segment in
+  // the reader status bar, so it must be the same size as those: UI_10.
+  static constexpr int batteryPercentFontId = UI_10_FONT_ID;
+
+  // Width of the whole right-hand battery cluster (right padding + icon + spacing +
+  // a full-width "100%"). Callers use it to reserve space, to clear the previous
+  // draw, and to place whatever sits to its left, so all three agree by construction.
+  static int batteryClusterWidth(const GfxRenderer& renderer);
+  // Top of the battery icon for a cluster whose text is drawn at rect.y: centres the
+  // icon in that text's line box so icon and percentage read as one row.
+  static int batteryIconTop(const GfxRenderer& renderer, const Rect& rect, int fontId);
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);
   static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY);
 };

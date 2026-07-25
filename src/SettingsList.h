@@ -270,6 +270,17 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),
+        // Defaults for the three per-book looks that used to be reachable only from the
+        // in-book menu. Changing one here sets what the NEXT freshly opened book starts
+        // with; a book that already has its own override keeps its own value, and the
+        // in-book menu still overrides any of them per book.
+        SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBERS, &CrossPointSettings::paragraphNumbering,
+                          {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER, StrId::STR_PARA_NUM_BOOK},
+                          "paragraphNumbering", StrId::STR_CAT_READER),
+        SettingInfo::Toggle(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody, "paperbackLookBody",
+                            StrId::STR_CAT_READER),
+        SettingInfo::Toggle(StrId::STR_PAPERBACK_STATUS, &CrossPointSettings::paperbackLookStatus,
+                            "paperbackLookStatus", StrId::STR_CAT_READER),
         // --- Controls ---
         SettingInfo::Enum(StrId::STR_SIDE_BTN_LAYOUT, &CrossPointSettings::sideButtonLayout,
                           {StrId::STR_PREV_NEXT, StrId::STR_NEXT_PREV, StrId::STR_DISABLED}, "sideButtonLayout",
