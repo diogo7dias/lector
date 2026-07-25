@@ -311,6 +311,15 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
      **`BOOK_CACHE_VERSION` 8 → 9**, so every book re-reads metadata/spine/TOC once on next open; laid-out
      pages and progress are untouched. The size estimate's length-prefix term went 5 → 6 strings — it feeds
      `lutOffset`, so missing it would have pointed the lookup table four bytes short.
+  3b. **Stats Dashboard sleep screen** (`878ffba5`). New Sleep Screen option: the book's cover with a stats
+     overlay (reading time, time left, progress, daily average, pages/min, days reading, finish estimate,
+     title + chapter, streak, reader-type label). Falls back to the default face when there is no open book,
+     no stats for the format, or no cover. Appended as `SLEEP_SCREEN_MODE` value 7 — the stored value IS the
+     persisted setting, so faces must only ever be appended; a `static_assert` pins it to the renderer's own
+     constant. The grayscale sequence mirrors `renderBitmapSleepScreen` (base stays HALF) and the face does
+     NOT clean the panel, because `renderSleepScreen` already does. The "plus" wallpaper variant and the
+     renderer's PXC branch were NOT ported: they need the dropped wallpaper playlist, and the cover path
+     only ever yields BMP.
   3. **Reading Stats** (`8a939fac`). Engine (`src/reading_stats/`, 12 files) + `BookStatsActivity` +
      `readingStatsEnabled` / `readingStatsIdleUnits` under System. Two 180-byte files, one per book in its
      cache dir and one global at `/.crosspoint/global_reading_stats.bin`, saved via verified temp + `.bak`
@@ -357,6 +366,8 @@ Everything since 0.0.1 was built, host-tested and shipped, but **not** device-te
 - **Unreleased:** Settings · Clean Up Storage removes orphan caches only (delete a book, sweep, confirm the
   other books still open at their saved place); reader menu · Book Info shows cover/author/language/synopsis;
   reader menu · Reading Stats counts a session, and the numbers survive closing and reopening the book.
+  Settings · Display · Sleep Screen · Stats Dashboard sleeps to the cover with stats over it (and falls back
+  to the logo face when there is no open book).
   Reading Stats needs the clock set, or streaks and weekday buckets will be wrong.
 - **0.0.7:** unlock keeps the `.pxc` wallpaper with banners on top (no logo, no white flash); a book's own
   font size survives closing and reopening it (SD-card fonts only — the bug never touched Vollkorn).
