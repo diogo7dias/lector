@@ -12,6 +12,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookFiling.h"
 
 namespace {
 // Hold threshold for the long-press "remove from list" action (firmware convention).
@@ -108,8 +109,12 @@ void RecentBooksActivity::promptRemoveBook(const std::string& path, const std::s
       LOG_DBG("RBA", "Remove from recents cancelled");
       return;
     }
-    if (RECENT_BOOKS.removeByPath(path)) {
-      LOG_DBG("RBA", "Removed from recents: %s", path.c_str());
+    // Removing undoes the filing that opening the book did, so a book sitting in
+    // /recents goes back to the card root. Same rule as the reader menu's row, so the
+    // two cannot drift apart. The book is not open here, so nothing holds a handle.
+    const std::string finalPath = bookfiling::unfileFromRecents(path);
+    if (RECENT_BOOKS.removeByPath(finalPath)) {
+      LOG_DBG("RBA", "Removed from recents: %s", finalPath.c_str());
       loadRecentBooks();
       if (recentBooks.empty()) {
         selectorIndex = 0;

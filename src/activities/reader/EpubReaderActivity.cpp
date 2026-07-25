@@ -47,6 +47,7 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
 #include "sleep/SleepPauseToggle.h"
+#include "util/BookFiling.h"
 #include "util/BookmarkUtil.h"
 #include "util/FavoriteImage.h"
 #include "util/ScreenshotUtil.h"
@@ -70,19 +71,10 @@ int clampPercent(int percent) {
   return percent;
 }
 
-// SD card folder finished books are moved into. Single source of truth for the path.
-// constexpr ⇒ lives in flash .rodata, no DRAM cost.
-constexpr char READ_FOLDER[] = "/read";
-// Books that are opened but not finished are filed here, so /read holds only what is
-// done and /recents holds what is in progress.
-constexpr char RECENTS_FOLDER[] = "/recents";
-
-// True if path is directly inside `folder` (starts with "<folder>/"). Non-allocating so
-// it is cheap to call from loop(), and avoids reintroducing a separate "/Read/" literal.
-bool isInFolder(const std::string& path, const char* folder) {
-  const size_t n = strlen(folder);
-  return path.size() > n && path.compare(0, n, folder) == 0 && path[n] == '/';
-}
+using bookfiling::isInFolder;
+using bookfiling::READ_FOLDER;
+using bookfiling::RECENTS_FOLDER;
+using bookfiling::ROOT_FOLDER;
 
 bool isInReadFolder(const std::string& path) { return isInFolder(path, READ_FOLDER); }
 
@@ -114,56 +106,6 @@ bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex
   const float bookmarkProgress = std::clamp(bookmark.percentage, 0.0f, 1.0f);
   return bookmarkProgress + bookmarkProgressEpsilon >= pageRange.start &&
          bookmarkProgress - bookmarkProgressEpsilon <= pageRange.end;
-}
-
-// Pick a non-colliding destination path inside `folder` for a book being filed.
-// Mirrors the suffixing scheme used elsewhere: "name.epub" -> "name (2).epub", etc.
-std::string buildFolderDestination(const std::string& srcPath, const char* folder) {
-  const size_t lastSlash = srcPath.rfind('/');
-  const std::string filename = (lastSlash != std::string::npos) ? srcPath.substr(lastSlash + 1) : srcPath;
-
-  Storage.mkdir(folder);
-  std::string dstPath = std::string(folder) + "/" + filename;
-  if (!Storage.exists(dstPath.c_str())) {
-    return dstPath;
-  }
-
-  const size_t dotPos = filename.rfind('.');
-  const std::string base = (dotPos != std::string::npos) ? filename.substr(0, dotPos) : filename;
-  const std::string ext = (dotPos != std::string::npos) ? filename.substr(dotPos) : "";
-  int suffix = 2;
-  do {
-    dstPath = std::string(folder) + "/" + base + " (" + std::to_string(suffix) + ")" + ext;
-    suffix++;
-  } while (Storage.exists(dstPath.c_str()) && suffix < 100);
-  return dstPath;
-}
-
-// Relocate a book and its cache dir into `dstPath`, keep it in recents by repointing its
-// entry to the new path, and repoint the resume pointer too.
-// On rename failure: LOG_ERR and leave everything in place (no UI alert subsystem here).
-void moveBookToFolder(const std::string& srcPath, const std::string& dstPath, const std::string& oldCachePath) {
-  LOG_INF("ERS", "Filing epub: %s -> %s", srcPath.c_str(), dstPath.c_str());
-  if (!Storage.rename(srcPath.c_str(), dstPath.c_str())) {
-    LOG_ERR("ERS", "Failed to move book to '%s'", dstPath.c_str());
-    return;
-  }
-
-  // Cache dir is keyed by hash of the epub path (see Epub ctor), so it must be re-keyed.
-  const std::string newCachePath = "/.crosspoint/epub_" + std::to_string(std::hash<std::string>{}(dstPath));
-  if (!oldCachePath.empty() && Storage.exists(oldCachePath.c_str())) {
-    if (!Storage.rename(oldCachePath.c_str(), newCachePath.c_str())) {
-      LOG_ERR("ERS", "Failed to rename cache dir %s -> %s (non-fatal)", oldCachePath.c_str(), newCachePath.c_str());
-    }
-  }
-
-  // Keep the book in recents (crossink behavior): repoint the entry to its new
-  // location instead of dropping it. updatePath persists on success.
-  RECENT_BOOKS.updatePath(srcPath, dstPath, oldCachePath, newCachePath);
-  if (APP_STATE.openEpubPath == srcPath) {
-    APP_STATE.openEpubPath = dstPath;
-    APP_STATE.saveToFile();
-  }
 }
 
 }  // namespace
@@ -300,20 +242,35 @@ void EpubReaderActivity::onExit() {
   // move is done after the Epub is released so no handle is open across the rename.
   const char* fileInto = nullptr;
   if (epub) {
-    if (pendingReadFolderMove) {
+    if (pendingRemoveFromRecents) {
+      // Removing undoes the filing that opening the book did, so the file goes back to
+      // the card root. A book that was never filed stays where the user put it.
+      if (isInFolder(epub->getPath(), RECENTS_FOLDER)) fileInto = ROOT_FOLDER;
+    } else if (pendingReadFolderMove) {
       fileInto = READ_FOLDER;
     } else if (SETTINGS.moveOpenedToRecentsFolder && !isInFolder(epub->getPath(), RECENTS_FOLDER)) {
       fileInto = RECENTS_FOLDER;
     }
   }
+  std::string finalPath = epub ? epub->getPath() : std::string();
   if (fileInto) {
     const std::string srcPath = epub->getPath();
     const std::string oldCachePath = epub->getCachePath();
-    const std::string dstPath = buildFolderDestination(srcPath, fileInto);
+    const std::string dstPath = bookfiling::buildFolderDestination(srcPath, fileInto);
     epub.reset();  // release the Epub (and any open handles) before renaming on the SD card
-    moveBookToFolder(srcPath, dstPath, oldCachePath);
+    finalPath = bookfiling::moveBookToFolder(srcPath, dstPath, oldCachePath);
   } else {
     epub.reset();
+  }
+
+  if (pendingRemoveFromRecents && !finalPath.empty()) {
+    RECENT_BOOKS.removeByPath(finalPath);
+    // Drop the resume pointer too, or Back on the home screen would reopen the very
+    // book the user just removed.
+    if (APP_STATE.openEpubPath == finalPath) {
+      APP_STATE.openEpubPath.clear();
+      APP_STATE.saveToFile();
+    }
   }
 }
 
@@ -1091,6 +1048,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // If no text or page loading failed, just close menu
       requestUpdate();
       break;
+    }
+    case EpubReaderMenuActivity::MenuAction::REMOVE_FROM_RECENTS: {
+      // The file move and the list edit both happen in onExit, where the Epub is
+      // already released — renaming a book with an open handle is what the /read and
+      // /recents filing carefully avoids, and this is the same move in reverse.
+      pendingRemoveFromRecents = true;
+      onGoHome();
+      return;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();
