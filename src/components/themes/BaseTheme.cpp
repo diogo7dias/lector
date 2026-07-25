@@ -763,6 +763,125 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   }
 }
 
+ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rect rect, const int itemCount,
+                                          const int selectedIndex, const int scrollOffset,
+                                          const std::function<std::string(int index)>& rowTitle,
+                                          const std::function<std::string(int index)>& rowValue,
+                                          const int maxVisibleRows) const {
+  if (itemCount <= 0 || !rowTitle) {
+    return {0, 0, itemCount > 0 ? itemCount : 0};
+  }
+
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  constexpr int rowGap = 2;
+  constexpr int rowPadY = 4;    // vertical breathing room inside a row
+  constexpr int valueGap = 10;  // gap between the wrapped title and the right-aligned value
+  const int contentX = rect.x + BaseMetrics::values.contentSidePadding;
+  const int contentW = rect.width - BaseMetrics::values.contentSidePadding * 2;
+
+  // Reserve a band at both ends for the "N more" badges whenever the list can scroll, so
+  // rows never sit under one.
+  const int indicatorH = (itemCount > 1) ? lineHeight + 8 : 0;
+  const int listTop = rect.y + indicatorH;
+  const int listHeight = rect.height - indicatorH * 2;
+  if (contentW <= 0 || listHeight < lineHeight) {
+    return {0, 0, itemCount};
+  }
+
+  struct Row {
+    int index;
+    std::vector<std::string> lines;
+    std::string value;
+    int valueW;
+    int height;
+  };
+
+  // Measuring wraps the title, so it is only ever done for rows near the window — never
+  // for a whole directory, which can hold thousands of entries.
+  auto measure = [&](const int index) {
+    Row row{index, {}, {}, 0, 0};
+    if (rowValue) {
+      row.value = rowValue(index);
+      if (!row.value.empty()) {
+        row.valueW = renderer.getTextWidth(UI_10_FONT_ID, row.value.c_str()) + valueGap;
+      }
+    }
+    // Never let the value squeeze the first line to nothing: below a third of the width the
+    // title wraps under the value instead.
+    const int firstLineW = std::max(contentW / 3, contentW - row.valueW);
+    row.lines = wrapText(renderer, rowTitle(index), firstLineW, contentW);
+    if (row.lines.empty()) row.lines.emplace_back("");
+    row.height = static_cast<int>(row.lines.size()) * lineHeight + rowPadY;
+    return row;
+  };
+
+  auto build = [&](const int start) {
+    std::vector<Row> rows;
+    int used = 0;
+    for (int i = start; i < itemCount && static_cast<int>(rows.size()) < maxVisibleRows; i++) {
+      Row row = measure(i);
+      const int step = row.height + (rows.empty() ? 0 : rowGap);
+      if (used + step > listHeight && !rows.empty()) break;
+      used += step;
+      rows.push_back(std::move(row));
+    }
+    return rows;
+  };
+
+  int start = std::clamp(scrollOffset, 0, itemCount - 1);
+  if (selectedIndex >= 0 && selectedIndex < start) start = selectedIndex;
+  std::vector<Row> rows = build(start);
+
+  // Selection past the last drawn row: walk the window back from the selection while the
+  // rows above still fit, which lands the selected row at the bottom.
+  if (selectedIndex >= 0 && !rows.empty() && selectedIndex > rows.back().index) {
+    int newStart = selectedIndex;
+    int used = measure(selectedIndex).height;
+    while (newStart > 0) {
+      const int step = measure(newStart - 1).height + rowGap;
+      if (used + step > listHeight) break;
+      used += step;
+      newStart--;
+    }
+    start = newStart;
+    rows = build(start);
+  }
+  if (rows.empty()) rows.push_back(measure(start));
+
+  const int firstVisible = rows.front().index;
+  const int lastVisible = rows.back().index;
+
+  if (firstVisible > 0) {
+    drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rect.x, rect.width, rect.y, lineHeight);
+  }
+  if (lastVisible < itemCount - 1) {
+    drawMoreIndicator(renderer, itemCount - 1 - lastVisible, StrId::STR_MORE_BELOW, rect.x, rect.width,
+                      rect.y + rect.height - indicatorH, lineHeight);
+  }
+
+  int rowY = listTop;
+  for (const Row& row : rows) {
+    const bool selected = row.index == selectedIndex;
+    if (selected) {
+      // One rect over the whole measured height, so a row spanning several lines inverts as
+      // a single block.
+      renderer.fillRect(rect.x, rowY, rect.width, row.height, true);
+    }
+    if (row.valueW > 0) {
+      const int valueX = contentX + contentW - (row.valueW - valueGap);
+      renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !selected);
+    }
+    int baselineY = rowY + 3;
+    for (const std::string& line : row.lines) {
+      renderer.drawText(UI_10_FONT_ID, contentX, baselineY, line.c_str(), !selected);
+      baselineY += lineHeight;
+    }
+    rowY += row.height + rowGap;
+  }
+
+  return {firstVisible, lastVisible, itemCount};
+}
+
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
                                const std::function<UIIcon(int index)>& rowIcon) const {
@@ -1177,9 +1296,9 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 // with a black background sits inline on line 0 (it flips to a white chip on the
 // selected/inverted row so it stays legible). "N more above/below" indicators show
 // when the list scrolls. Returns the visible index range for the caller's scroll state.
-BookListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
-                                                 const std::vector<RecentBook>& recentBooks, int selectorIndex,
-                                                 int scrollOffset) const {
+ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
+                                             const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                                             int scrollOffset) const {
   constexpr int maxRowsCap = 30;
   const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
   constexpr int maxVisibleBooks = 8;

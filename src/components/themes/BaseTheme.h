@@ -12,9 +12,9 @@
 class GfxRenderer;
 struct RecentBook;
 
-// Which recent-book indices the home list actually rendered this frame (variable
-// row heights + scrolling), so HomeActivity can keep the selected book on screen.
-struct BookListVisibility {
+// Which item indices a variable-height list actually rendered this frame, so the caller
+// can keep the selected row on screen. Used by drawRecentBookList and drawWrappedList.
+struct ListVisibility {
   int firstVisible;  // index of the first fully-rendered book
   int lastVisible;   // index of the last fully-rendered book (inclusive)
   int totalCount;
@@ -228,9 +228,18 @@ class BaseTheme {
   // many lines as it needs, with an inline [NN%] black-background badge, the selected
   // row inverted, and "N more above/below" indicators when the list scrolls. Returns
   // the visible index range so the caller can keep the selected book on screen.
-  virtual BookListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect,
-                                                const std::vector<RecentBook>& recentBooks, int selectorIndex,
-                                                int scrollOffset) const;
+  virtual ListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect,
+                                            const std::vector<RecentBook>& recentBooks, int selectorIndex,
+                                            int scrollOffset) const;
+  // Variable-height sibling of drawList: each row's title WRAPS over as many lines as it
+  // needs instead of being ellipsised, so a long filename stays readable in full. rowValue
+  // is optional and is drawn right-aligned on the row's first line, with its width reserved
+  // there. Rows scroll rather than paginate, so the caller keeps a scrollOffset and feeds
+  // back the returned visible range (see FileBrowserActivity).
+  virtual ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                                         int scrollOffset, const std::function<std::string(int index)>& rowTitle,
+                                         const std::function<std::string(int index)>& rowValue = nullptr,
+                                         int maxVisibleRows = 14) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;

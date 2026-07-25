@@ -22,6 +22,13 @@ class FileBrowserActivity final : public Activity {
 
   size_t selectorIndex = 0;
 
+  // Rows wrap over a variable number of lines, so the list scrolls instead of paginating.
+  // render() is the source of truth: it reports back which rows it actually drew, and
+  // loop() only nudges the offset when the selection leaves that range.
+  int scrollOffset = 0;
+  int firstVisibleIdx = 0;
+  int lastVisibleIdx = 0;
+
   bool lockLongPressBack = false;
   // True when this activity was entered while Confirm was already held; we must swallow the next
   // release so we don't immediately auto-open the first entry.

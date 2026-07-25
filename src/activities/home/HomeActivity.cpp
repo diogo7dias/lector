@@ -156,7 +156,7 @@ void HomeActivity::render(RenderLock&&) {
   // so no book row is highlighted.
   const Rect bookRect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight};
   const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
-  const BookListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
+  const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
   firstVisibleBookIdx = vis.firstVisible;
   lastVisibleBookIdx = vis.lastVisible;
   scrollOffset = vis.firstVisible;

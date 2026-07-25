@@ -22,6 +22,11 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 
 void FileBrowserActivity::loadFiles() {
   files.clear();
+  // A new listing invalidates the scroll window. render() re-derives it from the selection,
+  // so starting at the top is safe even when the caller then selects a row further down.
+  scrollOffset = 0;
+  firstVisibleIdx = 0;
+  lastVisibleIdx = 0;
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -203,12 +208,9 @@ void FileBrowserActivity::loop() {
     return;
   }
 
-  const int pathReserved = renderer.getLineHeight(SMALL_FONT_ID) + UITheme::getInstance().getMetrics().verticalSpacing;
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false, pathReserved);
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      renderer.getScreenHeight() - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+  // Rows have variable heights now, so a fixed items-per-page is meaningless. The page jump
+  // steps by however many rows the last draw actually fit on screen.
+  const int pageItems = std::max(1, lastVisibleIdx - firstVisibleIdx + 1);
 
   auto activateSelected = [this] {
     if (lockNextConfirmRelease) {
@@ -318,23 +320,41 @@ void FileBrowserActivity::loop() {
 
   int listSize = static_cast<int>(files.size());
 
-  buttonNavigator.onNextRelease([this, listSize] {
+  // Keep the selection inside the drawn window. Moving past the bottom nudges the offset by
+  // one and lets the draw settle the rest; jumping above the top snaps the offset to the
+  // selection (which also covers the wrap from the first row to the last).
+  auto followSelection = [this, listSize] {
+    const int index = static_cast<int>(selectorIndex);
+    if (index > lastVisibleIdx) {
+      scrollOffset = std::min(scrollOffset + 1, listSize - 1);
+    }
+    if (index < firstVisibleIdx) {
+      scrollOffset = index;
+    }
+    scrollOffset = std::clamp(scrollOffset, 0, std::max(0, listSize - 1));
+  };
+
+  buttonNavigator.onNextRelease([this, listSize, followSelection] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
+    followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, listSize] {
+  buttonNavigator.onPreviousRelease([this, listSize, followSelection] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
+    followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
+  buttonNavigator.onNextContinuous([this, listSize, pageItems, followSelection] {
     selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
+  buttonNavigator.onPreviousContinuous([this, listSize, pageItems, followSelection] {
     selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    followSelection();
     requestUpdate();
   });
 }
@@ -381,11 +401,16 @@ void FileBrowserActivity::render(RenderLock&&) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
   } else {
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, files.size(), selectorIndex,
-        [this](int index) { return getFileName(files[index]); }, nullptr,
-        [this](int index) { return UITheme::getFileIcon(files[index]); },
-        [this](int index) { return getFileExtension(files[index]); }, false);
+    // Wrapping list: a long book title spills onto extra lines instead of being cut off
+    // with an ellipsis. Rows therefore vary in height, so the visible range comes back from
+    // the draw and feeds the scroll offset.
+    const ListVisibility vis = GUI.drawWrappedList(
+        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(files.size()),
+        static_cast<int>(selectorIndex), scrollOffset, [this](int index) { return getFileName(files[index]); },
+        [this](int index) { return getFileExtension(files[index]); });
+    firstVisibleIdx = vis.firstVisible;
+    lastVisibleIdx = vis.lastVisible;
+    scrollOffset = vis.firstVisible;
   }
 
   // Full path display
