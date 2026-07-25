@@ -545,7 +545,21 @@ carries title + `[NN%]`.
   the pen, so the opening bracket's side bearing is inside the width while the right edge stops on the
   last lit pixel. The trailing blank is 0, not the advance's leftover.
 
-Shipped as **lector.c 0.0.10** (2026-07-25). All of it is DEVICE-TEST GATED — none is hardware-verified.
+Shipped as **lector.c 0.0.10** (2026-07-25).
+
+**Device results (Diogo, 2026-07-25):** OPDS works — connected and downloaded a book, so the built-in
+server and the Basic-auth path are hardware-verified. **The sleep ghost is NOT fixed** and is parked at
+Diogo's request. What is now known, so nobody repeats it:
+- The black-then-white wipe genuinely runs (he watched it), so the FULL refresh is real and the SDK's
+  `0xF7` sequence and the FULL-to-HALF demotion path are both cleared as suspects.
+- A ghost that survives a complete inversion cycle is not surface ghosting; it is deep trapped charge
+  from content held still for minutes.
+- The cold-boot lock being clean does NOT exonerate the wipe — a cold panel has nothing held long
+  enough to trap charge. (An earlier note in this log over-claimed that; corrected here.)
+- **His Refresh Frequency is "Never".** That is the charge source, and the trade is real: zero flashes
+  while reading means the panel holds charge and the lock cannot fully undo it.
+- Untried next steps, in order: run three black/white cycles at lock instead of one (~4 s, hidden); or
+  reinstate a FAST cap outside the reader only, leaving reading flash-free.
 
 ### 3. Remaining niceties still to port from old lector
 
