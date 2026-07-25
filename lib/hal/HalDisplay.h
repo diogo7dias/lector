@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <DisplayRefreshPolicy.h>
 #include <EInkDisplay.h>
 
 class HalDisplay {
@@ -99,7 +100,13 @@ class HalDisplay {
   uint32_t getBufferSize() const;
 
  private:
+  // Anti-ghosting cap, ported verbatim from the pre-rebase fork. Every refresh this
+  // class performs is routed through it, so no run of FAST passes can grow long
+  // enough to trap charge in the panel.
+  RefreshMode applyRefreshPolicy(RefreshMode requested);
+
   EInkDisplay einkDisplay;
+  DisplayRefreshPolicy refreshPolicy;
 };
 
 extern HalDisplay display;

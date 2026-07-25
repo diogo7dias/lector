@@ -57,7 +57,35 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   }
 }
 
+// Anti-ghosting cap, restored from the pre-rebase fork, where it was the reason the
+// sleep wallpaper never ghosted. The upstream base has no equivalent: it lets an
+// unbounded run of FAST (differential) passes accumulate, and content held still for
+// minutes then traps charge deep enough that a full inversion at lock cannot undo it.
+// The device evidence was that locking after a cold boot is clean while locking after
+// a session ghosts, with the lock's wipe visibly running either way — i.e. the wipe
+// was never the missing piece; the cap was. Promoting every 13th FAST to a clean pass
+// costs one flash per 13 page turns and keeps the panel from ever getting that deep.
+HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested) {
+  DisplayRefreshPolicy::Mode policyMode = DisplayRefreshPolicy::Mode::Fast;
+  if (requested == RefreshMode::HALF_REFRESH) {
+    policyMode = DisplayRefreshPolicy::Mode::Clean;
+  } else if (requested == RefreshMode::FULL_REFRESH) {
+    policyMode = DisplayRefreshPolicy::Mode::Full;
+  }
+
+  switch (refreshPolicy.choose(policyMode, millis())) {
+    case DisplayRefreshPolicy::Mode::Clean:
+      return RefreshMode::HALF_REFRESH;
+    case DisplayRefreshPolicy::Mode::Full:
+      return RefreshMode::FULL_REFRESH;
+    case DisplayRefreshPolicy::Mode::Fast:
+    default:
+      return RefreshMode::FAST_REFRESH;
+  }
+}
+
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
@@ -66,8 +94,17 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
+  const RefreshMode requested = mode;
+  mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
+  }
+
+  // A promoted pass has multi-phase post-work, so run it synchronously rather than
+  // detached — same trade the pre-rebase fork made.
+  if (mode != requested && mode != RefreshMode::FAST_REFRESH) {
+    einkDisplay.displayBuffer(convertRefreshMode(mode), false);
+    return;
   }
 
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
@@ -78,6 +115,7 @@ void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
@@ -85,7 +123,10 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
 }
 
-void HalDisplay::deepSleep() { einkDisplay.deepSleep(); }
+void HalDisplay::deepSleep() {
+  refreshPolicy.reset();
+  einkDisplay.deepSleep();
+}
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
@@ -98,6 +139,7 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* m
 }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
+  fallback = applyRefreshPolicy(fallback);
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior

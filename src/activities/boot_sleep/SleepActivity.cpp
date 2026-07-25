@@ -488,30 +488,21 @@ void SleepActivity::renderFreezeSleepScreen() const {
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
+// One blank FULL pass before painting a sleep face, exactly as the pre-rebase fork did
+// it (its RefreshIntent::DeepClean was Buffer + FULL over a white screen). Lock can
+// happen over any screen, and every sleep render below uses the calibrated differential
+// HALF/graybase waveforms, which would otherwise leave the prior content ghosting
+// through the wallpaper for the whole sleep.
+//
+// This deliberately does NOT try to be a stronger wipe. Escalating it here (black-then-
+// white, then three cycles of that) was tried and did not stop the ghost, because the
+// ghost was never a wipe problem: the pre-rebase fork ghosted nothing with this single
+// pass. What it also had, and what the rebase had dropped, is the anti-ghosting cap in
+// HalDisplay that stops a long run of FAST passes from trapping charge in the first
+// place. That cap is back; this stays as it was.
 void SleepActivity::deepCleanPanel() const {
-  // Drive the whole panel to black and back to white, N times, before the sleep screen
-  // paints over it.
-  //
-  // ONE cycle was not enough. Device evidence: locking after a cold boot is clean,
-  // locking after a session ghosts, and the black/white wipe is visibly running when it
-  // does. A ghost that survives a complete inversion is not surface charge; it is deep
-  // trapped charge left by content held still for minutes. The charge source is Refresh
-  // Frequency = "Never", which is a deliberate trade (zero flashes while reading) and is
-  // not going to be taken back, so the lock has to undo more per lock. Repeated
-  // inversion is the standard way to shift trapped charge; one pass only shifts the
-  // shallow part.
-  //
-  // The cost is (2 x cycles) full-panel refreshes, all of them after the user has put
-  // the device down, so the seconds are hidden. Raising this is cheap; if it still
-  // ghosts at 3, the next lever is the final sleep image itself, which paints with a
-  // partial waveform (HALF / the 3-pass grayscale) rather than a full one.
-  constexpr int cleanCycles = 3;
-  for (int i = 0; i < cleanCycles; i++) {
-    renderer.clearScreen(0x00);  // every pixel black
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-    renderer.clearScreen();  // back to white (0xFF)
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-  }
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
 // Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
