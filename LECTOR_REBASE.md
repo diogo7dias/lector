@@ -87,7 +87,18 @@ Legend: [x] done · [~] in progress · [ ] todo
       `b78f5d19`, `d5a18b17`, `b0a32fc4`, `d0377549`. Live preview honours every layout setting (`09d6ca89`).
 - [x] **Status bar v2** — per-item placement/customisation restored. Commit `6caefbfb`.
 - [x] **Guide dots** — middle dot drawn between words. Commit `71cd7679`.
-- [ ] Fonts/typography remaining: PT hyphenation; anti-alias fade off. ("Bionic Reading" name is DONE.)
+- [x] Fonts/typography: PT hyphenation added (trie + registry entry), text anti-aliasing defaulted OFF,
+      "Bionic Reading" name restored. Word spacing stays deferred.
+- [x] **Reading Themes** (from DX34) — named reader looks, applied per book. Code calls them PRESETS
+      (`ReaderPresetStore`, `ReaderPresetsActivity`) because UITheme/BaseTheme already mean the menu
+      chrome; the UI still says "Reading Themes". Deliberately CUT from the DX34 version: all 24
+      status-bar fields and orientation (both are device settings here, so capturing them would make a
+      theme write global state and break the per-book model), the one-level undo, the duplicate
+      "adjust settings"/"reset to global" rows, the last-applied bookkeeping, and 16 slots down to 8.
+      Stored as NAMED JSON KEYS, never a ReaderPrefs blob — the blob version is rejected hard on
+      mismatch, so a field added to ReaderPrefs would have silently wiped every saved theme.
+      `applyStolenLook` refactored into the shared `applyReaderPrefsFrom`, which also verifies the SD
+      font is still installed and writes the correction back to the theme.
       (NotoSerif source TTFs left in-tree but unused — trim later if desired.)
 - [x] **Home in-progress list** — recents as a list; full title WRAPPED (no truncation) +
       "by INITIALS" + inline `[NN%]` black-bg badge (via ported `BaseTheme::drawRecentBookList`
