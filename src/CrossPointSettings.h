@@ -353,6 +353,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SLEEP_QUALITY_FAST = 0;
   static constexpr uint8_t SLEEP_QUALITY_PRETTY = 1;
   uint8_t sleepImageQuality = SLEEP_QUALITY_PRETTY;
+  // Open one of the books in progress at boot instead of resuming the last-read one
+  // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
+  // so it can never wedge boot.
+  uint8_t openRandomRecentOnBoot = 0;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the

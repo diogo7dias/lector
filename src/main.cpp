@@ -16,8 +16,11 @@
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
+#include <esp_random.h>
 
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -284,6 +287,19 @@ void setupDisplayAndFonts(bool seamless = false) {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
+// A book to open when "Open a random book on boot" is on: any recent entry whose file
+// is still on the card. Missing ones are skipped rather than opened and failed.
+static std::string pickRandomRecentBookPath() {
+  const auto& books = RECENT_BOOKS.getBooks();
+  std::vector<const std::string*> candidates;
+  candidates.reserve(books.size());
+  for (const auto& book : books) {
+    if (!RecentBooksStore::isMissing(book)) candidates.push_back(&book.path);
+  }
+  if (candidates.empty()) return "";
+  return *candidates[esp_random() % candidates.size()];
+}
+
 void setup() {
   BoardConfig::holdPowerRails();
 
@@ -483,11 +499,28 @@ void setup() {
     // through to the sleep-wake "resume reader" logic, which fires on stale
     // openEpubPath + lastSleepFromReader from a prior session.
     activityManager.goHome();
-  } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
+  } else if (SETTINGS.openRandomRecentOnBoot || APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
     // crashed (indicated by readerActivityLoadCount > 0)
-    activityManager.goHome();
+    //
+    // "Open a random book on boot" jumps into one of the books in progress instead.
+    // Skipped when Back is held (the user is asking for home) or after a reader crash,
+    // so a book that cannot open can never wedge boot.
+    const bool backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
+    std::string randomBookPath;
+    if (SETTINGS.openRandomRecentOnBoot && !backHeld && APP_STATE.readerActivityLoadCount == 0) {
+      randomBookPath = pickRandomRecentBookPath();
+    }
+    if (!randomBookPath.empty()) {
+      // Same crash-loop guard the resume path uses: bump the counter first so a crash
+      // while opening lands on home next boot instead of trying again forever.
+      APP_STATE.readerActivityLoadCount++;
+      APP_STATE.saveToFile();
+      activityManager.goToReader(randomBookPath);
+    } else {
+      activityManager.goHome();
+    }
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
