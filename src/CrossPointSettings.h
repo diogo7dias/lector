@@ -350,6 +350,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char dictionaryName[32] = "";
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
+  // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the
+  // files: folders stay sorted at the top, or navigating a deep card becomes a lottery.
+  // A fresh shuffle is drawn every time a folder is opened, which is the point — it is
+  // for finding something to read, not a stable sort.
+  uint8_t bookBrowserRandomOrder = 0;
   // Remove a book from the Recent Books list when its End-of-Book screen is reached (0 = off, 1 = on).
   // Default ON: a finished book leaves the home in-progress list. Paging back before exit restores it.
   uint8_t removeReadBooksFromRecents = 1;

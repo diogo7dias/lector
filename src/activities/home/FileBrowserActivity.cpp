@@ -5,8 +5,10 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Memory.h>
+#include <esp_random.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
@@ -82,6 +84,25 @@ void FileBrowserActivity::loadFiles() {
   }
   root.close();
   FsHelpers::sortFileList(files);
+  shuffleFilesIfRandomOrder();
+}
+
+void FileBrowserActivity::shuffleFilesIfRandomOrder() {
+  // Books only. The firmware picker wants a predictable list, and shuffling folders
+  // would make navigating a deep card a lottery — sortFileList puts them first, so
+  // the shuffle starts after the last one.
+  if (!SETTINGS.bookBrowserRandomOrder || mode != Mode::Books) return;
+
+  size_t first = 0;
+  while (first < files.size() && !files[first].empty() && files[first].back() == '/') first++;
+  if (files.size() - first < 2) return;
+
+  // Fisher-Yates over the file tail. esp_random() is the hardware RNG, so this needs
+  // no seeding and gives a different order every time the folder is opened.
+  for (size_t i = files.size() - 1; i > first; i--) {
+    const size_t j = first + esp_random() % (i - first + 1);
+    std::swap(files[i], files[j]);
+  }
 }
 
 void FileBrowserActivity::onEnter() {

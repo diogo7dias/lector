@@ -43,6 +43,8 @@ class FileBrowserActivity final : public Activity {
 
   // Data loading
   void loadFiles();
+  // Re-orders the files (never the folders) when the browser order setting is Random.
+  void shuffleFilesIfRandomOrder();
   size_t findEntry(const std::string& name) const;
 
  public:
