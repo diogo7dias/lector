@@ -36,8 +36,14 @@ inline bool hasPxcExtension(std::string_view fileName) {
 // selects that path's panel refresh (default HALF = clean base); it is ignored on
 // the grayscale path.
 //
+// overlay, when set, is called on the 1-bit path after the wallpaper has been decoded
+// into the framebuffer and before the refresh, so its drawing composites on top of the
+// wallpaper in the same single refresh (the wake banners use this). A plain function
+// pointer, not std::function: no heap, no per-signature code bloat.
+//
 // Decode is on demand (no pre-staging): the payload is read once into RAM when it
 // fits, else re-read in small row batches per pass, so it never OOM-bricks at the
 // low, fragmented heap of sleep entry.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, bool grayscale = true,
-                          HalDisplay::RefreshMode oneBitRefresh = HalDisplay::HALF_REFRESH);
+                          HalDisplay::RefreshMode oneBitRefresh = HalDisplay::HALF_REFRESH,
+                          void (*overlay)(GfxRenderer&) = nullptr);

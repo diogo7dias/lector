@@ -10,6 +10,10 @@ class SleepActivity final : public Activity {
   void onEnter() override;
 
  private:
+  // Everything onEnter() does apart from bookkeeping. Split out so onEnter() can wrap it
+  // and record which wallpaper (if any) ended up on the panel; the render functions
+  // return from several places.
+  void renderSleepScreen() const;
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;

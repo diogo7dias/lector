@@ -29,6 +29,7 @@
 #include "UiFont.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
+#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
@@ -403,7 +404,20 @@ void setup() {
                             : !APP_STATE.showBootScreen ? BootResume::QuickResume
                                                         : BootResume::Splash;
 
-  setupDisplayAndFonts(resume != BootResume::Splash);
+  // Unlock over the wallpaper: when this is a normal (non-quick-resume) deep-sleep wake
+  // whose sleep screen was a .pxc wallpaper, re-render that wallpaper on the boot screen
+  // with the unlock banners on top instead of the logo, so the wallpaper stays. Needs the
+  // seamless begin() below so the panel keeps the wallpaper (no clearing pass) until the
+  // re-render lands. .pxc only: it is the one format with a fast 1-bit render path, and a
+  // wake is not the place to run the BMP decoder.
+  const std::string& lastWallpaper = APP_STATE.lastSleepWallpaperPath;
+  const bool sleepWasCustomWallpaper =
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
+      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader);
+  const bool wallpaperWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton &&
+                             sleepWasCustomWallpaper && hasPxcExtension(lastWallpaper);
+
+  setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
 
   // The wake/unlock banners are the first thing seen on waking, and the activity that
   // follows repaints straight over them. Stamp when they land so the routing below can
@@ -439,7 +453,7 @@ void setup() {
     case BootResume::Splash:
       // goToBoot() runs BootActivity::onEnter inline (no current activity yet), and that
       // paint is blocking, so the banners are already on the panel when this returns.
-      activityManager.goToBoot();
+      activityManager.goToBoot(wallpaperWake ? lastWallpaper : std::string());
       bannersPaintedMs = millis();
       break;
   }

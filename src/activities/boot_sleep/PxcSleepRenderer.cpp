@@ -18,7 +18,7 @@
 #include "Epub/converters/DirectPixelWriter.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const bool grayscale,
-                          const HalDisplay::RefreshMode oneBitRefresh) {
+                          const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&)) {
   HalFile file;
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
@@ -145,6 +145,9 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   if (!grayscale) {
     // 1-bit fast path: a single refresh of the dithered silhouette, skipping the
     // LSB/MSB planes and the grayscale composite. Refresh mode is caller-selected.
+    // The overlay draws into the same framebuffer first so wallpaper and overlay
+    // land together in one refresh (no intermediate wallpaper-only flash).
+    if (overlay != nullptr) overlay(renderer);
     renderer.displayBuffer(oneBitRefresh);
     stage("displayBuffer 1bit");
     return true;

@@ -107,6 +107,21 @@ std::string pickWallpaperByJump(HalFile& dir) {
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
+  // Deep sleep is a chip reset, so the wake cannot know what the panel is holding unless
+  // we write it down. Clear first and let the render path set it, so any screen that is
+  // not a wallpaper leaves it empty. Saved only when it changed: a fixed /sleep.pxc gives
+  // the same value every sleep and must not cost an SD write each time.
+  const std::string previousWallpaper = APP_STATE.lastSleepWallpaperPath;
+  APP_STATE.lastSleepWallpaperPath.clear();
+
+  renderSleepScreen();
+
+  if (APP_STATE.lastSleepWallpaperPath != previousWallpaper) {
+    APP_STATE.saveToFile();
+  }
+}
+
+void SleepActivity::renderSleepScreen() const {
   const bool renderQuickResume =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
       (fromTimeout &&
@@ -157,6 +172,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       renderBitmapSleepScreen(bitmap);
+      APP_STATE.lastSleepWallpaperPath = "/sleep.bmp";
       file.close();
       if (dir) dir.close();
       return;
@@ -175,6 +191,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   constexpr bool pxcGrayscale = true;
   if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale)) {
     LOG_INF("SLP", "Loaded: /sleep.pxc");
+    APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
     if (dir) dir.close();
     return;
   }
@@ -230,6 +247,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       delay(100);
       if (hasPxcExtension(chosen)) {
         if (renderPxcSleepScreen(renderer, filename, pxcGrayscale)) {
+          APP_STATE.lastSleepWallpaperPath = filename;
           dir.close();
           return;
         }
@@ -239,6 +257,7 @@ void SleepActivity::renderCustomSleepScreen() const {
           Bitmap bitmap(randFile, true);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             renderBitmapSleepScreen(bitmap);
+            APP_STATE.lastSleepWallpaperPath = filename;
             randFile.close();
             dir.close();
             return;

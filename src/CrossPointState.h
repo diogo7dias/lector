@@ -20,6 +20,11 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
+  // Wallpaper the last sleep screen actually rendered, or empty when the sleep screen
+  // was not a wallpaper. Deep sleep is a chip reset, so the wake has no other way to
+  // know what the panel is holding; setup() re-renders this file and composites the
+  // unlock banners over it instead of showing the boot logo.
+  std::string lastSleepWallpaperPath;
 
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
