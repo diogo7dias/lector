@@ -2,7 +2,7 @@
 
 > Living document. Updated every step. This is the source of truth for the
 > lector re-base so work can resume after any context compaction.
-> Last updated: 2026-07-25 (lector.c 0.0.10 live on the flasher site).
+> Last updated: 2026-07-25 (lector.c 0.1.0 live on the flasher site).
 
 ## Goal
 
@@ -423,9 +423,16 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.0.10:** `default` RAM 16.0% / Flash 72.9%; `gh_release` RAM 16.0% / Flash 72.3%
-(`firmware.bin` 4,750,496 bytes).
-**Live on the flasher site: `lector.c 0.0.10`** (published 2026-07-25, firmware.bin 4,750,496 bytes; bootloader/partitions/boot_app0 unchanged and left in place). Nothing is built-but-unreleased.
+**Sizes at 0.1.0:** `default` RAM 16.0% / Flash 73.2%; `gh_release` `firmware.bin` 4,766,400 bytes.
+**Live on the flasher site: `lector.c 0.1.0`** (published 2026-07-25, firmware.bin 4,766,400 bytes; bootloader/partitions/boot_app0 byte-identical to 0.0.10 and left in place). Nothing is built-but-unreleased.
+
+**0.1.0 contents:** Portuguese hyphenation; text anti-aliasing default off (no grey fade per turn);
+Reading Themes (`ReaderPresetStore`, 8 named slots, JSON named keys never a `ReaderPrefs` blob);
+pages-this-session status bar item (`sbSessionPagesPos`, drawn `+12`); the status-bar clock SETTING row
+hidden when `halClock.isAvailable()` is false (the clock item itself was already RTC-gated); one shared
+banner look (`src/components/BannerStyle.h` — UI_10, 10px pad, 2px bottom rule, black fill from row 0 so
+nothing white shows above it) with `drawOptionPopup` / `ValueBarPopup` reverted to a white panel, since
+black is for the banner only.
 
 **RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without
 Diogo's explicit OK — the site push itself can auto-deploy Pages. Never flash the device without asking.
