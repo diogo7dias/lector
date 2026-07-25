@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "BannerStyle.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "fontIds.h"
@@ -29,10 +30,10 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   const int pageHeight = renderer.getScreenHeight();
   const bool bwPass = renderer.getRenderMode() == GfxRenderer::BW;
 
-  const int pad = 10;
-  // Both banners share UI_10: the footer used to sit at UI_12 and read as a heavier,
-  // mismatched line against the version and title rows above it.
-  const int lh10 = renderer.getLineHeight(UI_10_FONT_ID);
+  // Shared with the message popups (BannerStyle.h) so every black banner in the
+  // firmware is the same band: same font, same padding, same rule.
+  const int pad = banner::PAD;
+  const int lh10 = renderer.getLineHeight(banner::FONT_ID);
 
   std::string bookLine;
   if (!APP_STATE.openEpubPath.empty()) {
@@ -41,10 +42,10 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   }
 
   // Title wraps to at most 12 rows so a long title keeps its words instead of a single
-  // ellipsised line. The version and every title row share the UI_10 size.
+  // ellipsised line. The version and every title row share the banner font size.
   std::vector<std::string> titleLines;
   if (!bookLine.empty()) {
-    titleLines = renderer.wrappedText(UI_10_FONT_ID, bookLine.c_str(), pageWidth - 24, 12);
+    titleLines = renderer.wrappedText(banner::FONT_ID, bookLine.c_str(), pageWidth - 24, 12);
   }
   const int titleRows = static_cast<int>(titleLines.size());
 
@@ -71,19 +72,19 @@ void drawUnlockBanners(GfxRenderer& renderer) {
 
   // One rule per banner, on the edge that faces the page: the banners span the screen
   // and reach its physical edges, so a full frame just boxes in a band.
-  constexpr int rule = 2;
+  constexpr int rule = banner::RULE;
   renderer.fillRect(0, topY + topH - rule, pageWidth, rule, false);  // under the top banner
   renderer.fillRect(0, botY, pageWidth, rule, false);                // over the bottom banner
 
   // The version string already names the firmware ("lector.c 0.0.8"), so prefixing it
   // with "Lector " read as "Lector lector.c 0.0.8".
-  renderer.drawCenteredText(UI_10_FONT_ID, topY + pad, CROSSPOINT_VERSION, false);
+  renderer.drawCenteredText(banner::FONT_ID, topY + pad, CROSSPOINT_VERSION, false);
   int titleY = topY + pad + lh10 + 4;
   for (const std::string& line : titleLines) {
-    renderer.drawCenteredText(UI_10_FONT_ID, titleY, line.c_str(), false);
+    renderer.drawCenteredText(banner::FONT_ID, titleY, line.c_str(), false);
     titleY += lh10;
   }
 
   const char* footer = SETTINGS.customFooter[0] != '\0' ? SETTINGS.customFooter : "READ UNTIL YOU DIE.";
-  renderer.drawCenteredText(UI_10_FONT_ID, botY + pad, footer, false);
+  renderer.drawCenteredText(banner::FONT_ID, botY + pad, footer, false);
 }

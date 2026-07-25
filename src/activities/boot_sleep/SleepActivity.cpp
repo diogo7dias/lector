@@ -164,9 +164,9 @@ void SleepActivity::renderSleepScreen() const {
   // anyway, so the popup is one extra differential paint the user sees for an
   // instant and then loses. The old fork skipped it on this path for the same
   // reason (its directWallpaperLock).
-  const bool paintsWallpaper = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
-                               (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM &&
-                                !APP_STATE.lastSleepFromReader);
+  const bool paintsWallpaper =
+      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
+      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader);
   if (!paintsWallpaper) {
     // Show popup with reader orientation only when going to sleep from reader
     if (APP_STATE.lastSleepFromReader) {

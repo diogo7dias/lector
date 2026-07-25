@@ -121,10 +121,10 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 // progress bar / nothing) so it can reserve space for the countdown indicator.
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const bool showText = SETTINGS.sbEnabled &&
-                        (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
-                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos ||
-                         SETTINGS.sbSessionPagesPos);
+  const bool showText =
+      SETTINGS.sbEnabled &&
+      (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
+       SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos || SETTINGS.sbSessionPagesPos);
   return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
 }
 
@@ -163,8 +163,7 @@ bool sbBandHasText(bool top, bool hasChapters) {
       {SETTINGS.sbTitlePos, false, true},  // title falls back to book title on chapterless books
       {SETTINGS.sbPagePos, false, true},   // page falls back to book pages on chapterless books
       {SETTINGS.sbBookPctPos, false, true},   {SETTINGS.sbChapterPctPos, true, true},
-      {SETTINGS.sbChapterNumPos, true, true},
-      {SETTINGS.sbSessionPagesPos, false, true},
+      {SETTINGS.sbChapterNumPos, true, true}, {SETTINGS.sbSessionPagesPos, false, true},
   };
   for (const auto& it : items) {
     if (!it.applicable) continue;

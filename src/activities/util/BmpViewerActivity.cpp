@@ -111,10 +111,9 @@ void BmpViewerActivity::onEnter() {
       const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
       const char* pauseLabel =
           filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
-      const auto labels =
-          triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
-                 : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""),
-                                         (hasNext ? ">" : ""));
+      const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
+                                 : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER),
+                                                         (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
@@ -279,8 +278,8 @@ void BmpViewerActivity::doToggleFavorite() {
 void BmpViewerActivity::doTogglePause() {
   // Pick the neighbour before the move, while this file still anchors the lookup.
   const int nextIndex = (currentImageIndex > 0) ? currentImageIndex - 1 : currentImageIndex + 1;
-  const bool hasNeighbour = siblingImages.size() > 1 && nextIndex >= 0 &&
-                            nextIndex < static_cast<int>(siblingImages.size());
+  const bool hasNeighbour =
+      siblingImages.size() > 1 && nextIndex >= 0 && nextIndex < static_cast<int>(siblingImages.size());
   std::string nextName = hasNeighbour ? siblingImages[nextIndex] : std::string();
 
   if (!crosspoint::sleep::toggleSleepPause(filePath).ok) {
@@ -305,23 +304,23 @@ void BmpViewerActivity::doTogglePause() {
 
 void BmpViewerActivity::promptDelete() {
   const std::string doomed = filePath;
-  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput,
-                                                               tr(STR_DELETE) + std::string("? "),
-                                                               FavoriteImage::displayNameForPath(doomed)),
-                         [this, doomed](const ActivityResult& res) {
-                           if (res.isCancelled) {
-                             onEnter();
-                             return;
-                           }
-                           if (!Storage.remove(doomed.c_str())) {
-                             GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
-                             delay(1000);
-                             onEnter();
-                             return;
-                           }
-                           // The wake path re-renders the last wallpaper; a dead path
-                           // there sends the next wake to the boot logo for no reason.
-                           FavoriteImage::removePathReferences(doomed);
-                           activityManager.goToFileBrowser(FsHelpers::extractFolderPath(doomed));
-                         });
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "),
+                                             FavoriteImage::displayNameForPath(doomed)),
+      [this, doomed](const ActivityResult& res) {
+        if (res.isCancelled) {
+          onEnter();
+          return;
+        }
+        if (!Storage.remove(doomed.c_str())) {
+          GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
+          delay(1000);
+          onEnter();
+          return;
+        }
+        // The wake path re-renders the last wallpaper; a dead path
+        // there sends the next wake to the boot logo for no reason.
+        FavoriteImage::removePathReferences(doomed);
+        activityManager.goToFileBrowser(FsHelpers::extractFolderPath(doomed));
+      });
 }

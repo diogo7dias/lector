@@ -80,10 +80,8 @@ struct ThemeMetrics {
   int keyboardWidthPercent;
 
   int popupMarginX;
-  int popupMarginY;
   int popupFrameThickness;
   int popupCornerRadius;
-  int popupTextBaselineOffsetY;
   int popupProgressBarHeight;
   bool popupProgressDrawOutline;
   bool popupProgressClampPercent;
@@ -156,10 +154,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 94,
                                  .popupMarginX = 15,
-                                 .popupMarginY = 15,
                                  .popupFrameThickness = 2,
                                  .popupCornerRadius = 0,
-                                 .popupTextBaselineOffsetY = -2,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = false,
                                  .popupProgressClampPercent = false,

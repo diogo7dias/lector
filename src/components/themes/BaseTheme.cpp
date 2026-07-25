@@ -15,6 +15,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "components/BannerStyle.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
@@ -912,25 +913,23 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 }
 
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int marginY = metrics.popupMarginY;
-  const int frameThickness = metrics.popupFrameThickness;
-
-  const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int w = renderer.getScreenWidth();
-  const int h = textHeight + marginY * 2;
-  const int x = 0;
-  // Below the top padding, which is what keeps chrome clear of the X4's physical
-  // top crop. A strip drawn above it loses its first rows on that panel.
-  const int y = metrics.topPadding;
+  const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
+  const int h = banner::PAD * 2 + lineHeight;
 
-  renderer.fillRect(x, y, w, h, true);  // black backing
-  // Bottom edge only. The strip spans the screen and its other three edges have nothing
-  // to be separated from; a full frame just draws a box around a band.
-  renderer.fillRect(x, y + h - frameThickness, w, frameThickness, false);
-  const int textY = y + marginY + metrics.popupTextBaselineOffsetY;  // white centered text
-  renderer.drawCenteredText(UI_12_FONT_ID, textY, message, false, EpdFontFamily::REGULAR);
-  return Rect{x, y, w, h};
+  // Physical top crop (X4 crops ~9px, X3 crops 0) via the renderer's oriented viewable
+  // inset, the same construction the wake banners use: the black backing starts at row
+  // 0 so nothing white shows above the band, while the text and the rule sit below the
+  // crop where they cannot be clipped. Starting the backing at the theme's topPadding
+  // instead left a white gap along the top edge.
+  int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+  const int y = viewTop;
+
+  renderer.fillRect(0, 0, w, y + h, true);                             // black to the physical edge
+  renderer.fillRect(0, y + h - banner::RULE, w, banner::RULE, false);  // rule on the page-facing edge
+  renderer.drawCenteredText(banner::FONT_ID, y + banner::PAD, message, false, EpdFontFamily::REGULAR);
+  return Rect{0, y, w, h};
 }
 
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
@@ -945,7 +944,9 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   const int barWidth =
       std::max(0, layout.width - metrics.popupMarginX * 2);  // twice the margin in drawPopup to match text width
   const int barX = layout.x + (layout.width - barWidth) / 2;
-  const int barY = layout.y + layout.height - metrics.popupMarginY / 2 - barHeight / 2 - 1;
+  // Centered in the blank between the text and the rule, so the bar rides inside the
+  // band rather than pushing it taller.
+  const int barY = layout.y + layout.height - banner::RULE - (banner::PAD - banner::RULE) / 2 - barHeight / 2;
   if (barWidth <= 0 || barHeight <= 0) {
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return;
@@ -1228,29 +1229,37 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   const int optionCount = static_cast<int>(options.size());
   const int listHeight = rowHeight * optionCount + itemSpacing * (optionCount - 1);
-  // Full width, like every other popup surface: one look for the whole firmware.
-  // maxTextWidth still decides nothing about the frame, but it is what tells the
-  // caller's options they will fit.
-  (void)maxTextWidth;
-  const int dialogW = pageWidth;
+  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10,
+                               pageWidth - metrics.optionPopupDialogSideMargin * 2);
   const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
   const int dialogH = contentHeight + innerPadding * 2;
-  const int dialogX = 0;
+  const int dialogX = (pageWidth - dialogW) / 2;
   const int dialogY = (pageHeight - dialogH) / 2;
 
   const int frameThickness = metrics.popupFrameThickness;
+  const int frameRadius = metrics.popupCornerRadius;
 
-  renderer.fillRect(dialogX, dialogY, dialogW, dialogH, true);                   // black backing
-  renderer.drawRect(dialogX, dialogY, dialogW, dialogH, frameThickness, false);  // white inset border
+  if (frameRadius > 0) {
+    renderer.fillRoundedRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
+                             dialogH + frameThickness * 2, frameRadius + frameThickness, Color::White);
+    renderer.fillRoundedRect(dialogX, dialogY, dialogW, dialogH, frameRadius, Color::Black);
+    renderer.fillRoundedRect(dialogX + frameThickness, dialogY + frameThickness, dialogW - frameThickness * 2,
+                             dialogH - frameThickness * 2,
+                             frameRadius - frameThickness > 0 ? frameRadius - frameThickness : 0, Color::White);
+  } else {
+    renderer.fillRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
+                      dialogH + frameThickness * 2, true);
+    renderer.fillRect(dialogX, dialogY, dialogW, dialogH, false);
+  }
 
   int y = dialogY + innerPadding;
 
-  renderer.drawCenteredText(UI_12_FONT_ID, y, title, false, EpdFontFamily::REGULAR);
+  renderer.drawCenteredText(UI_12_FONT_ID, y, title, true, EpdFontFamily::REGULAR);
   y += titleLineHeight;
 
   if (metrics.optionPopupTitleSeparator) {
     const int sepY = y + metrics.optionPopupTitleGap / 2;
-    renderer.drawLine(dialogX + innerPadding, sepY, dialogX + dialogW - innerPadding, sepY, false);
+    renderer.drawLine(dialogX + innerPadding, sepY, dialogX + dialogW - innerPadding, sepY, true);
   }
 
   y += metrics.optionPopupTitleGap;
@@ -1264,20 +1273,28 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
 
-    // The panel is black, so the selected row is the one that gets painted: a white
-    // chip with black text. Unselected rows are white text straight on the backing.
-    if (selected) {
-      if (selectionRadius > 0) {
-        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, Color::White);
+    if (metrics.optionPopupDrawAllRows || selected) {
+      Color rowColor;
+      if (selected) {
+        rowColor = metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black;
       } else {
-        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, false);
+        rowColor = Color::White;
+      }
+      if (selectionRadius > 0) {
+        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, rowColor);
+      } else {
+        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
       }
     }
 
     const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
     const int textY = itemY + (rowHeight - optionLineHeight) / 2;
     const int textX = itemRectX + (itemRectW - textW) / 2;
-    renderer.drawText(optionFontId, textX, textY, labelText, selected, optionStyle);
+    // Unselected items: text is dark (invert=true means draw on white bg).
+    // Selected on dark bg: text must be white (invert=false).
+    // Selected on light bg: text stays dark (invert=true).
+    const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
+    renderer.drawText(optionFontId, textX, textY, labelText, invertText, optionStyle);
   }
 }
 
@@ -1351,7 +1368,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     int bookIdx;
     std::vector<std::string> lines;
     int height;
-    int badgeW;  // 0 = no badge
+    int badgeW;       // 0 = no badge
     int badgeTextDx;  // where the text sits inside the chip (see badgeChipMetrics)
     std::string badgeText;
   };

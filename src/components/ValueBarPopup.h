@@ -90,41 +90,47 @@ class ValueBarPopup {
     const int innerPad = m.optionPopupInnerPadding;
 
     const int contentH = titleLH + gap + valueLH + gap + barH + gap + hintLH;
-    // Full width, black backing, white inset border — the same surface every other
-    // popup uses, so the firmware has one popup look and not three.
-    const int dialogW = screenW;
+    const int dialogW = std::min(400, std::max(0, screenW - m.optionPopupDialogSideMargin * 2));
     const int dialogH = contentH + innerPad * 2;
-    const int dialogX = 0;
+    const int dialogX = (screenW - dialogW) / 2;
     const int dialogY = (screenH - dialogH) / 2;
 
+    // Framed panel over the background (white body, black border), mirroring drawOptionPopup.
     const int ft = m.popupFrameThickness;
-    renderer.fillRect(dialogX, dialogY, dialogW, dialogH, true);
-    renderer.drawRect(dialogX, dialogY, dialogW, dialogH, ft, false);
+    const int fr = m.popupCornerRadius;
+    if (fr > 0) {
+      renderer.fillRoundedRect(dialogX - ft, dialogY - ft, dialogW + ft * 2, dialogH + ft * 2, fr + ft, Color::White);
+      renderer.fillRoundedRect(dialogX, dialogY, dialogW, dialogH, fr, Color::Black);
+      renderer.fillRoundedRect(dialogX + ft, dialogY + ft, dialogW - ft * 2, dialogH - ft * 2,
+                               fr - ft > 0 ? fr - ft : 0, Color::White);
+    } else {
+      renderer.fillRect(dialogX - ft, dialogY - ft, dialogW + ft * 2, dialogH + ft * 2, true);
+      renderer.fillRect(dialogX, dialogY, dialogW, dialogH, false);
+    }
 
     int y = dialogY + innerPad;
-    renderer.drawCenteredText(UI_12_FONT_ID, y, title.c_str(), false, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_12_FONT_ID, y, title.c_str(), true, EpdFontFamily::REGULAR);
     y += titleLH + gap;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "%d", value_);
-    renderer.drawCenteredText(UI_12_FONT_ID, y, buf, false, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_12_FONT_ID, y, buf, true, EpdFontFamily::REGULAR);
     y += valueLH + gap;
 
-    // Bar drawn in white on the black panel: outline, fill and knob all inverted.
     const int barWidth = std::min(dialogW - innerPad * 2, 360);
     const int barX = dialogX + (dialogW - barWidth) / 2;
     const int barY = y;
-    renderer.drawRect(barX, barY, barWidth, barH, false);
+    renderer.drawRect(barX, barY, barWidth, barH);
     const int range = std::max(1, maxValue_ - minValue_);
     const int fillWidth = (barWidth - 4) * (value_ - minValue_) / range;
     if (fillWidth > 0) {
-      renderer.fillRect(barX + 2, barY + 2, fillWidth, barH - 4, false);
+      renderer.fillRect(barX + 2, barY + 2, fillWidth, barH - 4);
     }
     const int knobX = std::max(barX + 2, barX + 2 + fillWidth - 2);
-    renderer.fillRect(knobX, barY - 4, 4, barH + 8, false);
+    renderer.fillRect(knobX, barY - 4, 4, barH + 8, true);
     y += barH + gap;
 
-    renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(stepHintId_), false);
+    renderer.drawCenteredText(SMALL_FONT_ID, y, I18N.get(stepHintId_), true);
   }
 
   bool isActive() const { return active; }

@@ -71,8 +71,8 @@ void OpdsServerStore::seedBuiltInServers() {
   for (const BuiltInServer& builtIn : BUILT_IN_SERVERS) {
     if (servers.size() >= MAX_SERVERS) break;
     // Skip one the user already added by hand, so seeding cannot double it up.
-    const bool alreadyPresent = std::any_of(servers.begin(), servers.end(),
-                                            [&](const OpdsServer& s) { return s.url == builtIn.url; });
+    const bool alreadyPresent =
+        std::any_of(servers.begin(), servers.end(), [&](const OpdsServer& s) { return s.url == builtIn.url; });
     if (alreadyPresent) continue;
 
     OpdsServer server;

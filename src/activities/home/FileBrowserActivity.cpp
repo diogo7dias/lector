@@ -153,17 +153,17 @@ void FileBrowserActivity::applySearch(const std::string& query) {
 void FileBrowserActivity::clearSearch() { applySearch(std::string()); }
 
 void FileBrowserActivity::openSearchEntry() {
-  startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput,
-                                                                 std::string(tr(STR_SEARCH_CURRENT_FOLDER)),
-                                                                 searchQuery, 64, InputType::Text),
-                         [this](const ActivityResult& res) {
-                           if (res.isCancelled) {
-                             requestUpdate(true);
-                             return;
-                           }
-                           const auto* kr = std::get_if<KeyboardResult>(&res.data);
-                           applySearch(kr ? kr->text : std::string());
-                         });
+  startActivityForResult(
+      std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, std::string(tr(STR_SEARCH_CURRENT_FOLDER)),
+                                              searchQuery, 64, InputType::Text),
+      [this](const ActivityResult& res) {
+        if (res.isCancelled) {
+          requestUpdate(true);
+          return;
+        }
+        const auto* kr = std::get_if<KeyboardResult>(&res.data);
+        applySearch(kr ? kr->text : std::string());
+      });
 }
 
 void FileBrowserActivity::shuffleFilesIfRandomOrder() {

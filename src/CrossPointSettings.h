@@ -214,21 +214,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wallpaperRotationPaused = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  uint8_t sbEnabled = 1;                     // master on/off
-  uint8_t sbBatteryPos = SB_ANCHOR_BL;       // battery anchor
-  uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
-  uint8_t sbTitlePos = SB_ANCHOR_BC;         // title anchor
-  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
-  uint8_t sbTitleTruncate = 0;               // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
-  uint8_t sbPagePos = SB_ANCHOR_BR;          // page-in-chapter anchor
-  uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
-  uint8_t sbBookPctPos = SB_ANCHOR_BR;       // book % (B:NN%) anchor
-  uint8_t sbChapterPctPos = SB_ANCHOR_OFF;   // chapter % (C:NN%) anchor
-  uint8_t sbChapterNumPos = SB_ANCHOR_OFF;   // chapter #/total (Ch N/M) anchor
-  uint8_t sbSessionPagesPos = SB_ANCHOR_OFF;  // pages turned this sitting (S:N) anchor
-  uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
-  uint8_t sbChapterBar = SB_EDGE_OFF;        // chapter progress bar edge
-  uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
+  uint8_t sbEnabled = 1;                      // master on/off
+  uint8_t sbBatteryPos = SB_ANCHOR_BL;        // battery anchor
+  uint8_t sbClockPos = SB_ANCHOR_OFF;         // clock anchor (X3 RTC only)
+  uint8_t sbTitlePos = SB_ANCHOR_BC;          // title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;   // book or chapter title
+  uint8_t sbTitleTruncate = 0;                // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
+  uint8_t sbPagePos = SB_ANCHOR_BR;           // page-in-chapter anchor
+  uint8_t sbPageFormat = SB_PAGE_FRACTION;    // "3/40" vs "8 left"
+  uint8_t sbBookPctPos = SB_ANCHOR_BR;        // book % (B:NN%) anchor
+  uint8_t sbChapterPctPos = SB_ANCHOR_OFF;    // chapter % (C:NN%) anchor
+  uint8_t sbChapterNumPos = SB_ANCHOR_OFF;    // chapter #/total (Ch N/M) anchor
+  uint8_t sbSessionPagesPos = SB_ANCHOR_OFF;  // pages turned this sitting (+N) anchor
+  uint8_t sbBookBar = SB_EDGE_OFF;            // book progress bar edge (Off/Top/Bottom)
+  uint8_t sbChapterBar = SB_EDGE_OFF;         // chapter progress bar edge
+  uint8_t sbBarThickness = SB_BAR_MEDIUM;     // progress bar thickness slim/med/fat
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
