@@ -5,28 +5,20 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CrossPoint Reader - Fonts</title>
     <style>
+      /* Monochrome UI. These pages mirror the e-reader's own screen: black on
+         white, square edges, no hues. State is carried by weight, borders and
+         fills instead of colour. */
       :root {
-        --font-color: #333;
-        --bg: #f5f5f5;
-        --title-color: #2c3e50;
-        --card-bg: #FFF;
-        --label-color: #7f8c8d;
-        --border-color: #eee;
-        --accent-color: rgb(110, 154, 130);
-        --accent-hover-color: #5a8c73;
-        --danger-color: #e74c3c;
-        --danger-hover: #c0392b;
+        --ink: #000;
+        --paper: #fff;
+        --muted: #555;
+        --faint: #949494;
+        /* Native controls (checkboxes, radios) paint black instead of blue. */
+        accent-color: #000;
+        color-scheme: light;
       }
-      @media (prefers-color-scheme: dark) {
-        :root {
-          --font-color: #f5f5f5;
-          --bg: #333;
-          --title-color: #ecf0f1;
-          --card-bg: #444;
-          --label-color: #bdc3c7;
-          --border-color: #555;
-          color-scheme: dark;
-        }
+      * {
+        box-sizing: border-box;
       }
       body {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -34,69 +26,85 @@
         max-width: 800px;
         margin: 0 auto;
         padding: 20px;
-        background-color: var(--bg);
-        color: var(--font-color);
+        background: var(--paper);
+        color: var(--ink);
+        line-height: 1.4;
       }
       h1 {
-        color: var(--title-color);
-        border-bottom: 2px solid var(--accent-color);
-        padding-bottom: 10px;
+        margin: 0 0 15px;
+        padding: 12px 16px;
+        background: var(--ink);
+        color: var(--paper);
+        font-size: 1.3em;
+        text-align: center;
+        letter-spacing: 0.05em;
       }
-      h2 { color: var(--title-color); margin-top: 0; }
-      h3 { margin: 0 0 8px 0; }
+      h2 {
+        margin: 0 0 12px;
+        padding-bottom: 6px;
+        font-size: 1.05em;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        border-bottom: 2px solid var(--ink);
+      }
+      h3 { margin: 0 0 4px 0; font-size: 1em; }
       .card {
-        background: var(--card-bg);
-        border-radius: 8px;
+        background: var(--paper);
+        border: 2px solid var(--ink);
         padding: 20px;
         margin: 15px 0;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
       .nav-links {
-        margin: 20px 0;
+        margin: 15px 0;
         display: flex;
-        gap: 10px;
+        gap: 8px;
+        flex-wrap: wrap;
       }
       .nav-links a {
-        padding: 10px 20px;
-        color: var(--font-color);
+        padding: 9px 16px;
+        background: var(--paper);
+        border: 2px solid var(--ink);
+        color: var(--ink);
         text-decoration: none;
-        border-radius: 4px;
+        font-weight: 600;
       }
       .nav-links a.active {
-        background-color: var(--accent-color);
-        color: white;
-      }
-      .nav-links a:not(.active):hover {
-        background-color: var(--accent-hover-color);
-        color: white;
+        background: var(--ink);
+        color: var(--paper);
       }
       .family {
-        border-bottom: 1px solid var(--border-color);
+        border-bottom: 1px solid var(--ink);
         padding: 12px 0;
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 12px;
       }
       .family:last-child { border-bottom: none; }
-      .family-info { flex: 1; }
-      .family-meta { color: var(--label-color); font-size: 0.9em; }
+      .family-info { flex: 1; min-width: 0; word-break: break-word; }
+      .family-meta { color: var(--muted); font-size: 0.9em; }
       .btn {
         padding: 6px 16px;
-        border: none;
-        border-radius: 4px;
+        border: 2px solid var(--ink);
+        background: var(--paper);
+        color: var(--ink);
         cursor: pointer;
         font-size: 0.9em;
+        font-weight: 600;
+        font-family: inherit;
       }
+      /* Destructive action: filled black with a second ring, so it reads as
+         heavier than a plain button without using colour. */
       .btn-danger {
-        background: var(--danger-color);
-        color: white;
+        background: var(--ink);
+        color: var(--paper);
+        outline: 1px solid var(--ink);
+        outline-offset: 2px;
       }
-      .btn-danger:hover { background: var(--danger-hover); }
       .btn-primary {
-        background: var(--accent-color);
-        color: white;
+        background: var(--ink);
+        color: var(--paper);
       }
-      .btn-primary:hover { background: var(--accent-hover-color); }
       .upload-form {
         display: flex;
         gap: 10px;
@@ -105,21 +113,59 @@
       }
       .upload-form input[type="text"] {
         padding: 6px 10px;
-        border: 1px solid var(--border-color);
-        border-radius: 4px;
-        background: var(--bg);
-        color: var(--font-color);
+        border: 2px solid var(--ink);
+        background: var(--paper);
+        color: var(--ink);
+        font-family: inherit;
       }
       .upload-form input[type="file"] { flex: 1; min-width: 200px; }
+      .upload-form input[type="file"]::file-selector-button {
+        background: var(--paper);
+        color: var(--ink);
+        border: 2px solid var(--ink);
+        padding: 6px 14px;
+        cursor: pointer;
+        font-size: 0.9em;
+        font-weight: 600;
+        font-family: inherit;
+        margin-right: 8px;
+      }
       #status {
         margin-top: 10px;
-        padding: 8px;
-        border-radius: 4px;
+        padding: 8px 10px;
+        border: 2px solid var(--ink);
+        background: var(--paper);
+        color: var(--ink);
         display: none;
       }
-      .status-ok { background: #d4edda; color: #155724; display: block !important; }
-      .status-err { background: #f8d7da; color: #721c24; display: block !important; }
-      .empty { color: var(--label-color); text-align: center; padding: 20px; }
+      /* Success and failure differ by weight and a thick left rule, not hue. */
+      .status-ok { display: block !important; }
+      .status-err {
+        display: block !important;
+        border-left-width: 8px;
+        font-weight: 700;
+      }
+      .empty { color: var(--muted); text-align: center; padding: 20px; }
+      /* Hover feedback without colour: an outlined control fills in. */
+      .nav-links a:not(.active):hover {
+        background: var(--ink);
+        color: var(--paper);
+      }
+      /* Colour emoji are the last hue left in the markup. Desaturate them on
+         leaf elements only: `filter` makes an element a containing block for
+         fixed-position descendants, so it must never go on body. */
+      h1,
+      h2,
+      .nav-links a,
+      .btn {
+        filter: grayscale(1);
+      }
+      @media (max-width: 600px) {
+        body { padding: 10px; font-size: 14px; }
+        .card { padding: 12px; margin: 10px 0; }
+        h1 { font-size: 1.15em; }
+        .nav-links a { padding: 8px 12px; font-size: 0.9em; }
+      }
     </style>
   </head>
   <body>

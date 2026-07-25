@@ -5,28 +5,28 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Settings - CrossPoint Reader</title>
   <style>
+    /* Monochrome UI. These pages mirror the e-reader's own screen: black on
+       white, square edges, no hues. State is carried by weight, borders and
+       fills instead of colour. */
     :root {
-      --font-color: #333;
-      --bg: #f5f5f5;
-      --title-color: #2c3e50;
-      --card-bg: #FFF;
-      --label-color: #7f8c8d;
-      --border-color: #eee;
-      --accent-color: rgb(110, 154, 130);
-      --accent-hover-color: #5a8c73;
-      --toggle-bg: #ccc;
+      --ink: #000;
+      --paper: #fff;
+      --muted: #555;
+      --faint: #949494;
+      /* Native controls (checkboxes, radios) paint black instead of blue. */
+      accent-color: #000;
+      /* Compatibility aliases: some inline styles are injected from the
+         scripts below and still name the old variables. */
+      --font-color: var(--ink);
+      --title-color: var(--ink);
+      --card-bg: var(--paper);
+      --label-color: var(--muted);
+      --border-color: var(--ink);
+      --accent-color: var(--ink);
+      color-scheme: light;
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --font-color: #f5f5f5;
-        --bg: #333;
-        --title-color: #ecf0f1;
-        --card-bg: #444;
-        --label-color: #bdc3c7;
-        --border-color: #555;
-        --toggle-bg: #666;
-        color-scheme: dark;
-      }
+    * {
+      box-sizing: border-box;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
@@ -34,57 +34,65 @@
       max-width: 800px;
       margin: 0 auto;
       padding: 20px;
-      background-color: var(--bg);
-      color: var(--font-color);
+      background: var(--paper);
+      color: var(--ink);
+      line-height: 1.4;
     }
     h1 {
-      color: var(--title-color);
-      border-bottom: 2px solid var(--accent-color);
-      padding-bottom: 10px;
+      margin: 0 0 15px;
+      padding: 12px 16px;
+      background: var(--ink);
+      color: var(--paper);
+      font-size: 1.3em;
+      text-align: center;
+      letter-spacing: 0.05em;
     }
     h2 {
-      color: var(--title-color);
-      margin-top: 0;
+      margin: 0 0 12px;
+      padding-bottom: 6px;
+      font-size: 1.05em;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-bottom: 2px solid var(--ink);
     }
     .card {
-      background: var(--card-bg);
-      border-radius: 8px;
+      background: var(--paper);
+      border: 2px solid var(--ink);
       padding: 20px;
       margin: 15px 0;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
     .nav-links {
-      margin: 20px 0;
+      margin: 15px 0;
       display: flex;
-      gap: 10px;
+      gap: 8px;
+      flex-wrap: wrap;
     }
     .nav-links a {
-      padding: 10px 20px;
-      color: var(--font-color);
+      padding: 9px 16px;
+      background: var(--paper);
+      border: 2px solid var(--ink);
+      color: var(--ink);
       text-decoration: none;
-      border-radius: 4px;
+      font-weight: 600;
     }
     .nav-links a.active {
-      background-color: var(--accent-color);
-      color: white;
-    }
-    .nav-links a:not(.active):hover {
-      background-color: var(--accent-hover-color);
-      color: white;
+      background: var(--ink);
+      color: var(--paper);
     }
     .setting-row {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       padding: 10px 0;
-      border-bottom: 1px solid var(--border-color);
+      border-bottom: 1px solid var(--ink);
     }
     .setting-row:last-child {
       border-bottom: none;
     }
     .setting-name {
-      font-weight: 500;
-      color: var(--label-color);
+      font-weight: 600;
+      color: var(--muted);
       flex: 1;
       min-width: 0;
       padding-right: 12px;
@@ -97,10 +105,11 @@
     .setting-control input[type="text"],
     .setting-control input[type="password"] {
       padding: 6px 10px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
+      border: 2px solid var(--ink);
       font-size: 0.95em;
-      background: var(--card-bg);
+      font-family: inherit;
+      background: var(--paper);
+      color: var(--ink);
     }
     .setting-control select {
       min-width: 160px;
@@ -112,7 +121,8 @@
     .setting-control input[type="number"] {
       width: 80px;
     }
-    /* Toggle switch */
+    /* Toggle switch: square track with a square knob. Off is an outline, on is
+       a solid black fill — no colour change, only fill. */
     .toggle-switch {
       display: inline-block;
       position: relative;
@@ -128,25 +138,23 @@
       position: absolute;
       cursor: pointer;
       top: 0; left: 0; right: 0; bottom: 0;
-      background-color: var(--toggle-bg);
-      border-radius: 26px;
-      transition: 0.3s;
+      background: var(--paper);
+      border: 2px solid var(--ink);
     }
     .toggle-slider:before {
       position: absolute;
       content: "";
-      height: 20px;
-      width: 20px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      border-radius: 50%;
-      transition: 0.3s;
+      height: 18px;
+      width: 18px;
+      left: 2px;
+      top: 2px;
+      background: var(--ink);
     }
     .toggle-switch input:checked + .toggle-slider {
-      background-color: var(--accent-color);
+      background: var(--ink);
     }
     .toggle-switch input:checked + .toggle-slider:before {
+      background: var(--paper);
       transform: translateX(22px);
     }
     .save-container {
@@ -154,38 +162,38 @@
       margin: 20px 0;
     }
     .save-btn {
-      background-color: #27ae60;
-      color: white;
+      background: var(--ink);
+      color: var(--paper);
       padding: 12px 40px;
-      border: none;
-      border-radius: 4px;
+      border: 2px solid var(--ink);
       cursor: pointer;
       font-size: 1.1em;
-      font-weight: 600;
-    }
-    .save-btn:hover {
-      background-color: #219a52;
+      font-weight: 700;
+      font-family: inherit;
+      letter-spacing: 0.04em;
     }
     .save-btn:disabled {
-      background-color: #95a5a6;
+      background: var(--paper);
+      color: var(--faint);
+      border-color: var(--faint);
       cursor: not-allowed;
     }
     .message {
       padding: 12px;
-      border-radius: 4px;
       margin: 15px 0;
       text-align: center;
       display: none;
+      background: var(--paper);
+      color: var(--ink);
+      border: 2px solid var(--ink);
     }
+    /* Success and failure differ by weight and a thick left rule, not hue. */
     .message.success {
-      background-color: #d4edda;
-      color: #155724;
-      border: 1px solid #c3e6cb;
+      font-weight: 600;
     }
     .message.error {
-      background-color: #f8d7da;
-      color: #721c24;
-      border: 1px solid #f5c6cb;
+      border-left-width: 8px;
+      font-weight: 700;
     }
     .loader-container {
       display: flex;
@@ -194,11 +202,10 @@
       margin: 20px 0;
     }
     .loader {
-      width: 48px;
-      height: 48px;
-      border: 5px solid #AAA;
+      width: 40px;
+      height: 40px;
+      border: 4px solid var(--ink);
       border-bottom-color: transparent;
-      border-radius: 50%;
       display: inline-block;
       box-sizing: border-box;
       animation: rotation 1s linear infinite;
@@ -208,8 +215,7 @@
       to { transform: rotate(360deg); }
     }
     .opds-server {
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
+      border: 1px solid var(--ink);
       padding: 12px;
       margin: 10px 0;
     }
@@ -220,34 +226,48 @@
       display: flex;
       gap: 8px;
       margin-top: 8px;
+      flex-wrap: wrap;
     }
     .btn-small {
       padding: 6px 14px;
-      border: none;
-      border-radius: 4px;
+      border: 2px solid var(--ink);
+      background: var(--paper);
+      color: var(--ink);
       cursor: pointer;
       font-size: 0.9em;
+      font-weight: 600;
+      font-family: inherit;
     }
     .btn-add {
-      background-color: var(--accent-color);
-      color: white;
+      background: var(--ink);
+      color: var(--paper);
     }
-    .btn-add:hover {
-      background-color: var(--accent-hover-color);
-    }
+    /* Destructive action: filled black with a second ring, so it reads as
+       heavier than a plain button without using colour. */
     .btn-delete {
-      background-color: #e74c3c;
-      color: white;
-    }
-    .btn-delete:hover {
-      background-color: #c0392b;
+      background: var(--ink);
+      color: var(--paper);
+      outline: 1px solid var(--ink);
+      outline-offset: 2px;
     }
     .btn-save-server {
-      background-color: #27ae60;
-      color: white;
+      background: var(--ink);
+      color: var(--paper);
     }
-    .btn-save-server:hover {
-      background-color: #219a52;
+    /* Hover feedback without colour: an outlined control fills in. */
+    .nav-links a:not(.active):hover {
+      background: var(--ink);
+      color: var(--paper);
+    }
+    /* Colour emoji are the last hue left in the markup. Desaturate them on
+       leaf elements only: `filter` makes an element a containing block for
+       fixed-position descendants, so it must never go on body. */
+    h1,
+    h2,
+    .nav-links a,
+    .btn-small,
+    .save-btn {
+      filter: grayscale(1);
     }
     @media (max-width: 600px) {
       body {
@@ -259,7 +279,7 @@
         margin: 10px 0;
       }
       h1 {
-        font-size: 1.3em;
+        font-size: 1.15em;
       }
       .nav-links a {
         padding: 8px 12px;
@@ -304,7 +324,7 @@
   <div id="opds-container"></div>
 
   <div class="card">
-    <p style="text-align: center; color: #95a5a6; margin: 0;">
+    <p style="text-align: center; color: var(--muted); margin: 0;">
       CrossPoint E-Reader • Open Source
     </p>
   </div>
@@ -546,7 +566,7 @@
     } catch (e) {
       console.error(e);
       document.getElementById('settings-container').innerHTML =
-        '<div class="card"><p style="text-align:center;color:#e74c3c;">Failed to load settings</p></div>';
+        '<div class="card"><p style="text-align:center;font-weight:700;">Failed to load settings</p></div>';
     }
   }
 
