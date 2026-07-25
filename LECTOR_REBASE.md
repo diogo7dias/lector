@@ -2,7 +2,7 @@
 
 > Living document. Updated every step. This is the source of truth for the
 > lector re-base so work can resume after any context compaction.
-> Last updated: 2026-07-25 (lector.c 0.0.9 live on the flasher site).
+> Last updated: 2026-07-25 (lector.c 0.0.10 live on the flasher site).
 
 ## Goal
 
@@ -412,9 +412,9 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.0.9:** `default` RAM 16.0% / Flash 72.7%; `gh_release` RAM 16.0% / Flash 72.1%
-(`firmware.bin` 4,736,928 bytes).
-**Live on the flasher site: `lector.c 0.0.9`** (published 2026-07-25, firmware.bin 4,736,928 bytes; bootloader/partitions/boot_app0 unchanged and left in place). Nothing is built-but-unreleased.
+**Sizes at 0.0.10:** `default` RAM 16.0% / Flash 72.9%; `gh_release` RAM 16.0% / Flash 72.3%
+(`firmware.bin` 4,750,496 bytes).
+**Live on the flasher site: `lector.c 0.0.10`** (published 2026-07-25, firmware.bin 4,750,496 bytes; bootloader/partitions/boot_app0 unchanged and left in place). Nothing is built-but-unreleased.
 
 **RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without
 Diogo's explicit OK — the site push itself can auto-deploy Pages. Never flash the device without asking.
@@ -545,7 +545,7 @@ carries title + `[NN%]`.
   the pen, so the opening bracket's side bearing is inside the width while the right edge stops on the
   last lit pixel. The trailing blank is 0, not the advance's leftover.
 
-All of the above is DEVICE-TEST GATED and unreleased; the site still serves 0.0.9.
+Shipped as **lector.c 0.0.10** (2026-07-25). All of it is DEVICE-TEST GATED — none is hardware-verified.
 
 ### 3. Remaining niceties still to port from old lector
 
