@@ -21,6 +21,7 @@
 
 #include "../../util/BookmarkFile.h"
 #include "BookInfoActivity.h"
+#include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -43,6 +44,8 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "reading_stats/ReadingStatsClock.h"
+#include "reading_stats/ReadingStatsPresentation.h"
 #include "util/BookmarkUtil.h"
 #include "util/ScreenshotUtil.h"
 
@@ -183,6 +186,17 @@ void EpubReaderActivity::onEnter() {
 
   epub->setupCacheDir();
 
+  // Reading stats. Latched here rather than read per event so a mid-book toggle
+  // cannot produce a session that is half tracked. The cache dir must already
+  // exist: this book's stats file lives inside it.
+  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
+  if (statsTrackingActive) {
+    statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
+                            .minimumPageSeconds = 2,
+                            .minimumSessionSeconds = 60});
+    statsSession.begin(epub->getCachePath(), reading_stats::currentLocalDateTime());
+  }
+
   // Load this book's per-book reader settings (or a snapshot of global) before any
   // layout, so the first render already paginates through the right ReaderPrefs.
   loadReaderPrefs();
@@ -241,6 +255,11 @@ void EpubReaderActivity::onEnter() {
 
 void EpubReaderActivity::onExit() {
   Activity::onExit();
+
+  if (statsTrackingActive) {
+    statsSession.pause(millis());
+    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save EPUB reading stats");
+  }
 
   // The extractor holds a raw pointer to this activity's epub; drop it before
   // the activity (and the shared_ptr) goes away.
@@ -401,6 +420,36 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
   startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
                                                                         orientedMarginLeft, orientedMarginTop),
+                         [this](const ActivityResult&) { requestUpdate(); });
+}
+
+void EpubReaderActivity::openReadingStats() {
+  // Stop the clock first: time spent staring at the stats screen is not reading.
+  if (statsTrackingActive) statsSession.pause(millis());
+
+  const reading_stats::ReadingStatsData book = statsSession.bookSnapshot();
+  const reading_stats::ReadingStatsData global = statsSession.globalSnapshot();
+  float bookProgress = 0.0f;
+  if (epub && epub->getBookSize() > 0 && section && section->estimatedTotalPages() > 0) {
+    const float chapterProgress =
+        static_cast<float>(section->currentPage) / static_cast<float>(section->estimatedTotalPages());
+    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
+  }
+  const uint8_t progress = static_cast<uint8_t>(clampPercent(static_cast<int>(bookProgress + 0.5f)));
+
+  startActivityForResult(std::make_unique<BookStatsActivity>(
+                             renderer, mappedInput, epub ? epub->getTitle() : std::string{}, book, global, progress,
+                             reading_stats::estimateTimeLeft(book.totalReadingSeconds, progress),
+                             [this](const bool resetAll, reading_stats::ReadingStatsData& nextBook,
+                                    reading_stats::ReadingStatsData& nextGlobal) {
+                               const auto now = reading_stats::currentLocalDateTime();
+                               const bool reset = resetAll ? statsSession.resetAll(now) : statsSession.resetBook(now);
+                               if (reset) {
+                                 nextBook = statsSession.bookSnapshot();
+                                 nextGlobal = statsSession.globalSnapshot();
+                               }
+                               return reset;
+                             }),
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
@@ -940,6 +989,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       openQuoteGrab();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::READING_STATS: {
+      openReadingStats();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
       // The screen itself reads nothing: hand it the metadata already in memory and
       // a thumbnail path, rendering one first if this book has never needed a cover.
@@ -1395,6 +1448,20 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
 }
 
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
+  if (statsTrackingActive) {
+    // Only forward turns count as reading. A backward turn is re-reading, so the
+    // page it leaves is closed out instead of being credited as progress.
+    if (isForwardTurn) {
+      statsSession.forwardTurn(millis());
+      if (section && section->currentPage >= section->pageCount - 1 && !section->isBuilding() && epub &&
+          currentSpineIndex >= epub->getSpineItemsCount() - 1) {
+        const auto now = reading_stats::currentLocalDateTime();
+        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+      }
+    } else {
+      statsSession.pause(millis());
+    }
+  }
   if (isForwardTurn) {
     // Advance within the section while there are (or may still be) more pages: either a built
     // page ahead, or the section is still building (windowed), in which case more pages exist
@@ -1828,6 +1895,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
+    // A page is only "shown" once it has actually been drawn; the timer for how
+    // long it was read starts here, not at the button press.
+    if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   }
   // Only persist when the position actually changed. render() also runs on menu,
   // bookmark and screenshot re-renders, and writeAtomic is several FAT ops for 6 bytes.

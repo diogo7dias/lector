@@ -16,6 +16,7 @@
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "reading_stats/ReadingStatsClock.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -35,6 +36,17 @@ void TxtReaderActivity::onEnter() {
 
   txt->setupCacheDir();
 
+  // Reading stats. Latched at open so a mid-book toggle cannot half-track a
+  // session; the cache dir must exist first because this book's stats file
+  // lives inside it.
+  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
+  if (statsTrackingActive) {
+    statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
+                            .minimumPageSeconds = 2,
+                            .minimumSessionSeconds = 60});
+    statsSession.begin(txt->getCachePath(), reading_stats::currentLocalDateTime());
+  }
+
   // Save current txt as last opened file and add to recent books
   auto filePath = txt->getPath();
   auto fileName = filePath.substr(filePath.rfind('/') + 1);
@@ -48,6 +60,11 @@ void TxtReaderActivity::onEnter() {
 
 void TxtReaderActivity::onExit() {
   Activity::onExit();
+
+  if (statsTrackingActive) {
+    statsSession.pause(millis());
+    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save TXT reading stats");
+  }
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -85,10 +102,19 @@ void TxtReaderActivity::loop() {
   }
 
   if (prevTriggered && currentPage > 0) {
+    // Backward is re-reading, not progress: close the page out rather than credit it.
+    if (statsTrackingActive) statsSession.pause(millis());
     currentPage--;
     requestUpdate();
   } else if (nextTriggered) {
     if (currentPage < totalPages - 1) {
+      if (statsTrackingActive) {
+        statsSession.forwardTurn(millis());
+        if (currentPage + 1 == totalPages - 1) {
+          const auto now = reading_stats::currentLocalDateTime();
+          statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+        }
+      }
       currentPage++;
       requestUpdate();
     } else {
@@ -371,6 +397,9 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   renderer.clearScreen();
   renderPage();
+
+  // The read timer starts when the page is actually on the panel, not at the press.
+  if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
 
   // Save progress
   saveProgress();

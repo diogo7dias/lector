@@ -27,6 +27,13 @@ class HalClock {
   // Returns false if RTC is not available.
   bool getTime(uint8_t& hour, uint8_t& minute) const;
 
+  // Full calendar date plus time, in UTC as the RTC holds it. Reading stats need
+  // a date, not just a clock, to bucket by weekday and count reading streaks.
+  // Falls back to the system clock on boards with no RTC, which is only useful
+  // after an NTP sync; an unset system clock is rejected rather than reported as
+  // the year 1970.
+  bool getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const;
+
   // Format time into a caller-provided buffer.
   // 24h mode produces "HH:MM" (needs >=6 bytes); 12h mode produces "H:MM AM"/"HH:MM PM" (needs >=9 bytes).
   // utcOffsetQuarterHoursBiased: biased quarter-hour offset (48 = UTC+0, 0 = UTC-12, 104 = UTC+14).

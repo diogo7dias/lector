@@ -39,6 +39,36 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   return true;
 }
 
+bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t& hour, uint8_t& minute) const {
+  if (!_available) {
+    // No RTC on this board. The system clock is only meaningful once something
+    // has synced it, so reject anything before 2020-01-01 rather than hand back
+    // the epoch and let a caller record a reading day in 1970.
+    const time_t now = time(nullptr);
+    if (now < 1577836800) return false;
+    struct tm utc;
+    gmtime_r(&now, &utc);
+    year = static_cast<uint16_t>(utc.tm_year + 1900);
+    month = static_cast<uint8_t>(utc.tm_mon + 1);
+    day = static_cast<uint8_t>(utc.tm_mday);
+    hour = static_cast<uint8_t>(utc.tm_hour);
+    minute = static_cast<uint8_t>(utc.tm_min);
+    return true;
+  }
+
+  // Deliberately not sharing getTime()'s cache: that one only keeps hour/minute,
+  // and this is called once per reading session rather than once per status-bar
+  // repaint, so a direct read costs nothing worth optimising.
+  Rtc::DateTime dt;
+  if (!_sdkRtc.now(dt)) return false;
+  year = dt.year;
+  month = dt.month;
+  day = dt.day;
+  hour = dt.hour;
+  minute = dt.minute;
+  return true;
+}
+
 bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour) const {
   if (bufSize < (use12Hour ? 9u : 6u)) return false;
   uint8_t h, m;

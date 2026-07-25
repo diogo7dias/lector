@@ -12,6 +12,8 @@
 #include "ReaderPrefs.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
+#include "reading_stats/ReaderStatsSession.h"
+#include "reading_stats/SdStatsFiles.h"
 
 class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
 
@@ -23,6 +25,12 @@ class EpubReaderActivity final : public Activity {
   // The reader lays out exclusively through prefs_, so the global singleton is never
   // mutated for reading and a custom book stays decoupled from global changes.
   ReaderPrefs prefs_;
+  // Reading statistics. The session owns both stores (this book's and the global
+  // one) and is fed page/turn events below; statsTrackingActive latches the
+  // setting at open so toggling it mid-book cannot half-track a session.
+  reading_stats::SdStatsFiles statsFiles;
+  reading_stats::ReaderStatsSession statsSession{statsFiles};
+  bool statsTrackingActive = false;
   bool prefsCustom_ = false;
   // Paragraph numbers (#10): per-spine visible-paragraph counts for whole-book
   // numbering, captured as pages render and persisted to paragraph_counts.bin so
@@ -205,6 +213,8 @@ class EpubReaderActivity final : public Activity {
   void openDictionaryWordSelect();
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();
+  // Opens the Reading Stats screen for this book plus the all-books totals.
+  void openReadingStats();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();

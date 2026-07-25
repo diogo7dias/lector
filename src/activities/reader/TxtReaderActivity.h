@@ -7,8 +7,16 @@
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
+#include "reading_stats/ReaderStatsSession.h"
+#include "reading_stats/SdStatsFiles.h"
 
 class TxtReaderActivity final : public Activity {
+  // Reading statistics. This reader has no menu, so it only feeds the tracker;
+  // the Reading Stats screen is reached from the EPUB reader. Time and pages read
+  // here still land in the all-books totals.
+  reading_stats::SdStatsFiles statsFiles;
+  reading_stats::ReaderStatsSession statsSession{statsFiles};
+  bool statsTrackingActive = false;
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;

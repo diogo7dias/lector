@@ -304,6 +304,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                           "opdsFilenameFormat"),
 
+        // Reading statistics: whether to track at all, and how long a page can sit
+        // untouched before the session stops counting it as reading time.
+        SettingInfo::Toggle(StrId::STR_TRACK_READING_STATS, &CrossPointSettings::readingStatsEnabled,
+                            "readingStatsEnabled", StrId::STR_CAT_SYSTEM),
+        SettingInfo::Value(
+            StrId::STR_READING_IDLE_LIMIT, &CrossPointSettings::readingStatsIdleUnits,
+            {CrossPointSettings::MIN_READING_STATS_IDLE_UNITS, CrossPointSettings::MAX_READING_STATS_IDLE_UNITS, 1},
+            "readingStatsIdleUnits", StrId::STR_CAT_SYSTEM),
         // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
         SettingInfo::DynamicString(
             StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },

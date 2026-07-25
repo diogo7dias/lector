@@ -23,6 +23,7 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "reading_stats/ReadingStatsClock.h"
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -32,6 +33,17 @@ void XtcReaderActivity::onEnter() {
   }
 
   xtc->setupCacheDir();
+
+  // Reading stats. Latched at open so a mid-book toggle cannot half-track a
+  // session; the cache dir must exist first because this book's stats file
+  // lives inside it.
+  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
+  if (statsTrackingActive) {
+    statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
+                            .minimumPageSeconds = 2,
+                            .minimumSessionSeconds = 60});
+    statsSession.begin(xtc->getCachePath(), reading_stats::currentLocalDateTime());
+  }
 
   // Load saved progress
   loadProgress();
@@ -47,6 +59,11 @@ void XtcReaderActivity::onEnter() {
 
 void XtcReaderActivity::onExit() {
   Activity::onExit();
+
+  if (statsTrackingActive) {
+    statsSession.pause(millis());
+    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save XTC reading stats");
+  }
 
   APP_STATE.readerActivityLoadCount = 0;
   APP_STATE.saveToFile();
@@ -141,6 +158,8 @@ void XtcReaderActivity::loop() {
   const int skipAmount = skipPages ? 10 : 1;
 
   if (prevTriggered) {
+    // Backward is re-reading, not progress: close the page out rather than credit it.
+    if (statsTrackingActive) statsSession.pause(millis());
     if (currentPage >= static_cast<uint32_t>(skipAmount)) {
       currentPage -= skipAmount;
     } else {
@@ -148,6 +167,13 @@ void XtcReaderActivity::loop() {
     }
     requestUpdate();
   } else if (nextTriggered) {
+    if (statsTrackingActive) {
+      statsSession.forwardTurn(millis());
+      if (currentPage + skipAmount >= xtc->getPageCount()) {
+        const auto now = reading_stats::currentLocalDateTime();
+        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
+      }
+    }
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
@@ -173,6 +199,8 @@ void XtcReaderActivity::render(RenderLock&&) {
   }
 
   renderPage();
+  // The read timer starts when the page is actually on the panel, not at the press.
+  if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   saveProgress();
 }
 
