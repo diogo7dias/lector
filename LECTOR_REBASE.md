@@ -370,6 +370,31 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   NOT ported from the old fork: the rotation-pause *flag* (the rebase picks a random wallpaper every
   sleep — there is no cursor to pause), and the `ISleepFs` playlist interface it hung off.
 
+- **2026-07-25** — **Home extras** (option "B"), two commits.
+  1. **Busy banner** (`fe5a5eee`). One shared strip at the top with short non-bold text, replacing the
+     silence over several multi-second waits. **It is late, not eager**: there is no regional refresh
+     wired up (`HalDisplay` only refreshes the whole panel; the SDK's `displayWindow` reaches
+     `GfxRenderer.h` as a commented-out declaration and nothing calls it), so drawing costs a real
+     refresh and showing it eagerly would slow the quick cases for nothing. `BusyBanner` arms; slow
+     loops call `busy::tick()` where they already feed the watchdog; the strip appears only past 400 ms.
+     Always-slow steps (SD font parse, first-open index build) call `busy::tickNow()` and skip the wait.
+     The hook is a bare function pointer in `src/util/BusyTick.h` so scanning code in `util/` keeps no
+     dependency on the display stack. Banners nest (open book → load font → build index). Covered:
+     file-browser scans (armed inside `loadFiles`, so all seven call sites get it), Settings open (it
+     rescans SD fonts + dictionaries first), SD font load, first-open EPUB indexing, wallpaper folder
+     stepping, end-of-book "read next". NOT converted: the network activities' full-screen status text,
+     and `EpubReaderActivity`'s mid-render chapter-build popups (they paint from inside `render()` under
+     the `RenderLock`).
+  2. **Pages tally + clock** (`0702e2ef`). `APP_STATE.sessionPagesRead`, incremented in all three
+     readers at the same point reading stats count a page. Header tile plus the clock left of the
+     battery (RTC boards only). The tile is **last in the tab order** although it is drawn first: as
+     index 0 it would be the home screen's opening selection, and the first Confirm after a wake would
+     zero the count instead of opening a book.
+
+  Not done from the old "home extras" list: the cover/list toggle (the rebase home already lists
+  recents with `[NN%]` badges) and the old home's `SdFileIndex` + library search, which is a separate
+  ~1700-line port, not an "extra".
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
@@ -407,6 +432,11 @@ Everything since 0.0.1 was built, host-tested and shipped, but **not** device-te
   wake still shows it under the banners; file browser lists `.pxc` and opens the viewer; Up/Down steps
   the folder at a usable speed on the real 2000-3000 image `/sleep`; Display · Pause Favorite Wallpapers
   states a count, moves that many, and the sleep rotation stops showing them.
+- **Unreleased (home extras):** the busy banner appears on a big folder and on opening Settings, and
+  does NOT appear (no extra flash) on a small folder — that "quick stays quick" check is the one that
+  matters, since the banner costs a full-panel refresh. Home shows "Pages N", the count rises as you
+  read, and selecting the tile (it is the LAST item in the tab order, after Settings) zeroes it.
+  On X3 only: the clock shows left of the battery.
 - **Unreleased:** Settings · Clean Up Storage removes orphan caches only (delete a book, sweep, confirm the
   other books still open at their saved place); reader menu · Book Info shows cover/author/language/synopsis;
   reader menu · Reading Stats counts a session, and the numbers survive closing and reopening the book.
@@ -444,10 +474,10 @@ Grouped by theme (see the checklist above for the full list):
   overlay, `PxcViewerActivity`~~ — DONE (`b9093fc4`, `2208c245`, `db956c03`, `9ee64d61`, `7aaf2bc4`).
 - ~~**Book screens:** `BookInfoActivity`, Reading Stats, `CleanStorageActivity`~~ — DONE (`11d98cea`,
   `d1a7f8d3`, `8a939fac`), plus the Stats Dashboard sleep face (`878ffba5`).
-- **Home extras:** "Opening…" banner, pages counter + clock, Pages button, cover/list toggle.
-  Note: the rebase home already lists recents with `[NN%]` badges, so only the banner, the counter/clock
-  and the Pages button are genuinely missing. The old home also carries `SdFileIndex` + library search
-  (2765 lines against the rebase's 1064) — that is a separate, much larger port, not an "extra".
+- ~~**Home extras:** "Opening…" banner, pages counter + clock, Pages button, cover/list toggle~~ — DONE
+  (`fe5a5eee`, `0702e2ef`); the cover/list toggle was not needed (the rebase home already lists recents
+  with `[NN%]` badges). Still outstanding and NOT an "extra": the old home's `SdFileIndex` + library
+  search (2765 lines against the rebase's 1064) is a separate, much larger port.
 - **Sleep/boot:** "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
 - **Networking:** WiFi file browser + OPDS-in-browser (was a branch in the old fork; a full 5-phase plan
   already exists, including the path-traversal hardening and the PIN gate).
