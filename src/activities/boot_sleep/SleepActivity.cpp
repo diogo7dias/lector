@@ -133,7 +133,7 @@ void SleepActivity::onEnter() {
   // we write it down. Clear first and let the render path set it, so any screen that is
   // not a wallpaper leaves it empty. Saved only when it changed: a fixed /sleep.pxc gives
   // the same value every sleep and must not cost an SD write each time.
-  const std::string previousWallpaper = APP_STATE.lastSleepWallpaperPath;
+  previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
 
   renderSleepScreen();
@@ -345,9 +345,27 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
 
   if (sleepDir) {
+    std::string chosen;
+
+    // Rotation paused: keep showing the wallpaper that is already up instead of
+    // picking a new one. Only honoured while that file is still sitting in this
+    // folder — favouriting renames it, pausing moves it out, and deleting it from
+    // the browser removes it, so a stale name here must fall through to a normal
+    // pick rather than leaving the user with a blank sleep screen they cannot
+    // explain.
+    if (SETTINGS.wallpaperRotationPaused && !previousWallpaper.empty()) {
+      const std::string prefix = std::string(sleepDir) + "/";
+      if (previousWallpaper.rfind(prefix, 0) == 0 && Storage.exists(previousWallpaper.c_str())) {
+        chosen = previousWallpaper.substr(prefix.size());
+        LOG_INF("SLP", "rotation paused, holding %s", chosen.c_str());
+      } else {
+        LOG_INF("SLP", "rotation paused but held wallpaper is gone; picking a new one");
+      }
+    }
+
     // Fast path: seek straight to a random directory slot (see pickWallpaperByJump).
     const uint32_t pickStartMs = millis();
-    std::string chosen = pickWallpaperByJump(dir);
+    if (chosen.empty()) chosen = pickWallpaperByJump(dir);
     if (!chosen.empty()) {
       LOG_INF("SLP", "jump pick in %ums", static_cast<unsigned>(millis() - pickStartMs));
     }

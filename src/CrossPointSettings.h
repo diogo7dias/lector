@@ -204,6 +204,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Draw a small "F" badge instead, for favorites only. Ignored when
   // showSleepImageFilename is on, which already marks favorites.
   uint8_t showSleepFavoriteBadge = 0;
+  // Hold the current wallpaper instead of picking a new one at every sleep.
+  // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
+  // never rotates in the first place.
+  uint8_t wallpaperRotationPaused = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
   uint8_t sbEnabled = 1;                     // master on/off

@@ -53,6 +53,11 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                      wallpaperFavorited ? StrId::STR_UNFAVORITE_WALLPAPER : StrId::STR_FAVORITE_WALLPAPER});
     if (wallpaperPausable) {
       items.push_back({MenuAction::WALLPAPER_PAUSE, StrId::STR_PAUSE_WALLPAPER});
+      // Holding only means something for a rotating folder; a fixed /sleep.pxc
+      // shows the same image every night whatever this says.
+      items.push_back({MenuAction::WALLPAPER_HOLD, SETTINGS.wallpaperRotationPaused
+                                                       ? StrId::STR_RESUME_WALLPAPER_ROTATION
+                                                       : StrId::STR_HOLD_THIS_WALLPAPER});
     }
   }
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});

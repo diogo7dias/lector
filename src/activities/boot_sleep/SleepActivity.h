@@ -1,4 +1,6 @@
 #pragma once
+#include <string>
+
 #include "activities/Activity.h"
 
 class Bitmap;
@@ -28,4 +30,8 @@ class SleepActivity final : public Activity {
   void renderBlankSleepScreen() const;
 
   bool fromTimeout = false;
+  // The wallpaper the previous sleep left on the panel. onEnter clears the shared
+  // APP_STATE field before rendering (so a non-wallpaper face leaves it empty),
+  // and the paused-rotation path needs the old value to know what to hold.
+  mutable std::string previousWallpaper;
 };

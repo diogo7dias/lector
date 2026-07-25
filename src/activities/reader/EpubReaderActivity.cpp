@@ -1026,6 +1026,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::WALLPAPER_HOLD: {
+      SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
+      SETTINGS.saveToFile();
+      GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+      requestUpdate();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_PAUSE: {
       const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
       if (lastPath.empty()) break;
