@@ -1275,36 +1275,32 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 // Home in-progress list. Ported from the lector home's classic layout. Each book's
 // Width of a chip that hugs "[NN%]" evenly, and where the text sits inside it.
 //
-// Padding the chip by the same number of pixels on each side draws visibly lopsided,
-// because a glyph's advance is not its ink: '[' carries a left side bearing (4px of
-// blank in Cozette 12) while ']' leaves only its advance's trailing sliver on the
-// right. So the same 4px looked like 8 on the left and 5-ish on the right.
+// Padding by the same number of pixels on each side draws visibly lopsided, because
+// getTextWidth measures the two ends differently. It returns an INK box, and its left
+// edge is clamped to the pen (getTextBounds seeds minX with startX), so the opening
+// bracket's own left side bearing — 4px of blank in Cozette 12 — is counted INSIDE the
+// width, while the right edge stops exactly on the closing bracket's last lit pixel
+// with no trailing blank at all. Equal padding therefore drew 4 + bearing on the left
+// against a bare 4 on the right.
 //
-// This measures the blank the first and last glyph actually carry and takes it out of
-// the padding, so both sides show the same gap — the tighter, right-hand one. Read from
-// the font rather than hardcoded, since the UI font is rebound per language.
+// So the fix is to pull the text left by that bearing: the ink then starts one gap in
+// from the chip edge and ends one gap before the far edge. Read from the font rather
+// than hardcoded, since the UI font is rebound per language.
 void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx) {
-  constexpr int kGapToBracket = 4;  // the right-hand gap the chip already had
-  const int advanceW = renderer.getTextWidth(UI_10_FONT_ID, text);
+  constexpr int kGap = 4;  // blank between the chip edge and the bracket, both sides
+  const int inkW = renderer.getTextWidth(UI_10_FONT_ID, text);
 
-  int leftInk = 0;
-  int rightInk = 0;
+  int leftBearing = 0;
   const auto& fontMap = renderer.getFontMap();
   const auto it = fontMap.find(UI_10_FONT_ID);
   if (it != fontMap.end() && text[0] != '\0') {
-    const size_t len = std::strlen(text);
     if (const EpdGlyph* first = it->second.getGlyph(static_cast<uint32_t>(text[0]))) {
-      leftInk = first->left;
-    }
-    if (const EpdGlyph* last = it->second.getGlyph(static_cast<uint32_t>(text[len - 1]))) {
-      rightInk = std::max(0, fp4::toPixel(last->advanceX) - last->left - last->width);
+      leftBearing = std::max(0, static_cast<int>(first->left));
     }
   }
 
-  // The right-hand gap is the one to keep, so the target is what it already shows.
-  const int gap = kGapToBracket + rightInk;
-  *textDx = gap - leftInk;
-  *chipW = *textDx + advanceW - rightInk + gap;
+  *textDx = kGap - leftBearing;
+  *chipW = *textDx + inkW + kGap;
 }
 
 // full title + " by INITIALS" wraps across as many lines as it needs; a [NN%] badge
