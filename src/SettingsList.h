@@ -459,6 +459,19 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
+  // The status-bar clock reads the RTC, which only the X3 carries. HalClock does have
+  // a system-clock fallback for boards without one, but deep sleep here is a full chip
+  // reset, so that clock would be lost every time the reader sleeps — a clock that is
+  // right only until you close the cover is worse than no clock. So the item stays
+  // RTC-only, and its row is dropped on a board that cannot ever show it rather than
+  // offering a setting that does nothing.
+  //
+  // Filtered in this per-call copy rather than in the static baseList: the static is
+  // built on first use, which is not guaranteed to be after HalClock::begin().
+  if (!halClock.isAvailable()) {
+    v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_CLOCK; }),
+            v.end());
+  }
   if (registry && registry->getFamilyCount() > 0) {
     auto it = std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_FONT_FAMILY; });
     if (it != v.end()) {
