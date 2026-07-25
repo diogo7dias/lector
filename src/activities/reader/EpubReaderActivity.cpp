@@ -46,7 +46,9 @@
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
+#include "sleep/SleepPauseToggle.h"
 #include "util/BookmarkUtil.h"
+#include "util/FavoriteImage.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -332,11 +334,21 @@ void EpubReaderActivity::openReaderMenu() {
   if (menuTocIndex != -1) {
     chapterName = epub->getTocItem(menuTocIndex).title;
   }
+  // Wallpaper triage targets the file the last sleep screen actually rendered.
+  // Only offer it while that file is still on the card: the user may have deleted
+  // or moved it from the file browser since.
+  const std::string& lastWallpaper = APP_STATE.lastSleepWallpaperPath;
+  const bool hasSleepWallpaper = !lastWallpaper.empty() && Storage.exists(lastWallpaper.c_str());
+  const bool wallpaperFavorited = hasSleepWallpaper && FavoriteImage::isFavoritePath(lastWallpaper);
+  // A fixed /sleep.pxc or /sleep.bmp has nowhere to be paused to — it is not part
+  // of a rotation folder.
+  const bool wallpaperPausable = hasSleepWallpaper && crosspoint::sleep::isUnderSleepDirs(lastWallpaper);
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(
           renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-          prefsCustom_, prefs_.paragraphNumbering, prefs_.paperbackLookBody, prefs_.paperbackLookStatus),
+          prefsCustom_, prefs_.paragraphNumbering, prefs_.paperbackLookBody, prefs_.paperbackLookStatus,
+          hasSleepWallpaper, wallpaperFavorited, wallpaperPausable),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
@@ -991,6 +1003,39 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::READING_STATS: {
       openReadingStats();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE: {
+      // Renames the file on the card, so the path in APP_STATE moves with it —
+      // FavoriteImage::setFavorite repoints it, which keeps the next wake able to
+      // redraw the same wallpaper under the unlock banners.
+      const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
+      if (lastPath.empty()) break;
+      const bool makeFavorite = !FavoriteImage::isFavoritePath(lastPath);
+      switch (FavoriteImage::setFavorite(lastPath, makeFavorite, nullptr)) {
+        case FavoriteImage::SetFavoriteResult::Success:
+          GUI.drawPopup(renderer, makeFavorite ? tr(STR_FAVORITED) : tr(STR_UNFAVORITED));
+          break;
+        case FavoriteImage::SetFavoriteResult::RenameConflict:
+          GUI.drawPopup(renderer, tr(STR_FAVORITE_NAME_EXISTS));
+          break;
+        default:
+          GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
+          break;
+      }
+      requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::WALLPAPER_PAUSE: {
+      const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
+      if (lastPath.empty()) break;
+      const auto moved = crosspoint::sleep::toggleSleepPause(lastPath);
+      if (!moved.ok) {
+        GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
+      } else {
+        GUI.drawPopup(renderer, moved.toPause ? tr(STR_WALLPAPER_PAUSED) : tr(STR_WALLPAPER_UNPAUSED));
+      }
+      requestUpdate();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {

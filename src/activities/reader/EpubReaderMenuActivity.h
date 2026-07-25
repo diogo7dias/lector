@@ -34,7 +34,9 @@ class EpubReaderMenuActivity final : public Activity {
     GO_TO_PARAGRAPH,           // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                // pick a passage on the page and save it to <book>_QUOTES.txt
     BOOK_INFO,                 // cover, author, language and the publisher synopsis
-    READING_STATS              // per-book and all-books reading statistics
+    READING_STATS,             // per-book and all-books reading statistics
+    WALLPAPER_FAVORITE,        // star/unstar the wallpaper the lock screen last showed
+    WALLPAPER_PAUSE            // move that wallpaper to "/sleep pause", out of rotation
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
@@ -42,7 +44,8 @@ class EpubReaderMenuActivity final : public Activity {
                                   const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
                                   const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
                                   uint8_t paragraphNumbering = 0, uint8_t paperbackBody = 1,
-                                  uint8_t paperbackStatus = 1);
+                                  uint8_t paperbackStatus = 1, bool hasSleepWallpaper = false,
+                                  bool wallpaperFavorited = false, bool wallpaperPausable = false);
 
   void onEnter() override;
   void onExit() override;
@@ -56,7 +59,8 @@ class EpubReaderMenuActivity final : public Activity {
   };
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
-                                              uint8_t paragraphNumbering);
+                                              uint8_t paragraphNumbering, bool hasSleepWallpaper,
+                                              bool wallpaperFavorited, bool wallpaperPausable);
   void closeCancelled();
 
   // Fixed menu layout

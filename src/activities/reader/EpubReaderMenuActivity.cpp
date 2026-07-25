@@ -12,9 +12,11 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
     const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
     const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
-    const uint8_t paragraphNumbering, const uint8_t paperbackBody, const uint8_t paperbackStatus)
+    const uint8_t paragraphNumbering, const uint8_t paperbackBody, const uint8_t paperbackStatus,
+    const bool hasSleepWallpaper, const bool wallpaperFavorited, const bool wallpaperPausable)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering)),
+      menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, hasSleepWallpaper,
+                               wallpaperFavorited, wallpaperPausable)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -26,12 +28,11 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {}
 
-std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(bool hasFootnotes,
-                                                                                     bool hasBookmarks,
-                                                                                     bool hasReaderOverride,
-                                                                                     uint8_t paragraphNumbering) {
+std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(
+    bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, bool hasSleepWallpaper,
+    bool wallpaperFavorited, bool wallpaperPausable) {
   std::vector<MenuItem> items;
-  items.reserve(18);
+  items.reserve(20);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
   items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
@@ -42,6 +43,18 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
   }
   items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
+  // Wallpaper triage, placed high because it is the whole point: the user wakes
+  // the device straight from the lock screen into this menu, so the wallpaper
+  // they just saw is the one these rows act on. Absent when the last sleep screen
+  // was not a wallpaper, or the file has since left the card. "Pause" is offered
+  // only for a wallpaper that lives in a folder it can be moved out of.
+  if (hasSleepWallpaper) {
+    items.push_back({MenuAction::WALLPAPER_FAVORITE,
+                     wallpaperFavorited ? StrId::STR_UNFAVORITE_WALLPAPER : StrId::STR_FAVORITE_WALLPAPER});
+    if (wallpaperPausable) {
+      items.push_back({MenuAction::WALLPAPER_PAUSE, StrId::STR_PAUSE_WALLPAPER});
+    }
+  }
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
   // Per-book reader settings. "Reset" only appears once this book has its own
