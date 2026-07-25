@@ -1055,10 +1055,12 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   push(SETTINGS.sbChapterPctPos, true, chapPctBuf, renderer.getTextWidth(f, chapPctBuf), false);
   snprintf(chapNumBuf, sizeof(chapNumBuf), "Ch %d/%d", data.chapterNum, data.chapterTotal);
   push(SETTINGS.sbChapterNumPos, true, chapNumBuf, renderer.getTextWidth(f, chapNumBuf), false);
-  // Pages turned this sitting ("S:12"). Hidden when the reader reports no session,
-  // so it never sits at 0 pretending to count.
+  // Pages turned this sitting ("+12"). The plus carries "since you sat down" on its
+  // own, so no letter has to be decoded — unlike B:/C:, which only work because a
+  // percent sign follows and the letter merely picks which percent.
+  // Hidden when the reader reports no session, so it never sits at 0 pretending to count.
   if (data.sessionPages >= 0) {
-    snprintf(sessionBuf, sizeof(sessionBuf), "S:%d", data.sessionPages);
+    snprintf(sessionBuf, sizeof(sessionBuf), "+%d", data.sessionPages);
     push(SETTINGS.sbSessionPagesPos, false, sessionBuf, renderer.getTextWidth(f, sessionBuf), false);
   }
 
