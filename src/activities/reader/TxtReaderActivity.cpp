@@ -69,8 +69,13 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
+  // See ReaderUtils::ButtonPressLatch: swallow a Back release whose press belonged to a
+  // child screen that closed on press, instead of reading it as "leave the book".
+  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
+
   if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, txt ? txt->getPath().c_str() : "",
-                                        {this, [](void* ctx) { static_cast<TxtReaderActivity*>(ctx)->onGoHome(); }})) {
+                                        {this, [](void* ctx) { static_cast<TxtReaderActivity*>(ctx)->onGoHome(); }},
+                                        backLatch_)) {
     return;
   }
 

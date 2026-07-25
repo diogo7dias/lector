@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "EndOfBookOptions.h"
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 
 class XtcReaderActivity final : public Activity {
@@ -22,6 +23,12 @@ class XtcReaderActivity final : public Activity {
   int pagesUntilFullRefresh = 0;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
+
+  // Back and Confirm are acted on at RELEASE here, while child screens (the Settings
+  // family) close on PRESS. These pair each release with the press this activity saw, so
+  // a release left over by a closing child cannot be read as the user's own input.
+  ReaderUtils::ButtonPressLatch backLatch_;
+  ReaderUtils::ButtonPressLatch confirmLatch_;
 
   enum class StatusBarOverlayPosition { Bottom, Top };
   struct StatusBarInfo {

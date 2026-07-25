@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 
 class TxtReaderActivity final : public Activity {
@@ -20,6 +21,10 @@ class TxtReaderActivity final : public Activity {
   int linesPerPage = 0;
   int viewportWidth = 0;
   bool initialized = false;
+
+  // Pairs the Back release with the press this activity saw, so a release left over by a
+  // child screen that closed on press is not read as "leave the book".
+  ReaderUtils::ButtonPressLatch backLatch_;
 
   // Cached settings for cache validation (different fonts/margins require re-indexing)
   int cachedFontId = 0;

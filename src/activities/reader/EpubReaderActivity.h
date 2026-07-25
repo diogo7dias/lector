@@ -10,6 +10,7 @@
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderPrefs.h"
+#include "ReaderUtils.h"
 #include "activities/Activity.h"
 
 class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
@@ -79,6 +80,12 @@ class EpubReaderActivity final : public Activity {
   bool pendingReadFolderMove = false;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
+
+  // Back and Confirm are acted on at RELEASE here, while child screens (the Settings
+  // family) close on PRESS. These pair each release with the press this activity saw, so
+  // a release left over by a closing child cannot be read as the user's own input.
+  ReaderUtils::ButtonPressLatch backLatch_;
+  ReaderUtils::ButtonPressLatch confirmLatch_;
 
   // Footnote support
   std::vector<FootnoteEntry> currentPageFootnotes;

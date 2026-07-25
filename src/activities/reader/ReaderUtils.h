@@ -122,6 +122,35 @@ struct BackNavCallback {
   void (*fn)(void*);
 };
 
+// Pairs a button press with its release WITHIN one activity.
+//
+// The firmware mixes two input models: the Settings family acts on button PRESS, the
+// readers and their menus act on RELEASE. So when a child screen closes on a press, the
+// matching release is still to come, and it lands on whatever activity is current when the
+// finger lifts — the reader underneath. The reader then read that release as its own Back
+// and left the book: closing Reader Settings dropped the user on the home screen instead
+// of back onto the page.
+//
+// The rule this enforces: a release only counts for an activity that also saw its press.
+// observe() must be called once per loop pass, before any early return, so a genuine
+// press is never missed.
+struct ButtonPressLatch {
+  bool seen = false;
+
+  void observe(const bool pressedThisFrame) {
+    if (pressedThisFrame) seen = true;
+  }
+
+  // True only when this activity saw the press that belongs to this release. Consumes
+  // the pairing either way, so a stray release is swallowed instead of lingering.
+  bool release(const bool releasedThisFrame) {
+    if (!releasedThisFrame) return false;
+    const bool paired = seen;
+    seen = false;
+    return paired;
+  }
+};
+
 // Returns true if the back button was consumed (caller should return).
 // Long press (>= GO_BACK_OR_HOME_MS):
 // - default: go to file browser
@@ -129,8 +158,16 @@ struct BackNavCallback {
 // Short press (< GO_BACK_OR_HOME_MS):
 // - default: go home
 // - with backShortToFileBrowser: go to file browser.
+// backLatch must already have observed this frame's press (see ButtonPressLatch): both
+// branches below are ignored for a press this activity never saw.
 inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
-                                 const char* filePath, BackNavCallback goHome) {
+                                 const char* filePath, BackNavCallback goHome, ButtonPressLatch& backLatch) {
+  if (!backLatch.seen) {
+    // Stray release left over from a child screen that closed on press: swallow it so it
+    // cannot be replayed later, and stay in the book.
+    backLatch.release(mappedInput.wasReleased(MappedInputManager::Button::Back));
+    return false;
+  }
   if (mappedInput.isPressed(MappedInputManager::Button::Back) && mappedInput.getHeldTime() >= GO_BACK_OR_HOME_MS) {
     if (SETTINGS.backShortToFileBrowser) {
       goHome.fn(goHome.ctx);
@@ -139,7 +176,8 @@ inline bool handleBackNavigation(const MappedInputManager& mappedInput, Activity
     }
     return true;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back) && mappedInput.getHeldTime() < GO_BACK_OR_HOME_MS) {
+  if (backLatch.release(mappedInput.wasReleased(MappedInputManager::Button::Back)) &&
+      mappedInput.getHeldTime() < GO_BACK_OR_HOME_MS) {
     if (SETTINGS.backShortToFileBrowser) {
       activityManager.goToFileBrowser(filePath);
     } else {

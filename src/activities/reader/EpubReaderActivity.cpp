@@ -421,6 +421,12 @@ void EpubReaderActivity::loop() {
     return;
   }
 
+  // Must run before any early return below, so a genuine press is never missed. See
+  // ReaderUtils::ButtonPressLatch: the reader acts on release, child screens close on
+  // press, and an unpaired release used to throw the user out of the book.
+  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
+  confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
+
   // Idle glyph prewarm for the likely next page (currentPage + 1). The scan
   // pass draws nothing (FCM scan mode suppresses pixels), so the displayed
   // framebuffer is untouched; endScanAndPrewarm loads only glyphs not already
@@ -609,7 +615,7 @@ void EpubReaderActivity::loop() {
   // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
   // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
     } else {
@@ -662,7 +668,8 @@ void EpubReaderActivity::loop() {
   }
 
   if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, epub ? epub->getPath().c_str() : "",
-                                        {this, [](void* ctx) { static_cast<EpubReaderActivity*>(ctx)->onGoHome(); }})) {
+                                        {this, [](void* ctx) { static_cast<EpubReaderActivity*>(ctx)->onGoHome(); }},
+                                        backLatch_)) {
     return;
   }
 

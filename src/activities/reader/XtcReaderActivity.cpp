@@ -69,6 +69,12 @@ void XtcReaderActivity::loop() {
     return;
   }
 
+  // Must run before any early return below. See ReaderUtils::ButtonPressLatch: this
+  // reader acts on release, child screens close on press, and an unpaired release used
+  // to be read as the user's own Back or Confirm.
+  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
+  confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
+
   const bool atEndOfBook = currentPage >= xtc->getPageCount();
 
   // While the end screen suggestion menu is showing it owns Confirm/Back/navigation
@@ -97,12 +103,13 @@ void XtcReaderActivity::loop() {
   }
 
   // Enter chapter selection activity
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     openChapterSelection();
   }
 
   if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, xtc ? xtc->getPath().c_str() : "",
-                                        {this, [](void* ctx) { static_cast<XtcReaderActivity*>(ctx)->onGoHome(); }})) {
+                                        {this, [](void* ctx) { static_cast<XtcReaderActivity*>(ctx)->onGoHome(); }},
+                                        backLatch_)) {
     return;
   }
 
