@@ -272,6 +272,9 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
+  // Cleared for every block; the h1-h6 branch in startElement sets it back on for the
+  // block it just opened.
+  currentBlockIsHeading_ = false;
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -950,6 +953,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
     self->startNewTextBlock(accumulated.withoutBottom());
+    self->currentBlockIsHeading_ = true;  // a chapter title is not paragraph 1
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
@@ -1632,9 +1636,13 @@ void ChapterHtmlSlimParser::makePages() {
   const uint16_t effectiveWidth =
       (horizontalInset < viewportWidth) ? static_cast<uint16_t>(viewportWidth - horizontalInset) : viewportWidth;
 
-  // This block is one visible paragraph: arm the ordinal so its first emitted line
-  // (if any) claims the next paragraph number. Blocks producing no line stay unarmed.
-  pendingParagraphFirstLine_ = true;
+  // Arm the ordinal so this block's first emitted line (if any) claims the next
+  // paragraph number. Blocks producing no line stay unarmed.
+  //
+  // Two kinds of block are deliberately not paragraphs, so number 1 lands on the first
+  // real one: a chapter heading, and a block with no letter or digit in it (a scene
+  // break made of asterisks, a stray bullet, whitespace that survived normalisation).
+  pendingParagraphFirstLine_ = !currentBlockIsHeading_ && currentTextBlock->hasLetters();
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });

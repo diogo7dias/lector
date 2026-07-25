@@ -6,6 +6,7 @@
 #include <Utf8.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <functional>
 #include <limits>
@@ -472,6 +473,18 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   if (wordStartsRtl) {
     hasRtlWord = true;
   }
+}
+
+bool ParsedText::hasLetters() const {
+  for (const std::string& word : words) {
+    for (const unsigned char c : word) {
+      // Any byte with the high bit set belongs to a multi-byte codepoint. Treating those
+      // as letters is what keeps CJK, Cyrillic, Greek and accented Latin counted; the
+      // alternative is decoding every paragraph to ask a question this answers already.
+      if (c >= 0x80 || std::isalnum(c) != 0) return true;
+    }
+  }
+  return false;
 }
 
 void ParsedText::setRubyForWordAt(size_t index, const std::string& ruby) {

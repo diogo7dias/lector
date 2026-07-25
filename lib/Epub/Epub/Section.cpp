@@ -36,7 +36,9 @@ namespace {
 // v38: upstream's <ruby>/<rt> support (upstream numbered it v33; our numbering is
 //      already ahead, so it lands here). Every on-disk TextBlock gains a per-word ruby
 //      string, so the format changes on all books and forces a one-time rebuild.
-constexpr uint8_t SECTION_FILE_VERSION = 38;
+// v39: paragraph numbering skips chapter headings and letterless blocks, so the stored
+//      paragraphOrdinal values shift. Layout is untouched; the rebuild is for the numbers.
+constexpr uint8_t SECTION_FILE_VERSION = 39;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

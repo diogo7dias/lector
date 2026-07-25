@@ -106,6 +106,9 @@ class ChapterHtmlSlimParser {
   // resets to 0 at each chapter — the reader adds the whole-book base at render.
   uint16_t paragraphOrdinal_ = 0;
   bool pendingParagraphFirstLine_ = false;  // set at makePages(), consumed by the block's first line
+  // A chapter title is not paragraph 1. Set when a block opens from an h1-h6, cleared by
+  // startNewTextBlock for every other block.
+  bool currentBlockIsHeading_ = false;
 
   // Footnote link tracking
   bool insideFootnoteLink = false;

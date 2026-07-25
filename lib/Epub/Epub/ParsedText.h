@@ -82,6 +82,10 @@ class ParsedText {
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }
   bool isEmpty() const { return words.empty(); }
+  // True when the block holds at least one letter or digit. Used to decide whether the
+  // block is a numbered paragraph: a separator made only of punctuation, a bullet, or a
+  // dinkus is not one, and must not consume a paragraph number.
+  bool hasLetters() const;
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);
