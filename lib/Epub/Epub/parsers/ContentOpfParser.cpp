@@ -14,6 +14,10 @@ constexpr char MEDIA_TYPE_NCX[] = "application/x-dtbncx+xml";
 constexpr char MEDIA_TYPE_CSS[] = "text/css";
 constexpr char MEDIA_TYPE_IMAGE_PREFIX[] = "image/";
 constexpr char itemCacheFile[] = "/.items.bin";
+// Enough for a back-cover blurb; a synopsis longer than this is marketing copy
+// nobody reads on a 6-inch panel, and it would cost heap during the parse and
+// bytes in every book.bin.
+constexpr size_t kMaxDescriptionBytes = 1500;
 
 bool startsWithImageMediaType(const std::string& mediaType) {
   constexpr size_t prefixLen = sizeof(MEDIA_TYPE_IMAGE_PREFIX) - 1;
@@ -120,6 +124,14 @@ void XMLCALL ContentOpfParser::startElement(void* userData, const XML_Char* name
 
   if (self->state == IN_METADATA && strcmp(name, "dc:language") == 0) {
     self->state = IN_BOOK_LANGUAGE;
+    return;
+  }
+
+  if (self->state == IN_METADATA && strcmp(name, "dc:description") == 0) {
+    // Only the first one; a few EPUBs repeat it per language.
+    if (self->description.empty()) {
+      self->state = IN_BOOK_DESCRIPTION;
+    }
     return;
   }
 
@@ -352,6 +364,18 @@ void XMLCALL ContentOpfParser::characterData(void* userData, const XML_Char* s, 
     self->language.append(s, len);
     return;
   }
+
+  if (self->state == IN_BOOK_DESCRIPTION) {
+    // Publishers routinely put escaped HTML inside dc:description; expat hands it
+    // back here already unescaped, so the markup arrives as literal text and is
+    // stripped later. Appending stops at the cap rather than trimming afterwards,
+    // so a book with a huge synopsis never allocates it in the first place.
+    if (self->description.size() < kMaxDescriptionBytes) {
+      const size_t room = kMaxDescriptionBytes - self->description.size();
+      self->description.append(s, len < static_cast<int>(room) ? static_cast<size_t>(len) : room);
+    }
+    return;
+  }
 }
 
 void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) {
@@ -387,6 +411,11 @@ void XMLCALL ContentOpfParser::endElement(void* userData, const XML_Char* name) 
   }
 
   if (self->state == IN_BOOK_LANGUAGE && strcmp(name, "dc:language") == 0) {
+    self->state = IN_METADATA;
+    return;
+  }
+
+  if (self->state == IN_BOOK_DESCRIPTION && strcmp(name, "dc:description") == 0) {
     self->state = IN_METADATA;
     return;
   }

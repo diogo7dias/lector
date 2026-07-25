@@ -20,6 +20,7 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
+#include "BookInfoActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -937,6 +938,21 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE: {
       openQuoteGrab();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
+      // The screen itself reads nothing: hand it the metadata already in memory and
+      // a thumbnail path, rendering one first if this book has never needed a cover.
+      constexpr int kInfoCoverHeight = 360;
+      std::string coverPath;
+      if (epub->generateThumbBmp(kInfoCoverHeight)) {
+        const std::string path = epub->getThumbBmpPath(kInfoCoverHeight);
+        if (Storage.exists(path.c_str())) coverPath = path;
+      }
+      startActivityForResult(
+          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub->getTitle(), epub->getAuthor(),
+                                             epub->getLanguage(), epub->getDescription(), coverPath),
+          [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH: {

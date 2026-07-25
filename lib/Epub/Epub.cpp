@@ -13,6 +13,43 @@
 #include "Epub/parsers/TocNavParser.h"
 #include "Epub/parsers/TocNcxParser.h"
 
+namespace {
+
+// dc:description is prose, but publishers stuff HTML into it and expat hands that
+// markup back as literal text. The Book Info screen draws plain wrapped text, so
+// flatten it here, once, at cache-build time: drop anything between angle
+// brackets and collapse every run of whitespace to a single space.
+std::string sanitizeDescription(const std::string& raw) {
+  std::string out;
+  out.reserve(raw.size());
+
+  bool inTag = false;
+  bool pendingSpace = false;
+  for (const char c : raw) {
+    if (c == '<') {
+      inTag = true;
+      pendingSpace = true;  // a tag boundary is a word boundary
+      continue;
+    }
+    if (inTag) {
+      if (c == '>') inTag = false;
+      continue;
+    }
+    if (static_cast<unsigned char>(c) <= ' ') {
+      pendingSpace = true;
+      continue;
+    }
+    if (pendingSpace && !out.empty()) {
+      out.push_back(' ');
+    }
+    pendingSpace = false;
+    out.push_back(c);
+  }
+  return out;
+}
+
+}  // namespace
+
 bool Epub::findContentOpfFile(std::string* contentOpfFile) const {
   const auto containerPath = "META-INF/container.xml";
   size_t containerSize;
@@ -80,6 +117,7 @@ bool Epub::parseContentOpf(BookMetadataCache::BookMetadata& bookMetadata, const 
   bookMetadata.author = opfParser.author;
   bookMetadata.language = opfParser.language;
   bookMetadata.coverItemHref = opfParser.coverItemHref;
+  bookMetadata.description = utf8ComposeNfc(sanitizeDescription(opfParser.description));
 
   // Guide-based cover fallback: if no cover found via metadata/properties,
   // try extracting the image reference from the guide's cover page XHTML
@@ -544,6 +582,15 @@ const std::string& Epub::getAuthor() const {
   }
 
   return bookMetadataCache->coreMetadata.author;
+}
+
+const std::string& Epub::getDescription() const {
+  static std::string blank;
+  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
+    return blank;
+  }
+
+  return bookMetadataCache->coreMetadata.description;
 }
 
 const std::string& Epub::getLanguage() const {

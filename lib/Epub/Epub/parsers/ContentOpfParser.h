@@ -18,6 +18,7 @@ class ContentOpfParser final : public Print {
     IN_BOOK_TITLE,
     IN_BOOK_AUTHOR,
     IN_BOOK_LANGUAGE,
+    IN_BOOK_DESCRIPTION,
     IN_MANIFEST,
     IN_SPINE,
     IN_GUIDE,
@@ -59,6 +60,10 @@ class ContentOpfParser final : public Print {
   std::string title;
   std::string author;
   std::string language;
+  // Publisher synopsis. Capped while parsing (see kMaxDescriptionBytes in the .cpp)
+  // because some EPUBs carry several kilobytes of marketing copy and this has to
+  // fit alongside everything else the parse already holds.
+  std::string description;
   std::string tocNcxPath;
   std::string tocNavPath;  // EPUB 3 nav document path
   std::string coverItemHref;

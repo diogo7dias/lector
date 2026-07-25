@@ -16,6 +16,9 @@ class BookMetadataCache {
     std::string language;
     std::string coverItemHref;
     std::string textReferenceHref;
+    // Publisher synopsis from <dc:description>, already stripped of markup and
+    // capped when parsed. Optional: plenty of EPUBs carry none.
+    std::string description;
   };
 
   struct SpineEntry {
