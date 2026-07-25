@@ -140,6 +140,8 @@ void SleepActivity::renderSleepScreen() const {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
 
+  deepCleanPanel();
+
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
@@ -270,6 +272,26 @@ void SleepActivity::renderCustomSleepScreen() const {
   if (dir) dir.close();
 
   renderDefaultSleepScreen();
+}
+
+// Locking can happen over any screen, and every sleep face below paints with a
+// differential waveform: HALF for the logo/blank/bitmap faces, and the calibrated
+// graybase + gray-nudge LUT for the grayscale wallpaper pipeline. A differential
+// only transitions the pixels that changed, so whatever was on the panel stays
+// visible underneath the wallpaper for the whole sleep (device photo 2026-07-25:
+// the Text Settings menu reading through a .pxc face). The "Entering sleep" popup
+// does not provide the clean either — it ends in a FAST_REFRESH, which is also
+// differential.
+//
+// One blank FULL pass fixes it. FULL selects the multi-flash GC waveform that
+// upstream deliberately avoids for sleep (#2471's blinking complaint), and it
+// costs roughly 1.5 s, but at this point sleep is already committed: there is no
+// page turn to delay and the flashing is hidden behind the lock.
+//
+// Not called for the quick-resume face, which must keep the frame it inherits.
+void SleepActivity::deepCleanPanel() const {
+  renderer.clearScreen();
+  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
 }
 
 // Sleep screens paint with a single HALF refresh (stock parity): the OEM X4

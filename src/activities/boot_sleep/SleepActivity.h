@@ -14,6 +14,9 @@ class SleepActivity final : public Activity {
   // and record which wallpaper (if any) ended up on the panel; the render functions
   // return from several places.
   void renderSleepScreen() const;
+  // Blank FULL pass before painting a sleep face, so the screen the user locked from
+  // does not ghost through it. See the definition for why nothing else provides it.
+  void deepCleanPanel() const;
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
