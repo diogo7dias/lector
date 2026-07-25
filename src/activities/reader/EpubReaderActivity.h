@@ -231,6 +231,8 @@ class EpubReaderActivity final : public Activity {
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.
   void reloadForReaderPrefsChange();
+  // Copies the reader settings stored in another book's cache dir onto this book.
+  void applyStolenLook(const std::string& sourceCachePath);
   // Paragraph numbers (#10).
   void applyParagraphNumbering(uint8_t mode);
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).

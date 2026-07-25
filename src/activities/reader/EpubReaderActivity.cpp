@@ -48,6 +48,7 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
 #include "sleep/SleepPauseToggle.h"
+#include "StealLookActivity.h"
 #include "util/BookFiling.h"
 #include "util/BookmarkUtil.h"
 #include "util/FavoriteImage.h"
@@ -1082,6 +1083,24 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::STEAL_LOOK: {
+      // Pick another book that has a custom look and copy its reader settings onto
+      // this one. A one-time snapshot, not a link: changing that book later does not
+      // change this one. A cancelled pick changes nothing.
+      startActivityForResult(makeUniqueNoThrow<StealLookActivity>(renderer, mappedInput, epub->getPath()),
+                             [this](const ActivityResult& res) {
+                               if (res.isCancelled) {
+                                 requestUpdate();
+                                 return;
+                               }
+                               if (const auto* fp = std::get_if<FilePathResult>(&res.data)) {
+                                 applyStolenLook(fp->path);
+                               } else {
+                                 requestUpdate();
+                               }
+                             });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::REMOVE_FROM_RECENTS: {
       // The file move and the list edit both happen in onExit, where the Epub is
       // already released — renaming a book with an open handle is what the /read and
@@ -1433,6 +1452,34 @@ void EpubReaderActivity::saveParagraphCounts() {
     f.write(reinterpret_cast<const uint8_t*>(&c), 2);
   }
   paragraphCountsDirty_ = false;
+}
+
+// Copies another book's saved reader settings onto this one, once. Reads that book's
+// reader_override.bin directly rather than going through its Epub, since the source
+// book is not open. Writing our own override marks this book custom, so a later Reset
+// still returns it to the global settings.
+void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
+  ReaderPrefs stolen;
+  HalFile f;
+  if (!Storage.openFileForRead("ERS", sourceCachePath + "/reader_override.bin", f) || !readReaderPrefs(f, stolen)) {
+    LOG_ERR("ERS", "Steal Look: source reader_override.bin missing or unreadable");
+    requestUpdate();
+    return;
+  }
+  if (std::memcmp(&stolen, &prefs_, sizeof(ReaderPrefs)) == 0) {
+    requestUpdate();  // already identical — nothing to copy, and no re-index to pay for
+    return;
+  }
+  prefs_ = stolen;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  // Orientation is deliberately NOT part of ReaderPrefs here: rotating is a device
+  // choice, not a book's look, so stealing a look never spins the screen.
+  // The font LOAD is the authority, not resolveFontId: an SD family keeps exactly one
+  // size resident, so the stolen size must be made resident before laying out with it.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
+  reloadForReaderPrefsChange();
+  requestUpdate();
 }
 
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int marginTop,

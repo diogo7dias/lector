@@ -71,6 +71,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   if (hasReaderOverride) {
     items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
   }
+  // Sits with the reader settings because that is what it changes: it copies another
+  // book's look onto this one, once. The picker itself reports when nothing qualifies.
+  items.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
   items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
   // Paperback Look toggles — in-book menu only (not in the global Settings screen).
   items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
