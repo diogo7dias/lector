@@ -30,6 +30,7 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
   doc["lastSleepWallpaperPath"] = lastSleepWallpaperPath;
+  doc["sessionPagesRead"] = sessionPagesRead;
 }
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
@@ -53,5 +54,6 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
   lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
+  sessionPagesRead = doc["sessionPagesRead"] | static_cast<uint32_t>(0);
   return true;
 }

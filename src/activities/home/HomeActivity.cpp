@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
@@ -20,15 +21,24 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-int HomeActivity::getMenuItemCount() const {
+int HomeActivity::menuRowCount() const {
   int count = 4;  // File Browser, Recents, File transfer, Settings
-  if (!recentBooks.empty()) {
-    count += recentBooks.size();
-  }
   if (hasOpdsServers) {
     count++;
   }
   return count;
+}
+
+int HomeActivity::pagesTileIndex() const { return static_cast<int>(recentBooks.size()) + menuRowCount(); }
+
+int HomeActivity::getMenuItemCount() const {
+  // Books, then the menu rows, then the pages tile.
+  //
+  // The tile is drawn up in the header but sits LAST in the tab order on purpose.
+  // Putting it first (where it looks like it belongs) would make it the selection
+  // the home screen opens with, and the first Confirm after waking the device
+  // would zero the user's page count instead of opening a book.
+  return static_cast<int>(recentBooks.size()) + menuRowCount() + 1;
 }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
@@ -76,8 +86,16 @@ void HomeActivity::loop() {
   const int menuCount = getMenuItemCount();
 
   auto activateSelection = [this] {
-    if (selectorIndex < recentBooks.size()) {
+    if (selectorIndex < static_cast<int>(recentBooks.size())) {
       onSelectBook(recentBooks[selectorIndex].path);
+      return;
+    }
+    if (selectorIndex == pagesTileIndex()) {
+      // Persist straight away: a reset the user can see must survive a power-off
+      // before the next state save, or the number comes back.
+      APP_STATE.sessionPagesRead = 0;
+      APP_STATE.saveToFile();
+      requestUpdate();
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
@@ -148,6 +166,7 @@ void HomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
+  drawHomeHeaderExtras(selectorIndex == pagesTileIndex());
 
   // In-progress books as a list: each book's full title + " by INITIALS" wrapped over
   // as many lines as it needs, with an inline [NN%] black-background badge, and
@@ -192,6 +211,49 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
+}
+
+void HomeActivity::drawHomeHeaderExtras(const bool pagesSelected) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  // topPadding already carries the X4's physical top-edge crop, so anchoring to it
+  // keeps both of these on screen on either board without a per-site inset.
+  const int textY = metrics.topPadding + 5;
+
+  // "Pages" label tile plus an inverted count chip. Filled when selected, since
+  // this row sits outside the menu list and gets no selection arrow of its own.
+  const std::string label = tr(STR_HOME_PAGES);
+  const std::string countText = std::to_string(APP_STATE.sessionPagesRead);
+  constexpr int tilePad = 6;
+  constexpr int tileGap = 5;
+  const int tileH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
+  const int tileY = textY - 3;
+
+  const int labelTileX = metrics.contentSidePadding;
+  const int labelTextW = renderer.getTextWidth(UI_10_FONT_ID, label.c_str());
+  const int labelTileW = labelTextW + tilePad * 2;
+  if (pagesSelected) {
+    renderer.fillRect(labelTileX, tileY, labelTileW, tileH + 1, true);
+  } else {
+    renderer.drawRect(labelTileX, tileY, labelTileW, tileH, 2, true);
+  }
+  renderer.drawText(UI_10_FONT_ID, labelTileX + tilePad, textY, label.c_str(), !pagesSelected);
+
+  const int countTileX = labelTileX + labelTileW + tileGap;
+  const int countTextW = renderer.getTextWidth(UI_10_FONT_ID, countText.c_str());
+  const int countTileW = countTextW + tilePad * 2;
+  renderer.fillRect(countTileX, tileY, countTileW, tileH + 1, true);
+  renderer.drawText(UI_10_FONT_ID, countTileX + (countTileW - countTextW) / 2, textY, countText.c_str(), false);
+
+  // Clock to the left of the battery cluster. Only boards with an RTC report
+  // available, so this simply does not draw where there is no clock to read.
+  if (!halClock.isAvailable()) return;
+  char timeBuf[9];
+  if (!halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) return;
+  const int batteryIconLeft = pageWidth - 12 - metrics.batteryWidth;
+  const int batteryTextWidth = renderer.getTextWidth(UI_10_FONT_ID, "100%");
+  const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
+  renderer.drawText(UI_10_FONT_ID, batteryIconLeft - batteryTextWidth - 4 - 12 - clockWidth, textY, timeBuf);
 }
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }

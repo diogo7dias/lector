@@ -1943,6 +1943,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // A page is only "shown" once it has actually been drawn; the timer for how
     // long it was read starts here, not at the button press.
     if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
+    // Home's resettable "pages read" tally, counted at the same moment the reading
+    // stats count a page: when it is actually on the panel, not when the button was
+    // pressed. Not persisted here — the reader saves state on exit.
+    APP_STATE.sessionPagesRead++;
   }
   // Only persist when the position actually changed. render() also runs on menu,
   // bookmark and screenshot re-renders, and writeAtomic is several FAT ops for 6 bytes.

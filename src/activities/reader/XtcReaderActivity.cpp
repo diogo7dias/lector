@@ -201,6 +201,10 @@ void XtcReaderActivity::render(RenderLock&&) {
   renderPage();
   // The read timer starts when the page is actually on the panel, not at the press.
   if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
+  // Home's resettable "pages read" tally, counted at the same moment the reading
+  // stats count a page: when it is actually on the panel, not when the button was
+  // pressed. Not persisted here — the reader saves state on exit.
+  APP_STATE.sessionPagesRead++;
   saveProgress();
 }
 
