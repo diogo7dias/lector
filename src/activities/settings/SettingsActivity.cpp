@@ -27,6 +27,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -113,6 +114,12 @@ void SettingsActivity::rebuildSettingsLists() {
 
 void SettingsActivity::onEnter() {
   Activity::onEnter();
+
+  // Opening Settings rescans SD fonts and dictionaries before anything is drawn,
+  // so on a loaded card this is a silent wait on the previous screen. Armed only
+  // here, not around the rebuilds triggered by changing a setting: those must stay
+  // instant, and flashing a banner on every toggle would be worse than nothing.
+  BusyBanner banner(renderer, tr(STR_BUSY_LOADING_SETTINGS));
 
   // Reset selection to first category
   selectedCategoryIndex = 0;

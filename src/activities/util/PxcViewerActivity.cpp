@@ -11,6 +11,7 @@
 #include "ConfirmationActivity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SdSleepImageFs.h"
@@ -97,6 +98,9 @@ void PxcViewerActivity::onExit() {
 }
 
 void PxcViewerActivity::openNeighbour(const int delta) {
+  // Each step scans the folder once, so on a card with thousands of wallpapers
+  // the gap between button and image is real. The banner fills it.
+  BusyBanner banner(renderer, tr(STR_BUSY_READING_WALLPAPERS));
   crosspoint::sleep::SdSleepImageFs fs;
   const std::string folder = folderOf(filePath);
   const std::string next =

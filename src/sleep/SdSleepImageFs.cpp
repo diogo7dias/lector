@@ -6,6 +6,7 @@
 #include <cstring>
 
 #include "WallpaperNames.h"
+#include "util/BusyTick.h"
 #include "util/TaskWatchdog.h"
 
 namespace crosspoint {
@@ -39,6 +40,9 @@ void SdSleepImageFs::walk(const char* dir, const NameSink& sink) {
     if (++seen % WDT_YIELD_INTERVAL == 0) {
       resetTaskWatchdogIfSubscribed();
       yield();
+      // Stepping through a big wallpaper folder scans it once per step, so the
+      // UI needs a way in to say what is taking the time.
+      busy::tick();
     }
   }
   handle.close();

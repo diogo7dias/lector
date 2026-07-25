@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <string_view>
 
+#include "BusyTick.h"
 #include "CrossPointSettings.h"
 
 namespace {
@@ -52,7 +53,11 @@ std::vector<std::string> NextBookFinder::findNextBooks(const std::string& curren
   result.reserve(maxCount + 1);
   const auto less = [](const std::string& a, const std::string& b) { return FsHelpers::naturalLess(a, b); };
 
+  uint32_t scanned = 0;
   for (auto file = dir.openNextFile(); file; file = dir.openNextFile()) {
+    // A library folder is unbounded, and this runs at end of book while the user
+    // waits for the "read next" list.
+    if ((++scanned & 0x3F) == 0) busy::tick();
     if (file.isDirectory()) {
       continue;
     }

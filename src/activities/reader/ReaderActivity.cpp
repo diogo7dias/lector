@@ -19,6 +19,7 @@
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
 #include "activities/util/PxcViewerActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
@@ -45,8 +46,13 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   // indexing popup so it isn't a silent wait on the home screen. The cachePath/hash is known at
   // construction, so this check is valid before load(); a cached open loads in a blink -> no popup.
   const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
+  std::optional<BusyBanner> banner;
   if (uncached) {
-    GUI.drawPopup(renderer, tr(STR_INDEXING));
+    // Known slow every time, so it skips the banner's usual delay. Kept alive
+    // across the load below so any busy::tick() inside the parse still lands on
+    // this banner rather than an empty handler.
+    banner.emplace(renderer, tr(STR_INDEXING));
+    banner->showNow();
   }
   bool loaded;
   {
@@ -143,7 +149,12 @@ void ReaderActivity::onEnter() {
     return;
   }
 
-  sdFontSystem.ensureLoaded(renderer);
+  {
+    // Only paints if a font actually gets read off the card; ensureLoaded returns
+    // early in the common case where the right family is already in RAM.
+    BusyBanner fontBanner(renderer, tr(STR_BUSY_LOADING_FONT));
+    sdFontSystem.ensureLoaded(renderer);
+  }
 
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {

@@ -5,6 +5,7 @@
 
 #include "CrossPointSettings.h"
 #include "fontIds.h"
+#include "util/BusyTick.h"
 
 namespace {
 
@@ -119,6 +120,11 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
 
   const auto* family = registry_.findFamily(wantedFamily);
   if (family) {
+    // Everything above this point is bookkeeping and returns early in the common
+    // case. Past here a font file is actually read and parsed off the SD card,
+    // which for a CJK family is megabytes and seconds — always worth telling the
+    // user about, so it does not wait out the banner's usual delay.
+    busy::tickNow();
     if (manager_.loadFamily(*family, renderer, sizeEnum)) {
       setupUiFallbacks(renderer);
       LOG_DBG("SDFS", "Loaded SD font family: %s", wantedFamily);

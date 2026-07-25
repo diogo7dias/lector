@@ -12,9 +12,11 @@
 #include "MappedInputManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BusyTick.h"
 #include "util/FavoriteImageNames.h"
 
 namespace {
@@ -23,6 +25,11 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 }  // namespace
 
 void FileBrowserActivity::loadFiles() {
+  // Armed here rather than at each of the seven call sites, so every path into a
+  // folder gets the same treatment. Nothing is drawn unless the scan actually
+  // drags — a small folder still lists instantly with no extra panel refresh.
+  BusyBanner banner(renderer, tr(STR_BUSY_READING_FOLDER));
+
   files.clear();
   // A new listing invalidates the scroll window. render() re-derives it from the selection,
   // so starting at the top is safe even when the caller then selects a row further down.
@@ -43,7 +50,12 @@ void FileBrowserActivity::loadFiles() {
     return;
   }
 
+  uint32_t scanned = 0;
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
+    // A wallpaper or library folder can hold thousands of entries, and this scan
+    // blocks before the browser's first frame. Let the busy banner appear if it
+    // drags.
+    if ((++scanned & 0x3F) == 0) busy::tick();
     file.getName(fileNameBuffer.get(), NAME_BUFFER_SIZE);
     if ((!SETTINGS.showHiddenFiles && fileNameBuffer[0] == '.') ||
         strcmp(fileNameBuffer.get(), "System Volume Information") == 0) {

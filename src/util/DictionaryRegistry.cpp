@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "BusyTick.h"
 #include "StringUtils.h"
 
 namespace DictionaryRegistry {
@@ -73,6 +74,9 @@ void discover(std::vector<DictionaryEntry>& out) {
     rootDir.rewindDirectory();
     char name[128];
     for (auto entry = rootDir.openNextFile(); entry; entry = rootDir.openNextFile()) {
+      // Each dictionary folder costs its own scan in findStem, so this outer loop
+      // can run for a while on a card with several dictionaries.
+      busy::tick();
       entry.getName(name, sizeof(name));
       if (!entry.isDirectory() || name[0] == '.') continue;
 
