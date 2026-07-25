@@ -17,6 +17,10 @@ class BmpViewerActivity final : public Activity {
  private:
   void loadSiblingImages();
   void doSetSleepCover();
+  // Sleep-folder triage, mirroring PxcViewerActivity so the two viewers agree.
+  void doToggleFavorite();
+  void doTogglePause();
+  void promptDelete();
 
   std::string filePath;
   std::vector<std::string> siblingImages;

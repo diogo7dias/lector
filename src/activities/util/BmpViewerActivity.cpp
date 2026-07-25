@@ -9,8 +9,11 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sleep/SleepPauseToggle.h"
+#include "util/FavoriteImage.h"
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
@@ -101,8 +104,17 @@ void BmpViewerActivity::onEnter() {
       bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
                       currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
 
+      // Inside a sleep folder the front buttons are triage, exactly as in the .pxc
+      // viewer, so the two image viewers do not want different fingers. Siblings move
+      // to Up/Down there; outside those folders nothing has changed.
+      const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
+      const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
+      const char* pauseLabel =
+          filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
       const auto labels =
-          mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
+          triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
+                 : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""),
+                                         (hasNext ? ">" : ""));
 
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
@@ -201,20 +213,115 @@ void BmpViewerActivity::loop() {
     return;
   }
 
+  const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    doSetSleepCover();
+    if (triage) {
+      doToggleFavorite();
+    } else {
+      doSetSleepCover();
+    }
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    if (triage) {
+      promptDelete();
+    } else {
+      openSibling(-1);
+    }
+    return;
+  }
+
+  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    if (triage) {
+      doTogglePause();
+    } else {
+      openSibling(1);
+    }
+    return;
+  }
+
+  // Siblings stay on Up/Down whatever the folder, so stepping through a wallpaper
+  // folder is the same movement in both viewers.
+  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
     openSibling(-1);
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right) ||
-      mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
     openSibling(1);
     return;
   }
+}
+
+void BmpViewerActivity::doToggleFavorite() {
+  const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
+  std::string newPath;
+  switch (FavoriteImage::setFavorite(filePath, makeFavorite, &newPath)) {
+    case FavoriteImage::SetFavoriteResult::Success:
+      // The file was renamed, so the viewer follows it and the sibling list is stale.
+      filePath = newPath;
+      siblingImages.clear();
+      onEnter();
+      return;
+    case FavoriteImage::SetFavoriteResult::RenameConflict:
+      GUI.drawPopup(renderer, tr(STR_FAVORITE_NAME_EXISTS));
+      break;
+    default:
+      GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
+      break;
+  }
+  delay(1000);
+  onEnter();
+}
+
+void BmpViewerActivity::doTogglePause() {
+  // Pick the neighbour before the move, while this file still anchors the lookup.
+  const int nextIndex = (currentImageIndex > 0) ? currentImageIndex - 1 : currentImageIndex + 1;
+  const bool hasNeighbour = siblingImages.size() > 1 && nextIndex >= 0 &&
+                            nextIndex < static_cast<int>(siblingImages.size());
+  std::string nextName = hasNeighbour ? siblingImages[nextIndex] : std::string();
+
+  if (!crosspoint::sleep::toggleSleepPause(filePath).ok) {
+    GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
+    delay(1000);
+    onEnter();
+    return;
+  }
+
+  // The file left this folder. Show the neighbour rather than dumping the user back
+  // to the browser after every move, so triage keeps flowing.
+  if (nextName.empty()) {
+    activityManager.goToFileBrowser(FsHelpers::extractFolderPath(filePath));
+    return;
+  }
+  std::string dirPath = FsHelpers::extractFolderPath(filePath);
+  if (dirPath.back() != '/') dirPath += "/";
+  filePath = dirPath + nextName;
+  siblingImages.clear();
+  onEnter();
+}
+
+void BmpViewerActivity::promptDelete() {
+  const std::string doomed = filePath;
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput,
+                                                               tr(STR_DELETE) + std::string("? "),
+                                                               FavoriteImage::displayNameForPath(doomed)),
+                         [this, doomed](const ActivityResult& res) {
+                           if (res.isCancelled) {
+                             onEnter();
+                             return;
+                           }
+                           if (!Storage.remove(doomed.c_str())) {
+                             GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
+                             delay(1000);
+                             onEnter();
+                             return;
+                           }
+                           // The wake path re-renders the last wallpaper; a dead path
+                           // there sends the next wake to the boot logo for no reason.
+                           FavoriteImage::removePathReferences(doomed);
+                           activityManager.goToFileBrowser(FsHelpers::extractFolderPath(doomed));
+                         });
 }

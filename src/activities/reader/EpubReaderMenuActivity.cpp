@@ -59,6 +59,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
                                                        ? StrId::STR_RESUME_WALLPAPER_ROTATION
                                                        : StrId::STR_HOLD_THIS_WALLPAPER});
     }
+    // Last of the wallpaper rows, because it is the destructive one and this menu is
+    // reached by waking the device — a stray press should not land on it.
+    items.push_back({MenuAction::WALLPAPER_DELETE, StrId::STR_DELETE_WALLPAPER});
   }
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});

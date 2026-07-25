@@ -38,6 +38,7 @@ class EpubReaderMenuActivity final : public Activity {
     WALLPAPER_FAVORITE,        // star/unstar the wallpaper the lock screen last showed
     WALLPAPER_PAUSE,           // move that wallpaper to "/sleep pause", out of rotation
     WALLPAPER_HOLD,           // stop picking a new wallpaper each sleep; keep this one
+    WALLPAPER_DELETE,         // delete that wallpaper file from the card, behind a confirmation
     REMOVE_FROM_RECENTS       // drop this book from the home list and put its file back at the card root
   };
 

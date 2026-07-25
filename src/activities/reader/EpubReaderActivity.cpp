@@ -41,6 +41,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -1000,6 +1001,38 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         GUI.drawPopup(renderer, moved.toPause ? tr(STR_WALLPAPER_PAUSED) : tr(STR_WALLPAPER_UNPAUSED));
       }
       requestUpdate();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::WALLPAPER_DELETE: {
+      const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
+      if (lastPath.empty()) break;
+      // Deleting a file is not undoable, so it asks first — unlike favourite and pause,
+      // which are both a rename away from being put back.
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "),
+                                                 FavoriteImage::displayNameForPath(lastPath)),
+          [this, lastPath](const ActivityResult& res) {
+            if (res.isCancelled) {
+              requestUpdate();
+              return;
+            }
+            if (!Storage.remove(lastPath.c_str())) {
+              GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
+              requestUpdate();
+              return;
+            }
+            // The wake path re-renders the last wallpaper to composite the unlock
+            // banners over it; a dead path there sends the next wake to the boot logo.
+            FavoriteImage::removePathReferences(lastPath);
+            // Holding a wallpaper that no longer exists would freeze the rotation on
+            // nothing, so deleting the held one resumes it.
+            if (SETTINGS.wallpaperRotationPaused) {
+              SETTINGS.wallpaperRotationPaused = 0;
+              SETTINGS.saveToFile();
+            }
+            GUI.drawPopup(renderer, tr(STR_DONE));
+            requestUpdate();
+          });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {

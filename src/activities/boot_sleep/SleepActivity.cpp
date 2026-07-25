@@ -324,7 +324,10 @@ void SleepActivity::renderCustomSleepScreen() const {
   // sequence powers the panel rails down, and the grayscale refresh that follows then
   // shared one activation with the rail ramp. Fixed at the driver-config level; see
   // src/platform/LectorSsd1677Config.cpp.
-  constexpr bool pxcGrayscale = true;
+  // Quality is the user's call: Pretty is the 3-pass grayscale above, Fast is a single
+  // 1-bit pass. Three panel refreshes instead of one is real time spent going to sleep,
+  // which is worth trading away on a dithered image.
+  const bool pxcGrayscale = SETTINGS.sleepImageQuality == CrossPointSettings::SLEEP_QUALITY_PRETTY;
   {
     const SleepInfoOverlayScope overlayScope("/sleep.pxc");
     if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {

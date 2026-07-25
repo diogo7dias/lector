@@ -348,6 +348,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char sdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
+  // Sleep wallpaper rendering quality. Pretty runs the OEM 3-pass grayscale pipeline;
+  // Fast draws one 1-bit pass, which is two panel refreshes cheaper on every sleep.
+  static constexpr uint8_t SLEEP_QUALITY_FAST = 0;
+  static constexpr uint8_t SLEEP_QUALITY_PRETTY = 1;
+  uint8_t sleepImageQuality = SLEEP_QUALITY_PRETTY;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the
