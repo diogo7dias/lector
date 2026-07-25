@@ -18,6 +18,9 @@ class SleepActivity final : public Activity {
   void renderSleepScreen() const;
   // Blank FULL pass before painting a sleep face, so the screen the user locked from
   // does not ghost through it. See the definition for why nothing else provides it.
+  // Keeps the page already on the panel and adds a thin border. Must not be preceded
+  // by the popup or the deep clean.
+  void renderFreezeSleepScreen() const;
   void deepCleanPanel() const;
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;

@@ -26,8 +26,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // Appended at the end: the stored value is the persisted setting, so new faces
     // must never be inserted before an existing one.
     STATS_DASHBOARD = 7,
+    // Keeps the last reader page on the panel and draws a thin frame around it.
+    FREEZE = 8,
     SLEEP_SCREEN_MODE_COUNT
   };
+  // Frame colour drawn around the screen in the FREEZE sleep mode.
+  enum SLEEP_FRAME_COLOR { SLEEP_FRAME_BLACK = 0, SLEEP_FRAME_WHITE = 1, SLEEP_FRAME_COLOR_COUNT };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -357,6 +361,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
   // so it can never wedge boot.
   uint8_t openRandomRecentOnBoot = 0;
+  // Colour of the FREEZE sleep face's border. Black reads on a light page, white on a
+  // dark one, and the frozen page can be either.
+  uint8_t sleepFrameColor = SLEEP_FRAME_BLACK;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the

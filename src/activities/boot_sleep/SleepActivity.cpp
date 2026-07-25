@@ -153,6 +153,12 @@ void SleepActivity::renderSleepScreen() const {
     return renderLastScreenSleepScreen();
   }
 
+  // Freeze keeps whatever is already on the panel, so it must run before both the
+  // popup and the deep clean — either would destroy the very thing it preserves.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::FREEZE) {
+    return renderFreezeSleepScreen();
+  }
+
   // The "Entering sleep" popup is a progress note for a lock that takes a moment.
   // A wallpaper lock does not need it: deepCleanPanel is about to blank the screen
   // anyway, so the popup is one extra differential paint the user sees for an
@@ -471,6 +477,17 @@ void SleepActivity::renderCustomSleepScreen() const {
 // there is no page turn to delay and the flashing is hidden behind the lock.
 //
 // Not called for the quick-resume face, which must keep the frame it inherits.
+void SleepActivity::renderFreezeSleepScreen() const {
+  // The panel is already holding the last rendered page and nothing here clears it.
+  // Draw a 2px border around the screen edge and let a differential refresh add just
+  // that border, leaving the page underneath untouched.
+  const int w = renderer.getScreenWidth();
+  const int h = renderer.getScreenHeight();
+  const bool black = SETTINGS.sleepFrameColor == CrossPointSettings::SLEEP_FRAME_BLACK;
+  renderer.drawRect(0, 0, w, h, 2, black);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
 void SleepActivity::deepCleanPanel() const {
   renderer.clearScreen(0x00);  // every pixel black
   renderer.displayBuffer(HalDisplay::FULL_REFRESH);
