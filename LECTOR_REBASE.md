@@ -117,8 +117,12 @@ Legend: [x] done · [~] in progress · [ ] todo
 - [ ] Wallpaper management: favourites + `/sleep pause` folder + move-by-favourite bulk actions +
       filename/favorite info overlay + `PxcViewerActivity`. Old-fork sources: `src/sleep/SleepFavoriteMove.h`,
       `src/util/FavoriteImage.h`, `src/activities/boot_sleep/SleepInfoOverlay.h`.
-- [ ] Book screens: `BookInfoActivity` (per-book detail), Reading Stats, `CleanStorageActivity`
-      (cache/orphan sweeper). All three exist on old `main`, none ported.
+- [x] **Clean Up Storage** — Settings action that removes only the cache directories whose book is gone,
+      leaving every present book's progress alone. Commit `11d98cea`.
+- [x] **Book Info** — reader-menu screen with cover, title, author, language and a paged synopsis. Required
+      plumbing `<dc:description>` through the OPF parser into `book.bin` (version 8 → 9). Commit `d1a7f8d3`.
+- [x] **Reading Stats** — engine + per-book/all-books screen + two System settings; all three readers feed
+      the tracker, only the EPUB menu opens the screen (TXT/XTC have no reader menu here). Commit `8a939fac`.
 
 **Dropped for good** (upstream has its own, usually better): custom `DisplayRefreshPolicy`,
 sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fixes.
@@ -290,6 +294,34 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   must keep the frame it inherits. Costs ~1.5 s and the multi-flash GC waveform upstream avoids for
   sleep (#2471), but sleep is already committed at that point.
 
+- **2026-07-25 — three old-lector screens ported (unreleased).** Diogo picked the "book screens" group.
+  1. **Clean Up Storage** (`11d98cea`). Sits above Clear Reading Cache in Settings. Deletes only
+     `/.crosspoint` cache directories whose book is no longer on the card. It enumerates every book first
+     and deletes NOTHING unless that walk completed, because a book the walk missed is indistinguishable
+     from an orphan and its cache holds that book's progress. Live books are kept as 16-byte keys
+     (prefix + `std::hash` of the path) in a sorted vector, not a set of name strings — a few hundred books
+     as strings would cost hundreds of KB of a 380 KB heap; the 2000-book cap bounds it at 32 KB. The walk
+     is iterative with an explicit stack and feeds the watchdog every 256 entries; the delete loop feeds it
+     too, because the rebase's `SDCardManager::removeDir` recurses a whole tree without feeding it (the old
+     fork's did — the existing Clear Cache screen still has that hole).
+  2. **Book Info** (`d1a7f8d3`). Second row of the reader menu. The screen itself was a near-verbatim port;
+     the work was the synopsis, which the rebase did not store at all. `ContentOpfParser` now captures
+     `<dc:description>` (stopping at 1500 bytes while appending, not trimming after), `Epub` flattens the
+     HTML publishers put in there once at cache-build time, and it is written to `book.bin`.
+     **`BOOK_CACHE_VERSION` 8 → 9**, so every book re-reads metadata/spine/TOC once on next open; laid-out
+     pages and progress are untouched. The size estimate's length-prefix term went 5 → 6 strings — it feeds
+     `lutOffset`, so missing it would have pointed the lookup table four bytes short.
+  3. **Reading Stats** (`8a939fac`). Engine (`src/reading_stats/`, 12 files) + `BookStatsActivity` +
+     `readingStatsEnabled` / `readingStatsIdleUnits` under System. Two 180-byte files, one per book in its
+     cache dir and one global at `/.crosspoint/global_reading_stats.bin`, saved via verified temp + `.bak`
+     rotation. All three readers feed the tracker so TXT and comics count toward all-books totals; only the
+     EPUB menu opens the screen because TXT/XTC have no reader menu in the rebase. Tracking is latched at
+     open so a mid-book toggle cannot half-track a session; backward turns close the page out rather than
+     credit it; the page timer starts when the page reaches the panel, not at the press.
+     **`HalClock::getDateTime()` is new** — streaks, weekday buckets and start/finish dates need a calendar
+     date and the HAL only exposed hour/minute. It reads the SDK RTC and falls back to the system clock on
+     boards without one, rejecting an unset clock rather than recording a reading day in 1970.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
@@ -322,6 +354,10 @@ content-derived, unique, nonzero — runtime only needs unique keys, so the pre-
 
 Everything since 0.0.1 was built, host-tested and shipped, but **not** device-tested. Highest value first:
 - **Unreleased:** locking from any screen leaves NO ghost of that screen under the sleep face.
+- **Unreleased:** Settings · Clean Up Storage removes orphan caches only (delete a book, sweep, confirm the
+  other books still open at their saved place); reader menu · Book Info shows cover/author/language/synopsis;
+  reader menu · Reading Stats counts a session, and the numbers survive closing and reopening the book.
+  Reading Stats needs the clock set, or streaks and weekday buckets will be wrong.
 - **0.0.7:** unlock keeps the `.pxc` wallpaper with banners on top (no logo, no white flash); a book's own
   font size survives closing and reopening it (SD-card fonts only — the bug never touched Vollkorn).
 - **0.0.4/0.0.5:** X4 grayscale `.pxc` sleep (the rails fix — X4 should now show 4-level gray like X3, not
