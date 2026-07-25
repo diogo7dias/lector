@@ -2,7 +2,7 @@
 
 > Living document. Updated every step. This is the source of truth for the
 > lector re-base so work can resume after any context compaction.
-> Last updated: 2026-07-25 (lector.c 0.0.7 live on the flasher site).
+> Last updated: 2026-07-25 (lector.c 0.0.9 live on the flasher site).
 
 ## Goal
 
@@ -408,9 +408,9 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.0.7:** `default` RAM 15.9% / Flash 71.6%; `gh_release` RAM 15.9% / Flash 71.0%
-(`firmware.bin` 4,667,536 bytes).
-**Live on the flasher site: `lector.c 0.0.7`.** Nothing is built-but-unreleased.
+**Sizes at 0.0.9:** `default` RAM 16.0% / Flash 72.7%; `gh_release` RAM 16.0% / Flash 72.1%
+(`firmware.bin` 4,736,928 bytes).
+**Live on the flasher site: `lector.c 0.0.9`** (published 2026-07-25, firmware.bin 4,736,928 bytes; bootloader/partitions/boot_app0 unchanged and left in place). Nothing is built-but-unreleased.
 
 **RELEASE RULE (Diogo, 2026-07-24):** NEVER publish to the flasher site (`lector-xteink-firmware`) without
 Diogo's explicit OK — the site push itself can auto-deploy Pages. Never flash the device without asking.
@@ -513,7 +513,7 @@ Seven commits, all built (`pio run -e default` green, Flash 72.7%) and host-test
   keyboard repaint on e-ink). The browser list is addressed by ROW now, not by file index —
   `findEntry` became `findEntryRow`.
 
-Device test owed on all of it. Cover/coverflow home layout was considered and **dropped on purpose**
+Shipped as **lector.c 0.0.9** (2026-07-25). Device test owed on all of it. Cover/coverflow home layout was considered and **dropped on purpose**
 (Diogo, 2026-07-25): thumbnail generation is what made the old home slow, and the list already
 carries title + `[NN%]`.
 
