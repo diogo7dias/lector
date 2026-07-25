@@ -233,6 +233,9 @@ class EpubReaderActivity final : public Activity {
   void reloadForReaderPrefsChange();
   // Copies the reader settings stored in another book's cache dir onto this book.
   void applyStolenLook(const std::string& sourceCachePath);
+  // Adopt reader settings from another book or a saved preset. Returns what was really
+  // adopted — an SD font that is no longer installed is swapped for the built-in family.
+  ReaderPrefs applyReaderPrefsFrom(const ReaderPrefs& incoming);
   // Paragraph numbers (#10).
   void applyParagraphNumbering(uint8_t mode);
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).

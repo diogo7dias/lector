@@ -39,6 +39,8 @@
 #include "QuoteSelectActivity.h"
 #include "QuoteText.h"
 #include "QuotesViewerActivity.h"
+#include "ReaderPresetStore.h"
+#include "ReaderPresetsActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -1114,6 +1116,28 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                              });
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::READING_THEMES: {
+      // The themes screen edits the store itself; only "Apply" comes back, as the index
+      // of the theme to adopt. Cancelling, renaming or deleting changes nothing here.
+      startActivityForResult(makeUniqueNoThrow<ReaderPresetsActivity>(renderer, mappedInput, prefs_),
+                             [this](const ActivityResult& res) {
+                               const auto* pr = res.isCancelled ? nullptr : std::get_if<PresetResult>(&res.data);
+                               const ReaderPreset* preset = pr ? READER_PRESETS.get(pr->index) : nullptr;
+                               if (!preset) {
+                                 requestUpdate();
+                                 return;
+                               }
+                               const ReaderPrefs stored = preset->prefs;
+                               const ReaderPrefs adopted = applyReaderPrefsFrom(stored);
+                               // A theme naming an SD font that has left the card comes back
+                               // corrected. Write the correction to the card so the theme is
+                               // repaired once, instead of falling back on every apply.
+                               if (std::memcmp(&adopted, &stored, sizeof(ReaderPrefs)) != 0) {
+                                 READER_PRESETS.overwrite(pr->index, adopted);
+                               }
+                             });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::REMOVE_FROM_RECENTS: {
       // The file move and the list edit both happen in onExit, where the Epub is
       // already released — renaming a book with an open handle is what the /read and
@@ -1479,20 +1503,51 @@ void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
     requestUpdate();
     return;
   }
-  if (std::memcmp(&stolen, &prefs_, sizeof(ReaderPrefs)) == 0) {
-    requestUpdate();  // already identical — nothing to copy, and no re-index to pay for
-    return;
+  applyReaderPrefsFrom(stolen);
+}
+
+// Adopt a whole set of reader settings from somewhere else — another book (Steal Look)
+// or a saved preset. Shared so the two cannot drift apart in how they write, reload or
+// resolve the font.
+//
+// Returns the prefs actually adopted, which differ from the argument when the SD font
+// it names is no longer installed. The caller uses that to write the correction back to
+// a stored preset, so a dead font name is repaired rather than re-applied forever.
+ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming) {
+  ReaderPrefs next = incoming;
+
+  // A preset saved months ago can name an SD font that has since left the card.
+  // resolveFontId answers with whatever family is currently RESIDENT rather than the
+  // one asked for, so an unchecked name lays the book out at the wrong font and size on
+  // every open. Fall back to the built-in family instead, and report it.
+  if (next.sdFontFamilyName[0] != '\0') {
+    const auto& families = sdFontSystem.registry().getFamilies();
+    const bool installed = std::any_of(families.begin(), families.end(), [&](const SdCardFontFamilyInfo& fam) {
+      return fam.name == next.sdFontFamilyName;
+    });
+    if (!installed) {
+      LOG_ERR("ERS", "Reader prefs name a missing SD font '%s' — falling back to the built-in family",
+              next.sdFontFamilyName);
+      std::memset(next.sdFontFamilyName, 0, sizeof(next.sdFontFamilyName));
+      next.fontFamily = 0;  // CrossPointSettings::VOLLKORN
+    }
   }
-  prefs_ = stolen;
+
+  if (std::memcmp(&next, &prefs_, sizeof(ReaderPrefs)) == 0) {
+    requestUpdate();  // already identical — nothing to copy, and no re-layout to pay for
+    return next;
+  }
+  prefs_ = next;
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
   // Orientation is deliberately NOT part of ReaderPrefs here: rotating is a device
-  // choice, not a book's look, so stealing a look never spins the screen.
+  // choice, not a book's look, so adopting a look never spins the screen.
   // The font LOAD is the authority, not resolveFontId: an SD family keeps exactly one
-  // size resident, so the stolen size must be made resident before laying out with it.
+  // size resident, so the adopted size must be made resident before laying out with it.
   sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontSize);
   reloadForReaderPrefsChange();
   requestUpdate();
+  return next;
 }
 
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int marginTop,

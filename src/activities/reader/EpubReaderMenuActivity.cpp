@@ -32,7 +32,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, bool hasSleepWallpaper,
     bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes) {
   std::vector<MenuItem> items;
-  items.reserve(21);
+  items.reserve(22);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
   items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
@@ -79,6 +79,9 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   // Sits with the reader settings because that is what it changes: it copies another
   // book's look onto this one, once. The picker itself reports when nothing qualifies.
   items.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
+  // Same cluster for the same reason: a saved look applied to this book. Steal Look
+  // takes one from another book, this takes one from the named sets on the card.
+  items.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
   items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
   // Paperback Look toggles — in-book menu only (not in the global Settings screen).
   items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});

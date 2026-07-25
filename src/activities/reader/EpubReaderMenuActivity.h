@@ -36,6 +36,7 @@ class EpubReaderMenuActivity final : public Activity {
     BOOK_INFO,                 // cover, author, language and the publisher synopsis
     READING_STATS,             // per-book and all-books reading statistics
     STEAL_LOOK,                // copy another book's reader settings onto this one
+    READING_THEMES,            // saved reader looks: apply one to this book, or save this one
     WALLPAPER_FAVORITE,        // star/unstar the wallpaper the lock screen last showed
     WALLPAPER_PAUSE,           // move that wallpaper to "/sleep pause", out of rotation
     WALLPAPER_HOLD,            // stop picking a new wallpaper each sleep; keep this one

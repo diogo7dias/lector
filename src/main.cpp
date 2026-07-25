@@ -27,6 +27,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "UiFont.h"
@@ -374,6 +375,7 @@ void setup() {
   // Adds the shipped library entry on a card that has never seen it, so it is there
   // to fill credentials into rather than typed out on a five-button keyboard.
   OPDS_STORE.seedBuiltInServers();
+  READER_PRESETS.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
 

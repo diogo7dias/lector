@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -67,9 +68,16 @@ struct FilePathResult {
   std::string path;
 };
 
+// Index into ReaderPresetStore of the Reading Theme the user chose to apply. Only the
+// index travels: the reader reads the theme back from the store, so the two cannot
+// disagree if the screen edited it on the way out.
+struct PresetResult {
+  size_t index = 0;
+};
+
 using ResultVariant =
     std::variant<std::monostate, WifiResult, KeyboardResult, MenuResult, ChapterResult, PercentResult, IntervalResult,
-                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult>;
+                 PageResult, ProgressChangeResult, NetworkModeResult, FootnoteResult, FilePathResult, PresetResult>;
 
 struct ActivityResult {
   bool isCancelled = false;
