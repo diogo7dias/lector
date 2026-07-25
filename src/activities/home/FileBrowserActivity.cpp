@@ -10,10 +10,12 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/FavoriteImageNames.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -59,7 +61,9 @@ void FileBrowserActivity::loadFiles() {
         }
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename)) {
+                 FsHelpers::hasBmpExtension(filename) || hasPxcExtension(filename)) {
+        // .pxc joins the list so a wallpaper folder can be browsed and triaged on
+        // the device; selecting one opens PxcViewerActivity.
         files.emplace_back(filename);
       }
     }
@@ -368,6 +372,11 @@ std::string getFileName(std::string filename) {
     return filename;
   }
   const auto pos = filename.rfind('.');
+  // Favourite wallpapers show as "[F] name": the _F suffix is the state, but it is
+  // bookkeeping, not part of the name the user gave the file.
+  if (FavoriteImage::hasFavoriteSuffix(filename)) {
+    return "[F] " + filename.substr(0, pos - 2);
+  }
   return filename.substr(0, pos);
 }
 

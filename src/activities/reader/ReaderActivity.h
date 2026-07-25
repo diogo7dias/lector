@@ -24,6 +24,7 @@ class ReaderActivity final : public Activity {
   void onGoToXtcReader(std::unique_ptr<Xtc> xtc);
   void onGoToTxtReader(std::unique_ptr<Txt> txt);
   void onGoToBmpViewer(const std::string& path);
+  void onGoToPxcViewer(const std::string& path);
 
   void onGoBack();
 

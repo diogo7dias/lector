@@ -15,8 +15,10 @@
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
+#include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/util/BmpViewerActivity.h"
 #include "activities/util/FullScreenMessageActivity.h"
+#include "activities/util/PxcViewerActivity.h"
 #include "components/UITheme.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
@@ -117,6 +119,10 @@ void ReaderActivity::onGoToBmpViewer(const std::string& path) {
   activityManager.replaceActivity(std::make_unique<BmpViewerActivity>(renderer, mappedInput, path));
 }
 
+void ReaderActivity::onGoToPxcViewer(const std::string& path) {
+  activityManager.replaceActivity(std::make_unique<PxcViewerActivity>(renderer, mappedInput, path));
+}
+
 void ReaderActivity::onGoToXtcReader(std::unique_ptr<Xtc> xtc) {
   const auto xtcPath = xtc->getPath();
   currentBookPath = xtcPath;
@@ -142,6 +148,8 @@ void ReaderActivity::onEnter() {
   currentBookPath = initialBookPath;
   if (isBmpFile(initialBookPath)) {
     onGoToBmpViewer(initialBookPath);
+  } else if (hasPxcExtension(initialBookPath)) {
+    onGoToPxcViewer(initialBookPath);
   } else if (isXtcFile(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
     if (!xtc) {

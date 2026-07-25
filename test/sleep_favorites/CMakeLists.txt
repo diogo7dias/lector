@@ -1,6 +1,7 @@
 add_executable(SleepFavoritesTest
   FavoriteImageNamesTest.cpp
   SleepImageMoveTest.cpp
+  WallpaperNeighbourTest.cpp
   ${REPO_ROOT}/src/util/FavoriteImageNames.cpp
 )
 
