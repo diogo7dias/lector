@@ -1427,7 +1427,10 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     const std::string initials = StringUtils::authorInitials(recentBooks[idx].author);
     const std::string rowText =
         initials.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + initials);
-    auto lines = wrapText(renderer, rowText, firstLineW, contentW);
+    // Every line gets the first line's width, because every line is drawn at the first
+    // line's x: continuation lines used to run back to the left margin, under the [NN%]
+    // chip, which left the block with a ragged left edge.
+    auto lines = wrapText(renderer, rowText, firstLineW, firstLineW);
     const int h = static_cast<int>(lines.size()) * rowLineHeight + 6;
     return {idx, std::move(lines), h, badgeW, badgeTextDx, std::move(badgeText)};
   };
@@ -1515,8 +1518,8 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
 
     int baselineY = rowY + 3;
     for (size_t li = 0; li < entry.lines.size(); li++) {
-      const int lineX = (li == 0) ? firstLineX : contentX;
-      renderer.drawText(UI_10_FONT_ID, lineX, baselineY, entry.lines[li].c_str(), !selected);
+      // Wrapped lines line up under the first line's text, not under the chip.
+      renderer.drawText(UI_10_FONT_ID, firstLineX, baselineY, entry.lines[li].c_str(), !selected);
       baselineY += rowLineHeight;
     }
 
