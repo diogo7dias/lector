@@ -395,6 +395,15 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   recents with `[NN%]` badges) and the old home's `SdFileIndex` + library search, which is a separate
   ~1700-line port, not an "extra".
 
+- **2026-07-25** — **Wallpaper hold** (`8a85e2d0`), the rotation-pause flag after all, at Diogo's
+  request. `SETTINGS.wallpaperRotationPaused`: Display toggle "Hold Wallpaper" plus a reader-menu row
+  that flips it in context. While held, the folder rotation keeps showing the wallpaper already up.
+  Honoured only while that exact file is still in that folder — favouriting renames it, pausing moves
+  it out, the browser can delete it — so a stale name falls through to a normal random pick instead of
+  a blank sleep screen. `SleepActivity` now keeps the previous path in a member, because `onEnter`
+  clears the shared `APP_STATE` field before rendering. No extra SD writes: the rendered path equals
+  the stored one, and `onEnter` only saves on change.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
