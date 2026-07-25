@@ -23,6 +23,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     COVER_CUSTOM = 4,
     BLANK = 5,
     QUICK_RESUME = 6,
+    // Appended at the end: the stored value is the persisted setting, so new faces
+    // must never be inserted before an existing one.
+    STATS_DASHBOARD = 7,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };

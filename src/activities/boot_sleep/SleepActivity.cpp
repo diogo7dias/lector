@@ -9,17 +9,40 @@
 #include <Txt.h>
 #include <Xtc.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
+#include "RecentBooksStore.h"
+#include "StatsDashboardPolicy.h"
+#include "StatsDashboardRenderer.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "reading_stats/ReaderStatsSession.h"
+#include "reading_stats/ReadingStatsClock.h"
+#include "reading_stats/ReadingStatsStore.h"
+#include "reading_stats/SdStatsFiles.h"
 #include "util/TaskWatchdog.h"
 
+static_assert(CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD == stats_dashboard::kStatsDashboardMode);
+
 namespace {
+
+std::string fileNameFromPath(const std::string& path) {
+  const size_t slash = path.find_last_of('/');
+  return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+RecentBook recentBookForPath(const std::string& path) {
+  const auto& books = RECENT_BOOKS.getBooks();
+  const auto found =
+      std::find_if(books.begin(), books.end(), [&](const RecentBook& book) { return book.path == path; });
+  return found == books.end() ? RecentBook{path, fileNameFromPath(path), "", ""} : *found;
+}
 
 // A FAT directory is a flat array of fixed-size slots, so a random wallpaper can be
 // reached by SEEKING to a random slot rather than walking every entry. SdFat's
@@ -155,9 +178,120 @@ void SleepActivity::renderSleepScreen() const {
       } else {
         return renderCustomSleepScreen();
       }
+    case (CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD):
+      return renderStatsDashboardSleepScreen();
     default:
       return renderDefaultSleepScreen();
   }
+}
+
+void SleepActivity::renderStatsDashboardSleepScreen() const {
+  const std::string& path = APP_STATE.openEpubPath;
+  if (path.empty() || !stats_dashboard::supportsBook(path)) {
+    return renderDefaultSleepScreen();
+  }
+
+  RecentBook recent = recentBookForPath(path);
+  stats_dashboard::DashboardData data;
+  data.title = recent.title;
+  data.progressPercent = static_cast<uint8_t>(std::clamp(recent.progressPercent, 0, 100));
+  std::string cachePath;
+  std::string coverPath;
+  constexpr int kDashboardCoverHeight = 444;
+
+  if (FsHelpers::hasEpubExtension(path)) {
+    Epub epub(path, "/.crosspoint");
+    cachePath = epub.getCachePath();
+    const bool loaded = epub.load(false, true);
+    if (data.title.empty() && loaded) data.title = epub.getTitle();
+    coverPath = UITheme::getCoverThumbPath(recent.coverBmpPath, kDashboardCoverHeight);
+
+    if (loaded) {
+      HalFile progressFile;
+      if (Storage.openFileForRead("DASH", cachePath + "/progress.bin", progressFile)) {
+        uint8_t progress[6] = {};
+        const int count = progressFile.read(progress, sizeof(progress));
+        progressFile.close();
+        if (count >= 4) {
+          const int spineIndex = progress[0] | (progress[1] << 8);
+          const int tocIndex = epub.getTocIndexForSpineIndex(spineIndex);
+          if (tocIndex >= 0) data.chapter = epub.getTocItem(tocIndex).title;
+        }
+      }
+    }
+  } else if (FsHelpers::hasXtcExtension(path)) {
+    Xtc xtc(path, "/.crosspoint");
+    cachePath = xtc.getCachePath();
+    const bool loaded = xtc.load();
+    if (data.title.empty() && loaded) data.title = xtc.getTitle();
+    coverPath = UITheme::getCoverThumbPath(recent.coverBmpPath, kDashboardCoverHeight);
+
+    if (loaded) {
+      HalFile progressFile;
+      if (Storage.openFileForRead("DASH", cachePath + "/progress.bin", progressFile)) {
+        uint8_t progress[4] = {};
+        const int count = progressFile.read(progress, sizeof(progress));
+        progressFile.close();
+        if (count == 4) {
+          const uint32_t page = progress[0] | (progress[1] << 8) | (progress[2] << 16) | (progress[3] << 24);
+          data.progressPercent = xtc.calculateProgress(page);
+          const auto& chapters = xtc.getChapters();
+          const auto chapter = std::find_if(chapters.begin(), chapters.end(), [&](const xtc::ChapterInfo& item) {
+            return page >= item.startPage && page <= item.endPage;
+          });
+          if (chapter != chapters.end()) data.chapter = chapter->name;
+        }
+      }
+    }
+  } else {
+    Txt txt(path, "/.crosspoint");
+    cachePath = txt.getCachePath();
+    const bool loaded = txt.load();
+    if (data.title.empty() && loaded) data.title = txt.getTitle();
+    if (loaded && Storage.exists(txt.getCoverBmpPath().c_str())) coverPath = txt.getCoverBmpPath();
+  }
+
+  if (data.title.empty()) data.title = fileNameFromPath(path);
+
+  const auto now = reading_stats::currentLocalDateTime();
+  data.todayDay = now.valid ? now.dayIndex : 0;
+  reading_stats::SdStatsFiles files;
+  reading_stats::ReadingStatsStore statsStore(files);
+  statsStore.load(cachePath + "/reading_stats.bin", data.book);
+  statsStore.load(reading_stats::ReaderStatsSession::globalPath(), data.global);
+  if (data.book.resetEpoch != data.global.resetEpoch) {
+    data.book = {};
+    data.book.resetEpoch = data.global.resetEpoch;
+  }
+
+  if (coverPath.empty() || !Storage.exists(coverPath.c_str())) {
+    // Thumb generation is SD->SD image decode; the framebuffer is not needed until
+    // the render below, so lend its 48KB to the decoder. The inflate window+state
+    // then comes from the loaned block instead of the heap at the sleep-entry
+    // low-water mark. The render path below starts with a full clearScreen, so the
+    // scribbled buffer is fine. The loan MUST end before any render call.
+    GfxRenderer::FrameBufferLoan loan(renderer);
+    if (FsHelpers::hasEpubExtension(path)) {
+      Epub epub(path, "/.crosspoint");
+      if (epub.load(false, true) && epub.generateThumbBmp(kDashboardCoverHeight)) {
+        coverPath = epub.getThumbBmpPath(kDashboardCoverHeight);
+      }
+    } else if (FsHelpers::hasXtcExtension(path)) {
+      Xtc xtc(path, "/.crosspoint");
+      if (xtc.load() && xtc.generateThumbBmp(kDashboardCoverHeight)) {
+        coverPath = xtc.getThumbBmpPath(kDashboardCoverHeight);
+      }
+    } else {
+      Txt txt(path, "/.crosspoint");
+      if (txt.load() && txt.generateCoverBmp()) coverPath = txt.getCoverBmpPath();
+    }
+  }
+
+  if (coverPath.empty() || !Storage.exists(coverPath.c_str())) {
+    return renderDefaultSleepScreen();
+  }
+  data.imagePath = coverPath;
+  if (!stats_dashboard::render(renderer, data)) renderDefaultSleepScreen();
 }
 
 void SleepActivity::renderCustomSleepScreen() const {

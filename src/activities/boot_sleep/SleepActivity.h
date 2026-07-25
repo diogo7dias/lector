@@ -21,6 +21,9 @@ class SleepActivity final : public Activity {
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
   void renderBitmapSleepScreen(const Bitmap& bitmap) const;
+  // Reading-stats dashboard over the current book's cover. Falls back to the default
+  // face when there is no open book, the format has no stats, or no cover can be made.
+  void renderStatsDashboardSleepScreen() const;
   void renderLastScreenSleepScreen() const;
   void renderBlankSleepScreen() const;
 
