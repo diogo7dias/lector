@@ -13,10 +13,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
     const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
     const uint8_t paragraphNumbering, const uint8_t paperbackBody, const uint8_t paperbackStatus,
-    const bool hasSleepWallpaper, const bool wallpaperFavorited, const bool wallpaperPausable)
+    const bool hasSleepWallpaper, const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, hasSleepWallpaper,
-                               wallpaperFavorited, wallpaperPausable)),
+                               wallpaperFavorited, wallpaperPausable, hasQuotes)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -30,9 +30,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
 
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuItems(
     bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, bool hasSleepWallpaper,
-    bool wallpaperFavorited, bool wallpaperPausable) {
+    bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes) {
   std::vector<MenuItem> items;
-  items.reserve(20);
+  items.reserve(21);
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
   items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
@@ -65,6 +65,11 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
   }
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
+  // Reading the quotes back only makes sense once this book has a sidecar to read;
+  // the caller checks for the file so this stays free of storage access.
+  if (hasQuotes) {
+    items.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
+  }
   // Per-book reader settings. "Reset" only appears once this book has its own
   // override (otherwise it already follows the global settings).
   items.push_back({MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS});

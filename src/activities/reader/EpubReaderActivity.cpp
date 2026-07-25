@@ -37,9 +37,12 @@
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "QuoteSelectActivity.h"
+#include "QuoteText.h"
+#include "QuotesViewerActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "StealLookActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -48,7 +51,6 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
 #include "sleep/SleepPauseToggle.h"
-#include "StealLookActivity.h"
 #include "util/BookFiling.h"
 #include "util/BookmarkUtil.h"
 #include "util/FavoriteImage.h"
@@ -302,12 +304,15 @@ void EpubReaderActivity::openReaderMenu() {
   // A fixed /sleep.pxc or /sleep.bmp has nowhere to be paused to — it is not part
   // of a rotation folder.
   const bool wallpaperPausable = hasSleepWallpaper && crosspoint::sleep::isUnderSleepDirs(lastWallpaper);
+  // "View Quotes" is only offered once Grab Quote has actually written a sidecar for
+  // this book; an empty viewer would be a dead row.
+  const bool hasQuotes = Storage.exists(quote_text::quotesFilePathFor(epub->getPath()).c_str());
   startActivityForResult(
       std::make_unique<EpubReaderMenuActivity>(
           renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
           prefsCustom_, prefs_.paragraphNumbering, prefs_.paperbackLookBody, prefs_.paperbackLookStatus,
-          hasSleepWallpaper, wallpaperFavorited, wallpaperPausable),
+          hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
@@ -958,6 +963,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE: {
       openQuoteGrab();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::VIEW_QUOTES: {
+      // The row only appears when the sidecar exists, so the viewer opens straight
+      // onto the file Grab Quote wrote.
+      startActivityForResult(
+          std::make_unique<QuotesViewerActivity>(renderer, mappedInput, quote_text::quotesFilePathFor(epub->getPath())),
+          [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::READING_STATS: {

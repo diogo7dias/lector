@@ -38,9 +38,10 @@ class EpubReaderMenuActivity final : public Activity {
     STEAL_LOOK,                // copy another book's reader settings onto this one
     WALLPAPER_FAVORITE,        // star/unstar the wallpaper the lock screen last showed
     WALLPAPER_PAUSE,           // move that wallpaper to "/sleep pause", out of rotation
-    WALLPAPER_HOLD,           // stop picking a new wallpaper each sleep; keep this one
-    WALLPAPER_DELETE,         // delete that wallpaper file from the card, behind a confirmation
-    REMOVE_FROM_RECENTS       // drop this book from the home list and put its file back at the card root
+    WALLPAPER_HOLD,            // stop picking a new wallpaper each sleep; keep this one
+    WALLPAPER_DELETE,          // delete that wallpaper file from the card, behind a confirmation
+    REMOVE_FROM_RECENTS,       // drop this book from the home list and put its file back at the card root
+    VIEW_QUOTES                // browse (and delete) the quotes saved in <book>_QUOTES.txt
   };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
@@ -49,7 +50,8 @@ class EpubReaderMenuActivity final : public Activity {
                                   const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
                                   uint8_t paragraphNumbering = 0, uint8_t paperbackBody = 1,
                                   uint8_t paperbackStatus = 1, bool hasSleepWallpaper = false,
-                                  bool wallpaperFavorited = false, bool wallpaperPausable = false);
+                                  bool wallpaperFavorited = false, bool wallpaperPausable = false,
+                                  bool hasQuotes = false);
 
   void onEnter() override;
   void onExit() override;
@@ -64,7 +66,7 @@ class EpubReaderMenuActivity final : public Activity {
 
   static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
                                               uint8_t paragraphNumbering, bool hasSleepWallpaper,
-                                              bool wallpaperFavorited, bool wallpaperPausable);
+                                              bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
   void closeCancelled();
 
   // Fixed menu layout
