@@ -492,13 +492,14 @@ std::string TextSettingsActivity::styleValueText(int row) const {
   }
 }
 
-// Only Focus Reading shows in the preview (bold prefixes); the other Style rows
-// have no distinct preview.
+// Focus Reading (bold prefixes) and Guide Dots both show in the preview. The other three
+// cannot: Hyphenation is fed to the layout but the fixed sample sentence has no word long
+// enough to ever split, Embedded Style reads the EPUB's own CSS (the sample has none), and
+// Anti-Aliasing needs the reader's grayscale pass, which the preview pane never runs.
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (selectedIndex() == 0 || tab_ != Tab::Style) return false;
   const StyleRow row = static_cast<StyleRow>(selectedIndex() - 1);
-  return row == StyleRow::GuideDots || row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle ||
-         row == StyleRow::AntiAliasing;
+  return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
 }
 
 void TextSettingsActivity::switchTab(int direction) {

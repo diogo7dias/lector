@@ -10,6 +10,9 @@ class TextBlock;
 namespace textsettings {
 
 // Settings + geometry that determine the laid-out lines; used to invalidate the cache.
+// Draw-only settings (paragraph spacing gap, vertical margins, debug borders, the
+// Paperback Look smear) are deliberately NOT here: they change where the cached lines
+// are painted, not what the lines are.
 struct PreviewKey {
   int fontId = -1;
   int fontSize = -1;
@@ -20,6 +23,9 @@ struct PreviewKey {
   bool extraParagraphSpacing = false;
   bool focusReading = false;
   bool hyphenation = false;
+  bool guideDots = false;
+  uint8_t firstLineIndentMode = 0xFF;
+  uint8_t firstLineIndentPercent = 0xFF;
   bool operator==(const PreviewKey&) const = default;
 };
 
