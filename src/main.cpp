@@ -405,6 +405,13 @@ void setup() {
 
   setupDisplayAndFonts(resume != BootResume::Splash);
 
+  // The wake/unlock banners are the first thing seen on waking, and the activity that
+  // follows repaints straight over them. Stamp when they land so the routing below can
+  // hold them for a readable beat. Measured from the paint, so a slow refresh or a slow
+  // book load already counts towards it and costs nothing extra.
+  constexpr uint32_t WAKE_BANNER_MIN_VISIBLE_MS = 1000;
+  uint32_t bannersPaintedMs = 0;
+
   switch (resume) {
     case BootResume::Silent:
       // Splash skipped: the routing block below picks the target activity; the
@@ -423,13 +430,25 @@ void setup() {
         // paints, so this does not change the "no phantom clicks" wake behavior.
         drawUnlockBanners(renderer);
         renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        bannersPaintedMs = millis();
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
+        bannersPaintedMs = millis();
       }
       break;
     case BootResume::Splash:
+      // goToBoot() runs BootActivity::onEnter inline (no current activity yet), and that
+      // paint is blocking, so the banners are already on the panel when this returns.
       activityManager.goToBoot();
+      bannersPaintedMs = millis();
       break;
+  }
+
+  if (bannersPaintedMs != 0) {
+    const uint32_t shownForMs = millis() - bannersPaintedMs;
+    if (shownForMs < WAKE_BANNER_MIN_VISIBLE_MS) {
+      delay(WAKE_BANNER_MIN_VISIBLE_MS - shownForMs);
+    }
   }
 
   if (recoveryFirmwareMode) {
