@@ -476,6 +476,47 @@ Everything since 0.0.1 was built, host-tested and shipped, but **not** device-te
     `Replace`/`goHome` instead of `finish()`. Not on any known path, and `saveToFile()` still protects
     `settings.json`, but it is a real hole.
 
+### 2b. Session 2026-07-25 (after 0.0.8): popups, recents, browser
+
+Seven commits, all built (`pio run -e default` green, Flash 72.7%) and host-tested (217/217,
+28 new). Nothing released, nothing flashed.
+
+- **One popup look.** `BaseTheme::drawBannerStrip` paints a full-width black strip with a white
+  inset border and white centered text; `drawPopup` adds the full refresh, `BusyBanner` the cheap
+  FAST one. `drawOptionPopup` and `ValueBarPopup` moved onto the same surface (selected row = white
+  chip, black text). Dropped the dead `popupTopOffsetRatio` / `popupTextBold` / `popupTextInverted`
+  metrics and flipped the popup progress bar to white.
+- **Unlock banners.** Footer was `UI_12` against the title's `UI_10` — same weight, different size,
+  which read as bold. Both `UI_10` now. The version line dropped its "Lector " prefix (the version
+  string already names the firmware, so it read "Lector lector.c 0.0.8").
+- **Remove from Recents, from inside the book.** New reader-menu row: drops the entry, moves the
+  file back from `/recents` to the card root, clears the resume pointer, leaves the book. The move
+  runs in `onExit` where the Epub is already released. The Recent Books screen's own remove follows
+  the same rule now.
+- **`src/util/BookFiling{,Names}`** — the filing helpers left `EpubReaderActivity`'s anonymous
+  namespace so both callers share them. Path arithmetic is pure and host-tested. Fixes a latent bug:
+  the cache re-key hardcoded the `epub_` prefix, but TXT and XTC use `txt_` / `xtc_`, and the Recent
+  Books screen holds those too.
+- **Home version label** back at the header's left edge, Pages tile shifted right.
+- **File Browser Order** (Settings · System): Alphabetical or Random. Fisher-Yates over the file
+  tail via `esp_random()`; folders stay sorted on top; fresh shuffle per folder open; Books mode only.
+- **Wallpaper triage completed.** Delete Wallpaper on the reader menu (last row, behind a
+  confirmation; deleting the held wallpaper resumes rotation). `BmpViewerActivity` gained the
+  `.pxc` viewer's triage inside sleep folders (favourite / delete / move to pause, siblings on
+  Up/Down); outside them Confirm still sets the sleep cover. Sleep Image Quality (Display) now
+  drives the grayscale flag `renderPxcSleepScreen` already took: Pretty = 3-pass OEM, Fast = one
+  1-bit pass.
+- **File browser search.** `src/activities/home/LibrarySearch.{h,cpp}`, pure + host-tested: three
+  tiers (name prefix, word-start, in-order-with-gaps), tighter match wins, ties keep listing order.
+  Reached through synthetic "Search this folder" / "Clear search" rows above the entries, so no new
+  button. Current folder only; cleared on navigation. NO live preview (a keystroke would cost a full
+  keyboard repaint on e-ink). The browser list is addressed by ROW now, not by file index —
+  `findEntry` became `findEntryRow`.
+
+Device test owed on all of it. Cover/coverflow home layout was considered and **dropped on purpose**
+(Diogo, 2026-07-25): thumbnail generation is what made the old home slow, and the list already
+carries title + `[NN%]`.
+
 ### 3. Remaining niceties still to port from old lector
 
 Grouped by theme (see the checklist above for the full list):
@@ -487,7 +528,14 @@ Grouped by theme (see the checklist above for the full list):
   (`fe5a5eee`, `0702e2ef`); the cover/list toggle was not needed (the rebase home already lists recents
   with `[NN%]` badges). Still outstanding and NOT an "extra": the old home's `SdFileIndex` + library
   search (2765 lines against the rebase's 1064) is a separate, much larger port.
-- **Sleep/boot:** "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader.
+- ~~**Wallpaper triage tail:** reader-menu Delete, BMP-viewer sleep actions, Sleep Image Quality~~
+  — DONE 2026-07-25. Still absent by choice: `wallpaperFormat` (the browser lists `.bmp` AND `.pxc`
+  unconditionally, which is better), and `sleepFrameColor`, which belongs with the Freeze sleep face.
+- ~~**File browser:** in-folder search, random order, `.pxc` viewer~~ — DONE (`.pxc` viewer was
+  already ahead of the old fork). The old fork's `SdFileIndex` external-merge index was NOT ported:
+  search ranks the in-RAM listing, which is what the rebase browser holds.
+- **Sleep/boot:** "Until Death" sleep screen, skull-crest boot logo (5 img) + segmented loader,
+  Freeze sleep face (+ `sleepFrameColor`), Quotes sleep face.
 - **Networking:** WiFi file browser + OPDS-in-browser (was a branch in the old fork; a full 5-phase plan
   already exists, including the path-traversal hardening and the PIN gate).
 - **Typography:** PT hyphenation, anti-alias fade off, "Bionic Reading" name, word-spacing slider (deferred).
