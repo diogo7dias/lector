@@ -30,6 +30,10 @@ class ParsedText {
   uint8_t firstLineIndentPercent;
   bool isNaturalAlign;
   bool hasRtlWord;
+  // True when this block was opened by an h1-h6. The flag has to live on the block, not on
+  // the parser: a block is laid out when the NEXT element opens, by which point any parser
+  // state describing it has already moved on to the new element.
+  bool isHeading;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
@@ -67,7 +71,8 @@ class ParsedText {
         firstLineIndentMode(firstLineIndentMode),
         firstLineIndentPercent(firstLineIndentPercent),
         isNaturalAlign(false),
-        hasRtlWord(false) {}
+        hasRtlWord(false),
+        isHeading(false) {}
   ~ParsedText() = default;
 
   void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false);
@@ -86,6 +91,9 @@ class ParsedText {
   // block is a numbered paragraph: a separator made only of punctuation, a bullet, or a
   // dinkus is not one, and must not consume a paragraph number.
   bool hasLetters() const;
+  // A heading is a chapter title, not paragraph 1, so it must not consume a paragraph number.
+  void setHeading(const bool heading) { isHeading = heading; }
+  bool getIsHeading() const { return isHeading; }
   void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
                              const std::function<void(std::shared_ptr<TextBlock>)>& processLine,
                              bool includeLastLine = true);

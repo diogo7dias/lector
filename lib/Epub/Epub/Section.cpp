@@ -38,7 +38,11 @@ namespace {
 //      string, so the format changes on all books and forces a one-time rebuild.
 // v39: paragraph numbering skips chapter headings and letterless blocks, so the stored
 //      paragraphOrdinal values shift. Layout is untouched; the rebuild is for the numbers.
-constexpr uint8_t SECTION_FILE_VERSION = 39;
+// v40: v39's heading skip never fired. The heading flag lived on the parser and was cleared
+//      when the next element opened, which is the moment the heading block is laid out, so
+//      every chapter title still took number 1. The flag now lives on the block. The stored
+//      ordinals shift again; layout is untouched.
+constexpr uint8_t SECTION_FILE_VERSION = 40;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

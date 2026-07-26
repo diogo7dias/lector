@@ -272,9 +272,6 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
 // start a new text block if needed
 void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   nextWordContinues = false;  // New block = new paragraph, no continuation
-  // Cleared for every block; the h1-h6 branch in startElement sets it back on for the
-  // block it just opened.
-  currentBlockIsHeading_ = false;
   if (currentTextBlock) {
     // already have a text block running and it is empty - just reuse it
     if (currentTextBlock->isEmpty()) {
@@ -295,6 +292,9 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
 
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(incoming, BlockStyle::CombineAxis::Vertical));
 
+      // The empty block is being re-purposed for the element that just opened, so it
+      // adopts that element's heading-ness rather than keeping the previous one's.
+      currentTextBlock->setHeading(insideHeading());
       flushPendingAnchor();
       return;
     }
@@ -306,6 +306,7 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
       const auto style = currentTextBlock->getBlockStyle();
       currentTextBlock->setBlockStyle(style.getCombinedBlockStyle(blockStyle, BlockStyle::CombineAxis::Vertical));
       listItemBulletOnly = false;
+      currentTextBlock->setHeading(insideHeading());
       flushPendingAnchor();
       return;
     }
@@ -317,6 +318,9 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   flushPendingAnchor();
   currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,
                                         guideDotsEnabled, blockStyle, firstLineIndentMode, firstLineIndentPercent));
+  // Blocks opened underneath a heading (a <br> splitting a two-line title) are heading
+  // blocks too. The h1-h6 branch flags the heading's own first block directly.
+  currentTextBlock->setHeading(insideHeading());
   wordsExtractedInBlock = 0;
   listItemBulletOnly = false;
 }
@@ -953,7 +957,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         self->blockStyleStack.back().getCombinedBlockStyle(headerBlockStyle, BlockStyle::CombineAxis::Horizontal);
     self->blockStyleStack.push_back(accumulated);
     self->startNewTextBlock(accumulated.withoutBottom());
-    self->currentBlockIsHeading_ = true;  // a chapter title is not paragraph 1
+    // A chapter title is not paragraph 1. The watermark keeps that true for every block the
+    // heading goes on to open; the heading's own first block is flagged here because
+    // startNewTextBlock ran before the watermark was set.
+    self->headingUntilDepth_ = std::min(self->headingUntilDepth_, self->depth);
+    self->currentTextBlock->setHeading(true);
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
@@ -1398,6 +1406,11 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->nextWordContinues = false;
   }
 
+  // Leaving heading tag
+  if (self->headingUntilDepth_ == self->depth) {
+    self->headingUntilDepth_ = INT_MAX;
+  }
+
   // Leaving bold tag
   if (self->boldUntilDepth == self->depth) {
     self->boldUntilDepth = INT_MAX;
@@ -1642,7 +1655,7 @@ void ChapterHtmlSlimParser::makePages() {
   // Two kinds of block are deliberately not paragraphs, so number 1 lands on the first
   // real one: a chapter heading, and a block with no letter or digit in it (a scene
   // break made of asterisks, a stray bullet, whitespace that survived normalisation).
-  pendingParagraphFirstLine_ = !currentBlockIsHeading_ && currentTextBlock->hasLetters();
+  pendingParagraphFirstLine_ = !currentTextBlock->getIsHeading() && currentTextBlock->hasLetters();
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
       [this](const std::shared_ptr<TextBlock>& textBlock) { addLineToPage(textBlock); });

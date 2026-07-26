@@ -106,9 +106,11 @@ class ChapterHtmlSlimParser {
   // resets to 0 at each chapter — the reader adds the whole-book base at render.
   uint16_t paragraphOrdinal_ = 0;
   bool pendingParagraphFirstLine_ = false;  // set at makePages(), consumed by the block's first line
-  // A chapter title is not paragraph 1. Set when a block opens from an h1-h6, cleared by
-  // startNewTextBlock for every other block.
-  bool currentBlockIsHeading_ = false;
+  // Depth watermark for h1-h6, matching boldUntilDepth: set when a heading opens, released
+  // when that same depth closes. Blocks record their own heading-ness at creation from it,
+  // because a block is laid out only when the NEXT element opens, long after this has moved on.
+  int headingUntilDepth_ = INT_MAX;
+  bool insideHeading() const { return headingUntilDepth_ < depth; }
 
   // Footnote link tracking
   bool insideFootnoteLink = false;
