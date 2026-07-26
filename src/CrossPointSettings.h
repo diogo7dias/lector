@@ -40,6 +40,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     SLEEP_SCREEN_COVER_FILTER_COUNT
   };
 
+  // Action for a short Back press on the home menu, where Back has no navigation target.
+  enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_RECENTS = 2, HOME_BACK_ACTION_COUNT };
+
   // Status bar: the legacy fixed-slot enums (STATUS_BAR_PROGRESS_BAR / _THICKNESS /
   // _TITLE / _CLOCK_MODE) were removed with the v1 renderer. XTC keeps its own mode.
   enum XTC_STATUS_BAR_MODE {
@@ -391,6 +394,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t moveOpenedToRecentsFolder = 1;
   // Short press Back goes to file browser instead of home (0 = disabled, 1 = enabled)
   uint8_t backShortToFileBrowser = 0;
+  // What a short Back press does on the home menu (HOME_BACK_ACTION)
+  uint8_t homeBackAction = HOME_BACK_RESUME;
   // Image rendering mode in EPUB reader
   // Reading statistics. The idle threshold is stored in 10-second units so the
   // full 30-second to 10-minute range fits in one persisted byte.
