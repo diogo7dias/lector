@@ -212,10 +212,6 @@ class BaseTheme {
                           bool selected) const;
   virtual bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
                                  int& index) const;
-  // Index of the leftmost tab the bar draws. Zero while every label fits; once they do
-  // not, the bar scrolls so the selected tab is the one guaranteed to be readable.
-  // Drawing and hit-testing both go through this so they cannot disagree.
-  size_t firstVisibleTab(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
@@ -273,4 +269,12 @@ class BaseTheme {
   static int batteryIconTop(const GfxRenderer& renderer, const Rect& rect, int fontId);
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);
   static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY);
+
+ protected:
+  // Index of the leftmost tab the bar draws. Zero while every label fits; once they do
+  // not, the bar scrolls so the selected tab is the one guaranteed to be readable.
+  // drawTabBar and tabIndexFromPoint both go through this, and apply the same
+  // right-edge cut-off, so what is on screen and what answers to a touch cannot
+  // disagree. A theme that overrides either of those owns keeping that true.
+  size_t firstVisibleTab(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs) const;
 };

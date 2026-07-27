@@ -521,15 +521,20 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
   renderer.drawText(UI_10_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
 }
 
+// How far the focused-tab highlight bleeds past its label on each side. Shared by the
+// draw loop that paints it and the two loops that decide whether a tab still fits.
+static constexpr int tabHighlightBleed = 3;
+
 size_t BaseTheme::firstVisibleTab(const GfxRenderer& renderer, const Rect rect,
                                   const std::vector<TabInfo>& tabs) const {
   if (tabs.empty()) return 0;
 
   const int spacing = BaseMetrics::values.tabSpacing;
   // Measured against the space the bar actually draws into: it starts one side padding
-  // in and may run to the far edge. Deliberately not a symmetric margin — that would
-  // make bars that fit today (several translations of the Settings tabs sit within a
-  // few pixels of the edge) start scrolling for the sake of a margin they never had.
+  // in and may run to the far edge. Deliberately not a symmetric margin. The widest
+  // shipped bar is the Portuguese (PT) Text Settings tabs at 446px of the 460px this
+  // leaves; a symmetric 2 * contentSidePadding would budget 440px and drop a tab there,
+  // trading a real tab for a margin the bar never had.
   const int available = rect.width - BaseMetrics::values.contentSidePadding;
 
   int wanted = 0;
@@ -539,13 +544,18 @@ size_t BaseTheme::firstVisibleTab(const GfxRenderer& renderer, const Rect rect,
     wanted += renderer.getTextWidth(UI_10_FONT_ID, tabs[i].label, EpdFontFamily::REGULAR);
     if (tabs[i].selected) selectedIndex = i;
   }
-  // Everything fits: the bar stays left-aligned and shows the whole set, which is the
-  // only shape the built-in English labels ever produce.
+  // Everything fits. This is the path every shipped configuration takes: measured
+  // across all 31 translations and both built-in UI fonts, the widest of the three tab
+  // bars is 446px against 460px available. The branch below is a guard, not a fix for
+  // anything currently on screen — it becomes reachable with a wider SD-card UI font,
+  // a translation of the reader-menu tab labels (they are English-only today), or a
+  // sixth tab.
   if (wanted <= available) return 0;
 
-  // Overflow (a long translation, or one tab too many). Start from the selected tab and
-  // widen the window leftwards while there is room, so the selected tab is always drawn
-  // whole and the tabs dropped are the ones furthest from it.
+  // Overflow. Start from the selected tab and widen the window leftwards while there is
+  // room, so the selected tab is always drawn whole. The window is filled leftward only,
+  // so it is the tabs to the RIGHT of the selected one that are dropped first — moving
+  // rightwards therefore reveals the next tab only once it is selected.
   size_t first = selectedIndex;
   int used = renderer.getTextWidth(UI_10_FONT_ID, tabs[selectedIndex].label, EpdFontFamily::REGULAR);
   while (first > 0) {
@@ -577,12 +587,17 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
     // Stop before painting past the right edge: a tab that does not fit whole is left
     // out rather than drawn half. The first tab is always drawn, so a label wider than
     // the whole bar still shows (clipped) instead of the bar coming out empty.
-    if (i > first && currentX + textWidth > rightEdge) break;
+    // The bleed is charged to every tab, not just the focused one, so that
+    // tabIndexFromPoint can apply the identical test without being told which tab has
+    // focus. Costing 3px on tabs that will not draw a highlight is the price of the two
+    // loops staying in lockstep.
+    if (i > first && currentX + textWidth + tabHighlightBleed > rightEdge) break;
 
     // Draw underline for selected tab
     if (tab.selected) {
       if (selected) {
-        renderer.fillRect(currentX - 3, rect.y, textWidth + 6, lineHeight + underlineGap);
+        renderer.fillRect(currentX - tabHighlightBleed, rect.y, textWidth + 2 * tabHighlightBleed,
+                          lineHeight + underlineGap);
       } else {
         renderer.fillRect(currentX, rect.y + lineHeight + underlineGap, textWidth, underlineHeight);
       }
@@ -608,8 +623,9 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
   for (size_t i = first; i < tabs.size(); i++) {
     const auto& tab = tabs[i];
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
-    // Same cut-off as drawTabBar: an undrawn tab must not answer to a touch.
-    if (i > first && currentX + textWidth > rightEdge) break;
+    // Same cut-off as drawTabBar, bleed included: an undrawn tab must not answer to a
+    // touch.
+    if (i > first && currentX + textWidth + tabHighlightBleed > rightEdge) break;
     const int left = (i == first) ? rect.x : currentX - BaseMetrics::values.tabSpacing / 2;
     const int right = currentX + textWidth + BaseMetrics::values.tabSpacing / 2;
     if (x >= left && x < right) {
