@@ -456,12 +456,28 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   for the tab the screen actually opens on, after seeding Family/Size with their current values.
   Branch is level with `upstream/develop` at `99c0e504`. Host 241/241, `gh_release` clean, published.
 
+- **2026-07-27** — **0.6.0: the in-book reader menu is tabbed.** The five section headings
+  (Navigate / This Book / Look / Sleep Screen / Device) become five tabs; `MenuAction::SECTION`,
+  `isSection()` and `firstSelectableFrom()` are deleted with them, so no unselectable rows remain.
+  `buildMenuItems()` → `buildTabs()`, returning one `TabPage` (tab, label, rows, own cursor) per
+  tab that has rows — the Sleep tab is not built at all when no wallpaper is in play, so indices
+  into the tab list are NOT `Tab` values. Tab labels reuse the existing `STR_SEC_*` strings, so no
+  new i18n keys. **Durable constraint worth remembering:** tab switching is Confirm-from-the-tab-bar,
+  NOT a direction press — `MappedInputManager.cpp:67-75` maps `NavNext` = Down|Right and
+  `NavPrevious` = Up|Left, so Left/Right are the SAME axis as Up/Down and this hardware has no spare
+  direction. `TextSettingsActivity` spends its hold gesture on tab switching and therefore moves rows
+  on release; this menu keeps press+hold-repeat like every other list, so its locked press/release
+  behaviour is untouched. Menu opens with the tab bar focused, on Sleep when a wallpaper exists
+  (Diogo's call: the menu is normally reached by waking the device) else Navigate. Built on branch
+  `claude/menu-tabs`, merged (`34d43f27`), branch deleted. Device test owed — nothing here is
+  hardware-verified and no host test covers this activity.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.5.1:** `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,776,656 bytes.
-**Live on the flasher site: `lector.c 0.5.1`** (published 2026-07-27, firmware.bin 4,776,656 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
+**Sizes at 0.6.0:** `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,777,568 bytes.
+**Live on the flasher site: `lector.c 0.6.0`** (published 2026-07-27, firmware.bin 4,777,568 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
 
 **0.2.0 = the FIRST upstream merge on this branch** (a second landed 2026-07-27; see the progress log). `git merge upstream/develop` brought nine commits
 (upstream 1.5.0) and moved the `freeink-sdk` pointer to `ae68356`. Eight conflicts; the settlements are
