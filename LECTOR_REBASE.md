@@ -472,12 +472,48 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   `claude/menu-tabs`, merged (`34d43f27`), branch deleted. Device test owed — nothing here is
   hardware-verified and no host test covers this activity.
 
+- **2026-07-27** — **0.6.1: the tab bar fits, and holding switches tab.** First device test of
+  0.6.0 came back with two faults. (1) The five labels measured **531px against the 460px the bar
+  draws into**, so "Device" was painted past the right edge as "De". Fixed by shortening two labels
+  that carried a spare word (`STR_SEC_THIS_BOOK` "This Book"→"Book", `STR_SEC_SLEEP_SCREEN`
+  "Sleep Screen"→"Sleep", → 392px) **and** by making `BaseTheme::drawTabBar` measure before drawing:
+  new `firstVisibleTab()` returns the leftmost tab to draw, scrolling on overflow so the selected tab
+  stays whole, with `tabIndexFromPoint` sharing the same window and the same right-edge cut-off.
+  (2) Holding a nav button walked into the rows; it now switches tab, which required moving row
+  navigation from press to **release** — so the note in the 0.6.0 entry above ("this menu keeps
+  press+hold-repeat") is superseded. `switchTab()` now parks the cursor on the tab bar when the
+  switch was made from the tab bar, mirroring `TextSettingsActivity::switchTab`. Commits `48f1e50c`
+  (fix), `b3bada85` (review fixes), `1cf5cc27` (bump).
+
+  **Measurement discipline, learned the hard way.** Three separate width measurements of these tab
+  bars disagreed, including two from independent code-review agents. The errors: measuring through a
+  StrId that does not exist (`STR_CAT_ABOUT`; the script then sized the literal key name), and
+  assuming the Ubuntu UI font applies broadly when `uiLanguageNeedsUbuntu()` (`main.cpp:121`) binds
+  it **only for Arabic and Hebrew** — every other language renders in Cozette. Settled from source:
+  across all 31 translations and both UI fonts, the widest of the three tab bars is **Portuguese (PT)
+  Text Settings at 446px** of 460px available. Nothing overflows today, so `firstVisibleTab`'s
+  scrolling branch is a guard, not a live fix. Any future claim about tab-bar widths must be
+  re-derived from the real `STR_*` keys in the activity and the `advanceX` values in
+  `lib/EpdFont/builtinFonts/cozette_12_regular.h` (monospace, 185 in 12.4 fixed point = 11.5625px
+  per glyph).
+
+  **Known, deliberately not fixed:** `ButtonNavigator`'s single `lastContinuousNavTime` is shared by
+  both directions and by every caller in an activity. A hold on one direction suppresses a tap on the
+  other, and a release edge lost to a `main.cpp` early return (the POWER+DOWN screenshot combo holds
+  `NavNext`) leaves the flag set so the next tap is swallowed. Both predate this work and are shared
+  by every screen using the release+continuous split. The obvious fix — clearing the flag when the
+  buttons are idle — breaks `EpubReaderPercentSelectionActivity` and `ValueBarPopup`, which drive four
+  button sets through one navigator, turning a held Left/Right into a runaway repeat. Needs
+  per-direction state and device testing. Related: `InputManager::getHeldTime()` is device-global
+  (`InputManager.cpp:439`), so pressing a nav button while any other button has been down >500ms fires
+  a continuous on the first frame.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.6.0:** `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,777,568 bytes.
-**Live on the flasher site: `lector.c 0.6.0`** (published 2026-07-27, firmware.bin 4,777,568 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
+**Sizes at 0.6.1:** `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,778,192 bytes.
+**Live on the flasher site: `lector.c 0.6.1`** (published 2026-07-27, firmware.bin 4,778,192 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
 
 **0.2.0 = the FIRST upstream merge on this branch** (a second landed 2026-07-27; see the progress log). `git merge upstream/develop` brought nine commits
 (upstream 1.5.0) and moved the `freeink-sdk` pointer to `ae68356`. Eight conflicts; the settlements are
