@@ -521,6 +521,43 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
   renderer.drawText(UI_10_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
 }
 
+size_t BaseTheme::firstVisibleTab(const GfxRenderer& renderer, const Rect rect,
+                                  const std::vector<TabInfo>& tabs) const {
+  if (tabs.empty()) return 0;
+
+  const int spacing = BaseMetrics::values.tabSpacing;
+  // Measured against the space the bar actually draws into: it starts one side padding
+  // in and may run to the far edge. Deliberately not a symmetric margin — that would
+  // make bars that fit today (several translations of the Settings tabs sit within a
+  // few pixels of the edge) start scrolling for the sake of a margin they never had.
+  const int available = rect.width - BaseMetrics::values.contentSidePadding;
+
+  int wanted = 0;
+  size_t selectedIndex = 0;
+  for (size_t i = 0; i < tabs.size(); i++) {
+    if (i > 0) wanted += spacing;
+    wanted += renderer.getTextWidth(UI_10_FONT_ID, tabs[i].label, EpdFontFamily::REGULAR);
+    if (tabs[i].selected) selectedIndex = i;
+  }
+  // Everything fits: the bar stays left-aligned and shows the whole set, which is the
+  // only shape the built-in English labels ever produce.
+  if (wanted <= available) return 0;
+
+  // Overflow (a long translation, or one tab too many). Start from the selected tab and
+  // widen the window leftwards while there is room, so the selected tab is always drawn
+  // whole and the tabs dropped are the ones furthest from it.
+  size_t first = selectedIndex;
+  int used = renderer.getTextWidth(UI_10_FONT_ID, tabs[selectedIndex].label, EpdFontFamily::REGULAR);
+  while (first > 0) {
+    const int widened =
+        used + spacing + renderer.getTextWidth(UI_10_FONT_ID, tabs[first - 1].label, EpdFontFamily::REGULAR);
+    if (widened > available) break;
+    used = widened;
+    first--;
+  }
+  return first;
+}
+
 void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const std::vector<TabInfo>& tabs,
                            bool selected) const {
   constexpr int underlineHeight = 2;  // Height of selection underline
@@ -528,10 +565,19 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
 
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
 
+  const size_t first = firstVisibleTab(renderer, rect, tabs);
+  const int rightEdge = rect.x + rect.width;
+
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
 
-  for (const auto& tab : tabs) {
+  for (size_t i = first; i < tabs.size(); i++) {
+    const auto& tab = tabs[i];
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
+
+    // Stop before painting past the right edge: a tab that does not fit whole is left
+    // out rather than drawn half. The first tab is always drawn, so a label wider than
+    // the whole bar still shows (clipped) instead of the bar coming out empty.
+    if (i > first && currentX + textWidth > rightEdge) break;
 
     // Draw underline for selected tab
     if (tab.selected) {
@@ -555,11 +601,16 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
     return false;
   }
 
+  const size_t first = firstVisibleTab(renderer, rect, tabs);
+  const int rightEdge = rect.x + rect.width;
+
   int currentX = rect.x + BaseMetrics::values.contentSidePadding;
-  for (size_t i = 0; i < tabs.size(); i++) {
+  for (size_t i = first; i < tabs.size(); i++) {
     const auto& tab = tabs[i];
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, tab.label, EpdFontFamily::REGULAR);
-    const int left = (i == 0) ? rect.x : currentX - BaseMetrics::values.tabSpacing / 2;
+    // Same cut-off as drawTabBar: an undrawn tab must not answer to a touch.
+    if (i > first && currentX + textWidth > rightEdge) break;
+    const int left = (i == first) ? rect.x : currentX - BaseMetrics::values.tabSpacing / 2;
     const int right = currentX + textWidth + BaseMetrics::values.tabSpacing / 2;
     if (x >= left && x < right) {
       index = static_cast<int>(i);

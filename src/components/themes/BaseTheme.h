@@ -212,6 +212,10 @@ class BaseTheme {
                           bool selected) const;
   virtual bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
                                  int& index) const;
+  // Index of the leftmost tab the bar draws. Zero while every label fits; once they do
+  // not, the bar scrolls so the selected tab is the one guaranteed to be readable.
+  // Drawing and hit-testing both go through this so they cannot disagree.
+  size_t firstVisibleTab(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs) const;
   virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
                                    const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
                                    bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;

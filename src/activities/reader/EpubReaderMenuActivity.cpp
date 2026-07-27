@@ -203,9 +203,9 @@ void EpubReaderMenuActivity::loop() {
   }
 
   auto activateSelected = [this] {
-    // Position 0 is the tab bar, not a row: Confirm there steps to the next tab. The
-    // nav buttons cannot do it — NavNext/NavPrevious already carry Left/Right on the
-    // same axis as Up/Down, so there is no spare direction to spend on tabs.
+    // Position 0 is the tab bar, not a row: Confirm there steps to the next tab, the
+    // same as holding a nav button. It stays because it is the discoverable one — the
+    // button hint names the tab it moves to.
     if (activeTab().selectedIndex == 0) {
       switchTab();
       return;
@@ -257,20 +257,27 @@ void EpubReaderMenuActivity::loop() {
   };
 
   // Handle navigation. The ring is the tab bar at 0 followed by this tab's rows, so
-  // walking off either end of the list lands back on the tab bar. Kept on onNext /
-  // onPrevious (press plus hold-repeat) like every other list screen — the hold gesture
-  // is already spent on repeat here, which is why Confirm switches tabs instead.
+  // walking off either end of the list lands back on the tab bar. Same gesture split as
+  // TextSettingsActivity, the other tabbed screen: a tap moves one step along the ring,
+  // and holding switches tab instead of repeating. The hold has to carry tabs because
+  // NavNext/NavPrevious already carry Left/Right on the same axis as Down/Up, so there
+  // is no spare direction to spend. Moving on release (not press) is what makes the two
+  // separable: ButtonNavigator::onRelease suppresses itself once a hold has fired, so a
+  // hold switches tabs without also stepping the cursor when the button comes back up.
   const int ringSize = static_cast<int>(activeTab().items.size()) + 1;
 
-  buttonNavigator.onNext([this, ringSize] {
+  buttonNavigator.onNextRelease([this, ringSize] {
     activeTab().selectedIndex = ButtonNavigator::nextIndex(activeTab().selectedIndex, ringSize);
     requestUpdate();
   });
 
-  buttonNavigator.onPrevious([this, ringSize] {
+  buttonNavigator.onPreviousRelease([this, ringSize] {
     activeTab().selectedIndex = ButtonNavigator::previousIndex(activeTab().selectedIndex, ringSize);
     requestUpdate();
   });
+
+  buttonNavigator.onNextContinuous([this] { switchTab(); });
+  buttonNavigator.onPreviousContinuous([this] { switchTab(-1); });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     activateSelected();
@@ -378,8 +385,14 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
       },
       true, nullptr, UI_10_FONT_ID);
 
-  // Footer / Hints
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // Footer / Hints. On the tab bar the Confirm button moves to the next tab, so the hint
+  // names that tab rather than saying "Select" — that is what makes tab switching
+  // findable without knowing the hold gesture.
+  const char* confirmLabel = tr(STR_SELECT);
+  if (onTabBar && tabs.size() > 1) {
+    confirmLabel = I18N.get(tabs[(activeTabIndex + 1) % static_cast<int>(tabs.size())].labelId);
+  }
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();
