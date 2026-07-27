@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 """Prepare a Lector wallpaper folder for fast random picking, in one command.
 
+    python3 rename_wallpapers.py                                # pick the folder in a dialog
     python3 rename_wallpapers.py /Volumes/CARD/sleep            # dry run, shows the plan
     python3 rename_wallpapers.py /Volumes/CARD/sleep --apply    # do it
+
+Run with no folder and it asks for one in a file dialog, shows the plan, and asks
+before changing anything — the way to use it by double-click, with no terminal.
+Given a folder on the command line it stays a dry run until --apply, as before.
 
 Three steps run in order, and each one is worth doing on its own:
 
@@ -29,11 +34,26 @@ one slot per file makes the pick exactly uniform — with mixed name lengths, or
 with dead slots left over from renaming, files that sit after a long run of slots
 get chosen more often.
 
-Subtract a step when you want to:
+Strip and compact only earn their keep on the card, so they run only on the card.
+The script reads the filesystem under the folder and treats FAT/exFAT as a card;
+anything else (a folder in Downloads, say) gets the rename and nothing else. That
+is not a shortcut, it is the whole of what applies:
+
+  - the "._NAME" files are written by macOS when it copies TO a FAT card, so a
+    folder on the internal disk does not have any to delete;
+  - the FAT directory that compaction shrinks does not exist on the internal
+    disk, and copying the folder to the card later builds a fresh directory
+    anyway — which is exactly what compaction does.
+
+The short names are the part that travels. Rename on the laptop, copy to the
+card, and the card gets one directory slot per file with no further work.
+
+Subtract or add a step when you want to:
 
     --no-strip      keep the macOS metadata files
     --no-rename     leave filenames alone
     --no-compact    skip the folder rebuild
+    --compact       force the folder rebuild on a non-FAT folder
     --lowercase     write a3f9.pxc instead of A3F9.PXC. Uppercase is the default
                     because it is the only form guaranteed to stay in a single
                     slot everywhere; lowercase relies on the FAT lowercase flags,
@@ -56,6 +76,7 @@ import os
 import random
 import re
 import string
+import subprocess
 import sys
 
 # Extensions Lector accepts as a sleep wallpaper. Matched case-insensitively.
@@ -70,6 +91,124 @@ UNDO_FILENAME = "wallpaper-rename-map.csv"
 # 1-8 base characters, a dot, 1-3 extension characters, all one case.
 GOOD_NAME_UPPER = re.compile(r"^[0-9A-Z]{1,8}\.[0-9A-Z]{1,3}$")
 GOOD_NAME_LOWER = re.compile(r"^[0-9a-z]{1,8}\.[0-9a-z]{1,3}$")
+
+
+# ------------------------------------------------------------------- the card question
+
+# Filesystems that lay out a directory as a flat array of 32-byte slots. Those are the
+# only ones where stripping and compacting change anything.
+FAT_FILESYSTEMS = {"msdos", "vfat", "exfat", "fat", "fat32", "fat16", "lifs"}
+
+
+def filesystem_type(path):
+    """Name of the filesystem holding `path`, lowercased, or "" when it cannot be read.
+
+    Parsed out of mount(8) rather than a library so this stays dependency-free. Both
+    layouts are handled:
+        macOS   /dev/disk4s1 on /Volumes/CARD (msdos, local, nodev, noowners)
+        Linux   /dev/sdb1 on /media/card type vfat (rw,relatime,...)
+    Windows has no mount(8), so this returns "" there and the folder is treated as not
+    a card; pass --compact to force the rebuild.
+    """
+    target = os.path.realpath(path)
+    try:
+        out = subprocess.run(["mount"], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+    # Longest matching mount point wins: /Volumes/CARD must beat / when both contain it.
+    best_point, best_type = "", ""
+    for line in out.splitlines():
+        match = re.search(r" on (.+?) (?:type (\S+)|\(([^,)]+)[,)])", line)
+        if not match:
+            continue
+        point = match.group(1)
+        fstype = (match.group(2) or match.group(3) or "").strip()
+        if target == point or target.startswith(point.rstrip("/") + "/"):
+            if len(point) >= len(best_point):
+                best_point, best_type = point, fstype
+    return best_type.lower()
+
+
+def looks_like_card(path):
+    return filesystem_type(path) in FAT_FILESYSTEMS
+
+
+# ----------------------------------------------------------------------------- dialogs
+#
+# Three ways to ask, tried in order, so the script works whether or not tkinter was
+# built into this Python and whether or not a terminal is attached:
+#   1. tkinter        — everywhere it exists
+#   2. osascript      — macOS without tkinter (the stock Command Line Tools Python)
+#   3. plain stdin    — last resort, needs a terminal
+
+_TK_ROOT = None
+
+
+def _tk():
+    """A single hidden Tk root, created once, or None when tkinter is unavailable."""
+    global _TK_ROOT
+    if _TK_ROOT is None:
+        try:
+            import tkinter
+            _TK_ROOT = tkinter.Tk()
+            _TK_ROOT.withdraw()
+        except Exception:
+            _TK_ROOT = False
+    return _TK_ROOT or None
+
+
+def _osascript(script):
+    """(ok, stdout). ok is False when the user cancelled or osascript is not here."""
+    try:
+        done = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError):
+        return False, ""
+    return done.returncode == 0, done.stdout.strip()
+
+
+def choose_folder():
+    """Folder path from a picker, or "" when the user cancelled."""
+    root = _tk()
+    if root is not None:
+        from tkinter import filedialog
+        return filedialog.askdirectory(title="Choose the folder holding the wallpapers") or ""
+
+    ok, out = _osascript(
+        'POSIX path of (choose folder with prompt "Choose the folder holding the wallpapers")')
+    if ok:
+        return out.rstrip("/")
+    if not sys.stdin.isatty():
+        return ""
+    return input("Folder holding the wallpapers: ").strip()
+
+
+def ask_confirm(title, message, confirm_label):
+    root = _tk()
+    if root is not None:
+        from tkinter import messagebox
+        return messagebox.askokcancel(title, message)
+
+    quoted = message.replace("\\", "\\\\").replace('"', '\\"')
+    ok, _ = _osascript('display dialog "%s" with title "%s" buttons {"Cancel", "%s"} '
+                       'default button "%s"' % (quoted, title, confirm_label, confirm_label))
+    if ok:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    return input("\n%s? [y/N] " % confirm_label).strip().lower() in ("y", "yes")
+
+
+def show_message(title, message):
+    print("\n%s\n%s" % (title, message))
+    root = _tk()
+    if root is not None:
+        from tkinter import messagebox
+        messagebox.showinfo(title, message)
+        return
+    quoted = message.replace("\\", "\\\\").replace('"', '\\"')
+    _osascript('display dialog "%s" with title "%s" buttons {"OK"} default button "OK"'
+               % (quoted, title))
 
 
 # --------------------------------------------------------------------------- helpers
@@ -245,20 +384,35 @@ def run_undo(folder, map_path, apply_changes):
 def main():
     parser = argparse.ArgumentParser(
         description="Strip macOS metadata, shorten wallpaper names, and rebuild the folder.")
-    parser.add_argument("folder", help="wallpaper folder, e.g. /Volumes/CARD/sleep")
+    parser.add_argument("folder", nargs="?",
+                        help="wallpaper folder, e.g. /Volumes/CARD/sleep. Omit it to pick one in a dialog.")
     parser.add_argument("--apply", action="store_true", help="do it (default is a dry run)")
     parser.add_argument("--no-strip", action="store_true", help="keep the macOS metadata files")
     parser.add_argument("--no-rename", action="store_true", help="leave filenames alone")
     parser.add_argument("--no-compact", action="store_true", help="skip the folder rebuild")
+    parser.add_argument("--compact", action="store_true",
+                        help="force the folder rebuild on a folder that is not FAT/exFAT")
     parser.add_argument("--lowercase", action="store_true", help="write a3f9.pxc instead of A3F9.PXC")
     parser.add_argument("--length", default="auto", help="base-name length, 2-8, or 'auto' (default)")
     parser.add_argument("--seed", type=int, default=None, help="random seed, for a reproducible run")
     parser.add_argument("--undo", metavar="MAP_CSV", help="restore original names from a rename map")
     args = parser.parse_args()
 
-    folder = os.path.abspath(os.path.expanduser(args.folder))
+    # No folder on the command line means "ask me": pick it in a dialog, and confirm in a
+    # dialog too, so the script is usable by double-click with no terminal in sight.
+    interactive = args.folder is None
+    chosen = args.folder if not interactive else choose_folder()
+    if not chosen:
+        print("Cancelled.")
+        return 0
+
+    folder = os.path.abspath(os.path.expanduser(chosen))
     if not os.path.isdir(folder):
-        print("Not a folder: %s" % folder, file=sys.stderr)
+        message = "Not a folder:\n%s" % folder
+        if interactive:
+            show_message("Nothing to do", message)
+        else:
+            print(message, file=sys.stderr)
         return 2
 
     if args.undo:
@@ -270,15 +424,25 @@ def main():
     others = [n for n in files if not is_metadata(n) and not is_wallpaper(n)]
 
     if not files:
-        print("Nothing to do: %s is empty" % folder)
+        message = "Nothing to do: %s is empty" % folder
+        if interactive:
+            show_message("Nothing to do", message)
+        else:
+            print(message)
         return 0
 
-    strip = not args.no_strip and bool(junk)
+    # Strip and compact only change anything on a FAT directory, so they only run on one.
+    # See the note at the top of this file: on the internal disk there are no "._NAME"
+    # companions to delete, and the copy to the card builds a fresh directory anyway.
+    fstype = filesystem_type(folder)
+    card = fstype in FAT_FILESYSTEMS
+
+    strip = card and not args.no_strip and bool(junk)
     length = name_length_for(len(wallpapers), args.length)
     rng = random.Random(args.seed)
     rename_plan = [] if args.no_rename else build_rename_plan(wallpapers, length, rng, args.lowercase)
     # Subfolders are never moved, so a folder holding one cannot be rebuilt safely.
-    compact = not args.no_compact and not subdirs
+    compact = (card or args.compact) and not args.no_compact and not subdirs
 
     # Slots after each step, so the plan shows where the saving actually comes from.
     slots_now = sum(slots_for(n) for n in files)
@@ -286,14 +450,20 @@ def main():
     slots_final = sum(slots_for(renamed.get(n, n)) for n in files if not (strip and is_metadata(n)))
 
     print("Folder:      %s" % folder)
+    print("Filesystem:  %s  ->  %s" % (fstype or "unknown",
+                                       "card, all three steps apply" if card
+                                       else "not a card, rename only"))
     print("Wallpapers:  %d" % len(wallpapers))
     print("macOS junk:  %d" % len(junk))
     if others:
         print("Other files: %d  (left alone)" % len(others))
     if subdirs:
         print("Subfolders:  %d  (compaction skipped — move them out to enable it)" % len(subdirs))
-    print("Directory:   ~%d slots (~%d KB)  ->  ~%d slots (~%d KB)"
-          % (slots_now, slots_now * 32 // 1024, slots_final, slots_final * 32 // 1024))
+    # On a card this is the directory being shrunk. Off a card there is no such directory
+    # yet, so the same numbers are a forecast of the one the card will build on copy.
+    print("%s ~%d slots (~%d KB)  ->  ~%d slots (~%d KB)"
+          % ("Directory:  " if card else "On the card:",
+             slots_now, slots_now * 32 // 1024, slots_final, slots_final * 32 // 1024))
 
     print("\nPlan:")
     print("  1. strip    %s" % ("delete %d macOS metadata file(s)" % len(junk) if strip else "skipped"))
@@ -311,9 +481,30 @@ def main():
             print("  ... and %d more" % (len(rename_plan) - 5))
 
     if not (strip or rename_plan or compact):
-        print("\nNothing to do.")
+        message = "Nothing to do — every file already has a short 8.3 name."
+        if interactive:
+            show_message("Nothing to do", message)
+        else:
+            print("\n%s" % message)
         return 0
-    if not args.apply:
+
+    # The command line stays a dry run until --apply. The dialog path asks instead, so
+    # that a double-click still cannot change anything without a deliberate yes.
+    if interactive:
+        steps = []
+        if strip:
+            steps.append("delete %d macOS metadata file(s)" % len(junk))
+        if rename_plan:
+            steps.append("rename %d file(s) to short names such as %s" % (len(rename_plan),
+                                                                          rename_plan[0][1]))
+        if compact:
+            steps.append("rebuild the folder to shrink its directory")
+        prompt = ("Folder:\n%s\n\nThis will:\n  %s\n\nThe original names are written to\n%s"
+                  % (folder, "\n  ".join(steps), undo_map_path(folder)))
+        if not ask_confirm("Rename wallpapers", prompt, "Go ahead"):
+            print("Cancelled.")
+            return 0
+    elif not args.apply:
         print("\nDry run. Nothing was changed. Re-run with --apply.")
         return 0
 
@@ -338,7 +529,23 @@ def main():
         moved = do_compact(folder)
         print("      Moved %d file(s). %s now has a fresh directory." % (moved, folder))
 
-    print("\nDone. Eject the card in Finder before removing it.")
+    summary = ["Renamed %d file(s)." % len(rename_plan) if rename_plan else "No renames were needed."]
+    if strip:
+        summary.append("Deleted %d macOS metadata file(s)." % len(junk))
+    if compact:
+        summary.append("Rebuilt the folder.")
+    if failures:
+        summary.append("%d file(s) FAILED — see the messages above." % failures)
+    if rename_plan:
+        summary.append("\nOriginal names: %s" % undo_map_path(folder))
+    summary.append("\nEject the card in Finder before removing it." if card
+                   else "\nCopy this folder to the card when you are ready.")
+
+    result = "\n".join(summary)
+    if interactive:
+        show_message("Done" if not failures else "Finished with errors", result)
+    else:
+        print("\n%s" % result)
     return 1 if failures else 0
 
 
