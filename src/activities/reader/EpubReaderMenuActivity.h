@@ -42,9 +42,13 @@ class EpubReaderMenuActivity final : public Activity {
     WALLPAPER_HOLD,            // stop picking a new wallpaper each sleep; keep this one
     WALLPAPER_DELETE,          // delete that wallpaper file from the card, behind a confirmation
     REMOVE_FROM_RECENTS,       // drop this book from the home list and put its file back at the card root
-    VIEW_QUOTES,               // browse (and delete) the quotes saved in <book>_QUOTES.txt
-    SECTION                    // not an action: a heading row. Never selectable, never returned.
+    VIEW_QUOTES                // browse (and delete) the quotes saved in <book>_QUOTES.txt
   };
+
+  // Tab pages of the menu. Sleep exists only when the lock screen last showed a
+  // wallpaper that is still on the card, so the live tab list can be shorter than
+  // this enum — see buildTabs().
+  enum class Tab : uint8_t { Navigate, ThisBook, Look, Sleep, Device };
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
                                   const std::string& author, const std::string& chapterName, const int currentPage,
@@ -66,21 +70,32 @@ class EpubReaderMenuActivity final : public Activity {
     StrId labelId;
   };
 
-  static std::vector<MenuItem> buildMenuItems(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
-                                              uint8_t paragraphNumbering, bool hasSleepWallpaper,
-                                              bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
-  bool isSection(int index) const {
-    return index >= 0 && index < static_cast<int>(menuItems.size()) && menuItems[index].action == MenuAction::SECTION;
-  }
-  // Step the selection past any heading rows. Headings are drawn in the list but are not
-  // options, so Up/Down must jump over them rather than stopping on a dead row.
-  int firstSelectableFrom(int index, bool forward) const;
+  // One tab page: which tab it is, the label drawn in the tab bar, its rows, and where
+  // the cursor sits inside it. selectedIndex is a nav-ring position, not a row index:
+  // 0 is the tab bar itself, 1..N are the rows. Each tab keeps its own cursor, so
+  // leaving a tab and coming back lands where you left it.
+  struct TabPage {
+    Tab tab;
+    StrId labelId;
+    std::vector<MenuItem> items;
+    int selectedIndex = 0;
+  };
+
+  // Builds only the tabs that have something to show, so indices into the result are
+  // NOT Tab values and the Sleep tab simply is not there when no wallpaper is in play.
+  static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
+                                        uint8_t paragraphNumbering, bool hasSleepWallpaper, bool wallpaperFavorited,
+                                        bool wallpaperPausable, bool hasQuotes);
+  TabPage& activeTab() { return tabs[activeTabIndex]; }
+  const TabPage& activeTab() const { return tabs[activeTabIndex]; }
+  // Move to another tab, wrapping. The cursor of the tab being left is kept.
+  void switchTab(int direction = 1);
   void closeCancelled();
 
-  // Fixed menu layout
-  const std::vector<MenuItem> menuItems;
+  // Fixed menu layout: rows never change after construction, only the cursors do.
+  std::vector<TabPage> tabs;
 
-  int selectedIndex = 0;
+  int activeTabIndex = 0;
 
   ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;
