@@ -11,7 +11,8 @@
 #include "FsHelpers.h"
 
 namespace {
-constexpr uint8_t BOOK_CACHE_VERSION = 9;  // v9: book description stored for the Book Info screen
+// v10 = upstream's ambiguous-guide fix; this fork's v9 added the Book Info description.
+constexpr uint8_t BOOK_CACHE_VERSION = 10;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";

@@ -23,14 +23,24 @@
 // (an in-menu per-book toggle, wired later). The struct is trivially-copyable POD
 // (all uint8_t + one fixed char[32], no padding) so change-detection is a plain
 // memcmp and the blob is safe to read back on the RISC-V target (no unaligned loads).
+// Reader font size became a real point size when upstream #2720 replaced the
+// SMALL/MEDIUM/LARGE/EXTRA_LARGE slot. Sidecars and presets written before that
+// hold the old slot in 0..3; no font renders at those sizes, so the range is
+// unambiguous and folds to the point sizes those slots used to mean.
+inline uint8_t foldLegacyReaderFontSize(const uint8_t stored) {
+  return stored <= 3 ? static_cast<uint8_t>(12 + stored * 2) : stored;
+}
+
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  static constexpr uint8_t VERSION = 5;  // v5: first-line indent Book/Custom% (was space-widths)
+  // v5 is the one exception — same layout, only fontPointSize's meaning changed,
+  // so it is read and folded instead of dropped.
+  static constexpr uint8_t VERSION = 6;  // v6: fontPointSize replaces the fontSize slot (upstream #2720)
 
   // Font (Family/Size tabs)
-  uint8_t fontFamily = 0;  // CrossPointSettings::VOLLKORN
-  uint8_t fontSize = 1;    // CrossPointSettings::MEDIUM
+  uint8_t fontFamily = 0;      // CrossPointSettings::VOLLKORN
+  uint8_t fontPointSize = 14;  // CrossPointSettings::DEFAULT_FONT_POINT_SIZE
   // Layout tab
   uint8_t lineSpacingPercent = 100;  // % of natural line height (restored granular)
   uint8_t paragraphAlignment = 0;    // CrossPointSettings::JUSTIFIED
@@ -82,9 +92,12 @@ inline void writeReaderPrefs(std::ostream& out, const ReaderPrefs& p) {
 inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p) {
   uint8_t ver = 0;
   if (!in.read(reinterpret_cast<char*>(&ver), 1)) return false;
-  if (ver != ReaderPrefs::VERSION) return false;
+  // Keep this accept-and-fold rule identical to the HalFile overload in
+  // ReaderPrefs.cpp — they read the same on-card format.
+  if (ver != ReaderPrefs::VERSION && ver != 5) return false;
   ReaderPrefs tmp;
   if (!in.read(reinterpret_cast<char*>(&tmp), sizeof(ReaderPrefs))) return false;
+  if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
   p = tmp;
   return true;
 }

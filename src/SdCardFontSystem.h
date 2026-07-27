@@ -27,12 +27,12 @@ class SdCardFontSystem {
   /// resolveFontId() returns whichever that is, so a book with a per-book font family
   /// or size must call this before it lays out, or it silently gets the global one.
   /// Unlike ensureLoaded(), a missing family here never clears the global selection —
-  /// the book simply falls back to the built-in font.
-  void ensureLoadedFor(GfxRenderer& renderer, const char* familyName, uint8_t fontSizeEnum);
+  /// the book simply falls back to the built-in font, and no snap is persisted.
+  void ensureLoadedFor(GfxRenderer& renderer, const char* familyName, uint8_t pointSize);
 
-  /// Resolve an SD card font ID from family name + fontSize enum.
+  /// Resolve an SD card font ID from family name + reader point size.
   /// Returns 0 if not found. Used by CrossPointSettings::getReaderFontId().
-  int resolveFontId(const char* familyName, uint8_t fontSizeEnum) const;
+  int resolveFontId(const char* familyName, uint8_t pointSize) const;
 
   /// Access the registry (e.g. for settings UI to enumerate available fonts).
   const SdCardFontRegistry& registry() const { return registry_; }
@@ -65,7 +65,7 @@ class SdCardFontSystem {
   // whether wantedFamily IS the global selection, and so whether a family that has
   // gone missing should clear SETTINGS.sdFontFamilyName. A book's own family must
   // never do that.
-  void ensureLoadedImpl(GfxRenderer& renderer, const char* wantedFamily, uint8_t sizeEnum, bool ownsGlobalSelection);
+  void ensureLoadedImpl(GfxRenderer& renderer, const char* wantedFamily, uint8_t pointSize, bool ownsGlobalSelection);
 
   SdCardFontRegistry registry_;
   SdCardFontManager manager_;

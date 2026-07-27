@@ -110,8 +110,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum FONT_FAMILY { VOLLKORN = 0, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
-  // Font size options
-  enum FONT_SIZE { SMALL = 0, MEDIUM = 1, LARGE = 2, EXTRA_LARGE = 3, FONT_SIZE_COUNT };
+  // Reader font size is a point size, not an enum slot — see fontPointSize.
+  // Legacy 1.4-and-earlier files stored a 0..3 SMALL/MEDIUM/LARGE/EXTRA_LARGE
+  // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
+  static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
+  static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
   enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
@@ -269,7 +272,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
   uint8_t fontFamily = VOLLKORN;
-  uint8_t fontSize = MEDIUM;
+  // Point size of the reader font (upstream #2720 replaced the SMALL/MEDIUM/LARGE
+  // enum with a real point size). Only sizes the active family actually ships are
+  // selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
+  // available size (and persists the snap) whenever the family changes.
+  uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
   // Legacy coarse line-spacing enum (TIGHT/NORMAL/WIDE). Superseded by
   // lineSpacingPercent below; retained so old saves still load and existing
   // references stay valid. resolveLineCompression now reads the percent.
@@ -430,6 +437,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // instead of the live global fields, so a custom book lays out through its own
   // settings without ever mutating the global singleton.
   int getReaderFontId(const ReaderPrefs& prefs) const;
+
+  // Drop the SD font selection and fall back to the built-in family. The reader
+  // point size comes back into BUILTIN_READER_POINT_SIZES with it, since that is
+  // the only set a built-in family ships — otherwise the settings UI would keep
+  // offering a size nothing renders at. Both fields are persisted in one write.
+  void clearSdFontFamily();
 
   // Resolved text-rendering configuration for the Epub layout engine. The
   // viewport is renderer/orientation-derived, so the caller supplies it —

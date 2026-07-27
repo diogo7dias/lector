@@ -22,7 +22,7 @@ struct PresetField {
 
 constexpr PresetField FIELDS[] = {
     {"fontFamily", &ReaderPrefs::fontFamily},
-    {"fontSize", &ReaderPrefs::fontSize},
+    {"fontSize", &ReaderPrefs::fontPointSize},
     {"lineSpacingPercent", &ReaderPrefs::lineSpacingPercent},
     {"paragraphAlignment", &ReaderPrefs::paragraphAlignment},
     {"extraParagraphSpacing", &ReaderPrefs::extraParagraphSpacing},
@@ -55,6 +55,8 @@ ReaderPrefs readPrefs(JsonObjectConst obj) {
   for (const PresetField& f : FIELDS) {
     if (obj[f.key].is<uint8_t>()) p.*(f.member) = obj[f.key].as<uint8_t>();
   }
+  // Presets saved before the point-size switch hold the old 0..3 slot.
+  p.fontPointSize = foldLegacyReaderFontSize(p.fontPointSize);
   const char* sdName = obj["sdFontFamilyName"] | "";
   // strncpy into the fixed field, then zero the tail: ReaderPrefs is compared whole
   // with memcmp, so trailing bytes must be canonical or an identical preset reads as

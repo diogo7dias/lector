@@ -15,7 +15,7 @@ namespace textsettings {
 // are painted, not what the lines are.
 struct PreviewKey {
   int fontId = -1;
-  int fontSize = -1;
+  int fontPointSize = -1;
   int screenMargin = -1;
   int textWidth = -1;
   float lineCompression = -1.0f;

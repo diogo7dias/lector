@@ -9,7 +9,7 @@
 ReaderPrefs ReaderPrefs::fromGlobal() {
   ReaderPrefs p;
   p.fontFamily = SETTINGS.fontFamily;
-  p.fontSize = SETTINGS.fontSize;
+  p.fontPointSize = SETTINGS.fontPointSize;
   p.lineSpacingPercent = SETTINGS.lineSpacingPercent;
   p.paragraphAlignment = SETTINGS.paragraphAlignment;
   p.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
@@ -49,11 +49,15 @@ bool writeReaderPrefs(HalFile& out, const ReaderPrefs& p) {
 bool readReaderPrefs(HalFile& in, ReaderPrefs& p) {
   uint8_t ver = 0;
   if (in.read(&ver, 1) != 1) return false;
-  if (ver != ReaderPrefs::VERSION) return false;
+  // v5 and v6 have identical layout — only fontPointSize's meaning changed — so a
+  // v5 sidecar is read and folded rather than discarded, which would silently drop
+  // every per-book override the first time this build runs.
+  if (ver != ReaderPrefs::VERSION && ver != 5) return false;
   ReaderPrefs tmp;
   if (in.read(reinterpret_cast<uint8_t*>(&tmp), sizeof(ReaderPrefs)) != static_cast<int>(sizeof(ReaderPrefs))) {
     return false;
   }
+  if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
   p = tmp;
   return true;
 }

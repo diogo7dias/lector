@@ -15,7 +15,7 @@ namespace {
 ReaderPrefs makeSample() {
   ReaderPrefs p;
   p.fontFamily = 1;
-  p.fontSize = 3;
+  p.fontPointSize = 18;
   p.lineSpacingPercent = 120;
   p.paragraphAlignment = 4;
   p.extraParagraphSpacing = 0;
@@ -43,7 +43,7 @@ ReaderPrefs makeSample() {
 
 void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.fontFamily, b.fontFamily);
-  EXPECT_EQ(a.fontSize, b.fontSize);
+  EXPECT_EQ(a.fontPointSize, b.fontPointSize);
   EXPECT_EQ(a.lineSpacingPercent, b.lineSpacingPercent);
   EXPECT_EQ(a.paragraphAlignment, b.paragraphAlignment);
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
@@ -90,6 +90,37 @@ TEST(ReaderPrefs, StreamRoundTrip) {
   ReaderPrefs loaded;
   ASSERT_TRUE(readReaderPrefs(ss, loaded));
   expectEqual(original, loaded);
+}
+
+TEST(ReaderPrefs, LegacyFontSizeSlotFolds) {
+  EXPECT_EQ(12, foldLegacyReaderFontSize(0));  // was SMALL
+  EXPECT_EQ(14, foldLegacyReaderFontSize(1));  // was MEDIUM
+  EXPECT_EQ(16, foldLegacyReaderFontSize(2));  // was LARGE
+  EXPECT_EQ(18, foldLegacyReaderFontSize(3));  // was EXTRA_LARGE
+  // Anything already a point size is left alone.
+  EXPECT_EQ(12, foldLegacyReaderFontSize(12));
+  EXPECT_EQ(22, foldLegacyReaderFontSize(22));
+}
+
+// A v5 sidecar has the same layout; only fontPointSize's meaning changed. It must
+// be read and folded, not discarded — discarding silently drops every per-book
+// override the first time this build runs.
+TEST(ReaderPrefs, Version5SidecarIsFoldedNotDropped) {
+  ReaderPrefs legacy = makeSample();
+  legacy.fontPointSize = 2;  // old LARGE slot
+  std::stringstream ss;
+  const uint8_t v5 = 5;
+  ss.write(reinterpret_cast<const char*>(&v5), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), sizeof(ReaderPrefs));
+
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded));
+  EXPECT_EQ(16, loaded.fontPointSize);
+  // Every other field survives the fold untouched.
+  EXPECT_EQ(legacy.fontFamily, loaded.fontFamily);
+  EXPECT_EQ(legacy.lineSpacingPercent, loaded.lineSpacingPercent);
+  EXPECT_EQ(legacy.firstLineIndentPercent, loaded.firstLineIndentPercent);
+  EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
 }
 
 TEST(ReaderPrefs, WrongVersionRejected) {

@@ -419,6 +419,37 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
   clears the shared `APP_STATE` field before rendering. No extra SD writes: the rendered path equals
   the stored one, and `onEnter` only saves on change.
 
+- **2026-07-27** — **Second upstream merge: `upstream/develop` (12 commits) at 0.4.0.** Eleven
+  conflicts, all one theme: upstream #2720 replaced the reader font-size ENUM
+  (SMALL/MEDIUM/LARGE/EXTRA_LARGE) with a real POINT SIZE, and the `lib/EpdFont/*` half of it
+  auto-merged, so keeping our enum was never an option. Settlements, same rule as 0.2.0 (our
+  feature stays, their mechanism folds around it):
+  - `fontSize` → `fontPointSize` everywhere: global settings, `ReaderPrefs`, Reading Themes,
+    `resolveReaderFontId()`. Built-ins resolve `12/16/18/14` → `VOLLKORN_*_FONT_ID`; upstream's
+    Noto Serif/Sans switch collapses because this fork ships one built-in family.
+  - **Migration, so no saved setting is lost.** Global JSON already folds 0..3 → 12/14/16/18
+    (upstream's own `LEGACY_FONT_SIZE_MAX`). The two stores this fork adds needed the same:
+    `ReaderPrefs::VERSION` 5 → 6 with v5 sidecars ACCEPTED and folded (layout is identical, only
+    the field's meaning changed), and Reading-Theme JSON folded on read. New host tests
+    `LegacyFontSizeSlotFolds` + `Version5SidecarIsFoldedNotDropped` lock both. Rejecting v5 would
+    have silently dropped every per-book override on first boot.
+  - `SdCardFontSystem`: took upstream's `clearSdFontFamily()` and size-snapping, but every write to
+    the global settings stays behind `ownsGlobalSelection`. A per-book load must never rewrite the
+    global family or point size — upstream's version had no per-book path to guard.
+  - #2644 (bind settings labels to enum values): the sleep-screen half applies and this fork's two
+    extra faces (`STATS_DASHBOARD`, `FREEZE`) are bound too; the status-bar clock half does NOT —
+    that bug cannot exist here, the whole status bar was replaced with per-item anchors, so the
+    dead `statusBarClockValues` vector and `STATUS_BAR_CLOCK_MODE` enum were dropped.
+  - `BOOK_CACHE_VERSION` 9 → 10 (#2716, ambiguous EPUB guide text): every book re-reads metadata
+    once on next open.
+  - Free with the merge: #2706 dictionary failure naming, #2673 font ligatures, #2719 kosync TLS
+    floor 35KB, #2716 guide fix, plus translation and BMP-viewer string fixes.
+  - **User-visible:** Settings › Reader › Font Size now lists real sizes ("12 pt", "14 pt", …) and
+    an SD family offers whatever sizes it actually ships, instead of Small/Medium/Large/X Large.
+  - Verified: host tests 241/241, `pio run -e default` clean (RAM 15.5%, Flash 73.3%),
+    clang-format clean. **Device test owed** — especially SD-font families and a book with a
+    per-book font override, since the sidecar fold runs once per book.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
@@ -426,7 +457,7 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 **Sizes at 0.2.0:** `default` RAM 16.0% / Flash 73.3%; `gh_release` `firmware.bin` 4,777,536 bytes.
 **Live on the flasher site: `lector.c 0.2.0`** (published 2026-07-25, firmware.bin 4,777,536 bytes; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased.
 
-**0.2.0 = the first upstream merge on this branch.** `git merge upstream/develop` brought nine commits
+**0.2.0 = the FIRST upstream merge on this branch** (a second landed 2026-07-27; see the progress log). `git merge upstream/develop` brought nine commits
 (upstream 1.5.0) and moved the `freeink-sdk` pointer to `ae68356`. Eight conflicts; the settlements are
 recorded in the merge commit message, and the rule that decided every one of them was: OUR feature stays,
 THEIR mechanism is folded around it. Notably `main.cpp` quick resume keeps our wake banners as the loading

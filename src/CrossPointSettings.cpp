@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cstring>
+#include <iterator>
 #include <string>
 
 #include "I18nKeys.h"
+#include "ReaderFontSizes.h"
 #include "SettingsList.h"
 #include "fontIds.h"
 
@@ -85,8 +87,10 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   doc["frontButtonConfirm"] = frontButtonConfirm;
   doc["frontButtonLeft"] = frontButtonLeft;
   doc["frontButtonRight"] = frontButtonRight;
-  // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  // Font family and size — both use dynamic getter/setters in SettingsList (the
+  // option lists depend on the SD font registry), so the generic loop skips them.
   doc["fontFamily"] = fontFamily;
+  doc["fontSize"] = fontPointSize;
   // SD card font family name — not in SettingsList, save manually
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
@@ -177,6 +181,17 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
 
+  // Reader font size — an actual point size since 1.5. Files written by 1.4 and
+  // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is
+  // renderable at those sizes, so the range is unambiguous and folds to the
+  // point sizes those slots used to mean. Drop this once 1.4 upgrades are done.
+  uint8_t storedFontSize = doc["fontSize"] | DEFAULT_FONT_POINT_SIZE;
+  if (storedFontSize <= LEGACY_FONT_SIZE_MAX) {
+    storedFontSize = 12 + storedFontSize * 2;  // 0,1,2,3 -> 12,14,16,18
+    needsResave = true;
+  }
+  fontPointSize = storedFontSize;
+
   // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
   fontFamily = clamp(storedFontFamily, BUILTIN_FONT_COUNT, 0);
@@ -264,42 +279,57 @@ int CrossPointSettings::getRefreshFrequency() const {
   }
 }
 
-int CrossPointSettings::resolveReaderFontId(const uint8_t fontFamily, const uint8_t fontSize,
+int CrossPointSettings::resolveReaderFontId(const uint8_t fontFamily, const uint8_t pointSize,
                                             const char* sdFontFamilyName) const {
   // Check SD card font first
   if (sdFontFamilyName[0] != '\0' && sdFontIdResolver) {
-    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, fontSize);
+    int id = sdFontIdResolver(sdFontResolverCtx, sdFontFamilyName, pointSize);
     if (id != 0) return id;
     // Fall through to built-in if SD font not found
   }
 
+  // A built-in family only exists at BUILTIN_READER_POINT_SIZES, so a size
+  // carried over from an SD family may not be one of them. ensureLoaded()
+  // normally persists the snap; snap again here (without allocating — this runs
+  // in the page render loop) so rendering is correct even before it has run.
+  const uint8_t pt =
+      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), pointSize);
   switch (fontFamily) {
     case VOLLKORN:
     default:
-      switch (fontSize) {
-        case SMALL:
+      switch (pt) {
+        case 12:
           return VOLLKORN_12_FONT_ID;
-        case MEDIUM:
+        case 16:
+          return VOLLKORN_16_FONT_ID;
+        case 18:
+          return VOLLKORN_18_FONT_ID;
+        case 14:
         default:
           return VOLLKORN_14_FONT_ID;
-        case LARGE:
-          return VOLLKORN_16_FONT_ID;
-        case EXTRA_LARGE:
-          return VOLLKORN_18_FONT_ID;
       }
   }
 }
 
-int CrossPointSettings::getReaderFontId() const { return resolveReaderFontId(fontFamily, fontSize, sdFontFamilyName); }
+void CrossPointSettings::clearSdFontFamily() {
+  sdFontFamilyName[0] = '\0';
+  fontPointSize =
+      snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), fontPointSize);
+  saveToFile();
+}
+
+int CrossPointSettings::getReaderFontId() const {
+  return resolveReaderFontId(fontFamily, fontPointSize, sdFontFamilyName);
+}
 
 int CrossPointSettings::getReaderFontId(const ReaderPrefs& prefs) const {
-  return resolveReaderFontId(prefs.fontFamily, prefs.fontSize, prefs.sdFontFamilyName);
+  return resolveReaderFontId(prefs.fontFamily, prefs.fontPointSize, prefs.sdFontFamilyName);
 }
 
 ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth, const uint16_t viewportHeight,
                                                       const ReaderPrefs& prefs) const {
   ReaderRenderSpec spec;
-  spec.fontId = resolveReaderFontId(prefs.fontFamily, prefs.fontSize, prefs.sdFontFamilyName);
+  spec.fontId = resolveReaderFontId(prefs.fontFamily, prefs.fontPointSize, prefs.sdFontFamilyName);
   spec.lineCompression = resolveLineCompression(prefs.lineSpacingPercent);
   spec.extraParagraphSpacing = prefs.extraParagraphSpacing != 0;
   spec.paragraphSpacing = prefs.paragraphSpacing;
@@ -318,7 +348,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 
 void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   fontFamily = p.fontFamily;
-  fontSize = p.fontSize;
+  fontPointSize = p.fontPointSize;
   lineSpacingPercent = p.lineSpacingPercent;
   paragraphAlignment = p.paragraphAlignment;
   extraParagraphSpacing = p.extraParagraphSpacing;

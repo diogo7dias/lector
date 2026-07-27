@@ -120,7 +120,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
   // glyph cache while this activity is up — true today: the only evictor is
   // FontCacheManager::PrewarmScope, used solely by the reader/dictionary activities.
   const PreviewKey key{.fontId = fontId,
-                       .fontSize = SETTINGS.fontSize,
+                       .fontPointSize = SETTINGS.fontPointSize,
                        .screenMargin = marginH,
                        .textWidth = textWidth,
                        .lineCompression = compression,
