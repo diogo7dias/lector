@@ -450,12 +450,18 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
     clang-format clean. **Device test owed** — especially SD-font families and a book with a
     per-book font override, since the sidecar fold runs once per book.
 
+- **2026-07-27** — **0.5.1: merged upstream #2739** (`99c0e504`, one line, no conflicts). The Text
+  Settings screen opened with a font row highlighted instead of the tab bar — a regression from
+  #2720, which this fork had shipped in 0.5.0 an hour earlier. `onEnter` now clears the selection
+  for the tab the screen actually opens on, after seeding Family/Size with their current values.
+  Branch is level with `upstream/develop` at `99c0e504`. Host 241/241, `gh_release` clean, published.
+
 ## Next steps (RESUME HERE after compaction)
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.5.0:** `default` RAM 15.5% / Flash 73.3%; `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,776,640 bytes.
-**Live on the flasher site: `lector.c 0.5.0`** (published 2026-07-27, firmware.bin 4,776,640 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
+**Sizes at 0.5.1:** `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,776,656 bytes.
+**Live on the flasher site: `lector.c 0.5.1`** (published 2026-07-27, firmware.bin 4,776,656 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
 
 **0.2.0 = the FIRST upstream merge on this branch** (a second landed 2026-07-27; see the progress log). `git merge upstream/develop` brought nine commits
 (upstream 1.5.0) and moved the `freeink-sdk` pointer to `ae68356`. Eight conflicts; the settlements are
