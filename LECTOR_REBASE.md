@@ -454,8 +454,8 @@ sleep-staging internals, arena/tier cache, Rust helpers, our forked SDK panel fi
 
 **Branch:** `crosspoint-rebase` (worktree `.claude/worktrees/crosspoint-base`), pushed to origin.
 **Build:** `cd .claude/worktrees/crosspoint-base && pio run` (~30-55s). Host tests: `test/` (149/149).
-**Sizes at 0.2.0:** `default` RAM 16.0% / Flash 73.3%; `gh_release` `firmware.bin` 4,777,536 bytes.
-**Live on the flasher site: `lector.c 0.2.0`** (published 2026-07-25, firmware.bin 4,777,536 bytes; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased.
+**Sizes at 0.5.0:** `default` RAM 15.5% / Flash 73.3%; `gh_release` RAM 15.5% / Flash 72.7%, `firmware.bin` 4,776,640 bytes.
+**Live on the flasher site: `lector.c 0.5.0`** (published 2026-07-27, firmware.bin 4,776,640 bytes, confirmed by `content-length` on the live URL; bootloader/partitions/boot_app0 byte-identical since 0.0.10 and left in place). Nothing is built-but-unreleased. Host tests 241/241.
 
 **0.2.0 = the FIRST upstream merge on this branch** (a second landed 2026-07-27; see the progress log). `git merge upstream/develop` brought nine commits
 (upstream 1.5.0) and moved the `freeink-sdk` pointer to `ae68356`. Eight conflicts; the settlements are
