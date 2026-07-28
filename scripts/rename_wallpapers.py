@@ -219,8 +219,27 @@ def is_metadata(name):
     return name == ".DS_Store" or name.startswith("._") or name.startswith(".")
 
 
-def is_wallpaper(name):
-    return not is_metadata(name) and os.path.splitext(name)[1].lower() in WALLPAPER_EXTS
+def is_wallpaper(name, exts=WALLPAPER_EXTS):
+    return not is_metadata(name) and os.path.splitext(name)[1].lower() in exts
+
+
+def parse_exts(raw):
+    """--ext "png,jpg" -> {".png", ".jpg"}, added to the wallpaper set."""
+    extra = set()
+    for piece in (raw or "").replace(" ", "").split(","):
+        if piece:
+            extra.add("." + piece.lstrip(".").lower())
+    return WALLPAPER_EXTS | extra
+
+
+def extension_tally(names):
+    """"322 .png, 4 .txt" — so a file left alone says why, instead of just a count."""
+    counts = {}
+    for name in names:
+        ext = os.path.splitext(name)[1].lower() or "(no extension)"
+        counts[ext] = counts.get(ext, 0) + 1
+    ranked = sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))
+    return ", ".join("%d %s" % (count, ext) for ext, count in ranked)
 
 
 def slots_for(name):
@@ -392,6 +411,9 @@ def main():
     parser.add_argument("--no-compact", action="store_true", help="skip the folder rebuild")
     parser.add_argument("--compact", action="store_true",
                         help="force the folder rebuild on a folder that is not FAT/exFAT")
+    parser.add_argument("--ext", metavar="LIST",
+                        help="also rename these extensions, e.g. --ext png,jpg. Useful before "
+                             "converting to .pxc, since the converter keeps the input name.")
     parser.add_argument("--lowercase", action="store_true", help="write a3f9.pxc instead of A3F9.PXC")
     parser.add_argument("--length", default="auto", help="base-name length, 2-8, or 'auto' (default)")
     parser.add_argument("--seed", type=int, default=None, help="random seed, for a reproducible run")
@@ -418,10 +440,11 @@ def main():
     if args.undo:
         return run_undo(folder, os.path.abspath(os.path.expanduser(args.undo)), args.apply)
 
+    exts = parse_exts(args.ext)
     files, subdirs = scan(folder)
     junk = [n for n in files if is_metadata(n)]
-    wallpapers = [n for n in files if is_wallpaper(n)]
-    others = [n for n in files if not is_metadata(n) and not is_wallpaper(n)]
+    wallpapers = [n for n in files if is_wallpaper(n, exts)]
+    others = [n for n in files if not is_metadata(n) and not is_wallpaper(n, exts)]
 
     if not files:
         message = "Nothing to do: %s is empty" % folder
@@ -453,10 +476,13 @@ def main():
     print("Filesystem:  %s  ->  %s" % (fstype or "unknown",
                                        "card, all three steps apply" if card
                                        else "not a card, rename only"))
-    print("Wallpapers:  %d" % len(wallpapers))
+    print("Wallpapers:  %d  (%s)" % (len(wallpapers), ", ".join(sorted(exts))))
     print("macOS junk:  %d" % len(junk))
     if others:
-        print("Other files: %d  (left alone)" % len(others))
+        # Naming the extensions matters: a folder of .png renders as "Wallpapers: 0" and
+        # a plan of three skips, which reads like a broken script rather than a filter.
+        print("Left alone:  %d  (%s)" % (len(others), extension_tally(others)))
+        print("             not in the list above. Add one with --ext, e.g. --ext png")
     if subdirs:
         print("Subfolders:  %d  (compaction skipped — move them out to enable it)" % len(subdirs))
     # On a card this is the directory being shrunk. Off a card there is no such directory
@@ -481,7 +507,14 @@ def main():
             print("  ... and %d more" % (len(rename_plan) - 5))
 
     if not (strip or rename_plan or compact):
-        message = "Nothing to do — every file already has a short 8.3 name."
+        if not wallpapers and others:
+            # Distinguish "all done" from "nothing here is mine". They look identical from
+            # the plan alone, and only one of them means the folder still needs work.
+            message = ("Nothing matched.\n\nThis folder holds %s.\nThe script renames %s.\n\n"
+                       "Add an extension with --ext, for example:\n  --ext png"
+                       % (extension_tally(others), ", ".join(sorted(exts))))
+        else:
+            message = "Nothing to do — every file already has a short 8.3 name."
         if interactive:
             show_message("Nothing to do", message)
         else:
