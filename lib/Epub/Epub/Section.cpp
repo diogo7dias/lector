@@ -44,7 +44,12 @@ namespace {
 //      ordinals shift again; layout is untouched.
 // v41: FOOTNOTE_HREF_LEN 96 -> 256 (upstream #2722). FootnoteEntry is written into
 //      every page record by Page::serialize, so the on-disk record size changes.
-constexpr uint8_t SECTION_FILE_VERSION = 41;
+// v42: <br> handling changed layout (upstream #2710; upstream numbered it v34). A <br>
+//      after text is now a margin-stripped line break, browser-like, and only a <br>
+//      whose block stays empty injects the scene-break gap. Cached pages laid out by
+//      older versions no longer match. Keeps <br>-per-paragraph books (common CJK and
+//      Korean web-novel formatting) from re-adding container spacing at every paragraph.
+constexpr uint8_t SECTION_FILE_VERSION = 42;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
