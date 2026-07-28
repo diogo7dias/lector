@@ -17,11 +17,19 @@ Three steps run in order, and each one is worth doing on its own:
               breaks the 8.3 rule so each costs two directory slots — on a real
               4172-wallpaper card they doubled the directory all by themselves.
 
-  2. RENAME   give every wallpaper a short 8.3 name such as A3F9.PXC.
+  2. RENAME   give every file a short 8.3 name such as A3F9.PXC.
               A FAT directory is a flat array of 32-byte slots. A file takes one
               slot, plus one more for every 13 characters of long name, so a
               100-character generated filename costs about nine. Short names cut
               that to one.
+
+              Every non-hidden file in the folder is renamed, whatever its type.
+              That is on purpose rather than a loose end: the usual folder is
+              .png straight out of an image generator, and it is renamed BEFORE
+              being converted, because img_to_pxc.py and the browser converter
+              both build the output name from the input name. Rename once, and
+              the short name is already on the .pxc that reaches the card.
+              Narrow it with --only when a folder holds something to leave be.
 
   3. COMPACT  move everything into a freshly created folder.
               FAT never shrinks a directory: renaming only marks the old
@@ -54,6 +62,8 @@ Subtract or add a step when you want to:
     --no-rename     leave filenames alone
     --no-compact    skip the folder rebuild
     --compact       force the folder rebuild on a non-FAT folder
+    --only LIST     rename only these extensions, e.g. --only pxc,bmp. Without it
+                    every non-hidden file in the folder is renamed.
     --lowercase     write a3f9.pxc instead of A3F9.PXC. Uppercase is the default
                     because it is the only form guaranteed to stay in a single
                     slot everywhere; lowercase relies on the FAT lowercase flags,
@@ -79,8 +89,16 @@ import string
 import subprocess
 import sys
 
-# Extensions Lector accepts as a sleep wallpaper. Matched case-insensitively.
+# Extensions Lector accepts as a sleep wallpaper, for the report only. Renaming is NOT
+# limited to them: the usual job is a folder of .png straight from an image generator,
+# renamed here and converted afterwards, and the converter keeps the input name — so the
+# short name has to be applied before the file is a wallpaper at all. Every non-hidden
+# file in the chosen folder is renamed unless --only says otherwise.
 WALLPAPER_EXTS = {".pxc", ".bmp"}
+
+# An 8.3 name allows three extension characters. Anything longer (.jpeg, .webp, .heic)
+# still gets a short base, but cannot be a classic short name, so it is reported.
+MAX_SHORT_EXT = 3
 
 # Base-name alphabet. Digits and letters only — every character here is valid in an 8.3
 # short name on every FAT implementation.
@@ -172,15 +190,15 @@ def choose_folder():
     root = _tk()
     if root is not None:
         from tkinter import filedialog
-        return filedialog.askdirectory(title="Choose the folder holding the wallpapers") or ""
+        return filedialog.askdirectory(title="Choose the folder of images to rename") or ""
 
     ok, out = _osascript(
-        'POSIX path of (choose folder with prompt "Choose the folder holding the wallpapers")')
+        'POSIX path of (choose folder with prompt "Choose the folder of images to rename")')
     if ok:
         return out.rstrip("/")
     if not sys.stdin.isatty():
         return ""
-    return input("Folder holding the wallpapers: ").strip()
+    return input("Folder of images to rename: ").strip()
 
 
 def ask_confirm(title, message, confirm_label):
@@ -219,17 +237,21 @@ def is_metadata(name):
     return name == ".DS_Store" or name.startswith("._") or name.startswith(".")
 
 
-def is_wallpaper(name, exts=WALLPAPER_EXTS):
-    return not is_metadata(name) and os.path.splitext(name)[1].lower() in exts
+def is_renamable(name, only_exts=None):
+    """Every file that is not macOS bookkeeping, unless --only narrowed the set."""
+    if is_metadata(name):
+        return False
+    if only_exts is None:
+        return True
+    return os.path.splitext(name)[1].lower() in only_exts
 
 
 def parse_exts(raw):
-    """--ext "png,jpg" -> {".png", ".jpg"}, added to the wallpaper set."""
-    extra = set()
-    for piece in (raw or "").replace(" ", "").split(","):
-        if piece:
-            extra.add("." + piece.lstrip(".").lower())
-    return WALLPAPER_EXTS | extra
+    """--only "png,jpg" -> {".png", ".jpg"}. None when the flag was not given."""
+    if not raw:
+        return None
+    chosen = {"." + piece.lstrip(".").lower() for piece in raw.replace(" ", "").split(",") if piece}
+    return chosen or None
 
 
 def extension_tally(names):
@@ -411,9 +433,9 @@ def main():
     parser.add_argument("--no-compact", action="store_true", help="skip the folder rebuild")
     parser.add_argument("--compact", action="store_true",
                         help="force the folder rebuild on a folder that is not FAT/exFAT")
-    parser.add_argument("--ext", metavar="LIST",
-                        help="also rename these extensions, e.g. --ext png,jpg. Useful before "
-                             "converting to .pxc, since the converter keeps the input name.")
+    parser.add_argument("--only", metavar="LIST",
+                        help="rename only these extensions, e.g. --only pxc,bmp. Default is "
+                             "every file in the folder that is not macOS bookkeeping.")
     parser.add_argument("--lowercase", action="store_true", help="write a3f9.pxc instead of A3F9.PXC")
     parser.add_argument("--length", default="auto", help="base-name length, 2-8, or 'auto' (default)")
     parser.add_argument("--seed", type=int, default=None, help="random seed, for a reproducible run")
@@ -440,11 +462,11 @@ def main():
     if args.undo:
         return run_undo(folder, os.path.abspath(os.path.expanduser(args.undo)), args.apply)
 
-    exts = parse_exts(args.ext)
+    only_exts = parse_exts(args.only)
     files, subdirs = scan(folder)
     junk = [n for n in files if is_metadata(n)]
-    wallpapers = [n for n in files if is_wallpaper(n, exts)]
-    others = [n for n in files if not is_metadata(n) and not is_wallpaper(n, exts)]
+    targets = [n for n in files if is_renamable(n, only_exts)]
+    others = [n for n in files if not is_metadata(n) and not is_renamable(n, only_exts)]
 
     if not files:
         message = "Nothing to do: %s is empty" % folder
@@ -461,9 +483,9 @@ def main():
     card = fstype in FAT_FILESYSTEMS
 
     strip = card and not args.no_strip and bool(junk)
-    length = name_length_for(len(wallpapers), args.length)
+    length = name_length_for(len(targets), args.length)
     rng = random.Random(args.seed)
-    rename_plan = [] if args.no_rename else build_rename_plan(wallpapers, length, rng, args.lowercase)
+    rename_plan = [] if args.no_rename else build_rename_plan(targets, length, rng, args.lowercase)
     # Subfolders are never moved, so a folder holding one cannot be rebuilt safely.
     compact = (card or args.compact) and not args.no_compact and not subdirs
 
@@ -476,13 +498,19 @@ def main():
     print("Filesystem:  %s  ->  %s" % (fstype or "unknown",
                                        "card, all three steps apply" if card
                                        else "not a card, rename only"))
-    print("Wallpapers:  %d  (%s)" % (len(wallpapers), ", ".join(sorted(exts))))
+    print("To rename:   %d  (%s)" % (len(targets), extension_tally(targets) or "nothing"))
     print("macOS junk:  %d" % len(junk))
     if others:
-        # Naming the extensions matters: a folder of .png renders as "Wallpapers: 0" and
-        # a plan of three skips, which reads like a broken script rather than a filter.
-        print("Left alone:  %d  (%s)" % (len(others), extension_tally(others)))
-        print("             not in the list above. Add one with --ext, e.g. --ext png")
+        # Only reachable via --only. Naming the extensions matters: a bare count reads as
+        # a broken script rather than as the filter the user asked for.
+        print("Left alone:  %d  (%s)  — excluded by --only" % (len(others), extension_tally(others)))
+    # A three-character extension is the part of 8.3 this script cannot choose. Longer
+    # ones keep their name and still cost an extra directory slot, which is worth saying
+    # out loud rather than silently truncating ".jpeg" to ".JPE" and changing the type.
+    long_ext = [n for n in targets if len(os.path.splitext(n)[1]) - 1 > MAX_SHORT_EXT]
+    if long_ext:
+        print("Long suffix: %d  (%s)  — base is shortened, suffix kept as it is"
+              % (len(long_ext), extension_tally(long_ext)))
     if subdirs:
         print("Subfolders:  %d  (compaction skipped — move them out to enable it)" % len(subdirs))
     # On a card this is the directory being shrunk. Off a card there is no such directory
@@ -507,12 +535,12 @@ def main():
             print("  ... and %d more" % (len(rename_plan) - 5))
 
     if not (strip or rename_plan or compact):
-        if not wallpapers and others:
+        if not targets and others:
             # Distinguish "all done" from "nothing here is mine". They look identical from
             # the plan alone, and only one of them means the folder still needs work.
-            message = ("Nothing matched.\n\nThis folder holds %s.\nThe script renames %s.\n\n"
-                       "Add an extension with --ext, for example:\n  --ext png"
-                       % (extension_tally(others), ", ".join(sorted(exts))))
+            message = ("Nothing matched.\n\nThis folder holds %s, and --only excluded all of "
+                       "it.\nDrop --only to rename every file in the folder."
+                       % extension_tally(others))
         else:
             message = "Nothing to do — every file already has a short 8.3 name."
         if interactive:
