@@ -128,6 +128,14 @@ void HalDisplay::deepSleep() {
   einkDisplay.deepSleep();
 }
 
+void HalDisplay::setBusyWaitHooks(void (*beginHook)(), void (*endHook)()) {
+  einkDisplay.setBusyWaitHooks(beginHook, endHook);
+}
+
+void HalDisplay::setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel)) {
+  einkDisplay.setBusyWaitSliceHook(sliceHook);
+}
+
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 
 uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisplay.lendBuildStorage(sizeOut); }

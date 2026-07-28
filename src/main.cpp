@@ -339,6 +339,15 @@ void setup() {
   halTiltSensor.begin();
   halClock.begin();
 
+  // Downclock the CPU while the render task busy-waits on an e-ink refresh
+  // (0.3-2 s of pure pin polling); the hooks no-op when WiFi/USB is active
+  display.setBusyWaitHooks([] { powerManager.onEinkBusyWaitBegin(); }, [] { powerManager.onEinkBusyWaitEnd(); });
+  // On top of the downclock, light-sleep through the refresh in short slices,
+  // waking exactly on the BUSY pin's completion level (falls back to polling
+  // when WiFi/USB blocks light sleep)
+  display.setBusyWaitSliceHook(
+      [](int8_t busyPin, uint8_t busyLevel) { return powerManager.onEinkBusyWaitSlice(busyPin, busyLevel); });
+
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
   // SD Card Initialization
@@ -696,12 +705,39 @@ void loop() {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
-    if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
-      // If we've been inactive for a while, increase the delay to save power
-      powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
-      delay(50);
+    const unsigned long idleMs = millis() - lastActivityTime;
+    if (idleMs >= HalPowerManager::IDLE_LIGHT_SLEEP_MS) {
+      // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence).
+      // Race-to-sleep: run the brief wake windows at normal clock, not LOW_POWER_FREQ.
+      // The board's sleep-floor current is paid per-millisecond regardless of CPU
+      // speed, so finishing the per-wake work ~16x faster and returning to sleep
+      // costs less charge than stretching the window at 10 MHz (measured at 10 MHz:
+      // 8.8 mA for 4.5 ms per wake). The downclock below only serves the pre-sleep
+      // 100 Hz delay-poll phase. The lightSleep()-rejected fallback delay() then
+      // also runs at normal clock, but that only happens when USB (externally
+      // powered), WiFi, or a render Lock (full speed wanted anyway) is active.
+      powerManager.setPowerSaving(false);
+      if (gpio.isDebouncePending()) {
+        // A raw button-state change is mid-debounce: commitment needs a second
+        // matching sample, so poll again quickly instead of sleeping a slice —
+        // a tap shorter than the 50 ms cadence would otherwise land in a single
+        // sample and be dropped, and every press would commit a slice late.
+        delay(10);
+      } else if (!powerManager.lightSleep(gpio)) {
+        // Light sleep declined = a render Lock, USB, or WiFi is active — the
+        // chip is at full clock anyway, so poll at 100 Hz. A 50 ms cadence
+        // here dropped sub-slice power taps (a press needs two samples >=5 ms
+        // apart to commit), which made short-press sleep flaky during renders
+        // — exactly when a render Lock forces this fallback.
+        delay(10);
+      }
     } else {
-      // Short delay to prevent tight loop while still being responsive
+      // Response window after recent input: keep 100 Hz polling for snappy interaction,
+      // but downclock once rapid-input bursts have settled — renders re-raise the clock
+      // via HalPowerManager::Lock, so full speed only serves loop bookkeeping here
+      if (idleMs >= HalPowerManager::IDLE_DOWNCLOCK_MS) {
+        powerManager.setPowerSaving(true);
+      }
       delay(10);
     }
   }

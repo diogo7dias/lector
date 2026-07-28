@@ -45,6 +45,14 @@ class HalGPIO {
 
   bool lastUsbConnected = false;
   bool usbStateChanged = false;
+  unsigned long usbLastPollMs = 0;
+
+  // X3 USB detection is a BQ27220 I2C read (~0.3-1 ms of awake CPU per call);
+  // polled every loop it costs a few percent of the light-sleep idle floor for
+  // nothing. At >=1 s intervals the energy cost is unmeasurable (~µC/s), so 1 s
+  // is chosen for prompt plug/unplug UX (battery icon, light-sleep USB guard /
+  // CDC recovery). X4 detection is a single digitalRead and stays per-loop.
+  static constexpr unsigned long USB_POLL_X3_MS = 1000;
 
  public:
   enum class DeviceType : uint8_t { X4, X3 };
@@ -70,6 +78,11 @@ class HalGPIO {
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
+  // True while a raw button-state change is still inside the debounce window.
+  // The idle loop polls fast while this is set so the confirming sample lands
+  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
+  // otherwise appear in a single sample and never commit (dropped press).
+  bool isDebouncePending() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
@@ -81,6 +94,10 @@ class HalGPIO {
 
   // Check if USB is connected
   bool isUsbConnected() const;
+
+  // USB state as sampled by the last update() call.
+  // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
+  bool isUsbConnectedCached() const { return lastUsbConnected; }
 
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;
