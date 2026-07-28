@@ -342,11 +342,21 @@ void setup() {
   // Downclock the CPU while the render task busy-waits on an e-ink refresh
   // (0.3-2 s of pure pin polling); the hooks no-op when WiFi/USB is active
   display.setBusyWaitHooks([] { powerManager.onEinkBusyWaitBegin(); }, [] { powerManager.onEinkBusyWaitEnd(); });
-  // On top of the downclock, light-sleep through the refresh in short slices,
-  // waking exactly on the BUSY pin's completion level (falls back to polling
-  // when WiFi/USB blocks light sleep)
-  display.setBusyWaitSliceHook(
-      [](int8_t busyPin, uint8_t busyLevel) { return powerManager.onEinkBusyWaitSlice(busyPin, busyLevel); });
+  // DIAGNOSTIC (lector.c 1.0.1-exp): the BUSY-wait slice hook is deliberately NOT installed.
+  //
+  // On top of the downclock it would light-sleep through the refresh in short slices, waking
+  // on the BUSY pin's completion level. But esp_light_sleep_start() halts the whole chip, not
+  // just the render task, for up to BUSY_SLEEP_SLICE_MS, and the slice arms a GPIO wake for
+  // the power button ONLY -- the front and side buttons are ADC resistor-ladder inputs whose
+  // pressed level is invisible to a digital GPIO wake, so they can only be found by polling.
+  // With a 20 ms slice and a 1 ms yield the main loop samples them roughly once per 21 ms, and
+  // a tap contained inside one slice is never sampled at all. lector.c 1.0.0-exp dropped fast
+  // repeated taps on an X4; lector.c 0.6.1 does not. Not installing the hook isolates it as
+  // the single variable while idle light sleep and the BUSY-wait downclock stay active.
+  //
+  // Restore this line once the cause is confirmed and a real fix is in place.
+  // display.setBusyWaitSliceHook(
+  //     [](int8_t busyPin, uint8_t busyLevel) { return powerManager.onEinkBusyWaitSlice(busyPin, busyLevel); });
 
   LOG_INF("MAIN", "Hardware detect: %s", gpio.deviceIsX3() ? "X3" : "X4");
 
