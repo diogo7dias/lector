@@ -32,12 +32,6 @@
 #define I2C_ADDR_DS3231 0x68  // RTC I2C address
 #define DS3231_SEC_REG 0x00   // Seconds command code (BCD)
 
-// QST QMI8658 IMU I2C
-#define I2C_ADDR_QMI8658 0x6B        // IMU I2C address
-#define I2C_ADDR_QMI8658_ALT 0x6A    // IMU I2C fallback address
-#define QMI8658_WHO_AM_I_REG 0x00    // WHO_AM_I command code
-#define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
-
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
