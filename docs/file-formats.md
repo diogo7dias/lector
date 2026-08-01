@@ -96,6 +96,13 @@ Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
 
+Version 43 is binary-identical to version 42. The version was bumped because
+word-gap suppression was narrowed to tokens glued together in the source
+(upstream #2768, which numbered it v34): earlier versions dropped the gap
+between any two words meeting at a CJK break opportunity, which collapsed the
+spaces between Hangul words, so cached word positions no longer match what the
+layout engine now produces.
+
 Version 33 adds a `uint16 paragraphOrdinal` to each serialized `PageLine`
 (written after `yPos`, before the `TextBlock`): the visible-paragraph number of a
 paragraph's first line (0 = not a paragraph start), consumed by the paragraph-numbers
