@@ -230,6 +230,12 @@ class EpubReaderActivity final : public Activity {
   bool writeReaderOverride(const ReaderPrefs& p) const;
   // Capture the in-book Reader Settings edit back into this book's override.
   void applyReaderSettingsEdit();
+  // Called on every row change inside the Reader Settings screen, via the overlay
+  // sink, so the book's sidecar is already correct if the reader is switched off in
+  // there. Writes only: prefs_ still holds what the page was laid out with, so the
+  // re-layout decision at applyReaderSettingsEdit() is unaffected.
+  void persistReaderSettingsEdit(const ReaderPrefs& live) const;
+  static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
   // Delete this book's override and follow the global settings again.
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.

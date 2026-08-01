@@ -1194,7 +1194,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // Overlay this book's values onto the live settings so the existing text
       // settings screen edits them in place (guarded so global settings.json is
       // untouched); the result callback captures the edits into the book override.
-      SETTINGS.beginReaderEditOverlay(prefs_);
+      SETTINGS.beginReaderEditOverlay(prefs_, &EpubReaderActivity::readerEditSinkThunk, this);
       startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                              [this](const ActivityResult&) { applyReaderSettingsEdit(); });
       break;
@@ -1327,6 +1327,24 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
     nextPageNumber = section->currentPage;
   }
   section.reset();
+}
+
+void EpubReaderActivity::readerEditSinkThunk(void* ctx, const ReaderPrefs& live) {
+  static_cast<const EpubReaderActivity*>(ctx)->persistReaderSettingsEdit(live);
+}
+
+void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) const {
+  const ReaderOverrideDecision decision = decideReaderOverride(live, prefs_, prefsCustom_);
+  switch (decision.action) {
+    case ReaderOverrideAction::Write:
+      writeReaderOverride(decision.prefs);
+      break;
+    case ReaderOverrideAction::Remove:
+      Storage.remove(readerOverridePath().c_str());
+      break;
+    case ReaderOverrideAction::Keep:
+      break;
+  }
 }
 
 void EpubReaderActivity::applyReaderSettingsEdit() {

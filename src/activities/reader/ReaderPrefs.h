@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cstring>
 #include <istream>
 #include <ostream>
 
@@ -78,6 +79,46 @@ struct ReaderPrefs {
   // trailing bytes are canonical and whole-blob memcmp change-detection is exact.
   static ReaderPrefs fromGlobal();
 };
+
+// ── Mid-edit override decision ────────────────────────────────────────────────
+// While the in-book Reader Settings screen is open, the edited values live on the
+// global reader fields (see CrossPointSettings::beginReaderEditOverlay). Every row
+// change must land on the card straight away, so switching the reader off inside
+// that screen keeps the change instead of losing it.
+//
+// This is the pure rule behind that write, split out from the storage call so the
+// host tests can exercise it: it takes the live overlaid values, the book's current
+// prefs, and whether the book already has a sidecar, and says what to do with it.
+enum class ReaderOverrideAction : uint8_t {
+  Keep,    // the file on the card already says this — leave it alone
+  Write,   // persist these prefs as the book's override
+  Remove,  // the book follows global again; drop any sidecar written mid-edit
+};
+
+struct ReaderOverrideDecision {
+  ReaderOverrideAction action;
+  ReaderPrefs prefs;  // only meaningful for Write
+};
+
+inline ReaderOverrideDecision decideReaderOverride(const ReaderPrefs& live, const ReaderPrefs& book,
+                                                   const bool bookIsCustom) {
+  ReaderOverrideDecision decision{ReaderOverrideAction::Keep, live};
+  // paragraphNumbering and the two Paperback flags are per-book in-menu toggles, not
+  // rows of the Reader Settings screen. The overlay does not carry them, so `live`
+  // holds the GLOBAL values for those three; the book's own must survive the edit.
+  decision.prefs.paragraphNumbering = book.paragraphNumbering;
+  decision.prefs.paperbackLookBody = book.paperbackLookBody;
+  decision.prefs.paperbackLookStatus = book.paperbackLookStatus;
+
+  if (std::memcmp(&decision.prefs, &book, sizeof(ReaderPrefs)) != 0) {
+    decision.action = ReaderOverrideAction::Write;
+  } else if (!bookIsCustom) {
+    // Edited a row and then put it back: the book was following global, so it must go
+    // on following global rather than freeze as custom on a sidecar written moments ago.
+    decision.action = ReaderOverrideAction::Remove;
+  }
+  return decision;
+}
 
 // ── Serialization: [uint8 version][POD blob] ──────────────────────────────────
 // Stream overloads are header-inline and Arduino-free so the host tests exercise

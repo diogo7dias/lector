@@ -370,11 +370,14 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
 }
 
-void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues) {
+void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues, const ReaderEditSink sink,
+                                                void* sinkCtx) {
   if (!readerEditOverlayActive_) {
     readerEditBackup_ = ReaderPrefs::fromGlobal();  // the true global reader values
     readerEditOverlayActive_ = true;
   }
+  readerEditSink_ = sink;
+  readerEditSinkCtx_ = sinkCtx;
   applyReaderPrefs(startValues);  // editor starts from the book's current values
 }
 
@@ -384,6 +387,10 @@ ReaderPrefs CrossPointSettings::endReaderEditOverlay() {
     applyReaderPrefs(readerEditBackup_);  // restore the true global values
     readerEditOverlayActive_ = false;
   }
+  // Cleared unconditionally: the sink points into the activity that opened the
+  // overlay, and must never outlive it.
+  readerEditSink_ = nullptr;
+  readerEditSinkCtx_ = nullptr;
   return edited;
 }
 
@@ -401,5 +408,10 @@ bool CrossPointSettings::saveToFile() const {
   self->applyReaderPrefs(readerEditBackup_);
   const bool ok = PersistableStore<CrossPointSettings>::saveToFile();
   self->applyReaderPrefs(overlaid);
+  // The overlaid values are the book's, and this is the only moment the settings
+  // screen tells anyone it changed something. Hand them to the owner so the book's
+  // sidecar is current on the card before the next button press — otherwise the
+  // edit lives only in RAM until the screen is left, and a power-off loses it.
+  if (readerEditSink_) readerEditSink_(readerEditSinkCtx_, overlaid);
   return ok;
 }

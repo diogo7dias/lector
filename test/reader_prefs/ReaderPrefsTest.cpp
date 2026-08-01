@@ -149,3 +149,65 @@ TEST(ReaderPrefs, EmptyRejected) {
   ReaderPrefs loaded;
   EXPECT_FALSE(readReaderPrefs(ss, loaded));
 }
+
+// ── Mid-edit override decision ────────────────────────────────────────────────
+// While the in-book Reader Settings screen is open, every row change must already
+// be safe on the card, so switching the reader off inside that screen keeps it.
+// decideReaderOverride() is the pure rule behind that write.
+
+TEST(ReaderOverrideDecision, ChangedValueIsWritten) {
+  ReaderPrefs book;
+  ReaderPrefs live = book;
+  live.fontPointSize = 18;
+
+  const auto decision = decideReaderOverride(live, book, /*bookIsCustom=*/false);
+  EXPECT_EQ(ReaderOverrideAction::Write, decision.action);
+  EXPECT_EQ(18, decision.prefs.fontPointSize);
+}
+
+TEST(ReaderOverrideDecision, InMenuTogglesComeFromTheBookNotTheOverlay) {
+  // paragraphNumbering and the two Paperback flags are in-menu per-book toggles.
+  // The overlay does not carry them, so the live snapshot holds the GLOBAL values;
+  // the book's own must survive an unrelated font edit.
+  ReaderPrefs book;
+  book.paragraphNumbering = 2;
+  book.paperbackLookBody = 0;
+  book.paperbackLookStatus = 0;
+
+  ReaderPrefs live = book;
+  live.paragraphNumbering = 0;  // global values leaking through fromGlobal()
+  live.paperbackLookBody = 1;
+  live.paperbackLookStatus = 1;
+  live.screenMargin = 30;  // the actual edit
+
+  const auto decision = decideReaderOverride(live, book, /*bookIsCustom=*/true);
+  EXPECT_EQ(ReaderOverrideAction::Write, decision.action);
+  EXPECT_EQ(30, decision.prefs.screenMargin);
+  EXPECT_EQ(2, decision.prefs.paragraphNumbering);
+  EXPECT_EQ(0, decision.prefs.paperbackLookBody);
+  EXPECT_EQ(0, decision.prefs.paperbackLookStatus);
+}
+
+TEST(ReaderOverrideDecision, NoChangeOnACustomBookKeepsItsFile) {
+  ReaderPrefs book = makeSample();
+  const auto decision = decideReaderOverride(book, book, /*bookIsCustom=*/true);
+  EXPECT_EQ(ReaderOverrideAction::Keep, decision.action);
+}
+
+TEST(ReaderOverrideDecision, EditUndoneOnAGlobalBookRemovesTheFile) {
+  // Changed a row, then changed it back. The book was following global, so the
+  // sidecar written mid-edit must go again rather than freeze it as custom.
+  ReaderPrefs book;
+  const auto decision = decideReaderOverride(book, book, /*bookIsCustom=*/false);
+  EXPECT_EQ(ReaderOverrideAction::Remove, decision.action);
+}
+
+TEST(ReaderOverrideDecision, SdFontNameChangeIsWritten) {
+  ReaderPrefs book;
+  ReaderPrefs live = book;
+  std::strncpy(live.sdFontFamilyName, "Bookerly", sizeof(live.sdFontFamilyName) - 1);
+
+  const auto decision = decideReaderOverride(live, book, /*bookIsCustom=*/true);
+  EXPECT_EQ(ReaderOverrideAction::Write, decision.action);
+  EXPECT_STREQ("Bookerly", decision.prefs.sdFontFamilyName);
+}
