@@ -33,8 +33,19 @@ static constexpr gpio_num_t GPIO_BATTERY_LATCH = GPIO_NUM_13;
 // below. The IDF flash-leakage workaround (CONFIG_ESP_SLEEP_FLASH_LEAKAGE_WORKAROUND) pulls
 // DIO-unused flash pads low on light-sleep entry, which on those boards is a hard power-off.
 // Boards that latch through an ordinary GPIO (BoardConfig power.latch0/latch1, asserted by
-// holdPowerRails()) keep their output level across light sleep and need none of this, so the
-// latch handling stays scoped to the Xteink family rather than running on every profile.
+// holdPowerRails()) keep their output level across light sleep and need none of this.
+//
+// BOTH Xteink boards, for two different reasons that happen to want the same pin behaviour.
+// GPIO13 is the battery latch on the X4 and the SD-rail power enable on the X3, and either
+// way it must be pinned high across light sleep and driven low into deep sleep.
+//
+// Narrowing this to the X4 was tried twice on 2026-08-01 and failed on an X3 both times, in
+// the same way: the sleep wallpaper came back half drawn or almost blank. That image is read
+// from the SD card, and this hold is the only thing keeping the card's rail asserted through
+// a light sleep. The SDK cannot do it -- SDCardManager asserts the rail on init and
+// PowerManager::powerDownRailsForSleep() drops it for deep sleep, but neither knows GPIO13 is
+// a flash pad, and the IDF flash-leakage workaround pulls DIO-unused flash pads low on every
+// light-sleep entry. Only a pad hold survives that, and only this file knows to apply one.
 static bool hasFlashPadBatteryLatch() { return gpio.isXteinkDevice(); }
 
 // Pin the battery latch high and pad-hold it across a light sleep. The hold overrides both
