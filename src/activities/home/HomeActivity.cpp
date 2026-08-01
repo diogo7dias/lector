@@ -22,7 +22,7 @@
 #include "fontIds.h"
 
 int HomeActivity::menuRowCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 3;  // File Browser, File transfer, Settings
   if (hasOpdsServers) {
     count++;
   }
@@ -103,9 +103,6 @@ void HomeActivity::loop() {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
-      case HomeMenuItem::RECENTS:
-        onRecentsOpen();
-        break;
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
         break;
@@ -157,9 +154,6 @@ void HomeActivity::loop() {
           return;
         }
         break;
-      case CrossPointSettings::HOME_BACK_RECENTS:
-        onRecentsOpen();
-        return;
       case CrossPointSettings::HOME_BACK_NONE:
       default:
         break;
@@ -181,7 +175,7 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
   drawHomeHeaderExtras(selectorIndex == pagesTileIndex());
 
-  // In-progress books as a list: each book's full title + " by INITIALS" wrapped over
+  // In-progress books as a list: each book's full title + its author wrapped over
   // as many lines as it needs, with an inline [NN%] black-background badge, and
   // "N more above/below" indicators when it scrolls. Replaces the single cover tile —
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
@@ -194,13 +188,12 @@ void HomeActivity::render(RenderLock&&) {
   scrollOffset = vis.firstVisible;
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -225,10 +218,6 @@ void HomeActivity::render(RenderLock&&) {
   switch (SETTINGS.homeBackAction) {
     case CrossPointSettings::HOME_BACK_RESUME:
       backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
-      break;
-    case CrossPointSettings::HOME_BACK_RECENTS:
-      // Short form: "Recent Books" is wider than the hint box.
-      backLabel = tr(STR_RECENTS_HINT);
       break;
     case CrossPointSettings::HOME_BACK_NONE:
     default:
@@ -294,8 +283,6 @@ void HomeActivity::drawHomeHeaderExtras(const bool pagesSelected) const {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
-
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 

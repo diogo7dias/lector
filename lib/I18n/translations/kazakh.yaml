@@ -214,7 +214,6 @@ STR_REMAP_FRONT_BUTTONS: "Алдыңғы түймелерді қайта бап�
 STR_OPDS_BROWSER: "OPDS шолғышы"
 STR_COVER_CUSTOM: "Мұқаба + Өзгертілген"
 STR_QUICK_RESUME: "Жылдам жалғастыру"
-STR_MENU_RECENT_BOOKS: "Жуырда оқылған кітаптар"
 STR_REMOVE_FROM_RECENTS: "Жуырда оқылған кітаптардан жою?"
 STR_NO_RECENT_BOOKS: "Жуырда оқылған кітаптар жоқ"
 STR_CALIBRE_DESC: "Calibre сымсыз тасымалдауын пайдалану"

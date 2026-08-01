@@ -1491,9 +1491,11 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
       badgeChipMetrics(renderer, pctBuf, &badgeW, &badgeTextDx);
     }
     const int firstLineW = badgeW > 0 ? std::max(1, contentW - (badgeW + 6)) : contentW;
-    const std::string initials = StringUtils::authorInitials(recentBooks[idx].author);
-    const std::string rowText =
-        initials.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + initials);
+    // Initials by default; the full name when the user has asked for it in Settings.
+    const std::string author = SETTINGS.authorDisplay == CrossPointSettings::AUTHOR_FULL_NAME
+                                   ? recentBooks[idx].author
+                                   : StringUtils::authorInitials(recentBooks[idx].author);
+    const std::string rowText = author.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + author);
     // Every line gets the first line's width, because every line is drawn at the first
     // line's x: continuation lines used to run back to the left margin, under the [NN%]
     // chip, which left the block with a ragged left edge.

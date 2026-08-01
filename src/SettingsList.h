@@ -235,6 +235,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
+        SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
+                          {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
+                          StrId::STR_CAT_DISPLAY),
         // Free-text footer shown on the wake/unlock screen bottom banner.
         SettingInfo::String(StrId::STR_SLEEP_FOOTER_TEXT, &SETTINGS.customFooter[0], sizeof(SETTINGS.customFooter),
                             "customFooter", StrId::STR_CAT_DISPLAY),
@@ -357,8 +360,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
                             "backShortToFileBrowser", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
-                          {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_MENU_RECENT_BOOKS}, "homeBackAction",
-                          StrId::STR_CAT_CONTROLS),
+                          {StrId::STR_NONE_OPT, StrId::STR_RESUME}, "homeBackAction", StrId::STR_CAT_CONTROLS),
 
         // --- System ---
         SettingInfo::Value(
