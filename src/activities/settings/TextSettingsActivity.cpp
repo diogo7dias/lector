@@ -253,6 +253,11 @@ void TextSettingsActivity::render(RenderLock&&) {
 // prewarmCache() — so without this lock a font switch can free the mini glyph
 // arrays out from under prewarmStyle() (crash: null s.miniGlyphs mid-read/sort).
 void TextSettingsActivity::applyFamily(int listIndex) {
+  // Saved on the way out of every path below, for the same reason applySize() does.
+  struct SaveOnReturn {
+    ~SaveOnReturn() { SETTINGS.saveToFile(); }
+  } saveOnReturn;
+
   RenderLock lock;
   const auto& font = fonts_[listIndex];
   if (font.isBuiltin) {
@@ -319,11 +324,18 @@ void TextSettingsActivity::activateRow(int row) {
 // Same RenderLock rationale as applyFamily(): a size change reloads the SD font
 // file, which frees and replaces the SdCardFont the render task may be reading.
 void TextSettingsActivity::applySize(int listIndex) {
-  RenderLock lock;
+  {
+    RenderLock lock;
 
-  currentSizeIndex_ = listIndex;
-  SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
-  sdFontSystem.ensureLoaded(renderer);
+    currentSizeIndex_ = listIndex;
+    SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
+    sdFontSystem.ensureLoaded(renderer);
+  }
+  // Persist outside the render lock, like the Layout and Style rows do: the size is
+  // otherwise only written when the screen is left, so powering off from inside Text
+  // Settings lost the change (upstream #2806, which covered the rows this fork keeps
+  // on other tabs).
+  SETTINGS.saveToFile();
 }
 
 std::vector<TextSettingsActivity::LayoutRow> TextSettingsActivity::visibleLayoutRows() const {

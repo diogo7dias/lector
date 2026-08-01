@@ -10,6 +10,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -202,13 +203,25 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin(), Book);
   }
 
+  // drawButtonMenu lays its rows out from the top of this rect and ignores the height,
+  // so any row the home screen does not draw leaves its gap at the BOTTOM — which is
+  // what dropping Recent Books produced: a hole between Settings and the button hints.
+  // Bottom-anchor the block instead, so the gap under the last row equals the gap
+  // between rows. std::max keeps the original top as a floor, so a long book list can
+  // still push the menu down but never up into itself.
+  const int menuCount = static_cast<int>(menuItems.size());
+  const int menuTopFloor = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+  const int lastRowBottomWanted = pageHeight - metrics.buttonHintsHeight - metrics.menuSpacing;
+  const int menuBlockHeight =
+      metrics.verticalSpacing + (menuCount - 1) * (metrics.menuRowHeight + metrics.menuSpacing) + metrics.menuRowHeight;
+  const int menuTop = std::max(menuTopFloor, lastRowBottomWanted - menuBlockHeight);
+
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+      Rect{0, menuTop, pageWidth,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
-      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
+      menuCount, metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
