@@ -14,8 +14,19 @@
 
 HalPowerManager powerManager;  // Singleton instance
 
-// GPIO13 is the flash SPIWP pad (unused in DIO flash mode), rewired on the Xteink boards to
-// the battery-latch MOSFET gate: high keeps the battery connected, low powers the device off.
+// GPIO13 is the flash SPIWP pad (unused in DIO flash mode), rewired on the Xteink boards --
+// but to DIFFERENT things per board, which this file long got wrong:
+//   X4: the battery-latch MOSFET gate. High keeps the battery connected, low powers off.
+//   X3: the SD card's power rail enable, active high. It is NOT the off switch there.
+// Proven on hardware 2026-08-01 with probe build lector.c 0.7.0-wire13, which stopped driving
+// the pin on an X3: the reader still powered off both ways, and the sleep wallpaper came back
+// half drawn because that image is read from the SD card whose rail had just been dropped.
+//
+// The handling below is correct for both boards even so, which is why it stays shared: high
+// while awake and across light sleep (X4 battery held / X3 card powered), low on the way into
+// deep sleep (X4 powers off / X3 stops the card draining while the reader is off). That second
+// half is the same saving upstream #2774 and #2808 set out to make, already in place here.
+// Anything that touches this pin must satisfy BOTH meanings, or state which board it is for.
 static constexpr gpio_num_t GPIO_BATTERY_LATCH = GPIO_NUM_13;
 
 // Only a board that latches its battery through a *flash* pad needs the sleep-time hold

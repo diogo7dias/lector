@@ -1,5 +1,12 @@
 #pragma once
 
+#include <builtinFonts/cozette_10_regular.h>
+#include <builtinFonts/cozette_12_regular.h>
+#include <builtinFonts/cozette_14_regular.h>
+#include <builtinFonts/notosans_8_regular.h>
+#include <builtinFonts/ubuntu_10_regular.h>
+#include <builtinFonts/ubuntu_12_regular.h>
+#include <builtinFonts/ubuntu_14_regular.h>
 #include <builtinFonts/vollkorn_12_bold.h>
 #include <builtinFonts/vollkorn_12_bolditalic.h>
 #include <builtinFonts/vollkorn_12_italic.h>
@@ -16,10 +23,3 @@
 #include <builtinFonts/vollkorn_18_bolditalic.h>
 #include <builtinFonts/vollkorn_18_italic.h>
 #include <builtinFonts/vollkorn_18_regular.h>
-#include <builtinFonts/notosans_8_regular.h>
-#include <builtinFonts/cozette_10_regular.h>
-#include <builtinFonts/cozette_12_regular.h>
-#include <builtinFonts/cozette_14_regular.h>
-#include <builtinFonts/ubuntu_10_regular.h>
-#include <builtinFonts/ubuntu_12_regular.h>
-#include <builtinFonts/ubuntu_14_regular.h>
