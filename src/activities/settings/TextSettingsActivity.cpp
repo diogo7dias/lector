@@ -391,8 +391,10 @@ void TextSettingsActivity::confirmLayoutRow(LayoutRow row) {
     case LayoutRow::LineSpacing:
       valueBar_.show(StrId::STR_LINE_SPACING, CrossPointSettings::MIN_LINE_SPACING_PERCENT,
                      CrossPointSettings::MAX_LINE_SPACING_PERCENT, 1, 5, SETTINGS.lineSpacingPercent,
-                     StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.lineSpacingPercent = static_cast<uint8_t>(v); SETTINGS.saveToFile(); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.lineSpacingPercent = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::ParaSpacing:
       SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
@@ -400,13 +402,17 @@ void TextSettingsActivity::confirmLayoutRow(LayoutRow row) {
       break;
     case LayoutRow::ParaSpacingPct:
       valueBar_.show(StrId::STR_PARAGRAPH_SPACING, PARA_SPACING_MIN, PARA_SPACING_MAX, 1, 5, SETTINGS.paragraphSpacing,
-                     StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.paragraphSpacing = static_cast<uint8_t>(v); SETTINGS.saveToFile(); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.paragraphSpacing = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::Alignment:
       optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
-                        SETTINGS.paragraphAlignment,
-                        [](int idx) { SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx); SETTINGS.saveToFile(); });
+                        SETTINGS.paragraphAlignment, [](int idx) {
+                          SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
       break;
     case LayoutRow::UniformMargins:
       SETTINGS.uniformMargins = !SETTINGS.uniformMargins;
@@ -414,31 +420,45 @@ void TextSettingsActivity::confirmLayoutRow(LayoutRow row) {
       break;
     case LayoutRow::ScreenMargin:
       valueBar_.show(StrId::STR_SCREEN_MARGIN, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMargin,
-                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMargin = static_cast<uint8_t>(v); SETTINGS.saveToFile(); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.screenMargin = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::ScreenMarginTop:
       valueBar_.show(StrId::STR_SCREEN_MARGIN_TOP, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMarginTop,
-                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMarginTop = static_cast<uint8_t>(v); SETTINGS.saveToFile(); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.screenMarginTop = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::ScreenMarginBottom:
       valueBar_.show(StrId::STR_SCREEN_MARGIN_BOTTOM, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMarginBottom,
-                     StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.screenMarginBottom = static_cast<uint8_t>(v); SETTINGS.saveToFile(); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.screenMarginBottom = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::DynamicMargins:
       optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
-                        static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins,
-                        [](int idx) { SETTINGS.dynamicMargins = static_cast<uint8_t>(idx); SETTINGS.saveToFile(); });
+                        static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins, [](int idx) {
+                          SETTINGS.dynamicMargins = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
       break;
     case LayoutRow::IndentMode:
       optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, INDENT_MODE_IDS, static_cast<int>(std::size(INDENT_MODE_IDS)),
-                        SETTINGS.firstLineIndentMode,
-                        [](int idx) { SETTINGS.firstLineIndentMode = static_cast<uint8_t>(idx); SETTINGS.saveToFile(); });
+                        SETTINGS.firstLineIndentMode, [](int idx) {
+                          SETTINGS.firstLineIndentMode = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
       break;
     case LayoutRow::IndentPercent:
       valueBar_.show(StrId::STR_FIRST_LINE_INDENT_PERCENT, INDENT_MIN, INDENT_MAX, 1, 5,
-                     SETTINGS.firstLineIndentPercent, StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(v); SETTINGS.saveToFile(); });
+                     SETTINGS.firstLineIndentPercent, StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::DebugBorders:
       SETTINGS.debugBorders = !SETTINGS.debugBorders;
