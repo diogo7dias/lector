@@ -253,6 +253,11 @@ void TextSettingsActivity::render(RenderLock&&) {
 // prewarmCache() — so without this lock a font switch can free the mini glyph
 // arrays out from under prewarmStyle() (crash: null s.miniGlyphs mid-read/sort).
 void TextSettingsActivity::applyFamily(int listIndex) {
+  // Saved on the way out of every path below, for the same reason applySize() does.
+  struct SaveOnReturn {
+    ~SaveOnReturn() { SETTINGS.saveToFile(); }
+  } saveOnReturn;
+
   RenderLock lock;
   const auto& font = fonts_[listIndex];
   if (font.isBuiltin) {
@@ -285,12 +290,21 @@ void TextSettingsActivity::activateRow(int row) {
     case Tab::Family:
       if (row != currentFamilyIndex_) {
         applyFamily(row);
+        // Persist immediately (like SettingsActivity's per-change saves): the
+        // parent's result callback only runs on a normal finish(), so relying
+        // on it loses the change when this screen is left via the home
+        // gesture/key or a sleep. Saved here, not inside applyFamily, so the
+        // SD write happens outside its RenderLock.
+        if (currentFamilyIndex_ == row) {
+          SETTINGS.saveToFile();
+        }
         requestUpdate();
       }
       break;
     case Tab::Size:
       if (row != currentSizeIndex_) {
         applySize(row);
+        SETTINGS.saveToFile();
         requestUpdate();
       }
       break;
@@ -310,11 +324,18 @@ void TextSettingsActivity::activateRow(int row) {
 // Same RenderLock rationale as applyFamily(): a size change reloads the SD font
 // file, which frees and replaces the SdCardFont the render task may be reading.
 void TextSettingsActivity::applySize(int listIndex) {
-  RenderLock lock;
+  {
+    RenderLock lock;
 
-  currentSizeIndex_ = listIndex;
-  SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
-  sdFontSystem.ensureLoaded(renderer);
+    currentSizeIndex_ = listIndex;
+    SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
+    sdFontSystem.ensureLoaded(renderer);
+  }
+  // Persist outside the render lock, like the Layout and Style rows do: the size is
+  // otherwise only written when the screen is left, so powering off from inside Text
+  // Settings lost the change (upstream #2806, which covered the rows this fork keeps
+  // on other tabs).
+  SETTINGS.saveToFile();
 }
 
 std::vector<TextSettingsActivity::LayoutRow> TextSettingsActivity::visibleLayoutRows() const {
@@ -382,55 +403,78 @@ void TextSettingsActivity::confirmLayoutRow(LayoutRow row) {
     case LayoutRow::LineSpacing:
       valueBar_.show(StrId::STR_LINE_SPACING, CrossPointSettings::MIN_LINE_SPACING_PERCENT,
                      CrossPointSettings::MAX_LINE_SPACING_PERCENT, 1, 5, SETTINGS.lineSpacingPercent,
-                     StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.lineSpacingPercent = static_cast<uint8_t>(v); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.lineSpacingPercent = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::ParaSpacing:
       SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
+      SETTINGS.saveToFile();
       break;
     case LayoutRow::ParaSpacingPct:
       valueBar_.show(StrId::STR_PARAGRAPH_SPACING, PARA_SPACING_MIN, PARA_SPACING_MAX, 1, 5, SETTINGS.paragraphSpacing,
-                     StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.paragraphSpacing = static_cast<uint8_t>(v); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.paragraphSpacing = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::Alignment:
       optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
-                        SETTINGS.paragraphAlignment,
-                        [](int idx) { SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx); });
+                        SETTINGS.paragraphAlignment, [](int idx) {
+                          SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
       break;
     case LayoutRow::UniformMargins:
       SETTINGS.uniformMargins = !SETTINGS.uniformMargins;
+      SETTINGS.saveToFile();
       break;
     case LayoutRow::ScreenMargin:
       valueBar_.show(StrId::STR_SCREEN_MARGIN, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMargin,
-                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMargin = static_cast<uint8_t>(v); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.screenMargin = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::ScreenMarginTop:
       valueBar_.show(StrId::STR_SCREEN_MARGIN_TOP, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMarginTop,
-                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) { SETTINGS.screenMarginTop = static_cast<uint8_t>(v); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.screenMarginTop = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::ScreenMarginBottom:
       valueBar_.show(StrId::STR_SCREEN_MARGIN_BOTTOM, MARGIN_MIN, MARGIN_MAX, 1, 5, SETTINGS.screenMarginBottom,
-                     StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.screenMarginBottom = static_cast<uint8_t>(v); });
+                     StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.screenMarginBottom = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::DynamicMargins:
       optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
-                        static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins,
-                        [](int idx) { SETTINGS.dynamicMargins = static_cast<uint8_t>(idx); });
+                        static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins, [](int idx) {
+                          SETTINGS.dynamicMargins = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
       break;
     case LayoutRow::IndentMode:
       optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, INDENT_MODE_IDS, static_cast<int>(std::size(INDENT_MODE_IDS)),
-                        SETTINGS.firstLineIndentMode,
-                        [](int idx) { SETTINGS.firstLineIndentMode = static_cast<uint8_t>(idx); });
+                        SETTINGS.firstLineIndentMode, [](int idx) {
+                          SETTINGS.firstLineIndentMode = static_cast<uint8_t>(idx);
+                          SETTINGS.saveToFile();
+                        });
       break;
     case LayoutRow::IndentPercent:
       valueBar_.show(StrId::STR_FIRST_LINE_INDENT_PERCENT, INDENT_MIN, INDENT_MAX, 1, 5,
-                     SETTINGS.firstLineIndentPercent, StrId::STR_VALUE_BAR_STEP_HINT,
-                     [](int v) { SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(v); });
+                     SETTINGS.firstLineIndentPercent, StrId::STR_VALUE_BAR_STEP_HINT, [](int v) {
+                       SETTINGS.firstLineIndentPercent = static_cast<uint8_t>(v);
+                       SETTINGS.saveToFile();
+                     });
       break;
     case LayoutRow::DebugBorders:
       SETTINGS.debugBorders = !SETTINGS.debugBorders;
+      SETTINGS.saveToFile();
       break;
     default:
       break;
@@ -497,6 +541,7 @@ void TextSettingsActivity::confirmStyleRow(int row) {
     default:
       return;
   }
+  SETTINGS.saveToFile();
   requestUpdate();
 }
 

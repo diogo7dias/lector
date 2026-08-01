@@ -10,6 +10,7 @@
 #include <Utf8.h>
 #include <Xtc.h>
 
+#include <algorithm>
 #include <cstring>
 #include <vector>
 
@@ -22,7 +23,7 @@
 #include "fontIds.h"
 
 int HomeActivity::menuRowCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 3;  // File Browser, File transfer, Settings
   if (hasOpdsServers) {
     count++;
   }
@@ -103,9 +104,6 @@ void HomeActivity::loop() {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
         break;
-      case HomeMenuItem::RECENTS:
-        onRecentsOpen();
-        break;
       case HomeMenuItem::OPDS_BROWSER:
         onOpdsBrowserOpen();
         break;
@@ -157,9 +155,6 @@ void HomeActivity::loop() {
           return;
         }
         break;
-      case CrossPointSettings::HOME_BACK_RECENTS:
-        onRecentsOpen();
-        return;
       case CrossPointSettings::HOME_BACK_NONE:
       default:
         break;
@@ -181,26 +176,18 @@ void HomeActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
   drawHomeHeaderExtras(selectorIndex == pagesTileIndex());
 
-  // In-progress books as a list: each book's full title + " by INITIALS" wrapped over
+  // In-progress books as a list: each book's full title + its author wrapped over
   // as many lines as it needs, with an inline [NN%] black-background badge, and
   // "N more above/below" indicators when it scrolls. Replaces the single cover tile —
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
-  const Rect bookRect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight};
-  const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
-  const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
-  firstVisibleBookIdx = vis.firstVisible;
-  lastVisibleBookIdx = vis.lastVisible;
-  scrollOffset = vis.firstVisible;
-
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+  std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -209,13 +196,38 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin(), Book);
   }
 
+  // drawButtonMenu lays its rows out from the top of this rect and ignores the height,
+  // so any row the home screen does not draw leaves its gap at the BOTTOM — which is
+  // what dropping Recent Books produced: a hole between Settings and the button hints.
+  // Bottom-anchor the block instead, so the gap under the last row equals the gap
+  // between rows. std::max keeps the original top as a floor, so a long book list can
+  // still push the menu down but never up into itself.
+  const int menuCount = static_cast<int>(menuItems.size());
+  const int menuTopFloor = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
+  const int lastRowBottomWanted = pageHeight - metrics.buttonHintsHeight - metrics.menuSpacing;
+  const int menuBlockHeight =
+      metrics.verticalSpacing + (menuCount - 1) * (metrics.menuRowHeight + metrics.menuSpacing) + metrics.menuRowHeight;
+  const int menuTop = std::max(menuTopFloor, lastRowBottomWanted - menuBlockHeight);
+
+  // The in-progress list gets every row between the header and the menu, rather than a
+  // fixed tile height: with the menu bottom-anchored, whatever the menu does not use is
+  // reading material. homeCoverTileHeight stays the floor so a theme that wants a short
+  // list still gets one.
+  const Rect bookRect{
+      0, metrics.homeTopPadding, pageWidth,
+      std::max(metrics.homeCoverTileHeight, menuTop - metrics.homeTopPadding - metrics.verticalSpacing)};
+  const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
+  const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
+  firstVisibleBookIdx = vis.firstVisible;
+  lastVisibleBookIdx = vis.lastVisible;
+  scrollOffset = vis.firstVisible;
+
   GUI.drawButtonMenu(
       renderer,
-      Rect{0, metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset, pageWidth,
+      Rect{0, menuTop, pageWidth,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      static_cast<int>(menuItems.size()),
-      metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
+      menuCount, metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; });
 
@@ -225,10 +237,6 @@ void HomeActivity::render(RenderLock&&) {
   switch (SETTINGS.homeBackAction) {
     case CrossPointSettings::HOME_BACK_RESUME:
       backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
-      break;
-    case CrossPointSettings::HOME_BACK_RECENTS:
-      // Short form: "Recent Books" is wider than the hint box.
-      backLabel = tr(STR_RECENTS_HINT);
       break;
     case CrossPointSettings::HOME_BACK_NONE:
     default:
@@ -294,8 +302,6 @@ void HomeActivity::drawHomeHeaderExtras(const bool pagesSelected) const {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
-
-void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
