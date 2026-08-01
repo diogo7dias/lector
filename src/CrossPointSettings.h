@@ -474,8 +474,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // TextSettingsActivity edits them in place; endReaderEditOverlay() captures the
   // result and restores the true global values. While an overlay is active,
   // saveToFile() persists the global backup, never the book's overlaid values.
+  //
+  // The optional sink is how a per-book edit survives a power-off from inside the
+  // settings screen: every saveToFile() during the overlay hands the live overlaid
+  // values to it, so the owner can write the book's sidecar there and then. Plain
+  // function pointer + context, not std::function — no closure allocation.
+  using ReaderEditSink = void (*)(void* ctx, const ReaderPrefs& live);
   void applyReaderPrefs(const ReaderPrefs& p);
-  void beginReaderEditOverlay(const ReaderPrefs& startValues);
+  void beginReaderEditOverlay(const ReaderPrefs& startValues, ReaderEditSink sink = nullptr, void* sinkCtx = nullptr);
   ReaderPrefs endReaderEditOverlay();
   bool readerEditOverlayActive() const { return readerEditOverlayActive_; }
 
@@ -493,6 +499,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   bool readerEditOverlayActive_ = false;
   ReaderPrefs readerEditBackup_;
+  ReaderEditSink readerEditSink_ = nullptr;
+  void* readerEditSinkCtx_ = nullptr;
 };
 
 // Helper macro to access settings
