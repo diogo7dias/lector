@@ -24,16 +24,18 @@ static constexpr gpio_num_t GPIO_BATTERY_LATCH = GPIO_NUM_13;
 // Boards that latch through an ordinary GPIO (BoardConfig power.latch0/latch1, asserted by
 // holdPowerRails()) keep their output level across light sleep and need none of this.
 //
-// X4 ONLY, and the X3's exclusion is measured rather than assumed. This file used to claim
-// GPIO13 on every Xteink board; the SDK declares it the X3's SD-rail power enable and keeps
-// it as power.latch0 on the X4 alone. A probe build (lector.c 0.7.0-wire13) narrowed this to
-// the X4 and was run on an X3 on 2026-08-01: the device still powered off from the menu and
-// by power-button hold, so GPIO13 is not what powers an X3 down. It also came back with a
-// half-drawn sleep wallpaper, because that image is read from the SD card and this hold was
-// the only thing keeping the card's rail asserted through sleep. Both observations point the
-// same way, and the SD rail is now the SDK's to drive (SDCardManager asserts it on init,
-// PowerManager::powerDownRailsForSleep() holds it off for deep sleep).
-static bool hasFlashPadBatteryLatch() { return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4; }
+// BOTH Xteink boards, for two different reasons that happen to want the same pin behaviour.
+// GPIO13 is the battery latch on the X4 and the SD-rail power enable on the X3, and either
+// way it must be pinned high across light sleep and driven low into deep sleep.
+//
+// Narrowing this to the X4 was tried twice on 2026-08-01 and failed on an X3 both times, in
+// the same way: the sleep wallpaper came back half drawn or almost blank. That image is read
+// from the SD card, and this hold is the only thing keeping the card's rail asserted through
+// a light sleep. The SDK cannot do it -- SDCardManager asserts the rail on init and
+// PowerManager::powerDownRailsForSleep() drops it for deep sleep, but neither knows GPIO13 is
+// a flash pad, and the IDF flash-leakage workaround pulls DIO-unused flash pads low on every
+// light-sleep entry. Only a pad hold survives that, and only this file knows to apply one.
+static bool hasFlashPadBatteryLatch() { return gpio.isXteinkDevice(); }
 
 // Pin the battery latch high and pad-hold it across a light sleep. The hold overrides both
 // the sleep-time pull and any pad re-muxing on the wake path, and is deliberately left
