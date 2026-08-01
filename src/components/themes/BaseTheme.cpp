@@ -1446,7 +1446,10 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
                                              int scrollOffset) const {
   constexpr int maxRowsCap = 30;
   const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
-  constexpr int maxVisibleBooks = 8;
+  // Cap the measure loop at the store's own capacity rather than a smaller number:
+  // the home list now grows into whatever the bottom-anchored menu leaves free, so a
+  // lower cap would hide books that fit. Height still decides how many actually draw.
+  constexpr int maxVisibleBooks = RecentBooksStore::MAX_RECENT_BOOKS;
   const int clampedOffset = std::max(0, std::min(scrollOffset, std::max(0, count - 1)));
   constexpr int rowGap = 4;
   const int rowLineHeight = renderer.getLineHeight(UI_10_FONT_ID);

@@ -181,13 +181,6 @@ void HomeActivity::render(RenderLock&&) {
   // "N more above/below" indicators when it scrolls. Replaces the single cover tile —
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
-  const Rect bookRect{0, metrics.homeTopPadding, pageWidth, metrics.homeCoverTileHeight};
-  const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
-  const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
-  firstVisibleBookIdx = vis.firstVisible;
-  lastVisibleBookIdx = vis.lastVisible;
-  scrollOffset = vis.firstVisible;
-
   // Build menu items dynamically
   std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
@@ -215,6 +208,19 @@ void HomeActivity::render(RenderLock&&) {
   const int menuBlockHeight =
       metrics.verticalSpacing + (menuCount - 1) * (metrics.menuRowHeight + metrics.menuSpacing) + metrics.menuRowHeight;
   const int menuTop = std::max(menuTopFloor, lastRowBottomWanted - menuBlockHeight);
+
+  // The in-progress list gets every row between the header and the menu, rather than a
+  // fixed tile height: with the menu bottom-anchored, whatever the menu does not use is
+  // reading material. homeCoverTileHeight stays the floor so a theme that wants a short
+  // list still gets one.
+  const Rect bookRect{
+      0, metrics.homeTopPadding, pageWidth,
+      std::max(metrics.homeCoverTileHeight, menuTop - metrics.homeTopPadding - metrics.verticalSpacing)};
+  const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
+  const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
+  firstVisibleBookIdx = vis.firstVisible;
+  lastVisibleBookIdx = vis.lastVisible;
+  scrollOffset = vis.firstVisible;
 
   GUI.drawButtonMenu(
       renderer,
