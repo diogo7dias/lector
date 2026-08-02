@@ -53,6 +53,7 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
 #include "sleep/SleepPauseToggle.h"
+#include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
 #include "util/BookmarkUtil.h"
 #include "util/FavoriteImage.h"
@@ -247,7 +248,7 @@ void EpubReaderActivity::onExit() {
   // opened goes to /recents. A finished move wins, so a book never lands in both. The
   // move is done after the Epub is released so no handle is open across the rename.
   const char* fileInto = nullptr;
-  if (epub) {
+  if (epub && !pendingDeleteBook) {
     if (pendingRemoveFromRecents) {
       // Removing undoes the filing that opening the book did, so the file goes back to
       // the card root. A book that was never filed stays where the user put it.
@@ -267,6 +268,21 @@ void EpubReaderActivity::onExit() {
     finalPath = bookfiling::moveBookToFolder(srcPath, dstPath, oldCachePath);
   } else {
     epub.reset();
+  }
+
+  if (pendingDeleteBook && !finalPath.empty()) {
+    if (Storage.remove(finalPath.c_str())) {
+      // The cache directory is keyed on the book path, so leaving it behind would
+      // strand a layout cache and a progress file nothing will open again.
+      clearBookCache(finalPath);
+      RECENT_BOOKS.removeByPath(finalPath);
+      if (APP_STATE.openEpubPath == finalPath) {
+        APP_STATE.openEpubPath.clear();
+        APP_STATE.saveToFile();
+      }
+    } else {
+      LOG_ERR("ERS", "Failed to delete book: %s", finalPath.c_str());
+    }
   }
 
   if (pendingRemoveFromRecents && !finalPath.empty()) {
@@ -1145,6 +1161,25 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       pendingRemoveFromRecents = true;
       onGoHome();
       return;
+    }
+    case EpubReaderMenuActivity::MenuAction::DELETE_BOOK: {
+      if (!epub) break;
+      const std::string path = epub->getPath();
+      const std::string name = path.substr(path.rfind('/') + 1);
+      // Erasing a book file cannot be undone, so it asks first. The deletion itself
+      // waits for onExit, where the Epub is already released — the same ordering the
+      // filing move uses, for the same reason.
+      startActivityForResult(
+          std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE_BOOK) + std::string("?"), name),
+          [this](const ActivityResult& res) {
+            if (res.isCancelled) {
+              requestUpdate();
+              return;
+            }
+            pendingDeleteBook = true;
+            onGoHome();
+          });
+      break;
     }
     case EpubReaderMenuActivity::MenuAction::GO_HOME: {
       onGoHome();

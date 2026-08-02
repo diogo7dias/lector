@@ -88,6 +88,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     // Undoing the open belongs with the book itself, not with the device tools, and it
     // sits last here because it is the one row that leaves the book.
     items.push_back({MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK});
+    // Deleting is the harder version of the row above it: removing only unfiles the
+    // book, this erases the file. It asks for confirmation before doing anything.
+    items.push_back({MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK});
   }
 
   // --- Look: everything that changes how the page is drawn ----------------------
