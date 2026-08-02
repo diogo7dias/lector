@@ -23,6 +23,7 @@ parser.add_argument("--additional-intervals", dest="additional_intervals", actio
 parser.add_argument("--compress", dest="compress", action="store_true", help="Compress glyph bitmaps using DEFLATE with group-based compression.")
 parser.add_argument("--force-autohint", dest="force_autohint", action="store_true", help="Force FreeType auto-hinter instead of native font hinting. Improves stem width consistency for fonts with weak or no native TrueType hints.")
 parser.add_argument("--pnum", dest="pnum", action="store_true", help="Use proportional numerals (pnum OpenType feature) instead of default tabular figures. Reduces visual gaps between digits in running prose.")
+parser.add_argument("--dpi", dest="dpi", type=int, default=150, help="Resolution passed to FreeType. Pixel size (ppem) = size * dpi / 72, so the historic default 150 turns 'size 10' into a 21px face. Pass --dpi 72 to make size mean pixels exactly, which is required for bitmap fonts: rendered off their native pixel grid they grow anti-alias halos on every stem and smear. Default 150 (unchanged for every existing font).")
 args = parser.parse_args()
 
 import freetype
@@ -265,7 +266,7 @@ for i_start, i_end in unvalidated_intervals:
         intervals.append((start, i_end))
 
 for face in font_stack:
-    face.set_char_size(size << 6, size << 6, 150, 150)
+    face.set_char_size(size << 6, size << 6, args.dpi, args.dpi)
 
 total_size = 0
 all_glyphs = []
@@ -518,10 +519,10 @@ def extract_kerning_fonttools(font_path, codepoints, ppem, pnum_subs=None):
             result[(lcp, rcp)] = adjust
     return result
 
-# The ppem used by the existing glyph rasterization:
-#   face.set_char_size(size << 6, size << 6, 150, 150)
-# means size_pt at 150 DPI -> ppem = size * 150 / 72
-ppem = size * 150.0 / 72.0
+# The ppem used by the glyph rasterization above:
+#   face.set_char_size(size << 6, size << 6, args.dpi, args.dpi)
+# means size_pt at args.dpi DPI -> ppem = size * dpi / 72 (dpi defaults to 150)
+ppem = size * args.dpi / 72.0
 
 kern_map = {}  # (leftCp, rightCp) -> adjust
 for face_idx, cps in face_idx_cps.items():

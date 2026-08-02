@@ -1655,7 +1655,7 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
       (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK) ? wholeBookParagraphBase(currentSpineIndex) : 0;
   constexpr int kGap = 5;  // px between the number and the first letter
   const int lineHeight = renderer.getLineHeight(fontId);
-  const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int numLineHeight = renderer.getLineHeight(PARA_NUM_FONT_ID);
   uint16_t pageMaxOrdinal = 0;
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
@@ -1667,14 +1667,14 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     if (!block || block->wordCount() == 0) continue;
     char buf[12];
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(base + ord));
-    const int numWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
+    const int numWidth = renderer.getTextWidth(PARA_NUM_FONT_ID, buf);
     // Right-align the number just left of the paragraph's first letter (wordXpos(0)
     // is non-zero for centered/justified/RTL lines, so it is the correct anchor).
     const int firstLetterX = marginLeft + line.xPos + block->wordXpos(0);
     const int x = firstLetterX - kGap - numWidth;
     if (x < 0) continue;  // no room in the margin — skip rather than clip into text
     const int y = marginTop + line.yPos + (lineHeight - numLineHeight) / 2;
-    renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
+    renderer.drawText(PARA_NUM_FONT_ID, x, y, buf, true);
   }
   // Capture this chapter's running-max paragraph count so a later chapter's whole-book
   // base includes it. Finalizes as the book is read forward through each chapter.
