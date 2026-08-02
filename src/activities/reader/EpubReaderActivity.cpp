@@ -34,6 +34,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "ParagraphNumberLayout.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "QuoteSelectActivity.h"
@@ -329,14 +330,14 @@ void EpubReaderActivity::openReaderMenu() {
       std::make_unique<EpubReaderMenuActivity>(
           renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-          prefsCustom_, prefs_.paragraphNumbering, prefs_.paperbackLookBody, prefs_.paperbackLookStatus,
-          hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes),
+          prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
+          prefs_.paperbackLookStatus, hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
         applyOrientation(menu.orientation);
         toggleAutoPageTurn(menu.pageTurnOption);
-        applyParagraphNumbering(menu.paragraphNumbering);
+        applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
         applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
         if (!result.isCancelled) {
           onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
@@ -1408,6 +1409,7 @@ void EpubReaderActivity::applyReaderSettingsEdit() {
   // the Reader Settings screen, so they are not in the overlay round-trip; carry the
   // book's values across so editing font/margins never resets them.
   edited.paragraphNumbering = prefs_.paragraphNumbering;
+  edited.paragraphNumberSize = prefs_.paragraphNumberSize;
   edited.paperbackLookBody = prefs_.paperbackLookBody;
   edited.paperbackLookStatus = prefs_.paperbackLookStatus;
   if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
@@ -1430,9 +1432,10 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   requestUpdate();
 }
 
-void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode) {
-  if (mode == prefs_.paragraphNumbering) return;
+void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode, const uint8_t size) {
+  if (mode == prefs_.paragraphNumbering && size == prefs_.paragraphNumberSize) return;
   prefs_.paragraphNumbering = mode;
+  prefs_.paragraphNumberSize = size;
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
   // No re-layout: the ordinals are already baked into the page cache; only whether
@@ -1654,8 +1657,26 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
   const uint32_t base =
       (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_BOOK) ? wholeBookParagraphBase(currentSpineIndex) : 0;
   constexpr int kGap = 5;  // px between the number and the first letter
+  // Small and Double are two separate baked faces, not one face scaled: a bitmap font
+  // only stays exact on whole multiples of its own cell, so the size is a choice between
+  // pre-rendered grids rather than a scale factor applied here.
+  const int numFontId =
+      (prefs_.paragraphNumberSize == CrossPointSettings::PARA_NUM_SIZE_DOUBLE) ? PARA_NUM_2X_FONT_ID : PARA_NUM_FONT_ID;
   const int lineHeight = renderer.getLineHeight(fontId);
-  const int numLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int numLineHeight = renderer.getLineHeight(numFontId);
+  // Sit the number on the same optical line as the words, at any reading size. The rule
+  // itself lives in ParagraphNumberLayout.h so the host tests can exercise it; the lookups
+  // are hoisted here so they cost one glyph query per page rather than one per line.
+  ParagraphNumberMetrics metrics;
+  metrics.bodyAscender = renderer.getFontAscenderSize(fontId);
+  metrics.bodyLineHeight = lineHeight;
+  metrics.numAscender = renderer.getFontAscenderSize(numFontId);
+  metrics.numLineHeight = numLineHeight;
+  // 'x' because lowercase is the bulk of what a line of prose looks like; 'H' stands in
+  // for a face without it, and the layout falls back to line-box centring without either.
+  metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'x');
+  if (metrics.bodyInkTop <= 0) metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'H');
+  metrics.numInkTop = renderer.getGlyphInkTop(numFontId, '0');
   uint16_t pageMaxOrdinal = 0;
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
@@ -1667,14 +1688,15 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     if (!block || block->wordCount() == 0) continue;
     char buf[12];
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(base + ord));
-    const int numWidth = renderer.getTextWidth(SMALL_FONT_ID, buf);
+    const int numWidth = renderer.getTextWidth(numFontId, buf);
     // Right-align the number just left of the paragraph's first letter (wordXpos(0)
     // is non-zero for centered/justified/RTL lines, so it is the correct anchor).
     const int firstLetterX = marginLeft + line.xPos + block->wordXpos(0);
     const int x = firstLetterX - kGap - numWidth;
     if (x < 0) continue;  // no room in the margin — skip rather than clip into text
-    const int y = marginTop + line.yPos + (lineHeight - numLineHeight) / 2;
-    renderer.drawText(SMALL_FONT_ID, x, y, buf, true);
+    metrics.lineTop = marginTop + line.yPos;
+    const int y = paragraphNumberDrawY(metrics);
+    renderer.drawText(numFontId, x, y, buf, true);
   }
   // Capture this chapter's running-max paragraph count so a later chapter's whole-book
   // base includes it. Finalizes as the book is read forward through each chapter.

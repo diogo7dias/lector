@@ -26,24 +26,25 @@ class EpubReaderMenuActivity final : public Activity {
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
-    READER_SETTINGS,           // open this book's per-book reader settings
-    RESET_READER_SETTINGS,     // clear this book's override, follow global again
-    TOGGLE_PARAGRAPH_NUMBERS,  // cycle off / per-chapter / whole-book in place
-    TOGGLE_PAPERBACK_LOOK,     // toggle heavier ink for reader body text
-    TOGGLE_PAPERBACK_STATUS,   // toggle heavier ink for status bar text
-    GO_TO_PARAGRAPH,           // jump to a paragraph number (only when numbering is on)
-    GRAB_QUOTE,                // pick a passage on the page and save it to <book>_QUOTES.txt
-    BOOK_INFO,                 // cover, author, language and the publisher synopsis
-    READING_STATS,             // per-book and all-books reading statistics
-    STEAL_LOOK,                // copy another book's reader settings onto this one
-    READING_THEMES,            // saved reader looks: apply one to this book, or save this one
-    WALLPAPER_FAVORITE,        // star/unstar the wallpaper the lock screen last showed
-    WALLPAPER_PAUSE,           // move that wallpaper to "/sleep pause", out of rotation
-    WALLPAPER_HOLD,            // stop picking a new wallpaper each sleep; keep this one
-    WALLPAPER_DELETE,          // delete that wallpaper file from the card, behind a confirmation
-    REMOVE_FROM_RECENTS,       // drop this book from the home list and put its file back at the card root
-    DELETE_BOOK,               // erase this book's file and its cache from the card, behind a confirmation
-    VIEW_QUOTES                // browse (and delete) the quotes saved in <book>_QUOTES.txt
+    READER_SETTINGS,            // open this book's per-book reader settings
+    RESET_READER_SETTINGS,      // clear this book's override, follow global again
+    TOGGLE_PARAGRAPH_NUMBERS,   // cycle off / per-chapter / whole-book in place
+    TOGGLE_PARAGRAPH_NUM_SIZE,  // cycle Small / Double in place
+    TOGGLE_PAPERBACK_LOOK,      // toggle heavier ink for reader body text
+    TOGGLE_PAPERBACK_STATUS,    // toggle heavier ink for status bar text
+    GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
+    GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
+    BOOK_INFO,                  // cover, author, language and the publisher synopsis
+    READING_STATS,              // per-book and all-books reading statistics
+    STEAL_LOOK,                 // copy another book's reader settings onto this one
+    READING_THEMES,             // saved reader looks: apply one to this book, or save this one
+    WALLPAPER_FAVORITE,         // star/unstar the wallpaper the lock screen last showed
+    WALLPAPER_PAUSE,            // move that wallpaper to "/sleep pause", out of rotation
+    WALLPAPER_HOLD,             // stop picking a new wallpaper each sleep; keep this one
+    WALLPAPER_DELETE,           // delete that wallpaper file from the card, behind a confirmation
+    REMOVE_FROM_RECENTS,        // drop this book from the home list and put its file back at the card root
+    DELETE_BOOK,                // erase this book's file and its cache from the card, behind a confirmation
+    VIEW_QUOTES                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
   };
 
   // Tab pages of the menu. Sleep exists only when the lock screen last showed a
@@ -55,10 +56,10 @@ class EpubReaderMenuActivity final : public Activity {
                                   const std::string& author, const std::string& chapterName, const int currentPage,
                                   const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
                                   const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
-                                  uint8_t paragraphNumbering = 0, uint8_t paperbackBody = 1,
-                                  uint8_t paperbackStatus = 1, bool hasSleepWallpaper = false,
-                                  bool wallpaperFavorited = false, bool wallpaperPausable = false,
-                                  bool hasQuotes = false);
+                                  uint8_t paragraphNumbering = 0, uint8_t paragraphNumberSize = 1,
+                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1,
+                                  bool hasSleepWallpaper = false, bool wallpaperFavorited = false,
+                                  bool wallpaperPausable = false, bool hasQuotes = false);
 
   void onEnter() override;
   void onExit() override;
@@ -109,6 +110,7 @@ class EpubReaderMenuActivity final : public Activity {
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
   uint8_t selectedParagraphNumbering = 0;
+  uint8_t selectedParagraphNumberSize = 1;
   // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
   uint8_t selectedPaperbackBody = 1;
   uint8_t selectedPaperbackStatus = 1;
@@ -116,6 +118,7 @@ class EpubReaderMenuActivity final : public Activity {
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER,
                                                  StrId::STR_PARA_NUM_BOOK};
+  const std::vector<StrId> paragraphNumSizeLabels = {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;

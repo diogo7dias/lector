@@ -12,8 +12,9 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
     const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
     const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
-    const uint8_t paragraphNumbering, const uint8_t paperbackBody, const uint8_t paperbackStatus,
-    const bool hasSleepWallpaper, const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
+    const uint8_t paragraphNumbering, const uint8_t paragraphNumberSize, const uint8_t paperbackBody,
+    const uint8_t paperbackStatus, const bool hasSleepWallpaper, const bool wallpaperFavorited,
+    const bool wallpaperPausable, const bool hasQuotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       tabs(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, hasSleepWallpaper,
                      wallpaperFavorited, wallpaperPausable, hasQuotes)),
@@ -22,6 +23,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       chapterName(chapterName),
       pendingOrientation(currentOrientation),
       selectedParagraphNumbering(paragraphNumbering),
+      selectedParagraphNumberSize(paragraphNumberSize),
       selectedPaperbackBody(paperbackBody),
       selectedPaperbackStatus(paperbackStatus),
       currentPage(currentPage),
@@ -109,6 +111,11 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     // takes one from another book, this takes one from the named sets on the card.
     items.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
     items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
+    // Size sits directly under the mode it belongs to, and only when there is
+    // something to size. Turn numbering on, reopen the menu, and the row appears.
+    if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
+      items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE, StrId::STR_PARAGRAPH_NUMBER_SIZE});
+    }
     items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
     items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
     items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
@@ -183,6 +190,7 @@ void EpubReaderMenuActivity::closeCancelled() {
                            pendingOrientation,
                            selectedPageTurnOption,
                            selectedParagraphNumbering,
+                           selectedParagraphNumberSize,
                            selectedPaperbackBody,
                            selectedPaperbackStatus};
   setResult(std::move(result));
@@ -251,6 +259,13 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
+    if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
+      // Cycle Small / Double in place; applied by the reader on exit, like the row above.
+      selectedParagraphNumberSize = (selectedParagraphNumberSize + 1) % CrossPointSettings::PARAGRAPH_NUMBER_SIZE_COUNT;
+      requestUpdate();
+      return;
+    }
+
     // Paperback Look toggles: flip in place (like the rows above) and keep the menu
     // open so the ON/OFF label updates like a checkbox; the reader applies them on exit.
     if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
@@ -265,7 +280,8 @@ void EpubReaderMenuActivity::loop() {
     }
 
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
-                         selectedParagraphNumbering, selectedPaperbackBody, selectedPaperbackStatus});
+                         selectedParagraphNumbering, selectedParagraphNumberSize, selectedPaperbackBody,
+                         selectedPaperbackStatus});
     finish();
   };
 
@@ -396,6 +412,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
           // Render current paragraph-numbering mode on the right edge.
           return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
+        } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
+          return I18N.get(paragraphNumSizeLabels[selectedParagraphNumberSize % paragraphNumSizeLabels.size()]);
         } else if (value == MenuAction::TOGGLE_PAPERBACK_LOOK) {
           return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {

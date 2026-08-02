@@ -195,6 +195,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     PARAGRAPH_NUMBERING_COUNT
   };
 
+  // How large those paragraph numbers are drawn. The numbers use a bitmap face, which
+  // is only exact on whole multiples of its own cell, so the choice is deliberately two
+  // fixed steps rather than a free size: Small is the native 12px cell (8px digits) and
+  // Double is that same cell at 2x (16px digits). Per-book, like the mode above.
+  enum PARAGRAPH_NUMBER_SIZE { PARA_NUM_SIZE_SMALL = 0, PARA_NUM_SIZE_DOUBLE = 1, PARAGRAPH_NUMBER_SIZE_COUNT };
+
   enum QUICK_RESUME_SLEEP_SCREEN {
     QUICK_RESUME_NEVER = 0,
     QUICK_RESUME_AFTER_TIMEOUT = 1,
@@ -371,6 +377,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // already carrying its own reader_override.bin keeps whatever it was set to in the
   // in-book menu; this only seeds the next book opened fresh.
   uint8_t paragraphNumbering = PARA_NUM_CHAPTER;
+  // Default size for those numbers. Double is the default: at the native cell the digits
+  // are 8px tall, which reads as too small on the device.
+  uint8_t paragraphNumberSize = PARA_NUM_SIZE_DOUBLE;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // TXT reader font, kept apart from the EPUB reader font above. A plain text file

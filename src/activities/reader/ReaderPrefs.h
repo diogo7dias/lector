@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <istream>
@@ -44,25 +45,28 @@ inline constexpr uint8_t EXTRA_PARAGRAPH_SPACING = 1;     // half a line of air 
 inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column width
 inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
 inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
+inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
 }  // namespace reader_defaults
 
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5, v6 and v7 are the exceptions — identical layout, so they are read and upgraded
-  // instead of dropped. Dropping a sidecar silently discards every per-book setting
-  // the user ever chose, which is far worse than carrying an old one forward.
-  static constexpr uint8_t VERSION = 8;  // v8: paragraph spacing % retired, gap back on the toggle
+  // v5 through v8 are the exceptions: they are read and upgraded instead of dropped.
+  // Dropping a sidecar silently discards every per-book setting the user ever chose,
+  // which is far worse than carrying an old one forward. v5-v8 share one layout; v9
+  // appended one trailing byte, so those records are read at READER_PREFS_LEGACY_SIZE.
+  static constexpr uint8_t VERSION = 9;  // v9: paragraph-number size added (first layout change since v5)
 
   // Bring a sidecar written before the current version onto the current reading
-  // defaults. Layout is unchanged from v5 through v8; only these values are re-seeded,
-  // and only for books that predate them. Everything else the user chose is left as it was.
+  // defaults. Only these values are re-seeded, and only for books that predate them.
+  // Everything else the user chose is left as it was.
   void adoptCurrentReadingDefaults() {
     paragraphSpacing = reader_defaults::PARAGRAPH_SPACING_PERCENT;
     extraParagraphSpacing = reader_defaults::EXTRA_PARAGRAPH_SPACING;
     firstLineIndentMode = reader_defaults::FIRST_LINE_INDENT_MODE;
     firstLineIndentPercent = reader_defaults::FIRST_LINE_INDENT_PERCENT;
     paragraphNumbering = reader_defaults::PARAGRAPH_NUMBERING;
+    paragraphNumberSize = reader_defaults::PARAGRAPH_NUMBER_SIZE;
   }
 
   // Font (Family/Size tabs)
@@ -100,11 +104,31 @@ struct ReaderPrefs {
   uint8_t firstLineIndentPercent = 0;
   // SD card font family name (empty = built-in fontFamily). Fixed width keeps the struct POD.
   char sdFontFamilyName[32] = "";
+  // Size of the paragraph numbers: 0 = Small (Spleen's native 12px cell, 8px digits),
+  // 1 = Double (that cell at exactly 2x, 16px digits). Per-book in-menu choice like
+  // paragraphNumbering, seeded from the global default.
+  //
+  // APPENDED LAST ON PURPOSE. Every field above it keeps its offset, so a v5-v8 sidecar
+  // is exactly this struct minus this one trailing byte and can be read straight into
+  // the front of it (see READER_PREFS_LEGACY_SIZE below). Any future field must also go last, for
+  // the same reason.
+  uint8_t paragraphNumberSize = 1;  // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
 
   // Snapshot the current global reader settings. Zero-pads sdFontFamilyName so the
   // trailing bytes are canonical and whole-blob memcmp change-detection is exact.
   static ReaderPrefs fromGlobal();
 };
+
+// On-card size of a v5-v8 blob: this struct up to the field appended in v9. It lives
+// out here because offsetof needs the completed type.
+inline constexpr size_t READER_PREFS_LEGACY_SIZE = offsetof(ReaderPrefs, paragraphNumberSize);
+
+// Every member is a single byte or a char array, so the struct has alignment 1 and no
+// padding anywhere. That is what makes READER_PREFS_LEGACY_SIZE equal the old sizeof
+// exactly, and what makes the whole blob safe to memcmp and to read back on RISC-V.
+static_assert(alignof(ReaderPrefs) == 1, "ReaderPrefs must stay byte-aligned POD");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_LEGACY_SIZE + 1,
+              "paragraphNumberSize must be the last field, with no padding before it");
 
 // ── Mid-edit override decision ────────────────────────────────────────────────
 // While the in-book Reader Settings screen is open, the edited values live on the
@@ -129,10 +153,11 @@ struct ReaderOverrideDecision {
 inline ReaderOverrideDecision decideReaderOverride(const ReaderPrefs& live, const ReaderPrefs& book,
                                                    const bool bookIsCustom) {
   ReaderOverrideDecision decision{ReaderOverrideAction::Keep, live};
-  // paragraphNumbering and the two Paperback flags are per-book in-menu toggles, not
-  // rows of the Reader Settings screen. The overlay does not carry them, so `live`
-  // holds the GLOBAL values for those three; the book's own must survive the edit.
+  // The two paragraph-number fields and the two Paperback flags are per-book in-menu
+  // toggles, not rows of the Reader Settings screen. The overlay does not carry them, so
+  // `live` holds the GLOBAL values for those four; the book's own must survive the edit.
   decision.prefs.paragraphNumbering = book.paragraphNumbering;
+  decision.prefs.paragraphNumberSize = book.paragraphNumberSize;
   decision.prefs.paperbackLookBody = book.paperbackLookBody;
   decision.prefs.paperbackLookStatus = book.paperbackLookStatus;
 
@@ -164,9 +189,14 @@ inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = n
   if (!in.read(reinterpret_cast<char*>(&ver), 1)) return false;
   // Keep this accept-and-fold rule identical to the HalFile overload in
   // ReaderPrefs.cpp — they read the same on-card format.
-  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6 && ver != 7) return false;
+  const bool legacy = (ver >= 5 && ver <= 8);
+  if (ver != ReaderPrefs::VERSION && !legacy) return false;
+  // A v5-v8 record is one byte shorter, so read only what it actually holds and leave
+  // the appended field at its constructed default. Reading sizeof() here would run off
+  // the end of the record and drop every per-book setting the user ever chose.
   ReaderPrefs tmp;
-  if (!in.read(reinterpret_cast<char*>(&tmp), sizeof(ReaderPrefs))) return false;
+  const size_t want = legacy ? READER_PREFS_LEGACY_SIZE : sizeof(ReaderPrefs);
+  if (!in.read(reinterpret_cast<char*>(&tmp), want)) return false;
   if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
   if (ver < ReaderPrefs::VERSION) {
     tmp.adoptCurrentReadingDefaults();

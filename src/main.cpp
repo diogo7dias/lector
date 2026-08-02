@@ -82,6 +82,23 @@ EpdFontFamily vollkorn18FontFamily(&vollkorn18RegularFont, &vollkorn18BoldFont, 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
 
+// Paragraph numbers only. Spleen 6x12 is a bitmap face baked at --dpi 72, so "size 12"
+// means 12 pixels and every glyph lands exactly on its native grid: one-pixel stems, no
+// anti-alias halo, no smear. Cozette (SMALL_FONT_ID) is also a bitmap face but is baked
+// at the historic 150 dpi, i.e. 1.6x off its own 13px grid, which fattens the digits
+// until 8, 9 and 0 close up at margin size. Digits here are 8px tall against Cozette's
+// 13px: smaller AND cleaner. Kept off SMALL_FONT_ID so the status bar is untouched.
+EpdFont paragraphNumFont(&spleen_6x12_regular);
+EpdFontFamily paragraphNumFontFamily(&paragraphNumFont, &paragraphNumFont);
+
+// The Double size: the very same Spleen cell baked at exactly 2x (24px at dpi 72), so
+// each pixel becomes a 2x2 block and the shapes are identical, just larger. Verified
+// glyph-by-glyph against the 1x header. A size between the two is not offered because
+// a bitmap face has nothing to draw there: 1.5 pixels rounds unevenly and the stems
+// come out mismatched, which is the very fault this font was brought in to cure.
+EpdFont paragraphNum2xFont(&spleen_6x12_2x_regular);
+EpdFontFamily paragraphNum2xFontFamily(&paragraphNum2xFont, &paragraphNum2xFont);
+
 // The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
 // so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
 // arrangement: menu weight hierarchy comes from SIZE, not from a second cut. Emphasis in
@@ -281,6 +298,10 @@ void setupDisplayAndFonts(bool seamless = false) {
   // language-select native-name list and the Arabic/Hebrew UI.
   renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
   renderer.insertFont(UBUNTU_12_FONT_ID, ubuntu12FontFamily);
+  // Paragraph numbers, both sizes. Digits only in practice, so neither rebinds per
+  // language; the reader picks between them per book from ReaderPrefs.
+  renderer.insertFont(PARA_NUM_FONT_ID, paragraphNumFontFamily);
+  renderer.insertFont(PARA_NUM_2X_FONT_ID, paragraphNum2xFontFamily);
   // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
   // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);

@@ -39,6 +39,7 @@ constexpr PresetField FIELDS[] = {
     {"textAntiAliasing", &ReaderPrefs::textAntiAliasing},
     {"imageRendering", &ReaderPrefs::imageRendering},
     {"paragraphNumbering", &ReaderPrefs::paragraphNumbering},
+    {"paragraphNumberSize", &ReaderPrefs::paragraphNumberSize},
     {"paperbackLookBody", &ReaderPrefs::paperbackLookBody},
     {"paperbackLookStatus", &ReaderPrefs::paperbackLookStatus},
     {"firstLineIndentMode", &ReaderPrefs::firstLineIndentMode},
