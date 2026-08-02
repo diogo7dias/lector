@@ -315,12 +315,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
                             "extraParagraphSpacing", StrId::STR_CAT_READER)
             .withTextSettings(),
-        // Granular paragraph gap as a percentage of line height (restored from old lector).
-        // Only applied when extraParagraphSpacing is on.
-        SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
-                           {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
-                           StrId::STR_CAT_READER)
-            .withTextSettings(),
+        // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
+        // the Extra Paragraph Spacing toggle above already does. The field and its render
+        // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
+        // 0 and no longer editable, here or in the in-book Layout tab. Restore this entry
+        // to bring the control back.
+        // SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
+        //                    {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
+        //                    StrId::STR_CAT_READER)
+        //     .withTextSettings(),
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),

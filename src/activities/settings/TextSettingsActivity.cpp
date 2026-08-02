@@ -343,7 +343,9 @@ std::vector<TextSettingsActivity::LayoutRow> TextSettingsActivity::visibleLayout
   rows.reserve(static_cast<int>(LayoutRow::Count));
   rows.push_back(LayoutRow::LineSpacing);
   rows.push_back(LayoutRow::ParaSpacing);
-  rows.push_back(LayoutRow::ParaSpacingPct);
+  // Retired in 0.8.2 — the paragraph gap is the ParaSpacing toggle alone. The row's
+  // handlers below are left in place so restoring this one line brings the control back.
+  // rows.push_back(LayoutRow::ParaSpacingPct);
   rows.push_back(LayoutRow::Alignment);
   rows.push_back(LayoutRow::UniformMargins);
   rows.push_back(LayoutRow::ScreenMargin);

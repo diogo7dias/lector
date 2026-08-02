@@ -522,33 +522,34 @@ void ParsedText::ensureRubyCapacity() {
   // and no large contiguous reallocation to avoid). Kept for call-site stability.
 }
 
-// renderer/fontId are unused since the indent became a percentage of the column width
-// rather than a multiple of the space advance; kept in the signature so the call sites
-// do not have to care which mode is configured.
+// A paragraph always starts with a visible indent, whatever the spacing toggle says:
+// the block gap and the indent are two independent cues, and the indent is the one that
+// still reads correctly at the top of a page where the gap above is invisible. Three
+// space advances is the classic typesetter's em-ish indent at any font size.
+static constexpr int MIN_FIRST_LINE_INDENT_SPACES = 3;
+
 int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const int pageWidth, const GfxRenderer& renderer,
                                        const int fontId) const {
-  (void)renderer;
-  (void)fontId;
   if (!isFirstLine || !isNaturalAlign) {
     return 0;
   }
-  // Custom % mode: a user indent as a percentage of the column width (0% flush,
-  // 100% = the column's horizontal middle), overriding any CSS indent.
+  const int floorIndent = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * MIN_FIRST_LINE_INDENT_SPACES;
+  // Custom % mode: a user indent as a percentage of the column width (100% = the
+  // column's horizontal middle), overriding any CSS indent. It can only add to the
+  // floor, never go below it.
   if (firstLineIndentMode == 1) {
-    if (firstLineIndentPercent == 0) {
-      return 0;
-    }
-    return pageWidth * firstLineIndentPercent / 200;
+    const int requested = pageWidth * firstLineIndentPercent / 200;
+    return requested > floorIndent ? requested : floorIndent;
   }
-  // Book mode: respect the publisher/CSS indent. A hanging (negative) indent is kept;
-  // a positive indent is dropped when paragraph spacing already separates paragraphs.
-  if (blockStyle.textIndentDefined) {
-    if (blockStyle.textIndent < 0 || !extraParagraphSpacing) {
-      return blockStyle.textIndent;
-    }
-    return 0;
+  // Book mode: respect the publisher/CSS indent. A hanging (negative) indent is kept
+  // as the publisher wrote it; a positive one is raised to the floor if it is smaller.
+  if (blockStyle.textIndentDefined && blockStyle.textIndent < 0) {
+    return blockStyle.textIndent;
   }
-  return 0;
+  if (blockStyle.textIndentDefined && blockStyle.textIndent > floorIndent) {
+    return blockStyle.textIndent;
+  }
+  return floorIndent;
 }
 // Consumes data to minimize memory usage
 void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,

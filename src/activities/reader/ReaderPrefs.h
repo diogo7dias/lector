@@ -36,7 +36,11 @@ inline uint8_t foldLegacyReaderFontSize(const uint8_t stored) {
 // because both the global settings and the per-book sidecar upgrade need them, and this
 // header is the one of the two that the host tests can compile on its own.
 namespace reader_defaults {
-inline constexpr uint8_t PARAGRAPH_SPACING_PERCENT = 50;  // half a line of air between paragraphs
+// The separate "Paragraph Spacing %" control was removed in 0.8.2: the half-line gap that
+// Extra Paragraph Spacing already adds, plus the always-on first-line indent, is the whole
+// paragraph break. The field and its cache key stay so old sidecars still deserialize.
+inline constexpr uint8_t PARAGRAPH_SPACING_PERCENT = 0;
+inline constexpr uint8_t EXTRA_PARAGRAPH_SPACING = 1;     // half a line of air between paragraphs, on
 inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column width
 inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
 inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
@@ -45,16 +49,17 @@ inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings:
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 and v6 are the exceptions — identical layout, so they are read and upgraded
+  // v5, v6 and v7 are the exceptions — identical layout, so they are read and upgraded
   // instead of dropped. Dropping a sidecar silently discards every per-book setting
   // the user ever chose, which is far worse than carrying an old one forward.
-  static constexpr uint8_t VERSION = 7;  // v7: reading defaults (indent, para spacing, numbering) changed
+  static constexpr uint8_t VERSION = 8;  // v8: paragraph spacing % retired, gap back on the toggle
 
-  // Bring a sidecar written before v7 onto the new reading defaults. Layout is
-  // unchanged from v5 through v7; only these values are re-seeded, and only for books
-  // that predate them. Everything else the user chose is left exactly as it was.
-  void adoptV7ReadingDefaults() {
+  // Bring a sidecar written before the current version onto the current reading
+  // defaults. Layout is unchanged from v5 through v8; only these values are re-seeded,
+  // and only for books that predate them. Everything else the user chose is left as it was.
+  void adoptCurrentReadingDefaults() {
     paragraphSpacing = reader_defaults::PARAGRAPH_SPACING_PERCENT;
+    extraParagraphSpacing = reader_defaults::EXTRA_PARAGRAPH_SPACING;
     firstLineIndentMode = reader_defaults::FIRST_LINE_INDENT_MODE;
     firstLineIndentPercent = reader_defaults::FIRST_LINE_INDENT_PERCENT;
     paragraphNumbering = reader_defaults::PARAGRAPH_NUMBERING;
@@ -159,12 +164,12 @@ inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = n
   if (!in.read(reinterpret_cast<char*>(&ver), 1)) return false;
   // Keep this accept-and-fold rule identical to the HalFile overload in
   // ReaderPrefs.cpp — they read the same on-card format.
-  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6) return false;
+  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6 && ver != 7) return false;
   ReaderPrefs tmp;
   if (!in.read(reinterpret_cast<char*>(&tmp), sizeof(ReaderPrefs))) return false;
   if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
   if (ver < ReaderPrefs::VERSION) {
-    tmp.adoptV7ReadingDefaults();
+    tmp.adoptCurrentReadingDefaults();
     if (migrated) *migrated = true;
   }
   p = tmp;

@@ -95,8 +95,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
-  // Marks the one-time 0.8.1 reading-defaults migration in fromJson as done.
-  doc["readingDefaults0810"] = true;
+  // Marks the one-time 0.8.2 reading-defaults migration in fromJson as done.
+  doc["readingDefaults0820"] = true;
   // TXT reader font — set from the in-book TXT popup, not in SettingsList.
   doc["txtFontSize"] = txtFontPointSize;
   if (txtSdFontFamilyName[0] != '\0') {
@@ -218,10 +218,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // and paragraph numbers per chapter. A settings file written before that carries the
   // old zeros, so it would keep the old look forever and read as a broken setting. The
   // marker makes this run exactly once; changing any of the three afterwards sticks.
-  if (!(doc["readingDefaults0810"] | false)) {
-    // Same four values the per-book sidecar upgrade applies, from the same constants,
-    // so global and per-book can never drift apart.
+  // 0.8.2 re-seeds the same block: the separate paragraph-spacing percentage is gone, so
+  // the gap is the Extra Paragraph Spacing toggle alone and it is forced back on. A file
+  // written by 0.8.1 carries the old 50% and must not keep a double gap.
+  if (!(doc["readingDefaults0820"] | false)) {
+    // Same values the per-book sidecar upgrade applies, from the same constants, so
+    // global and per-book can never drift apart.
     paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
+    extraParagraphSpacing = reader_defaults::EXTRA_PARAGRAPH_SPACING;
     firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
     firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
     paragraphNumbering = PARA_NUM_CHAPTER;

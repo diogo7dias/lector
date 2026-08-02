@@ -2016,7 +2016,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // anchor and drops the section; the rebuild below lands on the same paragraph.
       pendingPrefsMigration_ = false;
       ReaderPrefs upgraded = prefs_;
-      upgraded.adoptV7ReadingDefaults();
+      upgraded.adoptCurrentReadingDefaults();
       if (std::memcmp(&upgraded, &prefs_, sizeof(ReaderPrefs)) != 0) {
         prefs_ = upgraded;
         writeReaderOverride(prefs_);

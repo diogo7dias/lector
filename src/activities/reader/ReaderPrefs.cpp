@@ -53,14 +53,14 @@ bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated) {
   // v5, v6 and v7 have identical layout — only meanings and defaults changed — so an
   // old sidecar is read and upgraded rather than discarded, which would silently drop
   // every per-book override the first time this build runs.
-  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6) return false;
+  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6 && ver != 7) return false;
   ReaderPrefs tmp;
   if (in.read(reinterpret_cast<uint8_t*>(&tmp), sizeof(ReaderPrefs)) != static_cast<int>(sizeof(ReaderPrefs))) {
     return false;
   }
   if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
   if (ver < ReaderPrefs::VERSION) {
-    tmp.adoptV7ReadingDefaults();
+    tmp.adoptCurrentReadingDefaults();
     if (migrated) *migrated = true;
   }
   p = tmp;
