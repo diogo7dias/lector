@@ -43,6 +43,17 @@ class EpubReaderActivity final : public Activity {
   // Go to Paragraph: after a cross-chapter jump, the target local paragraph ordinal to
   // scan for once the new section has loaded (consumed in the render path).
   std::optional<uint16_t> pendingParagraphScan_;
+  // Paragraph ordinal the reader was showing when a layout-changing setting was
+  // applied. A page number means nothing across a re-layout (a new font or indent
+  // repaginates the chapter), but a paragraph is a property of the book and does not
+  // move, so the position is carried across as an ordinal and resolved back to
+  // whatever page now holds it. This is the same ordinal the in-book numbering draws
+  // and Go To Paragraph accepts.
+  std::optional<uint16_t> pendingOrdinalAnchor_;
+  // True when this book's sidecar was written before the 0.8.1 reading defaults. The
+  // upgrade is deferred until the chapter has been laid out under the old settings, so
+  // the reading position can be carried across as a paragraph rather than a page.
+  bool pendingPrefsMigration_ = false;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;
@@ -215,6 +226,16 @@ class EpubReaderActivity final : public Activity {
   // First page of a loaded section whose lines reach the given per-chapter ordinal
   // (returns the last page when the ordinal is past the chapter's paragraphs).
   int findPageForOrdinal(Section& section, uint16_t ordinal) const;
+  // First paragraph ordinal appearing on `page`, or nullopt when the page holds no
+  // numbered line (an image-only page, or a page not built yet).
+  std::optional<uint16_t> firstOrdinalOnPage(Section& section, int page) const;
+  // Remember where the reader is, as a paragraph ordinal, before dropping the section
+  // for a re-layout. No-op when the ordinal cannot be read.
+  void captureOrdinalAnchor();
+  // Anchor the position and drop the section so the next render lays it out again.
+  // The caller MUST already hold the render lock; reloadForReaderPrefsChange() is the
+  // entry point for callers that do not.
+  void dropSectionForRelayout();
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();

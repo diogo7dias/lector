@@ -32,12 +32,33 @@ inline uint8_t foldLegacyReaderFontSize(const uint8_t stored) {
   return stored <= 3 ? static_cast<uint8_t>(12 + stored * 2) : stored;
 }
 
+// The reading defaults introduced in 0.8.1, kept here rather than in CrossPointSettings
+// because both the global settings and the per-book sidecar upgrade need them, and this
+// header is the one of the two that the host tests can compile on its own.
+namespace reader_defaults {
+inline constexpr uint8_t PARAGRAPH_SPACING_PERCENT = 50;  // half a line of air between paragraphs
+inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column width
+inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
+inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
+}  // namespace reader_defaults
+
 struct ReaderPrefs {
   // Bump whenever the field set changes: readReaderPrefs rejects a mismatched
   // version, so an old sidecar is ignored and the book falls back to global.
-  // v5 is the one exception — same layout, only fontPointSize's meaning changed,
-  // so it is read and folded instead of dropped.
-  static constexpr uint8_t VERSION = 6;  // v6: fontPointSize replaces the fontSize slot (upstream #2720)
+  // v5 and v6 are the exceptions — identical layout, so they are read and upgraded
+  // instead of dropped. Dropping a sidecar silently discards every per-book setting
+  // the user ever chose, which is far worse than carrying an old one forward.
+  static constexpr uint8_t VERSION = 7;  // v7: reading defaults (indent, para spacing, numbering) changed
+
+  // Bring a sidecar written before v7 onto the new reading defaults. Layout is
+  // unchanged from v5 through v7; only these values are re-seeded, and only for books
+  // that predate them. Everything else the user chose is left exactly as it was.
+  void adoptV7ReadingDefaults() {
+    paragraphSpacing = reader_defaults::PARAGRAPH_SPACING_PERCENT;
+    firstLineIndentMode = reader_defaults::FIRST_LINE_INDENT_MODE;
+    firstLineIndentPercent = reader_defaults::FIRST_LINE_INDENT_PERCENT;
+    paragraphNumbering = reader_defaults::PARAGRAPH_NUMBERING;
+  }
 
   // Font (Family/Size tabs)
   uint8_t fontFamily = 0;      // CrossPointSettings::VOLLKORN
@@ -130,15 +151,22 @@ inline void writeReaderPrefs(std::ostream& out, const ReaderPrefs& p) {
   out.write(reinterpret_cast<const char*>(&p), sizeof(ReaderPrefs));
 }
 
-inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p) {
+// `migrated`, when given, reports whether the sidecar was upgraded on the way in, so
+// the caller can rewrite it and re-anchor the reading position against the new layout.
+inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = nullptr) {
+  if (migrated) *migrated = false;
   uint8_t ver = 0;
   if (!in.read(reinterpret_cast<char*>(&ver), 1)) return false;
   // Keep this accept-and-fold rule identical to the HalFile overload in
   // ReaderPrefs.cpp — they read the same on-card format.
-  if (ver != ReaderPrefs::VERSION && ver != 5) return false;
+  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6) return false;
   ReaderPrefs tmp;
   if (!in.read(reinterpret_cast<char*>(&tmp), sizeof(ReaderPrefs))) return false;
   if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
+  if (ver < ReaderPrefs::VERSION) {
+    tmp.adoptV7ReadingDefaults();
+    if (migrated) *migrated = true;
+  }
   p = tmp;
   return true;
 }
@@ -147,4 +175,4 @@ inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p) {
 // here so this header never pulls HalStorage/Arduino into the host test build.
 class HalFile;
 bool writeReaderPrefs(HalFile& out, const ReaderPrefs& p);
-bool readReaderPrefs(HalFile& in, ReaderPrefs& p);
+bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated = nullptr);

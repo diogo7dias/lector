@@ -249,7 +249,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // paragraphs; 0 = off). Restored granular control (old lector). Feeds the render
   // spec, so a change rebuilds the section cache.
   static constexpr uint8_t MAX_PARAGRAPH_SPACING = 150;
-  uint8_t paragraphSpacing = 0;
+  // Half a line of air between paragraphs by default: with the first-line indent below
+  // it, a paragraph break is visible at a glance rather than inferred from the ragged
+  // right edge of the line above.
+  static constexpr uint8_t DEFAULT_PARAGRAPH_SPACING = reader_defaults::PARAGRAPH_SPACING_PERCENT;
+  uint8_t paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
   // Off by default, as in the old fork. The grayscale text pass is imperceptible on
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.
@@ -317,8 +321,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // render spec, so a change rebuilds the section cache like any layout setting.
   enum FIRST_LINE_INDENT_MODE : uint8_t { FIRST_LINE_INDENT_BOOK = 0, FIRST_LINE_INDENT_PERCENT = 1 };
   static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
-  uint8_t firstLineIndentMode = FIRST_LINE_INDENT_BOOK;
-  uint8_t firstLineIndentPercent = 0;
+  // Default to a real indent rather than trusting the publisher's CSS, which on many
+  // EPUBs is absent entirely.
+  static constexpr uint8_t DEFAULT_FIRST_LINE_INDENT_PERCENT = reader_defaults::FIRST_LINE_INDENT_PERCENT;
+  uint8_t firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
+  uint8_t firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
   // OPDS download destination folder ("" = SD root). Global; edited from the
   // OPDS server list. Persisted via a category-less SettingInfo::String in
   // SettingsList.h, so it stays out of the on-device Settings screen.
@@ -363,7 +370,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Default paragraph numbering for books that have no per-book override yet. A book
   // already carrying its own reader_override.bin keeps whatever it was set to in the
   // in-book menu; this only seeds the next book opened fresh.
-  uint8_t paragraphNumbering = PARA_NUM_OFF;
+  uint8_t paragraphNumbering = PARA_NUM_CHAPTER;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // TXT reader font, kept apart from the EPUB reader font above. A plain text file

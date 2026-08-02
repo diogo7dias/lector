@@ -1306,6 +1306,9 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
       cachedSpineIndex = currentSpineIndex;
       cachedChapterTotalPageCount = section->pageCount;
       nextPageNumber = section->currentPage;
+      // Rotating re-flows the chapter for a different viewport, so the page number is
+      // as unreliable here as it is after a font change; anchor on the paragraph too.
+      captureOrdinalAnchor();
     }
 
     // Persist the selection so the reader keeps the new orientation on next launch.
@@ -1327,10 +1330,17 @@ void EpubReaderActivity::loadReaderPrefs() {
   HalFile f;
   if (Storage.openFileForRead("ERS", readerOverridePath(), f)) {
     ReaderPrefs loaded;
-    if (readReaderPrefs(f, loaded)) {
+    bool migrated = false;
+    if (readReaderPrefs(f, loaded, &migrated)) {
       prefs_ = loaded;
       prefsCustom_ = true;
-      LOG_DBG("ERS", "Loaded per-book reader override");
+      // An upgraded sidecar is not applied here. The saved page number was produced by
+      // the OLD layout, so the chapter is laid out that way first, the reading position
+      // is read off it as a paragraph, and only then do the new defaults go in — see
+      // applyPendingPrefsMigration(). Applying them now would land the reader on a page
+      // number that no longer means anything.
+      pendingPrefsMigration_ = migrated;
+      LOG_DBG("ERS", "Loaded per-book reader override%s", migrated ? " (defaults upgrade pending)" : "");
       return;
     }
     LOG_ERR("ERS", "reader_override.bin present but unreadable; using global settings");
@@ -1356,10 +1366,20 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
   // so the next render rebuilds it with the new ReaderPrefs (CrossPoint's section
   // cache re-keys on the changed spec automatically — no cache machinery of ours).
   RenderLock lock(*this);
+  dropSectionForRelayout();
+}
+
+void EpubReaderActivity::dropSectionForRelayout() {
+  // Caller must already hold the render lock. RenderLock wraps xSemaphoreCreateMutex,
+  // which is NOT recursive, so the render path takes this entry point instead of
+  // reloadForReaderPrefsChange() — taking the mutex twice on one task blocks forever.
   if (section) {
     cachedSpineIndex = currentSpineIndex;
     cachedChapterTotalPageCount = section->pageCount;
     nextPageNumber = section->currentPage;
+    // nextPageNumber is kept only as the fallback: the new layout may have a different
+    // page count entirely, so the paragraph below is what actually restores the place.
+    captureOrdinalAnchor();
   }
   section.reset();
 }
@@ -1452,6 +1472,31 @@ int EpubReaderActivity::findPageForOrdinal(Section& sec, const uint16_t ordinal)
     }
   }
   return pages > 0 ? pages - 1 : 0;  // past the last paragraph -> last page
+}
+
+std::optional<uint16_t> EpubReaderActivity::firstOrdinalOnPage(Section& sec, const int page) const {
+  if (page < 0 || page >= sec.pageCount) return std::nullopt;
+  const auto loaded = sec.loadPage(page);
+  if (!loaded) return std::nullopt;
+  for (const auto& el : loaded->elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const uint16_t ordinal = static_cast<const PageLine&>(*el).getParagraphOrdinal();
+    // Ordinal 0 means the line carries no paragraph of its own (a heading, an image
+    // caption); keep looking rather than anchoring on nothing.
+    if (ordinal > 0) return ordinal;
+  }
+  return std::nullopt;
+}
+
+void EpubReaderActivity::captureOrdinalAnchor() {
+  if (!section) return;
+  // The anchor is the first paragraph that *starts* on this page. A paragraph running
+  // across the page boundary from above resolves to its own first page, so the reader
+  // can land slightly earlier than it was, never later. Earlier is the safe way to be
+  // wrong: re-reading a line costs nothing, skipping one is a spoiler.
+  if (const auto ordinal = firstOrdinalOnPage(*section, section->currentPage)) {
+    pendingOrdinalAnchor_ = *ordinal;
+  }
 }
 
 void EpubReaderActivity::jumpToParagraph(const int target) {
@@ -1963,6 +2008,34 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       if (section->currentPage < 0) {
         section->currentPage = 0;
       }
+    }
+
+    if (pendingPrefsMigration_ && section->pageCount > 0) {
+      // The chapter is now laid out under the book's old settings, so the paragraph the
+      // reader is on can be read off it. reloadForReaderPrefsChange() captures that
+      // anchor and drops the section; the rebuild below lands on the same paragraph.
+      pendingPrefsMigration_ = false;
+      ReaderPrefs upgraded = prefs_;
+      upgraded.adoptV7ReadingDefaults();
+      if (std::memcmp(&upgraded, &prefs_, sizeof(ReaderPrefs)) != 0) {
+        prefs_ = upgraded;
+        writeReaderOverride(prefs_);
+        // Already inside render(), which holds the render lock — see dropSectionForRelayout.
+        dropSectionForRelayout();
+        requestUpdate();
+        return;
+      }
+      // Already matching the new defaults: just re-stamp the sidecar at the new version
+      // so this does not run again on every open.
+      writeReaderOverride(prefs_);
+    }
+
+    if (pendingOrdinalAnchor_.has_value() && section->pageCount > 0) {
+      // The chapter has just been laid out again under different settings. Put the
+      // reader back on the paragraph it was reading, wherever that landed.
+      section->currentPage = findPageForOrdinal(*section, *pendingOrdinalAnchor_);
+      nextPageNumber = section->currentPage;
+      pendingOrdinalAnchor_.reset();
     }
 
     if (!pendingAnchor.empty()) {
