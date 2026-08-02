@@ -42,6 +42,7 @@ class EpubReaderMenuActivity final : public Activity {
     WALLPAPER_HOLD,            // stop picking a new wallpaper each sleep; keep this one
     WALLPAPER_DELETE,          // delete that wallpaper file from the card, behind a confirmation
     REMOVE_FROM_RECENTS,       // drop this book from the home list and put its file back at the card root
+    DELETE_BOOK,               // erase this book's file and its cache from the card, behind a confirmation
     VIEW_QUOTES                // browse (and delete) the quotes saved in <book>_QUOTES.txt
   };
 

@@ -95,6 +95,11 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  // TXT reader font — set from the in-book TXT popup, not in SettingsList.
+  doc["txtFontSize"] = txtFontPointSize;
+  if (txtSdFontFamilyName[0] != '\0') {
+    doc["txtSdFontFamilyName"] = txtSdFontFamilyName;
+  }
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, save manually
   if (dictionaryName[0] != '\0') {
     doc["dictionaryName"] = dictionaryName;
@@ -207,6 +212,11 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   } else if (storedFontFamily >= BUILTIN_FONT_COUNT) {
     needsResave = true;
   }
+  // TXT reader font — absent on any settings file written before the TXT popup
+  // existed, so an upgrade lands on the smallest size, which is the intended default.
+  txtFontPointSize = doc["txtFontSize"] | TXT_DEFAULT_FONT_POINT_SIZE;
+  copyToField(txtSdFontFamilyName, doc["txtSdFontFamilyName"] | "", sizeof(txtSdFontFamilyName));
+
   // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
   copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
 
@@ -320,6 +330,10 @@ void CrossPointSettings::clearSdFontFamily() {
 
 int CrossPointSettings::getReaderFontId() const {
   return resolveReaderFontId(fontFamily, fontPointSize, sdFontFamilyName);
+}
+
+int CrossPointSettings::getTxtReaderFontId() const {
+  return resolveReaderFontId(fontFamily, txtFontPointSize, txtSdFontFamilyName);
 }
 
 int CrossPointSettings::getReaderFontId(const ReaderPrefs& prefs) const {

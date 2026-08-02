@@ -7,13 +7,14 @@
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/SdStatsFiles.h"
 
 class TxtReaderActivity final : public Activity {
-  // Reading statistics. This reader has no menu, so it only feeds the tracker;
-  // the Reading Stats screen is reached from the EPUB reader. Time and pages read
-  // here still land in the all-books totals.
+  // Reading statistics. This reader has only the small Confirm popup below, not the
+  // EPUB reader's tabbed menu, so the Reading Stats screen is still reached from the
+  // EPUB reader. Time and pages read here still land in the all-books totals.
   reading_stats::SdStatsFiles statsFiles;
   reading_stats::ReaderStatsSession statsSession{statsFiles};
   bool statsTrackingActive = false;
@@ -42,6 +43,22 @@ class TxtReaderActivity final : public Activity {
   int cachedOrientedMarginRight = 0;
   int cachedOrientedMarginBottom = 0;
   int cachedOrientedMarginLeft = 0;
+
+  // Confirm inside a TXT book opens this small popup instead of a full menu: a plain
+  // text file has only a handful of things worth changing, so three rows cover it.
+  OptionPopup settingsPopup;
+  // Set when the popup's Delete row has been confirmed; the file and its cache are
+  // removed in onExit, after the Txt handle is released, the same ordering the EPUB
+  // reader uses for its move-on-exit filing.
+  bool pendingDeleteBook = false;
+
+  void openSettingsPopup();
+  void openFontPopup();
+  void openSizePopup();
+  void askDeleteBook();
+  // Re-layout after a font or size change: rebuilds the page index against the new
+  // font and lands on the page holding the byte the reader was showing before.
+  void relayoutForFontChange();
 
   void renderPage();
   void renderStatusBar() const;

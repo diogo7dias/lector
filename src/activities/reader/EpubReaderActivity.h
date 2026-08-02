@@ -91,6 +91,9 @@ class EpubReaderActivity final : public Activity {
   bool pendingReadFolderMove = false;
   // Set by the reader menu's "Remove from Recents" row; acted on in onExit.
   bool pendingRemoveFromRecents = false;
+  // Set once the Delete Book confirmation is accepted; the file and its cache are
+  // erased in onExit, after the Epub (and its open handles) are released.
+  bool pendingDeleteBook = false;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
 

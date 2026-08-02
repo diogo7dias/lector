@@ -12,11 +12,15 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ProgressFile.h"
+#include "ReaderFontSizes.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
+#include "SdCardFontSystem.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
+#include "util/BookCacheUtils.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -33,6 +37,11 @@ void TxtReaderActivity::onEnter() {
   }
 
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+
+  // Only one SD font size is resident at a time, and it is the EPUB reader's unless
+  // this is called; without it a TXT-only SD family silently lays out in the built-in
+  // font. A family that has left the card falls back to built-in and persists nothing.
+  sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
 
   txt->setupCacheDir();
 
@@ -72,7 +81,7 @@ void TxtReaderActivity::onExit() {
   // Persist reading progress % to the recents store so the home in-progress list shows a
   // [NN%] badge for TXT books (EPUB writes this on exit too; comics/XTC intentionally do not).
   // setProgress skips the SD write when unchanged, so this is cheap on every exit.
-  if (txt && totalPages > 0) {
+  if (txt && totalPages > 0 && !pendingDeleteBook) {
     int pct = static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f);
     if (pct > 100) pct = 100;
     RECENT_BOOKS.setProgress(txt->getPath(), pct);
@@ -81,14 +90,45 @@ void TxtReaderActivity::onExit() {
   pageOffsets.clear();
   currentPageLines.clear();
   APP_STATE.readerActivityLoadCount = 0;
-  APP_STATE.saveToFile();
+
+  // Deleting the book the reader is holding happens here, after the Txt (and any open
+  // handle on the file) is released — removing a file with a handle still open is what
+  // the EPUB reader's move-on-exit filing avoids in the same way.
+  const std::string deletePath = pendingDeleteBook && txt ? txt->getPath() : std::string();
   txt.reset();
+  if (!deletePath.empty()) {
+    if (Storage.remove(deletePath.c_str())) {
+      // The cache directory is keyed on the path, so leaving it behind would strand
+      // an index and a progress file that nothing will ever open again.
+      clearBookCache(deletePath);
+      RECENT_BOOKS.removeByPath(deletePath);
+      // Without this, Back on the home screen would try to reopen the deleted file.
+      if (APP_STATE.openEpubPath == deletePath) {
+        APP_STATE.openEpubPath.clear();
+      }
+    } else {
+      LOG_ERR("TRS", "Failed to delete book: %s", deletePath.c_str());
+    }
+  }
+
+  APP_STATE.saveToFile();
 }
 
 void TxtReaderActivity::loop() {
   // See ReaderUtils::ButtonPressLatch: swallow a Back release whose press belonged to a
   // child screen that closed on press, instead of reading it as "leave the book".
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
+
+  // The popup owns every button while it is up, including Back (which closes it), so
+  // it is handled before the reader's own Back and page-turn handling.
+  if (settingsPopup.handleInput(mappedInput, [this]() { requestUpdate(); })) {
+    return;
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    openSettingsPopup();
+    return;
+  }
 
   if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, txt ? txt->getPath().c_str() : "",
                                         {this, [](void* ctx) { static_cast<TxtReaderActivity*>(ctx)->onGoHome(); }},
@@ -129,7 +169,8 @@ void TxtReaderActivity::initializeReader() {
   }
 
   // Store current settings for cache validation
-  cachedFontId = SETTINGS.getReaderFontId();
+  // TXT has its own font selection, independent of the EPUB reader's.
+  cachedFontId = SETTINGS.getTxtReaderFontId();
   cachedScreenMargin = SETTINGS.screenMargin;
   cachedParagraphAlignment = SETTINGS.paragraphAlignment;
 
@@ -398,6 +439,10 @@ void TxtReaderActivity::render(RenderLock&&) {
   renderer.clearScreen();
   renderPage();
 
+  // The popup paints over the page that renderPage just put on the panel. That costs
+  // one extra panel update, but only while the popup is actually open.
+  settingsPopup.processRender(renderer, mappedInput);
+
   // The read timer starts when the page is actually on the panel, not at the press.
   if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   // Home's resettable "pages read" tally, counted at the same moment the reading
@@ -407,6 +452,123 @@ void TxtReaderActivity::render(RenderLock&&) {
 
   // Save progress
   saveProgress();
+}
+
+void TxtReaderActivity::openSettingsPopup() {
+  // Rows are fixed, so the indices below are stable and can be compared directly.
+  const std::vector<std::string> rows = {tr(STR_FONT), tr(STR_SIZE), tr(STR_DELETE_BOOK)};
+  settingsPopup.show(StrId::STR_BOOK_MENU, rows, 0, [this](const int index) {
+    switch (index) {
+      case 0:
+        openFontPopup();
+        break;
+      case 1:
+        openSizePopup();
+        break;
+      default:
+        askDeleteBook();
+        break;
+    }
+  });
+  requestUpdate();
+}
+
+void TxtReaderActivity::openFontPopup() {
+  // Entry 0 is the built-in family; the rest are whatever is installed on the card.
+  const auto& families = sdFontSystem.registry().getFamilies();
+  std::vector<std::string> options;
+  options.reserve(families.size() + 1);
+  options.push_back(tr(STR_BUILT_IN_FONT));
+  for (const auto& family : families) {
+    options.push_back(family.name);
+  }
+
+  int current = 0;
+  if (SETTINGS.txtSdFontFamilyName[0] != '\0') {
+    const int idx = sdFontSystem.registry().getFamilyIndex(SETTINGS.txtSdFontFamilyName);
+    if (idx >= 0) current = idx + 1;
+  }
+
+  settingsPopup.show(StrId::STR_FONT, options, current, [this, options](const int index) {
+    if (index == 0) {
+      SETTINGS.txtSdFontFamilyName[0] = '\0';
+    } else {
+      strncpy(SETTINGS.txtSdFontFamilyName, options[index].c_str(), sizeof(SETTINGS.txtSdFontFamilyName) - 1);
+      SETTINGS.txtSdFontFamilyName[sizeof(SETTINGS.txtSdFontFamilyName) - 1] = '\0';
+    }
+    // A family ships only the sizes it ships, so the point size is snapped into the
+    // new family's set before anything tries to resolve a font id from the pair.
+    const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.txtSdFontFamilyName);
+    SETTINGS.txtFontPointSize = snapToNearestPointSize(sizes, SETTINGS.txtFontPointSize);
+    SETTINGS.saveToFile();
+    sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
+    relayoutForFontChange();
+  });
+  requestUpdate();
+}
+
+void TxtReaderActivity::openSizePopup() {
+  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), SETTINGS.txtSdFontFamilyName);
+  std::vector<std::string> options;
+  options.reserve(sizes.size());
+  int current = 0;
+  for (size_t i = 0; i < sizes.size(); i++) {
+    options.push_back(std::to_string(sizes[i]));
+    if (sizes[i] == SETTINGS.txtFontPointSize) current = static_cast<int>(i);
+  }
+
+  settingsPopup.show(StrId::STR_SIZE, options, current, [this, sizes](const int index) {
+    if (index < 0 || index >= static_cast<int>(sizes.size())) return;
+    if (sizes[index] == SETTINGS.txtFontPointSize) {
+      requestUpdate();
+      return;
+    }
+    SETTINGS.txtFontPointSize = sizes[index];
+    SETTINGS.saveToFile();
+    sdFontSystem.ensureLoadedFor(renderer, SETTINGS.txtSdFontFamilyName, SETTINGS.txtFontPointSize);
+    relayoutForFontChange();
+  });
+  requestUpdate();
+}
+
+void TxtReaderActivity::relayoutForFontChange() {
+  if (!txt) return;
+  // Page numbers mean nothing across a font change, but byte offsets do: remember the
+  // byte the reader is showing, then land on whichever new page contains it.
+  const size_t anchorOffset = pageOffsets.empty() ? 0 : pageOffsets[currentPage];
+
+  initialized = false;
+  pageOffsets.clear();
+  currentPageLines.clear();
+  initializeReader();
+
+  // loadProgress() inside initializeReader restores the page number saved for the old
+  // font, so the anchor is applied after it, not before.
+  int landing = 0;
+  for (size_t i = 0; i < pageOffsets.size(); i++) {
+    if (pageOffsets[i] > anchorOffset) break;
+    landing = static_cast<int>(i);
+  }
+  currentPage = landing;
+  requestUpdate();
+}
+
+void TxtReaderActivity::askDeleteBook() {
+  if (!txt) return;
+  const std::string path = txt->getPath();
+  const std::string name = path.substr(path.rfind('/') + 1);
+  // Deleting a book file is not undoable, so it asks first, the same as deleting a
+  // sleep wallpaper does.
+  startActivityForResult(
+      std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE_BOOK) + std::string("?"), name),
+      [this](const ActivityResult& res) {
+        if (res.isCancelled) {
+          requestUpdate();
+          return;
+        }
+        pendingDeleteBook = true;
+        onGoHome();
+      });
 }
 
 void TxtReaderActivity::renderPage() {
