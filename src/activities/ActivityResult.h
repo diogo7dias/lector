@@ -23,6 +23,8 @@ struct MenuResult {
   uint8_t orientation = 0;
   uint8_t pageTurnOption = 0;
   uint8_t paragraphNumbering = 0;
+  // Per-book paragraph-number size (0 = Small, 1 = Double), cycled in the menu.
+  uint8_t paragraphNumberSize = 1;
   // Per-book Paperback Look, toggled live in the menu and applied by the reader on close.
   uint8_t paperbackBody = 1;
   uint8_t paperbackStatus = 1;

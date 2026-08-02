@@ -15,9 +15,13 @@
 #define UBUNTU_10_FONT_ID (-350896663)
 #define UBUNTU_12_FONT_ID (-884914451)
 #define SMALL_FONT_ID (674098198)
-// Paragraph numbers in the reader margin. Its own id, not SMALL_FONT_ID, so the
+// Paragraph numbers in the reader margin. Their own ids, not SMALL_FONT_ID, so the
 // status bar keeps the Cozette look while the numbers use the Spleen bitmap face.
+// Two sizes, both baked on Spleen's own 12px grid: Small is the native cell, Double
+// is the same cell at exactly 2x, so it is a pixel-for-pixel doubling with no
+// resampling. Nothing in between is offered because nothing in between is exact.
 #define PARA_NUM_FONT_ID (-558301807)
+#define PARA_NUM_2X_FONT_ID (-501125356)
 
 // Font ID 0 is reserved as the "not found" sentinel.
 // Guard against any hash accidentally producing 0.
@@ -31,4 +35,7 @@ static_assert(UBUNTU_10_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(UBUNTU_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(PARA_NUM_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(PARA_NUM_2X_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(PARA_NUM_FONT_ID != SMALL_FONT_ID, "Font ID collision");
+static_assert(PARA_NUM_2X_FONT_ID != SMALL_FONT_ID, "Font ID collision");
+static_assert(PARA_NUM_2X_FONT_ID != PARA_NUM_FONT_ID, "Font ID collision");

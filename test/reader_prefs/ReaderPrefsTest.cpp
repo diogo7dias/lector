@@ -36,6 +36,7 @@ ReaderPrefs makeSample() {
   p.paperbackLookStatus = 1;
   p.firstLineIndentMode = 1;  // Custom %
   p.firstLineIndentPercent = 40;
+  p.paragraphNumberSize = 0;  // Small
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, "Bookerly", sizeof(p.sdFontFamilyName) - 1);
   return p;
@@ -64,6 +65,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.paperbackLookStatus, b.paperbackLookStatus);
   EXPECT_EQ(a.firstLineIndentMode, b.firstLineIndentMode);
   EXPECT_EQ(a.firstLineIndentPercent, b.firstLineIndentPercent);
+  EXPECT_EQ(a.paragraphNumberSize, b.paragraphNumberSize);
   EXPECT_STREQ(a.sdFontFamilyName, b.sdFontFamilyName);
   // POD change-detection is a whole-blob memcmp, so the bytes must match exactly.
   EXPECT_EQ(0, std::memcmp(&a, &b, sizeof(ReaderPrefs)));
@@ -111,7 +113,8 @@ TEST(ReaderPrefs, Version5SidecarIsFoldedNotDropped) {
   std::stringstream ss;
   const uint8_t v5 = 5;
   ss.write(reinterpret_cast<const char*>(&v5), 1);
-  ss.write(reinterpret_cast<const char*>(&legacy), sizeof(ReaderPrefs));
+  // A v5 record on the card is this struct WITHOUT the byte v9 appended.
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE);
 
   ReaderPrefs loaded;
   bool migrated = false;
@@ -140,7 +143,7 @@ TEST(ReaderPrefs, Version6SidecarAdoptsNewReadingDefaultsAndKeepsTheRest) {
   std::stringstream ss;
   const uint8_t v6 = 6;
   ss.write(reinterpret_cast<const char*>(&v6), 1);
-  ss.write(reinterpret_cast<const char*>(&legacy), sizeof(ReaderPrefs));
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE);
 
   ReaderPrefs loaded;
   bool migrated = false;
@@ -209,6 +212,75 @@ TEST(ReaderPrefs, EmptyRejected) {
   EXPECT_FALSE(readReaderPrefs(ss, loaded));
 }
 
+// ── v9: the paragraph-number size ─────────────────────────────────────────────
+// v9 is the first version since v5 to change the LAYOUT rather than just meanings:
+// one byte appended at the end. These tests pin the two things that could go wrong —
+// reading an older record at the wrong length (which would drop every per-book
+// setting the user ever chose) and failing to re-seed the new default onto it.
+
+TEST(ReaderPrefs, ParagraphNumberSizeDefaultsToDouble) {
+  const ReaderPrefs p;
+  EXPECT_EQ(1, p.paragraphNumberSize);  // PARA_NUM_SIZE_DOUBLE
+}
+
+TEST(ReaderPrefs, LegacyRecordIsExactlyOneByteShorter) {
+  EXPECT_EQ(sizeof(ReaderPrefs), READER_PREFS_LEGACY_SIZE + 1);
+  EXPECT_EQ(offsetof(ReaderPrefs, paragraphNumberSize), READER_PREFS_LEGACY_SIZE);
+}
+
+TEST(ReaderPrefs, Version8SidecarKeepsEverythingAndAdoptsDoubleSize) {
+  ReaderPrefs legacy = makeSample();
+  legacy.paragraphNumbering = 2;   // whole book, a real user choice
+  legacy.paragraphNumberSize = 0;  // never stored by a v8 writer; must not survive the read
+  std::stringstream ss;
+  const uint8_t v8 = 8;
+  ss.write(reinterpret_cast<const char*>(&v8), 1);
+  // A v8 file holds no size byte at all — it stops one byte short.
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  // The new field takes the current default rather than whatever byte followed.
+  EXPECT_EQ(reader_defaults::PARAGRAPH_NUMBER_SIZE, loaded.paragraphNumberSize);
+  // Everything the user chose that is not a re-seeded default survives untouched.
+  EXPECT_EQ(legacy.fontFamily, loaded.fontFamily);
+  EXPECT_EQ(legacy.fontPointSize, loaded.fontPointSize);
+  EXPECT_EQ(legacy.lineSpacingPercent, loaded.lineSpacingPercent);
+  EXPECT_EQ(legacy.screenMargin, loaded.screenMargin);
+  EXPECT_EQ(legacy.screenMarginTop, loaded.screenMarginTop);
+  EXPECT_EQ(legacy.screenMarginBottom, loaded.screenMarginBottom);
+  EXPECT_EQ(legacy.dynamicMargins, loaded.dynamicMargins);
+  EXPECT_EQ(legacy.paperbackLookBody, loaded.paperbackLookBody);
+  EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
+}
+
+TEST(ReaderPrefs, Version8SidecarTruncatedMidRecordIsRejected) {
+  const ReaderPrefs legacy = makeSample();
+  std::stringstream ss;
+  const uint8_t v8 = 8;
+  ss.write(reinterpret_cast<const char*>(&v8), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE - 1);
+
+  ReaderPrefs loaded;
+  EXPECT_FALSE(readReaderPrefs(ss, loaded));
+}
+
+TEST(ReaderPrefs, CurrentVersionCarriesTheSizeByte) {
+  ReaderPrefs sample = makeSample();
+  sample.paragraphNumberSize = 0;  // Small, chosen per book
+  std::stringstream ss;
+  writeReaderPrefs(ss, sample);
+
+  ReaderPrefs loaded;
+  bool migrated = true;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_FALSE(migrated);
+  EXPECT_EQ(0, loaded.paragraphNumberSize);
+  expectEqual(sample, loaded);
+}
+
 // ── Mid-edit override decision ────────────────────────────────────────────────
 // While the in-book Reader Settings screen is open, every row change must already
 // be safe on the card, so switching the reader off inside that screen keeps it.
@@ -245,6 +317,21 @@ TEST(ReaderOverrideDecision, InMenuTogglesComeFromTheBookNotTheOverlay) {
   EXPECT_EQ(2, decision.prefs.paragraphNumbering);
   EXPECT_EQ(0, decision.prefs.paperbackLookBody);
   EXPECT_EQ(0, decision.prefs.paperbackLookStatus);
+}
+
+TEST(ReaderOverrideDecision, ParagraphNumberSizeComesFromTheBookNotTheOverlay) {
+  // Size is an in-book menu choice, so the Reader Settings overlay carries the GLOBAL
+  // value for it. Editing a font row must not drag that global size onto the book.
+  ReaderPrefs book = makeSample();
+  book.paragraphNumberSize = 0;  // this book was set to Small
+  ReaderPrefs live = book;
+  live.paragraphNumberSize = 1;  // global says Double
+  live.fontPointSize = 16;       // the row actually edited
+
+  const auto decision = decideReaderOverride(live, book, true);
+  EXPECT_EQ(ReaderOverrideAction::Write, decision.action);
+  EXPECT_EQ(16, decision.prefs.fontPointSize);
+  EXPECT_EQ(0, decision.prefs.paragraphNumberSize);
 }
 
 TEST(ReaderOverrideDecision, NoChangeOnACustomBookKeepsItsFile) {
