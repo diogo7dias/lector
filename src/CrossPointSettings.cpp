@@ -95,6 +95,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  // Marks the one-time 0.8.1 reading-defaults migration in fromJson as done.
+  doc["readingDefaults0810"] = true;
   // TXT reader font — set from the in-book TXT popup, not in SettingsList.
   doc["txtFontSize"] = txtFontPointSize;
   if (txtSdFontFamilyName[0] != '\0') {
@@ -212,6 +214,20 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   } else if (storedFontFamily >= BUILTIN_FONT_COUNT) {
     needsResave = true;
   }
+  // Reading defaults changed in 0.8.1: a first-line indent, air between paragraphs,
+  // and paragraph numbers per chapter. A settings file written before that carries the
+  // old zeros, so it would keep the old look forever and read as a broken setting. The
+  // marker makes this run exactly once; changing any of the three afterwards sticks.
+  if (!(doc["readingDefaults0810"] | false)) {
+    // Same four values the per-book sidecar upgrade applies, from the same constants,
+    // so global and per-book can never drift apart.
+    paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
+    firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
+    firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
+    paragraphNumbering = PARA_NUM_CHAPTER;
+    needsResave = true;
+  }
+
   // TXT reader font — absent on any settings file written before the TXT popup
   // existed, so an upgrade lands on the smallest size, which is the intended default.
   txtFontPointSize = doc["txtFontSize"] | TXT_DEFAULT_FONT_POINT_SIZE;

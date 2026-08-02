@@ -114,13 +114,72 @@ TEST(ReaderPrefs, Version5SidecarIsFoldedNotDropped) {
   ss.write(reinterpret_cast<const char*>(&legacy), sizeof(ReaderPrefs));
 
   ReaderPrefs loaded;
-  ASSERT_TRUE(readReaderPrefs(ss, loaded));
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
   EXPECT_EQ(16, loaded.fontPointSize);
-  // Every other field survives the fold untouched.
+  // A v5 sidecar predates the v7 reading defaults too, so it is upgraded on the way in.
+  EXPECT_TRUE(migrated);
+  // Every field outside the fold and the reading defaults survives untouched.
   EXPECT_EQ(legacy.fontFamily, loaded.fontFamily);
   EXPECT_EQ(legacy.lineSpacingPercent, loaded.lineSpacingPercent);
-  EXPECT_EQ(legacy.firstLineIndentPercent, loaded.firstLineIndentPercent);
+  EXPECT_EQ(legacy.screenMargin, loaded.screenMargin);
   EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
+}
+
+// A v6 sidecar is the common case on an upgrading device: same layout, but written
+// before the reading defaults changed. It must be upgraded in place, never dropped —
+// dropping it would discard every per-book setting the user ever chose.
+TEST(ReaderPrefs, Version6SidecarAdoptsNewReadingDefaultsAndKeepsTheRest) {
+  ReaderPrefs legacy = makeSample();
+  legacy.paragraphSpacing = 0;
+  legacy.firstLineIndentMode = 0;
+  legacy.firstLineIndentPercent = 0;
+  legacy.paragraphNumbering = 0;
+  legacy.fontPointSize = 18;
+  legacy.screenMargin = 35;
+  std::stringstream ss;
+  const uint8_t v6 = 6;
+  ss.write(reinterpret_cast<const char*>(&v6), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), sizeof(ReaderPrefs));
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(reader_defaults::PARAGRAPH_SPACING_PERCENT, loaded.paragraphSpacing);
+  EXPECT_EQ(reader_defaults::FIRST_LINE_INDENT_MODE, loaded.firstLineIndentMode);
+  EXPECT_EQ(reader_defaults::FIRST_LINE_INDENT_PERCENT, loaded.firstLineIndentPercent);
+  EXPECT_EQ(reader_defaults::PARAGRAPH_NUMBERING, loaded.paragraphNumbering);
+  // A v6 point size is already a point size, so it is not folded.
+  EXPECT_EQ(18, loaded.fontPointSize);
+  // Everything the user chose that is not one of the four defaults is left alone.
+  EXPECT_EQ(35, loaded.screenMargin);
+  EXPECT_EQ(legacy.lineSpacingPercent, loaded.lineSpacingPercent);
+  EXPECT_EQ(legacy.paragraphAlignment, loaded.paragraphAlignment);
+  EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
+}
+
+// A current sidecar is read as-is. Nothing is re-seeded, so a user who deliberately
+// turned the indent back off keeps it off across every reopen.
+TEST(ReaderPrefs, CurrentVersionIsNotMigrated) {
+  ReaderPrefs current = makeSample();
+  current.paragraphSpacing = 0;
+  current.firstLineIndentMode = 0;
+  current.firstLineIndentPercent = 0;
+  current.paragraphNumbering = 0;
+  std::stringstream ss;
+  const uint8_t ver = ReaderPrefs::VERSION;
+  ss.write(reinterpret_cast<const char*>(&ver), 1);
+  ss.write(reinterpret_cast<const char*>(&current), sizeof(ReaderPrefs));
+
+  ReaderPrefs loaded;
+  bool migrated = true;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_FALSE(migrated);
+  EXPECT_EQ(0, loaded.paragraphSpacing);
+  EXPECT_EQ(0, loaded.firstLineIndentMode);
+  EXPECT_EQ(0, loaded.firstLineIndentPercent);
+  EXPECT_EQ(0, loaded.paragraphNumbering);
 }
 
 TEST(ReaderPrefs, WrongVersionRejected) {

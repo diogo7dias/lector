@@ -46,18 +46,23 @@ bool writeReaderPrefs(HalFile& out, const ReaderPrefs& p) {
   return out.write(reinterpret_cast<const uint8_t*>(&p), sizeof(ReaderPrefs)) == sizeof(ReaderPrefs);
 }
 
-bool readReaderPrefs(HalFile& in, ReaderPrefs& p) {
+bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated) {
+  if (migrated) *migrated = false;
   uint8_t ver = 0;
   if (in.read(&ver, 1) != 1) return false;
-  // v5 and v6 have identical layout — only fontPointSize's meaning changed — so a
-  // v5 sidecar is read and folded rather than discarded, which would silently drop
+  // v5, v6 and v7 have identical layout — only meanings and defaults changed — so an
+  // old sidecar is read and upgraded rather than discarded, which would silently drop
   // every per-book override the first time this build runs.
-  if (ver != ReaderPrefs::VERSION && ver != 5) return false;
+  if (ver != ReaderPrefs::VERSION && ver != 5 && ver != 6) return false;
   ReaderPrefs tmp;
   if (in.read(reinterpret_cast<uint8_t*>(&tmp), sizeof(ReaderPrefs)) != static_cast<int>(sizeof(ReaderPrefs))) {
     return false;
   }
   if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
+  if (ver < ReaderPrefs::VERSION) {
+    tmp.adoptV7ReadingDefaults();
+    if (migrated) *migrated = true;
+  }
   p = tmp;
   return true;
 }
