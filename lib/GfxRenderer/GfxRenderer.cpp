@@ -1966,6 +1966,16 @@ int GfxRenderer::getFontAscenderSize(const int fontId) const {
   return fontIt->second.getData(EpdFontFamily::REGULAR)->ascender;
 }
 
+int GfxRenderer::getGlyphInkTop(const int fontId, const uint32_t codepoint, const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return 0;
+  }
+  const EpdGlyph* glyph = fontIt->second.getGlyph(codepoint, style);
+  return glyph != nullptr ? glyph->top : 0;
+}
+
 int GfxRenderer::getLineHeight(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {

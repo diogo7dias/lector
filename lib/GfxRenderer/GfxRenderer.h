@@ -270,6 +270,13 @@ class GfxRenderer {
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
+  /// Distance in pixels from the baseline up to the top of \p codepoint's ink.
+  /// This is the glyph's REAL drawn height, taken from the outline baked into the
+  /// font, unlike getFontAscenderSize() which reports the declared ascender and
+  /// includes accent room no letter reaches. Two different faces are only
+  /// comparable through a measurement like this one. Returns 0 if the glyph is
+  /// absent, so callers must keep a fallback.
+  int getGlyphInkTop(int fontId, uint32_t codepoint, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getLineHeight(int fontId) const;
   int getLineHeight(int fontId, float compression) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,

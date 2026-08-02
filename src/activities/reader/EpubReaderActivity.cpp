@@ -34,6 +34,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "ParagraphNumberLayout.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
 #include "QuoteSelectActivity.h"
@@ -1663,6 +1664,19 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
       (prefs_.paragraphNumberSize == CrossPointSettings::PARA_NUM_SIZE_DOUBLE) ? PARA_NUM_2X_FONT_ID : PARA_NUM_FONT_ID;
   const int lineHeight = renderer.getLineHeight(fontId);
   const int numLineHeight = renderer.getLineHeight(numFontId);
+  // Sit the number on the same optical line as the words, at any reading size. The rule
+  // itself lives in ParagraphNumberLayout.h so the host tests can exercise it; the lookups
+  // are hoisted here so they cost one glyph query per page rather than one per line.
+  ParagraphNumberMetrics metrics;
+  metrics.bodyAscender = renderer.getFontAscenderSize(fontId);
+  metrics.bodyLineHeight = lineHeight;
+  metrics.numAscender = renderer.getFontAscenderSize(numFontId);
+  metrics.numLineHeight = numLineHeight;
+  // 'x' because lowercase is the bulk of what a line of prose looks like; 'H' stands in
+  // for a face without it, and the layout falls back to line-box centring without either.
+  metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'x');
+  if (metrics.bodyInkTop <= 0) metrics.bodyInkTop = renderer.getGlyphInkTop(fontId, 'H');
+  metrics.numInkTop = renderer.getGlyphInkTop(numFontId, '0');
   uint16_t pageMaxOrdinal = 0;
   for (const auto& el : page.elements) {
     if (el->getTag() != TAG_PageLine) continue;
@@ -1680,7 +1694,8 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     const int firstLetterX = marginLeft + line.xPos + block->wordXpos(0);
     const int x = firstLetterX - kGap - numWidth;
     if (x < 0) continue;  // no room in the margin — skip rather than clip into text
-    const int y = marginTop + line.yPos + (lineHeight - numLineHeight) / 2;
+    metrics.lineTop = marginTop + line.yPos;
+    const int y = paragraphNumberDrawY(metrics);
     renderer.drawText(numFontId, x, y, buf, true);
   }
   // Capture this chapter's running-max paragraph count so a later chapter's whole-book
