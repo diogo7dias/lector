@@ -45,9 +45,26 @@ void QuoteSelectActivity::extractWords() {
   pageText.reserve(2048);
   uint8_t styleMask = 0;
 
+  // Paragraph ordinal of the paragraph this page OPENS inside. Ordinals sit only
+  // on a paragraph's first line, so a page that begins mid-paragraph carries none
+  // until the next paragraph starts: the one before that first ordinal is the one
+  // the page opened in. A page wholly inside one long paragraph has no ordinal at
+  // all — then it stays 0, meaning "unknown", and the underline search later falls
+  // back to the whole chapter.
+  uint16_t runningOrdinal = 0;
+  for (const auto& element : page->elements) {
+    if (element->getTag() != TAG_PageLine) continue;
+    const uint16_t ordinal = static_cast<const PageLine*>(element.get())->getParagraphOrdinal();
+    if (ordinal != 0) {
+      runningOrdinal = static_cast<uint16_t>(ordinal - 1);
+      break;
+    }
+  }
+
   for (const auto& element : page->elements) {
     if (element->getTag() != TAG_PageLine) continue;
     const auto* line = static_cast<const PageLine*>(element.get());
+    if (line->getParagraphOrdinal() != 0) runningOrdinal = line->getParagraphOrdinal();
     const auto& block = line->getBlock();
     if (!block || !block->valid()) continue;
 
@@ -59,6 +76,7 @@ void QuoteSelectActivity::extractWords() {
       box.style = block->wordStyle(i);
       box.width = 0;  // measured below, once the advance table is ready
       box.row = rowCount;
+      box.paragraphOrdinal = runningOrdinal;
       box.text = block->wordText(i);
       words.push_back(box);
       rowHasWords = true;
@@ -124,19 +142,28 @@ void QuoteSelectActivity::saveSelectedQuote() {
   }
   const std::string quote = quote_text::joinQuoteWords(selected);
   if (quote.empty()) return;
-  saveQuoteToFile(quote);
+
+  // Where this passage lives, so the reader can underline it on later visits.
+  // The word index is only a tie-break for a passage repeated inside the same
+  // paragraph; the quote text itself is what identifies the words.
+  quote_text::QuoteAnchor anchor;
+  anchor.spine = static_cast<uint16_t>(spineIndex);
+  anchor.paragraph = words[a].paragraphOrdinal;
+  anchor.wordHint = static_cast<uint16_t>(a);
+  anchor.valid = true;
+  saveQuoteToFile(quote, quote_text::formatAnchorToken(anchor));
 }
 
-// Atomic-ish read-modify-write append of one "[chapter]\nquote\n---\n\n" entry to
-// the "<book>_QUOTES.txt" sidecar: stream existing bytes + the new entry into a
-// .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore .bak on
-// promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
-bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote) {
+// Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"
+// entry to the "<book>_QUOTES.txt" sidecar: stream existing bytes + the new entry
+// into a .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore
+// .bak on promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
+bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken) {
   if (!epub) return false;
   const std::string path = quote_text::quotesFilePathFor(epub->getPath());
   const std::string tmpPath = path + ".tmp";
   const std::string bakPath = path + ".bak";
-  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), quote);
+  const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote);
 
   size_t existingSize = 0;
   const bool primaryExists = Storage.exists(path.c_str());

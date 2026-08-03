@@ -18,6 +18,10 @@ class QuotesViewerActivity final : public Activity {
  public:
   struct QuoteEntry {
     std::string chapter;
+    // Position token as stored in the header ("@q1:spine,para,hint"), empty for
+    // quotes saved before anchors existed. Kept verbatim so deleting one quote
+    // never strips the others' underlines.
+    std::string anchor;
     std::string text;
   };
 

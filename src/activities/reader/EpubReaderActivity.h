@@ -108,6 +108,29 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastRenderCompleteMs = 0;
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;
+  // Saved quotes keep a thin underline in the text. Only their POSITIONS live in
+  // RAM (12 bytes each, capped); the quote text itself stays on the SD card and is
+  // read back, bounded, on the rare page that might be showing it.
+  struct QuoteAnchorRef {
+    uint32_t textOffset;  // byte offset of the quote text inside the sidecar
+    uint16_t textLength;
+    uint16_t spine;
+    uint16_t paragraph;  // chapter-local ordinal; 0 = unknown, search the chapter
+    uint16_t wordHint;   // index the quote started at when grabbed; tie-break only
+  };
+  // Positions of this book's saved quotes, loaded once per open and refreshed
+  // whenever the sidecar is rewritten (a grab, or a delete in the viewer).
+  std::vector<QuoteAnchorRef> quoteAnchors;
+  // Underline segments already worked out for the page on screen, so a repeat
+  // render (status bar tick, return from a menu) costs no SD reads.
+  struct UnderlineSegment {
+    int16_t x1;
+    int16_t x2;
+    int16_t y;
+  };
+  std::vector<UnderlineSegment> underlineMemo;
+  int underlineMemoSpine = -1;
+  int underlineMemoPage = -1;
   // Tracks whether this book is currently removed from Recent Books by the
   // removeReadBooksFromRecents feature (set at End-of-Book, cleared if paged back in).
   bool recentsEntryRemoved = false;
@@ -290,6 +313,8 @@ class EpubReaderActivity final : public Activity {
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).
   void applyPaperbackLook(uint8_t body, uint8_t status);
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
+  void loadQuoteAnchors();
+  void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
   uint32_t wholeBookParagraphBase(int spineIndex) const;
   std::string paragraphCountsPath() const;
   void loadParagraphCounts();

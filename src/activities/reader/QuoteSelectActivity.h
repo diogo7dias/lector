@@ -39,6 +39,9 @@ class QuoteSelectActivity final : public Activity {
     int16_t y;
     int16_t width;
     uint16_t row;
+    // Chapter-local paragraph this word belongs to (0 = not derivable from this
+    // page); saved with the quote so the reader can find it again later.
+    uint16_t paragraphOrdinal;
     const char* text;
     EpdFontFamily::Style style;
   };
@@ -49,7 +52,7 @@ class QuoteSelectActivity final : public Activity {
   int closestInRow(uint16_t row, int centerX) const;
   void moveVertical(int direction);
   void saveSelectedQuote();
-  bool saveQuoteToFile(const std::string& quote);
+  bool saveQuoteToFile(const std::string& quote, const std::string& anchorToken);
   std::string chapterTitle() const;
   void drawRangeHighlight() const;
   void drawHints() const;

@@ -45,6 +45,84 @@ TEST(QuoteText, EntryFormatMatchesSidecarLayout) {
   EXPECT_EQ("[Ch 1]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "Hello world"));
 }
 
+TEST(QuoteText, AnchorTokenRoundTrips) {
+  QuoteAnchor anchor;
+  anchor.spine = 12;
+  anchor.paragraph = 37;
+  anchor.wordHint = 84;
+  anchor.valid = true;
+  const std::string token = formatAnchorToken(anchor);
+  EXPECT_EQ("@q1:12,37,84", token);
+
+  QuoteAnchor parsed;
+  ASSERT_TRUE(parseAnchorToken(token, parsed));
+  EXPECT_TRUE(parsed.valid);
+  EXPECT_EQ(12, parsed.spine);
+  EXPECT_EQ(37, parsed.paragraph);
+  EXPECT_EQ(84, parsed.wordHint);
+}
+
+TEST(QuoteText, InvalidAnchorTokenIsRejected) {
+  QuoteAnchor parsed;
+  EXPECT_FALSE(parseAnchorToken("", parsed));
+  EXPECT_FALSE(parseAnchorToken("@q2:1,2,3", parsed));      // unknown version
+  EXPECT_FALSE(parseAnchorToken("@q1:1,2", parsed));        // missing field
+  EXPECT_FALSE(parseAnchorToken("@q1:1,2,3,4", parsed));    // trailing junk
+  EXPECT_FALSE(parseAnchorToken("@q1:a,2,3", parsed));      // not digits
+  EXPECT_FALSE(parseAnchorToken("@q1:1,,3", parsed));       // empty field
+  EXPECT_FALSE(parseAnchorToken("@q1:70000,2,3", parsed));  // will not fit uint16
+  EXPECT_FALSE(parsed.valid);
+}
+
+TEST(QuoteText, InvalidAnchorIsNotFormatted) {
+  QuoteAnchor anchor;  // valid defaults to false
+  EXPECT_EQ("", formatAnchorToken(anchor));
+}
+
+TEST(QuoteText, SplitChapterAnchorSeparatesTitleAndToken) {
+  std::string chapter, token;
+  splitChapterAnchor("Chapter One @q1:12,37,84", chapter, token);
+  EXPECT_EQ("Chapter One", chapter);
+  EXPECT_EQ("@q1:12,37,84", token);
+}
+
+TEST(QuoteText, SplitChapterAnchorLeavesPlainTitleAlone) {
+  std::string chapter, token;
+  splitChapterAnchor("Chapter One", chapter, token);
+  EXPECT_EQ("Chapter One", chapter);
+  EXPECT_EQ("", token);
+
+  splitChapterAnchor("An email @q1:not-an-anchor", chapter, token);
+  EXPECT_EQ("An email @q1:not-an-anchor", chapter);
+  EXPECT_EQ("", token);
+}
+
+TEST(QuoteText, EntryWithAnchorKeepsRecordGrammar) {
+  EXPECT_EQ("[Ch 1 @q1:2,5,7]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "@q1:2,5,7", "Hello world"));
+}
+
+TEST(QuoteText, EntryWithEmptyAnchorMatchesLegacyBytes) {
+  EXPECT_EQ(formatQuoteEntry("Ch 1", "Hello world"), formatQuoteEntry("Ch 1", "", "Hello world"));
+}
+
+TEST(QuoteText, AnchoredEntryRoundTripsThroughSplit) {
+  QuoteAnchor anchor;
+  anchor.spine = 3;
+  anchor.paragraph = 0;  // paragraph unknown on the grab page
+  anchor.wordHint = 11;
+  anchor.valid = true;
+  const std::string field = "Ch 2 " + formatAnchorToken(anchor);
+
+  std::string chapter, token;
+  splitChapterAnchor(field, chapter, token);
+  EXPECT_EQ("Ch 2", chapter);
+  QuoteAnchor parsed;
+  ASSERT_TRUE(parseAnchorToken(token, parsed));
+  EXPECT_EQ(3, parsed.spine);
+  EXPECT_EQ(0, parsed.paragraph);
+  EXPECT_EQ(11, parsed.wordHint);
+}
+
 TEST(GrowthBounds, WithinAndOverLimit) {
   EXPECT_TRUE(memory::canGrowWithinLimit(0, 100, 1000));
   EXPECT_TRUE(memory::canGrowWithinLimit(900, 100, 1000));
