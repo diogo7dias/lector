@@ -73,7 +73,9 @@ void QuotesViewerActivity::loadQuotes() {
   //   [Chapter Title]\nquote text\n---\n\n
   size_t pos = 0;
   while (pos < buf.size()) {
-    while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r' || buf[pos] == ' ')) ++pos;
+    // isRecordGap covers the page-break byte each entry now starts with, so the
+    // header bracket is still what the scan lands on.
+    while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
     if (pos >= buf.size()) break;
 
     QuoteEntry entry;

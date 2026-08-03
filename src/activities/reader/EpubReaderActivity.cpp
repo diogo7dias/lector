@@ -1831,7 +1831,7 @@ void EpubReaderActivity::loadQuoteAnchors() {
   quoteAnchors.reserve(MAX_QUOTE_ANCHORS);
   size_t pos = 0;
   while (pos < buf.size() && quoteAnchors.size() < MAX_QUOTE_ANCHORS) {
-    while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r' || buf[pos] == ' ')) ++pos;
+    while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
     if (pos >= buf.size()) break;
 
     quote_text::QuoteAnchor anchor;

@@ -133,14 +133,25 @@ inline void splitChapterAnchor(const std::string& field, std::string& chapterOut
   anchorOut = candidate;
 }
 
-// One sidecar entry: "[chapter @q1:...]\nquote\n---\n\n". The anchor lives inside
+// Form feed, the ASCII page break. Written at the head of every entry so the
+// sidecar opened as a book in the TXT reader starts each quote on its own page
+// (see TxtReaderActivity::loadPageAtOffset). Files written before this change
+// have none and simply flow as they always did.
+inline constexpr char PAGE_BREAK = '\f';
+
+// True for the bytes that separate records: real whitespace plus the page break.
+// Every parser of this file must skip these before looking for a header bracket.
+inline bool isRecordGap(const char c) { return c == '\n' || c == '\r' || c == ' ' || c == PAGE_BREAK; }
+
+// One sidecar entry: "\f[chapter @q1:...]\nquote\n---\n\n". The anchor lives inside
 // the brackets on purpose: the record grammar (bracketed header line, body, "---")
 // is unchanged, so a reader that knows nothing about anchors still parses every
-// record. An empty token reproduces the pre-anchor bytes exactly.
+// record. An empty token writes no anchor at all.
 inline std::string formatQuoteEntry(const std::string& chapter, const std::string& anchorToken,
                                     const std::string& quote) {
   std::string entry;
-  entry.reserve(chapter.size() + anchorToken.size() + quote.size() + 13);
+  entry.reserve(chapter.size() + anchorToken.size() + quote.size() + 14);
+  entry.push_back(PAGE_BREAK);
   entry.push_back('[');
   entry.append(chapter);
   if (!anchorToken.empty()) {

@@ -26,7 +26,7 @@ namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 // Cache file magic and version
 constexpr uint32_t CACHE_MAGIC = 0x54585449;  // "TXTI"
-constexpr uint8_t CACHE_VERSION = 3;          // Increment when cache format changes
+constexpr uint8_t CACHE_VERSION = 4;          // Increment when cache format changes (4: form-feed page breaks)
 }  // namespace
 
 void TxtReaderActivity::onEnter() {
@@ -314,6 +314,16 @@ bool TxtReaderActivity::loadPageAtOffset(size_t offset, std::vector<std::string>
     if (!lineComplete && static_cast<int>(outLines.size()) > 0) {
       // Incomplete line and we already have some lines, stop here
       break;
+    }
+
+    // Form feed = hard page break. The quotes sidecar writes one before every quote,
+    // so each saved quote opens its own page instead of running on from the last one.
+    // Reached with lines already on the page: stop, leaving the marker as the next
+    // page's first byte. Reached on an empty page: swallow it and fill this page.
+    if (buffer[pos] == '\f') {
+      if (!outLines.empty()) break;
+      pos++;
+      continue;
     }
 
     // Calculate the actual length of line content in the buffer (excluding newline)

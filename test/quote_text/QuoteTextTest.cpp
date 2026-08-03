@@ -42,7 +42,22 @@ TEST(QuoteText, JoinHardCapsLength) {
 }
 
 TEST(QuoteText, EntryFormatMatchesSidecarLayout) {
-  EXPECT_EQ("[Ch 1]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "Hello world"));
+  EXPECT_EQ("\f[Ch 1]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "Hello world"));
+}
+
+TEST(QuoteText, EveryEntryOpensWithAPageBreak) {
+  // The sidecar read as a book must start each quote on its own page.
+  EXPECT_EQ(PAGE_BREAK, formatQuoteEntry("Ch 1", "Hello")[0]);
+  EXPECT_EQ(PAGE_BREAK, formatQuoteEntry("Ch 1", "@q1:1,2,3", "Hello")[0]);
+}
+
+TEST(QuoteText, RecordGapCoversThePageBreak) {
+  EXPECT_TRUE(isRecordGap('\n'));
+  EXPECT_TRUE(isRecordGap('\r'));
+  EXPECT_TRUE(isRecordGap(' '));
+  EXPECT_TRUE(isRecordGap(PAGE_BREAK));
+  EXPECT_FALSE(isRecordGap('['));
+  EXPECT_FALSE(isRecordGap('a'));
 }
 
 TEST(QuoteText, AnchorTokenRoundTrips) {
@@ -98,10 +113,10 @@ TEST(QuoteText, SplitChapterAnchorLeavesPlainTitleAlone) {
 }
 
 TEST(QuoteText, EntryWithAnchorKeepsRecordGrammar) {
-  EXPECT_EQ("[Ch 1 @q1:2,5,7]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "@q1:2,5,7", "Hello world"));
+  EXPECT_EQ("\f[Ch 1 @q1:2,5,7]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "@q1:2,5,7", "Hello world"));
 }
 
-TEST(QuoteText, EntryWithEmptyAnchorMatchesLegacyBytes) {
+TEST(QuoteText, EntryWithEmptyAnchorWritesNoToken) {
   EXPECT_EQ(formatQuoteEntry("Ch 1", "Hello world"), formatQuoteEntry("Ch 1", "", "Hello world"));
 }
 
