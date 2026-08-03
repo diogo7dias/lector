@@ -455,6 +455,21 @@ void setup() {
                                                         : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
 
+  // "Open a random book on boot": pick the target BEFORE the unlock banners paint, so the
+  // banner names the book this boot is about to open instead of the previous one. The
+  // result is reused by the routing block below — picking twice would name one book and
+  // open another. Guarded by every condition that block uses and that is already known
+  // here, so a boot heading to recovery, the crash report, or a silent-reboot target never
+  // advertises a book it will not open. Back-held and readerActivityLoadCount are the
+  // routing block's own escape hatches and are re-checked there.
+  std::string randomBookPath;
+  if (SETTINGS.openRandomRecentOnBoot && !recoveryFirmwareMode && !HalSystem::isRebootFromPanic() &&
+      resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
+      !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+    randomBookPath = pickRandomRecentBookPath();
+    if (!randomBookPath.empty()) setUnlockBannerBookPath(randomBookPath);
+  }
+
   // Unlock over the wallpaper: when this is a normal (non-quick-resume) deep-sleep wake
   // whose sleep screen was a .pxc wallpaper, re-render that wallpaper on the boot screen
   // with the unlock banners on top instead of the logo, so the wallpaper stays. Needs the
@@ -474,7 +489,7 @@ void setup() {
   // follows repaints straight over them. Stamp when they land so the routing below can
   // hold them for a readable beat. Measured from the paint, so a slow refresh or a slow
   // book load already counts towards it and costs nothing extra.
-  constexpr uint32_t WAKE_BANNER_MIN_VISIBLE_MS = 1000;
+  constexpr uint32_t WAKE_BANNER_MIN_VISIBLE_MS = 500;
   uint32_t bannersPaintedMs = 0;
 
   switch (resume) {
@@ -555,11 +570,10 @@ void setup() {
     // "Open a random book on boot" jumps into one of the books in progress instead.
     // Skipped when Back is held (the user is asking for home) or after a reader crash,
     // so a book that cannot open can never wedge boot.
+    // randomBookPath was chosen above, before the banners painted, so the banner named
+    // this exact book. Back held or a prior reader crash clears it rather than re-picking.
     const bool backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
-    std::string randomBookPath;
-    if (SETTINGS.openRandomRecentOnBoot && !backHeld && APP_STATE.readerActivityLoadCount == 0) {
-      randomBookPath = pickRandomRecentBookPath();
-    }
+    if (backHeld || APP_STATE.readerActivityLoadCount > 0) randomBookPath.clear();
     if (!randomBookPath.empty()) {
       // Same crash-loop guard the resume path uses: bump the counter first so a crash
       // while opening lands on home next boot instead of trying again forever.

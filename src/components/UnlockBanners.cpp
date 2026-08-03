@@ -23,7 +23,12 @@ std::string bookTitleFromPath(const std::string& path) {
   return path.substr(start, end - start);
 }
 
+// Empty means "name APP_STATE.openEpubPath". See setUnlockBannerBookPath().
+std::string bannerBookPathOverride;
+
 }  // namespace
+
+void setUnlockBannerBookPath(const std::string& path) { bannerBookPathOverride = path; }
 
 void drawUnlockBanners(GfxRenderer& renderer) {
   const int pageWidth = renderer.getScreenWidth();
@@ -35,9 +40,13 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   const int pad = banner::PAD;
   const int lh10 = renderer.getLineHeight(banner::FONT_ID);
 
+  // The book this boot is actually heading into: the override when one was set (random
+  // book on boot), otherwise the book being resumed.
+  const std::string& bannerBookPath = bannerBookPathOverride.empty() ? APP_STATE.openEpubPath : bannerBookPathOverride;
+
   std::string bookLine;
-  if (!APP_STATE.openEpubPath.empty()) {
-    bookLine = bookTitleFromPath(APP_STATE.openEpubPath);
+  if (!bannerBookPath.empty()) {
+    bookLine = bookTitleFromPath(bannerBookPath);
     for (char& c : bookLine) c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
   }
 

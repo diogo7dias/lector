@@ -453,8 +453,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
+  // Hold-to-wake threshold. 200 ms is long enough to reject a pocket brush but short
+  // enough that the device feels instant in the hand. HalGPIO::verifyPowerButtonWakeup
+  // returns as soon as the held time crosses this, so the wake happens under the finger
+  // with no release required.
   uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
+    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 200;
   }
   int getReaderFontId() const;
   // Font id for the TXT reader, resolved from the txt* fields above rather than the

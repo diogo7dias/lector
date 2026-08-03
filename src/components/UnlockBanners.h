@@ -1,6 +1,20 @@
 #pragma once
 
+#include <string>
+
 class GfxRenderer;
+
+// Override the book title the banner names, for boots that are about to open a book
+// other than APP_STATE.openEpubPath — today only "Open a random book on boot", which
+// picks its target after the banner would otherwise have painted the previous book.
+// Set once during setup(), before the first drawUnlockBanners() call; an empty path
+// means "use APP_STATE.openEpubPath" (the normal resume case).
+//
+// A module-level string rather than a drawUnlockBanners() parameter: BootActivity
+// passes the function as a plain `void(GfxRenderer&)` callback, so the signature is
+// fixed. It is boot-only and holds one short path, so the DRAM cost is a few dozen
+// bytes that are never touched again after the reader paints.
+void setUnlockBannerBookPath(const std::string& path);
 
 // Draws the wake/unlock screen's two framed banners over whatever is already on the
 // framebuffer (the restored sleep wallpaper): TOP = "Lector <version>" plus the
