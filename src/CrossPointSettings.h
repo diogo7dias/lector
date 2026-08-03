@@ -348,6 +348,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Double-click Confirm function in EPUB reader. Shares the LONG_PRESS_MENU_FUNCTION
+  // values so both bindings offer the same list. Defaults to Disabled because any other
+  // value makes a single Confirm click wait out the double-click window (see
+  // ReaderUtils::DOUBLE_CLICK_MS) before the reader menu opens.
+  uint8_t doubleClickMenuFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation

@@ -486,6 +486,32 @@ void EpubReaderActivity::openQuoteGrab() {
       });
 }
 
+bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
+  switch (function) {
+    case CrossPointSettings::LP_MENU_BOOKMARK:
+      if (showBookmarkMessage) return false;
+      addBookmark();
+      showBookmarkMessage = true;
+      bookmarkMessageTime = millis();
+      requestUpdate();
+      return true;
+    case CrossPointSettings::LP_MENU_KOSYNC:
+      // False when sync cannot run (no credentials stored); the caller then leaves the
+      // Confirm release alone so the normal reader menu still opens.
+      return launchKOReaderSync();
+    case CrossPointSettings::LP_MENU_DICTIONARY:
+      if (showDictionaryMessage) return false;
+      openDictionaryWordSelect();
+      return true;
+    case CrossPointSettings::LP_MENU_GRAB_QUOTE:
+      openQuoteGrab();
+      return true;
+    case CrossPointSettings::LP_MENU_DISABLED:
+    default:
+      return false;
+  }
+}
+
 void EpubReaderActivity::loop() {
   if (!epub) {
     // Should never happen
@@ -690,11 +716,29 @@ void EpubReaderActivity::loop() {
   // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
   // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
+  // A held-back first click becomes an ordinary menu open once the double-click window
+  // closes. The button must be up: if it is down again the press started inside the
+  // window, so it is the second click and the release below claims it.
+  if (confirmClickPending && millis() - confirmClickMs >= ReaderUtils::DOUBLE_CLICK_MS &&
+      !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    confirmClickPending = false;
+    openReaderMenu();
+    return;
+  }
+
   if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
-    } else {
+    } else if (confirmClickPending) {
+      // Second click: run the bound function instead of opening the menu.
+      confirmClickPending = false;
+      if (runBoundMenuFunction(SETTINGS.doubleClickMenuFunction)) return;
+      openReaderMenu();  // the function declined (e.g. KOSync has no credentials)
+    } else if (SETTINGS.doubleClickMenuFunction == CrossPointSettings::LP_MENU_DISABLED) {
       openReaderMenu();
+    } else {
+      confirmClickPending = true;
+      confirmClickMs = millis();
     }
   }
 
@@ -709,46 +753,17 @@ void EpubReaderActivity::loop() {
   // a sync the user never asked for. An inherited hold is now ignored until the button is
   // released and pressed again inside the reader.
   if (confirmLatch_.seen && mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-    switch (SETTINGS.longPressMenuFunction) {
-      case CrossPointSettings::LP_MENU_BOOKMARK:
-        // Hold ~0.4s drops a bookmark at the current page.
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showBookmarkMessage) {
-          addBookmark();
-          showBookmarkMessage = true;
-          ignoreNextConfirmRelease = true;  // Prevent accidental menu open after adding bookmark
-          bookmarkMessageTime = millis();
-          requestUpdate();
-        }
-        break;
-      case CrossPointSettings::LP_MENU_KOSYNC:
-        // Hold ~1s launches KOReader sync. If sync can't run (no credentials stored), fall
-        // through so the normal Confirm-release still opens the reader menu.
-        if (mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-          if (launchKOReaderSync()) {
-            ignoreNextConfirmRelease = true;  // sync launched or error shown; suppress menu open
-            return;
-          }
-        }
-        break;
-      case CrossPointSettings::LP_MENU_DICTIONARY:
-        // Hold ~0.4s starts dictionary word selection on the current page.
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
-          ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
-          openDictionaryWordSelect();
-          return;
-        }
-        break;
-      case CrossPointSettings::LP_MENU_GRAB_QUOTE:
-        // Hold ~0.4s starts quote selection on the current page.
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
-          ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
-          openQuoteGrab();
-          return;
-        }
-        break;
-      case CrossPointSettings::LP_MENU_DISABLED:
-      default:
-        break;
+    // KOSync asks for a longer hold (~1s) than the others (~0.4s): it starts WiFi, so an
+    // accidental brush must not trigger it. A function that declines (KOSync without
+    // credentials) leaves the release alone, so the normal reader menu still opens.
+    const unsigned long holdThreshold = (SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_KOSYNC)
+                                            ? ReaderUtils::GO_HOME_MS
+                                            : ReaderUtils::BOOKMARK_HOLD_MS;
+    if (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED &&
+        mappedInput.getHeldTime() >= holdThreshold && runBoundMenuFunction(SETTINGS.longPressMenuFunction)) {
+      confirmClickPending = false;      // this press belonged to the hold, not to a double click
+      ignoreNextConfirmRelease = true;  // suppress the menu on the release that follows
+      return;
     }
   }
 

@@ -98,6 +98,12 @@ class EpubReaderActivity final : public Activity {
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
+  // Double-click Confirm state. A first click is held back for
+  // ReaderUtils::DOUBLE_CLICK_MS so a second one can claim it; if none arrives the
+  // click becomes the ordinary "open the reader menu". Both stay untouched while
+  // SETTINGS.doubleClickMenuFunction is Disabled, so the menu keeps opening at once.
+  bool confirmClickPending = false;
+  unsigned long confirmClickMs = 0UL;
   bool currentPageBookmarked = false;
   // Idle-time glyph prewarm: after a page settles, scan the LIKELY next page
   // (scan mode draws nothing) and load its missing glyphs from SD during idle,
@@ -281,6 +287,10 @@ class EpubReaderActivity final : public Activity {
   void openDictionaryWordSelect();
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();
+  // Runs one of the CrossPointSettings::LONG_PRESS_MENU_FUNCTION actions. Shared by the
+  // long-press and double-click Confirm bindings so both offer the same behaviour.
+  // Returns true when the function actually ran.
+  bool runBoundMenuFunction(uint8_t function);
   // Opens the Reading Stats screen for this book plus the all-books totals.
   void openReadingStats();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
