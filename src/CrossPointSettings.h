@@ -161,6 +161,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_DISABLED = 1,
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
+    LP_MENU_GRAB_QUOTE = 4,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 

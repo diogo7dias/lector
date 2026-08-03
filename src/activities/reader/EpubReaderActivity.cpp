@@ -738,6 +738,14 @@ void EpubReaderActivity::loop() {
           return;
         }
         break;
+      case CrossPointSettings::LP_MENU_GRAB_QUOTE:
+        // Hold ~0.4s starts quote selection on the current page.
+        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS) {
+          ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
+          openQuoteGrab();
+          return;
+        }
+        break;
       case CrossPointSettings::LP_MENU_DISABLED:
       default:
         break;
