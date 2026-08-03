@@ -93,6 +93,8 @@ struct ThemeMetrics {
   int optionPopupSelectionHPadding;
   int optionPopupSelectionVPadding;
   int optionPopupTitleGap;
+  bool optionPopupUseSmallFont;
+  bool optionPopupOptionFontBold;
   int optionPopupSelectionRadius;
   bool optionPopupSelectionLight;
   bool optionPopupDrawAllRows;
@@ -165,6 +167,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupSelectionHPadding = 8,
                                  .optionPopupSelectionVPadding = 4,
                                  .optionPopupTitleGap = 10,
+                                 .optionPopupUseSmallFont = true,
+                                 .optionPopupOptionFontBold = true,
                                  .optionPopupSelectionRadius = 0,
                                  .optionPopupSelectionLight = false,
                                  .optionPopupDrawAllRows = false,
