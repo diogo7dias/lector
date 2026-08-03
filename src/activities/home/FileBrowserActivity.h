@@ -1,5 +1,7 @@
 #pragma once
 
+#include <NameList.h>
+
 #include <functional>
 #include <memory>
 #include <string>
@@ -38,7 +40,9 @@ class FileBrowserActivity final : public Activity {
 
   // Files state
   std::string basepath = "/";
-  std::vector<std::string> files;
+  // Arena-backed and bounded: a wallpaper folder with thousands of images used to
+  // exhaust the heap here, and a throwing allocation aborts the firmware.
+  NameList files;
   std::unique_ptr<char[]> fileNameBuffer;
 
   // In-folder search. `files` always holds the whole folder; when a search is running,

@@ -12,6 +12,8 @@
 // Within a tier the tighter, earlier match wins; equal matches keep listing order,
 // so a search never reshuffles equally good results on its own.
 
+#include <algorithm>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -30,6 +32,37 @@ struct Match {
 bool scoreEntry(std::string_view name, std::string_view query, Match& out);
 
 // Indices into `names` of every entry that matches, best first.
-std::vector<int> rankMatches(const std::vector<std::string>& names, std::string_view query);
+// Templated on the container so it serves both a std::vector<std::string> and the
+// arena-backed NameList the file browser uses; it needs only size() and an
+// operator[] whose result converts to std::string_view.
+template <typename Names>
+std::vector<int> rankMatches(const Names& names, const std::string_view query) {
+  std::vector<int> hits;
+  if (query.empty()) return hits;
+
+  // Score and index travel together, or sorting one would lose track of the other.
+  struct Scored {
+    int index;
+    Match match;
+  };
+  std::vector<Scored> scored;
+  scored.reserve(names.size());
+  for (size_t i = 0; i < names.size(); i++) {
+    Match m;
+    if (!scoreEntry(names[i], query, m)) continue;
+    scored.push_back(Scored{static_cast<int>(i), m});
+  }
+
+  // stable_sort so equally good matches keep the listing order the folder already had,
+  // rather than being reshuffled by the sort.
+  std::stable_sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) {
+    if (a.match.tier != b.match.tier) return a.match.tier < b.match.tier;
+    return a.match.score < b.match.score;
+  });
+
+  hits.reserve(scored.size());
+  for (const Scored& s : scored) hits.push_back(s.index);
+  return hits;
+}
 
 }  // namespace librarysearch

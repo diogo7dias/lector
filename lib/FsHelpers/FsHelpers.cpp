@@ -79,10 +79,10 @@ std::string normalisePath(const std::string& path) {
   return result;
 }
 
-bool naturalLess(const std::string& str1, const std::string& str2) {
+bool naturalLess(const std::string& str1, const std::string& str2) { return naturalLessC(str1.c_str(), str2.c_str()); }
+
+bool naturalLessC(const char* s1, const char* s2) {
   // Naive natural sort: numeric-aware, case-insensitive
-  const char* s1 = str1.c_str();
-  const char* s2 = str2.c_str();
 
   // ctype functions require unsigned char values: passing a negative char (UTF-8
   // bytes above 0x7f with signed char) is undefined behavior
@@ -126,15 +126,21 @@ bool naturalLess(const std::string& str1, const std::string& str2) {
   return *s1 == '\0' && *s2 != '\0';
 }
 
-void sortFileList(std::vector<std::string>& strs) {
-  std::sort(begin(strs), end(strs), [](const std::string& str1, const std::string& str2) {
-    // Directories first
-    bool isDir1 = str1.back() == '/';
-    bool isDir2 = str2.back() == '/';
-    if (isDir1 != isDir2) return isDir1;
+bool fileListLessC(const char* s1, const char* s2) {
+  // Directories first. An empty name has no trailing slash to inspect, so it sorts
+  // as a file rather than reading one byte before the terminator.
+  const size_t len1 = strlen(s1);
+  const size_t len2 = strlen(s2);
+  const bool isDir1 = len1 > 0 && s1[len1 - 1] == '/';
+  const bool isDir2 = len2 > 0 && s2[len2 - 1] == '/';
+  if (isDir1 != isDir2) return isDir1;
 
-    return naturalLess(str1, str2);
-  });
+  return naturalLessC(s1, s2);
+}
+
+void sortFileList(std::vector<std::string>& strs) {
+  std::sort(begin(strs), end(strs),
+            [](const std::string& str1, const std::string& str2) { return fileListLessC(str1.c_str(), str2.c_str()); });
 }
 
 bool checkFileExtension(std::string_view fileName, const char* extension) {

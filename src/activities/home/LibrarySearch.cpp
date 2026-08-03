@@ -63,33 +63,4 @@ bool scoreEntry(std::string_view name, const std::string_view query, Match& out)
   return true;
 }
 
-std::vector<int> rankMatches(const std::vector<std::string>& names, const std::string_view query) {
-  std::vector<int> hits;
-  if (query.empty()) return hits;
-
-  // Score and index travel together, or sorting one would lose track of the other.
-  struct Scored {
-    int index;
-    Match match;
-  };
-  std::vector<Scored> scored;
-  scored.reserve(names.size());
-  for (size_t i = 0; i < names.size(); i++) {
-    Match m;
-    if (!scoreEntry(names[i], query, m)) continue;
-    scored.push_back(Scored{static_cast<int>(i), m});
-  }
-
-  // stable_sort so equally good matches keep the listing order the folder already had,
-  // rather than being reshuffled by the sort.
-  std::stable_sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) {
-    if (a.match.tier != b.match.tier) return a.match.tier < b.match.tier;
-    return a.match.score < b.match.score;
-  });
-
-  hits.reserve(scored.size());
-  for (const Scored& s : scored) hits.push_back(s.index);
-  return hits;
-}
-
 }  // namespace librarysearch
