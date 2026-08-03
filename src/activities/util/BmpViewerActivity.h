@@ -1,5 +1,7 @@
 #pragma once
 
+#include <NameList.h>
+
 #include <functional>
 #include <string>
 
@@ -23,6 +25,8 @@ class BmpViewerActivity final : public Activity {
   void promptDelete();
 
   std::string filePath;
-  std::vector<std::string> siblingImages;
+  // Arena-backed and bounded; see NameList. A wallpaper folder with thousands of
+  // images used to exhaust the heap building this list.
+  NameList siblingImages;
   int currentImageIndex = -1;
 };

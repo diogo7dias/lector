@@ -71,25 +71,31 @@ void FileBrowserActivity::loadFiles() {
     }
 
     if (file.isDirectory()) {
-      files.emplace_back(std::string(fileNameBuffer.get()) + "/");
+      std::string dirName(fileNameBuffer.get());
+      dirName += '/';
+      if (!files.push(dirName)) break;
     } else {
       std::string_view filename{fileNameBuffer.get()};
       if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
         if (FsHelpers::checkFileExtension(filename, ".bin")) {
-          files.emplace_back(filename);
+          if (!files.push(filename)) break;
         }
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
                  FsHelpers::hasBmpExtension(filename) || hasPxcExtension(filename)) {
         // .pxc joins the list so a wallpaper folder can be browsed and triaged on
         // the device; selecting one opens PxcViewerActivity.
-        files.emplace_back(filename);
+        if (!files.push(filename)) break;
       }
     }
   }
   root.close();
-  FsHelpers::sortFileList(files);
+  if (files.truncated()) {
+    LOG_ERR("FileBrowser", "Folder too large to list in full; showing first %u entries",
+            static_cast<unsigned>(files.size()));
+  }
+  files.sortByC([](const char* a, const char* b) { return FsHelpers::fileListLessC(a, b); });
   shuffleFilesIfRandomOrder();
 
   // A new folder is a new search scope, so any running search ends here rather than
@@ -132,13 +138,13 @@ std::string FileBrowserActivity::rowTitle(const int row) const {
       break;
   }
   const int index = fileIndexAt(row);
-  return index < 0 ? std::string() : getFileName(files[static_cast<size_t>(index)]);
+  return index < 0 ? std::string() : getFileName(std::string(files[static_cast<size_t>(index)]));
 }
 
 std::string FileBrowserActivity::rowValue(const int row) const {
   if (rowKindAt(row) != RowKind::Entry) return {};
   const int index = fileIndexAt(row);
-  return index < 0 ? std::string() : getFileExtension(files[static_cast<size_t>(index)]);
+  return index < 0 ? std::string() : getFileExtension(std::string(files[static_cast<size_t>(index)]));
 }
 
 void FileBrowserActivity::applySearch(const std::string& query) {
@@ -175,13 +181,10 @@ void FileBrowserActivity::shuffleFilesIfRandomOrder() {
   size_t first = 0;
   while (first < files.size() && !files[first].empty() && files[first].back() == '/') first++;
   if (files.size() - first < 2) return;
-
-  // Fisher-Yates over the file tail. esp_random() is the hardware RNG, so this needs
-  // no seeding and gives a different order every time the folder is opened.
-  for (size_t i = files.size() - 1; i > first; i--) {
-    const size_t j = first + esp_random() % (i - first + 1);
-    std::swap(files[i], files[j]);
-  }
+  // Fisher-Yates over the file tail, moving offsets rather than names. esp_random() is
+  // the hardware RNG, so this needs no seeding and gives a different order every time
+  // the folder is opened.
+  files.shuffleTail(first, [] { return static_cast<uint32_t>(esp_random()); });
 }
 
 void FileBrowserActivity::onEnter() {
@@ -346,8 +349,8 @@ void FileBrowserActivity::loop() {
 
     const int fileIndex = fileIndexAt(row);
     if (fileIndex < 0) return;
-    const std::string& entry = files[static_cast<size_t>(fileIndex)];
-    bool isDirectory = (entry.back() == '/');
+    const std::string entry(files[static_cast<size_t>(fileIndex)]);
+    bool isDirectory = (!entry.empty() && entry.back() == '/');
 
     // Firmware picker: select file -> return path; navigate into directories normally.
     if (mode == Mode::PickFirmware && !isDirectory) {
@@ -523,6 +526,13 @@ void FileBrowserActivity::render(RenderLock&&) {
       (mode == Mode::PickFirmware)
           ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
           : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
+  // A folder too big to list in full must say so. Showing a silently short listing
+  // would read as missing files.
+  if (files.truncated()) {
+    folderName += " (";
+    folderName += tr(STR_PARTIAL_LISTING);
+    folderName += ")";
+  }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
 
   const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
@@ -584,8 +594,9 @@ void FileBrowserActivity::render(RenderLock&&) {
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
   const int selectedRow = static_cast<int>(selectorIndex);
   const int selectedFile = fileIndexAt(selectedRow);
-  const bool selectingFirmwareFile =
-      mode == Mode::PickFirmware && selectedFile >= 0 && files[static_cast<size_t>(selectedFile)].back() != '/';
+  const bool selectingFirmwareFile = mode == Mode::PickFirmware && selectedFile >= 0 &&
+                                     !files[static_cast<size_t>(selectedFile)].empty() &&
+                                     files[static_cast<size_t>(selectedFile)].back() != '/';
   const bool listEmpty = totalRowCount() == 0;
   const char* confirmLabel =
       listEmpty ? ""
@@ -602,6 +613,6 @@ size_t FileBrowserActivity::findEntryRow(const std::string& name) const {
   // Returns a LIST ROW, not an index into `files`: the search rows sit above the
   // entries, so the two only coincide in a folder that has no rows above.
   for (size_t i = 0; i < files.size(); i++)
-    if (files[i] == name) return static_cast<size_t>(headerRowCount()) + i;
+    if (files[i] == std::string_view(name)) return static_cast<size_t>(headerRowCount()) + i;
   return 0;
 }

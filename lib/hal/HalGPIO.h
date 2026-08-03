@@ -32,6 +32,12 @@
 #define I2C_ADDR_DS3231 0x68  // RTC I2C address
 #define DS3231_SEC_REG 0x00   // Seconds command code (BCD)
 
+// QST QMI8658 IMU I2C
+#define I2C_ADDR_QMI8658 0x6B        // IMU I2C address
+#define I2C_ADDR_QMI8658_ALT 0x6A    // IMU I2C fallback address
+#define QMI8658_WHO_AM_I_REG 0x00    // WHO_AM_I command code
+#define QMI8658_WHO_AM_I_VALUE 0x05  // WHO_AM_I expected value
+
 class HalGPIO {
 #if CROSSPOINT_EMULATED == 0
   InputManager inputMgr;
@@ -57,6 +63,16 @@ class HalGPIO {
  public:
   HalGPIO() = default;
 
+  // True while a raw button-state change is still inside the debounce window.
+  // The idle loop polls fast while this is set so the confirming sample lands
+  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
+  // otherwise appear in a single sample and never commit (dropped press).
+  bool isDebouncePending() const;
+
+  // USB state as sampled by the last update() call.
+  // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
+  bool isUsbConnectedCached() const { return lastUsbConnected; }
+
   // Inline device type helpers for cleaner downstream checks
   inline bool deviceIsX3() const { return _deviceType == DeviceType::X3; }
   inline bool deviceIsX4() const { return _deviceType == DeviceType::X4; }
@@ -72,13 +88,16 @@ class HalGPIO {
   bool wasAnyPressed() const;
   bool wasReleased(uint8_t buttonIndex) const;
   bool wasAnyReleased() const;
-  // True while a raw button-state change is still inside the debounce window.
-  // The idle loop polls fast while this is set so the confirming sample lands
-  // ~10 ms after the first; at the 50 ms light-sleep cadence a short tap can
-  // otherwise appear in a single sample and never commit (dropped press).
-  bool isDebouncePending() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
+  bool hasTouch() const;
+  bool wasTouchTap(float& nx, float& ny) const;
+  bool wasTouchDown(float& nx, float& ny) const;
+  bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
+  bool isTouchHeldAt(float& nx, float& ny) const;
+  unsigned long lastTouchHeldMs() const;
+  bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;
+  bool wasTouchActivity() const;
   void setSharedConfirmPowerShortPressEmitsPower(bool enabled);
 
   // Verify power button was held long enough after wakeup.
@@ -88,10 +107,6 @@ class HalGPIO {
 
   // Check if USB is connected
   bool isUsbConnected() const;
-
-  // USB state as sampled by the last update() call.
-  // Prefer this in per-loop polling: isUsbConnected() performs a fresh I2C read on X3.
-  bool isUsbConnectedCached() const { return lastUsbConnected; }
 
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;

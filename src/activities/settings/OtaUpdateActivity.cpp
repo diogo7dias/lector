@@ -11,6 +11,25 @@
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
 
+namespace {
+// Reuses the theme's Rect (components/themes/BaseTheme.h) rather than a local copy,
+// which the fork's UITheme already puts in scope here.
+struct OtaActionRects {
+  Rect cancel;
+  Rect update;
+};
+
+OtaActionRects getOtaActionRects(const GfxRenderer& renderer) {
+  const int top = renderer.getScreenHeight() - 80;
+  const int width = renderer.getScreenWidth() / 2;
+  return {Rect{0, top, width, 80}, Rect{width, top, renderer.getScreenWidth() - width, 80}};
+}
+
+bool contains(const Rect& rect, const int x, const int y) {
+  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+}  // namespace
+
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
@@ -109,11 +128,15 @@ void OtaUpdateActivity::render(RenderLock&&) {
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
                       (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
 
-    // Upstream draws Cancel/Update here as touch targets and hides them behind
-    // mappedInput.hasTouch(). Neither the X3 nor the X4 has a touch panel and this
-    // fork has no hasTouch(), so the labels are dropped outright: the button hints
-    // drawn just below already say Cancel and Update, and drawing both printed each
-    // word twice.
+    if (mappedInput.hasTouch()) {
+      const auto actionRects = getOtaActionRects(renderer);
+      const int cancelTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_CANCEL));
+      renderer.drawText(UI_10_FONT_ID, actionRects.cancel.x + (actionRects.cancel.width - cancelTextWidth) / 2,
+                        actionRects.cancel.y + 28, tr(STR_CANCEL));
+      const int updateTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_UPDATE));
+      renderer.drawText(UI_10_FONT_ID, actionRects.update.x + (actionRects.update.width - updateTextWidth) / 2,
+                        actionRects.update.y + 28, tr(STR_UPDATE));
+    }
 
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

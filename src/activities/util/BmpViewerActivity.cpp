@@ -39,9 +39,11 @@ void BmpViewerActivity::loadSiblingImages() {
     if (!file.isDirectory()) {
       file.getName(name, sizeof(name));
       if (name[0] != '.') {
-        std::string fname(name);
-        if (fname.length() >= 4 && fname.substr(fname.length() - 4) == ".bmp") {
-          siblingImages.push_back(fname);
+        const std::string_view fname(name);
+        if (FsHelpers::checkFileExtension(fname, ".bmp")) {
+          // Bounded on purpose: this folder can hold thousands of images, and an
+          // unbounded name list exhausts the heap into a throwing allocation.
+          if (!siblingImages.push(fname)) break;
         }
       }
     }
@@ -49,10 +51,10 @@ void BmpViewerActivity::loadSiblingImages() {
   }
   dir.close();
 
-  FsHelpers::sortFileList(siblingImages);
+  siblingImages.sortByC([](const char* a, const char* b) { return FsHelpers::fileListLessC(a, b); });
 
   for (size_t i = 0; i < siblingImages.size(); ++i) {
-    if (siblingImages[i] == fileName) {
+    if (siblingImages[i] == std::string_view(fileName)) {
       currentImageIndex = static_cast<int>(i);
       break;
     }
@@ -202,7 +204,7 @@ void BmpViewerActivity::loop() {
     currentImageIndex = nextIndex;
     std::string dirPath = FsHelpers::extractFolderPath(filePath);
     if (dirPath.back() != '/') dirPath += "/";
-    filePath = dirPath + siblingImages[currentImageIndex];
+    filePath = dirPath + std::string(siblingImages[currentImageIndex]);
     onEnter();
     return true;
   };
@@ -280,7 +282,7 @@ void BmpViewerActivity::doTogglePause() {
   const int nextIndex = (currentImageIndex > 0) ? currentImageIndex - 1 : currentImageIndex + 1;
   const bool hasNeighbour =
       siblingImages.size() > 1 && nextIndex >= 0 && nextIndex < static_cast<int>(siblingImages.size());
-  std::string nextName = hasNeighbour ? siblingImages[nextIndex] : std::string();
+  std::string nextName = hasNeighbour ? std::string(siblingImages[nextIndex]) : std::string();
 
   if (!crosspoint::sleep::toggleSleepPause(filePath).ok) {
     GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));

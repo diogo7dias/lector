@@ -14,6 +14,12 @@ std::string normalisePath(const std::string& path);
 // Numeric-aware, case-insensitive comparison ("2" < "10"). Returns true when str1 orders
 // before str2. Same ordering sortFileList applies within the file/directory groups.
 bool naturalLess(const std::string& str1, const std::string& str2);
+// Same ordering on NUL-terminated names, so callers holding their names in a
+// character arena can sort without materialising a std::string per comparison.
+bool naturalLessC(const char* s1, const char* s2);
+// Full file-list ordering: directories first, then naturalLessC. Empty names are
+// treated as files.
+bool fileListLessC(const char* s1, const char* s2);
 
 void sortFileList(std::vector<std::string>& strs);
 
