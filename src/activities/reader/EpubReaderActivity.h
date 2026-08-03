@@ -58,6 +58,13 @@ class EpubReaderActivity final : public Activity {
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;
   int pagesUntilFullRefresh = 0;
+  // Any popup or banner painted over the page leaves charge the next fast differential
+  // cannot clear, so the redraw that REMOVES it has to drive every pixel. Setting the
+  // counter to 1 promotes that next paint to HALF via displayWithRefreshCycle, which is
+  // the same idiom the image-page path already uses, and still honours
+  // Refresh Frequency = Never. Call it where the overlay goes away, not where it is
+  // drawn: a render that both draws and displays would consume the promotion itself.
+  void scheduleGhostCleanup() { pagesUntilFullRefresh = 1; }
   // Image pages use a dedicated double-FAST refresh path, so retain a manual
   // refresh request until renderContents can issue its clean base pass.
   bool forcedRefreshPending = false;
