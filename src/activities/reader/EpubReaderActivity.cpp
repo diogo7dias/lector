@@ -1045,13 +1045,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                // layout: preserve position and force a re-layout, mirroring
                                // applyOrientation()'s reflow.
                                RenderLock lock(*this);
-                               if (section) {
-                                 rememberCurrentContentOffset();
-                                 cachedSpineIndex = currentSpineIndex;
-                                 cachedChapterTotalPageCount = section->pageCount;
-                                 nextPageNumber = section->currentPage;
-                               }
-                               section.reset();
+                               // Same relayout as a per-book prefs change, so it takes the
+                               // same path: the paragraph anchor is what puts the reader
+                               // back, and the quote underline memo has to go with it.
+                               dropSectionForRelayout();
                              });
       break;
     }
@@ -1487,6 +1484,9 @@ void EpubReaderActivity::dropSectionForRelayout() {
   // which is NOT recursive, so the render path takes this entry point instead of
   // reloadForReaderPrefsChange() — taking the mutex twice on one task blocks forever.
   if (section) {
+    // The content offset is what makes the rebuild stop in the right place; the
+    // paragraph below is what picks the landing page once it has.
+    rememberCurrentContentOffset();
     cachedSpineIndex = currentSpineIndex;
     cachedChapterTotalPageCount = section->pageCount;
     nextPageNumber = section->currentPage;
@@ -1590,7 +1590,8 @@ uint32_t EpubReaderActivity::wholeBookParagraphBase(const int spineIndex) const 
   return base;
 }
 
-int EpubReaderActivity::findPageForOrdinal(Section& sec, const uint16_t ordinal) const {
+int EpubReaderActivity::findPageForOrdinal(Section& sec, const uint16_t ordinal, bool* const outFound) const {
+  if (outFound) *outFound = false;
   const int pages = sec.pageCount;
   for (int p = 0; p < pages; p++) {
     auto page = sec.loadPage(p);
@@ -1599,23 +1600,41 @@ int EpubReaderActivity::findPageForOrdinal(Section& sec, const uint16_t ordinal)
       if (el->getTag() != TAG_PageLine) continue;
       // Ordinals are contiguous and increase down the chapter, so the first page whose
       // lines reach the target holds that paragraph's first line.
-      if (static_cast<const PageLine&>(*el).getParagraphOrdinal() >= ordinal) return p;
+      if (static_cast<const PageLine&>(*el).getParagraphOrdinal() >= ordinal) {
+        if (outFound) *outFound = true;
+        return p;
+      }
     }
   }
-  return pages > 0 ? pages - 1 : 0;  // past the last paragraph -> last page
+  // Past the last paragraph laid out so far. On a finished chapter that means the last
+  // page; on a chapter still building it means "not reached yet", which `outFound`
+  // tells the caller apart so it can wait rather than land on the build watermark.
+  return pages > 0 ? pages - 1 : 0;
 }
 
 std::optional<uint16_t> EpubReaderActivity::firstOrdinalOnPage(Section& sec, const int page) const {
   if (page < 0 || page >= sec.pageCount) return std::nullopt;
   const auto loaded = sec.loadPage(page);
   if (!loaded) return std::nullopt;
+  // Only the FIRST line of a paragraph carries its ordinal; every other line is 0. So a
+  // page that opens in the middle of a paragraph shows 0 until the next paragraph starts,
+  // and the paragraph the page opened in is the one before that. That is the paragraph
+  // the reader was looking at, which is what the anchor wants.
+  bool openedMidParagraph = false;
+  bool sawFirstLine = false;
   for (const auto& el : loaded->elements) {
     if (el->getTag() != TAG_PageLine) continue;
     const uint16_t ordinal = static_cast<const PageLine&>(*el).getParagraphOrdinal();
-    // Ordinal 0 means the line carries no paragraph of its own (a heading, an image
-    // caption); keep looking rather than anchoring on nothing.
-    if (ordinal > 0) return ordinal;
+    if (!sawFirstLine) {
+      sawFirstLine = true;
+      openedMidParagraph = (ordinal == 0);
+    }
+    if (ordinal == 0) continue;
+    if (!openedMidParagraph) return ordinal;  // page starts on a paragraph
+    return (ordinal > 1) ? static_cast<uint16_t>(ordinal - 1) : ordinal;
   }
+  // No paragraph starts on this page at all: it sits wholly inside one long paragraph,
+  // and there is nothing here to name it by.
   return std::nullopt;
 }
 
@@ -1942,7 +1961,12 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
     const auto& ref = quoteAnchors[i];
     if (static_cast<int>(ref.spine) != currentSpineIndex) continue;
     const bool ordinalKnown = ref.paragraph != 0 && firstOrdinal != 0;
-    if (ordinalKnown && (ref.paragraph < firstOrdinal || ref.paragraph > lastOrdinal)) continue;
+    if (ordinalKnown) {
+      // A quote starting after this page cannot show here at all. One starting before
+      // it may still have its tail here, so look back a bounded number of paragraphs.
+      if (ref.paragraph > lastOrdinal) continue;
+      if (ref.paragraph + quote_underline::MAX_SPAN_PARAGRAPHS < firstOrdinal) continue;
+    }
     candidates[candidateCount++] = i;
   }
   if (candidateCount == 0) return;  // nothing to look for: no tokens built, no SD read
@@ -1990,7 +2014,12 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
     scratch[ref.textLength] = '\0';
 
     size_t first = 0, last = 0;
-    if (!quote_underline::findQuoteRun(texts.data(), texts.size(), scratch.get(), ref.wordHint, first, last)) continue;
+    if (!quote_underline::findQuoteRun(texts.data(), texts.size(), scratch.get(), ref.wordHint, first, last)) {
+      // Not starting here. It may still be a quote grabbed on an earlier page whose
+      // rest runs into this one, which always resumes at the page's first word.
+      if (!quote_underline::findQuoteContinuation(texts.data(), texts.size(), scratch.get(), last)) continue;
+      first = 0;
+    }
 
     // One unbroken stroke per screen row: words that share a y are covered by a
     // single line from the first word's left edge to the last word's right edge,
@@ -2026,13 +2055,7 @@ void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption
   if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
     // Preserve current reading position so we can restore after reflow.
     RenderLock lock(*this);
-    if (section) {
-      rememberCurrentContentOffset();
-      cachedSpineIndex = currentSpineIndex;
-      cachedChapterTotalPageCount = section->pageCount;
-      nextPageNumber = section->currentPage;
-    }
-    section.reset();
+    dropSectionForRelayout();
   }
 }
 
@@ -2399,9 +2422,19 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (pendingOrdinalAnchor_.has_value() && section->pageCount > 0) {
       // The chapter has just been laid out again under different settings. Put the
       // reader back on the paragraph it was reading, wherever that landed.
-      section->currentPage = findPageForOrdinal(*section, *pendingOrdinalAnchor_);
-      nextPageNumber = section->currentPage;
-      pendingOrdinalAnchor_.reset();
+      bool found = false;
+      const int ordinalPage = findPageForOrdinal(*section, *pendingOrdinalAnchor_, &found);
+      if (found || section->isBuildComplete()) {
+        section->currentPage = ordinalPage;
+        nextPageNumber = ordinalPage;
+        pendingOrdinalAnchor_.reset();
+        // The paragraph decided the page. Retire both fallbacks so the background
+        // build's completion cannot rescale it a second time and teleport the reader.
+        cachedChapterTotalPageCount = 0;
+        cachedVisibleTextOffset.reset();
+      }
+      // Not laid out that far yet: keep the anchor. applyDeferredReposition() resolves
+      // it once the build finishes, rather than landing on the build watermark now.
     }
 
     if (!pendingAnchor.empty()) {
@@ -2590,9 +2623,27 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 }
 
 bool EpubReaderActivity::applyDeferredReposition() {
-  if ((!cachedVisibleTextOffset.has_value() && cachedChapterTotalPageCount == 0) || !section || section->isBuilding()) {
+  if ((!cachedVisibleTextOffset.has_value() && cachedChapterTotalPageCount == 0 &&
+       !pendingOrdinalAnchor_.has_value()) ||
+      !section || section->isBuilding()) {
     return false;
   }
+
+  // The paragraph anchor outranks both fallbacks: it is the place the reader actually
+  // was. The chapter is fully laid out by now, so the paragraph is certainly in it.
+  if (pendingOrdinalAnchor_.has_value() && section->pageCount > 0 && currentSpineIndex == cachedSpineIndex) {
+    const int ordinalPage = findPageForOrdinal(*section, *pendingOrdinalAnchor_);
+    pendingOrdinalAnchor_.reset();
+    cachedChapterTotalPageCount = 0;
+    cachedVisibleTextOffset.reset();
+    if (ordinalPage != section->currentPage) {
+      section->currentPage = ordinalPage;
+      nextPageNumber = ordinalPage;
+      return true;
+    }
+    return false;
+  }
+
   bool changed = false;
   // Re-derive the page from the saved content offset after a settings reflow.
   // Older 4/6-byte progress files retain the page-fraction fallback.

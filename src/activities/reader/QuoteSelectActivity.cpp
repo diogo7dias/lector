@@ -163,6 +163,21 @@ int QuoteSelectActivity::closestInRow(const uint16_t row, const int centerX) con
   return best;
 }
 
+// Move the cursor to an absolute word index, refusing anything before the first
+// selectable word of this page. Returns false when the target is out of range.
+bool QuoteSelectActivity::moveCursorTo(const int index) {
+  if (index < firstSelectedOnPage() || index >= static_cast<int>(words.size())) return false;
+  if (index == cursor) return true;  // already there; nothing to redraw
+  cursor = index;
+  requestUpdate();
+  return true;
+}
+
+// Whether stepping off the edge of the page may turn it. Only while picking the end of
+// the quote: the start word is chosen on the page the user opened the picker from, and
+// moving around there must never carry them somewhere else.
+bool QuoteSelectActivity::mayLeavePage() const { return phase == Phase::SelectEnd; }
+
 void QuoteSelectActivity::moveVertical(const int direction) {
   if (words.empty() || cursor >= static_cast<int>(words.size())) {
     // Wordless page: there is no row to move within, only the page to leave.
@@ -175,23 +190,21 @@ void QuoteSelectActivity::moveVertical(const int direction) {
   }
 
   const WordBox& current = words[cursor];
-  const int targetRow = static_cast<int>(current.row) + direction;
+  const int centerX = current.x + current.width / 2;
+  int targetRow = static_cast<int>(current.row) + direction;
   if (targetRow < 0 || targetRow >= static_cast<int>(rowCount)) {
-    // Off the top or bottom of the page: carry the selection to the neighbouring page,
-    // the same way Left and Right do at the page's first and last word.
-    if (direction > 0) {
-      advancePage();
-    } else {
-      retreatPage();
-    }
-    return;
+    // Off the top or bottom of the page. Picking the END of the quote carries the
+    // selection onto the neighbouring page, which is how a quote spans pages. Picking
+    // the START never leaves the page: the page on screen is the page the user chose,
+    // so the cursor wraps to the opposite edge instead, keeping the same column.
+    if (mayLeavePage() && (direction > 0 ? advancePage() : retreatPage())) return;
+    targetRow = (direction > 0) ? 0 : static_cast<int>(rowCount) - 1;
   }
 
-  const int best = closestInRow(static_cast<uint16_t>(targetRow), current.x + current.width / 2);
-  const int lo = firstSelectedOnPage();
-  if (best >= lo && best != cursor) {
-    cursor = best;
-    requestUpdate();
+  if (!moveCursorTo(closestInRow(static_cast<uint16_t>(targetRow), centerX))) {
+    // The nearest word in that row sits before the start word (SelectEnd on the start
+    // page): fall back to the start word rather than leaving the cursor stuck.
+    moveCursorTo(firstSelectedOnPage());
   }
 }
 
@@ -350,15 +363,17 @@ void QuoteSelectActivity::loop() {
     if (cursor > lo) {
       cursor--;
       requestUpdate();
-    } else {
-      retreatPage();
+    } else if (!mayLeavePage() || !retreatPage()) {
+      // Picking the start word, or nowhere to retreat to: wrap round to the last word
+      // of this page so the cursor is never stuck at the edge.
+      moveCursorTo(static_cast<int>(words.size()) - 1);
     }
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     if (cursor + 1 < static_cast<int>(words.size())) {
       cursor++;
       requestUpdate();
-    } else {
-      advancePage();
+    } else if (!mayLeavePage() || !advancePage()) {
+      moveCursorTo(lo);
     }
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     moveVertical(-1);

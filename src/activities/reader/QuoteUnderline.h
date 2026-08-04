@@ -21,7 +21,13 @@ namespace quote_underline {
 
 // A quote longer than this is never underlined: the scratch buffer that holds it
 // during matching is bounded, and very long selections are rare.
-inline constexpr size_t MAX_MATCH_BYTES = 768;
+inline constexpr size_t MAX_MATCH_BYTES = 1536;
+
+// How many paragraphs beyond its own start paragraph a quote is allowed to reach.
+// A quote that began before this page can still have its tail visible here, so the
+// page filter has to look backwards — but not over the whole chapter, or every old
+// quote would be read from SD on every page.
+inline constexpr uint16_t MAX_SPAN_PARAGRAPHS = 4;
 
 // Per-page caps. Every one of these is a hard refusal, not a resize.
 inline constexpr size_t MAX_QUOTES_PER_PAGE = 4;
@@ -62,8 +68,12 @@ inline bool quoteExhausted(const char* quote, size_t qStart) {
 // Does the run starting at word `start` spell out `quote`? On success `outLast`
 // is the last word of the run. A quote that runs out mid-word fails: the
 // underline covers whole words or nothing.
+//
+// `allowTail` accepts a second kind of success: the run reached the page's last
+// word with the quote still unfinished. That is a quote which carries on onto the
+// following page, and the part visible here is underlined.
 inline bool matchRunAt(const char* const* words, const size_t wordCount, const char* quote, const size_t start,
-                       size_t& outLast) {
+                       size_t& outLast, const bool allowTail = false) {
   size_t qi = 0;
   for (size_t w = start; w < wordCount; w++) {
     const char* p = words[w];
@@ -86,7 +96,13 @@ inline bool matchRunAt(const char* const* words, const size_t wordCount, const c
       return true;
     }
   }
-  return false;  // page ran out before the quote did
+  // The page ran out before the quote did. Every word from `start` on matched, so
+  // this is the head of a quote that continues onto the next page.
+  if (allowTail && qi > 0) {
+    outLast = wordCount - 1;
+    return true;
+  }
+  return false;
 }
 
 // Scan `words` for `quote`, preferring the occurrence nearest `startHint` (the
@@ -105,13 +121,44 @@ inline bool findQuoteRun(const char* const* words, const size_t wordCount, const
     const size_t start = (hint + offset) % wordCount;
     if (firstSignificant(words[start]) != firstChar) continue;  // cheap reject
     size_t last = 0;
-    if (matchRunAt(words, wordCount, quote, start, last)) {
+    if (matchRunAt(words, wordCount, quote, start, last, true)) {
       outFirst = start;
       outLast = last;
       return true;
     }
   }
   return false;
+}
+
+// The rest of a quote that began on an earlier page. Such a continuation always
+// resumes at this page's very first word, so only the quote's own offset is
+// unknown: every offset whose first significant byte matches is tried, and the one
+// covering the most words wins. That rule keeps a short accidental agreement from
+// beating the real continuation, which runs either to the end of the quote or to
+// the end of the page.
+//
+// Offset 0 is skipped: a quote starting here is the ordinary case and belongs to
+// findQuoteRun.
+inline bool findQuoteContinuation(const char* const* words, const size_t wordCount, const char* quote,
+                                  size_t& outLast) {
+  if (!words || !quote || wordCount == 0) return false;
+  const char firstChar = firstSignificant(words[0]);
+  if (firstChar == '\0') return false;
+
+  bool found = false;
+  size_t best = 0;
+  for (size_t q = 1; quote[q]; q++) {
+    if (ignorableLen(quote + q) != 0) continue;  // start on a significant byte only
+    if (quote[q] != firstChar) continue;         // cheap reject
+    size_t last = 0;
+    if (!matchRunAt(words, wordCount, quote + q, 0, last, true)) continue;
+    if (!found || last > best) {
+      best = last;
+      found = true;
+    }
+  }
+  if (found) outLast = best;
+  return found;
 }
 
 // A hairline at the smallest reading size, two pixels once the text is big

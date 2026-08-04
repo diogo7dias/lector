@@ -56,6 +56,8 @@ class QuoteSelectActivity final : public Activity {
 
   void extractWords();
   int closestInRow(uint16_t row, int centerX) const;
+  bool mayLeavePage() const;
+  bool moveCursorTo(int index);
   void moveVertical(int direction);
   // Index of the first selected word on the page being shown: the start word on the
   // page the quote began on, and word 0 on every page it has since run into.
