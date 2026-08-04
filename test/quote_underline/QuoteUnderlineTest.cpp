@@ -88,10 +88,14 @@ TEST(QuoteUnderline, NoMatchLeavesOutputsUntouched) {
   EXPECT_EQ(43u, last);
 }
 
-TEST(QuoteUnderline, QuoteRunningPastPageEndDoesNotMatch) {
+TEST(QuoteUnderline, QuoteRunningPastPageEndUnderlinesWhatIsVisible) {
+  // The quote carries on onto the next page. The part on this page is still drawn;
+  // the rest is picked up by findQuoteContinuation when that page renders.
   const std::vector<const char*> words = {"alpha", "beta"};
   size_t first = 99, last = 99;
-  EXPECT_FALSE(find(words, "beta gamma", 0, first, last));
+  EXPECT_TRUE(find(words, "beta gamma", 0, first, last));
+  EXPECT_EQ(1u, first);
+  EXPECT_EQ(1u, last);
 }
 
 TEST(QuoteUnderline, PartialWordDoesNotMatch) {
@@ -162,3 +166,54 @@ TEST(QuoteUnderline, UnderlineStaysInsideItsLineBox) {
 }
 
 TEST(QuoteUnderline, UnderlineSitsBelowTheGlyphs) { EXPECT_GT(underlineY(0, 20, 30, 1), 20); }
+
+// --- Quotes that run across a page boundary -------------------------------
+
+TEST(QuoteUnderline, HeadOfAQuoteThatContinuesOnTheNextPageIsUnderlined) {
+  // Page one ends mid-quote. Everything from the start word to the last word of
+  // the page is covered.
+  const std::vector<const char*> words = {"before", "the", "quick", "brown"};
+  size_t first = 99, last = 99;
+  EXPECT_TRUE(find(words, "the quick brown fox jumped", 0, first, last));
+  EXPECT_EQ(1u, first);
+  EXPECT_EQ(3u, last);
+}
+
+TEST(QuoteUnderline, RestOfTheQuoteIsUnderlinedOnTheFollowingPage) {
+  const std::vector<const char*> words = {"fox", "jumped", "over", "later", "words"};
+  size_t last = 99;
+  EXPECT_TRUE(findQuoteContinuation(words.data(), words.size(), "the quick brown fox jumped", last));
+  EXPECT_EQ(1u, last);
+}
+
+TEST(QuoteUnderline, ContinuationCoveringTheWholePageIsAccepted) {
+  // A quote spanning three pages: this middle page is entirely inside it.
+  const std::vector<const char*> words = {"brown", "fox"};
+  size_t last = 99;
+  EXPECT_TRUE(findQuoteContinuation(words.data(), words.size(), "the quick brown fox jumped over", last));
+  EXPECT_EQ(1u, last);
+}
+
+TEST(QuoteUnderline, ContinuationPrefersTheLongerAgreement) {
+  // "over" appears twice in the quote. The occurrence that carries on matching
+  // wins over the one that stops after a single word.
+  const std::vector<const char*> words = {"over", "the", "hill"};
+  size_t last = 99;
+  EXPECT_TRUE(findQuoteContinuation(words.data(), words.size(), "jumped over and over the hill", last));
+  EXPECT_EQ(2u, last);
+}
+
+TEST(QuoteUnderline, PageUnrelatedToTheQuoteIsNotAContinuation) {
+  const std::vector<const char*> words = {"nothing", "in", "common"};
+  size_t last = 99;
+  EXPECT_FALSE(findQuoteContinuation(words.data(), words.size(), "the quick brown fox", last));
+  EXPECT_EQ(99u, last);
+}
+
+TEST(QuoteUnderline, ContinuationRejectsEmptyInputs) {
+  const std::vector<const char*> words = {"alpha"};
+  size_t last = 99;
+  EXPECT_FALSE(findQuoteContinuation(nullptr, 0, "alpha", last));
+  EXPECT_FALSE(findQuoteContinuation(words.data(), 0, "alpha", last));
+  EXPECT_FALSE(findQuoteContinuation(words.data(), words.size(), "", last));
+}

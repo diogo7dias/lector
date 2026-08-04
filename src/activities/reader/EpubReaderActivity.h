@@ -264,7 +264,7 @@ class EpubReaderActivity final : public Activity {
   void jumpToParagraph(int target);
   // First page of a loaded section whose lines reach the given per-chapter ordinal
   // (returns the last page when the ordinal is past the chapter's paragraphs).
-  int findPageForOrdinal(Section& section, uint16_t ordinal) const;
+  int findPageForOrdinal(Section& section, uint16_t ordinal, bool* outFound = nullptr) const;
   // First paragraph ordinal appearing on `page`, or nullopt when the page holds no
   // numbered line (an image-only page, or a page not built yet).
   std::optional<uint16_t> firstOrdinalOnPage(Section& section, int page) const;
