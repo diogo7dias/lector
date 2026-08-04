@@ -226,7 +226,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t wallpaperRotationPaused = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
-  uint8_t sbEnabled = 1;                      // master on/off
+  // Master on/off. NEVER read this field to decide whether to draw or reserve the bar —
+  // call statusBarEnabled() instead, so a book that turned the bar off for itself is
+  // honoured. This field stays the global default and the value written to settings.json.
+  uint8_t sbEnabled = 1;
   uint8_t sbBatteryPos = SB_ANCHOR_BL;        // battery anchor
   uint8_t sbClockPos = SB_ANCHOR_OFF;         // clock anchor (X3 RTC only)
   uint8_t sbTitlePos = SB_ANCHOR_BC;          // title anchor
@@ -348,11 +351,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
-  // Double-click Confirm function in EPUB reader. Shares the LONG_PRESS_MENU_FUNCTION
-  // values so both bindings offer the same list. Defaults to Disabled because any other
-  // value makes a single Confirm click wait out the double-click window (see
-  // ReaderUtils::DOUBLE_CLICK_MS) before the reader menu opens.
-  uint8_t doubleClickMenuFunction = LP_MENU_DISABLED;
+  // Hold-Confirm function INSIDE the in-book menu. Shares the LONG_PRESS_MENU_FUNCTION
+  // values so both bindings offer the same list. Held Confirm closes the menu and hands
+  // the choice back to the reader, which owns the page every one of those functions
+  // needs. Costs nothing when Disabled, and nothing when set: the menu acts on release,
+  // so a plain tap is unaffected either way.
+  uint8_t menuHoldFunction = LP_MENU_DISABLED;
   // UI Theme
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
@@ -525,6 +529,19 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // leak a book's per-book values into the global settings.json.
   bool saveToFile() const;
 
+  // ── Per-book status bar switch ─────────────────────────────────────────────
+  // The EPUB reader owns a book that may have turned the status bar off for itself
+  // (ReaderPrefs::statusBarEnabled). Everything that draws or reserves space for the
+  // bar asks statusBarEnabled(), which returns the book's answer while a book is open
+  // and the global one everywhere else.
+  //
+  // Deliberately NOT done by writing the book's value into sbEnabled: that field is
+  // persisted, so a book's choice could leak into settings.json and silently become
+  // the user's global setting. This override is runtime-only and never saved.
+  void setStatusBarOverride(const uint8_t enabled) { sbEnabledOverride_ = static_cast<int8_t>(enabled ? 1 : 0); }
+  void clearStatusBarOverride() { sbEnabledOverride_ = -1; }
+  bool statusBarEnabled() const { return sbEnabledOverride_ >= 0 ? sbEnabledOverride_ != 0 : sbEnabled != 0; }
+
  private:
   // Shared resolvers so getReaderFontId()/getReaderLineCompression() and their
   // ReaderPrefs overloads compute font id / line compression from one code path.
@@ -533,6 +550,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // to [MIN..MAX]_LINE_SPACING_PERCENT. Restored granular model (old lector).
   static float resolveLineCompression(uint8_t lineSpacingPercent);
 
+  // -1 = no book open, follow the global sbEnabled. 0/1 = the open book's own choice.
+  int8_t sbEnabledOverride_ = -1;
   bool readerEditOverlayActive_ = false;
   ReaderPrefs readerEditBackup_;
   ReaderEditSink readerEditSink_ = nullptr;

@@ -224,6 +224,10 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  // Stop speaking for this book: everything outside the reader follows the global
+  // status bar setting again.
+  SETTINGS.clearStatusBarOverride();
+
   if (statsTrackingActive) {
     statsSession.pause(millis());
     if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save EPUB reading stats");
@@ -347,7 +351,8 @@ void EpubReaderActivity::openReaderMenu() {
           renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
           prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
-          prefs_.paperbackLookStatus, hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes),
+          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, hasSleepWallpaper, wallpaperFavorited, wallpaperPausable,
+          hasQuotes),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
@@ -355,6 +360,20 @@ void EpubReaderActivity::openReaderMenu() {
         toggleAutoPageTurn(menu.pageTurnOption);
         applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
         applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
+        // Last of the live toggles because it is the only one that repaginates.
+        applyStatusBar(menu.statusBar);
+        // A hold inside the menu comes back cancelled with the bound function attached:
+        // no row was chosen, so this replaces the row action rather than following it.
+        //
+        // Runs AFTER the toggles above, never before. Grab Quote hands the picker a raw
+        // Section* and the picker outlives this callback; starting it first and then
+        // letting applyStatusBar/applyOrientation drop the section would leave that
+        // pointer dangling. In this order the worst case is a bound function that
+        // declines because the section is already gone, which every one of them handles.
+        if (menu.holdFunction != CrossPointSettings::LP_MENU_DISABLED) {
+          runBoundMenuFunction(menu.holdFunction);
+          return;
+        }
         if (!result.isCancelled) {
           onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
         }
@@ -717,29 +736,11 @@ void EpubReaderActivity::loop() {
   // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
   // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
-  // A held-back first click becomes an ordinary menu open once the double-click window
-  // closes. The button must be up: if it is down again the press started inside the
-  // window, so it is the second click and the release below claims it.
-  if (confirmClickPending && millis() - confirmClickMs >= ReaderUtils::DOUBLE_CLICK_MS &&
-      !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-    confirmClickPending = false;
-    openReaderMenu();
-    return;
-  }
-
   if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
-    } else if (confirmClickPending) {
-      // Second click: run the bound function instead of opening the menu.
-      confirmClickPending = false;
-      if (runBoundMenuFunction(SETTINGS.doubleClickMenuFunction)) return;
-      openReaderMenu();  // the function declined (e.g. KOSync has no credentials)
-    } else if (SETTINGS.doubleClickMenuFunction == CrossPointSettings::LP_MENU_DISABLED) {
-      openReaderMenu();
     } else {
-      confirmClickPending = true;
-      confirmClickMs = millis();
+      openReaderMenu();
     }
   }
 
@@ -762,7 +763,6 @@ void EpubReaderActivity::loop() {
                                             : ReaderUtils::BOOKMARK_HOLD_MS;
     if (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED &&
         mappedInput.getHeldTime() >= holdThreshold && runBoundMenuFunction(SETTINGS.longPressMenuFunction)) {
-      confirmClickPending = false;      // this press belonged to the hold, not to a double click
       ignoreNextConfirmRelease = true;  // suppress the menu on the release that follows
       return;
     }
@@ -1560,6 +1560,17 @@ void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode, const uint8
   requestUpdate();
 }
 
+void EpubReaderActivity::applyStatusBar(const uint8_t enabled) {
+  if (enabled == prefs_.statusBarEnabled) return;
+  prefs_.statusBarEnabled = enabled;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  // Unlike the toggles above this one changes the reserved top/bottom bands, so the
+  // viewport changes and the chapter has to be laid out again. Same path as any margin
+  // change: the reading position is held as a paragraph across the rebuild.
+  reloadForReaderPrefsChange();
+}
+
 void EpubReaderActivity::applyPaperbackLook(const uint8_t body, const uint8_t status) {
   if (body == prefs_.paperbackLookBody && status == prefs_.paperbackLookStatus) return;
   prefs_.paperbackLookBody = body;
@@ -2120,6 +2131,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
+  // Publish this book's status bar switch before anything measures or draws the bar.
+  // Set here rather than beside each `prefs_ =` assignment so it cannot fall out of
+  // step with the prefs the layout below is about to use. Cleared in onExit().
+  SETTINGS.setStatusBarOverride(prefs_.statusBarEnabled);
+
   // Apply screen viewable areas and additional padding
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
@@ -2134,8 +2150,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Auto page turn shows a one-line countdown in the title slot, so skip the wrap
   // reservation then.
   int sbTitleExtraPx = 0;
-  if (!automaticPageTurnActive && SETTINGS.sbEnabled && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
-      SETTINGS.sbTitleTruncate == 0) {
+  if (!automaticPageTurnActive && SETTINGS.statusBarEnabled() &&
+      SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && SETTINGS.sbTitleTruncate == 0) {
     std::string sbTitle;
     if (SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
       const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
@@ -2363,7 +2379,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // anchor and drops the section; the rebuild below lands on the same paragraph.
       pendingPrefsMigration_ = false;
       ReaderPrefs upgraded = prefs_;
-      upgraded.adoptCurrentReadingDefaults();
+      // A pre-v10 sidecar has no status bar byte, so the struct default (on) stood in
+      // while this chapter was laid out. Seed the book from the global setting now, with
+      // the position already anchored, because the switch changes the viewport.
+      upgraded.statusBarEnabled = SETTINGS.sbEnabled;
       if (std::memcmp(&upgraded, &prefs_, sizeof(ReaderPrefs)) != 0) {
         prefs_ = upgraded;
         writeReaderOverride(prefs_);

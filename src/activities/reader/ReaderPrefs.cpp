@@ -31,6 +31,7 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.firstLineIndentPercent = SETTINGS.firstLineIndentPercent;
   p.paragraphNumbering = SETTINGS.paragraphNumbering;
   p.paragraphNumberSize = SETTINGS.paragraphNumberSize;
+  p.statusBarEnabled = SETTINGS.sbEnabled;
   // Zero-pad then copy so the trailing bytes are canonical for whole-blob memcmp.
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(p.sdFontFamilyName) - 1);
@@ -51,22 +52,19 @@ bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated) {
   if (migrated) *migrated = false;
   uint8_t ver = 0;
   if (in.read(&ver, 1) != 1) return false;
-  // v5 through v8 are read and upgraded rather than discarded, which would silently drop
-  // every per-book override the first time this build runs. v5-v8 share one layout; v9
-  // appended a single trailing byte, so an older record is read at its own shorter
-  // length and the new field keeps its constructed default.
-  const bool legacy = (ver >= 5 && ver <= 8);
-  if (ver != ReaderPrefs::VERSION && !legacy) return false;
+  // v5 through v9 are read and upgraded rather than discarded, which would silently drop
+  // every per-book override the first time this build runs. Each older layout is a strict
+  // prefix of the current struct, so a record is read at its own shorter length and every
+  // field appended since keeps its constructed default.
+  const size_t want = readerPrefsRecordSize(ver);
+  if (want == 0) return false;
   ReaderPrefs tmp;
-  const size_t want = legacy ? READER_PREFS_LEGACY_SIZE : sizeof(ReaderPrefs);
   if (in.read(reinterpret_cast<uint8_t*>(&tmp), want) != static_cast<int>(want)) {
     return false;
   }
   if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
-  if (ver < ReaderPrefs::VERSION) {
-    tmp.adoptCurrentReadingDefaults();
-    if (migrated) *migrated = true;
-  }
+  if (ver < ReaderPrefs::FIRST_VERSION_WITH_CURRENT_DEFAULTS) tmp.adoptCurrentReadingDefaults();
+  if (ver < ReaderPrefs::VERSION && migrated) *migrated = true;
   p = tmp;
   return true;
 }

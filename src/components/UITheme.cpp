@@ -122,7 +122,7 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const bool showText =
-      SETTINGS.sbEnabled &&
+      SETTINGS.statusBarEnabled() &&
       (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
        SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos || SETTINGS.sbSessionPagesPos);
   return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
@@ -130,8 +130,9 @@ int UITheme::getStatusBarHeight() {
 
 int UITheme::getProgressBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const bool showProgressBar = SETTINGS.sbEnabled && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
-                                                      SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
+  const bool showProgressBar =
+      SETTINGS.statusBarEnabled() && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
+                                      SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
   return showProgressBar ? (statusBarThicknessPx(SETTINGS.sbBarThickness) + metrics.progressBarMarginTop) : 0;
 }
 
@@ -175,7 +176,7 @@ bool sbBandHasText(bool top, bool hasChapters) {
 }  // namespace
 
 int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
-  if (!SETTINGS.sbEnabled) return 0;
+  if (!SETTINGS.statusBarEnabled()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
   int bars = 0;
@@ -187,7 +188,7 @@ int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
 }
 
 int UITheme::getStatusBarV2BottomHeight(bool hasChapters, int extraTitleHeightPx) {
-  if (!SETTINGS.sbEnabled) return 0;
+  if (!SETTINGS.statusBarEnabled()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
   int bars = 0;
@@ -208,7 +209,7 @@ int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
 }
 
 int UITheme::getStatusBarV2TitleLines(const GfxRenderer& renderer, const char* title) {
-  if (!SETTINGS.sbEnabled || SETTINGS.sbTitlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
+  if (!SETTINGS.statusBarEnabled() || SETTINGS.sbTitlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
   if (SETTINGS.sbTitleTruncate != 0) return 1;  // a clipping title stays one line
   if (!title || title[0] == '\0') return 1;
   const int bandWidth = getStatusBarV2BandWidth(renderer);

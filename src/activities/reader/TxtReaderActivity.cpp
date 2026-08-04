@@ -189,7 +189,8 @@ void TxtReaderActivity::initializeReader() {
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
   int sbTitleExtraPx = 0;
-  if (SETTINGS.sbEnabled && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && SETTINGS.sbTitleTruncate == 0) {
+  if (SETTINGS.statusBarEnabled() && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
+      SETTINGS.sbTitleTruncate == 0) {
     // TXT resolves any title source to the book title (no chapters to fall back from).
     const int lines = UITheme::getStatusBarV2TitleLines(renderer, txt->getTitle().c_str());
     sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);

@@ -5,6 +5,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -13,7 +14,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
     const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
     const uint8_t paragraphNumbering, const uint8_t paragraphNumberSize, const uint8_t paperbackBody,
-    const uint8_t paperbackStatus, const bool hasSleepWallpaper, const bool wallpaperFavorited,
+    const uint8_t paperbackStatus, const uint8_t statusBar, const bool hasSleepWallpaper, const bool wallpaperFavorited,
     const bool wallpaperPausable, const bool hasQuotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
       tabs(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, hasSleepWallpaper,
@@ -26,6 +27,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       selectedParagraphNumberSize(paragraphNumberSize),
       selectedPaperbackBody(paperbackBody),
       selectedPaperbackStatus(paperbackStatus),
+      selectedStatusBar(statusBar),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
@@ -118,6 +120,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     }
     items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
     items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+    items.push_back({MenuAction::TOGGLE_STATUS_BAR, StrId::STR_STATUS_BAR});
     items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   }
 
@@ -192,7 +195,9 @@ void EpubReaderMenuActivity::closeCancelled() {
                            selectedParagraphNumbering,
                            selectedParagraphNumberSize,
                            selectedPaperbackBody,
-                           selectedPaperbackStatus};
+                           selectedPaperbackStatus,
+                           selectedStatusBar,
+                           firedHoldFunction};
   setResult(std::move(result));
   finish();
 }
@@ -214,6 +219,36 @@ void EpubReaderMenuActivity::loop() {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       return;  // swallow the release that closed the popup
+    }
+  }
+
+  // Menu Hold: holding Confirm anywhere in the menu runs the bound function instead of
+  // activating the highlighted row. Every one of those functions needs the reader's page,
+  // which this activity does not have, so the hold only reports itself and closes; the
+  // reader runs the function when it takes the result back.
+  //
+  // Reported as CANCELLED on purpose: no row was chosen. The reader applies the live
+  // toggles either way and skips the row action, which is exactly right here.
+  //
+  // Closing on the press (not the release) is what keeps the tap path untouched: the row
+  // still activates on release, and the release that follows this hold lands in the
+  // reader, whose ButtonPressLatch drops it because that press was never seen there.
+  if (SETTINGS.menuHoldFunction != CrossPointSettings::LP_MENU_DISABLED) {
+    // Timed from a press this activity actually SAW, never from a button that merely
+    // happens to be down. Returning from a sub-screen (chapter list, confirmation) can
+    // hand the menu a Confirm that is still held with the threshold already passed;
+    // measuring that would fire the bound function the instant the menu came back.
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      confirmHoldStart = millis();
+    }
+    if (confirmHoldStart != 0 && mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      if (millis() - confirmHoldStart >= ReaderUtils::BOOKMARK_HOLD_MS) {
+        firedHoldFunction = SETTINGS.menuHoldFunction;
+        closeCancelled();
+        return;
+      }
+    } else if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      confirmHoldStart = 0;
     }
   }
 
@@ -278,10 +313,15 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
+    if (selectedAction == MenuAction::TOGGLE_STATUS_BAR) {
+      selectedStatusBar = selectedStatusBar ? 0 : 1;
+      requestUpdate();
+      return;
+    }
 
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
                          selectedParagraphNumbering, selectedParagraphNumberSize, selectedPaperbackBody,
-                         selectedPaperbackStatus});
+                         selectedPaperbackStatus, selectedStatusBar, firedHoldFunction});
     finish();
   };
 
@@ -418,6 +458,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
           return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_STATUS_BAR) {
+          return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else {
           return "";
         }
