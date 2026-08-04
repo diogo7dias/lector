@@ -256,17 +256,22 @@ void HomeActivity::drawHomeHeaderExtras() const {
     renderer.drawText(UI_10_FONT_ID, rightEdge, textY, timeBuf);
   }
 
-  // Skull centred in whatever is left between the version and the right-hand
-  // cluster, so it stays put as the version string or the clock changes width.
-  // Drawn only when the gap can hold it with air on both sides.
-  const int gapLeft = versionX + versionWidth;
-  constexpr int skullMinAir = 8;
-  if (rightEdge - gapLeft >= Skull12Icon.w + skullMinAir * 2) {
-    const int skullX = gapLeft + (rightEdge - gapLeft - Skull12Icon.w) / 2;
-    // Sit the skull's centre of mass on the text's own vertical middle, so it lines
-    // up with the version string rather than with the invisible line box.
-    const int textCenterY = textY + renderer.getTextHeight(UI_10_FONT_ID) / 2;
-    const int skullY = textCenterY - Skull12Icon.opticalCenterY;
+  // Skull on the screen's own centre line, NOT centred in the gap between the
+  // version and the clock. Centring in the gap moves the skull whenever the version
+  // string or the clock changes width, which reads as drift; the screen's midpoint
+  // does not move, so the skull sits in the same place on every build.
+  const int skullX = (pageWidth - Skull12Icon.w) / 2;
+  // Sit the skull's centre of mass on the text's own vertical middle, so it lines
+  // up with the version string rather than with the invisible line box.
+  const int textCenterY = textY + renderer.getTextHeight(UI_10_FONT_ID) / 2;
+  const int skullY = textCenterY - Skull12Icon.opticalCenterY;
+
+  // The only reason to skip it: a version string or clock long enough to reach the
+  // middle. Overlapping glyphs would be worse than no skull.
+  constexpr int skullMinAir = 4;
+  const bool clearOfText =
+      skullX - skullMinAir >= versionX + versionWidth && skullX + Skull12Icon.w + skullMinAir <= rightEdge;
+  if (clearOfText) {
     renderer.drawIcon(Skull12Icon.bits, skullX, skullY, Skull12Icon.w);
   }
 }

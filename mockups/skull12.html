@@ -45,7 +45,7 @@
   <h2>In the header</h2>
   <p class="note">
     The top strip of the home screen at 1:1, then doubled. Version on the left,
-    skull centred in the measured gap, clock and battery on the right.
+    skull on the panel centre line, clock and battery on the right.
   </p>
   <div class="scrollx">
     <div class="panel"><canvas id="h1"></canvas></div>
@@ -125,7 +125,7 @@ iconCanvas('i4', 4, {invert: true});
 // Panel is 480 logical pixels wide in portrait. These paddings mirror the ones
 // HomeActivity::drawHomeHeaderExtras reads out of the theme metrics.
 const PANEL_W = 480, STRIP_H = 34;
-const SIDE_PAD = 12, TEXT_Y = 9, CLUSTER_W = 44, CLUSTER_GAP = 12, MIN_AIR = 8;
+const SIDE_PAD = 12, TEXT_Y = 9, CLUSTER_W = 44, CLUSTER_GAP = 12, MIN_AIR = 4;
 const VERSION = 'lector.exp.4';
 const CLOCK = '21:04';
 
@@ -158,10 +158,12 @@ function headerCanvas(id, scale) {
   rightEdge -= clockW;
   ctx.fillText(CLOCK, rightEdge, TEXT_Y);
 
-  // Centre the skull in what is left, exactly as drawHomeHeaderExtras does.
-  const gapLeft = SIDE_PAD + versionW;
-  if (rightEdge - gapLeft >= SIZE + MIN_AIR * 2) {
-    const skullX = Math.round(gapLeft + (rightEdge - gapLeft - SIZE) / 2);
+  // Skull on the panel's own centre line, exactly as drawHomeHeaderExtras does.
+  const skullXCandidate = Math.round((PANEL_W - SIZE) / 2);
+  const clearOfText = skullXCandidate - MIN_AIR >= SIDE_PAD + versionW &&
+                      skullXCandidate + SIZE + MIN_AIR <= rightEdge;
+  if (clearOfText) {
+    const skullX = skullXCandidate;
     const skullY = Math.round(TEXT_Y + 11 / 2 - 6);
     drawSkull(ctx, skullX, skullY, 1, false);
   }
