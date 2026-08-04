@@ -14,6 +14,11 @@ constexpr unsigned long GO_HOME_MS = 1000;
 constexpr unsigned long GO_BACK_OR_HOME_MS = GO_HOME_MS;
 constexpr unsigned long SKIP_HOLD_MS = 700;
 constexpr unsigned long BOOKMARK_HOLD_MS = 400;
+
+// How long a single Confirm click waits to see whether a second click follows.
+// Only spent when a double-click function is bound; with the binding Disabled the
+// first click still opens the reader menu immediately.
+constexpr unsigned long DOUBLE_CLICK_MS = 300;
 constexpr unsigned long BOOKMARK_MESSAGE_DURATION_MS = 2500;
 
 inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {

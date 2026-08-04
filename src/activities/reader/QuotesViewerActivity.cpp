@@ -73,14 +73,19 @@ void QuotesViewerActivity::loadQuotes() {
   //   [Chapter Title]\nquote text\n---\n\n
   size_t pos = 0;
   while (pos < buf.size()) {
-    while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r' || buf[pos] == ' ')) ++pos;
+    // isRecordGap covers the page-break byte each entry now starts with, so the
+    // header bracket is still what the scan lands on.
+    while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
     if (pos >= buf.size()) break;
 
     QuoteEntry entry;
     if (buf[pos] == '[') {
       const auto close = buf.find(']', pos);
       if (close != std::string::npos) {
-        entry.chapter = buf.substr(pos + 1, close - pos - 1);
+        // The header field carries the chapter title and, for quotes saved with
+        // a position, the anchor token. Split them so the title displays clean
+        // and the anchor survives a rewrite of this file.
+        quote_text::splitChapterAnchor(buf.substr(pos + 1, close - pos - 1), entry.chapter, entry.anchor);
         pos = close + 1;
         while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
       }
@@ -124,7 +129,7 @@ bool QuotesViewerActivity::saveQuotes() const {
       return false;
     }
     for (const auto& quote : quotes) {
-      const std::string entry = quote_text::formatQuoteEntry(quote.chapter, quote.text);
+      const std::string entry = quote_text::formatQuoteEntry(quote.chapter, quote.anchor, quote.text);
       if (dst.write(entry.data(), entry.size()) != entry.size()) {
         LOG_ERR("QV", "Temp quotes write failed");
         dst.close();

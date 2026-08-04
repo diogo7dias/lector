@@ -57,9 +57,8 @@ class HomeActivity final : public Activity {
   // Menu rows only, excluding books and the pages tile.
   int menuRowCount() const;
   // Selector index of the resettable "pages read" tile in the header.
-  int pagesTileIndex() const;
   // Header extras: the pages tile and, on boards with an RTC, the clock.
-  void drawHomeHeaderExtras(bool pagesSelected) const;
+  void drawHomeHeaderExtras() const;
   void loadRecentBooks(int maxBooks);
 
  public:

@@ -98,6 +98,12 @@ class EpubReaderActivity final : public Activity {
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
+  // Double-click Confirm state. A first click is held back for
+  // ReaderUtils::DOUBLE_CLICK_MS so a second one can claim it; if none arrives the
+  // click becomes the ordinary "open the reader menu". Both stay untouched while
+  // SETTINGS.doubleClickMenuFunction is Disabled, so the menu keeps opening at once.
+  bool confirmClickPending = false;
+  unsigned long confirmClickMs = 0UL;
   bool currentPageBookmarked = false;
   // Idle-time glyph prewarm: after a page settles, scan the LIKELY next page
   // (scan mode draws nothing) and load its missing glyphs from SD during idle,
@@ -108,6 +114,29 @@ class EpubReaderActivity final : public Activity {
   unsigned long lastRenderCompleteMs = 0;
   bool bookmarkRemoved = false;  // true when last toggle removed (controls popup text)
   std::vector<BookmarkEntry> cachedBookmarks;
+  // Saved quotes keep a thin underline in the text. Only their POSITIONS live in
+  // RAM (12 bytes each, capped); the quote text itself stays on the SD card and is
+  // read back, bounded, on the rare page that might be showing it.
+  struct QuoteAnchorRef {
+    uint32_t textOffset;  // byte offset of the quote text inside the sidecar
+    uint16_t textLength;
+    uint16_t spine;
+    uint16_t paragraph;  // chapter-local ordinal; 0 = unknown, search the chapter
+    uint16_t wordHint;   // index the quote started at when grabbed; tie-break only
+  };
+  // Positions of this book's saved quotes, loaded once per open and refreshed
+  // whenever the sidecar is rewritten (a grab, or a delete in the viewer).
+  std::vector<QuoteAnchorRef> quoteAnchors;
+  // Underline segments already worked out for the page on screen, so a repeat
+  // render (status bar tick, return from a menu) costs no SD reads.
+  struct UnderlineSegment {
+    int16_t x1;
+    int16_t x2;
+    int16_t y;
+  };
+  std::vector<UnderlineSegment> underlineMemo;
+  int underlineMemoSpine = -1;
+  int underlineMemoPage = -1;
   // Tracks whether this book is currently removed from Recent Books by the
   // removeReadBooksFromRecents feature (set at End-of-Book, cleared if paged back in).
   bool recentsEntryRemoved = false;
@@ -258,6 +287,10 @@ class EpubReaderActivity final : public Activity {
   void openDictionaryWordSelect();
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();
+  // Runs one of the CrossPointSettings::LONG_PRESS_MENU_FUNCTION actions. Shared by the
+  // long-press and double-click Confirm bindings so both offer the same behaviour.
+  // Returns true when the function actually ran.
+  bool runBoundMenuFunction(uint8_t function);
   // Opens the Reading Stats screen for this book plus the all-books totals.
   void openReadingStats();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
@@ -290,6 +323,8 @@ class EpubReaderActivity final : public Activity {
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).
   void applyPaperbackLook(uint8_t body, uint8_t status);
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
+  void loadQuoteAnchors();
+  void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
   uint32_t wholeBookParagraphBase(int spineIndex) const;
   std::string paragraphCountsPath() const;
   void loadParagraphCounts();

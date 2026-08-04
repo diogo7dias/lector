@@ -39,6 +39,7 @@
 #include "QrDisplayActivity.h"
 #include "QuoteSelectActivity.h"
 #include "QuoteText.h"
+#include "QuoteUnderline.h"
 #include "QuotesViewerActivity.h"
 #include "ReaderPresetStore.h"
 #include "ReaderPresetsActivity.h"
@@ -68,6 +69,14 @@ constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
 // paragraph_counts.bin: [uint8 version][uint16 spineCount][uint16 count]*spineCount.
 constexpr uint8_t PARAGRAPH_COUNTS_VERSION = 1;
+// Quote underlines. Positions only: 128 anchors is 1.5KB resident, and a book with
+// more saved quotes than that simply stops underlining the extras.
+constexpr size_t MAX_QUOTE_ANCHORS = 128;
+// Heap that must remain free beyond the sidecar itself before it is read at all.
+constexpr size_t QUOTE_INDEX_HEAP_HEADROOM = 8 * 1024;
+// Ceiling on the word list flattened per page while looking for a quote. A full
+// page of small type is well under this; the cap only bounds the allocation.
+constexpr size_t MAX_PAGE_TOKENS = 512;
 
 int clampPercent(int percent) {
   if (percent < 0) {
@@ -162,6 +171,8 @@ void EpubReaderActivity::onEnter() {
   // Per-spine paragraph counts for whole-book numbering (sized to the spine; filled
   // from the sidecar if present, else zeros that fill in as the book is read).
   loadParagraphCounts();
+  // Where this book's saved quotes sit, so their underlines can be drawn back in.
+  loadQuoteAnchors();
 
   HalFile f;
   if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
@@ -456,8 +467,6 @@ void EpubReaderActivity::openReadingStats() {
 
 void EpubReaderActivity::openQuoteGrab() {
   if (!section) return;
-  auto page = section->loadPage(section->currentPage);
-  if (!page) return;
 
   // Word geometry must match render(): use the same per-book reader margins.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -467,9 +476,41 @@ void EpubReaderActivity::openQuoteGrab() {
   // the highlight boxes line up with the rendered glyphs.
   const int readerFontId = SETTINGS.getReaderFontId(prefs_);
   startActivityForResult(
-      std::make_unique<QuoteSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
-                                            orientedMarginTop, epub, currentSpineIndex, readerFontId),
-      [this](const ActivityResult&) { requestUpdate(); });
+      // The picker loads its own pages: a quote may run past this one, and it turns
+      // pages itself while the reader stays suspended and its section stays alive.
+      std::make_unique<QuoteSelectActivity>(renderer, mappedInput, section.get(), section->currentPage,
+                                            orientedMarginLeft, orientedMarginTop, epub, currentSpineIndex,
+                                            readerFontId),
+      [this](const ActivityResult&) {
+        loadQuoteAnchors();  // a fresh grab appended to the sidecar
+        requestUpdate();
+      });
+}
+
+bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
+  switch (function) {
+    case CrossPointSettings::LP_MENU_BOOKMARK:
+      if (showBookmarkMessage) return false;
+      addBookmark();
+      showBookmarkMessage = true;
+      bookmarkMessageTime = millis();
+      requestUpdate();
+      return true;
+    case CrossPointSettings::LP_MENU_KOSYNC:
+      // False when sync cannot run (no credentials stored); the caller then leaves the
+      // Confirm release alone so the normal reader menu still opens.
+      return launchKOReaderSync();
+    case CrossPointSettings::LP_MENU_DICTIONARY:
+      if (showDictionaryMessage) return false;
+      openDictionaryWordSelect();
+      return true;
+    case CrossPointSettings::LP_MENU_GRAB_QUOTE:
+      openQuoteGrab();
+      return true;
+    case CrossPointSettings::LP_MENU_DISABLED:
+    default:
+      return false;
+  }
 }
 
 void EpubReaderActivity::loop() {
@@ -676,11 +717,29 @@ void EpubReaderActivity::loop() {
   // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
   // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
   // following the hold does not also open the menu.
+  // A held-back first click becomes an ordinary menu open once the double-click window
+  // closes. The button must be up: if it is down again the press started inside the
+  // window, so it is the second click and the release below claims it.
+  if (confirmClickPending && millis() - confirmClickMs >= ReaderUtils::DOUBLE_CLICK_MS &&
+      !mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+    confirmClickPending = false;
+    openReaderMenu();
+    return;
+  }
+
   if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
-    } else {
+    } else if (confirmClickPending) {
+      // Second click: run the bound function instead of opening the menu.
+      confirmClickPending = false;
+      if (runBoundMenuFunction(SETTINGS.doubleClickMenuFunction)) return;
+      openReaderMenu();  // the function declined (e.g. KOSync has no credentials)
+    } else if (SETTINGS.doubleClickMenuFunction == CrossPointSettings::LP_MENU_DISABLED) {
       openReaderMenu();
+    } else {
+      confirmClickPending = true;
+      confirmClickMs = millis();
     }
   }
 
@@ -695,38 +754,17 @@ void EpubReaderActivity::loop() {
   // a sync the user never asked for. An inherited hold is now ignored until the button is
   // released and pressed again inside the reader.
   if (confirmLatch_.seen && mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-    switch (SETTINGS.longPressMenuFunction) {
-      case CrossPointSettings::LP_MENU_BOOKMARK:
-        // Hold ~0.4s drops a bookmark at the current page.
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showBookmarkMessage) {
-          addBookmark();
-          showBookmarkMessage = true;
-          ignoreNextConfirmRelease = true;  // Prevent accidental menu open after adding bookmark
-          bookmarkMessageTime = millis();
-          requestUpdate();
-        }
-        break;
-      case CrossPointSettings::LP_MENU_KOSYNC:
-        // Hold ~1s launches KOReader sync. If sync can't run (no credentials stored), fall
-        // through so the normal Confirm-release still opens the reader menu.
-        if (mappedInput.getHeldTime() >= ReaderUtils::GO_HOME_MS) {
-          if (launchKOReaderSync()) {
-            ignoreNextConfirmRelease = true;  // sync launched or error shown; suppress menu open
-            return;
-          }
-        }
-        break;
-      case CrossPointSettings::LP_MENU_DICTIONARY:
-        // Hold ~0.4s starts dictionary word selection on the current page.
-        if (mappedInput.getHeldTime() >= ReaderUtils::BOOKMARK_HOLD_MS && !showDictionaryMessage) {
-          ignoreNextConfirmRelease = true;  // Prevent menu open on the release that follows
-          openDictionaryWordSelect();
-          return;
-        }
-        break;
-      case CrossPointSettings::LP_MENU_DISABLED:
-      default:
-        break;
+    // KOSync asks for a longer hold (~1s) than the others (~0.4s): it starts WiFi, so an
+    // accidental brush must not trigger it. A function that declines (KOSync without
+    // credentials) leaves the release alone, so the normal reader menu still opens.
+    const unsigned long holdThreshold = (SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_KOSYNC)
+                                            ? ReaderUtils::GO_HOME_MS
+                                            : ReaderUtils::BOOKMARK_HOLD_MS;
+    if (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED &&
+        mappedInput.getHeldTime() >= holdThreshold && runBoundMenuFunction(SETTINGS.longPressMenuFunction)) {
+      confirmClickPending = false;      // this press belonged to the hold, not to a double click
+      ignoreNextConfirmRelease = true;  // suppress the menu on the release that follows
+      return;
     }
   }
 
@@ -1046,7 +1084,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // onto the file Grab Quote wrote.
       startActivityForResult(
           std::make_unique<QuotesViewerActivity>(renderer, mappedInput, quote_text::quotesFilePathFor(epub->getPath())),
-          [this](const ActivityResult&) { requestUpdate(); });
+          [this](const ActivityResult&) {
+            loadQuoteAnchors();  // a delete in there rewrites the sidecar
+            requestUpdate();
+          });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::READING_STATS: {
@@ -1387,6 +1428,11 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
     // Reset section to force re-layout in the new orientation.
     section.reset();
+    // Same page number, entirely different geometry: drop the remembered quote
+    // underline segments so they are worked out again for the new viewport.
+    underlineMemoSpine = -1;
+    underlineMemoPage = -1;
+    underlineMemo.clear();
   }
 }
 
@@ -1449,6 +1495,11 @@ void EpubReaderActivity::dropSectionForRelayout() {
     captureOrdinalAnchor();
   }
   section.reset();
+  // Quote underlines are memoised per (spine, page). A relayout keeps both of those
+  // numbers but moves every word, so the remembered segments must go with the section.
+  underlineMemoSpine = -1;
+  underlineMemoPage = -1;
+  underlineMemo.clear();
 }
 
 void EpubReaderActivity::readerEditSinkThunk(void* ctx, const ReaderPrefs& live) {
@@ -1771,6 +1822,181 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     sectionParagraphCounts_[currentSpineIndex] = pageMaxOrdinal;
     paragraphCountsDirty_ = true;
   }
+}
+
+// Index the saved quotes: where each one sits, not what it says. Called on open
+// and after anything rewrites the sidecar (a new grab, a delete in the viewer).
+// The 24KB read is bounded by the writer's own cap and refused when the heap
+// cannot spare it; on any refusal the book simply shows no underlines.
+void EpubReaderActivity::loadQuoteAnchors() {
+  quoteAnchors.clear();
+  underlineMemoSpine = -1;
+  underlineMemoPage = -1;
+  underlineMemo.clear();
+  if (!epub) return;
+
+  const std::string path = quote_text::quotesFilePathFor(epub->getPath());
+  if (!Storage.exists(path.c_str())) return;  // the common case: nothing to do
+
+  HalFile file;
+  if (!Storage.openFileForRead("ERS", path, file)) return;
+  const size_t fileSize = file.size();
+  if (fileSize == 0 || fileSize > quote_text::MAX_QUOTES_FILE_BYTES) return;
+  if (ESP.getMaxAllocHeap() < fileSize + QUOTE_INDEX_HEAP_HEADROOM) {
+    LOG_ERR("ERS", "Low heap for %u byte quotes file, skipping underlines", static_cast<unsigned>(fileSize));
+    return;
+  }
+  std::string buf;
+  buf.assign(fileSize, '\0');
+  if (file.read(&buf[0], fileSize) != static_cast<int>(fileSize)) return;
+
+  // Same record grammar the viewer parses: "[chapter @anchor]\nquote\n---\n\n".
+  // Records with no anchor are skipped here — they stay bare in the text.
+  quoteAnchors.reserve(MAX_QUOTE_ANCHORS);
+  size_t pos = 0;
+  while (pos < buf.size() && quoteAnchors.size() < MAX_QUOTE_ANCHORS) {
+    while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
+    if (pos >= buf.size()) break;
+
+    quote_text::QuoteAnchor anchor;
+    if (buf[pos] == '[') {
+      const auto close = buf.find(']', pos);
+      if (close == std::string::npos) break;
+      std::string chapter, token;
+      quote_text::splitChapterAnchor(buf.substr(pos + 1, close - pos - 1), chapter, token);
+      if (!token.empty()) quote_text::parseAnchorToken(token, anchor);
+      pos = close + 1;
+      while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
+    }
+
+    const auto sep = buf.find("\n---", pos);
+    const size_t textEnd = (sep == std::string::npos) ? buf.size() : sep;
+    if (anchor.valid && textEnd > pos && (textEnd - pos) <= quote_underline::MAX_MATCH_BYTES) {
+      QuoteAnchorRef ref;
+      ref.textOffset = static_cast<uint32_t>(pos);
+      ref.textLength = static_cast<uint16_t>(textEnd - pos);
+      ref.spine = anchor.spine;
+      ref.paragraph = anchor.paragraph;
+      ref.wordHint = anchor.wordHint;
+      quoteAnchors.push_back(ref);
+    }
+    if (sep == std::string::npos) break;
+    pos = sep + 4;
+  }
+  LOG_DBG("ERS", "Quote anchors: %u", static_cast<unsigned>(quoteAnchors.size()));
+}
+
+// Draw the thin line under every saved quote visible on this page. Nothing is
+// stored about where a quote sits on screen — the words are found again by their
+// own text, so the line follows the passage through any font, margin or
+// orientation change, and a passage that is not really here draws nothing.
+void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginLeft, const int marginTop,
+                                             const int fontId) {
+  if (quoteAnchors.empty() || !section) return;
+
+  const int lineHeight = renderer.getLineHeight(fontId);
+  const int thickness = quote_underline::underlineThickness(lineHeight);
+  const auto drawSegments = [&]() {
+    for (const auto& seg : underlineMemo) {
+      renderer.drawLine(seg.x1, seg.y, seg.x2, seg.y, thickness, true);
+    }
+  };
+
+  // Same page as last render: the words have not moved, so replay the result.
+  if (underlineMemoSpine == currentSpineIndex && underlineMemoPage == section->currentPage) {
+    drawSegments();
+    return;
+  }
+  underlineMemo.clear();
+  underlineMemoSpine = currentSpineIndex;
+  underlineMemoPage = section->currentPage;
+
+  // Which paragraphs this page covers. A page that opens mid-paragraph carries no
+  // ordinal until the next paragraph begins, so the one before that first ordinal
+  // is the paragraph it opened in. A page wholly inside one paragraph has none at
+  // all, and then the range check is skipped for every quote.
+  uint16_t firstOrdinal = 0;
+  uint16_t lastOrdinal = 0;
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const uint16_t ord = static_cast<const PageLine&>(*el).getParagraphOrdinal();
+    if (ord == 0) continue;
+    if (firstOrdinal == 0) firstOrdinal = static_cast<uint16_t>(ord - 1);
+    lastOrdinal = ord;
+  }
+
+  size_t candidates[quote_underline::MAX_QUOTES_PER_PAGE];
+  size_t candidateCount = 0;
+  for (size_t i = 0; i < quoteAnchors.size() && candidateCount < quote_underline::MAX_QUOTES_PER_PAGE; i++) {
+    const auto& ref = quoteAnchors[i];
+    if (static_cast<int>(ref.spine) != currentSpineIndex) continue;
+    const bool ordinalKnown = ref.paragraph != 0 && firstOrdinal != 0;
+    if (ordinalKnown && (ref.paragraph < firstOrdinal || ref.paragraph > lastOrdinal)) continue;
+    candidates[candidateCount++] = i;
+  }
+  if (candidateCount == 0) return;  // nothing to look for: no tokens built, no SD read
+
+  // Flatten the page's words: the text pointers the matcher walks, and the geometry
+  // the line is drawn from. Pointers go straight into the TextBlock arena, which owns
+  // NUL-terminated text and outlives this call, so no strings are copied.
+  struct TokenBox {
+    int16_t x;
+    int16_t y;
+    EpdFontFamily::Style style;
+  };
+  std::vector<const char*> texts;
+  std::vector<TokenBox> boxes;
+  texts.reserve(MAX_PAGE_TOKENS);
+  boxes.reserve(MAX_PAGE_TOKENS);
+  for (const auto& el : page.elements) {
+    if (el->getTag() != TAG_PageLine) continue;
+    const auto& line = static_cast<const PageLine&>(*el);
+    const auto& block = line.getBlock();
+    if (!block || !block->valid()) continue;
+    for (uint16_t i = 0; i < block->wordCount() && texts.size() < MAX_PAGE_TOKENS; i++) {
+      texts.push_back(block->wordText(i));
+      boxes.push_back({static_cast<int16_t>(line.xPos + block->wordXpos(i) + marginLeft),
+                       static_cast<int16_t>(line.yPos + marginTop), block->wordStyle(i)});
+    }
+  }
+  if (texts.empty()) return;
+
+  auto scratch = makeUniqueNoThrow<char[]>(quote_underline::MAX_MATCH_BYTES + 1);
+  if (!scratch) {
+    LOG_ERR("ERS", "OOM: quote underline scratch");
+    return;
+  }
+  const std::string path = quote_text::quotesFilePathFor(epub->getPath());
+  HalFile file;
+  if (!Storage.openFileForRead("ERS", path, file)) return;
+
+  const int ascender = renderer.getFontAscenderSize(fontId);
+  for (size_t c = 0; c < candidateCount; c++) {
+    const auto& ref = quoteAnchors[candidates[c]];
+    if (!file.seek(ref.textOffset)) continue;
+    const int read = file.read(scratch.get(), ref.textLength);
+    if (read != static_cast<int>(ref.textLength)) continue;
+    scratch[ref.textLength] = '\0';
+
+    size_t first = 0, last = 0;
+    if (!quote_underline::findQuoteRun(texts.data(), texts.size(), scratch.get(), ref.wordHint, first, last)) continue;
+
+    // One unbroken stroke per screen row: words that share a y are covered by a
+    // single line from the first word's left edge to the last word's right edge,
+    // so the spaces between them are underlined too.
+    size_t i = first;
+    while (i <= last && underlineMemo.size() < quote_underline::MAX_SEGMENTS_PER_PAGE) {
+      const int16_t rowY = boxes[i].y;
+      size_t rowEnd = i;
+      while (rowEnd + 1 <= last && boxes[rowEnd + 1].y == rowY) rowEnd++;
+      const int x2 = boxes[rowEnd].x + renderer.getTextAdvanceX(fontId, texts[rowEnd], boxes[rowEnd].style);
+      underlineMemo.push_back(
+          {boxes[i].x, static_cast<int16_t>(x2),
+           static_cast<int16_t>(quote_underline::underlineY(rowY, ascender, lineHeight, thickness))});
+      i = rowEnd + 1;
+    }
+  }
+  drawSegments();
 }
 
 void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
@@ -2315,10 +2541,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // A page is only "shown" once it has actually been drawn; the timer for how
     // long it was read starts here, not at the button press.
     if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
-    // Home's resettable "pages read" tally, counted at the same moment the reading
-    // stats count a page: when it is actually on the panel, not when the button was
-    // pressed. Not persisted here — the reader saves state on exit.
-    APP_STATE.sessionPagesRead++;
   }
   // Only persist when the position actually changed. render() also runs on menu,
   // bookmark and screenshot re-renders, and writeAtomic is several FAT ops for 6 bytes.
@@ -2463,6 +2685,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
   renderer.setPaperbackLook(false);
   drawParagraphNumbers(*page, orientedMarginLeft, orientedMarginTop, fontId);
+  drawQuoteUnderlines(*page, orientedMarginLeft, orientedMarginTop, fontId);
   if (SETTINGS.debugBorders) {
     // Diagnostic: outline the text viewport on the BW base plane. Draw-only overlay,
     // never affects layout or the section cache.

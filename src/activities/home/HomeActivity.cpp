@@ -15,11 +15,11 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "components/UITheme.h"
+#include "components/icons/skull12.h"
 #include "fontIds.h"
 
 int HomeActivity::menuRowCount() const {
@@ -30,17 +30,7 @@ int HomeActivity::menuRowCount() const {
   return count;
 }
 
-int HomeActivity::pagesTileIndex() const { return static_cast<int>(recentBooks.size()) + menuRowCount(); }
-
-int HomeActivity::getMenuItemCount() const {
-  // Books, then the menu rows, then the pages tile.
-  //
-  // The tile is drawn up in the header but sits LAST in the tab order on purpose.
-  // Putting it first (where it looks like it belongs) would make it the selection
-  // the home screen opens with, and the first Confirm after waking the device
-  // would zero the user's page count instead of opening a book.
-  return static_cast<int>(recentBooks.size()) + menuRowCount() + 1;
-}
+int HomeActivity::getMenuItemCount() const { return static_cast<int>(recentBooks.size()) + menuRowCount(); }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
   recentBooks.clear();
@@ -89,14 +79,6 @@ void HomeActivity::loop() {
   auto activateSelection = [this] {
     if (selectorIndex < static_cast<int>(recentBooks.size())) {
       onSelectBook(recentBooks[selectorIndex].path);
-      return;
-    }
-    if (selectorIndex == pagesTileIndex()) {
-      // Persist straight away: a reset the user can see must survive a power-off
-      // before the next state save, or the number comes back.
-      APP_STATE.sessionPagesRead = 0;
-      APP_STATE.saveToFile();
-      requestUpdate();
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
@@ -174,7 +156,7 @@ void HomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
-  drawHomeHeaderExtras(selectorIndex == pagesTileIndex());
+  drawHomeHeaderExtras();
 
   // In-progress books as a list: each book's full title + its author wrapped over
   // as many lines as it needs, with an inline [NN%] black-background badge, and
@@ -249,54 +231,49 @@ void HomeActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
-void HomeActivity::drawHomeHeaderExtras(const bool pagesSelected) const {
+void HomeActivity::drawHomeHeaderExtras() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   // topPadding already carries the X4's physical top-edge crop, so anchoring to it
   // keeps both of these on screen on either board without a per-site inset.
   const int textY = metrics.topPadding + 5;
 
-  // "Pages" label tile plus an inverted count chip. Filled when selected, since
-  // this row sits outside the menu list and gets no selection arrow of its own.
-  const std::string label = tr(STR_HOME_PAGES);
-  const std::string countText = std::to_string(APP_STATE.sessionPagesRead);
-  constexpr int tilePad = 6;
-  constexpr int tileGap = 5;
-  const int tileH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
-  const int tileY = textY - 3;
-
   // Firmware version at the left edge, which is where the old Lector home carried it.
-  // The Pages tile starts after it rather than at the padding.
   const int versionX = metrics.contentSidePadding;
   const int versionWidth = renderer.getTextWidth(UI_10_FONT_ID, CROSSPOINT_VERSION);
   renderer.drawText(UI_10_FONT_ID, versionX, textY, CROSSPOINT_VERSION);
 
-  const int labelTileX = versionX + versionWidth + 14;
-  const int labelTextW = renderer.getTextWidth(UI_10_FONT_ID, label.c_str());
-  const int labelTileW = labelTextW + tilePad * 2;
-  if (pagesSelected) {
-    renderer.fillRect(labelTileX, tileY, labelTileW, tileH + 1, true);
-  } else {
-    renderer.drawRect(labelTileX, tileY, labelTileW, tileH, 2, true);
-  }
-  renderer.drawText(UI_10_FONT_ID, labelTileX + tilePad, textY, label.c_str(), !pagesSelected);
-
-  const int countTileX = labelTileX + labelTileW + tileGap;
-  const int countTextW = renderer.getTextWidth(UI_10_FONT_ID, countText.c_str());
-  const int countTileW = countTextW + tilePad * 2;
-  renderer.fillRect(countTileX, tileY, countTileW, tileH + 1, true);
-  renderer.drawText(UI_10_FONT_ID, countTileX + (countTileW - countTextW) / 2, textY, countText.c_str(), false);
-
   // Clock to the left of the battery cluster. Only boards with an RTC report
   // available, so this simply does not draw where there is no clock to read.
-  if (!halClock.isAvailable()) return;
-  char timeBuf[9];
-  if (!halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) return;
   // Placed against the same cluster width drawHeader reserves, so the gap stays put
   // whatever the UI font measures.
-  const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
-  renderer.drawText(UI_10_FONT_ID, pageWidth - BaseTheme::batteryClusterWidth(renderer) - 12 - clockWidth, textY,
-                    timeBuf);
+  int rightEdge = pageWidth - BaseTheme::batteryClusterWidth(renderer) - 12;
+  char timeBuf[9];
+  if (halClock.isAvailable() &&
+      halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
+    const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
+    rightEdge -= clockWidth;
+    renderer.drawText(UI_10_FONT_ID, rightEdge, textY, timeBuf);
+  }
+
+  // Skull on the screen's own centre line, NOT centred in the gap between the
+  // version and the clock. Centring in the gap moves the skull whenever the version
+  // string or the clock changes width, which reads as drift; the screen's midpoint
+  // does not move, so the skull sits in the same place on every build.
+  const int skullX = (pageWidth - Skull12Icon.w) / 2;
+  // Sit the skull's centre of mass on the text's own vertical middle, so it lines
+  // up with the version string rather than with the invisible line box.
+  const int textCenterY = textY + renderer.getTextHeight(UI_10_FONT_ID) / 2;
+  const int skullY = textCenterY - Skull12Icon.opticalCenterY;
+
+  // The only reason to skip it: a version string or clock long enough to reach the
+  // middle. Overlapping glyphs would be worse than no skull.
+  constexpr int skullMinAir = 4;
+  const bool clearOfText =
+      skullX - skullMinAir >= versionX + versionWidth && skullX + Skull12Icon.w + skullMinAir <= rightEdge;
+  if (clearOfText) {
+    renderer.drawIcon(Skull12Icon.bits, skullX, skullY, Skull12Icon.w);
+  }
 }
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }

@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lector — header skull (12x12)</title>
+<style>
+  :root { --ink:#111; --paper:#f4f2ec; --line:#c9c4b8; }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; padding:24px 16px 60px;
+    background:var(--paper); color:var(--ink);
+    font:14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  h1 { font-size:16px; margin:0 0 4px; letter-spacing:.02em; }
+  h2 { font-size:13px; margin:32px 0 10px; text-transform:uppercase; letter-spacing:.08em; color:#6b6558; }
+  p.note { max-width:60ch; color:#555; margin:0 0 6px; }
+  .wrap { max-width:900px; margin:0 auto; }
+  .row { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-end; }
+  .cell { text-align:center; }
+  .cell span { display:block; margin-top:6px; font-size:11px; color:#6b6558; }
+  canvas { image-rendering: pixelated; background:#fff; border:1px solid var(--line); }
+  /* The e-ink panel: white paper, black ink, no antialiasing anywhere. */
+  .panel { background:#fff; border:1px solid var(--line); padding:0; display:inline-block; }
+  .scrollx { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>lector — home header skull</h1>
+  <p class="note">
+    Every pixel below is decoded from the bytes committed in
+    <code>src/components/icons/skull12.h</code>, replayed through the same mapping
+    <code>GfxRenderer::drawIcon</code> uses: asset (row, col) lands at screen
+    (x + size-1-row, y + col). Nothing here is redrawn by hand.
+  </p>
+
+  <h2>The icon</h2>
+  <div class="row">
+    <div class="cell"><canvas id="s1"></canvas><span>1:1 &mdash; actual size</span></div>
+    <div class="cell"><canvas id="s4"></canvas><span>4&times;</span></div>
+    <div class="cell"><canvas id="s12"></canvas><span>12&times; &mdash; with grid</span></div>
+  </div>
+
+  <h2>In the header</h2>
+  <p class="note">
+    The top strip of the home screen at 1:1, then doubled. Version on the left,
+    skull on the panel centre line, clock and battery on the right.
+  </p>
+  <div class="scrollx">
+    <div class="panel"><canvas id="h1"></canvas></div>
+  </div>
+  <div class="scrollx" style="margin-top:14px">
+    <div class="panel"><canvas id="h2c"></canvas></div>
+  </div>
+
+  <h2>Inverted</h2>
+  <p class="note">A quick check that it still reads as a skull when the tile is filled.</p>
+  <div class="row">
+    <div class="cell"><canvas id="i4"></canvas><span>4&times;, inverted</span></div>
+  </div>
+</div>
+
+<script>
+// --- the committed bytes, verbatim from skull12.h ---------------------------
+const BITS = [
+  0xC0, 0x7F, 0x80, 0x3F, 0x8E, 0x0F, 0x0E, 0x0F, 0x0E, 0x1F, 0x00, 0x8F,
+  0x00, 0x8F, 0x0E, 0x1F, 0x0E, 0x0F, 0x8E, 0x0F, 0x80, 0x3F, 0xC0, 0x7F,
+];
+const SIZE = 12;
+const ROWBYTES = (SIZE + 7) >> 3;
+
+// GfxRenderer::drawIcon, transcribed: bit 0 = ink, and asset (row, col) is
+// plotted at screen (size-1-row, col).
+function decode() {
+  const px = Array.from({length: SIZE}, () => new Array(SIZE).fill(0));
+  for (let row = 0; row < SIZE; row++) {
+    for (let col = 0; col < SIZE; col++) {
+      const byte = BITS[row * ROWBYTES + (col >> 3)];
+      const ink = ((byte >> (7 - (col & 7))) & 1) === 0;
+      if (ink) px[col][SIZE - 1 - row] = 1;   // [screenY][screenX]
+    }
+  }
+  return px;
+}
+const SKULL = decode();
+
+function drawSkull(ctx, x, y, scale, invert) {
+  ctx.fillStyle = invert ? '#fff' : '#000';
+  for (let sy = 0; sy < SIZE; sy++) {
+    for (let sx = 0; sx < SIZE; sx++) {
+      if (SKULL[sy][sx]) ctx.fillRect(x + sx * scale, y + sy * scale, scale, scale);
+    }
+  }
+}
+
+function iconCanvas(id, scale, opts = {}) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  const w = SIZE * scale, h = SIZE * scale;
+  c.width = w * dpr; c.height = h * dpr;
+  c.style.width = w + 'px'; c.style.height = h + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = opts.invert ? '#000' : '#fff';
+  ctx.fillRect(0, 0, w, h);
+  drawSkull(ctx, 0, 0, scale, opts.invert);
+  if (opts.grid) {
+    ctx.strokeStyle = 'rgba(120,120,120,.35)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < SIZE; i++) {
+      ctx.beginPath(); ctx.moveTo(i * scale + .5, 0); ctx.lineTo(i * scale + .5, h); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * scale + .5); ctx.lineTo(w, i * scale + .5); ctx.stroke();
+    }
+  }
+}
+
+iconCanvas('s1', 1);
+iconCanvas('s4', 4);
+iconCanvas('s12', 12, {grid: true});
+iconCanvas('i4', 4, {invert: true});
+
+// --- the header strip -------------------------------------------------------
+// Panel is 480 logical pixels wide in portrait. These paddings mirror the ones
+// HomeActivity::drawHomeHeaderExtras reads out of the theme metrics.
+const PANEL_W = 480, STRIP_H = 34;
+const SIDE_PAD = 12, TEXT_Y = 9, CLUSTER_W = 44, CLUSTER_GAP = 12, MIN_AIR = 4;
+const VERSION = 'lector.exp.4';
+const CLOCK = '21:04';
+
+function headerCanvas(id, scale) {
+  const c = document.getElementById(id);
+  const dpr = window.devicePixelRatio || 1;
+  c.width = PANEL_W * scale * dpr; c.height = STRIP_H * scale * dpr;
+  c.style.width = (PANEL_W * scale) + 'px'; c.style.height = (STRIP_H * scale) + 'px';
+  const ctx = c.getContext('2d');
+  ctx.scale(dpr * scale, dpr * scale);
+  ctx.imageSmoothingEnabled = false;
+
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, PANEL_W, STRIP_H);
+  ctx.fillStyle = '#000';
+  ctx.font = '11px ui-monospace, Menlo, Consolas, monospace';
+  ctx.textBaseline = 'top';
+
+  ctx.fillText(VERSION, SIDE_PAD, TEXT_Y);
+  const versionW = ctx.measureText(VERSION).width;
+
+  // Battery cluster, then the clock to its left — same order the firmware uses.
+  const battX = PANEL_W - SIDE_PAD - 22;
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 1;
+  ctx.strokeRect(battX + .5, TEXT_Y + 1.5, 18, 9);
+  ctx.fillRect(battX + 19, TEXT_Y + 4, 2, 4);
+  ctx.fillRect(battX + 2, TEXT_Y + 3, 14, 6);
+
+  let rightEdge = PANEL_W - CLUSTER_W - CLUSTER_GAP;
+  const clockW = ctx.measureText(CLOCK).width;
+  rightEdge -= clockW;
+  ctx.fillText(CLOCK, rightEdge, TEXT_Y);
+
+  // Skull on the panel's own centre line, exactly as drawHomeHeaderExtras does.
+  const skullXCandidate = Math.round((PANEL_W - SIZE) / 2);
+  const clearOfText = skullXCandidate - MIN_AIR >= SIDE_PAD + versionW &&
+                      skullXCandidate + SIZE + MIN_AIR <= rightEdge;
+  if (clearOfText) {
+    const skullX = skullXCandidate;
+    const skullY = Math.round(TEXT_Y + 11 / 2 - 6);
+    drawSkull(ctx, skullX, skullY, 1, false);
+  }
+
+  // Header rule under the strip.
+  ctx.fillRect(0, STRIP_H - 1, PANEL_W, 1);
+}
+
+headerCanvas('h1', 1);
+headerCanvas('h2c', 2);
+</script>
+</body>
+</html>
