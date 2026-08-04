@@ -98,12 +98,6 @@ class EpubReaderActivity final : public Activity {
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
-  // Double-click Confirm state. A first click is held back for
-  // ReaderUtils::DOUBLE_CLICK_MS so a second one can claim it; if none arrives the
-  // click becomes the ordinary "open the reader menu". Both stay untouched while
-  // SETTINGS.doubleClickMenuFunction is Disabled, so the menu keeps opening at once.
-  bool confirmClickPending = false;
-  unsigned long confirmClickMs = 0UL;
   bool currentPageBookmarked = false;
   // Idle-time glyph prewarm: after a page settles, scan the LIKELY next page
   // (scan mode draws nothing) and load its missing glyphs from SD during idle,
@@ -322,6 +316,7 @@ class EpubReaderActivity final : public Activity {
   void applyParagraphNumbering(uint8_t mode, uint8_t size);
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).
   void applyPaperbackLook(uint8_t body, uint8_t status);
+  void applyStatusBar(uint8_t enabled);
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);

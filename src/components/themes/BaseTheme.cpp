@@ -1073,7 +1073,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {
-  if (!SETTINGS.sbEnabled) return;
+  if (!SETTINGS.statusBarEnabled()) return;
 
   const int f = UI_10_FONT_ID;
   const auto& metrics = UITheme::getInstance().getMetrics();

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
@@ -33,6 +34,7 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PARAGRAPH_NUM_SIZE,  // cycle Small / Double in place
     TOGGLE_PAPERBACK_LOOK,      // toggle heavier ink for reader body text
     TOGGLE_PAPERBACK_STATUS,    // toggle heavier ink for status bar text
+    TOGGLE_STATUS_BAR,          // show or hide the reading status bar for this book only
     GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
     BOOK_INFO,                  // cover, author, language and the publisher synopsis
@@ -58,7 +60,7 @@ class EpubReaderMenuActivity final : public Activity {
                                   const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
                                   const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
                                   uint8_t paragraphNumbering = 0, uint8_t paragraphNumberSize = 1,
-                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1,
+                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1, uint8_t statusBar = 1,
                                   bool hasSleepWallpaper = false, bool wallpaperFavorited = false,
                                   bool wallpaperPausable = false, bool hasQuotes = false);
 
@@ -115,6 +117,12 @@ class EpubReaderMenuActivity final : public Activity {
   // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
   uint8_t selectedPaperbackBody = 1;
   uint8_t selectedPaperbackStatus = 1;
+  uint8_t selectedStatusBar = 1;
+  // Set when Confirm was held long enough to fire the bound Menu Hold function.
+  // Reported to the reader, which owns the page the function needs. LP_MENU_DISABLED
+  // (1) when no hold fired — 0 would mean KOSync.
+  uint8_t firedHoldFunction = CrossPointSettings::LP_MENU_DISABLED;
+  unsigned long confirmHoldStart = 0;
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER,

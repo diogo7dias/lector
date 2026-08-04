@@ -114,7 +114,7 @@ TEST(ReaderPrefs, Version5SidecarIsFoldedNotDropped) {
   const uint8_t v5 = 5;
   ss.write(reinterpret_cast<const char*>(&v5), 1);
   // A v5 record on the card is this struct WITHOUT the byte v9 appended.
-  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V8_SIZE);
 
   ReaderPrefs loaded;
   bool migrated = false;
@@ -143,7 +143,7 @@ TEST(ReaderPrefs, Version6SidecarAdoptsNewReadingDefaultsAndKeepsTheRest) {
   std::stringstream ss;
   const uint8_t v6 = 6;
   ss.write(reinterpret_cast<const char*>(&v6), 1);
-  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V8_SIZE);
 
   ReaderPrefs loaded;
   bool migrated = false;
@@ -223,9 +223,75 @@ TEST(ReaderPrefs, ParagraphNumberSizeDefaultsToDouble) {
   EXPECT_EQ(1, p.paragraphNumberSize);  // PARA_NUM_SIZE_DOUBLE
 }
 
-TEST(ReaderPrefs, LegacyRecordIsExactlyOneByteShorter) {
-  EXPECT_EQ(sizeof(ReaderPrefs), READER_PREFS_LEGACY_SIZE + 1);
-  EXPECT_EQ(offsetof(ReaderPrefs, paragraphNumberSize), READER_PREFS_LEGACY_SIZE);
+TEST(ReaderPrefs, EachOlderRecordIsAStrictPrefixOfTheCurrentOne) {
+  EXPECT_EQ(offsetof(ReaderPrefs, paragraphNumberSize), READER_PREFS_V8_SIZE);
+  EXPECT_EQ(offsetof(ReaderPrefs, statusBarEnabled), READER_PREFS_V9_SIZE);
+  EXPECT_EQ(READER_PREFS_V8_SIZE + 1, READER_PREFS_V9_SIZE);
+  EXPECT_EQ(sizeof(ReaderPrefs), READER_PREFS_V9_SIZE + 1);
+}
+
+// The one rule both readers share. Getting a size wrong here does not fail loudly: it
+// reads a record at the wrong length and silently drops per-book settings.
+TEST(ReaderPrefs, RecordSizeIsKnownForEveryReadableVersionAndZeroOtherwise) {
+  for (uint8_t v = 5; v <= 8; v++) EXPECT_EQ(READER_PREFS_V8_SIZE, readerPrefsRecordSize(v));
+  EXPECT_EQ(READER_PREFS_V9_SIZE, readerPrefsRecordSize(9));
+  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
+  EXPECT_EQ(0u, readerPrefsRecordSize(4));
+  EXPECT_EQ(0u, readerPrefsRecordSize(0));
+  EXPECT_EQ(0u, readerPrefsRecordSize(ReaderPrefs::VERSION + 1));
+}
+
+// The status bar switch is per-book. A v9 sidecar predates it and stops one byte short,
+// so the field must fall back to its default instead of eating whatever followed.
+TEST(ReaderPrefs, Version9SidecarKeepsEverythingAndDefaultsTheStatusBar) {
+  ReaderPrefs legacy = makeSample();
+  legacy.paragraphNumberSize = 0;  // Small, a real v9 user choice that must survive
+  legacy.statusBarEnabled = 0;     // never stored by a v9 writer; must not survive the read
+  std::stringstream ss;
+  const uint8_t v9 = 9;
+  ss.write(reinterpret_cast<const char*>(&v9), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V9_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(1, loaded.statusBarEnabled);
+  EXPECT_EQ(0, loaded.paragraphNumberSize);
+  EXPECT_EQ(legacy.fontFamily, loaded.fontFamily);
+  EXPECT_EQ(legacy.fontPointSize, loaded.fontPointSize);
+  EXPECT_EQ(legacy.screenMargin, loaded.screenMargin);
+  EXPECT_EQ(legacy.paperbackLookBody, loaded.paperbackLookBody);
+  EXPECT_EQ(legacy.paperbackLookStatus, loaded.paperbackLookStatus);
+  EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
+}
+
+TEST(ReaderPrefs, CurrentVersionCarriesTheStatusBarByte) {
+  ReaderPrefs sample = makeSample();
+  sample.statusBarEnabled = 0;  // hidden for this book only
+  std::stringstream ss;
+  writeReaderPrefs(ss, sample);
+
+  ReaderPrefs loaded;
+  bool migrated = true;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_FALSE(migrated);
+  EXPECT_EQ(0, loaded.statusBarEnabled);
+}
+
+// The status bar switch is an in-menu per-book toggle, so the Reader Settings overlay
+// never carries it. The book's own value must survive an edit of unrelated rows.
+TEST(ReaderPrefs, StatusBarSwitchSurvivesAReaderSettingsEdit) {
+  ReaderPrefs book = makeSample();
+  book.statusBarEnabled = 0;
+  ReaderPrefs live = book;
+  live.statusBarEnabled = 1;  // the GLOBAL value, which is what the overlay leaves behind
+  live.screenMargin = static_cast<uint8_t>(book.screenMargin + 5);
+
+  const auto decision = decideReaderOverride(live, book, true);
+  EXPECT_EQ(ReaderOverrideAction::Write, decision.action);
+  EXPECT_EQ(0, decision.prefs.statusBarEnabled);
+  EXPECT_EQ(live.screenMargin, decision.prefs.screenMargin);
 }
 
 TEST(ReaderPrefs, Version8SidecarKeepsEverythingAndAdoptsDoubleSize) {
@@ -236,7 +302,7 @@ TEST(ReaderPrefs, Version8SidecarKeepsEverythingAndAdoptsDoubleSize) {
   const uint8_t v8 = 8;
   ss.write(reinterpret_cast<const char*>(&v8), 1);
   // A v8 file holds no size byte at all — it stops one byte short.
-  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V8_SIZE);
 
   ReaderPrefs loaded;
   bool migrated = false;
@@ -261,7 +327,7 @@ TEST(ReaderPrefs, Version8SidecarTruncatedMidRecordIsRejected) {
   std::stringstream ss;
   const uint8_t v8 = 8;
   ss.write(reinterpret_cast<const char*>(&v8), 1);
-  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_LEGACY_SIZE - 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V8_SIZE - 1);
 
   ReaderPrefs loaded;
   EXPECT_FALSE(readReaderPrefs(ss, loaded));

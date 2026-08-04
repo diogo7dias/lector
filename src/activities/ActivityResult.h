@@ -28,6 +28,15 @@ struct MenuResult {
   // Per-book Paperback Look, toggled live in the menu and applied by the reader on close.
   uint8_t paperbackBody = 1;
   uint8_t paperbackStatus = 1;
+  // Per-book status bar master switch, toggled live in the menu and applied by the
+  // reader on close. Unlike the Paperback flags this one repaginates: the bar's
+  // reserved bands change the viewport.
+  uint8_t statusBar = 1;
+  // The bound Menu Hold function (a CrossPointSettings::LONG_PRESS_MENU_FUNCTION
+  // value) when the menu was closed by holding Confirm, else LP_MENU_DISABLED. The
+  // reader runs it; the menu only reports the hold. Defaults to LP_MENU_DISABLED (1),
+  // NOT 0 — 0 is LP_MENU_KOSYNC, so a zero default would sync on every menu close.
+  uint8_t holdFunction = 1;
 };
 
 struct ChapterResult {
