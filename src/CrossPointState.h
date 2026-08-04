@@ -25,11 +25,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // know what the panel is holding; setup() re-renders this file and composites the
   // unlock banners over it instead of showing the boot logo.
   std::string lastSleepWallpaperPath;
-  // Resettable "pages read" tally shown on the home screen. Separate from the
-  // reading-stats totals on purpose: those are a lifetime record, this is a
-  // scoreboard the user zeroes whenever they feel like starting again.
-  uint32_t sessionPagesRead = 0;
-
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
