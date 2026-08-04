@@ -467,8 +467,6 @@ void EpubReaderActivity::openReadingStats() {
 
 void EpubReaderActivity::openQuoteGrab() {
   if (!section) return;
-  auto page = section->loadPage(section->currentPage);
-  if (!page) return;
 
   // Word geometry must match render(): use the same per-book reader margins.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -478,8 +476,11 @@ void EpubReaderActivity::openQuoteGrab() {
   // the highlight boxes line up with the rendered glyphs.
   const int readerFontId = SETTINGS.getReaderFontId(prefs_);
   startActivityForResult(
-      std::make_unique<QuoteSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
-                                            orientedMarginTop, epub, currentSpineIndex, readerFontId),
+      // The picker loads its own pages: a quote may run past this one, and it turns
+      // pages itself while the reader stays suspended and its section stays alive.
+      std::make_unique<QuoteSelectActivity>(renderer, mappedInput, section.get(), section->currentPage,
+                                            orientedMarginLeft, orientedMarginTop, epub, currentSpineIndex,
+                                            readerFontId),
       [this](const ActivityResult&) {
         loadQuoteAnchors();  // a fresh grab appended to the sidecar
         requestUpdate();

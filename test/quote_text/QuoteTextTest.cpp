@@ -41,6 +41,44 @@ TEST(QuoteText, JoinHardCapsLength) {
   EXPECT_LE(joinQuoteWords(many, 100).size(), 100u);
 }
 
+TEST(QuoteText, AppendBuildsTheSameStringAsJoin) {
+  // A quote picked across page ends is built one word at a time; it must come out
+  // byte-identical to the same words joined in one go on a single page.
+  const std::vector<std::string> words = {"Hello", ",", "world", "!", "Again"};
+  std::string out;
+  for (const auto& word : words) {
+    EXPECT_TRUE(appendQuoteWord(out, word.c_str()));
+  }
+  EXPECT_EQ(joinQuoteWords(words), out);
+  EXPECT_EQ("Hello, world! Again", out);
+}
+
+TEST(QuoteText, AppendPutsNoSpaceBeforeTheFirstWord) {
+  std::string out;
+  EXPECT_TRUE(appendQuoteWord(out, "First"));
+  EXPECT_EQ("First", out);
+}
+
+TEST(QuoteText, AppendRefusesPastTheCapAndLeavesTheTextIntact) {
+  std::string out = "abc";
+  EXPECT_FALSE(appendQuoteWord(out, "de", 5));  // "abc" + " " + "de" = 6 > 5
+  EXPECT_EQ("abc", out);
+  EXPECT_TRUE(appendQuoteWord(out, ".", 5));  // punctuation attaches: no space, fits
+  EXPECT_EQ("abc.", out);
+}
+
+TEST(QuoteText, AppendFillsExactlyToTheCap) {
+  std::string out = "abc";
+  EXPECT_TRUE(appendQuoteWord(out, "de", 6));
+  EXPECT_EQ("abc de", out);
+}
+
+TEST(QuoteText, AppendRejectsNull) {
+  std::string out = "abc";
+  EXPECT_FALSE(appendQuoteWord(out, nullptr));
+  EXPECT_EQ("abc", out);
+}
+
 TEST(QuoteText, EntryFormatMatchesSidecarLayout) {
   EXPECT_EQ("\f[Ch 1]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "Hello world"));
 }

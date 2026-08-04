@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <string>
 #include <vector>
 
@@ -41,6 +42,20 @@ inline bool wordAttachesLeft(const char* word) {
     default:
       return false;
   }
+}
+
+// Append one word to a quote being built, with the single-space rule above.
+// Returns false and leaves `out` untouched when the word would pass maxLen, so a
+// caller building a quote across several pages can stop cleanly at the cap
+// instead of saving a passage cut mid-word.
+inline bool appendQuoteWord(std::string& out, const char* word, const size_t maxLen = MAX_QUOTE_LENGTH) {
+  if (!word) return false;
+  const bool needsSpace = !out.empty() && !wordAttachesLeft(word);
+  const size_t grown = out.size() + (needsSpace ? 1 : 0) + std::strlen(word);
+  if (grown > maxLen) return false;
+  if (needsSpace) out.push_back(' ');
+  out.append(word);
+  return true;
 }
 
 // Join words with single spaces, suppressing the space before attaching

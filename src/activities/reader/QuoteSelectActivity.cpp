@@ -13,23 +13,77 @@
 #include "QuoteText.h"
 #include "components/UITheme.h"
 
-QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                         std::unique_ptr<Page> page, int marginLeft, int marginTop,
-                                         std::shared_ptr<Epub> epub, int spineIndex, int fontId)
+QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section,
+                                         int startPageNumber, int marginLeft, int marginTop, std::shared_ptr<Epub> epub,
+                                         int spineIndex, int fontId)
     : Activity("QuoteSelect", renderer, mappedInput),
-      page(std::move(page)),
+      section(section),
       marginLeft(marginLeft),
       marginTop(marginTop),
       epub(std::move(epub)),
       spineIndex(spineIndex),
-      fontId(fontId) {}
+      fontId(fontId),
+      pageNumber(startPageNumber),
+      startPageNumber(startPageNumber) {}
 
 void QuoteSelectActivity::onEnter() {
   Activity::onEnter();
   lineHeight = renderer.getLineHeight(fontId);
-  extractWords();
+  showPage(pageNumber);
   cursor = 0;
   requestUpdate();
+}
+
+bool QuoteSelectActivity::showPage(const int number) {
+  if (!section || number < 0 || number >= static_cast<int>(section->pageCount)) return false;
+  auto loaded = section->loadPage(number);
+  if (!loaded) return false;  // keep the page already on screen
+  page = std::move(loaded);
+  extractWords();
+  return true;
+}
+
+int QuoteSelectActivity::firstSelectedOnPage() const {
+  if (phase != Phase::SelectEnd) return 0;
+  return (pageNumber == startPageNumber) ? startWord : 0;
+}
+
+// Fold every still-selected word of this page into committedText, then show the next
+// page with the cursor on its first word. Refused at the chapter's last page, at the
+// quote length cap, and on a failed page load — in each case nothing changes.
+bool QuoteSelectActivity::advancePage() {
+  if (phase != Phase::SelectEnd || !section) return false;
+  if (pageNumber + 1 >= static_cast<int>(section->pageCount)) return false;
+
+  const uint32_t mark = static_cast<uint32_t>(committedText.size());
+  for (int i = firstSelectedOnPage(); i < static_cast<int>(words.size()); i++) {
+    if (!quote_text::appendQuoteWord(committedText, words[i].text)) {
+      committedText.resize(mark);  // at the cap: stop here rather than save a cut word
+      return false;
+    }
+  }
+  if (!showPage(pageNumber + 1)) {
+    committedText.resize(mark);
+    return false;
+  }
+  committedMarks.push_back(mark);
+  pageNumber++;
+  cursor = 0;
+  requestUpdate();
+  return true;
+}
+
+// Undo one advancePage: back to the previous page with its words selected again.
+bool QuoteSelectActivity::retreatPage() {
+  if (phase != Phase::SelectEnd || committedMarks.empty()) return false;
+  if (!showPage(pageNumber - 1)) return false;
+
+  committedText.resize(committedMarks.back());
+  committedMarks.pop_back();
+  pageNumber--;
+  cursor = words.empty() ? 0 : static_cast<int>(words.size()) - 1;
+  requestUpdate();
+  return true;
 }
 
 void QuoteSelectActivity::extractWords() {
@@ -110,12 +164,31 @@ int QuoteSelectActivity::closestInRow(const uint16_t row, const int centerX) con
 }
 
 void QuoteSelectActivity::moveVertical(const int direction) {
+  if (words.empty() || cursor >= static_cast<int>(words.size())) {
+    // Wordless page: there is no row to move within, only the page to leave.
+    if (direction > 0) {
+      advancePage();
+    } else {
+      retreatPage();
+    }
+    return;
+  }
+
   const WordBox& current = words[cursor];
   const int targetRow = static_cast<int>(current.row) + direction;
-  if (targetRow < 0 || targetRow >= static_cast<int>(rowCount)) return;
+  if (targetRow < 0 || targetRow >= static_cast<int>(rowCount)) {
+    // Off the top or bottom of the page: carry the selection to the neighbouring page,
+    // the same way Left and Right do at the page's first and last word.
+    if (direction > 0) {
+      advancePage();
+    } else {
+      retreatPage();
+    }
+    return;
+  }
 
   const int best = closestInRow(static_cast<uint16_t>(targetRow), current.x + current.width / 2);
-  const int lo = (phase == Phase::SelectEnd) ? startWord : 0;
+  const int lo = firstSelectedOnPage();
   if (best >= lo && best != cursor) {
     cursor = best;
     requestUpdate();
@@ -130,28 +203,21 @@ std::string QuoteSelectActivity::chapterTitle() const {
 }
 
 void QuoteSelectActivity::saveSelectedQuote() {
-  if (startWord < 0 || words.empty()) return;
-  int a = startWord;
-  int b = cursor;
-  if (a > b) std::swap(a, b);
+  if (startWord < 0) return;
 
-  std::vector<std::string> selected;
-  selected.reserve(static_cast<size_t>(b - a + 1));
-  for (int i = a; i <= b && i < static_cast<int>(words.size()); i++) {
-    selected.emplace_back(words[i].text);
+  // Pages already passed are in committedText; the page on screen contributes the
+  // words from its first selected one up to the cursor.
+  std::string quote = committedText;
+  for (int i = firstSelectedOnPage(); i <= cursor && i < static_cast<int>(words.size()); i++) {
+    if (!quote_text::appendQuoteWord(quote, words[i].text)) break;  // at the cap
   }
-  const std::string quote = quote_text::joinQuoteWords(selected);
   if (quote.empty()) return;
 
-  // Where this passage lives, so the reader can underline it on later visits.
-  // The word index is only a tie-break for a passage repeated inside the same
-  // paragraph; the quote text itself is what identifies the words.
-  quote_text::QuoteAnchor anchor;
-  anchor.spine = static_cast<uint16_t>(spineIndex);
-  anchor.paragraph = words[a].paragraphOrdinal;
-  anchor.wordHint = static_cast<uint16_t>(a);
-  anchor.valid = true;
-  saveQuoteToFile(quote, quote_text::formatAnchorToken(anchor));
+  // Where this passage lives, so the reader can underline it on later visits. The
+  // anchor was taken on the start word's own page (see the Confirm handler): the word
+  // index is only a tie-break for a passage repeated inside the same paragraph, and
+  // the quote text itself is what identifies the words.
+  saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor));
 }
 
 // Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"
@@ -238,7 +304,12 @@ void QuoteSelectActivity::loop() {
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
     if (phase == Phase::SelectEnd) {
+      // Drop the whole selection, including any pages it had run into.
       phase = Phase::SelectStart;
+      committedText.clear();
+      committedMarks.clear();
+      if (pageNumber != startPageNumber && showPage(startPageNumber)) pageNumber = startPageNumber;
+      cursor = (startWord >= 0 && startWord < static_cast<int>(words.size())) ? startWord : 0;
       startWord = -1;
       requestUpdate();
     } else {
@@ -247,9 +318,18 @@ void QuoteSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && !words.empty()) {
+  // A selection that has already crossed a page can be saved even from a page with no
+  // words of its own (an image page), so the picker never traps the user there.
+  const bool canConfirm = !words.empty() || (phase == Phase::SelectEnd && !committedText.empty());
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && canConfirm) {
     if (phase == Phase::SelectStart) {
       startWord = cursor;
+      // Capture the anchor now: the selection may leave this page, and the paragraph
+      // ordinal lives in the words of the page the quote starts on.
+      startAnchor.spine = static_cast<uint16_t>(spineIndex);
+      startAnchor.paragraph = words[cursor].paragraphOrdinal;
+      startAnchor.wordHint = static_cast<uint16_t>(cursor);
+      startAnchor.valid = true;
       phase = Phase::SelectEnd;
       requestUpdate();
     } else {
@@ -259,15 +339,27 @@ void QuoteSelectActivity::loop() {
     return;
   }
 
-  if (words.empty()) return;
+  // A wordless page still passes Left/Right through, so a selection running through an
+  // image page can carry on to the next one instead of stopping there.
+  if (words.empty() && phase == Phase::SelectStart) return;
 
-  const int lo = (phase == Phase::SelectEnd) ? startWord : 0;
-  if (mappedInput.wasPressed(MappedInputManager::Button::Left) && cursor > lo) {
-    cursor--;
-    requestUpdate();
-  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right) && cursor + 1 < static_cast<int>(words.size())) {
-    cursor++;
-    requestUpdate();
+  // Stepping off either end of the page carries the selection onto the neighbouring
+  // page instead of stopping. Only in SelectEnd: the start word is picked on one page.
+  const int lo = firstSelectedOnPage();
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (cursor > lo) {
+      cursor--;
+      requestUpdate();
+    } else {
+      retreatPage();
+    }
+  } else if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+    if (cursor + 1 < static_cast<int>(words.size())) {
+      cursor++;
+      requestUpdate();
+    } else {
+      advancePage();
+    }
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     moveVertical(-1);
   } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
@@ -278,9 +370,9 @@ void QuoteSelectActivity::loop() {
 // Continuous black bar over the selected range [min(start,cursor)..max], one bar
 // per screen row (words sharing a y), with the covered words redrawn white.
 void QuoteSelectActivity::drawRangeHighlight() const {
-  int a = startWord;
-  int b = cursor;
-  if (a > b) std::swap(a, b);
+  const int a = firstSelectedOnPage();
+  const int b = cursor;
+  if (a > b) return;
 
   int i = a;
   while (i <= b) {
