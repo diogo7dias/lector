@@ -39,10 +39,11 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       activeTabIndex = i;
       // Land the cursor on the favourite row rather than the tab bar, so favouriting
       // the wallpaper just shown is a single Confirm press. selectedIndex is a nav-ring
-      // position: 0 is the tab bar, so row r sits at r + 1.
+      // position: 0 is the tab bar, so row r sits at r + 1. Held in a member because
+      // onEnter runs after this and sets the opening position itself.
       for (int r = 0; r < static_cast<int>(tabs[i].items.size()); r++) {
         if (tabs[i].items[r].action == MenuAction::WALLPAPER_FAVORITE) {
-          tabs[i].selectedIndex = r + 1;
+          openingSelectedIndex = r + 1;
           break;
         }
       }
@@ -186,10 +187,12 @@ void EpubReaderMenuActivity::switchTab(const int direction) {
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
-  // Nav-ring position 0 is the tab bar, and that is where the menu opens: the tab it
-  // opens ON carries the intent (see the constructor), so the first thing offered is
-  // the choice of tab rather than whichever row happens to be first.
-  activeTab().selectedIndex = 0;
+  // Nav-ring position 0 is the tab bar, and that is normally where the menu opens: the
+  // tab it opens ON carries the intent (see the constructor), so the first thing offered
+  // is the choice of tab rather than whichever row happens to be first. The exception is
+  // the Sleep tab's favourite row, which the constructor points at so that favouriting
+  // the wallpaper just shown is a single Confirm press.
+  activeTab().selectedIndex = openingSelectedIndex;
   requestUpdate();
 }
 
