@@ -7,6 +7,12 @@ on:
 jobs:
   build-release:
     runs-on: ubuntu-latest
+    # The repository default for GITHUB_TOKEN is read-only, so creating the release
+    # returns HTTP 403 without this. Granted at job level and limited to contents,
+    # which is the only scope the publish step needs. The flasher-site push uses its
+    # own WALLPAPER_REPO_TOKEN and is unaffected.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v6
         with:
