@@ -17,6 +17,7 @@ namespace {
 // v30: Arabic shaping changed both drawing and measurement (getTextAdvanceX now
 //      measures the shaped visual text); cached word positions from v29 no longer
 //      match what drawText renders.
+// v31: CJK words split at MAX_WORD_SIZE preserve continuation state.
 // v32: ImageBlock serializes the book-internal source href after the cache path
 //      (lazy extraction: images are header-probed at build time and extracted on
 //      first render).
@@ -60,7 +61,11 @@ namespace {
 //      fifth placeholder for the visible-offset LUT (upstream #2805; upstream numbered it
 //      v35). Reading positions become content-based, so sync survives a re-layout and maps
 //      onto other readers. The header and page records both grow, forcing a one-time rebuild.
-constexpr uint8_t SECTION_FILE_VERSION = 45;
+// v46: simple HTML table rows are laid out as positioned columns instead of flattened
+//      paragraphs with synthetic "Tab Row N, Cell M:" labels (upstream #2654; upstream
+//      numbered it v36). Table cells occupy different line positions than before, so
+//      cached pages built by older versions no longer match.
+constexpr uint8_t SECTION_FILE_VERSION = 46;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
