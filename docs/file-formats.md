@@ -90,11 +90,16 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 45
+### Version 46
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 46 keeps the version 45 serialized layout unchanged. It was bumped
+because simple HTML table rows are now laid out as positioned columns rather
+than flattened paragraphs with synthetic row/cell labels (upstream #2654, which
+numbered it v36).
 
 Version 45 adds a header offset and a `uint32_t` entry per page for the
 visible-text offset LUT, so reading positions are anchored to content rather
@@ -145,7 +150,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 35
+#define EXPECTED_VERSION 46
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 96
