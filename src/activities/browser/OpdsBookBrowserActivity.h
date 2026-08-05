@@ -34,6 +34,10 @@ class OpdsBookBrowserActivity final : public Activity {
   std::string searchTemplate;
   bool consumeConfirm = false;
   bool consumeBack = false;  // Added missing member
+  // Spend one FULL refresh on the frame that replaces the download screen. That
+  // screen repaints on every progress step, all in FAST, so it leaves the panel
+  // heavily ghosted.
+  bool pendingFullRefresh = false;
   int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
@@ -45,6 +49,8 @@ class OpdsBookBrowserActivity final : public Activity {
   void checkAndConnectWifi();
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
+  // Push the framebuffer, spending a FULL refresh if one is pending.
+  void presentFrame();
   void fetchFeed(const std::string& path);
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);

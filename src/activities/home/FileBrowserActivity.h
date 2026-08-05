@@ -35,6 +35,10 @@ class FileBrowserActivity final : public Activity {
   // True when this activity was entered while Confirm was already held; we must swallow the next
   // release so we don't immediately auto-open the first entry.
   bool lockNextConfirmRelease = false;
+  // Spend one FULL refresh on the next frame, then fall back to FAST. Set on entry
+  // and on return from a child activity, since the panel may arrive here carrying
+  // ghosts from screens that only ever paint FAST.
+  bool pendingFullRefresh = true;
 
   Mode mode = Mode::Books;
 

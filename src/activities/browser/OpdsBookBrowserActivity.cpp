@@ -177,7 +177,7 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    presentFrame();
     return;
   }
 
@@ -213,6 +213,15 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
       renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
                         i != static_cast<size_t>(selectorIndex));
     }
+  }
+  presentFrame();
+}
+
+void OpdsBookBrowserActivity::presentFrame() {
+  if (pendingFullRefresh) {
+    pendingFullRefresh = false;
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+    return;
   }
   renderer.displayBuffer();
 }
@@ -357,6 +366,7 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_DOWNLOAD_FAILED);
   }
+  pendingFullRefresh = true;
   requestUpdate();
 }
 

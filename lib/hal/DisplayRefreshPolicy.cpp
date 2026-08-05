@@ -13,13 +13,27 @@ DisplayRefreshPolicy::Mode DisplayRefreshPolicy::choose(const Mode requested, ui
     chosen = Mode::Clean;
   }
 
+  // A Clean pass resets consecutiveFast_ but does not discharge the panel, so on
+  // its own the cap above lets ghosting build without bound. Escalate to a real
+  // FULL once enough FAST passes have gone by since the last one.
+  if (requested == Mode::Fast && fastSinceFull_ >= MAX_FAST_BEFORE_FULL) {
+    chosen = Mode::Full;
+  }
+
   if (chosen == Mode::Fast) {
     ++consecutiveFast_;
+    ++fastSinceFull_;
   } else {
     consecutiveFast_ = 0;
+    if (chosen == Mode::Full) {
+      fastSinceFull_ = 0;
+    }
   }
 
   return chosen;
 }
 
-void DisplayRefreshPolicy::reset() { consecutiveFast_ = 0; }
+void DisplayRefreshPolicy::reset() {
+  consecutiveFast_ = 0;
+  fastSinceFull_ = 0;
+}

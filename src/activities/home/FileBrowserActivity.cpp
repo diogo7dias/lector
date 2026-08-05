@@ -197,6 +197,7 @@ void FileBrowserActivity::onEnter() {
   }
 
   selectorIndex = 0;
+  pendingFullRefresh = true;
 
   // If Confirm was held while this activity opened (typical when launched from a menu), ignore
   // its release — otherwise we'd immediately auto-open whatever is at index 0.
@@ -606,7 +607,16 @@ void FileBrowserActivity::render(RenderLock&&) {
                                             listEmpty ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  // The browser is commonly reached straight from screens that paint only in FAST
+  // (the OPDS download fires 20+ full-screen FAST paints of its own), so the panel
+  // arrives here already carrying ghosts. Spend one FULL on the first frame after
+  // entry or resume; every later frame stays FAST.
+  if (pendingFullRefresh) {
+    pendingFullRefresh = false;
+    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+  } else {
+    renderer.displayBuffer();
+  }
 }
 
 size_t FileBrowserActivity::findEntryRow(const std::string& name) const {
