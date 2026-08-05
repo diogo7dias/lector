@@ -37,6 +37,15 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
   for (int i = 0; i < static_cast<int>(tabs.size()); i++) {
     if (tabs[i].tab == Tab::Sleep) {
       activeTabIndex = i;
+      // Land the cursor on the favourite row rather than the tab bar, so favouriting
+      // the wallpaper just shown is a single Confirm press. selectedIndex is a nav-ring
+      // position: 0 is the tab bar, so row r sits at r + 1.
+      for (int r = 0; r < static_cast<int>(tabs[i].items.size()); r++) {
+        if (tabs[i].items[r].action == MenuAction::WALLPAPER_FAVORITE) {
+          tabs[i].selectedIndex = r + 1;
+          break;
+        }
+      }
       break;
     }
   }
