@@ -45,3 +45,127 @@ jobs:
             .pio/build/gh_release/firmware.elf
             .pio/build/gh_release/firmware.map
             .pio/build/gh_release/partitions.bin
+
+      # Attaches the firmware binaries to a GitHub Release for the tag so a manual
+      # flash (esptool, or copying firmware.bin onto the SD card for Settings ->
+      # SD Card Firmware Update) needs no build environment. Creates the release if
+      # the tag has none, otherwise uploads the assets onto the existing one.
+      - name: Publish GitHub release with firmware assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          BUILD_DIR=.pio/build/gh_release
+          for f in firmware.bin bootloader.bin partitions.bin firmware.elf; do
+            test -f "$BUILD_DIR/$f" || { echo "missing $BUILD_DIR/$f" >&2; exit 1; }
+          done
+          ASSETS=("$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$BUILD_DIR/firmware.elf")
+          BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' | head -n1)"
+          if [ -n "$BOOT_APP0" ]; then
+            cp "$BOOT_APP0" "$BUILD_DIR/boot_app0.bin"
+            ASSETS+=("$BUILD_DIR/boot_app0.bin")
+          fi
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'EOF'
+          **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-xteink-firmware/#flash) (Chrome/Edge, USB cable). One build serves both Xteink X3 and X4.
+
+          **Update from the SD card:** download `firmware.bin`, copy it to the SD card, then on the device open Settings and choose SD Card Firmware Update.
+
+          **Manual flash (esptool):**
+          ```
+          esptool.py --chip esp32c3 write_flash \
+            0x0 bootloader.bin \
+            0x8000 partitions.bin \
+            0xE000 boot_app0.bin \
+            0x10000 firmware.bin
+          ```
+          `firmware.elf` is for symbolizing crash reports, not for flashing.
+
+          ---
+          EOF
+          PRERELEASE_FLAG=""
+          case "$TAG" in *rc*|*RC*) PRERELEASE_FLAG="--prerelease" ;; esac
+          if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
+            gh release upload "$TAG" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$TAG" "${ASSETS[@]}" \
+              --title "Lector $TAG" \
+              --notes-file "$NOTES_FILE" \
+              --generate-notes \
+              $PRERELEASE_FLAG
+          fi
+
+      # Publishes the freshly built binaries into the wallpaper site so its
+      # /flash page can serve the latest build to the browser flasher.
+      # Stable tags only (skips *-rc*). Needs a fine-grained PAT with
+      # Contents:write on lector-xteink-firmware, stored as WALLPAPER_REPO_TOKEN.
+      - name: Publish firmware to flasher site
+        if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') }}
+        env:
+          WALLPAPER_TOKEN: ${{ secrets.WALLPAPER_REPO_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${WALLPAPER_TOKEN:-}" ]; then
+            echo "WALLPAPER_REPO_TOKEN is not set; skipping flasher publish." >&2
+            exit 0
+          fi
+          # Tags on this line are "lector-X.Y.Z"; older ones were "vX.Y.Z". The site
+          # wants the display form "lector X.Y.Z", which its own tests enforce.
+          NUM="${GITHUB_REF_NAME#lector-}"
+          NUM="${NUM#v}"
+          VERSION="lector ${NUM}"
+          BUILD_DIR=.pio/build/gh_release
+          BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' | head -n1)"
+          if [ -z "$BOOT_APP0" ]; then
+            echo "boot_app0.bin not found in the framework package." >&2
+            exit 1
+          fi
+          for f in firmware.bin bootloader.bin partitions.bin; do
+            test -f "$BUILD_DIR/$f" || { echo "missing $BUILD_DIR/$f" >&2; exit 1; }
+          done
+          git clone --depth 1 \
+            "https://x-access-token:${WALLPAPER_TOKEN}@github.com/diogo7dias/lector-xteink-firmware.git" site
+          DEST=site/flash/firmware/latest
+          mkdir -p "$DEST"
+          cp "$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$DEST/"
+          cp "$BOOT_APP0" "$DEST/boot_app0.bin"
+          printf '%s' "$VERSION" > site/flash/version.txt
+          python3 -c 'import json,sys\nfor path in ("site/flash/manifest-update.json", "site/flash/manifest-full.json"):\n    with open(path) as fh: data = json.load(fh)\n    data["version"] = sys.argv[1]\n    with open(path, "w") as fh: json.dump(data, fh, indent=2); fh.write("\\n")' "$VERSION"
+          cd site
+          git config user.name "lector-release-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add flash/firmware/latest flash/version.txt flash/manifest-update.json flash/manifest-full.json
+          if git diff --cached --quiet; then
+            echo "No firmware changes to publish."
+          else
+            git commit -m "chore(flash): publish ${VERSION}"
+            git push
+          fi
+
+      # A PAT push to the wallpaper repo does not reliably trigger its (legacy,
+      # branch-based) GitHub Pages rebuild, so the /flash site can keep serving the
+      # previous version.txt until forced. Request a build explicitly. If the PAT
+      # lacks Pages:write this warns rather than failing the release.
+      - name: Trigger flasher site Pages rebuild
+        if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') }}
+        env:
+          WALLPAPER_TOKEN: ${{ secrets.WALLPAPER_REPO_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${WALLPAPER_TOKEN:-}" ]; then
+            echo "WALLPAPER_REPO_TOKEN is not set; skipping Pages rebuild." >&2
+            exit 0
+          fi
+          code="$(curl -sS -o /tmp/pages_resp.json -w '%{http_code}' -X POST \
+            -H "Authorization: Bearer ${WALLPAPER_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/diogo7dias/lector-xteink-firmware/pages/builds || echo 000)"
+          echo "Pages build request HTTP ${code}"
+          if [ "${code}" = "201" ]; then
+            echo "GitHub Pages rebuild requested."
+          else
+            echo "::warning::Pages rebuild request returned HTTP ${code}. WALLPAPER_REPO_TOKEN likely lacks Pages:write on lector-xteink-firmware."
+            cat /tmp/pages_resp.json 2>/dev/null || true
+          fi
