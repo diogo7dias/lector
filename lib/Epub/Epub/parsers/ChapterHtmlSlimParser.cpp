@@ -1885,6 +1885,7 @@ bool ChapterHtmlSlimParser::beginParse() {
   paragraphAlignmentBlockStyle.alignment = align;
   startNewTextBlock(paragraphAlignmentBlockStyle);
 
+  carryLen_ = 0;
   xmlParser_ = XML_ParserCreate(nullptr);
   if (!xmlParser_) {
     LOG_ERR("EHP", "Couldn't allocate memory for parser");
@@ -1915,20 +1916,38 @@ bool ChapterHtmlSlimParser::beginParse() {
 }
 
 ChapterHtmlSlimParser::ParseStatus ChapterHtmlSlimParser::parseStep() {
-  void* const buf = XML_GetBuffer(xmlParser_, PARSE_BUFFER_SIZE);
+  // Ask for more than we read: VoidTagFixer inserts one byte per unclosed void element, and
+  // a chunk of nothing but "<br>" grows by a quarter. Half again is comfortably clear of that.
+  constexpr size_t BUFFER_CAPACITY = PARSE_BUFFER_SIZE + PARSE_BUFFER_SIZE / 2;
+  void* const buf = XML_GetBuffer(xmlParser_, BUFFER_CAPACITY);
   if (!buf) {
     LOG_ERR("EHP", "Couldn't allocate memory for buffer");
     return ParseStatus::Error;
   }
+  char* const chars = static_cast<char*>(buf);
 
-  const size_t len = parseFile_.read(buf, PARSE_BUFFER_SIZE);
+  // A tag straddling the previous chunk boundary could not be judged then; it was held back
+  // and goes in front of this chunk's bytes.
+  size_t len = carryLen_;
+  if (carryLen_ > 0) {
+    memcpy(chars, carry_, carryLen_);
+    carryLen_ = 0;
+  }
 
-  if (len == 0 && parseFile_.available() > 0) {
+  const size_t read = parseFile_.read(chars + len, PARSE_BUFFER_SIZE - len);
+
+  if (read == 0 && parseFile_.available() > 0) {
     LOG_ERR("EHP", "File read error");
     return ParseStatus::Error;
   }
+  len += read;
 
   const int done = parseFile_.available() == 0;
+
+  // Close unclosed HTML void elements before expat sees them. Without this, a single
+  // <meta charset="utf-8"> in <head> -- which Calibre writes into every chapter -- fails
+  // well-formedness at </head> and costs the reader the entire book.
+  len = VoidTagFixer::process(chars, len, BUFFER_CAPACITY, carry_, carryLen_, done != 0);
 
   if (XML_ParseBuffer(xmlParser_, static_cast<int>(len), done) == XML_STATUS_ERROR) {
     LOG_ERR("EHP", "Parse error at line %lu:\n%s", XML_GetCurrentLineNumber(xmlParser_),

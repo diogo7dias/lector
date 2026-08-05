@@ -15,6 +15,7 @@
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
 #include "Epub/css/CssStyle.h"
+#include "VoidTagFixer.h"
 
 class Page;
 class GfxRenderer;
@@ -143,6 +144,11 @@ class ChapterHtmlSlimParser {
   // boundaries.
   XML_Parser xmlParser_ = nullptr;
   HalFile parseFile_;
+  // Bytes of a tag that straddled the last chunk boundary, waiting to be judged with the
+  // next chunk in front of them. Fixed size and part of the parser object: no allocation,
+  // and the parser is already heap-held for the length of a build.
+  char carry_[VoidTagFixer::MAX_CARRY] = {};
+  size_t carryLen_ = 0;
   uint32_t parseStartTime_ = 0;
 
   void updateEffectiveInlineStyle();
