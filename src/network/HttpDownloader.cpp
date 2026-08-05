@@ -291,6 +291,15 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     Storage.remove(destPath.c_str());
     return HTTP_ERROR;
   }
+  // Belt and braces over the transport's own completeness check: a short body that
+  // still reports complete would leave a truncated book on the SD card, which then
+  // fails much later and looks like a corrupt file rather than a bad download.
+  // sink.total stays 0 for chunked responses, where no length was promised.
+  if (sink.total > 0 && sink.downloaded != sink.total) {
+    LOG_ERR("HTTP", "short download: got %zu of %zu bytes", sink.downloaded, sink.total);
+    Storage.remove(destPath.c_str());
+    return HTTP_ERROR;
+  }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;
 }
