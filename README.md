@@ -49,14 +49,14 @@ It follows CrossPoint closely. Upstream fixes are pulled in regularly, and every
 - Reading statistics and a Reading Stats screen.
 - Tabbed in-book reader menu, sectioned, with Menu Hold to open it.
 - Status bar customised per item, and per book on or off.
-- Kumedia shipped as a built-in OPDS server.
 - Firmware version on the home header.
 
 ### Removed on purpose
 
 - Tilt page turn (the gyro) is gone entirely.
 - The Recent Books screen is gone; the home list replaces it.
-- No touch support is used. The upstream touch code stays, inert.
+
+Upstream's touch support is kept in full, ready for a device that has a touch panel.
 
 ---
 
