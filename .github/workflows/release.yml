@@ -137,7 +137,19 @@ jobs:
           cp "$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$DEST/"
           cp "$BOOT_APP0" "$DEST/boot_app0.bin"
           printf '%s' "$VERSION" > site/flash/version.txt
-          python3 -c 'import json,sys\nfor path in ("site/flash/manifest-update.json", "site/flash/manifest-full.json"):\n    with open(path) as fh: data = json.load(fh)\n    data["version"] = sys.argv[1]\n    with open(path, "w") as fh: json.dump(data, fh, indent=2); fh.write("\\n")' "$VERSION"
+          # Heredoc, not python3 -c with "\n": inside single quotes the shell passes the
+          # backslash-n through literally, so Python saw one line and raised SyntaxError.
+          python3 - "$VERSION" <<'PY'
+          import json, sys
+
+          for path in ("site/flash/manifest-update.json", "site/flash/manifest-full.json"):
+              with open(path) as fh:
+                  data = json.load(fh)
+              data["version"] = sys.argv[1]
+              with open(path, "w") as fh:
+                  json.dump(data, fh, indent=2)
+                  fh.write("\n")
+          PY
           cd site
           git config user.name "lector-release-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
