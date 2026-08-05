@@ -55,17 +55,22 @@ RecentBook recentBookForPath(const std::string& path) {
 // one read per file. The old full walk took seconds on a large folder and could wedge
 // sleep entry outright.
 //
-// Fairness note: a file consumes one slot per 13 characters of long name, plus one, so
-// long-named files cover more slots and are picked slightly more often. Files named to
-// fit 8.3 (e.g. "A3F9.PXC") occupy exactly one slot each, which makes the pick exactly
-// uniform. scripts/rename_wallpapers.py renames a folder into that form.
+// Fairness: a file consumes one slot per 13 characters of long name, plus one, so a
+// plain random slot favours long-named files in proportion to their name length, and a
+// forward walk from the landing slot compounds it by giving each file the dead slots
+// before it. The jump below removes both effects with rejection sampling: a landing is
+// accepted only when it is the FIRST slot of a wallpaper's entry, so every wallpaper has
+// exactly one accepting slot regardless of how many it spans. Rejections re-roll, and
+// after MAX_JUMP_TRIES the caller's reservoir walk — already exactly uniform — takes
+// over, so the pick is fair either way.
 constexpr size_t DIR_SLOT_BYTES = 32;
 // 131072 slots — far past any real wallpaper folder, and only a bound for the doubling
 // probe, not an allocation.
 constexpr size_t MAX_DIR_BYTES = 4u * 1024u * 1024u;
-// After landing, how many slots to walk looking for a wallpaper before giving up. A
-// wallpaper folder is essentially all wallpapers, so this normally resolves in one step.
-constexpr int MAX_FORWARD_SLOTS = 512;
+// How many landings to try before deferring to the caller's full uniform walk. Accept
+// probability is (wallpapers / slots), so a folder of long-named files rejects more
+// often; eight tries keeps the fallback rare without making sleep entry slow.
+constexpr int MAX_JUMP_TRIES = 8;
 
 using crosspoint::sleep::isWallpaperName;
 
@@ -78,6 +83,25 @@ bool entryExistsAt(HalFile& dir, const size_t offset) {
   const bool found = static_cast<bool>(probe);
   if (probe) probe.close();
   return found;
+}
+
+// True when `offset` is the first slot of the entry a seek there returns.
+//
+// A long name spans several slots, and seeking into the middle of that chain still
+// returns the same entry — which is exactly what makes a plain random slot favour long
+// names. Probing the slot before the landing separates the two cases without decoding
+// the chain: if it yields the same entry, the landing was inside the chain, not at its
+// start. Deriving the chain length from the name instead would be wrong, because a name
+// that fits 8.3 has no long-name slots at all.
+bool landsOnEntryStart(HalFile& dir, const size_t offset, const char* name) {
+  if (offset == 0) return true;  // nothing can precede the first slot
+  if (!dir.seekSet(offset - DIR_SLOT_BYTES)) return false;
+  auto probe = dir.openNextFile();
+  if (!probe) return false;
+  char previous[256];  // FAT long-file-name maximum (255 characters plus terminator)
+  probe.getName(previous, sizeof(previous));
+  probe.close();
+  return strcmp(previous, name) != 0;
 }
 
 // Random wallpaper name, or empty when the jump could not resolve one (caller falls
@@ -104,22 +128,21 @@ std::string pickWallpaperByJump(HalFile& dir) {
   }
 
   const uint32_t slots = static_cast<uint32_t>(lastLive / DIR_SLOT_BYTES) + 1;
-  size_t start = static_cast<size_t>(random(static_cast<long>(slots))) * DIR_SLOT_BYTES;
 
   char name[256];  // FAT long-file-name maximum (255 characters plus terminator)
-  // Two passes: the landing slot may sit in a trailing run of non-wallpapers, in which
-  // case the walk runs off the end and restarts from the top.
-  for (int pass = 0; pass < 2; pass++) {
-    if (!dir.seekSet(start)) break;
-    for (int step = 0; step < MAX_FORWARD_SLOTS; step++) {
-      auto entry = dir.openNextFile();
-      if (!entry) break;  // end of directory — wrap
-      const bool isDir = entry.isDirectory();
-      entry.getName(name, sizeof(name));
-      entry.close();
-      if (!isDir && isWallpaperName(name)) return std::string(name);
-    }
-    start = 0;
+  for (int tries = 0; tries < MAX_JUMP_TRIES; tries++) {
+    const size_t start = static_cast<size_t>(random(static_cast<long>(slots))) * DIR_SLOT_BYTES;
+    if (!dir.seekSet(start)) continue;
+    auto entry = dir.openNextFile();
+    if (!entry) continue;  // landed past the last entry
+    const bool isDir = entry.isDirectory();
+    entry.getName(name, sizeof(name));
+    entry.close();
+    // Re-roll rather than walking forward: a forward walk is what hands each file the
+    // dead and non-wallpaper slots ahead of it.
+    if (isDir || !isWallpaperName(name)) continue;
+    if (!landsOnEntryStart(dir, start, name)) continue;
+    return std::string(name);
   }
   return {};
 }
@@ -383,10 +406,25 @@ void SleepActivity::renderCustomSleepScreen() const {
     }
 
     // Fast path: seek straight to a random directory slot (see pickWallpaperByJump).
+    const bool heldByPause = !chosen.empty();
     const uint32_t pickStartMs = millis();
     if (chosen.empty()) chosen = pickWallpaperByJump(dir);
     if (!chosen.empty()) {
       LOG_INF("SLP", "jump pick in %ums", static_cast<unsigned>(millis() - pickStartMs));
+    }
+
+    // Never show the same wallpaper twice in a row. Each lock picks independently, so
+    // the pick can legitimately land on the file already on the panel; a couple of
+    // re-rolls make a visible repeat unlikely without pretending the folder holds more
+    // than it does. A one-wallpaper folder simply keeps showing it, which is correct,
+    // and a paused rotation is meant to repeat, so it is left alone.
+    if (!heldByPause && !chosen.empty() && !previousWallpaper.empty()) {
+      const std::string prefix = std::string(sleepDir) + "/";
+      for (int retry = 0; retry < 2 && prefix + chosen == previousWallpaper; retry++) {
+        const std::string again = pickWallpaperByJump(dir);
+        if (again.empty()) break;  // jump gave up; keep what we have
+        chosen = again;
+      }
     }
 
     // Fallback: walk the whole folder with reservoir sampling — keep the k-th valid
