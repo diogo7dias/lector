@@ -91,7 +91,8 @@ jobs:
           ---
           EOF
           PRERELEASE_FLAG=""
-          case "$TAG" in *rc*|*RC*) PRERELEASE_FLAG="--prerelease" ;; esac
+          # Experimental builds are untested on a device, so they are prereleases too.
+          case "$TAG" in *rc*|*RC*|lector.exp.*) PRERELEASE_FLAG="--prerelease" ;; esac
           if gh release view "$TAG" --json tagName >/dev/null 2>&1; then
             gh release upload "$TAG" "${ASSETS[@]}" --clobber
           else
@@ -116,11 +117,30 @@ jobs:
             echo "WALLPAPER_REPO_TOKEN is not set; skipping flasher publish." >&2
             exit 0
           fi
-          # Tags on this line are "lector-X.Y.Z"; older ones were "vX.Y.Z". The site
-          # wants the display form "lector X.Y.Z", which its own tests enforce.
-          NUM="${GITHUB_REF_NAME#lector-}"
-          NUM="${NUM#v}"
-          VERSION="lector ${NUM}"
+          # Two channels, decided by the tag.
+          #   "lector.exp.N"  -> the experimental button, for firmware not yet proven
+          #                      on a device. Published as its own version string, its
+          #                      own firmware dir and its own manifest, so the stable
+          #                      button is untouched.
+          #   "lector-X.Y.Z"  -> the stable Update button (older tags were "vX.Y.Z").
+          # The site's tests enforce both display forms: "lector X.Y.Z" for stable and
+          # "lector.exp.N" for experimental, and that the two are never equal.
+          if [[ "$GITHUB_REF_NAME" =~ ^lector\.exp\.[0-9]+$ ]]; then
+            CHANNEL=experimental
+            VERSION="$GITHUB_REF_NAME"
+            FW_DIR=experimental
+            VERSION_FILE=experimental-version.txt
+            MANIFESTS="manifest-experimental.json"
+          else
+            CHANNEL=stable
+            NUM="${GITHUB_REF_NAME#lector-}"
+            NUM="${NUM#v}"
+            VERSION="lector ${NUM}"
+            FW_DIR=latest
+            VERSION_FILE=version.txt
+            MANIFESTS="manifest-update.json manifest-full.json"
+          fi
+          echo "Publishing $VERSION to the $CHANNEL channel."
           BUILD_DIR=.pio/build/gh_release
           BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' | head -n1)"
           if [ -z "$BOOT_APP0" ]; then
@@ -132,20 +152,41 @@ jobs:
           done
           git clone --depth 1 \
             "https://x-access-token:${WALLPAPER_TOKEN}@github.com/diogo7dias/lector-xteink-firmware.git" site
-          DEST=site/flash/firmware/latest
+          DEST="site/flash/firmware/${FW_DIR}"
           mkdir -p "$DEST"
           cp "$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$DEST/"
           cp "$BOOT_APP0" "$DEST/boot_app0.bin"
-          printf '%s' "$VERSION" > site/flash/version.txt
+          printf '%s' "$VERSION" > "site/flash/${VERSION_FILE}"
           # Heredoc, not python3 -c with "\n": inside single quotes the shell passes the
           # backslash-n through literally, so Python saw one line and raised SyntaxError.
-          python3 - "$VERSION" <<'PY'
-          import json, sys
+          python3 - "$VERSION" "$FW_DIR" $MANIFESTS <<'PY'
+          import json, os, sys
 
-          for path in ("site/flash/manifest-update.json", "site/flash/manifest-full.json"):
-              with open(path) as fh:
-                  data = json.load(fh)
-              data["version"] = sys.argv[1]
+          version, fw_dir, names = sys.argv[1], sys.argv[2], sys.argv[3:]
+          for name in names:
+              path = os.path.join("site/flash", name)
+              if os.path.exists(path):
+                  with open(path) as fh:
+                      data = json.load(fh)
+              else:
+                  # The experimental manifest is created on its first publish. Same shape
+                  # as the update manifest (app-only: boot_app0 + firmware, no erase), only
+                  # pointed at this channel's firmware directory.
+                  data = {
+                      "name": "Lector",
+                      "version": version,
+                      "erase": False,
+                      "builds": [
+                          {
+                              "chipFamily": "ESP32-C3",
+                              "parts": [
+                                  {"path": f"firmware/{fw_dir}/boot_app0.bin", "offset": 57344},
+                                  {"path": f"firmware/{fw_dir}/firmware.bin", "offset": 65536},
+                              ],
+                          }
+                      ],
+                  }
+              data["version"] = version
               with open(path, "w") as fh:
                   json.dump(data, fh, indent=2)
                   fh.write("\n")
@@ -153,7 +194,8 @@ jobs:
           cd site
           git config user.name "lector-release-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add flash/firmware/latest flash/version.txt flash/manifest-update.json flash/manifest-full.json
+          git add "flash/firmware/${FW_DIR}" "flash/${VERSION_FILE}"
+          for m in $MANIFESTS; do git add "flash/$m"; done
           if git diff --cached --quiet; then
             echo "No firmware changes to publish."
           else
