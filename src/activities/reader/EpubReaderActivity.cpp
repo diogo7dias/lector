@@ -2125,9 +2125,21 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // A section build failure (e.g. an invalid/corrupt EPUB that fails XML parsing) leaves the
   // "Indexing" popup on screen with no way forward. Surface an explicit error instead of hanging.
   // clearScreen first so the error popup doesn't overlay the stale "Indexing" popup.
-  const auto showBuildError = [this]() {
+  // The diagnostic tail (code + heap at the moment of failure) is appended because these
+  // builds fail on-device, where there is usually no serial monitor attached. Code 7 with
+  // a low free heap means an allocation failure; code 7 with plenty of heap means the SD
+  // write failed. See Section::BuildFailure.
+  const auto showBuildError = [this](const Section::BuildFailure code, const uint32_t freeHeap,
+                                     const uint32_t maxAlloc) {
     renderer.clearScreen();
-    GUI.drawPopup(renderer, tr(STR_INDEX_FAILED));
+    char msg[96];
+    if (code == Section::BuildFailure::None) {
+      snprintf(msg, sizeof(msg), "%s", tr(STR_INDEX_FAILED));
+    } else {
+      snprintf(msg, sizeof(msg), "%s (E%d h%uk a%uk)", tr(STR_INDEX_FAILED), static_cast<int>(code), freeHeap / 1024,
+               maxAlloc / 1024);
+    }
+    GUI.drawPopup(renderer, msg);
     scheduleGhostCleanup();
     automaticPageTurnActive = false;
   };
@@ -2272,9 +2284,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         GfxRenderer::FrameBufferLoan loan(renderer);
         if (!section->createSectionFile(renderSpec, popupFn)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
+          const auto failure = section->lastFailure();
+          const auto failHeap = section->lastFailureFreeHeap();
+          const auto failAlloc = section->lastFailureMaxAlloc();
           section.reset();
           loan.end();  // restore before anything draws
-          showBuildError();
+          showBuildError(failure, failHeap, failAlloc);
           return;
         }
         loan.end();
@@ -2332,18 +2347,28 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           buildPopupPending = !showPopup;
           const unsigned long buildStartMs = millis();
           bool started;
+          // Lend the framebuffer's 48 KB across the whole blocking build, not just
+          // startBuild's inflation peak. Page layout allocates a per-page text arena,
+          // and this loop is the lowest-headroom moment in the system: unlike the
+          // background builder in loop() it has no heap gate, so an oversized chapter
+          // could fail its arena allocation here and take the whole chapter down with
+          // it. The loan is dropped around any popup so drawing still works.
+          auto loan = makeUniqueNoThrow<GfxRenderer::FrameBufferLoan>(renderer);
           {
-            // Lend the framebuffer's 48 KB to startBuild only (the spine HTML
-            // inflation peak). The chunk loop below runs without it so the popup
-            // can draw mid-build; background chunks never had the loan either.
-            GfxRenderer::FrameBufferLoan loan(renderer);
-            started = section->startBuild(renderSpec, [this] { showBuildPopup(); });
+            started = section->startBuild(renderSpec, [this, &loan] {
+              loan.reset();
+              showBuildPopup();
+            });
           }
           if (!started) {
+            loan.reset();  // restore before anything draws
             LOG_ERR("ERS", "Failed to start section build");
+            const auto failure = section->lastFailure();
+            const auto failHeap = section->lastFailureFreeHeap();
+            const auto failAlloc = section->lastFailureMaxAlloc();
             section.reset();
             buildPopupPending = false;
-            showBuildError();
+            showBuildError(failure, failHeap, failAlloc);
             return;
           }
           while (!section->isBuildComplete() &&
@@ -2358,16 +2383,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             // Otherwise: build until the target page exists. loop() builds the rest behind it.
             if (buildPopupPending && millis() - buildStartMs >= BUILD_POPUP_DEADLINE_MS) {
               // The predictive gates guessed fast but the build blew the silent budget.
+              loan.reset();
               showBuildPopup();
             }
             if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+              loan.reset();  // restore before anything draws
               LOG_ERR("ERS", "Failed during incremental section build");
+              const auto failure = section->lastFailure();
+              const auto failHeap = section->lastFailureFreeHeap();
+              const auto failAlloc = section->lastFailureMaxAlloc();
               section.reset();
               buildPopupPending = false;
-              showBuildError();
+              showBuildError(failure, failHeap, failAlloc);
               return;
             }
           }
+          loan.reset();  // hand the framebuffer back before the page is drawn
           buildPopupPending = false;
         }
       }
@@ -2485,16 +2516,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Start a build to extend a partial toward the requested page.
     if (!section->isBuilding() && !section->startBuild(renderSpec)) {
       LOG_ERR("ERS", "Failed to start partial extension build");
+      const auto failure = section->lastFailure();
+      const auto failHeap = section->lastFailureFreeHeap();
+      const auto failAlloc = section->lastFailureMaxAlloc();
       section.reset();
-      showBuildError();
+      showBuildError(failure, failHeap, failAlloc);
       return;
     }
     // Extend until either the target page exists or the build completes.
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
+        const auto failure = section->lastFailure();
+        const auto failHeap = section->lastFailureFreeHeap();
+        const auto failAlloc = section->lastFailureMaxAlloc();
         section.reset();
-        showBuildError();
+        showBuildError(failure, failHeap, failAlloc);
         return;
       }
     }
@@ -2504,8 +2541,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
+        const auto failure = section->lastFailure();
+        const auto failHeap = section->lastFailureFreeHeap();
+        const auto failAlloc = section->lastFailureMaxAlloc();
         section.reset();
-        showBuildError();
+        showBuildError(failure, failHeap, failAlloc);
         return;
       }
     }

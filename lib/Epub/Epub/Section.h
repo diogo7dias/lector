@@ -14,6 +14,23 @@ class ChapterHtmlSlimParser;
 class CssParser;
 
 class Section {
+ public:
+  // Why the last build failed. Surfaced on screen next to the failure message so a
+  // device without a serial monitor can still say which path broke. Numbered, not
+  // translated: it is a diagnostic code, not prose.
+  enum class BuildFailure : uint8_t {
+    None = 0,
+    HtmlStream = 1,  // could not spool the spine item out of the zip to SD
+    OpenTmpBin = 2,  // could not open the layout .bin for writing
+    OomContext = 3,  // BuildContext allocation failed
+    OomParser = 4,   // ChapterHtmlSlimParser allocation failed
+    BeginParse = 5,  // expat/parser start failed
+    ParseStep = 6,   // parse error or SD read error mid-chapter
+    PageWrite = 7,   // a page failed to serialize (arena OOM or short SD write)
+    Commit = 8,      // LUT/commit rejected the finished build
+  };
+
+ private:
   std::shared_ptr<Epub> epub;
   const int spineIndex;
   GfxRenderer& renderer;
@@ -65,6 +82,14 @@ class Section {
   // Parse watermark from the partial's trailer, for estimating the total page count.
   uint32_t partialBytesConsumed_ = 0;
   uint32_t partialTotalBytes_ = 0;
+  // Set when onPageComplete could not write a page. The page callback cannot abort the
+  // parser, so it records the failure here and buildSomeMore bails on the next step
+  // instead of grinding out the whole chapter and only rejecting it at commit time.
+  bool pageWriteFailed_ = false;
+  BuildFailure lastFailure_ = BuildFailure::None;
+  uint32_t lastFailureFreeHeap_ = 0;
+  uint32_t lastFailureMaxAlloc_ = 0;
+  void noteBuildFailure(BuildFailure code);
   bool finalizeBuild();
   // Write the LUTs/anchor map (and, for a partial, the watermark trailer), patch the
   // header, stamp the version byte, and swap the tmp .bin over filePath.
@@ -80,6 +105,12 @@ class Section {
  public:
   uint16_t pageCount = 0;
   int currentPage = 0;
+
+  // Last build failure plus the heap at the moment it happened. Free heap tells an
+  // allocation failure apart from an SD write failure without a serial monitor.
+  BuildFailure lastFailure() const { return lastFailure_; }
+  uint32_t lastFailureFreeHeap() const { return lastFailureFreeHeap_; }
+  uint32_t lastFailureMaxAlloc() const { return lastFailureMaxAlloc_; }
 
   // Constructor and destructor are out-of-line: BuildContext holds a unique_ptr to the
   // forward-declared ChapterHtmlSlimParser, whose full definition is only visible in the .cpp.

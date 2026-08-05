@@ -98,15 +98,30 @@ Section::Section(const std::shared_ptr<Epub>& epub, const int spineIndex, GfxRen
 // (no-op once a build has completed or never started).
 Section::~Section() { suspendBuild(); }
 
+void Section::noteBuildFailure(const BuildFailure code) {
+  lastFailure_ = code;
+  lastFailureFreeHeap_ = ESP.getFreeHeap();
+  lastFailureMaxAlloc_ = ESP.getMaxAllocHeap();
+  LOG_ERR("SCT", "Build failure code %d (free heap %u, max alloc %u)", static_cast<int>(code), lastFailureFreeHeap_,
+          lastFailureMaxAlloc_);
+}
+
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   if (!file) {
     LOG_ERR("SCT", "File not open for writing page %d", builtPageCount_);
+    pageWriteFailed_ = true;
+    noteBuildFailure(BuildFailure::PageWrite);
     return 0;
   }
 
   const uint32_t position = file.position();
   if (!page->serialize(file)) {
     LOG_ERR("SCT", "Failed to serialize page %d", builtPageCount_);
+    // The parser owns the loop and cannot be stopped from here, so flag it and let
+    // buildSomeMore abort on the next step. Grinding on would waste the rest of the
+    // chapter and then fail at commit with no clue which page broke.
+    pageWriteFailed_ = true;
+    noteBuildFailure(BuildFailure::PageWrite);
     return 0;
   }
   LOG_DBG("SCT", "Page %d processed", builtPageCount_);
@@ -297,6 +312,9 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   // to the tmp .bin, so availability never drops below the partial's watermark.
   pageCount = partial_ ? partialPageCount_ : 0;
 
+  pageWriteFailed_ = false;
+  lastFailure_ = BuildFailure::None;
+
   // Remove a stale tmp .bin from a crash-interrupted build; this build recreates it.
   {
     const std::string staleTmp = binTmpPath();
@@ -364,6 +382,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
 
     if (!streamed) {
       LOG_ERR("SCT", "Failed to stream item contents to temp file after retries");
+      noteBuildFailure(BuildFailure::HtmlStream);
       return false;
     }
 
@@ -389,6 +408,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   auto ctx = makeUniqueNoThrow<BuildContext>();
   if (!ctx) {
     LOG_ERR("SCT", "OOM: BuildContext");
+    noteBuildFailure(BuildFailure::OomContext);
     file.close();
     Storage.remove(binTmpPath().c_str());
     if (!reusedHtml) Storage.remove(tmpHtmlPath.c_str());
@@ -444,6 +464,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
       popupFn, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
+    noteBuildFailure(BuildFailure::OomParser);
     if (ctx->cssParser) ctx->cssParser->clear();
     file.close();
     Storage.remove(binTmpPath().c_str());
@@ -456,6 +477,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
 
   if (!build_->parser->beginParse()) {
     LOG_ERR("SCT", "Failed to begin parse");
+    noteBuildFailure(BuildFailure::BeginParse);
     abandonBuild();
     return false;
   }
@@ -476,6 +498,12 @@ bool Section::buildSomeMore(const int maxPages) {
     const auto status = build_->parser->parseStep();
     if (status == ChapterHtmlSlimParser::ParseStatus::Error) {
       LOG_ERR("SCT", "Parse error during incremental build");
+      noteBuildFailure(BuildFailure::ParseStep);
+      abandonBuild();
+      return false;
+    }
+    if (pageWriteFailed_) {
+      LOG_ERR("SCT", "Aborting build after page %d failed to write", builtPageCount_);
       abandonBuild();
       return false;
     }
@@ -574,6 +602,7 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   for (const auto& entry : build_->lut) {
     if (entry.fileOffset == 0) {
       LOG_ERR("SCT", "Failed to write LUT due to invalid page positions");
+      noteBuildFailure(BuildFailure::Commit);
       return failCommit();
     }
     serialization::writePod(file, entry.fileOffset);
