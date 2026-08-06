@@ -116,7 +116,10 @@ void ClockSyncActivity::render(RenderLock&&) {
     case SUCCESS: {
       renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_OK), true, EpdFontFamily::REGULAR);
       if (syncedTime[0] != '\0') {
-        char line[32];
+        // Sized for the label in any language: STR_CURRENT_TIME is 26 bytes in
+        // Russian (UTF-8 Cyrillic is 2 bytes per letter) versus 13 in English,
+        // plus a separator and up to "08:56 PM".
+        char line[64];
         snprintf(line, sizeof(line), "%s %s", tr(STR_CURRENT_TIME), syncedTime);
         renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, line);
       }
