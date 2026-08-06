@@ -22,16 +22,10 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   bool showBootScreen = true;
   // Wallpaper the last sleep screen actually rendered, or empty when the sleep screen
   // was not a wallpaper. Deep sleep is a chip reset, so the wake has no other way to
-  // know what the panel is holding; setup() re-renders this file and composites the
-  // unlock banners over it instead of showing the boot logo.
+  // know what the panel is holding. The wake uses it to tell a wallpaper sleep from a
+  // logo one (the two take different unlock paths), and the reader menu uses it to
+  // favorite, pause or delete the image the lock screen last showed.
   std::string lastSleepWallpaperPath;
-  // True when the sleep face was painted 1-bit, so the saved frame buffer is a faithful
-  // copy of what the panel is physically holding. Only then may the wake restore that
-  // frame instead of decoding the wallpaper again: a 3-pass grayscale face leaves the
-  // buffer holding a plane, not the finished picture, and restoring it would paint the
-  // wrong image. Measured on an X3 (lector.exp.9): re-decoding costs ~3.6s of a ~4.7s
-  // wake, and it is the single largest cost in the whole wake.
-  bool sleepFrameIsFaithful = false;
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);

@@ -113,6 +113,12 @@ class EpubReaderMenuActivity final : public Activity {
   std::string title = "Reader Menu";
   std::string author;
   std::string chapterName;
+  // One-shot confirmation line under the book header, for actions that finish inside the
+  // menu and would otherwise say nothing (favoriting the wallpaper). It costs no refresh
+  // of its own: the menu already redraws the whole screen for the row label flip, so the
+  // line rides that same pass. render() clears it after drawing, so it shows once.
+  bool hasStatusLine = false;
+  StrId statusLineId = StrId::STR_FAVORITED;
   uint8_t pendingOrientation = 0;
   uint8_t selectedPageTurnOption = 0;
   uint8_t selectedParagraphNumbering = 0;

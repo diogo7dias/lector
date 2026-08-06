@@ -158,17 +158,10 @@ void SleepActivity::onEnter() {
   // the same value every sleep and must not cost an SD write each time.
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
-  // Same clear-then-let-the-render-set-it rule as the path above: every face that is not
-  // a 1-bit wallpaper must leave this false, or the wake would restore a frame that does
-  // not match the panel.
-  const bool previousFaithful = APP_STATE.sleepFrameIsFaithful;
-  APP_STATE.sleepFrameIsFaithful = false;
 
   renderSleepScreen();
 
-  // The flag can flip while the path stays the same — switching sleep image quality does
-  // exactly that with a fixed /sleep.pxc — so it has to be part of the change test.
-  if (APP_STATE.lastSleepWallpaperPath != previousWallpaper || APP_STATE.sleepFrameIsFaithful != previousFaithful) {
+  if (APP_STATE.lastSleepWallpaperPath != previousWallpaper) {
     APP_STATE.saveToFile();
   }
 }
@@ -379,9 +372,6 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
       LOG_INF("SLP", "Loaded: /sleep.pxc");
       APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
-      // 1-bit face: the buffer now equals the panel, so the wake may restore it instead
-      // of decoding this file again. See CrossPointState::sleepFrameIsFaithful.
-      APP_STATE.sleepFrameIsFaithful = !pxcGrayscale;
       if (dir) dir.close();
       return;
     }
@@ -473,7 +463,6 @@ void SleepActivity::renderCustomSleepScreen() const {
       if (hasPxcExtension(chosen)) {
         if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
           APP_STATE.lastSleepWallpaperPath = filename;
-          APP_STATE.sleepFrameIsFaithful = !pxcGrayscale;
           dir.close();
           return;
         }

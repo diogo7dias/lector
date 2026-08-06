@@ -353,9 +353,13 @@ void EpubReaderMenuActivity::loop() {
       }
       // setFavorite repointed APP_STATE.lastSleepWallpaperPath at the renamed file, so
       // the label is derived from the card, not from a flag that could drift out of step.
+      const bool nowFavorite = FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath);
       activeTab().items[activeTab().selectedIndex - 1].labelId =
-          FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath) ? StrId::STR_UNFAVORITE_WALLPAPER
-                                                                          : StrId::STR_FAVORITE_WALLPAPER;
+          nowFavorite ? StrId::STR_UNFAVORITE_WALLPAPER : StrId::STR_FAVORITE_WALLPAPER;
+      // Say it as well as show it. This is a line inside the redraw the label flip already
+      // costs, not a popup over the reading page, so it is free.
+      statusLineId = nowFavorite ? StrId::STR_FAVORITED : StrId::STR_UNFAVORITED;
+      hasStatusLine = true;
       requestUpdate();
       return;
     }
@@ -459,6 +463,15 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
   renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());
   y += subLineHeight;
+
+  // One-shot confirmation for an action that completed in place, drawn bold so it reads
+  // as an event rather than as another header line. Cleared here: it belongs to the redraw
+  // that the action itself triggered, and the next redraw is a fresh state.
+  if (hasStatusLine) {
+    renderer.drawCenteredText(UI_10_FONT_ID, y, I18N.get(statusLineId), true, EpdFontFamily::BOLD);
+    y += subLineHeight;
+    hasStatusLine = false;
+  }
 
   // Tab bar sits between the book header and the rows. It is nav-ring position 0, so it
   // draws as selected whenever the cursor is on it.

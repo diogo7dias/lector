@@ -260,11 +260,10 @@ void enterDeepSleep(bool fromTimeout = false) {
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
 
-  // Quick resume has always kept its frame. A 1-bit wallpaper face now keeps one too:
-  // without it the wake has to re-read the .pxc and re-dither 384,000 pixels, measured
-  // at ~3.6s of a ~4.7s wake on an X3 (lector.exp.9). Restoring 48KB off the card is far
-  // cheaper. Only when the face was 1-bit — see CrossPointState::sleepFrameIsFaithful.
-  if (isQuickResumeSleep || APP_STATE.sleepFrameIsFaithful) {
+  // Quick resume keeps its frame, because its wake restores that exact frame. A wallpaper
+  // sleep face does not: its wake blanks the panel and goes to the book, so saving 48KB to
+  // the card here would only slow the lock for a frame nothing reads.
+  if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
   }
 
@@ -551,55 +550,41 @@ void setup() {
       }
       break;
     case BootResume::Splash:
-      // Wake Straight to Book: no wallpaper redraw and no unlock banners. Instead, blank
-      // the panel with one FULL pass and go on to the book.
+      // Waking from a wallpaper sleep face never redraws the wallpaper. The sleep screen
+      // itself is untouched — the wallpaper is still what the panel shows all night — but
+      // the unlock does not decode it a second time. Re-reading the .pxc and re-dithering
+      // 384,000 pixels measured at 3.3-3.7s of a ~4.7s wake on an X3 (lector.exp.9), and
+      // every one of those pixels is covered by the book page moments later.
+      //
+      // So: blank the framebuffer, draw the unlock banners into it if they are wanted,
+      // and put that up with one FULL pass.
       //
       // The blank is not optional and not decoration. A wallpaper is arbitrary content,
       // and a differential waveform only drives the pixels that changed — paint a page
       // straight over a wallpaper and the wallpaper stays in the page, which is exactly
-      // what the first build of this setting did (device photo, 0.15.0). A FULL pass over
-      // a blank buffer clears the panel and gives the reader a clean baseline.
+      // what the first build of this path did (device photo, 0.15.0). FAST_REFRESH cannot
+      // stand in for FULL_REFRESH here either: its custom LUT nudges changed pixels with a
+      // short waveform and does not reset the ink, so dark wallpaper survives it. Only the
+      // complete waveform over a blank buffer truly clears the panel, and only then may
+      // the reader's own first paint take the cheap differential path.
       //
-      // It also doubles as the loading face this path would otherwise lack: the screen
-      // goes blank the moment the wake starts, while the button is still held, so there
-      // IS a visible answer to the press before the page arrives.
-      //
-      // Still far cheaper than what it replaces: one FULL refresh instead of a card read,
-      // a re-dither of every pixel, a banner composite and a refresh.
-      if (wallpaperWake && SETTINGS.wakeStraightToBook) {
+      // The blank also doubles as the loading face when the banners are off: the screen
+      // goes blank the moment the wake starts, while the button is still held, so there IS
+      // a visible answer to the press before the page arrives.
+      if (wallpaperWake) {
         renderer.clearScreen();
+        if (!SETTINGS.wakeStraightToBook) {
+          // Banners wanted: they now sit on a blank page instead of over the wallpaper.
+          // They cost only the draw — the FULL pass below happens either way.
+          drawUnlockBanners(renderer);
+        }
         renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-        // The panel is genuinely blank now, so the reader's own first paint may take the
-        // cheap differential path over it.
         allowFastInitialReaderRefresh = true;
         break;
       }
-      // Fast wallpaper wake: the sleep face was 1-bit, so the saved frame is exactly what
-      // the panel holds. Restore it and composite the banners, instead of re-reading the
-      // .pxc and re-dithering every pixel — the same trick quick resume already uses, and
-      // the one thing that moves the ~3.6s measured in this stage.
-      //
-      // The saved frame is consumed either way (loadSleepFrameBuffer deletes it), so a
-      // failed load simply falls through to the decode path below.
-      if (wallpaperWake && APP_STATE.sleepFrameIsFaithful && loadSleepFrameBuffer()) {
-        const bool useDifferentialRefresh = gpio.deviceIsX3();
-        if (useDifferentialRefresh) {
-          // begin() clears the X3 controller RAM, so the restored frame has to become the
-          // baseline before the banners are drawn over it.
-          renderer.cleanupGrayscaleWithFrameBuffer();
-        }
-        drawUnlockBanners(renderer);
-        if (useDifferentialRefresh) {
-          renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-          allowFastInitialReaderRefresh = true;
-        } else {
-          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-        }
-        break;
-      }
       // goToBoot() runs BootActivity::onEnter inline (no current activity yet), and that
-      // paint is blocking, so the banners are already on the panel when this returns.
-      activityManager.goToBoot(wallpaperWake ? lastWallpaper : std::string());
+      // paint is blocking, so the splash is already on the panel when this returns.
+      activityManager.goToBoot();
       break;
   }
 

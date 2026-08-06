@@ -30,7 +30,6 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
   doc["lastSleepWallpaperPath"] = lastSleepWallpaperPath;
-  doc["sleepFrameIsFaithful"] = sleepFrameIsFaithful;
 }
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
@@ -54,8 +53,5 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
   lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
-  // Defaults false: an older state file has no frame worth trusting, so the wake takes
-  // the decode path exactly as before.
-  sleepFrameIsFaithful = doc["sleepFrameIsFaithful"] | false;
   return true;
 }

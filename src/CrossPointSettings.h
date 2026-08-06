@@ -417,7 +417,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   //
   // Off by default. The cost is that the wake shows no sign of progress: the wallpaper
   // simply sits there until the book appears.
-  uint8_t wakeStraightToBook = 0;
+  uint8_t wakeStraightToBook = 1;
   // Open one of the books in progress at boot instead of resuming the last-read one
   // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
   // so it can never wedge boot.
