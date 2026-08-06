@@ -9,6 +9,7 @@
 #include "BannerStyle.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "WakeTiming.h"
 #include "fontIds.h"
 
 namespace {
@@ -95,5 +96,14 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   }
 
   const char* footer = SETTINGS.customFooter[0] != '\0' ? SETTINGS.customFooter : "READ UNTIL YOU DIE.";
+#if defined(WAKE_TIMING_OVERLAY) && WAKE_TIMING_OVERLAY
+  // Experimental builds only: replace the footer with the previous wake's breakdown, so a
+  // device with no serial console can still report where its wake time went. The stamps
+  // are one wake behind by necessity (see WakeTiming.h), which is why this reads as a
+  // measurement of the last unlock rather than of this one.
+  char timings[96];
+  WakeTiming::formatPrevious(timings, sizeof(timings));
+  if (timings[0] != '\0') footer = timings;
+#endif
   renderer.drawCenteredText(banner::FONT_ID, botY + pad, footer, false);
 }
