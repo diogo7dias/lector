@@ -30,6 +30,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "UiFont.h"
+#include "WakeTiming.h"
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
@@ -353,9 +354,13 @@ void setup() {
   silentRebootMagic = 0;
   silentRebootTarget = 0;
 
+  WakeTiming::beginWake();
+
   gpio.begin();
   powerManager.begin();
   halClock.begin();
+  WakeTiming::mark(WakeTiming::Stage::HalReady);
+
   // Light-sleep through the render task's e-ink BUSY wait (0.3-2 s of pure pin
   // polling) in short slices, waking exactly on the BUSY pin's completion level
   // (falls back to plain polling when WiFi/USB blocks light sleep)
@@ -372,6 +377,8 @@ void setup() {
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
     return;
   }
+
+  WakeTiming::mark(WakeTiming::Stage::SdReady);
 
   HalSystem::checkPanic();
 
@@ -401,6 +408,8 @@ void setup() {
   READER_PRESETS.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+  WakeTiming::mark(WakeTiming::Stage::ConfigReady);
+
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
@@ -440,6 +449,8 @@ void setup() {
       LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
     }
   }
+
+  WakeTiming::mark(WakeTiming::Stage::InputSettled);
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
@@ -482,6 +493,8 @@ void setup() {
                              sleepWasCustomWallpaper && hasPxcExtension(lastWallpaper);
 
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
+  WakeTiming::mark(WakeTiming::Stage::DisplayReady);
+
   // The wake/unlock banners are the first thing seen on waking, and the activity that
   // follows repaints straight over them. They are the loading face: they exist to show the
   // reader is busy while input is still gated, not to be read.
@@ -537,6 +550,8 @@ void setup() {
       break;
   }
 
+  WakeTiming::mark(WakeTiming::Stage::BannersUp);
+
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
@@ -581,6 +596,8 @@ void setup() {
     APP_STATE.saveToFile();
     activityManager.goToReader(path, allowFastInitialReaderRefresh);
   }
+
+  WakeTiming::mark(WakeTiming::Stage::ActivityUp);
 
   if (resume == BootResume::Silent) {
     // Block until the first paint physically completes. refreshDisplay()
