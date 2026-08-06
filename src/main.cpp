@@ -356,7 +356,6 @@ void setup() {
   gpio.begin();
   powerManager.begin();
   halClock.begin();
-
   // Light-sleep through the render task's e-ink BUSY wait (0.3-2 s of pure pin
   // polling) in short slices, waking exactly on the BUSY pin's completion level
   // (falls back to plain polling when WiFi/USB blocks light sleep)
@@ -402,7 +401,6 @@ void setup() {
   READER_PRESETS.loadFromFile();
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
-
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
@@ -484,13 +482,15 @@ void setup() {
                              sleepWasCustomWallpaper && hasPxcExtension(lastWallpaper);
 
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
-
   // The wake/unlock banners are the first thing seen on waking, and the activity that
-  // follows repaints straight over them. Stamp when they land so the routing below can
-  // hold them for a readable beat. Measured from the paint, so a slow refresh or a slow
-  // book load already counts towards it and costs nothing extra.
-  constexpr uint32_t WAKE_BANNER_MIN_VISIBLE_MS = 500;
-  uint32_t bannersPaintedMs = 0;
+  // follows repaints straight over them. They are the loading face: they exist to show the
+  // reader is busy while input is still gated, not to be read.
+  //
+  // There is deliberately no minimum visible time. A 500ms floor used to hold them here,
+  // and it was pure cost on a fast wake: the work that follows takes seconds on its own, so
+  // the floor only ever fired when the banners were about to be covered promptly anyway.
+  // Dropping it cannot leave a blank screen, because the retained wallpaper stays on the
+  // panel underneath until the next activity paints over it.
 
   switch (resume) {
     case BootResume::Silent:
@@ -526,25 +526,15 @@ void setup() {
         } else {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
-        bannersPaintedMs = millis();
       } else {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
-        bannersPaintedMs = millis();
       }
       break;
     case BootResume::Splash:
       // goToBoot() runs BootActivity::onEnter inline (no current activity yet), and that
       // paint is blocking, so the banners are already on the panel when this returns.
       activityManager.goToBoot(wallpaperWake ? lastWallpaper : std::string());
-      bannersPaintedMs = millis();
       break;
-  }
-
-  if (bannersPaintedMs != 0) {
-    const uint32_t shownForMs = millis() - bannersPaintedMs;
-    if (shownForMs < WAKE_BANNER_MIN_VISIBLE_MS) {
-      delay(WAKE_BANNER_MIN_VISIBLE_MS - shownForMs);
-    }
   }
 
   if (recoveryFirmwareMode) {
