@@ -1092,6 +1092,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE: {
+      // FAILURE PATH ONLY. The menu now favourites in place and stays open, so a
+      // successful star never reaches the reader — see EpubReaderMenuActivity's
+      // WALLPAPER_FAVORITE branch. The menu hands the action over only when the rename
+      // failed, because reporting that needs a popup and the full refresh that clears
+      // it. Retrying here is safe: a failed setFavorite changed nothing, so this either
+      // succeeds or reports the same failure.
+      //
       // Renames the file on the card, so the path in APP_STATE moves with it —
       // FavoriteImage::setFavorite repoints it, which keeps the next wake able to
       // redraw the same wallpaper under the unlock banners.

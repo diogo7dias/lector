@@ -101,8 +101,11 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   // device with no serial console can still report where its wake time went. The stamps
   // are one wake behind by necessity (see WakeTiming.h), which is why this reads as a
   // measurement of the last unlock rather than of this one.
+  // formatDiagnostic, not formatPrevious: an empty result used to fall through to the
+  // normal footer, which reads exactly like a build with the overlay switched off. The
+  // diagnostic always prints something, so "no numbers" becomes a readable cause.
   char timings[96];
-  WakeTiming::formatPrevious(timings, sizeof(timings));
+  WakeTiming::formatDiagnostic(timings, sizeof(timings));
   if (timings[0] != '\0') footer = timings;
 #endif
   renderer.drawCenteredText(banner::FONT_ID, botY + pad, footer, false);

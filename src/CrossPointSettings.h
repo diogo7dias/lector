@@ -406,6 +406,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SLEEP_QUALITY_FAST = 0;
   static constexpr uint8_t SLEEP_QUALITY_PRETTY = 1;
   uint8_t sleepImageQuality = SLEEP_QUALITY_PRETTY;
+  // Skip the unlock screen on a wallpaper wake and go straight back into the book.
+  //
+  // The sleep screen itself is untouched: the wallpaper is drawn and shown exactly as
+  // before. This only changes what happens on the way OUT. Normally the wake re-reads the
+  // .pxc, re-dithers every pixel, composites the unlock banners and refreshes the panel —
+  // measured at ~3.6s of a ~4.7s wake on an X3 — and then the reader paints over all of
+  // it anyway. With this on, none of that runs: the wallpaper stays on the panel from the
+  // sleep until the reader's own first paint replaces it.
+  //
+  // Off by default. The cost is that the wake shows no sign of progress: the wallpaper
+  // simply sits there until the book appears.
+  uint8_t wakeStraightToBook = 0;
   // Open one of the books in progress at boot instead of resuming the last-read one
   // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
   // so it can never wedge boot.

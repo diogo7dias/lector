@@ -4,10 +4,12 @@
 #include <I18n.h>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/FavoriteImage.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
@@ -327,6 +329,33 @@ void EpubReaderMenuActivity::loop() {
     }
     if (selectedAction == MenuAction::TOGGLE_STATUS_BAR) {
       selectedStatusBar = selectedStatusBar ? 0 : 1;
+      requestUpdate();
+      return;
+    }
+
+    // Favourite the sleep wallpaper here rather than handing the action to the reader.
+    // The work is a rename on the card and needs no page, and doing it in place turns a
+    // popup plus a forced FULL refresh of the reading page — one to two seconds on this
+    // panel — into a label flip inside the already-open menu. The row reads Favorite or
+    // Unfavorite, so the result is still visible; it is a checkbox, like the rows above.
+    if (selectedAction == MenuAction::WALLPAPER_FAVORITE) {
+      const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
+      if (lastPath.empty()) return;
+      const bool makeFavorite = !FavoriteImage::isFavoritePath(lastPath);
+      if (FavoriteImage::setFavorite(lastPath, makeFavorite, nullptr) != FavoriteImage::SetFavoriteResult::Success) {
+        // Only a failure is worth a popup and the full refresh that clears it: a name
+        // clash or a card error is something the reader must not swallow silently.
+        setResult(MenuResult{static_cast<int>(MenuAction::WALLPAPER_FAVORITE), pendingOrientation,
+                             selectedPageTurnOption, selectedParagraphNumbering, selectedParagraphNumberSize,
+                             selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar, firedHoldFunction});
+        finish();
+        return;
+      }
+      // setFavorite repointed APP_STATE.lastSleepWallpaperPath at the renamed file, so
+      // the label is derived from the card, not from a flag that could drift out of step.
+      activeTab().items[activeTab().selectedIndex - 1].labelId =
+          FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath) ? StrId::STR_UNFAVORITE_WALLPAPER
+                                                                          : StrId::STR_FAVORITE_WALLPAPER;
       requestUpdate();
       return;
     }

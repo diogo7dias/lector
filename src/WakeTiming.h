@@ -33,9 +33,21 @@ enum class Stage : uint8_t {
 // out of order are kept as-is, since the reader of these numbers wants the raw stamps.
 void mark(Stage stage);
 
-// Copy this wake's stamps into the "previous wake" slot and clear the current ones. Call
-// once, early in setup(), before the first mark() of the new wake.
+// Clear the slate for the wake starting now. Call once, early in setup(), before the
+// first mark().
 void beginWake();
+
+// Read the previous wake's stamps from the SD card. Call once, right after the card is
+// mounted (Stage::SdReady) and before the unlock banners are drawn — the numbers cannot
+// be reported before they have been loaded.
+//
+// The card, not RTC memory: the X3 cuts power to the RTC block on sleep, so nothing
+// stored there survives. See the note at the top of the .cpp.
+void loadPrevious();
+
+// Write this wake's stamps to the card, for the next wake to display. Call once at the
+// end of the wake, after the last mark(). One 22-byte record, one write per wake.
+void persist();
 
 // Human-readable breakdown of the PREVIOUS wake, e.g. "sd 118 cfg 74 in 512 disp 96
 // ban 410 act 3180 = 4390". Returns an empty string when no previous wake was recorded,
@@ -44,5 +56,23 @@ void beginWake();
 // The buffer is filled rather than returned by value to keep this off the heap during a
 // wake. Pass at least 96 bytes.
 void formatPrevious(char* out, size_t outLen);
+
+// Like formatPrevious, but NEVER returns an empty string.
+//
+// formatPrevious falls back to silence when it has nothing to report, and on the banner
+// that silence is indistinguishable from "the overlay was never compiled in". This one
+// always says something, so an empty-handed wake can be told apart from a missing build
+// flag, and the two ways of coming up empty can be told apart from each other:
+//
+//   "w4 sd 118 cfg 74 in 512 disp 96 ban 410 act 3180 = 4390"  numbers, wake 4
+//   "w0 rtc lost m=3f2a91cc"      the RTC magic word did not survive the sleep
+//   "w4 no stamps"                RTC survived, but no stage was ever marked
+//
+// The leading "wN" is a wake counter kept in the same RTC block. If it climbs across
+// sleeps, RTC memory is surviving and the fault is in the stamping; if it is always 0,
+// the memory itself is being cleared. That single digit decides where to look next.
+//
+// Pass at least 96 bytes.
+void formatDiagnostic(char* out, size_t outLen);
 
 }  // namespace WakeTiming
