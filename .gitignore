@@ -29,8 +29,7 @@ lib/EpdFont/scripts/output/
 /.dummy
 /CMakeLists.txt
 /dependencies.lock
-/sdkconfig.default
-/sdkconfig.defaults
+/sdkconfig.*
 sdkconfig.sticky
 # Written per environment by the custom_sdkconfig rebuild (sdkconfig.gh_release etc).
 sdkconfig.gh_release*
