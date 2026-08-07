@@ -32,3 +32,5 @@ lib/EpdFont/scripts/output/
 /sdkconfig.default
 /sdkconfig.defaults
 sdkconfig.sticky
+# Written per environment by the custom_sdkconfig rebuild (sdkconfig.gh_release etc).
+sdkconfig.gh_release*
