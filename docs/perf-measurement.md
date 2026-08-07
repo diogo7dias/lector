@@ -1,16 +1,11 @@
 # Panel performance measurement, X3 and X4
 
-Purpose: replace source-reading guesses with real numbers, so speed work is aimed
-at whatever actually costs the most on each device.
+Why this exists: the X3 and X4 are separate performance targets, and the cost ranking so
+far is read from the drivers rather than measured. This is the reference for the build
+that replaces the reading with numbers.
 
-The X3 and X4 are separate performance targets. The same firmware pays very
-different costs on each panel, so every run below is done twice, once per device,
-and the results are never averaged together.
-
-The device does the recording. The firmware appends one line per refresh to a
-file on the SD card. Nothing is read off the screen and nothing is typed by hand.
-
----
+Nothing here is filled in by hand. The device records everything, including the settings
+each run was taken under.
 
 ## Building it
 
@@ -18,19 +13,22 @@ file on the SD card. Nothing is read off the screen and nothing is typed by hand
 pio run -e gh_release_perf
 ```
 
-Identical to `gh_release` plus `-DPERF_LOG=1`. It is a separate environment rather than a
-flag added to the release build because PlatformIO's dependency finder preprocesses the
+Identical to `gh_release` plus `-DPERF_LOG=1`. A separate environment rather than a flag
+added to the release build, because PlatformIO's dependency finder preprocesses the
 sources: with the flag undefined it cannot see the includes behind the `#if`, and the
 recorder's dependencies never get linked.
 
-Cost: about 4 KB of RAM for the record buffer, and nothing at all in `gh_release`, where
-every recorder call compiles to an empty inline body.
+Cost: about 4 KB of RAM for the record buffer. In `gh_release` every recorder call
+compiles to an empty inline body, so the stable line carries none of it.
 
-## What the instrumented build records
+## Output
 
-One CSV line per refresh, appended to `/perf/x3-000.csv` or `/perf/x4-000.csv` on the SD
-card. A new numbered file is opened per boot, so a lock-and-wake cycle produces several
-files rather than overwriting one.
+`/perf/x3-000.csv` or `/perf/x4-000.csv` on the SD card, a new numbered file per boot, so
+a lock-and-wake cycle produces several files rather than overwriting one.
+
+Three comment lines of context first, written by the device: firmware version, battery,
+orientation, font family and size, sleep image quality, Wake Straight to Book, and the
+open book. Then one row per refresh:
 
 | Column | Meaning |
 |---|---|
@@ -45,120 +43,51 @@ files rather than overwriting one.
 `req` and `run` are separate columns on purpose. Both panel drivers override the requested
 mode in places, and the size of that gap is itself one of the things being measured.
 
-## What it does not record, and why
+## What it cannot see, and why
 
-The bus / waveform / post-work split can only be seen from inside the SDK, and the SDK is
-a submodule this build does not fork for a measurement.
+The bus / waveform / post-work split lives inside the SDK, and the SDK is a submodule this
+build does not fork for a measurement.
 
-`async_start_us` is the usable stand-in. On paths that refresh asynchronously, it is the
-time to fire the waveform — commands issued, bytes pushed — while `total_us` also covers
-the wait and the driver's post-work. The difference between them separates "pushing bytes"
-from "waiting for ink and cleaning up", which is exactly the distinction the speed work
-turns on. On blocking paths there is no split and the field is 0.
+`async_start_us` is the usable stand-in. On async paths it is the time to fire the
+waveform — commands issued, bytes pushed — while `total_us` also covers the wait and the
+driver's post-work. The difference separates "pushing bytes" from "waiting for ink and
+cleaning up", which is the distinction the speed work turns on.
 
-So the first pass answers *which screens and which modes cost what, and how much of it
-overlaps*. If it turns out the cost sits inside a single blocking call and the split is
-needed after all, that is the point at which forking the SDK is justified.
-
----
+Panel temperature is not recorded because neither driver can read one back. The
+temperature values in the drivers are constants written to the panel, not readings.
 
 ## Runs
 
-Same book, same font, same font size, same orientation on both devices. Note the
-book and settings in the run sheet so a later run can be compared to this one.
+Five sequences, done on each device. The book does not have to match between them: a
+refresh drives the whole panel whatever is on it, so page content barely touches the
+number being measured.
 
-Do each run on the X3, then repeat the identical run on the X4.
+1. **Steady reading.** Thirty page turns at reading pace. The hot path, and the number
+   that matters most.
+2. **Fast reading.** Thirty page turns as fast as the device accepts presses. Against
+   run 1 this shows whether presses are lost while the panel is busy, and what the
+   periodic clean pass costs inside a burst.
+3. **Menu.** Open the in-book menu, move a few rows, switch tab, close. Five times. This
+   path uses non-fast refreshes, where the X3's fixed post-refresh delay should show.
+4. **Lock and unlock.** Five times with Wake Straight to Book on, five with it off. Both
+   drivers override the requested mode on the first paint after `begin()`, so this shows
+   what the panel really does at unlock.
+5. **Cold boot.** Once. The fixed startup cost no page-turn work can improve.
 
-### Run 1 — page turns, steady reading
-
-Open a book mid-chapter. Turn forward 30 pages at a comfortable reading pace, a
-few seconds between presses. Do not open any menu.
-
-This is the number that matters most. It is the firmware's hot path.
-
-### Run 2 — page turns, fast
-
-Same book, same starting page. Turn forward 30 pages as fast as the device will
-accept presses.
-
-Run 1 versus Run 2 shows whether presses are being lost or queued while the panel
-is busy, and how much the refresh policy's periodic clean pass costs when it
-lands in a burst.
-
-### Run 3 — menu open and close
-
-From the reading page: open the in-book menu, move down three rows, open the
-Sleep tab, close the menu back to the page. Repeat five times.
-
-This path uses non-fast refreshes, so it is where the X3's fixed post-refresh
-delay should show up plainly.
-
-### Run 4 — lock and unlock
-
-With `Settings, Display, Wake Straight to Book` ON: lock the device, wait ten
-seconds, wake it with the power button, wait for the book. Repeat five times.
-
-Then set the same setting OFF and repeat five times.
-
-Wake is a special case: both drivers override the requested mode on the first
-paint after `begin()`, so this run shows what the panel really does at unlock
-rather than what the firmware asked for.
-
-### Run 5 — cold boot
-
-Power the device fully off, then boot it to the reading page. Once per device.
-
-Establishes the fixed startup cost that no page-turn work can improve.
-
----
-
-## Run sheet
-
-Fill this in once per device. Everything else comes from the CSV.
-
-| Field | X3 | X4 |
-|---|---|---|
-| Firmware version | | |
-| Book file name | | |
-| Font family and size | | |
-| Orientation | | |
-| Sleep Image Quality | | |
-| Wake Straight to Book | | |
-| Battery percent at start | | |
-| Room temperature, roughly | | |
-| Anything that looked wrong | | |
-
-Temperature is on the list because e-ink waveform timing is temperature
-compensated. A run in a cold room is not comparable to a warm one.
-
----
-
-## Returning the results
-
-Copy these off the SD card and hand them back:
-
-- everything under `/perf/` from the X3
-- everything under `/perf/` from the X4
-- this file with the run sheet filled in
-
-No screenshots and no transcription. If a run went wrong, say which `seq` range
-to ignore rather than deleting lines.
-
----
+Then copy everything under `/perf` off both cards.
 
 ## Known before measuring
 
-Recorded here so the numbers can confirm or refute them, rather than being read
-to fit them. All of these are from source, none from a stopwatch.
+Written down first so the numbers can refute them, rather than being read to fit them.
+All from source, none from a stopwatch.
 
 - X3 panel bus default is 16 MHz, X4 is 40 MHz.
-- The X3 sends the whole frame twice per refresh: once to draw, once to resync
-  the differential baseline.
+- The X3 sends the whole frame twice per refresh: once to draw, once to resync the
+  differential baseline.
 - The X3 blocks for a fixed 200 ms after every non-fast refresh.
-- After a full sync the X3 runs an extra settle pass, so one full refresh is
-  really two.
-- Asking for HALF on the X3 forces a full sync plus a conditioning pass, so it
-  costs more than asking for FULL, not less.
+- After a full sync the X3 runs an extra settle pass, so one full refresh is really two.
+- Asking for HALF on the X3 forces a full sync plus a conditioning pass, so it costs more
+  than asking for FULL, not less.
 - The X4 driver can write a sub-region; the X3 driver cannot.
 - On a wake neither driver honours the requested mode.
 
