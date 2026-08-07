@@ -7,6 +7,7 @@
 #include <PerfLog.h>
 
 #include <cstdio>
+#include <cstdlib>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -38,6 +39,41 @@ void commit() {
 
 }  // namespace
 
+// Held from the boot-time read so the header can report which value this session ran, and
+// so repeated calls during init cannot walk the list twice.
+uint8_t activePll = 0x09;
+
+unsigned char lectorX3PllByte() {
+  static bool chosen = false;
+  if (chosen) return activePll;
+  chosen = true;
+
+  // N held at 1, M walked upward: 0x09 is M=1, the stock value and the baseline. If the
+  // measured refresh time does not fall as M rises, the frame-clock theory is wrong.
+  static constexpr uint8_t kCandidates[] = {0x09, 0x11, 0x19, 0x21};
+  static constexpr uint8_t kCandidateCount = sizeof(kCandidates) / sizeof(kCandidates[0]);
+  static constexpr const char* kIndexPath = "/perf/pll-next.txt";
+
+  uint8_t index = 0;
+  char buf[8] = {0};
+  if (Storage.readFileToBuffer(kIndexPath, buf, sizeof(buf)) > 0) {
+    const int parsed = atoi(buf);
+    if (parsed > 0 && parsed < kCandidateCount) index = static_cast<uint8_t>(parsed);
+  }
+  activePll = kCandidates[index];
+
+  // Advance for the next boot, wrapping so the sweep can simply be repeated. Written
+  // before the panel is touched, so a session that crashes mid-sweep still moves on
+  // rather than pinning the device to one candidate forever.
+  if (Storage.ensureDirectoryExists("/perf")) {
+    const uint8_t next = static_cast<uint8_t>((index + 1) % kCandidateCount);
+    char out[8] = {0};
+    snprintf(out, sizeof(out), "%u\n", static_cast<unsigned>(next));
+    Storage.writeFile(kIndexPath, String(out));
+  }
+  return activePll;
+}
+
 void startPerfLogSink(const char* device) {
   if (device == nullptr) device = "dev";
   if (!Storage.ensureDirectoryExists(kDir)) return;
@@ -55,8 +91,8 @@ void startPerfLogSink(const char* device) {
   // things wrong. Panel temperature is deliberately absent: neither driver can read one
   // back — the temperature values in the driver are constants written TO the panel.
   char header[192];
-  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%%\n", device, CROSSPOINT_VERSION,
-           static_cast<unsigned>(powerManager.getBatteryPercentage()));
+  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%% pll=0x%02X\n", device, CROSSPOINT_VERSION,
+           static_cast<unsigned>(powerManager.getBatteryPercentage()), static_cast<unsigned>(activePll));
   writeLine(header);
   snprintf(header, sizeof(header), "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u\n",
            static_cast<unsigned>(SETTINGS.orientation), static_cast<unsigned>(SETTINGS.fontFamily),
@@ -75,5 +111,8 @@ void startPerfLogSink(const char* device) {
 #else
 
 void startPerfLogSink(const char*) {}
+
+// Stock frame clock: the stable firmware never sweeps.
+unsigned char lectorX3PllByte() { return 0x09; }
 
 #endif  // PERF_LOG
