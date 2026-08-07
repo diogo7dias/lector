@@ -35,8 +35,14 @@ namespace PerfLog {
 // which is counted and reported in the log itself rather than retried.
 using LineSink = bool (*)(const char* line);
 
-// Installs the sink and writes the CSV header through it.
-void begin(LineSink sink);
+// Called at the end of every batch to make the written lines durable. Separate from
+// LineSink because the cost belongs once per batch, not once per line: without it the
+// records sit in the storage layer's buffer and a deep sleep (a chip reset) throws them
+// away, which is exactly how the first measurement run lost 13 of its 14 files.
+using CommitSink = void (*)();
+
+// Installs the sinks and writes the CSV header through them.
+void begin(LineSink sink, CommitSink commit);
 
 // Names the screen that the following refreshes belong to. The name is copied, not
 // referenced: activities are heap-allocated and deleted on exit, so a stored pointer
@@ -55,7 +61,8 @@ void flush();
 #else
 
 using LineSink = bool (*)(const char* line);
-inline void begin(LineSink) {}
+using CommitSink = void (*)();
+inline void begin(LineSink, CommitSink) {}
 inline void setScreen(const char*) {}
 inline void record(uint8_t, uint8_t, uint32_t, uint32_t) {}
 inline void flush() {}

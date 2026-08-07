@@ -29,14 +29,11 @@ HalFile logFile;
 bool writeLine(const char* line) {
   if (!logFile.isOpen()) return false;
   logFile.print(line);
-  // Commit periodically rather than per line. A batch is 128 lines, so this costs four
-  // commits per batch and bounds what an unclean power-off can lose to 32 refreshes.
-  static uint32_t linesSinceCommit = 0;
-  if (++linesSinceCommit >= 32) {
-    linesSinceCommit = 0;
-    logFile.flush();
-  }
   return true;
+}
+
+void commit() {
+  if (logFile.isOpen()) logFile.flush();
 }
 
 }  // namespace
@@ -72,10 +69,7 @@ void startPerfLogSink(const char* device) {
   snprintf(header, sizeof(header), "# book=%s\n", APP_STATE.openEpubPath.c_str());
   writeLine(header);
 
-  PerfLog::begin(&writeLine);
-  // Flushed rather than closed after each batch: the handle stays open for the session,
-  // so an unclean power-off loses at most the batch not yet written.
-  logFile.flush();
+  PerfLog::begin(&writeLine, &commit);
 }
 
 #else

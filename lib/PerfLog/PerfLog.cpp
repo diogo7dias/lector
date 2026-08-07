@@ -11,8 +11,11 @@ namespace {
 
 // Records are batched rather than written per refresh: a card write costs milliseconds,
 // and adding those to the very number being measured would make the log a measurement of
-// itself. 128 records covers a 30-page run several times over.
-constexpr size_t kBatchSize = 128;
+// itself. Sized small because sessions are short — a lock and wake is a handful of
+// refreshes — and a batch that never fills is a batch that never reaches the card. The
+// write lands between refreshes, and a measured X3 refresh is 619 ms, so a few
+// milliseconds of card time here is not worth a larger buffer.
+constexpr size_t kBatchSize = 16;
 
 struct Record {
   uint32_t ms;
@@ -29,6 +32,7 @@ size_t count = 0;
 uint16_t sequence = 0;
 char currentScreen[14] = "boot";
 LineSink lineSink = nullptr;
+CommitSink commitSink = nullptr;
 // Set when a record is lost. Reported in the log itself on the next successful write, so
 // a gap in the sequence numbers is never silently unexplained.
 uint32_t droppedRecords = 0;
@@ -48,9 +52,11 @@ const char* modeName(const uint8_t mode) {
 
 }  // namespace
 
-void begin(const LineSink sink) {
+void begin(const LineSink sink, const CommitSink commit) {
   lineSink = sink;
+  commitSink = commit;
   if (lineSink != nullptr) lineSink("seq,ms,screen,req,run,total_us,async_start_us\n");
+  if (commitSink != nullptr) commitSink();
 }
 
 void setScreen(const char* screenName) {
@@ -95,6 +101,9 @@ void flush() {
              static_cast<unsigned long>(r.totalUs), static_cast<unsigned long>(r.asyncStartUs));
     if (!lineSink(line)) droppedRecords++;
   }
+  // Made durable here rather than per line: the records are worthless if a deep sleep
+  // resets the chip before they reach the card.
+  if (commitSink != nullptr) commitSink();
   // Cleared unconditionally: a failed line is counted, not retried. Retrying would stall
   // the reader on a bad card, and the count in the file is enough to spot the gap.
   count = 0;

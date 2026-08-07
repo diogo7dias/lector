@@ -6,6 +6,11 @@
 
 void Activity::onEnter() {
   LOG_DBG("ACT", "Entering activity: %s", name.c_str());
+  // Commit the outgoing screen's records before the new screen's begin. A screen change
+  // is a natural gap between refreshes, so the card write does not land inside anything
+  // being timed, and it means a power-off keeps everything up to the last screen change
+  // rather than only whole batches.
+  PerfLog::flush();
   // Tags the refreshes that follow with the screen that caused them. PerfLog copies the
   // name: this activity is deleted on exit, so a stored pointer would dangle.
   PerfLog::setScreen(name.c_str());
