@@ -1,4 +1,8 @@
 [submodule "freeink-sdk"]
 	path = freeink-sdk
-	url = https://github.com/Free-Ink/freeink-sdk.git
-	branch = main
+	# Diogo's fork, not Free-Ink/freeink-sdk. The fork carries lector-only X3 panel
+	# timing work that upstream has no reason to take (see the lector/x3-refresh-cost
+	# branch). It tracks upstream otherwise: fetch Free-Ink as a second remote inside
+	# the submodule and rebase the lector branch onto it when syncing.
+	url = https://github.com/diogo7dias/freeink-sdk.git
+	branch = lector/x3-refresh-cost

@@ -108,6 +108,9 @@ class HalDisplay {
   // class performs is routed through it, so no run of FAST passes can grow long
   // enough to trap charge in the panel.
   RefreshMode applyRefreshPolicy(RefreshMode requested);
+  // True only when the caller asked for HALF itself, never when the anti-ghost cap
+  // promoted a FAST into one. See the definition for why the difference matters.
+  bool needsX3HalfResync(RefreshMode requested, RefreshMode actual) const;
 
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;

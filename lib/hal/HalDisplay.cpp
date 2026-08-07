@@ -85,11 +85,30 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
   }
 }
 
+// An X3 HALF is not one waveform. HalDisplay asks the driver to resync first, which turns
+// it into a white-baseline full sync plus a conditioning pass: measured at 2551 ms on an
+// X3, against 2016 ms for an outright FULL and 617 ms for a FAST.
+//
+// That strength is right when a caller asks for HALF on purpose — the sleep screen wants
+// a genuinely clean panel under the wallpaper. It is wrong for a pass the anti-ghost cap
+// promoted out of a FAST. The policy's own design has two tiers: a cheap Clean every 12
+// FAST passes, and a real FULL every 48 because "a Clean pass does not discharge the
+// panel". The resync was collapsing the cheap tier into the expensive one, so the tier
+// that exists to be affordable was costing more than the tier that exists to be thorough.
+//
+// So: resync only when the caller genuinely asked for HALF. A promoted pass takes the
+// driver's plain half scrub, which still drives every pixel to its target ignoring the
+// previous frame — a real clean, just not a full discharge. The every-48 FULL remains the
+// discharge, exactly as the policy intends.
+bool HalDisplay::needsX3HalfResync(const RefreshMode requested, const RefreshMode actual) const {
+  return gpio.deviceIsX3() && actual == RefreshMode::HALF_REFRESH && requested == RefreshMode::HALF_REFRESH;
+}
+
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   const RefreshMode requested = mode;
   const uint32_t startUs = micros();
   mode = applyRefreshPolicy(mode);
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+  if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
   }
 
@@ -105,7 +124,7 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   mode = applyRefreshPolicy(mode);
   pendingAsyncActual = mode;
   pendingAsync = true;
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+  if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
   }
 
@@ -140,7 +159,7 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   const RefreshMode requested = mode;
   const uint32_t startUs = micros();
   mode = applyRefreshPolicy(mode);
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+  if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
   }
 
