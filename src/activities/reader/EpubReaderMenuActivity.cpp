@@ -464,15 +464,6 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());
   y += subLineHeight;
 
-  // One-shot confirmation for an action that completed in place, drawn bold so it reads
-  // as an event rather than as another header line. Cleared here: it belongs to the redraw
-  // that the action itself triggered, and the next redraw is a fresh state.
-  if (hasStatusLine) {
-    renderer.drawCenteredText(UI_10_FONT_ID, y, I18N.get(statusLineId), true, EpdFontFamily::BOLD);
-    y += subLineHeight;
-    hasStatusLine = false;
-  }
-
   // Tab bar sits between the book header and the rows. It is nav-ring position 0, so it
   // draws as selected whenever the cursor is on it.
   const int tabTop = y + metrics.verticalSpacing;
@@ -529,6 +520,18 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+
+  // One-shot confirmation for an action that finished inside the menu. Same strip the
+  // waits use (BusyBanner), so a result and a wait read as one surface. Drawn last, so it
+  // sits on top like every other banner, and it costs no refresh of its own: the menu is
+  // already redrawing this whole screen for the row label flip.
+  //
+  // Cleared right here: the banner belongs to the redraw its own action triggered, and
+  // the next redraw is a fresh state.
+  if (hasStatusLine) {
+    GUI.drawBannerStrip(renderer, I18N.get(statusLineId));
+    hasStatusLine = false;
+  }
 
   renderer.displayBuffer();
 }

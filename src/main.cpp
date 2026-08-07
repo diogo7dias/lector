@@ -485,18 +485,21 @@ void setup() {
     if (!randomBookPath.empty()) setUnlockBannerBookPath(randomBookPath);
   }
 
-  // Unlock over the wallpaper: when this is a normal (non-quick-resume) deep-sleep wake
-  // whose sleep screen was a .pxc wallpaper, re-render that wallpaper on the boot screen
-  // with the unlock banners on top instead of the logo, so the wallpaper stays. Needs the
-  // seamless begin() below so the panel keeps the wallpaper (no clearing pass) until the
-  // re-render lands. .pxc only: it is the one format with a fast 1-bit render path, and a
-  // wake is not the place to run the BMP decoder.
+  // Waking from a wallpaper sleep face: a normal (non-quick-resume) deep-sleep wake whose
+  // sleep screen was a custom wallpaper. The unlock path below blanks the panel and goes
+  // to the book instead of showing the boot splash. Needs the seamless begin() so the
+  // panel keeps the wallpaper (no clearing pass) until that blank lands.
+  //
+  // Every wallpaper format qualifies, not just .pxc. The old .pxc-only rule existed
+  // because the wake re-rendered the image, and .pxc was the one format with a render
+  // path fast enough to attempt on a wake. Nothing is re-rendered now, so a BMP sleep
+  // face takes the same fast unlock a .pxc one does.
   const std::string& lastWallpaper = APP_STATE.lastSleepWallpaperPath;
   const bool sleepWasCustomWallpaper =
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
       (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader);
   const bool wallpaperWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton &&
-                             sleepWasCustomWallpaper && hasPxcExtension(lastWallpaper);
+                             sleepWasCustomWallpaper && !lastWallpaper.empty();
 
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
   WakeTiming::mark(WakeTiming::Stage::DisplayReady);
