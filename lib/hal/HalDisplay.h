@@ -111,6 +111,15 @@ class HalDisplay {
 
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
+
+  // In-flight async refresh, so waitRefreshComplete() can close the PerfLog record the
+  // async start opened. Carried unconditionally rather than behind the PERF_LOG flag:
+  // 14 bytes on one long-lived object is not worth an #if in a header everything sees.
+  uint32_t pendingAsyncStartUs = 0;
+  uint32_t pendingAsyncSplitUs = 0;
+  RefreshMode pendingAsyncRequested = RefreshMode::FAST_REFRESH;
+  RefreshMode pendingAsyncActual = RefreshMode::FAST_REFRESH;
+  bool pendingAsync = false;
 };
 
 extern HalDisplay display;

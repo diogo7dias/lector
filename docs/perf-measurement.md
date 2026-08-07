@@ -12,35 +12,53 @@ file on the SD card. Nothing is read off the screen and nothing is typed by hand
 
 ---
 
+## Building it
+
+```
+pio run -e gh_release_perf
+```
+
+Identical to `gh_release` plus `-DPERF_LOG=1`. It is a separate environment rather than a
+flag added to the release build because PlatformIO's dependency finder preprocesses the
+sources: with the flag undefined it cannot see the includes behind the `#if`, and the
+recorder's dependencies never get linked.
+
+Cost: about 4 KB of RAM for the record buffer, and nothing at all in `gh_release`, where
+every recorder call compiles to an empty inline body.
+
 ## What the instrumented build records
 
-One CSV line per refresh, appended to `/perf-<device>.csv` on the SD card.
+One CSV line per refresh, appended to `/perf/x3-000.csv` or `/perf/x4-000.csv` on the SD
+card. A new numbered file is opened per boot, so a lock-and-wake cycle produces several
+files rather than overwriting one.
 
 | Column | Meaning |
 |---|---|
 | `seq` | Refresh counter since boot, starting at 0 |
 | `ms` | `millis()` when the refresh was requested |
-| `screen` | Which screen asked: `reader`, `menu`, `home`, `boot`, `sleep`, `settings` |
+| `screen` | The activity that asked, e.g. `EpubReader`, `EpubReaderMenu`, `Home` |
 | `req` | Mode the firmware asked for: `FAST`, `HALF`, `FULL` |
-| `run` | Mode the driver actually ran, after policy and driver overrides |
-| `bytes` | Bytes pushed over the panel SPI bus for this refresh |
-| `bus_us` | Microseconds spent pushing those bytes |
-| `wave_us` | Microseconds waiting for the panel BUSY line |
-| `post_us` | Microseconds of post-work after the waveform (plane resync, settle pass, fixed delays) |
-| `total_us` | Request to return, the number a finger actually feels |
+| `run` | Mode actually used, after the refresh policy and the driver's own overrides |
+| `total_us` | Request to return, in microseconds: the number a finger feels |
+| `async_start_us` | On an async refresh, the part that returned before the panel finished. 0 on a blocking refresh |
 
-`req` and `run` are recorded separately on purpose. Both drivers override the
-requested mode in places, and the size of that gap is itself a finding.
+`req` and `run` are separate columns on purpose. Both panel drivers override the requested
+mode in places, and the size of that gap is itself one of the things being measured.
 
-## Why these columns
+## What it does not record, and why
 
-They split one refresh into the four things that can be attacked independently:
+The bus / waveform / post-work split can only be seen from inside the SDK, and the SDK is
+a submodule this build does not fork for a measurement.
 
-- `bus_us` is fixed by SPI clock and bytes. Attack with a faster clock or fewer bytes.
-- `wave_us` is the ink. Only a different waveform changes it.
-- `post_us` is work done after the picture is already correct. It is the best
-  candidate for deferring off the critical path.
-- `total_us` minus the other three is overhead worth explaining.
+`async_start_us` is the usable stand-in. On paths that refresh asynchronously, it is the
+time to fire the waveform — commands issued, bytes pushed — while `total_us` also covers
+the wait and the driver's post-work. The difference between them separates "pushing bytes"
+from "waiting for ink and cleaning up", which is exactly the distinction the speed work
+turns on. On blocking paths there is no split and the field is 0.
+
+So the first pass answers *which screens and which modes cost what, and how much of it
+overlaps*. If it turns out the cost sits inside a single blocking call and the split is
+needed after all, that is the point at which forking the SDK is justified.
 
 ---
 
@@ -119,9 +137,9 @@ compensated. A run in a cold room is not comparable to a warm one.
 
 Copy these off the SD card and hand them back:
 
-- `/perf-x3.csv`
-- `/perf-x4.csv`
-- This file with the run sheet filled in
+- everything under `/perf/` from the X3
+- everything under `/perf/` from the X4
+- this file with the run sheet filled in
 
 No screenshots and no transcription. If a run went wrong, say which `seq` range
 to ignore rather than deleting lines.

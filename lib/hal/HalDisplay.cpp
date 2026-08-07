@@ -1,5 +1,6 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <PerfLog.h>
 
 // Global HalDisplay instance
 HalDisplay display;
@@ -85,17 +86,25 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  const RefreshMode requested = mode;
+  const uint32_t startUs = micros();
   mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
+  // Blocking path: the whole cost is in one call, so there is no async split to report.
+  PerfLog::record(requested, mode, micros() - startUs, 0);
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   const RefreshMode requested = mode;
+  pendingAsyncStartUs = micros();
+  pendingAsyncRequested = mode;
   mode = applyRefreshPolicy(mode);
+  pendingAsyncActual = mode;
+  pendingAsync = true;
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
@@ -104,23 +113,39 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   // detached — same trade the pre-rebase fork made.
   if (mode != requested && mode != RefreshMode::FAST_REFRESH) {
     einkDisplay.displayBuffer(convertRefreshMode(mode), false);
+    // Ran blocking despite the async request, so it has no split to report and no wait
+    // for waitRefreshComplete() to time.
+    PerfLog::record(requested, mode, micros() - pendingAsyncStartUs, 0);
+    pendingAsync = false;
     return;
   }
 
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
+  // Time to here is the part that genuinely overlaps: commands issued and bytes pushed,
+  // with the waveform fired but not waited on. waitRefreshComplete() closes the record.
+  pendingAsyncSplitUs = micros() - pendingAsyncStartUs;
 }
 
-void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
+void HalDisplay::waitRefreshComplete() {
+  einkDisplay.waitRefreshComplete();
+  if (pendingAsync) {
+    PerfLog::record(pendingAsyncRequested, pendingAsyncActual, micros() - pendingAsyncStartUs, pendingAsyncSplitUs);
+    pendingAsync = false;
+  }
+}
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+  const RefreshMode requested = mode;
+  const uint32_t startUs = micros();
   mode = applyRefreshPolicy(mode);
   if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
+  PerfLog::record(requested, mode, micros() - startUs, 0);
 }
 
 void HalDisplay::deepSleep() {

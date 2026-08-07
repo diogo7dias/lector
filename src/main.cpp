@@ -12,6 +12,7 @@
 #include <HalSystem.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <PerfLog.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
@@ -26,6 +27,7 @@
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
+#include "PerfLogSink.h"
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -274,6 +276,7 @@ void enterDeepSleep(bool fromTimeout = false) {
     WiFi.mode(WIFI_OFF);
   }
 
+  PerfLog::flush();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
 
@@ -382,6 +385,7 @@ void setup() {
   }
 
   WakeTiming::mark(WakeTiming::Stage::SdReady);
+  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
   // The card is up, so the previous wake's numbers can be read. Must happen before the
   // unlock banners are drawn, since that is what displays them.
   WakeTiming::loadPrevious();

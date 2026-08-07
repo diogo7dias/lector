@@ -1,8 +1,15 @@
 #include "Activity.h"
 
+#include <PerfLog.h>
+
 #include "ActivityManager.h"
 
-void Activity::onEnter() { LOG_DBG("ACT", "Entering activity: %s", name.c_str()); }
+void Activity::onEnter() {
+  LOG_DBG("ACT", "Entering activity: %s", name.c_str());
+  // Tags the refreshes that follow with the screen that caused them. PerfLog copies the
+  // name: this activity is deleted on exit, so a stored pointer would dangle.
+  PerfLog::setScreen(name.c_str());
+}
 
 void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }
 
