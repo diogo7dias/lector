@@ -36,6 +36,11 @@ CommitSink commitSink = nullptr;
 // Set when a record is lost. Reported in the log itself on the next successful write, so
 // a gap in the sequence numbers is never silently unexplained.
 uint32_t droppedRecords = 0;
+// 1-based round of the sweep this boot is running, and how many rounds there are. 0 until
+// the sink picks a candidate, which is why the marker draws nothing on the first paints of
+// a boot rather than claiming to be round zero.
+uint8_t currentRound = 0;
+uint8_t totalRounds = 0;
 
 const char* modeName(const uint8_t mode) {
   switch (mode) {
@@ -58,6 +63,12 @@ void begin(const LineSink sink, const CommitSink commit) {
   if (lineSink != nullptr) lineSink("seq,ms,screen,req,run,total_us,async_start_us\n");
   if (commitSink != nullptr) commitSink();
 }
+
+void setRound(const uint8_t round) { currentRound = round; }
+uint8_t round() { return currentRound; }
+// Named "rounds", not "count": `count` is the record-buffer counter in this namespace.
+void setRoundCount(const uint8_t rounds) { totalRounds = rounds; }
+uint8_t roundCount() { return totalRounds; }
 
 void setScreen(const char* screenName) {
   if (screenName == nullptr) return;

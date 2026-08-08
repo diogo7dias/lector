@@ -170,6 +170,10 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void tapToLogical(float nx, float ny, int& outX, int& outY) const;
+  // Stamps the sweep round in the top-right corner. Compiles to an empty body without
+  // PERF_LOG, so the stable build carries none of it. Called from both display paths
+  // below rather than by callers, so no screen can forget it.
+  void stampPerfRound() const;
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
   // grayscale strip rendering) can overlap the panel's refresh time. The

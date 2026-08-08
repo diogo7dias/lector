@@ -58,6 +58,21 @@ void record(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_
 // directly before sleeping so a run is never lost to a lock.
 void flush();
 
+// Which round of the sweep this boot is running, 1-based, 0 when unset. Set once at boot
+// by whoever picks the candidate (src/PerfLogSink.cpp), read by GfxRenderer so every
+// refresh can stamp the number on screen. It lives here rather than in the sink because
+// this is the one header both the sink and the renderer already share.
+//
+// The reason it exists at all: the sweep asks the reader which round looked and felt best,
+// and a round is a whole boot. Counting boots in your head is exactly the kind of thing
+// that goes wrong quietly, and lector.exp.11 was already lost once to a bookkeeping bug.
+void setRound(uint8_t round);
+uint8_t round();
+
+// Total rounds in the sweep, so the on-screen marker can read "3 of 4" rather than "3".
+void setRoundCount(uint8_t count);
+uint8_t roundCount();
+
 #else
 
 using LineSink = bool (*)(const char* line);
@@ -66,6 +81,10 @@ inline void begin(LineSink, CommitSink) {}
 inline void setScreen(const char*) {}
 inline void record(uint8_t, uint8_t, uint32_t, uint32_t) {}
 inline void flush() {}
+inline void setRound(uint8_t) {}
+inline uint8_t round() { return 0; }
+inline void setRoundCount(uint8_t) {}
+inline uint8_t roundCount() { return 0; }
 
 #endif
 

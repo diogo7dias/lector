@@ -48,9 +48,16 @@ unsigned char lectorX3PllByte() {
   if (chosen) return activePll;
   chosen = true;
 
-  // N held at 1, M walked upward: 0x09 is M=1, the stock value and the baseline. If the
-  // measured refresh time does not fall as M rises, the frame-clock theory is wrong.
-  static constexpr uint8_t kCandidates[] = {0x09, 0x11, 0x19, 0x21};
+  // Second sweep, walking DOWN. The first one (lector.exp.11) walked up from the stock
+  // 0x09 on the sibling datasheet's hint that raising M raises the frame rate. It does
+  // not on this panel: two of those five boots measured page turns at ~3138 ms against
+  // the usual ~617 ms, so raising the byte made the panel about five times SLOWER. The
+  // register plainly works and reaches the hardware; the direction was simply inverted.
+  //
+  // So the candidates now go below 0x09 rather than above it. 0x09 stays first as the
+  // baseline every run is compared against. If none of the three beat it, 0x09 is at or
+  // near the panel's ceiling and the frame-clock idea is finished.
+  static constexpr uint8_t kCandidates[] = {0x09, 0x08, 0x01, 0x00};
   static constexpr uint8_t kCandidateCount = sizeof(kCandidates) / sizeof(kCandidates[0]);
   static constexpr const char* kIndexPath = "/perf/pll-next.txt";
 
@@ -61,6 +68,10 @@ unsigned char lectorX3PllByte() {
     if (parsed > 0 && parsed < kCandidateCount) index = static_cast<uint8_t>(parsed);
   }
   activePll = kCandidates[index];
+  // Publish the round so every screen can stamp it in the top-right corner. 1-based,
+  // because the reader is asked which round was best and "round 0" invites a mistake.
+  PerfLog::setRound(static_cast<uint8_t>(index + 1));
+  PerfLog::setRoundCount(kCandidateCount);
 
   // Advance for the next boot, wrapping so the sweep can simply be repeated. Written
   // before the panel is touched, so a session that crashes mid-sweep still moves on
@@ -97,8 +108,12 @@ void startPerfLogSink(const char* device) {
   // stamped "pll=0x09" on all five lector.exp.11 runs while the panel was in fact running
   // different values — the sweep worked and the log denied it. Calling the chooser instead
   // makes the choice here, where the card is up, and the driver later gets the cached value.
-  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%% pll=0x%02X\n", device, CROSSPOINT_VERSION,
-           static_cast<unsigned>(powerManager.getBatteryPercentage()), static_cast<unsigned>(lectorX3PllByte()));
+  // round= is the same number the screen stamps in its top-right corner, so a note saying
+  // "round 3 looked best" can be matched to a file without counting anything.
+  const unsigned pll = static_cast<unsigned>(lectorX3PllByte());  // sets the round; call before reading it
+  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%% pll=0x%02X round=%u/%u\n", device,
+           CROSSPOINT_VERSION, static_cast<unsigned>(powerManager.getBatteryPercentage()), pll,
+           static_cast<unsigned>(PerfLog::round()), static_cast<unsigned>(PerfLog::roundCount()));
   writeLine(header);
   snprintf(header, sizeof(header), "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u\n",
            static_cast<unsigned>(SETTINGS.orientation), static_cast<unsigned>(SETTINGS.fontFamily),

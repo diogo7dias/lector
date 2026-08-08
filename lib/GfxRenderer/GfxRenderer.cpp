@@ -5,6 +5,10 @@
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+// Unconditional on purpose: the library dependency finder preprocesses sources, so an
+// include hidden behind #if PERF_LOG would leave PerfLog unlinked in the measurement
+// build. The header itself is empty inline bodies without the flag.
+#include <PerfLog.h>
 #include <SdCardFont.h>
 #include <Utf8.h>
 
@@ -1549,13 +1553,54 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+void GfxRenderer::stampPerfRound() const {
+#if defined(PERF_LOG) && PERF_LOG
+  // Measurement builds only. A sweep round is a whole boot, and the reader is asked
+  // afterwards which round looked best — so the round has to be on the screen the whole
+  // time, not counted in anyone's head. Drawn here, at the one place every screen passes
+  // through, so it survives the reader, the menus, the home list and the lock screen
+  // without a hook in each.
+  //
+  // Deliberately font-free: this library owns no font ids (they live in src/fontIds.h) and
+  // a box of filled squares reads at a glance from across a room, which a 10pt glyph on an
+  // e-ink panel does not. Four slots are always drawn and the first `round` are filled, so
+  // it reads as "3 of 4" rather than as an unlabelled count.
+  const uint8_t round = PerfLog::round();
+  if (round == 0) return;  // no candidate chosen yet: say nothing rather than "round 0"
+  const uint8_t slots = PerfLog::roundCount() > 0 ? PerfLog::roundCount() : round;
+
+  constexpr int kSquare = 10;
+  constexpr int kGap = 4;
+  constexpr int kPad = 4;
+  const int boxW = slots * kSquare + (slots - 1) * kGap + kPad * 2;
+  const int boxH = kSquare + kPad * 2;
+  const int boxX = getScreenWidth() - boxW - 4;
+  constexpr int boxY = 4;
+
+  // White fill first: this paints over whatever the screen already drew there, so the
+  // marker is legible on a page of text, on a menu row and on a wallpaper alike.
+  fillRect(boxX, boxY, boxW, boxH, false);
+  drawRect(boxX, boxY, boxW, boxH, 2, true);
+  for (uint8_t i = 0; i < slots; i++) {
+    const int x = boxX + kPad + i * (kSquare + kGap);
+    if (i < round) {
+      fillRect(x, boxY + kPad, kSquare, kSquare, true);
+    } else {
+      drawRect(x, boxY + kPad, kSquare, kSquare, 1, true);
+    }
+  }
+#endif
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
+  stampPerfRound();
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
+  stampPerfRound();
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
