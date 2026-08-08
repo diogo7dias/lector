@@ -511,6 +511,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_BAR_THICKNESS, &CrossPointSettings::sbBarThickness,
                           {StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT}, "sbBarThickness",
                           StrId::STR_CUSTOMISE_STATUS_BAR),
+        // Keeps the Book Bar / Chapter Bar edges drawing while the status bar itself is
+        // hidden, at its own thickness. Ignored while the status bar is on.
+        SettingInfo::Enum(StrId::STR_PROGRESS_BAR, &CrossPointSettings::sbOffBar,
+                          {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT},
+                          "sbOffBar", StrId::STR_CUSTOMISE_STATUS_BAR),
         SettingInfo::Enum(StrId::STR_XTC_STATUS_BAR, &CrossPointSettings::xtcStatusBarMode,
                           {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
                           StrId::STR_CUSTOMISE_STATUS_BAR),

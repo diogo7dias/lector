@@ -34,6 +34,10 @@ class StatusBarSettingsActivity final : public Activity {
   uint8_t* pickerTarget = nullptr;
 
   void handleSelection();
+  // Rebuilds the display list. Two items are conditional: the clock (X3 RTC only) and
+  // the hidden-bar progress row, which only makes sense while the status bar is off.
+  // Called again whenever the master toggle flips so that row appears/disappears live.
+  void rebuildVisibleItems();
   // Returns the SETTINGS anchor field for a position item, or nullptr for non-anchor items.
   uint8_t* anchorFieldFor(int itemId) const;
   void renderPicker();

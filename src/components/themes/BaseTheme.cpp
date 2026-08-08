@@ -1073,7 +1073,11 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
 }
 
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const {
-  if (!SETTINGS.statusBarEnabled()) return;
+  // Two independent halves. The text items need the status bar switched on; the edge
+  // progress bars can also be kept alive on their own by sbOffBar, in which case this
+  // function draws the bars and returns before touching any text.
+  const bool drawText = SETTINGS.statusBarEnabled();
+  if (!drawText && !SETTINGS.progressBarsVisible()) return;
 
   const int f = UI_10_FONT_ID;
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -1086,6 +1090,46 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int rightEdge = screenW - metrics.statusBarHorizontalMargin - mr;
   const int bandWidth = rightEdge - leftEdge;
   const int lineH = renderer.getLineHeight(f);
+
+  // --- Progress bars (full width, flush to the edge) ------------------------
+  // Drawn before the text so the bars-only path can return early. topTextY /
+  // bottomTextY fall out of the same stacking, so the text band always sits inside
+  // whatever the bars left free — matching the heights UITheme reserved.
+  const int barPx = statusBarThicknessPx(SETTINGS.activeBarThickness());
+  const int barLeft = ml;
+  const int barMaxW = screenW - ml - mr;
+  auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
+  auto drawEdgeBar = [&](int y, int pct) {
+    const int w = barMaxW * clampPct(pct) / 100;
+    if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
+  };
+
+  // Top edge: book bar then chapter bar flush to the top; text band below them.
+  int topStack = mt;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) {
+    drawEdgeBar(topStack, data.bookPercent);
+    topStack += barPx;
+  }
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
+    drawEdgeBar(topStack, data.chapterPercent);
+    topStack += barPx;
+  }
+  const int topTextY = topStack + 2;
+
+  // Bottom edge: bars flush to the bottom; text band above them.
+  int bottomStack = screenH - mb;
+  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
+    bottomStack -= barPx;
+    drawEdgeBar(bottomStack, data.bookPercent);
+  }
+  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters) {
+    bottomStack -= barPx;
+    drawEdgeBar(bottomStack, data.chapterPercent);
+  }
+  const int bottomTextY = bottomStack - lineH - 2;
+
+  if (!drawText) return;  // bars-only: the status bar is hidden, sbOffBar kept them
+
   // Separator between co-anchored items: a drawn vertical bar with equal gaps on
   // each side. A " | " string looked lopsided because the '|' glyph sits
   // off-centre in its monospace cell (wide gap before, tight after).
@@ -1182,40 +1226,6 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
     statusbar::reflowTitle(L, titleAnchorIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
   }
-
-  // --- Progress bars (full width, flush to the edge) ------------------------
-  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
-  const int barLeft = ml;
-  const int barMaxW = screenW - ml - mr;
-  auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
-  auto drawEdgeBar = [&](int y, int pct) {
-    const int w = barMaxW * clampPct(pct) / 100;
-    if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
-  };
-
-  // Top edge: book bar then chapter bar flush to the top; text band below them.
-  int topStack = mt;
-  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) {
-    drawEdgeBar(topStack, data.bookPercent);
-    topStack += barPx;
-  }
-  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
-    drawEdgeBar(topStack, data.chapterPercent);
-    topStack += barPx;
-  }
-  const int topTextY = topStack + 2;
-
-  // Bottom edge: bars flush to the bottom; text band above them.
-  int bottomStack = screenH - mb;
-  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
-    bottomStack -= barPx;
-    drawEdgeBar(bottomStack, data.bookPercent);
-  }
-  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters) {
-    bottomStack -= barPx;
-    drawEdgeBar(bottomStack, data.chapterPercent);
-  }
-  const int bottomTextY = bottomStack - lineH - 2;
 
   auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };
 

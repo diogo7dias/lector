@@ -15,6 +15,7 @@ namespace {
 // Item ids in display order. Clock is X3-only and is filtered out in onEnter().
 enum ItemId {
   ITEM_ENABLED,         // master on/off (toggle)
+  ITEM_OFF_BAR,         // Off / Slim / Medium / Fat (cycle) — only while ENABLED is off
   ITEM_BATTERY,         // anchor
   ITEM_CLOCK,           // anchor (X3 only)
   ITEM_TITLE,           // anchor
@@ -36,6 +37,8 @@ StrId itemLabel(int id) {
   switch (id) {
     case ITEM_ENABLED:
       return StrId::STR_STATUS_BAR;
+    case ITEM_OFF_BAR:
+      return StrId::STR_PROGRESS_BAR;
     case ITEM_BATTERY:
       return StrId::STR_BATTERY;
     case ITEM_CLOCK:
@@ -78,6 +81,9 @@ const StrId edgeNames[CrossPointSettings::STATUS_BAR_EDGE_COUNT] = {StrId::STR_S
                                                                     StrId::STR_BOTTOM};
 const StrId thicknessNames[CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT] = {
     StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT};
+// Off plus the same three thicknesses, so the row is both the switch and the size.
+const StrId offBarNames[CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT] = {
+    StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM, StrId::STR_FAT};
 
 // Row value for a position item: "[TC]" for an anchor, "Off" when parked.
 std::string anchorRowValue(uint8_t v) {
@@ -111,18 +117,24 @@ uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) const {
   }
 }
 
+void StatusBarSettingsActivity::rebuildVisibleItems() {
+  visibleItems.clear();
+  for (int id = 0; id < ITEM_ID_COUNT; id++) {
+    if (id == ITEM_CLOCK && !halClock.isAvailable()) continue;
+    // The hidden-bar progress row is dead weight while the status bar is on: the bar
+    // already draws from Book Bar / Chapter Bar + Bar Thickness there.
+    if (id == ITEM_OFF_BAR && SETTINGS.sbEnabled) continue;
+    visibleItems.push_back(id);
+  }
+}
+
 void StatusBarSettingsActivity::onEnter() {
   Activity::onEnter();
 
   selectedIndex = 0;
   pickerActive = false;
 
-  // Build the visible item list (clock only when the RTC is present).
-  visibleItems.clear();
-  for (int id = 0; id < ITEM_ID_COUNT; id++) {
-    if (id == ITEM_CLOCK && !halClock.isAvailable()) continue;
-    visibleItems.push_back(id);
-  }
+  rebuildVisibleItems();
 
   // Clamp possibly-corrupt values so they index label arrays safely.
   auto clampField = [](uint8_t& f, int count) {
@@ -141,6 +153,7 @@ void StatusBarSettingsActivity::onEnter() {
   clampField(SETTINGS.sbBookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
   clampField(SETTINGS.sbChapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
   clampField(SETTINGS.sbBarThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
+  clampField(SETTINGS.sbOffBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
 
   requestUpdate();
 }
@@ -226,6 +239,13 @@ void StatusBarSettingsActivity::handleSelection() {
   switch (id) {
     case ITEM_ENABLED:
       SETTINGS.sbEnabled = cycle(SETTINGS.sbEnabled, 2);
+      // Turning the bar off reveals the hidden-bar progress row directly below this
+      // one; turning it back on hides it again. Rebuild before selectedIndex can point
+      // past the shortened list. This row is index 0, so the cursor stays put.
+      rebuildVisibleItems();
+      break;
+    case ITEM_OFF_BAR:
+      SETTINGS.sbOffBar = cycle(SETTINGS.sbOffBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
       break;
     case ITEM_TITLE_SOURCE:
       SETTINGS.sbTitleSource = cycle(SETTINGS.sbTitleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
@@ -301,6 +321,9 @@ void StatusBarSettingsActivity::render(RenderLock&&) {
         switch (id) {
           case ITEM_ENABLED:
             return SETTINGS.sbEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+          case ITEM_OFF_BAR:
+            return I18N.get(
+                offBarNames[SETTINGS.sbOffBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? SETTINGS.sbOffBar : 0]);
           case ITEM_TITLE_SOURCE:
             return SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER ? tr(STR_CHAPTER) : tr(STR_BOOK);
           case ITEM_TITLE_TRUNCATE:

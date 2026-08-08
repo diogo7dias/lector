@@ -131,9 +131,9 @@ int UITheme::getStatusBarHeight() {
 int UITheme::getProgressBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   const bool showProgressBar =
-      SETTINGS.statusBarEnabled() && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
-                                      SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
-  return showProgressBar ? (statusBarThicknessPx(SETTINGS.sbBarThickness) + metrics.progressBarMarginTop) : 0;
+      SETTINGS.progressBarsVisible() && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
+                                         SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
+  return showProgressBar ? (statusBarThicknessPx(SETTINGS.activeBarThickness()) + metrics.progressBarMarginTop) : 0;
 }
 
 namespace {
@@ -176,25 +176,27 @@ bool sbBandHasText(bool top, bool hasChapters) {
 }  // namespace
 
 int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
-  if (!SETTINGS.statusBarEnabled()) return 0;
+  // The bars can outlive the text: with the status bar hidden and sbOffBar set, this
+  // band reserves the bar only. See CrossPointSettings::progressBarsVisible().
+  if (!SETTINGS.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  const int barPx = statusBarThicknessPx(SETTINGS.activeBarThickness());
   int bars = 0;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
-  const bool hasText = sbBandHasText(true, hasChapters);
+  const bool hasText = SETTINGS.statusBarEnabled() && sbBandHasText(true, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }
 
 int UITheme::getStatusBarV2BottomHeight(bool hasChapters, int extraTitleHeightPx) {
-  if (!SETTINGS.statusBarEnabled()) return 0;
+  if (!SETTINGS.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarThicknessPx(SETTINGS.sbBarThickness);
+  const int barPx = statusBarThicknessPx(SETTINGS.activeBarThickness());
   int bars = 0;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
-  const bool hasText = sbBandHasText(false, hasChapters);
+  const bool hasText = SETTINGS.statusBarEnabled() && sbBandHasText(false, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
 }

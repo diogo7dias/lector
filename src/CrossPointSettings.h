@@ -73,6 +73,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
   enum STATUS_BAR_EDGE { SB_EDGE_OFF = 0, SB_EDGE_TOP = 1, SB_EDGE_BOTTOM = 2, STATUS_BAR_EDGE_COUNT };
   enum STATUS_BAR_BAR_THICKNESS { SB_BAR_SLIM = 0, SB_BAR_MEDIUM = 1, SB_BAR_FAT = 2, STATUS_BAR_BAR_THICKNESS_COUNT };
+  // Progress bar kept alive while the status bar itself is hidden. Off plus the same
+  // three thicknesses, so one row is both the switch and the thickness. Values 1..3
+  // map onto STATUS_BAR_BAR_THICKNESS 0..2.
+  enum STATUS_BAR_OFF_BAR {
+    SB_OFFBAR_OFF = 0,
+    SB_OFFBAR_SLIM = 1,
+    SB_OFFBAR_MEDIUM = 2,
+    SB_OFFBAR_FAT = 3,
+    STATUS_BAR_OFF_BAR_COUNT
+  };
 
   enum ORIENTATION {
     PORTRAIT = 0,       // 480x800 logical coordinates (current default)
@@ -244,6 +254,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbBookBar = SB_EDGE_OFF;            // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_OFF;         // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;     // progress bar thickness slim/med/fat
+  // Off / Slim / Medium / Fat. Only consulted while the status bar is hidden, where it
+  // keeps the configured Book Bar / Chapter Bar edges drawing at its own thickness.
+  // Off (the default) is the old behaviour: hiding the bar hides its progress bars too.
+  uint8_t sbOffBar = SB_OFFBAR_OFF;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
   // Value 48 = UTC+0, 0 = UTC-12:00, 104 = UTC+14:00.
   // Quarter-hour granularity supports oddball zones like Nepal (+5:45) and Chatham (+12:45).
@@ -553,6 +567,22 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   void setStatusBarOverride(const uint8_t enabled) { sbEnabledOverride_ = static_cast<int8_t>(enabled ? 1 : 0); }
   void clearStatusBarOverride() { sbEnabledOverride_ = -1; }
   bool statusBarEnabled() const { return sbEnabledOverride_ >= 0 ? sbEnabledOverride_ != 0 : sbEnabled != 0; }
+
+  // ── Progress bars while the status bar is hidden ───────────────────────────
+  // The Book Bar / Chapter Bar edges are part of the status bar, so hiding the bar
+  // used to hide them as well. sbOffBar keeps them alive on their own: the edges,
+  // the percentages and the draw path stay exactly as they are with the bar showing,
+  // only the visibility gate and the thickness come from a different field.
+  //
+  // Everything that draws or reserves space for a progress bar must ask
+  // progressBarsVisible() + activeBarThickness(), never statusBarEnabled() +
+  // sbBarThickness, or the reserved band and the drawn bar disagree and the bar
+  // paints over the reading text.
+  bool progressBarsVisible() const { return statusBarEnabled() || sbOffBar != SB_OFFBAR_OFF; }
+  uint8_t activeBarThickness() const {
+    if (statusBarEnabled() || sbOffBar == SB_OFFBAR_OFF) return sbBarThickness;
+    return static_cast<uint8_t>(sbOffBar - 1);  // Slim/Medium/Fat -> 0/1/2
+  }
 
  private:
   // Shared resolvers so getReaderFontId()/getReaderLineCompression() and their
