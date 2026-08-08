@@ -35,6 +35,7 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PAPERBACK_LOOK,      // toggle heavier ink for reader body text
     TOGGLE_PAPERBACK_STATUS,    // toggle heavier ink for status bar text
     TOGGLE_STATUS_BAR,          // show or hide the reading status bar for this book only
+    TOGGLE_PROGRESS_BAR,        // cycle Off / Slim / Medium / Fat for the bar that outlives a hidden status bar
     GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
     BOOK_INFO,                  // cover, author, language and the publisher synopsis
@@ -61,8 +62,9 @@ class EpubReaderMenuActivity final : public Activity {
                                   const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
                                   uint8_t paragraphNumbering = 0, uint8_t paragraphNumberSize = 1,
                                   uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1, uint8_t statusBar = 1,
-                                  bool hasSleepWallpaper = false, bool wallpaperFavorited = false,
-                                  bool wallpaperPausable = false, bool hasQuotes = false);
+                                  uint8_t progressBar = 0, bool hasSleepWallpaper = false,
+                                  bool wallpaperFavorited = false, bool wallpaperPausable = false,
+                                  bool hasQuotes = false);
 
   void onEnter() override;
   void onExit() override;
@@ -89,8 +91,8 @@ class EpubReaderMenuActivity final : public Activity {
   // Builds only the tabs that have something to show, so indices into the result are
   // NOT Tab values and the Sleep tab simply is not there when no wallpaper is in play.
   static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
-                                        uint8_t paragraphNumbering, bool hasSleepWallpaper, bool wallpaperFavorited,
-                                        bool wallpaperPausable, bool hasQuotes);
+                                        uint8_t paragraphNumbering, uint8_t statusBar, bool hasSleepWallpaper,
+                                        bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
   TabPage& activeTab() { return tabs[activeTabIndex]; }
   const TabPage& activeTab() const { return tabs[activeTabIndex]; }
   // Move to another tab, wrapping. The cursor of the tab being left is kept.
@@ -127,6 +129,8 @@ class EpubReaderMenuActivity final : public Activity {
   uint8_t selectedPaperbackBody = 1;
   uint8_t selectedPaperbackStatus = 1;
   uint8_t selectedStatusBar = 1;
+  // Global Progress Bar value, cycled in the menu; returned via MenuResult like the rest.
+  uint8_t selectedProgressBar = 0;
   // Set when Confirm was held long enough to fire the bound Menu Hold function.
   // Reported to the reader, which owns the page the function needs. LP_MENU_DISABLED
   // (1) when no hold fired — 0 would mean KOSync.
@@ -137,6 +141,9 @@ class EpubReaderMenuActivity final : public Activity {
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER,
                                                  StrId::STR_PARA_NUM_BOOK};
   const std::vector<StrId> paragraphNumSizeLabels = {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE};
+  // Same four labels the Customise Status Bar screen uses for this setting.
+  const std::vector<StrId> progressBarLabels = {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM,
+                                                StrId::STR_FAT};
   const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;

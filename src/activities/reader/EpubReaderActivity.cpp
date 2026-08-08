@@ -351,8 +351,8 @@ void EpubReaderActivity::openReaderMenu() {
           renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
           prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
-          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, hasSleepWallpaper, wallpaperFavorited, wallpaperPausable,
-          hasQuotes),
+          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, SETTINGS.sbOffBar, hasSleepWallpaper, wallpaperFavorited,
+          wallpaperPausable, hasQuotes),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
@@ -361,7 +361,7 @@ void EpubReaderActivity::openReaderMenu() {
         applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
         applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
         // Last of the live toggles because it is the only one that repaginates.
-        applyStatusBar(menu.statusBar);
+        applyStatusBar(menu.statusBar, menu.progressBar);
         // A hold inside the menu comes back cancelled with the bound function attached:
         // no row was chosen, so this replaces the row action rather than following it.
         //
@@ -1567,14 +1567,26 @@ void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode, const uint8
   requestUpdate();
 }
 
-void EpubReaderActivity::applyStatusBar(const uint8_t enabled) {
-  if (enabled == prefs_.statusBarEnabled) return;
-  prefs_.statusBarEnabled = enabled;
-  prefsCustom_ = true;
-  writeReaderOverride(prefs_);
-  // Unlike the toggles above this one changes the reserved top/bottom bands, so the
-  // viewport changes and the chapter has to be laid out again. Same path as any margin
-  // change: the reading position is held as a paragraph across the rebuild.
+void EpubReaderActivity::applyStatusBar(const uint8_t enabled, const uint8_t progressBar) {
+  const bool barChanged = enabled != prefs_.statusBarEnabled;
+  // Progress Bar is a global setting, not a per-book one, so it is compared against
+  // SETTINGS rather than prefs_. The value-change guard is what keeps this off the
+  // SPIFFS write path on every menu close.
+  const bool progressBarChanged = progressBar != SETTINGS.sbOffBar;
+  if (!barChanged && !progressBarChanged) return;
+  if (barChanged) {
+    prefs_.statusBarEnabled = enabled;
+    prefsCustom_ = true;
+    writeReaderOverride(prefs_);
+  }
+  if (progressBarChanged) {
+    SETTINGS.sbOffBar = progressBar;
+    SETTINGS.saveToFile();
+  }
+  // Unlike the toggles above these change the reserved top/bottom bands, so the viewport
+  // changes and the chapter has to be laid out again. Same path as any margin change: the
+  // reading position is held as a paragraph across the rebuild. Both are applied before
+  // this single reload, so changing them together costs one repagination, not two.
   reloadForReaderPrefsChange();
 }
 

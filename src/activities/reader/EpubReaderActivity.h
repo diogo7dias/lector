@@ -316,7 +316,7 @@ class EpubReaderActivity final : public Activity {
   void applyParagraphNumbering(uint8_t mode, uint8_t size);
   // Paperback Look: per-book heavier-ink toggles (body text + status bar).
   void applyPaperbackLook(uint8_t body, uint8_t status);
-  void applyStatusBar(uint8_t enabled);
+  void applyStatusBar(uint8_t enabled, uint8_t progressBar);
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);

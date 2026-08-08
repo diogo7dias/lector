@@ -16,10 +16,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
     const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
     const uint8_t paragraphNumbering, const uint8_t paragraphNumberSize, const uint8_t paperbackBody,
-    const uint8_t paperbackStatus, const uint8_t statusBar, const bool hasSleepWallpaper, const bool wallpaperFavorited,
-    const bool wallpaperPausable, const bool hasQuotes)
+    const uint8_t paperbackStatus, const uint8_t statusBar, const uint8_t progressBar, const bool hasSleepWallpaper,
+    const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      tabs(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, hasSleepWallpaper,
+      tabs(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar, hasSleepWallpaper,
                      wallpaperFavorited, wallpaperPausable, hasQuotes)),
       title(title),
       author(author),
@@ -30,6 +30,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       selectedPaperbackBody(paperbackBody),
       selectedPaperbackStatus(paperbackStatus),
       selectedStatusBar(statusBar),
+      selectedProgressBar(progressBar),
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
@@ -55,8 +56,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
 }
 
 std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
-    bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, bool hasSleepWallpaper,
-    bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes) {
+    bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, uint8_t statusBar,
+    bool hasSleepWallpaper, bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes) {
   // Reserve every tab this menu can ever have, so no push_back below can reallocate.
   // That matters: page() hands back a reference INTO the vector, and a reallocation
   // would dangle it. Raise this with any new tab. (Each reference also dies at the end
@@ -133,6 +134,14 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
     items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
     items.push_back({MenuAction::TOGGLE_STATUS_BAR, StrId::STR_STATUS_BAR});
+    // Directly under the row it depends on, and only while that row reads OFF: with the
+    // bar shown the progress bars already draw from Book Bar / Chapter Bar + Bar
+    // Thickness, so this row would be a second control for the same thing. Rows are
+    // fixed once the menu is built, so turning the bar off reveals it on the next open —
+    // same as Paragraph Number Size above.
+    if (!statusBar) {
+      items.push_back({MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
+    }
     items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   }
 
@@ -211,6 +220,7 @@ void EpubReaderMenuActivity::closeCancelled() {
                            selectedPaperbackBody,
                            selectedPaperbackStatus,
                            selectedStatusBar,
+                           selectedProgressBar,
                            firedHoldFunction};
   setResult(std::move(result));
   finish();
@@ -332,6 +342,12 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
+    if (selectedAction == MenuAction::TOGGLE_PROGRESS_BAR) {
+      // Cycle Off / Slim / Medium / Fat in place; the reader applies it on exit.
+      selectedProgressBar = (selectedProgressBar + 1) % CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT;
+      requestUpdate();
+      return;
+    }
 
     // Favourite the sleep wallpaper here rather than handing the action to the reader.
     // The work is a rename on the card and needs no page, and doing it in place turns a
@@ -347,7 +363,8 @@ void EpubReaderMenuActivity::loop() {
         // clash or a card error is something the reader must not swallow silently.
         setResult(MenuResult{static_cast<int>(MenuAction::WALLPAPER_FAVORITE), pendingOrientation,
                              selectedPageTurnOption, selectedParagraphNumbering, selectedParagraphNumberSize,
-                             selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar, firedHoldFunction});
+                             selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar, selectedProgressBar,
+                             firedHoldFunction});
         finish();
         return;
       }
@@ -366,7 +383,7 @@ void EpubReaderMenuActivity::loop() {
 
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
                          selectedParagraphNumbering, selectedParagraphNumberSize, selectedPaperbackBody,
-                         selectedPaperbackStatus, selectedStatusBar, firedHoldFunction});
+                         selectedPaperbackStatus, selectedStatusBar, selectedProgressBar, firedHoldFunction});
     finish();
   };
 
@@ -505,6 +522,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_STATUS_BAR) {
           return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_PROGRESS_BAR) {
+          return I18N.get(progressBarLabels[selectedProgressBar % progressBarLabels.size()]);
         } else {
           return "";
         }
