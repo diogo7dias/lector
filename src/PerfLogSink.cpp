@@ -91,8 +91,14 @@ void startPerfLogSink(const char* device) {
   // things wrong. Panel temperature is deliberately absent: neither driver can read one
   // back — the temperature values in the driver are constants written TO the panel.
   char header[192];
+  // lectorX3PllByte(), NOT activePll. This sink starts right after the card mounts, which
+  // is BEFORE setupDisplayAndFonts() constructs the panel driver, so at this point nothing
+  // has chosen a candidate yet and activePll still holds its initialiser. Reading it here
+  // stamped "pll=0x09" on all five lector.exp.11 runs while the panel was in fact running
+  // different values — the sweep worked and the log denied it. Calling the chooser instead
+  // makes the choice here, where the card is up, and the driver later gets the cached value.
   snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%% pll=0x%02X\n", device, CROSSPOINT_VERSION,
-           static_cast<unsigned>(powerManager.getBatteryPercentage()), static_cast<unsigned>(activePll));
+           static_cast<unsigned>(powerManager.getBatteryPercentage()), static_cast<unsigned>(lectorX3PllByte()));
   writeLine(header);
   snprintf(header, sizeof(header), "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u\n",
            static_cast<unsigned>(SETTINGS.orientation), static_cast<unsigned>(SETTINGS.fontFamily),
