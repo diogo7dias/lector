@@ -48,9 +48,16 @@ unsigned char lectorX3PllByte() {
   if (chosen) return activePll;
   chosen = true;
 
-  // N held at 1, M walked upward: 0x09 is M=1, the stock value and the baseline. If the
-  // measured refresh time does not fall as M rises, the frame-clock theory is wrong.
-  static constexpr uint8_t kCandidates[] = {0x09, 0x11, 0x19, 0x21};
+  // Second sweep, walking DOWN. The first one (lector.exp.11) walked up from the stock
+  // 0x09 on the sibling datasheet's hint that raising M raises the frame rate. It does
+  // not on this panel: two of those five boots measured page turns at ~3138 ms against
+  // the usual ~617 ms, so raising the byte made the panel about five times SLOWER. The
+  // register plainly works and reaches the hardware; the direction was simply inverted.
+  //
+  // So the candidates now go below 0x09 rather than above it. 0x09 stays first as the
+  // baseline every run is compared against. If none of the three beat it, 0x09 is at or
+  // near the panel's ceiling and the frame-clock idea is finished.
+  static constexpr uint8_t kCandidates[] = {0x09, 0x08, 0x01, 0x00};
   static constexpr uint8_t kCandidateCount = sizeof(kCandidates) / sizeof(kCandidates[0]);
   static constexpr const char* kIndexPath = "/perf/pll-next.txt";
 
