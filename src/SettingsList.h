@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <HalClock.h>
+#include <HalGPIO.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
 
@@ -231,10 +232,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
                           {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY),
+        // Keeps this fork's extra "Never" option, which upstream does not have.
         SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                            StrId::STR_PAGES_30, StrId::STR_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
+        // Upstream #2818. X3 only; the row is filtered out below on any other board.
+        SettingInfo::Enum(StrId::STR_REFRESH_ACTION, &CrossPointSettings::refreshAction,
+                          {StrId::STR_REFRESH_ACTION_FULL, StrId::STR_REFRESH_ACTION_BW_REINFORCEMENT}, "refreshAction",
+                          StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
@@ -535,6 +541,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
+  // Upstream #2818's no-flash cleanup uses an X3-only OEM waveform. This fork ships one
+  // binary for both boards, so the row is filtered by runtime detection (gpio.deviceIsX3)
+  // rather than upstream's compile-time BoardConfig::ACTIVE.name check, which would keep
+  // the row on an X4 running the same build.
+  if (!gpio.deviceIsX3()) {
+    v.erase(
+        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_REFRESH_ACTION; }),
+        v.end());
+  }
   // The status-bar clock reads the RTC, which only the X3 carries. HalClock does have
   // a system-clock fallback for boards without one, but deep sleep here is a full chip
   // reset, so that clock would be lost every time the reader sleeps — a clock that is

@@ -401,7 +401,6 @@ void EpubReaderActivity::showBuildPopup() {
   GUI.drawPopup(renderer, tr(STR_INDEXING));
   scheduleGhostCleanup();
   // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts.
-  pagesUntilFullRefresh = 1;
   buildPopupPending = false;
 }
 
@@ -2291,7 +2290,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         scheduleGhostCleanup();
         // The popup's own refresh is a plain FAST, so force the page that replaces it onto the HALF
         // ghost-cleanup path -- otherwise the "INDEXING" text ghosts under the rendered page.
-        pagesUntilFullRefresh = 1;
         // No popup redraws while the framebuffer is lent to the build below;
         // the panel holds the popup displayed above (e-ink is persistent).
         const auto popupFn = [this]() {
@@ -2356,7 +2354,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             GUI.drawPopup(renderer, tr(STR_INDEXING));
             scheduleGhostCleanup();
             // HALF-clear the popup when the page replaces it, else "INDEXING" ghosts under the page.
-            pagesUntilFullRefresh = 1;
           }
           // Mid-build popup surfacing for slow builds the predictive gates can't
           // see (image extraction/probing inside a single page, or any chunk
@@ -2529,7 +2526,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
     GUI.drawPopup(renderer, tr(STR_INDEXING));
     scheduleGhostCleanup();
-    pagesUntilFullRefresh = 1;
   }
   while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
     // Start a build to extend a partial toward the requested page.
@@ -2854,7 +2850,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // text there ghosts gray (#2190). Force the next ordinary page onto the
     // HALF ghost-cleanup path, which drives every pixel to its target
     // regardless of residue.
-    pagesUntilFullRefresh = 1;
+    pagesUntilFullRefresh = 0;
   } else {
     // Async form: start the waveform and return so the grayscale plane rendering
     // below overlaps the panel's refresh time instead of following it.

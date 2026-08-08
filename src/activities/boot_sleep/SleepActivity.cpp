@@ -342,7 +342,9 @@ void SleepActivity::renderCustomSleepScreen() const {
   // This takes priority over the /sleep folder.
   HalFile file;
   if (Storage.openFileForRead("SLP", "/sleep.bmp", file)) {
-    Bitmap bitmap(file, true);
+    const bool adaptiveTone =
+        SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+    Bitmap bitmap(file, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       const SleepInfoOverlayScope overlayScope("/sleep.bmp");
@@ -469,7 +471,13 @@ void SleepActivity::renderCustomSleepScreen() const {
       } else {
         HalFile randFile;
         if (Storage.openFileForRead("SLP", filename, randFile)) {
-          Bitmap bitmap(randFile, true);
+          // Same rule the /sleep.bmp path above uses: stretch the tone range only when
+          // the user has asked for no cover filter, so a filtered image still looks the
+          // way they set it. Applies to .bmp wallpapers only; .pxc took the branch above
+          // and is already quantised to four levels when the file is written.
+          const bool adaptiveTone =
+              SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+          Bitmap bitmap(randFile, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
           if (bitmap.parseHeaders() == BmpReaderError::Ok) {
             renderBitmapSleepScreen(bitmap);
             APP_STATE.lastSleepWallpaperPath = filename;

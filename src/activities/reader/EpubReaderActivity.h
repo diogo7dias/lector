@@ -64,7 +64,11 @@ class EpubReaderActivity final : public Activity {
   // the same idiom the image-page path already uses, and still honours
   // Refresh Frequency = Never. Call it where the overlay goes away, not where it is
   // drawn: a render that both draws and displays would consume the promotion itself.
-  void scheduleGhostCleanup() { pagesUntilFullRefresh = 1; }
+  // 0, not 1. Both reach the HALF cleanup pass (displayWithRefreshCycle tests <= 1), but
+  // the X3 no-flash reinforcement path added by upstream #2818 triggers on exactly 1. A
+  // ghost is the one thing the gentle waveform must not be asked to clear, so these sites
+  // say 0 and keep the strong pass. Upstream makes the same change at its own call sites.
+  void scheduleGhostCleanup() { pagesUntilFullRefresh = 0; }
   // Image pages use a dedicated double-FAST refresh path, so retain a manual
   // refresh request until renderContents can issue its clean base pass.
   bool forcedRefreshPending = false;
@@ -355,7 +359,7 @@ class EpubReaderActivity final : public Activity {
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);
-      pagesUntilFullRefresh = 1;
+      pagesUntilFullRefresh = 0;
       forcedRefreshPending = true;
     }
     requestUpdate();

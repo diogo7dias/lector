@@ -70,8 +70,19 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
   // those too, or "Never" would still flash.
   const int cycle = SETTINGS.getRefreshFrequency();
   const bool never = cycle == 0;
-  const auto mode = (!never && pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
-  if (async) {
+  const bool refreshDue = !never && pagesUntilFullRefresh <= 1;
+  // Upstream #2818: on the X3 the OEM grayscale-base waveform turns the page while
+  // gently settling unchanged black and white pixels, so the periodic cleanup costs
+  // no full-screen flash. Opt-in, X3 only, and never when the cleanup is switched off
+  // entirely. Kept at == 1 rather than <= 1 so the hard-set cleanups above (popup
+  // ghosts, image pages) still get the strong HALF pass they were asked for.
+  const bool useBwReinforcement = !never && pagesUntilFullRefresh == 1 && gpio.deviceIsX3() &&
+                                  SETTINGS.refreshAction == CrossPointSettings::REFRESH_ACTION_BW_REINFORCEMENT;
+  const auto mode = refreshDue ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+
+  if (useBwReinforcement) {
+    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+  } else if (async) {
     renderer.displayBufferAsync(mode);
   } else {
     renderer.displayBuffer(mode);
@@ -79,7 +90,7 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
   if (never) {
     return;
   }
-  if (pagesUntilFullRefresh <= 1) {
+  if (refreshDue) {
     pagesUntilFullRefresh = cycle;
   } else {
     pagesUntilFullRefresh--;
