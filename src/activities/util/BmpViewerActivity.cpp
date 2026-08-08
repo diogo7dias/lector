@@ -61,6 +61,24 @@ void BmpViewerActivity::loadSiblingImages() {
   }
 }
 
+void BmpViewerActivity::drawHints() {
+  const bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
+  const bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
+                        currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
+
+  // Inside a sleep folder the front buttons are triage, exactly as in the .pxc
+  // viewer, so the two image viewers do not want different fingers. Siblings move
+  // to Up/Down there; outside those folders nothing has changed.
+  const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
+  const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
+  const char* pauseLabel =
+      filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
+  const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
+                             : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""),
+                                                     (hasNext ? ">" : ""));
+  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
 void BmpViewerActivity::onEnter() {
   Activity::onEnter();
 
@@ -101,22 +119,6 @@ void BmpViewerActivity::onEnter() {
         y = (pageHeight - bitmap.getHeight()) / 2;
       }
 
-      // 4. Prepare Rendering
-      bool hasPrevious = (siblingImages.size() > 1 && currentImageIndex > 0);
-      bool hasNext = (siblingImages.size() > 1 && currentImageIndex != -1 &&
-                      currentImageIndex < static_cast<int>(siblingImages.size()) - 1);
-
-      // Inside a sleep folder the front buttons are triage, exactly as in the .pxc
-      // viewer, so the two image viewers do not want different fingers. Siblings move
-      // to Up/Down there; outside those folders nothing has changed.
-      const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
-      const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
-      const char* pauseLabel =
-          filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
-      const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
-                                 : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER),
-                                                         (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
-
       GUI.fillPopupProgress(renderer, popupRect, 50);
 
       renderer.clearScreen();
@@ -125,7 +127,7 @@ void BmpViewerActivity::onEnter() {
       renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, 0, 0);
 
       // Draw UI hints on the base layer
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      drawHints();
       // Single pass for non-grayscale images
 
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
@@ -262,9 +264,18 @@ void BmpViewerActivity::doToggleFavorite() {
   switch (FavoriteImage::setFavorite(filePath, makeFavorite, &newPath)) {
     case FavoriteImage::SetFavoriteResult::Success:
       // The file was renamed, so the viewer follows it and the sibling list is stale.
+      // Only the name moved: the image on screen is identical, and the one thing that
+      // has to change is the Fav/Unfav word. Re-entering would re-open, re-parse and
+      // re-decode the whole BMP behind a Loading popup to repaint the same pixels, so
+      // repaint the hint strip over the framebuffer that is already holding the image
+      // and refresh differentially instead.
+      //
+      // The sibling list is rebuilt rather than dropped: openSibling() does not reload
+      // an empty list, it just stops working.
       filePath = newPath;
-      siblingImages.clear();
-      onEnter();
+      loadSiblingImages();
+      drawHints();
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
       return;
     case FavoriteImage::SetFavoriteResult::RenameConflict:
       GUI.drawPopup(renderer, tr(STR_FAVORITE_NAME_EXISTS));

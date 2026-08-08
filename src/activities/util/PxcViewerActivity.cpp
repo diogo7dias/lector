@@ -60,6 +60,21 @@ void PxcViewerActivity::drawHints() const {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
+// Favouriting renames the file on the card. It does not change one pixel of the
+// wallpaper — only the Fav/Unfav word in the hint strip. Re-running render() to flip
+// that word costs a blank FULL pass, a re-read and re-decode of the whole .pxc, and a
+// HALF refresh: roughly four seconds of panel time on the X3 to repaint an identical
+// image. Repainting the strip and refreshing differentially is one FAST pass.
+//
+// Safe only because the 1-bit pxc path leaves the finished image in the framebuffer:
+// renderPxcSleepScreen decodes into it, draws the overlay, then refreshes once, and
+// nothing clears it afterwards. Do NOT reuse this after the grayscale path, which
+// clears the buffer once per plane and leaves it holding the MSB plane, not the image.
+void PxcViewerActivity::refreshHintsOnly() const {
+  drawHints();
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+}
+
 void PxcViewerActivity::render() {
   // Deep clean first. The viewer paints straight over the file-browser list, and
   // every wallpaper refresh below is differential, so without a blank FULL pass
@@ -128,7 +143,7 @@ void PxcViewerActivity::loop() {
     const auto result = FavoriteImage::setFavorite(filePath, makeFavorite, &updated);
     if (result == FavoriteImage::SetFavoriteResult::Success) {
       filePath = updated;
-      render();
+      refreshHintsOnly();
     } else {
       GUI.drawPopup(renderer, result == FavoriteImage::SetFavoriteResult::RenameConflict ? tr(STR_FAVORITE_NAME_EXISTS)
                                                                                          : tr(STR_FAVORITE_FAILED));

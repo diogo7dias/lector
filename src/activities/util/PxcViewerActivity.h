@@ -35,6 +35,9 @@ class PxcViewerActivity final : public Activity {
   // overlay hook, so the hints composite into the same refresh as the wallpaper
   // instead of costing a second one.
   void drawHints() const;
+  // Repaints the hint strip over the framebuffer that already holds the wallpaper
+  // and refreshes differentially. For changes that touch the hints and nothing else.
+  void refreshHintsOnly() const;
 
   std::string filePath;
   // Set to false once the file has been deleted, so onExit does not try to keep

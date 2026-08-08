@@ -18,6 +18,9 @@ class BmpViewerActivity final : public Activity {
 
  private:
   void loadSiblingImages();
+  // Draws the button hint strip for the current file. Shared by the full render and
+  // by the hint-only repaint, so the two can never disagree about the labels.
+  void drawHints();
   void doSetSleepCover();
   // Sleep-folder triage, mirroring PxcViewerActivity so the two viewers agree.
   void doToggleFavorite();
