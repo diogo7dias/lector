@@ -65,7 +65,12 @@ namespace {
 //      paragraphs with synthetic "Tab Row N, Cell M:" labels (upstream #2654; upstream
 //      numbered it v36). Table cells occupy different line positions than before, so
 //      cached pages built by older versions no longer match.
-constexpr uint8_t SECTION_FILE_VERSION = 46;
+// v47: the anchor map stores a uint64 arxHash64 of each anchor instead of the anchor
+//      string (upstream #2456). Keys become fixed-width, so a v46 map reads as garbage
+//      and must be rebuilt. Pagination itself is unchanged; this is a RAM fix, cutting
+//      up to ~32 KB of vector slots and up to MAX_ANCHORS_PER_CHAPTER separate heap
+//      blocks out of a chapter parse, and allocating nothing per entry on lookup.
+constexpr uint8_t SECTION_FILE_VERSION = 47;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -438,15 +443,16 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
     }
   }
 
-  // Collect TOC anchors for this spine so the parser can insert page breaks at chapter boundaries
-  std::vector<std::string> tocAnchors;
+  // Collect TOC anchors for this spine so the parser can insert page breaks at chapter
+  // boundaries. Hashed on the way in, so the parser only ever compares uint64_t.
+  std::vector<uint64_t> tocAnchors;
   const int startTocIndex = epub->getTocIndexForSpineIndex(spineIndex);
   if (startTocIndex >= 0) {
     for (int i = startTocIndex; i < epub->getTocItemsCount(); i++) {
       auto entry = epub->getTocItem(i);
       if (entry.spineIndex != spineIndex) break;
       if (!entry.anchor.empty()) {
-        tocAnchors.push_back(std::move(entry.anchor));
+        tocAnchors.push_back(arxHash64(entry.anchor));
       }
     }
   }
@@ -530,8 +536,9 @@ bool Section::hasHtmlCache() const {
 
 std::optional<uint16_t> Section::findAnchorDuringBuild(const std::string& anchor) const {
   if (!build_ || !build_->parser) return std::nullopt;
+  const uint64_t targetHash = arxHash64(anchor);
   for (const auto& [key, page] : build_->parser->getAnchors()) {
-    if (key == anchor) return page;
+    if (key == targetHash) return page;
   }
   return std::nullopt;
 }
@@ -624,7 +631,7 @@ bool Section::commitBuildFile(const uint8_t version, const uint32_t bytesConsume
   serialization::writePod(file, anchorCount);
   for (const auto& [anchor, page] : anchors) {
     if (asPartial && page >= builtPageCount_) continue;
-    serialization::writeString(file, anchor);
+    serialization::writePod(file, anchor);
     serialization::writePod(file, page);
   }
 
@@ -907,15 +914,18 @@ std::optional<uint16_t> Section::getPageForAnchor(const std::string& anchor) con
     return std::nullopt;
   }
 
+  // Fixed-width keys, so the scan allocates nothing per entry — the old string map built
+  // and threw away one std::string for every anchor it walked past.
+  const uint64_t targetHash = arxHash64(anchor);
   f.seek(anchorMapOffset);
   uint16_t count;
   serialization::readPod(f, count);
   for (uint16_t i = 0; i < count; i++) {
-    std::string key;
+    uint64_t key;
     uint16_t page;
-    serialization::readString(f, key);
+    serialization::readPod(f, key);
     serialization::readPod(f, page);
-    if (key == anchor) {
+    if (key == targetHash) {
       return page;
     }
   }

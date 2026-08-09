@@ -231,11 +231,11 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
 }
 
 void ChapterHtmlSlimParser::flushPendingAnchor() {
-  if (pendingAnchorId.empty()) return;
+  if (!pendingAnchorId) return;
 
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
-  if (std::find(tocAnchors.begin(), tocAnchors.end(), pendingAnchorId) != tocAnchors.end()) {
+  if (std::find(tocAnchors.begin(), tocAnchors.end(), *pendingAnchorId) != tocAnchors.end()) {
     if (currentPage && !currentPage->elements.empty()) {
       completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
       completedPageCount++;
@@ -246,8 +246,8 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   }
 
   // Record deferred anchor after previous block is flushed (and any TOC page break)
-  anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-  pendingAnchorId.clear();
+  anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
+  pendingAnchorId.reset();
 }
 
 void ChapterHtmlSlimParser::setCurrentPageVisibleOffset(const uint32_t offset) {
@@ -419,9 +419,9 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
   setCurrentPageVisibleOffset(visibleTextOffset);
   currentPageNextY = static_cast<int16_t>(currentPageNextY + ruleThickness + bottomSpacing);
 
-  if (!pendingAnchorId.empty()) {
-    anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-    pendingAnchorId.clear();
+  if (pendingAnchorId) {
+    anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
+    pendingAnchorId.reset();
   }
 }
 
@@ -648,19 +648,19 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         // link targets in epub content, but reading-system converters can inject tens
         // of thousands of them per chapter, exhausting the heap. TOC anchors are
         // always recorded regardless of element type, since they drive page breaks.
-        const char* idValue = atts[i + 1];
+        const uint64_t idHash = arxHash64(atts[i + 1]);
         const bool isTocAnchor =
-            std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idValue) != self->tocAnchors.end();
+            std::find(self->tocAnchors.begin(), self->tocAnchors.end(), idHash) != self->tocAnchors.end();
         if (isTocAnchor || (!isNonNavigableInlineElement(name) && self->anchorData.size() < MAX_ANCHORS_PER_CHAPTER)) {
           // Flush a displaced anchor before overwriting. Consecutive non-block elements
           // (e.g. <aside id="fn1">text</aside><aside id="fn2">) with no intervening block
           // never trigger startNewTextBlock, so fn1 gets silently overwritten. That leaves
           // fn1 missing from the anchor map -> getPageForAnchor returns nullopt -> reader
           // lands at page 0 (section start) instead of the footnote.
-          if (!self->pendingAnchorId.empty()) {
+          if (self->pendingAnchorId) {
             self->flushPendingAnchor();
           }
-          self->pendingAnchorId = idValue;
+          self->pendingAnchorId = idHash;
         }
       } else if (strcmp(atts[i], "dir") == 0) {
         dirAttr = atts[i + 1];
@@ -1980,9 +1980,9 @@ bool ChapterHtmlSlimParser::finishParse() {
   // Process last page if there is still text
   if (currentTextBlock) {
     makePages();
-    if (!pendingAnchorId.empty()) {
-      anchorData.push_back({std::move(pendingAnchorId), static_cast<uint16_t>(completedPageCount)});
-      pendingAnchorId.clear();
+    if (pendingAnchorId) {
+      anchorData.push_back({*pendingAnchorId, static_cast<uint16_t>(completedPageCount)});
+      pendingAnchorId.reset();
     }
     setCurrentPageVisibleOffset(visibleTextOffset);
     completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);

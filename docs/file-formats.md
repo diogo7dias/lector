@@ -90,11 +90,19 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 46
+### Version 47
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 47 changes `AnchorEntry` from a length-prefixed string to a `u64`
+`arxHash64` of the anchor. Anchors are only compared for equality, never
+displayed, so the text is dead weight; fixed-width keys drop up to
+`MAX_ANCHORS_PER_CHAPTER` separate heap allocations out of a chapter parse and
+make anchor lookup allocation-free. Pagination is unchanged. The hash function
+in `ChapterHtmlSlimParser.h` is part of this format: changing it requires
+another version bump.
 
 Version 46 keeps the version 45 serialized layout unchanged. It was bumped
 because simple HTML table rows are now laid out as positioned columns rather
@@ -282,7 +290,7 @@ struct Page {
 };
 
 struct AnchorEntry {
-    String anchor;
+    u64 anchorHash [[comment("arxHash64 of the HTML id, not the id text")]];
     u16 page;
 };
 
