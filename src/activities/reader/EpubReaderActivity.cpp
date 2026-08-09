@@ -225,6 +225,11 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  // Leaving the book is one of the two moments queued favourite renames run (the
+  // other is sleep entry). Fire-and-forget: the worker's directory scans overlap
+  // this exit's own card work instead of ever standing between a press and a page.
+  DeferredFavorite::flush();
+
   // Stop speaking for this book: everything outside the reader follows the global
   // status bar setting again.
   SETTINGS.clearStatusBarOverride();
@@ -1134,6 +1139,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_PAUSE: {
+      // A queued favourite rename may still own this file's name on the card
+      // (renames run at flush points, not at the press). Land it first so the
+      // move below acts on the name APP_STATE promises. Rare action, and it does
+      // a synchronous rename itself, so the wait is in character here.
+      DeferredFavorite::waitForIdle(15000);
+      DeferredFavorite::reconcile();
       const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
       if (lastPath.empty()) break;
       const auto moved = crosspoint::sleep::toggleSleepPause(lastPath);
@@ -1148,6 +1159,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_DELETE: {
+      // Same rule as WALLPAPER_PAUSE: land any queued rename so the delete hits
+      // the file under its current on-card name.
+      DeferredFavorite::waitForIdle(15000);
+      DeferredFavorite::reconcile();
       const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
       if (lastPath.empty()) break;
       // Deleting a file is not undoable, so it asks first — unlike favourite and pause,

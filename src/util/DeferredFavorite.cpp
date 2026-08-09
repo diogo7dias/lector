@@ -56,22 +56,24 @@ bool workerRunning = false;  // guarded by stateMutex()
 
 // Card-only half of the favorite toggle. Deliberately does NOT call
 // FavoriteImage::setFavorite: that one reads and writes APP_STATE, which belongs to the
-// main task. SdFat never overwrites on rename, so the clash is checked rather than left
-// to fail opaquely, exactly as the foreground path does.
+// main task.
+//
+// Rename FIRST, diagnose only on failure. On FAT every name-based operation is a
+// linear scan of the directory, seconds each with thousands of wallpapers, and each
+// scan holds the storage mutex against the main task. The old exists/exists/rename
+// order paid three scans on every success; SdFat never overwrites on rename, so the
+// clash the pre-checks guarded against still fails safely — the two extra scans are
+// only worth paying to label a failure that already happened.
 bool renameOnCard(const Job& job) {
+  if (Storage.rename(job.fromPath.c_str(), job.toPath.c_str())) return true;
   if (!Storage.exists(job.fromPath.c_str())) {
     LOG_ERR("DFAV", "%s is gone; cannot rename it", job.fromPath.c_str());
-    return false;
-  }
-  if (Storage.exists(job.toPath.c_str())) {
+  } else if (Storage.exists(job.toPath.c_str())) {
     LOG_ERR("DFAV", "%s already exists; refusing to overwrite", job.toPath.c_str());
-    return false;
-  }
-  if (!Storage.rename(job.fromPath.c_str(), job.toPath.c_str())) {
+  } else {
     LOG_ERR("DFAV", "Rename of %s failed", job.fromPath.c_str());
-    return false;
   }
-  return true;
+  return false;
 }
 
 void workerLoop(void*) {
@@ -104,25 +106,40 @@ void workerLoop(void*) {
 bool request(const std::string& fromPath, const std::string& toPath) {
   if (fromPath == toPath) return true;  // already in the requested state
 
+  // RAM only. Starting the worker here would begin directory scans on the card
+  // while the reader is repainting and the user is turning pages — the mutex
+  // contention this module exists to avoid. The job waits for flush().
   std::lock_guard<std::mutex> lock(stateMutex());
+  // Toggling straight back cancels the queued toggle instead of stacking a
+  // second rename: the two jobs are a net no-op on the card, and cancelling
+  // keeps indecisive tapping from ever filling the queue.
+  if (!pending().empty() && pending().back().fromPath == toPath && pending().back().toPath == fromPath) {
+    pending().pop_back();
+    return true;
+  }
   if (pending().size() >= kMaxPending) {
     LOG_ERR("DFAV", "Favorite queue full; refusing %s", fromPath.c_str());
     return false;
   }
   pending().push_back(Job{fromPath, toPath});
-  if (workerRunning) return true;
+  return true;
+}
+
+void flush() {
+  std::lock_guard<std::mutex> lock(stateMutex());
+  if (pending().empty() || workerRunning) return;
 
   // Started under the lock on purpose. Creating it after releasing would let a second
-  // request slip in, see workerRunning set, and queue behind a task that then failed to
+  // flush slip in, see workerRunning set, and trust a task that then failed to
   // start. xTaskCreate does not block on this mutex, so holding it here is safe.
   TaskHandle_t handle = nullptr;
   if (xTaskCreate(&workerLoop, "DeferredFav", kWorkerStackBytes, nullptr, kWorkerPriority, &handle) != pdPASS) {
-    pending().pop_back();
+    // Jobs stay queued; the next flush retries. waitForIdle() times out and its
+    // callers already treat an undrained queue as "proceed and reconcile later".
     LOG_ERR("DFAV", "Could not start the favorite worker");
-    return false;
+    return;
   }
   workerRunning = true;
-  return true;
 }
 
 void reconcile() {
@@ -164,6 +181,7 @@ bool isIdle() {
 }
 
 bool waitForIdle(const uint32_t timeoutMs) {
+  flush();  // the queue cannot drain if no worker is running
   const uint32_t deadline = millis() + timeoutMs;
   while (!isIdle()) {
     // Signed difference so the comparison survives the millis() rollover.

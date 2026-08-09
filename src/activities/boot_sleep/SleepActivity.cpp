@@ -128,12 +128,15 @@ std::string pickWallpaperByJump(HalFile& dir) {
 void SleepActivity::onEnter() {
   Activity::onEnter();
 
-  // Let any queued favourite rename land before the folder is walked and before the state
-  // below is written. Deep sleep is a chip reset: a rename still sitting in the queue would
-  // be lost, while the name it was promised could already have been saved to the card. In
-  // practice the worker finished long ago and both calls return at once; the wait only
-  // matters when the card is slow. Bounded so a jammed worker can never block sleeping.
-  DeferredFavorite::waitForIdle(3000);
+  // Run and land any queued favourite rename before the folder is touched and before the
+  // state below is written. The renames DELIBERATELY start here, not at the press: on a
+  // FAT card every name operation is a linear directory scan — seconds with thousands of
+  // wallpapers — and each scan holds the storage mutex against the reader's page turns.
+  // The lock is the moment the user has stopped reading, so the seconds belong here.
+  // Deep sleep is a chip reset: a rename still sitting in the queue would be lost, while
+  // the name it was promised could already have been saved to the card. Bounded so a
+  // jammed worker can never block sleeping; sized for a few scan-heavy renames.
+  DeferredFavorite::waitForIdle(15000);
   DeferredFavorite::reconcile();
 
   // Deep sleep is a chip reset, so the wake cannot know what the panel is holding unless
