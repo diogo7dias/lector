@@ -56,11 +56,11 @@ SetFavoriteResult setFavorite(const std::string& path, const bool favorite, std:
 
 void replacePathReferences(const std::string& oldPath, const std::string& newPath) {
   if (oldPath == newPath) return;
-  // Every foreground rename/move of a wallpaper funnels through here, so this
-  // is the one place the wallpaper index learns the folder changed. (The
-  // background rename worker cannot come through here — it must not touch
-  // APP_STATE — so DeferredFavorite::reconcile marks on the main task instead.)
-  crosspoint::sleep::windex::markDirty();
+  // Deliberately no windex::markDirty() here: the favorite toggle funnels
+  // through this and its rename does not change the folder's membership — the
+  // index pick resolves the record through favoriteCounterpart(), and the
+  // reconcile's counterpart check refuses the duplicate append. Callers that
+  // move a file BETWEEN folders (SleepPauseToggle) mark dirty themselves.
   // The wake path re-renders this exact file to composite the unlock banners over
   // it, so a stale path here means the wake falls back to the boot logo.
   if (APP_STATE.lastSleepWallpaperPath == oldPath) APP_STATE.lastSleepWallpaperPath = newPath;

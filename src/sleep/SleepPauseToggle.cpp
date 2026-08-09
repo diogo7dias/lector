@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/FavoriteImage.h"
 
 namespace crosspoint {
@@ -46,6 +47,10 @@ SleepPauseToggleResult toggleSleepPause(const std::string& path) {
   if (!Storage.rename(path.c_str(), dst.c_str())) return r;
 
   FavoriteImage::replacePathReferences(path, dst);
+  // A pause toggle moves the file between folders, so the sleep folder's
+  // membership really changed — unlike the favorite rename, this must
+  // reconcile at the next boot.
+  windex::markDirty();
   r.ok = true;
   r.newPath = dst;
   return r;

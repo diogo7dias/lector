@@ -33,6 +33,11 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t sleepIndexDirId = 0;          // 0 = /sleep, 1 = /.sleep
   bool sleepIndexDirty = false;         // a mutation hook flagged the folder
   bool sleepIndexNeedsRebuild = false;  // pick exhausted its skip budget
+  // Last live directory slot at the last reconcile. On the Xteink boards a
+  // battery lock is a full power cut, so every unlock arrives as a power-on
+  // reset — this probe result is what lets those boots skip the folder walk
+  // when nothing was added (FAT appends extend the slot tail).
+  uint32_t sleepIndexTailSlot = 0;
   uint32_t sleepCursorPos = 0;
   uint32_t sleepCursorMult = 1;
   uint32_t sleepCursorOff = 0;

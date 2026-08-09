@@ -166,11 +166,10 @@ void reconcile() {
 
   // One save for the batch. It persists whatever the reference now is, which is the point
   // of saving at all: an unexpected reset must not leave the card pointing at a name that
-  // no longer exists. The dirty mark rides along: the worker renamed files in the sleep
-  // folder but must never touch APP_STATE itself, so the index learns about it here, on
-  // the main task, inside the save this batch already pays for.
+  // no longer exists. No sleepIndexDirty mark: a favorite rename keeps the folder's
+  // membership — the index resolves the old record through favoriteCounterpart(), so
+  // forcing a reconcile here only bought an "Indexing wallpapers" popup on the next boot.
   if (anySucceeded) {
-    APP_STATE.sleepIndexDirty = true;
     APP_STATE.saveToFile();
   }
 }

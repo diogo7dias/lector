@@ -8,12 +8,14 @@
  * thousands of images the folder holds. 5000 images ≈ 780 KB on SD, never in
  * RAM; the only RAM the rotation keeps is the scalar cursor in APP_STATE.
  *
- * The folder is scanned ONLY at cold boot (reconcileAtColdBoot): deep-sleep
- * wake never scans, lock never scans. An unchanged folder costs one
- * fingerprint walk and writes nothing; new files are appended at EOF as the
- * "fresh" region the pick serves next; a folder that drifted too far (bad
- * header, folder switch, dead-slot pileup) is rebuilt from scratch into a tmp
- * file and rotated in, so the live index is never torn.
+ * The folder is walked ONLY when it looks changed. A battery lock on the
+ * Xteink boards is a full power cut, so every unlock boots as a power-on
+ * reset; the boot gate therefore asks folderTailMoved() — a millisecond
+ * slot-tail probe — before paying the walk, and a clean unlock scans nothing.
+ * When the walk does run, new files are appended at EOF as the "fresh" region
+ * the pick serves next; a folder that drifted too far (bad header, folder
+ * switch, dead-slot pileup) is rebuilt from scratch into a tmp file and
+ * rotated in, so the live index is never torn.
  *
  * The record count is always derived from the file size, never persisted —
  * count drift between state.json and the file is structurally impossible.
@@ -83,6 +85,14 @@ void markDirty();
 // rotation reads or stages (/sleep, /.sleep, /sleep pause). For file-serving
 // code (web upload/rename/delete) that touches arbitrary paths.
 void markDirtyIfSleepPath(const char* path);
+
+// MAIN TASK ONLY, boot gate: cheap change probe, milliseconds and no UI. True
+// when the sleep folder's last live directory slot (or the resolved folder
+// itself) differs from the last reconcile's snapshot — FAT appends extend the
+// slot tail, so card-added files move it. Exists because a battery lock on the
+// Xteink boards is a full power cut: every unlock arrives as a power-on reset,
+// and without this probe every unlock would pay the folder walk.
+bool folderTailMoved();
 
 // MAIN TASK ONLY, cold boot: one folder walk; a trusted index returns without
 // writing anything; a changed folder appends the new names (they jump the

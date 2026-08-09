@@ -599,19 +599,24 @@ void setup() {
 
   WakeTiming::mark(WakeTiming::Stage::BannersUp);
 
-  // Wallpaper index reconcile — cold boots only. Wallpapers change through two
-  // doors: the card leaves the device (that power cycle IS a cold boot), or the
-  // WiFi file browser writes to the sleep folder (its session always ends in a
-  // silentRestart, and the mutation hooks persist sleepIndexDirty before it).
-  // A deep-sleep wake is neither, so it pays exactly one reset-reason compare —
-  // the wake path never scans the folder. A plain software restart with no
-  // dirty mark (a settings-only WiFi session, OTA) also boots clean.
+  // Wallpaper index reconcile. A battery lock on the Xteink boards is a full
+  // power cut (battery latch), so every unlock arrives as ESP_RST_POWERON —
+  // reset reason alone cannot separate "wake" from "the card was out". The
+  // walk therefore runs only when something says the folder changed: a
+  // persisted dirty mark (WiFi file browser, pause moves, deletes), the pick's
+  // needs-rebuild flag, or the millisecond tail-slot probe seeing the folder
+  // grow (card-added files extend the FAT slot tail). A clean unlock pays the
+  // probe and skips the walk — no banner, no folder scan. A plain software
+  // restart with no dirty mark (a settings-only WiFi session, OTA) skips even
+  // the probe: the folder cannot change behind a running device except through
+  // the hooked paths.
   {
     const esp_reset_reason_t rst = esp_reset_reason();
     const bool wantsWallpaperIndex = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
                                      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
     if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !HalSystem::isRebootFromPanic() && wantsWallpaperIndex) {
-      if (rst != ESP_RST_SW || APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild) {
+      if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild ||
+          (rst != ESP_RST_SW && crosspoint::sleep::windex::folderTailMoved())) {
         crosspoint::sleep::windex::reconcileAtColdBoot(renderer);
       }
     }

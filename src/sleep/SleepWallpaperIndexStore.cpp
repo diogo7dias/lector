@@ -145,6 +145,14 @@ bool walkFolder(const char* dirPath, uint32_t& count, uint32_t& fingerprint, Pro
   return true;
 }
 
+// Offset (in slots) of the last live directory entry, 0 for missing/empty.
+// ~2*log2(entries) probes — milliseconds, never a walk.
+uint32_t probeTailSlot(const uint8_t dirId) {
+  auto dir = Storage.open(dirPathForId(dirId));
+  if (!dir || !dir.isDirectory()) return 0;
+  return static_cast<uint32_t>(liveSlotCount(dir));
+}
+
 // Reset the rotation to "fresh shuffled lap over `count`, nothing pending" and
 // stamp the snapshot. Caller saves state.json (exactly once per reconcile).
 void resetRotationState(const uint32_t count, const uint32_t fingerprint, const uint32_t liveCount,
@@ -157,6 +165,7 @@ void resetRotationState(const uint32_t count, const uint32_t fingerprint, const 
   APP_STATE.sleepIndexDirId = dirId;
   APP_STATE.sleepIndexDirty = false;
   APP_STATE.sleepIndexNeedsRebuild = false;
+  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
 }
 
 // Full scan -> tmp file -> rotate. The live index is replaced atomically; a
@@ -278,6 +287,12 @@ void markDirtyIfSleepPath(const char* path) {
   if (under("/sleep/") || under("/.sleep/") || under("/sleep pause/")) markDirty();
 }
 
+bool folderTailMoved() {
+  const uint8_t dirId = resolveSleepDirId();
+  if (dirId != APP_STATE.sleepIndexDirId) return true;
+  return probeTailSlot(dirId) != APP_STATE.sleepIndexTailSlot;
+}
+
 sleep_queue::QueueState loadQueueState() {
   sleep_queue::QueueState s;
   s.cursor.position = APP_STATE.sleepCursorPos;
@@ -327,10 +342,23 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
   }
 
   auto plan = sleep_reconcile::decidePlan(in);
-  if (plan == sleep_reconcile::Plan::NoChange) return;
+  if (plan == sleep_reconcile::Plan::NoChange) {
+    // Reachable only through a tail-probe mismatch (the boot gate skips clean
+    // folders): entries relocated but the content is identical. Re-anchor the
+    // probe or every following boot would walk the folder again.
+    const uint32_t tailNow = probeTailSlot(dirId);
+    if (APP_STATE.sleepIndexTailSlot != tailNow) {
+      APP_STATE.sleepIndexTailSlot = tailNow;
+      APP_STATE.saveToFile();
+    }
+    return;
+  }
 
+  // Shown lazily: a rebuild is always real work, but an append pass that turns
+  // out to find nothing new (a dirty mark from a rename or a delete) stays
+  // under the checking banner instead of flashing "Indexing wallpapers".
   ProgressPopup progress(renderer);
-  progress.show();
+  if (plan == sleep_reconcile::Plan::FullRebuild) progress.show();
 
   if (plan == sleep_reconcile::Plan::IncrementalAppend) {
     // Pass B: hash the known records (transient, freed before boot continues).
@@ -369,6 +397,7 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
                    const std::string alt = FavoriteImage::favoriteCounterpart(nameView);
                    if (!alt.empty() && known.contains(sleep_reconcile::nameHash(alt))) return;
                    if (recordCount + appends >= sleep_reconcile::kMaxEntries) return;
+                   progress.show();  // first real append: now it is indexing
                    if (!writeRecord(idx, name, len)) appendFailed = true;
                    ++appends;
                  });
@@ -391,6 +420,7 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
       APP_STATE.sleepIndexFingerprint = fingerprint;
       APP_STATE.sleepIndexDirId = dirId;
       APP_STATE.sleepIndexDirty = false;
+      APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
       const uint32_t newCount = recordCount + appends;
       if (APP_STATE.sleepFreshNext > newCount) APP_STATE.sleepFreshNext = newCount;
       APP_STATE.saveToFile();
@@ -400,6 +430,7 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
     }
   }
 
+  progress.show();  // idempotent; covers the incremental-to-rebuild fallthrough
   if (!buildBlocking(dirId, &progress)) {
     // Build failed (SD error): leave flags so the next cold boot retries, and
     // the sleep pick falls back to the jump pick meanwhile.
