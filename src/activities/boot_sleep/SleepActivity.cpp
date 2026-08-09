@@ -28,6 +28,7 @@
 #include "reading_stats/ReadingStatsStore.h"
 #include "reading_stats/SdStatsFiles.h"
 #include "sleep/WallpaperNames.h"
+#include "util/DeferredFavorite.h"
 #include "util/TaskWatchdog.h"
 
 static_assert(CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD == stats_dashboard::kStatsDashboardMode);
@@ -151,6 +152,14 @@ std::string pickWallpaperByJump(HalFile& dir) {
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+
+  // Let any queued favourite rename land before the folder is walked and before the state
+  // below is written. Deep sleep is a chip reset: a rename still sitting in the queue would
+  // be lost, while the name it was promised could already have been saved to the card. In
+  // practice the worker finished long ago and both calls return at once; the wait only
+  // matters when the card is slow. Bounded so a jammed worker can never block sleeping.
+  DeferredFavorite::waitForIdle(3000);
+  DeferredFavorite::reconcile();
 
   // Deep sleep is a chip reset, so the wake cannot know what the panel is holding unless
   // we write it down. Clear first and let the render path set it, so any screen that is

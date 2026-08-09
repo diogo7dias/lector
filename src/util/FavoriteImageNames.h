@@ -23,4 +23,14 @@ bool hasFavoriteSuffix(std::string_view filename);
 std::string stripFavoriteSuffix(std::string_view filename);
 std::string addFavoriteSuffix(std::string_view filename);
 
+// Whole-path form of the two above: returns `path` with its basename carrying the
+// _F suffix (favorite = true) or with it stripped (favorite = false). The directory
+// part is copied through verbatim, so no path-joining rule can drift between the
+// callers. Returns `path` unchanged when the name is not a wallpaper name or is
+// already in the requested state.
+//
+// Exists so the caller that has to know the post-rename path BEFORE the rename runs
+// (the background favorite worker) derives it from the same code as the rename itself.
+std::string favoritePathFor(std::string_view path, bool favorite);
+
 }  // namespace FavoriteImage

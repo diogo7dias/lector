@@ -49,4 +49,14 @@ std::string stripFavoriteSuffix(std::string_view filename) {
   return std::string(filename.substr(0, extPos - kFavoriteSuffix.size())) + std::string(filename.substr(extPos));
 }
 
+std::string favoritePathFor(std::string_view path, const bool favorite) {
+  const size_t slashPos = path.find_last_of('/');
+  // Keep the separator with the directory half, so a name at the root ("/x.bmp")
+  // and a name in a folder ("/sleep/x.bmp") both rejoin by plain concatenation.
+  const std::string_view dir = (slashPos == std::string_view::npos) ? std::string_view() : path.substr(0, slashPos + 1);
+  const std::string_view name = (slashPos == std::string_view::npos) ? path : path.substr(slashPos + 1);
+  const std::string renamed = favorite ? addFavoriteSuffix(name) : stripFavoriteSuffix(name);
+  return std::string(dir) + renamed;
+}
+
 }  // namespace FavoriteImage

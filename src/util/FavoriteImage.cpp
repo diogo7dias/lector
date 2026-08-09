@@ -15,17 +15,6 @@ std::string getBasename(const std::string& path) {
   return (slashPos == std::string::npos) ? path : path.substr(slashPos + 1);
 }
 
-std::string getParentPath(const std::string& path) {
-  const auto slashPos = path.find_last_of('/');
-  if (slashPos == std::string::npos || slashPos == 0) return "/";
-  return path.substr(0, slashPos);
-}
-
-std::string joinPath(const std::string& parent, const std::string& name) {
-  if (parent.empty() || parent == "/") return "/" + name;
-  return parent + "/" + name;
-}
-
 }  // namespace
 
 // hasFavoriteSuffix / addFavoriteSuffix / stripFavoriteSuffix / isImageExtension
@@ -44,11 +33,11 @@ SetFavoriteResult setFavorite(const std::string& path, const bool favorite, std:
   if (!Storage.exists(path.c_str())) return SetFavoriteResult::Missing;
 
   std::string currentPath = path;
-  const std::string currentName = getBasename(currentPath);
-  const std::string targetName = favorite ? addFavoriteSuffix(currentName) : stripFavoriteSuffix(currentName);
+  // Same helper the background worker uses to predict this path, so the name it
+  // advertised to the UI and the name renamed here can never be derived differently.
+  const std::string targetPath = favoritePathFor(currentPath, favorite);
 
-  if (targetName != currentName) {
-    const std::string targetPath = joinPath(getParentPath(currentPath), targetName);
+  if (targetPath != currentPath) {
     // SdFat never overwrites on rename, so check first and report the clash
     // rather than letting it fail opaquely.
     if (Storage.exists(targetPath.c_str())) return SetFavoriteResult::RenameConflict;

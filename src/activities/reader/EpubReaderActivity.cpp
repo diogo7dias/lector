@@ -58,6 +58,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
 #include "util/BookmarkUtil.h"
+#include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
 #include "util/ScreenshotUtil.h"
 
@@ -334,6 +335,10 @@ void EpubReaderActivity::openReaderMenu() {
   if (menuTocIndex != -1) {
     chapterName = epub->getTocItem(menuTocIndex).title;
   }
+  // Settle any favorite rename queued the last time this menu was open, so the row below
+  // reads the true state and a rename that failed has already given the reference back.
+  // The worker has almost always finished by now; this only applies its outcome.
+  DeferredFavorite::reconcile();
   // Wallpaper triage targets the file the last sleep screen actually rendered.
   // Only offer it while that file is still on the card: the user may have deleted
   // or moved it from the file browser since.
@@ -1091,32 +1096,31 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE: {
-      // FAILURE PATH ONLY. The menu now favourites in place and stays open, so a
-      // successful star never reaches the reader — see EpubReaderMenuActivity's
-      // WALLPAPER_FAVORITE branch. The menu hands the action over only when the rename
-      // failed, because reporting that needs a popup and the full refresh that clears
-      // it. Retrying here is safe: a failed setFavorite changed nothing, so this either
-      // succeeds or reports the same failure.
+      // Favouriting must not stand between the press and the page. The rename plus the
+      // APP_STATE save are card work worth hundreds of milliseconds, and none of it is
+      // needed to draw anything, so it is queued and the page repaint below starts at
+      // once — the panel refresh and the card work then overlap instead of queueing.
       //
-      // Renames the file on the card, so the path in APP_STATE moves with it —
-      // FavoriteImage::setFavorite repoints it, which keeps the next wake able to
-      // redraw the same wallpaper under the unlock banners.
+      // No popup. A popup paints and refreshes on its own, and then the page repaint
+      // refreshes again: two waits for one press, which is the cost this change exists
+      // to remove. The Favorite / Unfavorite row label carries the result instead, and
+      // it is already correct because APP_STATE moves to the new name right here.
+      //
+      // Moving APP_STATE now rather than after the rename is what lets the UI move on.
+      // It is a promise, and DeferredFavorite takes it back if the rename fails.
       const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
       if (lastPath.empty()) break;
       const bool makeFavorite = !FavoriteImage::isFavoritePath(lastPath);
-      switch (FavoriteImage::setFavorite(lastPath, makeFavorite, nullptr)) {
-        case FavoriteImage::SetFavoriteResult::Success:
-          GUI.drawPopup(renderer, makeFavorite ? tr(STR_FAVORITED) : tr(STR_UNFAVORITED));
-          scheduleGhostCleanup();
-          break;
-        case FavoriteImage::SetFavoriteResult::RenameConflict:
-          GUI.drawPopup(renderer, tr(STR_FAVORITE_NAME_EXISTS));
-          scheduleGhostCleanup();
-          break;
-        default:
+      const std::string newPath = FavoriteImage::favoritePathFor(lastPath, makeFavorite);
+      APP_STATE.lastSleepWallpaperPath = newPath;
+      if (!DeferredFavorite::request(lastPath, newPath)) {
+        // Could not queue it (the worker would not start, or the queue is jammed). Do it
+        // here rather than drop the press, and report failure the way the old path did.
+        APP_STATE.lastSleepWallpaperPath = lastPath;
+        if (FavoriteImage::setFavorite(lastPath, makeFavorite, nullptr) != FavoriteImage::SetFavoriteResult::Success) {
           GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
           scheduleGhostCleanup();
-          break;
+        }
       }
       requestUpdate();
       break;

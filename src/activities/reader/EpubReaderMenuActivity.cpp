@@ -11,7 +11,6 @@
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/FavoriteImage.h"
 
 EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
@@ -376,37 +375,12 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    // Favourite the sleep wallpaper here rather than handing the action to the reader.
-    // The work is a rename on the card and needs no page, and doing it in place turns a
-    // popup plus a forced FULL refresh of the reading page — one to two seconds on this
-    // panel — into a label flip inside the already-open menu. The row reads Favorite or
-    // Unfavorite, so the result is still visible; it is a checkbox, like the rows above.
-    if (selectedAction == MenuAction::WALLPAPER_FAVORITE) {
-      const std::string lastPath = APP_STATE.lastSleepWallpaperPath;
-      if (lastPath.empty()) return;
-      const bool makeFavorite = !FavoriteImage::isFavoritePath(lastPath);
-      if (FavoriteImage::setFavorite(lastPath, makeFavorite, nullptr) != FavoriteImage::SetFavoriteResult::Success) {
-        // Only a failure is worth a popup and the full refresh that clears it: a name
-        // clash or a card error is something the reader must not swallow silently.
-        setResult(MenuResult{static_cast<int>(MenuAction::WALLPAPER_FAVORITE), pendingOrientation,
-                             selectedPageTurnOption, selectedParagraphNumbering, selectedParagraphNumberSize,
-                             selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar, selectedProgressBar,
-                             firedHoldFunction});
-        finish();
-        return;
-      }
-      // setFavorite repointed APP_STATE.lastSleepWallpaperPath at the renamed file, so
-      // the label is derived from the card, not from a flag that could drift out of step.
-      const bool nowFavorite = FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath);
-      activeTab().items[activeTab().selectedIndex - 1].labelId =
-          nowFavorite ? StrId::STR_UNFAVORITE_WALLPAPER : StrId::STR_FAVORITE_WALLPAPER;
-      // Say it as well as show it. This is a line inside the redraw the label flip already
-      // costs, not a popup over the reading page, so it is free.
-      statusLineId = nowFavorite ? StrId::STR_FAVORITED : StrId::STR_UNFAVORITED;
-      hasStatusLine = true;
-      requestUpdate();
-      return;
-    }
+    // Favouriting is handed to the reader like every other action, and the reader queues
+    // the card work rather than waiting for it. Nothing happens here, deliberately: an
+    // in-place label flip costs a menu redraw, and leaving the menu already costs a page
+    // repaint, so doing both pays two panel refreshes for one press. Falling straight
+    // through pays one. The row label is right the next time the menu opens because the
+    // reader moves APP_STATE to the new name before it returns.
 
     setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
                          selectedParagraphNumbering, selectedParagraphNumberSize, selectedPaperbackBody,
@@ -566,18 +540,6 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  // One-shot confirmation for an action that finished inside the menu. Same strip the
-  // waits use (BusyBanner), so a result and a wait read as one surface. Drawn last, so it
-  // sits on top like every other banner, and it costs no refresh of its own: the menu is
-  // already redrawing this whole screen for the row label flip.
-  //
-  // Cleared right here: the banner belongs to the redraw its own action triggered, and
-  // the next redraw is a fresh state.
-  if (hasStatusLine) {
-    GUI.drawBannerStrip(renderer, I18N.get(statusLineId));
-    hasStatusLine = false;
-  }
 
   renderer.displayBuffer();
 }

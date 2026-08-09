@@ -10,6 +10,7 @@
 
 using crosspoint::sleep::isWallpaperName;
 using FavoriteImage::addFavoriteSuffix;
+using FavoriteImage::favoritePathFor;
 using FavoriteImage::hasFavoriteSuffix;
 using FavoriteImage::isImageExtension;
 using FavoriteImage::stripFavoriteSuffix;
@@ -100,4 +101,47 @@ TEST(StripFavoriteSuffix, LeavesInnerUnderscoreFAlone) { EXPECT_EQ("a_F_b.bmp", 
 TEST(RoundTrip, AddThenStripRestoresOriginal) {
   const std::string original = "my sunset photo.bmp";
   EXPECT_EQ(original, stripFavoriteSuffix(addFavoriteSuffix(original)));
+}
+
+// favoritePathFor: the whole-path form the background worker uses to know the
+// post-rename name before the rename has run. The directory half must survive
+// untouched, because the worker compares that predicted path against APP_STATE.
+
+TEST(FavoritePathFor, AddsSuffixAndKeepsDirectory) {
+  EXPECT_EQ("/sleep/sunset_F.bmp", favoritePathFor("/sleep/sunset.bmp", true));
+}
+
+TEST(FavoritePathFor, StripsSuffixAndKeepsDirectory) {
+  EXPECT_EQ("/sleep/sunset.bmp", favoritePathFor("/sleep/sunset_F.bmp", false));
+}
+
+TEST(FavoritePathFor, HandlesRootLevelFiles) {
+  EXPECT_EQ("/sleep_F.bmp", favoritePathFor("/sleep.bmp", true));
+  EXPECT_EQ("/sleep.bmp", favoritePathFor("/sleep_F.bmp", false));
+}
+
+TEST(FavoritePathFor, HandlesNestedDirectories) {
+  EXPECT_EQ("/sleep pause/a/b/sunset_F.pxc", favoritePathFor("/sleep pause/a/b/sunset.pxc", true));
+}
+
+TEST(FavoritePathFor, HandlesBareNameWithNoDirectory) {
+  EXPECT_EQ("sunset_F.bmp", favoritePathFor("sunset.bmp", true));
+}
+
+TEST(FavoritePathFor, IsIdempotentInBothDirections) {
+  EXPECT_EQ("/sleep/sunset_F.bmp", favoritePathFor("/sleep/sunset_F.bmp", true));
+  EXPECT_EQ("/sleep/sunset.bmp", favoritePathFor("/sleep/sunset.bmp", false));
+}
+
+TEST(FavoritePathFor, ReturnsInputUnchangedForNonWallpapers) {
+  // The caller treats an unchanged return as "nothing to rename", so a non-wallpaper
+  // path must not become a queued job.
+  EXPECT_EQ("/books/novel.epub", favoritePathFor("/books/novel.epub", true));
+}
+
+TEST(FavoritePathFor, IgnoresUnderscoreFInADirectoryName) {
+  // Only the basename carries the favorite state; a folder that happens to end in _F
+  // must not be mistaken for one.
+  EXPECT_EQ("/holiday_F/sunset_F.bmp", favoritePathFor("/holiday_F/sunset.bmp", true));
+  EXPECT_EQ("/holiday_F/sunset.bmp", favoritePathFor("/holiday_F/sunset.bmp", false));
 }
