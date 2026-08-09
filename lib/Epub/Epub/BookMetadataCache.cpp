@@ -19,6 +19,10 @@ constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
 // Buffer size for the buildBookBin streams. 3 buffers x 4KB, transient (freed on
 // return); 4KB = 8 SD sectors per transfer, enough to stop the sector-cache thrash.
 constexpr size_t BUILD_IO_BUFFER_SIZE = 4096;
+// Buffer for the one-pass spine scan in load(). Transient (freed before load()
+// returns) and deliberately small: a spine entry is a few tens of bytes, so 512
+// covers roughly ten of them per SD transfer.
+constexpr size_t SPINE_SCAN_BUFFER_SIZE = 512;
 
 // Entry (de)serializers, templated so they run over HalFile and the Buffered*
 // wrappers alike (two instantiations each -- a few hundred bytes of flash, in
@@ -490,9 +494,39 @@ bool BookMetadataCache::load() {
   serialization::readString(bookFile, coreMetadata.textReferenceHref);
   serialization::readString(bookFile, coreMetadata.description);
 
+  // Cache cumulative spine sizes in RAM. The progress bar (every render) and percent
+  // jumps otherwise pay 2 seeks + a heap-allocating SpineEntry read per access. Spine
+  // entries are stored contiguously in index order immediately after the LUTs (see
+  // buildBookBin), so one sequential pass fills the whole table.
+  //
+  // Adapted from upstream #2441: the fields are read directly rather than through
+  // readSpineEntry(), so the pass does not allocate and free one std::string per spine
+  // item, and it runs through a small buffered reader, so the pass costs a handful of
+  // SD transfers instead of three unbuffered reads per entry.
+  const uint32_t lutSize = (static_cast<uint32_t>(spineCount) + tocCount) * sizeof(uint32_t);
+  cumulativeSizes.assign(spineCount, 0);
+  {
+    serialization::BufferedFileReader spineIn(bookFile, SPINE_SCAN_BUFFER_SIZE);
+    spineIn.seek(lutOffset + lutSize);
+    for (uint16_t i = 0; i < spineCount; i++) {
+      uint32_t hrefLen = 0;
+      serialization::readPod(spineIn, hrefLen);
+      spineIn.seek(spineIn.position() + hrefLen);  // skip href
+      serialization::readPod(spineIn, cumulativeSizes[i]);
+      spineIn.seek(spineIn.position() + sizeof(int16_t));  // skip tocIndex
+    }
+  }
+
   loaded = true;
   LOG_DBG("BMC", "Loaded cache data: %d spine, %d TOC entries", spineCount, tocCount);
   return true;
+}
+
+uint32_t BookMetadataCache::getCumulativeSize(const int index) const {
+  if (index < 0 || index >= static_cast<int>(cumulativeSizes.size())) {
+    return 0;
+  }
+  return cumulativeSizes[index];
 }
 
 BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) {
