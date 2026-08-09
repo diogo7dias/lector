@@ -13,6 +13,7 @@
 #include "sleep/SdSleepImageFs.h"
 #include "sleep/SleepImageMove.h"
 #include "sleep/SleepPauseToggle.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -132,6 +133,9 @@ void WallpaperMoveActivity::runMove() {
   stalled = report.stalled;
   LOG_INF("WPMOVE", "moved %u, failed %u%s", static_cast<unsigned>(movedCount), static_cast<unsigned>(failedCount),
           stalled ? ", stalled" : "");
+  // One mark per batch, not per file: the bulk move changed the sleep folder,
+  // so the next cold boot reconciles the wallpaper index against it.
+  if (report.moved > 0) crosspoint::sleep::windex::markDirty();
 
   state = DONE;
   requestUpdate();

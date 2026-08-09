@@ -74,6 +74,7 @@ class HalFile : public Print {
 
   void flush();
   size_t getName(char* name, size_t len);
+  bool getModifyDateTime(uint16_t* pdate, uint16_t* ptime);
   size_t size();
   size_t fileSize();
   uint64_t fileSize64();

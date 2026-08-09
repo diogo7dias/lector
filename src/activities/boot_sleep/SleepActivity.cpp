@@ -8,8 +8,10 @@
 #include <I18n.h>
 #include <Txt.h>
 #include <Xtc.h>
+#include <esp_random.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -27,8 +29,11 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsStore.h"
 #include "reading_stats/SdStatsFiles.h"
+#include "sleep/DirSlotProbe.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperNames.h"
 #include "util/DeferredFavorite.h"
+#include "util/FavoriteImageNames.h"
 #include "util/TaskWatchdog.h"
 
 static_assert(CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD == stats_dashboard::kStatsDashboardMode);
@@ -48,9 +53,9 @@ RecentBook recentBookForPath(const std::string& path) {
 }
 
 // A FAT directory is a flat array of fixed-size slots, so a random wallpaper can be
-// reached by SEEKING to a random slot rather than walking every entry. SdFat's
-// openNext() reads from the directory's current position, which makes the jump legal:
-// it returns the first live entry at or after wherever the position was left.
+// reached by SEEKING to a random slot rather than walking every entry (the slot
+// probing itself — entryExistsAt, liveSlotCount — lives in sleep/DirSlotProbe.h,
+// shared with the wallpaper index reconcile).
 //
 // Cost is ~2*log2(entries) probes (roughly 25 reads for a 4000-file folder) instead of
 // one read per file. The old full walk took seconds on a large folder and could wedge
@@ -64,27 +69,16 @@ RecentBook recentBookForPath(const std::string& path) {
 // exactly one accepting slot regardless of how many it spans. Rejections re-roll, and
 // after MAX_JUMP_TRIES the caller's reservoir walk — already exactly uniform — takes
 // over, so the pick is fair either way.
-constexpr size_t DIR_SLOT_BYTES = 32;
-// 131072 slots — far past any real wallpaper folder, and only a bound for the doubling
-// probe, not an allocation.
-constexpr size_t MAX_DIR_BYTES = 4u * 1024u * 1024u;
+//
 // How many landings to try before deferring to the caller's full uniform walk. Accept
 // probability is (wallpapers / slots), so a folder of long-named files rejects more
 // often; eight tries keeps the fallback rare without making sleep entry slow.
 constexpr int MAX_JUMP_TRIES = 8;
 
+using crosspoint::sleep::DIR_SLOT_BYTES;
+using crosspoint::sleep::entryExistsAt;
 using crosspoint::sleep::isWallpaperName;
-
-// True when at least one live directory entry exists at or after `offset`. Monotone in
-// `offset` (entries are contiguous and terminated by a free slot), which is what makes
-// the binary search below valid.
-bool entryExistsAt(HalFile& dir, const size_t offset) {
-  if (!dir.seekSet(offset)) return false;
-  auto probe = dir.openNextFile();
-  const bool found = static_cast<bool>(probe);
-  if (probe) probe.close();
-  return found;
-}
+using crosspoint::sleep::liveSlotCount;
 
 // True when `offset` is the first slot of the entry a seek there returns.
 //
@@ -108,27 +102,8 @@ bool landsOnEntryStart(HalFile& dir, const size_t offset, const char* name) {
 // Random wallpaper name, or empty when the jump could not resolve one (caller falls
 // back to the full walk). `dir` is left at an arbitrary position.
 std::string pickWallpaperByJump(HalFile& dir) {
-  if (!entryExistsAt(dir, 0)) return {};
-
-  // Grow a bound until a probe lands past the last entry.
-  size_t lastLive = 0;
-  size_t past = DIR_SLOT_BYTES;
-  while (past < MAX_DIR_BYTES && entryExistsAt(dir, past)) {
-    lastLive = past;
-    past *= 2;
-  }
-  // Narrow to the last slot that still yields an entry.
-  while (past - lastLive > DIR_SLOT_BYTES) {
-    const size_t mid = ((lastLive + (past - lastLive) / 2) / DIR_SLOT_BYTES) * DIR_SLOT_BYTES;
-    if (mid == lastLive) break;
-    if (entryExistsAt(dir, mid)) {
-      lastLive = mid;
-    } else {
-      past = mid;
-    }
-  }
-
-  const uint32_t slots = static_cast<uint32_t>(lastLive / DIR_SLOT_BYTES) + 1;
+  const uint32_t slots = static_cast<uint32_t>(liveSlotCount(dir));
+  if (slots == 0) return {};
 
   char name[256];  // FAT long-file-name maximum (255 characters plus terminator)
   for (int tries = 0; tries < MAX_JUMP_TRIES; tries++) {
@@ -170,7 +145,7 @@ void SleepActivity::onEnter() {
 
   renderSleepScreen();
 
-  if (APP_STATE.lastSleepWallpaperPath != previousWallpaper) {
+  if (APP_STATE.lastSleepWallpaperPath != previousWallpaper || stateDirty) {
     APP_STATE.saveToFile();
   }
 }
@@ -416,11 +391,57 @@ void SleepActivity::renderCustomSleepScreen() const {
       }
     }
 
-    // Fast path: seek straight to a random directory slot (see pickWallpaperByJump).
     const bool heldByPause = !chosen.empty();
+
+    // The persistent line: fresh (newly indexed) wallpapers first, then the
+    // shuffled lap — every wallpaper exactly once per lap, reshuffled at the
+    // wrap. Cost per sleep is one index open plus a 160-byte read per inspected
+    // slot; no folder scan. Falls through to the jump pick when the index is
+    // absent, built for the other folder, or declared stale.
+    bool pickedFromIndex = false;
+    if (chosen.empty() && !APP_STATE.sleepIndexNeedsRebuild) {
+      namespace windex = crosspoint::sleep::windex;
+      const uint32_t indexStartMs = millis();
+      windex::Reader reader;
+      if (reader.open() && reader.recordCount() > 0 && strcmp(windex::dirPathForId(reader.dirId()), sleepDir) == 0) {
+        auto queueState = windex::loadQueueState();
+        const std::string prefix = std::string(sleepDir) + "/";
+        const auto nameAt = [&](const size_t i) { return reader.nameAt(i); };
+        const auto liveInFolder = [&](const std::string& n) { return Storage.exists((prefix + n).c_str()); };
+        const auto counterpart = [](const std::string& n) { return FavoriteImage::favoriteCounterpart(n); };
+        auto result = sleep_queue::pickNext(queueState, reader.recordCount(), esp_random(), esp_random(), nameAt,
+                                            liveInFolder, counterpart);
+        // Within a lap repeats are impossible by construction; only a reseed
+        // boundary can land on the wallpaper already holding the panel.
+        if (!heldByPause && !result.basename.empty() && reader.recordCount() > 1 &&
+            prefix + result.basename == previousWallpaper) {
+          auto again = sleep_queue::pickNext(queueState, reader.recordCount(), esp_random(), esp_random(), nameAt,
+                                             liveInFolder, counterpart);
+          if (!again.basename.empty()) result = std::move(again);
+        }
+        // Persist the advanced state even when the render below fails: the
+        // cursor must step PAST a present-but-unrenderable file, or every
+        // sleep would retry it and show the logo face forever. A crash before
+        // the render costs one skipped wallpaper, nothing more.
+        windex::storeQueueState(queueState);
+        stateDirty = true;
+        if (result.needsRebuild) {
+          // Too many dead slots this pick: use the jump pick tonight and let
+          // the next cold boot rebuild the index.
+          APP_STATE.sleepIndexNeedsRebuild = true;
+          LOG_INF("SLP", "index stale, falling back to jump pick");
+        } else if (!result.basename.empty()) {
+          chosen = std::move(result.basename);
+          pickedFromIndex = true;
+          LOG_INF("SLP", "index pick in %ums", static_cast<unsigned>(millis() - indexStartMs));
+        }
+      }
+    }
+
+    // Fast path: seek straight to a random directory slot (see pickWallpaperByJump).
     const uint32_t pickStartMs = millis();
     if (chosen.empty()) chosen = pickWallpaperByJump(dir);
-    if (!chosen.empty()) {
+    if (!chosen.empty() && !heldByPause && !pickedFromIndex) {
       LOG_INF("SLP", "jump pick in %ums", static_cast<unsigned>(millis() - pickStartMs));
     }
 
@@ -428,8 +449,10 @@ void SleepActivity::renderCustomSleepScreen() const {
     // the pick can legitimately land on the file already on the panel; a couple of
     // re-rolls make a visible repeat unlikely without pretending the folder holds more
     // than it does. A one-wallpaper folder simply keeps showing it, which is correct,
-    // and a paused rotation is meant to repeat, so it is left alone.
-    if (!heldByPause && !chosen.empty() && !previousWallpaper.empty()) {
+    // and a paused rotation is meant to repeat, so it is left alone. An index pick
+    // handled its own reseed-boundary repeat above and must not be re-rolled here —
+    // a jump re-roll would break the line's no-repeat guarantee.
+    if (!heldByPause && !pickedFromIndex && !chosen.empty() && !previousWallpaper.empty()) {
       const std::string prefix = std::string(sleepDir) + "/";
       for (int retry = 0; retry < 2 && prefix + chosen == previousWallpaper; retry++) {
         const std::string again = pickWallpaperByJump(dir);

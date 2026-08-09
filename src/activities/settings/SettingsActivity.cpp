@@ -30,6 +30,7 @@
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
@@ -83,6 +84,7 @@ void SettingsActivity::rebuildSettingsLists() {
       SettingInfo::Action(StrId::STR_PAUSE_OTHER_WALLPAPERS, SettingAction::PauseOtherWallpapers));
   displaySettings.push_back(
       SettingInfo::Action(StrId::STR_RESTORE_PAUSED_WALLPAPERS, SettingAction::RestorePausedWallpapers));
+  displaySettings.push_back(SettingInfo::Action(StrId::STR_SHUFFLE_WALLPAPERS, SettingAction::ShuffleWallpapers));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
@@ -345,6 +347,14 @@ void SettingsActivity::toggleCurrentSetting() {
                                                                        WallpaperMoveActivity::Job::RestoreAllPaused),
                                resultHandler);
         break;
+      case SettingAction::ShuffleWallpapers: {
+        // Inline, no sub-activity: the reshuffle is a reseed of the rotation
+        // cursor plus one state.json save — the index file is untouched.
+        GUI.drawPopup(renderer, tr(STR_SHUFFLING_WALLPAPERS));
+        const bool shuffled = crosspoint::sleep::windex::reshuffleNow();
+        GUI.drawPopup(renderer, shuffled ? tr(STR_WALLPAPERS_SHUFFLED) : tr(STR_SHUFFLE_EMPTY));
+        break;
+      }
       case SettingAction::CleanStorage:
         startActivityForResult(std::make_unique<CleanStorageActivity>(renderer, mappedInput), resultHandler);
         break;

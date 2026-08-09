@@ -11,12 +11,7 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   friend class PersistableStore<CrossPointState>;
 
  public:
-  static constexpr uint8_t SLEEP_RECENT_COUNT = 16;
-
   std::string openEpubPath;
-  uint16_t recentSleepImages[SLEEP_RECENT_COUNT] = {};  // circular buffer of recent wallpaper indices
-  uint8_t recentSleepPos = 0;                           // next write slot
-  uint8_t recentSleepFill = 0;                          // valid entries (0..SLEEP_RECENT_COUNT)
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
@@ -26,15 +21,28 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // logo one (the two take different unlock paths), and the reader menu uses it to
   // favorite, pause or delete the image the lock screen last showed.
   std::string lastSleepWallpaperPath;
+
+  // Sleep wallpaper index (/.crosspoint/sleep_index.bin) snapshot + rotation
+  // cursor. The index file itself lives on SD; these scalars are all the RAM
+  // the rotation ever holds. Snapshot halves detect folder changes at cold
+  // boot; cursor fields drive the shuffled no-repeat lap; sleepFreshNext marks
+  // the start of the fresh (appended, served-next) record region. Defaults
+  // mean "no index yet" so a missing key forces a first build.
+  uint32_t sleepIndexLiveCount = 0;     // wallpapers counted at last reconcile
+  uint32_t sleepIndexFingerprint = 0;   // order-independent folder fingerprint
+  uint8_t sleepIndexDirId = 0;          // 0 = /sleep, 1 = /.sleep
+  bool sleepIndexDirty = false;         // a mutation hook flagged the folder
+  bool sleepIndexNeedsRebuild = false;  // pick exhausted its skip budget
+  uint32_t sleepCursorPos = 0;
+  uint32_t sleepCursorMult = 1;
+  uint32_t sleepCursorOff = 0;
+  uint32_t sleepCursorSeededCount = 0;
+  bool sleepCursorSeeded = false;
+  uint32_t sleepFreshNext = 0;
+
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
-
-  // Returns true if idx was shown within the last checkCount picks.
-  // Walks backwards from the most recently written slot.
-  bool isRecentSleep(uint16_t idx, uint8_t checkCount) const;
-
-  void pushRecentSleep(uint16_t idx);
 };
 
 // Helper macro to access state

@@ -17,6 +17,7 @@
 #include <WiFi.h>
 #include <builtinFonts/all.h>
 #include <esp_random.h>
+#include <esp_system.h>
 
 #include <cstring>
 #include <string>
@@ -40,6 +41,7 @@
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
 
@@ -596,6 +598,24 @@ void setup() {
   }
 
   WakeTiming::mark(WakeTiming::Stage::BannersUp);
+
+  // Wallpaper index reconcile — cold boots only. Wallpapers change through two
+  // doors: the card leaves the device (that power cycle IS a cold boot), or the
+  // WiFi file browser writes to the sleep folder (its session always ends in a
+  // silentRestart, and the mutation hooks persist sleepIndexDirty before it).
+  // A deep-sleep wake is neither, so it pays exactly one reset-reason compare —
+  // the wake path never scans the folder. A plain software restart with no
+  // dirty mark (a settings-only WiFi session, OTA) also boots clean.
+  {
+    const esp_reset_reason_t rst = esp_reset_reason();
+    const bool wantsWallpaperIndex = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
+                                     SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
+    if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !HalSystem::isRebootFromPanic() && wantsWallpaperIndex) {
+      if (rst != ESP_RST_SW || APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild) {
+        crosspoint::sleep::windex::reconcileAtColdBoot(renderer);
+      }
+    }
+  }
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.

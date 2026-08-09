@@ -24,6 +24,7 @@ enum class SettingAction {
   PauseFavoriteWallpapers,
   PauseOtherWallpapers,
   RestorePausedWallpapers,
+  ShuffleWallpapers,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,

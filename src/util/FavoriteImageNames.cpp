@@ -49,6 +49,11 @@ std::string stripFavoriteSuffix(std::string_view filename) {
   return std::string(filename.substr(0, extPos - kFavoriteSuffix.size())) + std::string(filename.substr(extPos));
 }
 
+std::string favoriteCounterpart(std::string_view filename) {
+  if (!isImageExtension(filename)) return {};
+  return hasFavoriteSuffix(filename) ? stripFavoriteSuffix(filename) : addFavoriteSuffix(filename);
+}
+
 std::string favoritePathFor(std::string_view path, const bool favorite) {
   const size_t slashPos = path.find_last_of('/');
   // Keep the separator with the directory half, so a name at the root ("/x.bmp")

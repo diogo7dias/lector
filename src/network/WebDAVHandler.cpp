@@ -4,6 +4,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -105,6 +106,9 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
       }
       if (!_putOk) Storage.remove(tempPath.c_str());
     }
+    // Same mark the plain-HTTP upload sets: a wallpaper written over WebDAV
+    // must reach the rotation index at the post-session reconcile.
+    if (_putOk) crosspoint::sleep::windex::markDirtyIfSleepPath(_putPath.c_str());
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
 
   } else if (raw.status == RAW_ABORTED) {
@@ -436,6 +440,7 @@ void WebDAVHandler::handleDelete(WebServer& s) {
     file.close();
     clearBookCache(path.c_str());
     if (Storage.remove(path.c_str())) {
+      crosspoint::sleep::windex::markDirtyIfSleepPath(path.c_str());
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to delete file");
@@ -548,6 +553,9 @@ void WebDAVHandler::handleMove(WebServer& s) {
   file.close();
 
   if (success) {
+    // Either end of the move can be a sleep folder (in or out both change it).
+    crosspoint::sleep::windex::markDirtyIfSleepPath(srcPath.c_str());
+    crosspoint::sleep::windex::markDirtyIfSleepPath(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -642,6 +650,7 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
+    crosspoint::sleep::windex::markDirtyIfSleepPath(dstPath.c_str());
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());

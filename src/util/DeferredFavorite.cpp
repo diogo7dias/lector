@@ -149,8 +149,13 @@ void reconcile() {
 
   // One save for the batch. It persists whatever the reference now is, which is the point
   // of saving at all: an unexpected reset must not leave the card pointing at a name that
-  // no longer exists.
-  if (anySucceeded) APP_STATE.saveToFile();
+  // no longer exists. The dirty mark rides along: the worker renamed files in the sleep
+  // folder but must never touch APP_STATE itself, so the index learns about it here, on
+  // the main task, inside the save this batch already pays for.
+  if (anySucceeded) {
+    APP_STATE.sleepIndexDirty = true;
+    APP_STATE.saveToFile();
+  }
 }
 
 bool isIdle() {

@@ -37,4 +37,8 @@ class SleepActivity final : public Activity {
   // APP_STATE field before rendering (so a non-wallpaper face leaves it empty),
   // and the paused-rotation path needs the old value to know what to hold.
   mutable std::string previousWallpaper;
+  // True when the render path changed APP_STATE beyond lastSleepWallpaperPath
+  // (rotation cursor advanced, index flagged stale). onEnter folds it into the
+  // single batched saveToFile before deep sleep.
+  mutable bool stateDirty = false;
 };

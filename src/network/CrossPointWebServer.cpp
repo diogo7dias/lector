@@ -24,6 +24,7 @@
 #include "html/HomePageHtml.generated.h"
 #include "html/SettingsPageHtml.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
 #include "util/TaskWatchdog.h"
 
@@ -785,6 +786,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
+        // A wallpaper landed over WiFi: flag the index so the post-session
+        // restart reconciles and the new file jumps the rotation queue.
+        // Handlers run on the main task (handleClient is called from the
+        // activity loop), so the persisted mark is safe here.
+        crosspoint::sleep::windex::markDirtyIfSleepPath(filePath.c_str());
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -936,6 +942,7 @@ void CrossPointWebServer::handleRename() const {
 
   if (success) {
     LOG_DBG("WEB", "Renamed file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    crosspoint::sleep::windex::markDirtyIfSleepPath(itemPath.c_str());
     server->send(200, "text/plain", "Renamed successfully");
   } else {
     LOG_ERR("WEB", "Failed to rename file: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1029,6 +1036,9 @@ void CrossPointWebServer::handleMove() const {
 
   if (success) {
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    // Either end of the move can be a sleep folder (in or out both change it).
+    crosspoint::sleep::windex::markDirtyIfSleepPath(itemPath.c_str());
+    crosspoint::sleep::windex::markDirtyIfSleepPath(newPath.c_str());
     server->send(200, "text/plain", "Moved successfully");
   } else {
     LOG_ERR("WEB", "Failed to move file: %s -> %s", itemPath.c_str(), newPath.c_str());
@@ -1143,6 +1153,7 @@ void CrossPointWebServer::handleDelete() const {
       if (f) f.close();
       success = Storage.remove(itemPath.c_str());
       clearBookCache(itemPath.c_str());
+      if (success) crosspoint::sleep::windex::markDirtyIfSleepPath(itemPath.c_str());
     }
 
     if (!success) {

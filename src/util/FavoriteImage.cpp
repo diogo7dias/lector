@@ -6,6 +6,7 @@
 
 #include "CrossPointState.h"
 #include "FavoriteImageNames.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 
 namespace FavoriteImage {
 namespace {
@@ -55,12 +56,19 @@ SetFavoriteResult setFavorite(const std::string& path, const bool favorite, std:
 
 void replacePathReferences(const std::string& oldPath, const std::string& newPath) {
   if (oldPath == newPath) return;
+  // Every foreground rename/move of a wallpaper funnels through here, so this
+  // is the one place the wallpaper index learns the folder changed. (The
+  // background rename worker cannot come through here — it must not touch
+  // APP_STATE — so DeferredFavorite::reconcile marks on the main task instead.)
+  crosspoint::sleep::windex::markDirty();
   // The wake path re-renders this exact file to composite the unlock banners over
   // it, so a stale path here means the wake falls back to the boot logo.
   if (APP_STATE.lastSleepWallpaperPath == oldPath) APP_STATE.lastSleepWallpaperPath = newPath;
 }
 
 void removePathReferences(const std::string& path) {
+  // Same funnel as replacePathReferences, for the delete flows.
+  crosspoint::sleep::windex::markDirty();
   if (APP_STATE.lastSleepWallpaperPath == path) APP_STATE.lastSleepWallpaperPath.clear();
 }
 

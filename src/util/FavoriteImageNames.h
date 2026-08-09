@@ -23,6 +23,12 @@ bool hasFavoriteSuffix(std::string_view filename);
 std::string stripFavoriteSuffix(std::string_view filename);
 std::string addFavoriteSuffix(std::string_view filename);
 
+// The favorite-toggled twin of `filename` (x.pxc <-> x_F.pxc), or empty when
+// the name is not a wallpaper name. A favorite toggle renames the file but must
+// not change its identity: the wallpaper index resolves stale records — and
+// refuses duplicate appends — through this name.
+std::string favoriteCounterpart(std::string_view filename);
+
 // Whole-path form of the two above: returns `path` with its basename carrying the
 // _F suffix (favorite = true) or with it stripped (favorite = false). The directory
 // part is copied through verbatim, so no path-joining rule can drift between the
