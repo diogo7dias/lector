@@ -93,6 +93,11 @@ class EpubReaderMenuActivity final : public Activity {
   static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
                                         uint8_t paragraphNumbering, uint8_t statusBar, bool hasSleepWallpaper,
                                         bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
+  // Adds or removes the Progress Bar row to match selectedStatusBar, in place, so the
+  // row appears the moment the Status Bar row is switched off rather than on the next
+  // menu open. Safe to call from loop(): it mutates one tab's item vector, never the
+  // tabs vector itself, and no reference into either outlives the call.
+  void syncProgressBarRow();
   TabPage& activeTab() { return tabs[activeTabIndex]; }
   const TabPage& activeTab() const { return tabs[activeTabIndex]; }
   // Move to another tab, wrapping. The cursor of the tab being left is kept.

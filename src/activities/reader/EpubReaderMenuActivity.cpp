@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
@@ -136,9 +138,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     items.push_back({MenuAction::TOGGLE_STATUS_BAR, StrId::STR_STATUS_BAR});
     // Directly under the row it depends on, and only while that row reads OFF: with the
     // bar shown the progress bars already draw from Book Bar / Chapter Bar + Bar
-    // Thickness, so this row would be a second control for the same thing. Rows are
-    // fixed once the menu is built, so turning the bar off reveals it on the next open —
-    // same as Paragraph Number Size above.
+    // Thickness, so this row would be a second control for the same thing. This decides
+    // the state the menu OPENS in; syncProgressBarRow keeps it right afterwards, so the
+    // row also arrives and leaves live as the Status Bar row is toggled.
     if (!statusBar) {
       items.push_back({MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
     }
@@ -178,6 +180,28 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
   }
 
   return pages;
+}
+
+void EpubReaderMenuActivity::syncProgressBarRow() {
+  for (auto& page : tabs) {
+    auto& items = page.items;
+    const auto bar = std::find_if(items.begin(), items.end(),
+                                  [](const MenuItem& m) { return m.action == MenuAction::TOGGLE_STATUS_BAR; });
+    if (bar == items.end()) continue;
+    const auto next = bar + 1;
+    const bool present = next != items.end() && next->action == MenuAction::TOGGLE_PROGRESS_BAR;
+    if (!selectedStatusBar && !present) {
+      items.insert(next, MenuItem{MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
+    } else if (selectedStatusBar && present) {
+      items.erase(next);
+      // The cursor sits on the Status Bar row when this runs, so it is always above the
+      // row being removed and does not move. Clamped anyway: a nav-ring position past
+      // the end would index off the vector on the next render.
+      const int last = static_cast<int>(items.size());
+      if (page.selectedIndex > last) page.selectedIndex = last;
+    }
+    return;  // the row exists in exactly one tab
+  }
 }
 
 void EpubReaderMenuActivity::switchTab(const int direction) {
@@ -339,6 +363,9 @@ void EpubReaderMenuActivity::loop() {
     }
     if (selectedAction == MenuAction::TOGGLE_STATUS_BAR) {
       selectedStatusBar = selectedStatusBar ? 0 : 1;
+      // The Progress Bar row belongs to the OFF state, so it arrives and leaves with
+      // this toggle rather than waiting for the menu to be reopened.
+      syncProgressBarRow();
       requestUpdate();
       return;
     }
