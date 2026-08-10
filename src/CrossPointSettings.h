@@ -597,11 +597,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // paints over the reading text.
   bool progressBarsVisible() const { return statusBarEnabled() || sbOffBar != SB_OFFBAR_OFF; }
   // Gap between a floating progress bar and the screen edge, in pixels. Applied
-  // to the outer edge and to both ends. Six survives the panel's own edge while
-  // still reading as a detail rather than a drift. Every site that draws OR
-  // reserves space for a bar must add it, or the two disagree and the bar paints
-  // over the reading text.
-  static constexpr int SB_FLOATING_BAR_MARGIN_PX = 6;
+  // to the outer edge and to both ends. Twelve reads clearly as a lifted pill on
+  // the panel; six was too close to the bezel to be seen as deliberate. Every site
+  // that draws OR reserves space for a bar must add it, or the two disagree and
+  // the bar paints over the reading text.
+  static constexpr int SB_FLOATING_BAR_MARGIN_PX = 12;
   int floatingBarMarginPx() const { return sbFloatingBar ? SB_FLOATING_BAR_MARGIN_PX : 0; }
   uint8_t activeBarThickness() const {
     if (statusBarEnabled() || sbOffBar == SB_OFFBAR_OFF) return sbBarThickness;
