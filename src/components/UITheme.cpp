@@ -133,7 +133,9 @@ int UITheme::getProgressBarHeight() {
   const bool showProgressBar =
       SETTINGS.progressBarsVisible() && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
                                          SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
-  return showProgressBar ? (statusBarThicknessPx(SETTINGS.activeBarThickness()) + metrics.progressBarMarginTop) : 0;
+  return showProgressBar ? (statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), SETTINGS.sbBarOutline != 0) +
+                            metrics.progressBarMarginTop + SETTINGS.floatingBarMarginPx())
+                         : 0;
 }
 
 namespace {
@@ -180,25 +182,27 @@ int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
   // band reserves the bar only. See CrossPointSettings::progressBarsVisible().
   if (!SETTINGS.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarThicknessPx(SETTINGS.activeBarThickness());
+  const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), SETTINGS.sbBarOutline != 0);
   int bars = 0;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
   const bool hasText = SETTINGS.statusBarEnabled() && sbBandHasText(true, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
-  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
+  // The floating margin is the gap ABOVE the topmost bar, so it is paid once per
+  // band, not once per bar.
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + SETTINGS.floatingBarMarginPx() : 0);
 }
 
 int UITheme::getStatusBarV2BottomHeight(bool hasChapters, int extraTitleHeightPx) {
   if (!SETTINGS.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarThicknessPx(SETTINGS.activeBarThickness());
+  const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), SETTINGS.sbBarOutline != 0);
   int bars = 0;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
   const bool hasText = SETTINGS.statusBarEnabled() && sbBandHasText(false, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
-  return text + (bars > 0 ? bars + metrics.progressBarMarginTop : 0);
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + SETTINGS.floatingBarMarginPx() : 0);
 }
 
 int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {

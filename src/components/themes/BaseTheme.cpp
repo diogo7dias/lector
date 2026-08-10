@@ -1091,21 +1091,44 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int bandWidth = rightEdge - leftEdge;
   const int lineH = renderer.getLineHeight(f);
 
-  // --- Progress bars (full width, flush to the edge) ------------------------
+  // --- Progress bars --------------------------------------------------------
   // Drawn before the text so the bars-only path can return early. topTextY /
   // bottomTextY fall out of the same stacking, so the text band always sits inside
   // whatever the bars left free — matching the heights UITheme reserved.
-  const int barPx = statusBarThicknessPx(SETTINGS.activeBarThickness());
-  const int barLeft = ml;
-  const int barMaxW = screenW - ml - mr;
+  //
+  // Flush by default. With sbFloatingBar on, one small margin lifts the band off
+  // the outer edge and pulls both ends in by the same amount, so the bar reads as
+  // a floating pill. The margin is paid once per band (the gap is outside the
+  // stack), which is exactly what UITheme reserves.
+  const bool outlined = SETTINGS.sbBarOutline != 0;
+  const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), outlined);
+  const int floatMargin = SETTINGS.floatingBarMarginPx();
+  const int barLeft = ml + floatMargin;
+  const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2);
   auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
   auto drawEdgeBar = [&](int y, int pct) {
-    const int w = barMaxW * clampPct(pct) / 100;
-    if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
+    if (!outlined) {
+      const int w = barMaxW * clampPct(pct) / 100;
+      if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
+      return;
+    }
+    // Outlined: a 1px frame over the whole track, the fill inset inside it so the
+    // empty remainder stays readable as a track.
+    renderer.drawRect(barLeft, y, barMaxW, barPx, 1, true);
+    const int innerW = barMaxW - 2;
+    const int innerH = barPx - 2;
+    if (innerW <= 0 || innerH <= 0) return;
+    const int w = innerW * clampPct(pct) / 100;
+    if (w > 0) renderer.fillRect(barLeft + 1, y + 1, w, innerH, true);
   };
 
-  // Top edge: book bar then chapter bar flush to the top; text band below them.
-  int topStack = mt;
+  const bool anyTopBar = SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP ||
+                         (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters);
+  const bool anyBottomBar = SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM ||
+                            (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters);
+
+  // Top edge: book bar then chapter bar; text band below them.
+  int topStack = mt + (anyTopBar ? floatMargin : 0);
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) {
     drawEdgeBar(topStack, data.bookPercent);
     topStack += barPx;
@@ -1116,8 +1139,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
   const int topTextY = topStack + 2;
 
-  // Bottom edge: bars flush to the bottom; text band above them.
-  int bottomStack = screenH - mb;
+  // Bottom edge: bars along the bottom; text band above them.
+  int bottomStack = screenH - mb - (anyBottomBar ? floatMargin : 0);
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
     bottomStack -= barPx;
     drawEdgeBar(bottomStack, data.bookPercent);

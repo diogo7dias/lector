@@ -20,9 +20,12 @@ std::string g_sourcePath;
 uint32_t g_position = 0;
 uint32_t g_total = 0;
 
-// Filled box + text in the bottom-left safe corner. White text on a black box so
-// it reads over any wallpaper.
-void drawLabel(const GfxRenderer& renderer, const std::string& text) {
+enum class Corner { BottomLeft, BottomRight };
+
+// Filled box + text in a bottom safe corner. White text on a black box so it
+// reads over any wallpaper. Both badges share this so the filename, the "F"
+// mark and the rotation position are the same shape on screen.
+void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corner corner = Corner::BottomLeft) {
   if (text.empty()) return;
   const int screenWidth = renderer.getScreenWidth();
   const int screenHeight = renderer.getScreenHeight();
@@ -37,7 +40,7 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text) {
   const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, shown.c_str(), EpdFontFamily::REGULAR);
   const int boxWidth = std::min(textWidth + paddingX * 2, maxBoxWidth);
   const int boxHeight = textLineHeight + paddingY * 2;
-  const int boxX = safeInset;
+  const int boxX = corner == Corner::BottomRight ? std::max(safeInset, screenWidth - safeInset - boxWidth) : safeInset;
   const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
 
   // The black box must be drawn in EVERY pass: in the grayscale plane passes
@@ -50,44 +53,6 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text) {
   if (renderer.getRenderMode() == GfxRenderer::BW) {
     renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
     renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY, shown.c_str(), false, EpdFontFamily::REGULAR);
-  }
-}
-
-// "position / total" plus a progress bar in the bottom-right safe corner.
-// Same box style and — critically — the same render-pass rules as drawLabel:
-// the black box fills in every pass, white pixels only in the BW base pass.
-void drawPositionBadge(const GfxRenderer& renderer, const uint32_t position, const uint32_t total) {
-  const int screenWidth = renderer.getScreenWidth();
-  const int screenHeight = renderer.getScreenHeight();
-  constexpr int safeInset = 18;
-  constexpr int paddingX = 4;
-  constexpr int paddingY = 2;
-  constexpr int barHeight = 4;
-  constexpr int barGap = 3;
-  // A floor so the bar stays readable as a bar when the numbers are short.
-  constexpr int minInnerWidth = 56;
-
-  char text[24];
-  snprintf(text, sizeof(text), "%lu / %lu", static_cast<unsigned long>(position), static_cast<unsigned long>(total));
-  const int textLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, text, EpdFontFamily::REGULAR);
-  const int innerWidth = std::max(textWidth, minInnerWidth);
-  const int boxWidth = innerWidth + paddingX * 2;
-  const int boxHeight = paddingY * 2 + textLineHeight + barGap + barHeight;
-  const int boxX = std::max(safeInset, screenWidth - safeInset - boxWidth);
-  const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
-
-  renderer.fillRect(boxX, boxY, boxWidth, boxHeight, true);
-  if (renderer.getRenderMode() == GfxRenderer::BW) {
-    renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
-    const int textX = boxX + paddingX + (innerWidth - textWidth) / 2;
-    renderer.drawText(UI_10_FONT_ID, textX, boxY + paddingY, text, false, EpdFontFamily::REGULAR);
-    const int barX = boxX + paddingX;
-    const int barY = boxY + paddingY + textLineHeight + barGap;
-    renderer.drawRect(barX, barY, innerWidth, barHeight, 1, false);
-    int fillWidth = static_cast<int>(static_cast<uint64_t>(position) * innerWidth / total);  // caller ensures total > 0
-    if (fillWidth > innerWidth) fillWidth = innerWidth;
-    if (fillWidth > 0) renderer.fillRect(barX, barY, fillWidth, barHeight, false);
   }
 }
 
@@ -116,6 +81,10 @@ void drawSleepInfoOverlay(GfxRenderer& renderer) {
     drawLabel(renderer, "F");
   }
   if (SETTINGS.showSleepWallpaperPosition && g_total > 0 && g_position > 0) {
-    drawPositionBadge(renderer, g_position, g_total);
+    // Same boxed shape as the "F" mark, mirrored to the other corner.
+    char text[24];
+    snprintf(text, sizeof(text), "%lu / %lu", static_cast<unsigned long>(g_position),
+             static_cast<unsigned long>(g_total));
+    drawLabel(renderer, text, Corner::BottomRight);
   }
 }

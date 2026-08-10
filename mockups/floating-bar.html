@@ -1,0 +1,197 @@
+<h1>lector — "Floating Bar" (v2: small margin)</h1>
+<p class="sub">Fixed from v1: the gap was far too wide. Now it is a small margin, just enough to lift the bar
+off the frame. Every screen below is drawn at true device scale (800 × 480), so the gaps you see are the
+real gaps. Under each one there is a 4× zoom of the top-left corner, because a few pixels are hard to
+judge at true size.</p>
+
+<h2 class="sec">Pick a margin</h2>
+
+<div class="grid">
+
+  <figure>
+    <figcaption><b>A — Today (flush)</b><br><span>margin 0 · bar welded to the frame</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen">
+      <div class="bar" style="--m:0px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+      <div class="status"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+    </div></div></div>
+    <div class="zoomrow"><div class="zoom"><div class="zscreen"><div class="zbar" style="--m:0px"></div></div></div><span>4× corner</span></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>B — margin 4 px</b><br><span>barely lifted, very subtle</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen">
+      <div class="bar" style="--m:4px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+      <div class="status"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+    </div></div></div>
+    <div class="zoomrow"><div class="zoom"><div class="zscreen"><div class="zbar" style="--m:4px"></div></div></div><span>4× corner</span></div>
+  </figure>
+
+  <figure class="pick">
+    <figcaption><b>C — margin 6 px</b> <em>Zidden recommends</em><br><span>clearly floating, still tight to the frame</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen">
+      <div class="bar" style="--m:6px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+      <div class="status"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+    </div></div></div>
+    <div class="zoomrow"><div class="zoom"><div class="zscreen"><div class="zbar" style="--m:6px"></div></div></div><span>4× corner</span></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>D — margin 10 px</b><br><span>the most it can take before it drifts</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen">
+      <div class="bar" style="--m:10px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+      <div class="status"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+    </div></div></div>
+    <div class="zoomrow"><div class="zoom"><div class="zscreen"><div class="zbar" style="--m:10px"></div></div></div><span>4× corner</span></div>
+  </figure>
+
+</div>
+
+<p class="note">v1 used 18 px, shown here for contrast only — this is the one you rejected:</p>
+<div class="dev narrow"><div class="scaler"><div class="screen">
+  <div class="bar" style="--m:18px;--t:6px"><i style="width:62%"></i></div>
+  <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+  <div class="status"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+</div></div></div>
+
+<h2 class="sec">The outline, now its own setting</h2>
+<p class="sub2">Two independent switches. <b>Floating Bar</b> lifts the bar off the frame. <b>Bar Outline</b>
+draws a thin frame around the whole track so the empty part is visible too. Either one works without the
+other, so all four combinations are valid.</p>
+
+<div class="grid four">
+  <figure>
+    <figcaption><b>Floating off · Outline off</b><br><span>exactly today</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen short">
+      <div class="bar" style="--m:0px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p></div>
+    </div></div></div>
+  </figure>
+  <figure>
+    <figcaption><b>Floating off · Outline on</b><br><span>full-width track, still on the frame</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen short">
+      <div class="bar outline" style="--m:0px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p></div>
+    </div></div></div>
+  </figure>
+  <figure>
+    <figcaption><b>Floating on · Outline off</b><br><span>lifted, only the filled part shows</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen short">
+      <div class="bar" style="--m:6px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p></div>
+    </div></div></div>
+  </figure>
+  <figure class="pick">
+    <figcaption><b>Floating on · Outline on</b><br><span>a lifted pill with a visible track</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen short">
+      <div class="bar outline" style="--m:6px;--t:6px"><i style="width:62%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p></div>
+    </div></div></div>
+  </figure>
+</div>
+
+<h2 class="sec">Bottom edge and two stacked bars</h2>
+<div class="grid two">
+  <figure>
+    <figcaption><b>Floating at the bottom</b><br><span>same margin, mirrored</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen">
+      <div class="status top"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+      <div class="bar outline bottom" style="--m:6px;--t:6px"><i style="width:62%"></i></div>
+    </div></div></div>
+  </figure>
+  <figure>
+    <figcaption><b>Book bar + chapter bar</b><br><span>margin outside, small gap between them</span></figcaption>
+    <div class="dev"><div class="scaler"><div class="screen">
+      <div class="bar outline" style="--m:6px;--t:6px"><i style="width:62%"></i></div>
+      <div class="bar outline" style="--m:6px;--t:6px;--gap:3px"><i style="width:24%"></i></div>
+      <div class="txt"><p>The morning came in slow and grey, and the</p><p>harbour held its boats like a hand holding</p><p>coins. She counted them twice, then a third</p><p>time, and still the number refused to settle.</p></div>
+      <div class="status"><span>Battery 82%</span><span>Chapter Four</span><span>3/40</span></div>
+    </div></div></div>
+  </figure>
+</div>
+
+<div class="rule">
+  <h2>The rule</h2>
+  <p><b>One small margin, used three times.</b> The bar moves in from its outer edge by that amount, and both
+  ends move in from the left and right sides by the same amount. Nothing else changes: same thickness
+  setting, same top-or-bottom choice, same fill direction, same space reserved for the reading text.</p>
+  <p class="note">Recommended value: <b>6 pixels</b> (option C). Small enough to read as a detail, big enough
+  that the gap survives the e-ink panel's edge, where a 1 or 2 pixel gap can disappear entirely.</p>
+</div>
+
+<style>
+  :root {
+    --ink:#16181d; --paper:#fff; --muted:#5d6470; --line:#d9dde4; --panel:#f4f6f9;
+    --epd:#f7f7f4; --epdink:#1b1b1b; --accent:#2f6df6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --ink:#e7eaef; --paper:#14161a; --muted:#99a1ad; --line:#2a2f38; --panel:#1b1e24;
+            --epd:#e8e8e4; --epdink:#17171a; --accent:#7aa2ff; }
+  }
+  :root[data-theme="dark"] {
+    --ink:#e7eaef; --paper:#14161a; --muted:#99a1ad; --line:#2a2f38; --panel:#1b1e24;
+    --epd:#e8e8e4; --epdink:#17171a; --accent:#7aa2ff;
+  }
+  :root[data-theme="light"] {
+    --ink:#16181d; --paper:#fff; --muted:#5d6470; --line:#d9dde4; --panel:#f4f6f9;
+    --epd:#f7f7f4; --epdink:#1b1b1b; --accent:#2f6df6;
+  }
+
+  body { margin:0 auto; padding:32px 18px 64px; max-width:1100px; background:var(--paper); color:var(--ink);
+         font:15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  h1 { font-size:24px; margin:0 0 8px; letter-spacing:-0.01em; }
+  h2 { font-size:17px; margin:0 0 8px; }
+  .sec { margin:38px 0 14px; padding-top:14px; border-top:1px solid var(--line); }
+  .sub { color:var(--muted); margin:0 0 22px; max-width:70ch; }
+  .sub2 { color:var(--muted); margin:0 0 18px; max-width:74ch; font-size:14px; }
+  .note { color:var(--muted); font-size:13.5px; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(300px,1fr)); gap:24px; }
+  .grid.four { grid-template-columns:repeat(auto-fit, minmax(250px,1fr)); }
+  .grid.two { grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); }
+  figure { margin:0; }
+  figcaption { font-size:13px; margin:0 0 10px; }
+  figcaption span { color:var(--muted); }
+  figcaption em { color:var(--accent); font-style:normal; font-weight:600; font-size:12px;
+                  border:1px solid currentColor; border-radius:99px; padding:1px 7px; margin-left:4px; }
+  .pick .dev { outline:2px solid var(--accent); outline-offset:2px; }
+
+  /* True device scale: inner box is 800x480 device px, scaled down to fit. */
+  .dev { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:9px; }
+  .dev.narrow { max-width:420px; }
+  .scaler { container-type:inline-size; }
+  .screen {
+    width:800px; height:480px; transform-origin:top left;
+    transform:scale(calc(100cqw / 800));
+    margin-bottom:calc((100cqw / 800) * 480 - 480px);
+    background:var(--epd); color:var(--epdink);
+    border:1px solid rgba(0,0,0,.28); box-sizing:border-box;
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .screen.short { height:300px; margin-bottom:calc((100cqw / 800) * 300 - 300px); }
+
+  /* --m = margin from edges (device px), --t = bar thickness */
+  .bar { height:var(--t); margin:var(--m) var(--m) 0; margin-top:calc(var(--m) + var(--gap, 0px)); box-sizing:border-box; }
+  .bar i { display:block; height:100%; background:var(--epdink); }
+  .bar.outline { box-shadow:inset 0 0 0 1px var(--epdink); }
+  .bar.bottom { margin:0 var(--m) var(--m); margin-top:auto; }
+
+  .txt { flex:1; padding:16px 22px 8px; font-size:19px; line-height:1.6; }
+  .txt p { margin:0 0 6px; }
+  .status { display:flex; justify-content:space-between; gap:10px; padding:0 20px 10px; font-size:15px; opacity:.85; }
+  .status.top { padding:10px 20px 0; }
+
+  /* 4x zoom of the top-left corner: 40x28 device px blown up */
+  .zoomrow { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .zoomrow span { font-size:12px; color:var(--muted); }
+  .zoom { width:160px; height:112px; overflow:hidden; border:1px solid var(--line); border-radius:6px; background:var(--panel); }
+  .zscreen {
+    width:40px; height:28px; transform:scale(4); transform-origin:top left;
+    background:var(--epd); box-sizing:border-box; border-top:1px solid rgba(0,0,0,.5); border-left:1px solid rgba(0,0,0,.5);
+  }
+  .zbar { height:6px; margin:var(--m) 0 0 var(--m); background:var(--epdink); }
+</style>

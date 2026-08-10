@@ -261,6 +261,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbBookBar = SB_EDGE_OFF;            // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_OFF;         // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;     // progress bar thickness slim/med/fat
+  // Lift the progress bars off the screen edge: one small margin applied to the
+  // outer edge and to both ends, so the bar reads as a floating pill instead of
+  // a strip welded to the frame. Position and thickness are unaffected.
+  uint8_t sbFloatingBar = 0;
+  // Outline the full length of the progress bar so the unfilled part of the
+  // track stays visible. Independent of sbFloatingBar; all four combinations
+  // are valid.
+  uint8_t sbBarOutline = 0;
   // Off / Slim / Medium / Fat. Only consulted while the status bar is hidden, where it
   // keeps the configured Book Bar / Chapter Bar edges drawing at its own thickness.
   // Off (the default) is the old behaviour: hiding the bar hides its progress bars too.
@@ -588,6 +596,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // sbBarThickness, or the reserved band and the drawn bar disagree and the bar
   // paints over the reading text.
   bool progressBarsVisible() const { return statusBarEnabled() || sbOffBar != SB_OFFBAR_OFF; }
+  // Gap between a floating progress bar and the screen edge, in pixels. Applied
+  // to the outer edge and to both ends. Six survives the panel's own edge while
+  // still reading as a detail rather than a drift. Every site that draws OR
+  // reserves space for a bar must add it, or the two disagree and the bar paints
+  // over the reading text.
+  static constexpr int SB_FLOATING_BAR_MARGIN_PX = 6;
+  int floatingBarMarginPx() const { return sbFloatingBar ? SB_FLOATING_BAR_MARGIN_PX : 0; }
   uint8_t activeBarThickness() const {
     if (statusBarEnabled() || sbOffBar == SB_OFFBAR_OFF) return sbBarThickness;
     return static_cast<uint8_t>(sbOffBar - 1);  // Slim/Medium/Fat -> 0/1/2
