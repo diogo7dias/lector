@@ -232,6 +232,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Draw a small "F" badge instead, for favorites only. Ignored when
   // showSleepImageFilename is on, which already marks favorites.
   uint8_t showSleepFavoriteBadge = 0;
+  // Draw "position / total" with a progress bar in the bottom-right corner of
+  // the sleep screen, showing how far the wallpaper rotation is through its
+  // current loop. Only drawn for index picks — the jump-pick fallback has no
+  // position to report.
+  uint8_t showSleepWallpaperPosition = 0;
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.

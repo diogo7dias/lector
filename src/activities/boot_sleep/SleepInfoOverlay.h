@@ -1,14 +1,18 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 class GfxRenderer;
 
-// Draws the optional sleep-screen info overlay in the bottom-left corner:
-//  - showSleepImageFilename ON  -> the wallpaper's (favorite-suffix-stripped)
-//    filename in a filled box.
-//  - else showSleepFavoriteBadge ON and the file is a favorite -> a small "F" box.
-// No-op when neither applies or no wallpaper is in scope.
+// Draws the optional sleep-screen info overlays:
+//  - bottom-left: showSleepImageFilename ON -> the wallpaper's
+//    (favorite-suffix-stripped) filename in a filled box; else
+//    showSleepFavoriteBadge ON and the file is a favorite -> a small "F" box.
+//  - bottom-right: showSleepWallpaperPosition ON and the scope carries a
+//    rotation position -> "position / total" with a progress bar, showing how
+//    far the wallpaper line is through its current loop.
+// No-op when nothing applies or no wallpaper is in scope.
 //
 // Signature matches renderPxcSleepScreen's overlay hook, and it must be called
 // once per render pass (BW base + LSB + MSB) so it composites solid, mirroring
@@ -22,7 +26,11 @@ void drawSleepInfoOverlay(GfxRenderer& renderer);
 // a later screen. Not reentrant: one sleep render is in flight at a time.
 class SleepInfoOverlayScope {
  public:
-  explicit SleepInfoOverlayScope(const std::string& sourcePath);
+  // `position`/`total` describe the rotation line ("this is wallpaper N of M
+  // this loop"); 0/0 means unknown (fixed sleep file, jump-pick fallback) and
+  // suppresses the position badge. They ride in the scope because the overlay
+  // hook is a bare function pointer with no context parameter.
+  explicit SleepInfoOverlayScope(const std::string& sourcePath, uint32_t position = 0, uint32_t total = 0);
   ~SleepInfoOverlayScope();
 
   SleepInfoOverlayScope(const SleepInfoOverlayScope&) = delete;

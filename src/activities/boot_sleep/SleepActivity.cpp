@@ -402,6 +402,10 @@ void SleepActivity::renderCustomSleepScreen() const {
     // slot; no folder scan. Falls through to the jump pick when the index is
     // absent, built for the other folder, or declared stale.
     bool pickedFromIndex = false;
+    // Rotation line position of the picked wallpaper, for the optional
+    // bottom-right badge. 0/0 = unknown (jump pick, pause hold), badge hidden.
+    uint32_t linePosition = 0;
+    uint32_t lineTotal = 0;
     if (chosen.empty() && !APP_STATE.sleepIndexNeedsRebuild) {
       namespace windex = crosspoint::sleep::windex;
       const uint32_t indexStartMs = millis();
@@ -436,6 +440,13 @@ void SleepActivity::renderCustomSleepScreen() const {
         } else if (!result.basename.empty()) {
           chosen = std::move(result.basename);
           pickedFromIndex = true;
+          // Served-this-loop count, from the post-advance state: cursor.position
+          // lap picks plus the drained part of the fresh region (fresh records
+          // start at seededCount). 0 only right after a wrap, which means the
+          // pick that COMPLETED the loop — show it as total/total, not 0.
+          lineTotal = static_cast<uint32_t>(reader.recordCount());
+          const uint32_t served = queueState.cursor.position + (queueState.freshNext - queueState.cursor.seededCount);
+          linePosition = served == 0 || served > lineTotal ? lineTotal : served;
           LOG_INF("SLP", "index pick in %ums", static_cast<unsigned>(millis() - indexStartMs));
         }
       }
@@ -496,7 +507,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       const auto filename = std::string(sleepDir) + "/" + chosen;
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       delay(100);
-      const SleepInfoOverlayScope overlayScope(filename);
+      const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
       if (hasPxcExtension(chosen)) {
         if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
           APP_STATE.lastSleepWallpaperPath = filename;

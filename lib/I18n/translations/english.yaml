@@ -592,6 +592,7 @@ STR_RECOVERY_MODE_HINT: "Place firmware.bin on SD card root and select it"
 
 STR_SHOW_SLEEP_IMAGE_FILENAME: "Show Wallpaper Name"
 STR_SHOW_SLEEP_FAVORITE_BADGE: "Show Favorite Badge"
+STR_SHOW_SLEEP_WALLPAPER_POSITION: "Show Wallpaper Position"
 STR_FAV: "Fav"
 STR_UNFAV: "Unfav"
 STR_SLEEP_MOVE_TO_PAUSE: "Pause"

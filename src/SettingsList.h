@@ -224,6 +224,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "wakeStraightToBook", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
                             "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY),
+        SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
+                            "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_PAUSE_WALLPAPER_ROTATION, &CrossPointSettings::wallpaperRotationPaused,
                             "wallpaperRotationPaused", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
