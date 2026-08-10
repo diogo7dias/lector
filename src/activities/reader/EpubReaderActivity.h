@@ -372,6 +372,7 @@ class EpubReaderActivity final : public Activity {
     return SETTINGS.doubleClickPowerFunction != CrossPointSettings::LP_MENU_DISABLED;
   }
   void runPowerDoubleClick() override;
+  bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

@@ -3,6 +3,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -127,6 +128,11 @@ std::string pickWallpaperByJump(HalFile& dir) {
 
 void SleepActivity::onEnter() {
   Activity::onEnter();
+
+  // Sleep screens always use normal polarity. This activity draws directly
+  // from onEnter (outside ActivityManager's per-render polarity resolution),
+  // so clear any inversion left over from a night-mode reader render.
+  display.setInverted(false);
 
   // Run and land any queued favourite rename before the folder is touched and before the
   // state below is written. The renames DELIBERATELY start here, not at the press: on a
