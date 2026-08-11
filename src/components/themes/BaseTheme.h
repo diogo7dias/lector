@@ -243,8 +243,13 @@ class BaseTheme {
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
   Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
+  // leftAlign left-aligns the rows instead of centring them, so a caller whose labels carry
+  // a status marker keeps that marker in a fixed column rather than letting it shunt each
+  // label sideways. Text is 1-bit on this panel, so an unavailable row is marked in the
+  // label the caller supplies, not by the painter. Defaults to the centred look every
+  // other caller in the firmware uses.
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                               int selectedIndex) const;
+                               int selectedIndex, bool leftAlign = false) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the

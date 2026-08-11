@@ -1,6 +1,7 @@
 #pragma once
 #include <I18n.h>
 
+#include <algorithm>
 #include <functional>
 #include <string>
 #include <vector>
@@ -21,15 +22,13 @@ enum class SettingAction {
   Network,
   ClearCache,
   CleanStorage,
-  PauseFavoriteWallpapers,
-  PauseOtherWallpapers,
-  RestorePausedWallpapers,
   ShuffleWallpapers,
   CheckForUpdates,
   SdFirmwareUpdate,
   Language,
   DownloadFonts,
   TextSettings,
+  PopupItems,
 };
 
 struct SettingInfo {
@@ -52,6 +51,17 @@ struct SettingInfo {
   bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
   bool inTextSettings = false;           // Surfaced in the Text Settings screen; hidden from the flat Reader list
 
+  // Enum values that are no longer offered but must keep their slot. ENUM settings persist
+  // by index, so a retired option cannot simply be deleted from enumValues without
+  // reinterpreting every value after it. Listing it here drops it from the picker while
+  // enumValues stays index-aligned with the enum. Stored values are migrated away in
+  // CrossPointSettings::fromJson, so a hidden value should never be the current one.
+  std::vector<uint8_t> hiddenEnumValues;
+
+  bool isEnumValueHidden(const uint8_t value) const {
+    return std::find(hiddenEnumValues.begin(), hiddenEnumValues.end(), value) != hiddenEnumValues.end();
+  }
+
   // Direct char[] string fields (for settings stored in CrossPointSettings)
   size_t stringOffset = 0;
   size_t stringMaxLen = 0;
@@ -69,6 +79,11 @@ struct SettingInfo {
 
   SettingInfo& withTextSettings() {
     inTextSettings = true;
+    return *this;
+  }
+
+  SettingInfo& withHiddenEnumValues(std::vector<uint8_t> values) {
+    hiddenEnumValues = std::move(values);
     return *this;
   }
 

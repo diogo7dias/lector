@@ -43,23 +43,40 @@ class OptionPopup {
             std::function<void(int)> onSelect) {
     title = I18N.get(titleId);
     ownedStrings = options;
+    disabled.clear();
+    leftAligned = false;
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
     active = true;
   }
 
+  // Variant for lists whose rows are not all usable right now (the reader's Quick Menu).
+  // Disabled rows stay visible and keep their place — a row that vanished when a page had
+  // no footnote would move every row under it and break the muscle memory the pop-up
+  // exists to reward — but the cursor steps over them and Confirm cannot land on one.
+  //
+  // leftAlign lines up the rows so the disabled marker occupies a fixed column instead of
+  // shunting the label sideways on each row that carries it.
+  void showWithDisabled(StrId titleId, const std::vector<std::string>& options, const std::vector<bool>& disabledRows,
+                        int currentIndex, bool leftAlign, std::function<void(int)> onSelect) {
+    show(titleId, options, currentIndex, std::move(onSelect));
+    disabled = disabledRows;
+    leftAligned = leftAlign;
+    // Never open on a row Confirm would refuse.
+    if (isDisabled(selectedIndex)) selectedIndex = nextEnabled(selectedIndex, 1);
+  }
+
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return false;
 
-    const int count = static_cast<int>(ownedStrings.size());
     int tx = 0;
     int ty = 0;
     if (input.wasScreenTouchDown(tx, ty)) {
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
-          if (selectedIndex != i) {
+          if (selectedIndex != i && !isDisabled(i)) {
             selectedIndex = i;
             requestUpdate();
           }
@@ -72,6 +89,9 @@ class OptionPopup {
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
+          // A tap on a disabled row is neither a choice nor a dismissal: it lands
+          // inside the dialog, so the pop-up simply stays open.
+          if (isDisabled(i)) return true;
           selectedIndex = i;
           active = false;
           if (onSelectCallback) onSelectCallback(selectedIndex);
@@ -87,14 +107,21 @@ class OptionPopup {
     }
 
     if (input.wasPressed(MappedInputManager::Button::NavPrevious)) {
-      selectedIndex = (selectedIndex - 1 + count) % count;
+      selectedIndex = nextEnabled(selectedIndex, -1);
       requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::NavNext)) {
-      selectedIndex = (selectedIndex + 1) % count;
+      selectedIndex = nextEnabled(selectedIndex, 1);
       requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Confirm)) {
+      // Every row disabled: there is nothing to choose, so Confirm dismisses rather
+      // than firing an action the caller declared impossible.
+      if (isDisabled(selectedIndex)) {
+        active = false;
+        requestUpdate();
+        return true;
+      }
       active = false;
       if (onSelectCallback) onSelectCallback(selectedIndex);
       requestUpdate();
@@ -118,12 +145,29 @@ class OptionPopup {
 
   void render(const GfxRenderer& renderer) const {
     if (!active) return;
-    GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex);
+    GUI.drawOptionPopup(renderer, title.c_str(), ownedStrings, selectedIndex, leftAligned);
   }
 
   bool isActive() const { return active; }
 
  private:
+  bool isDisabled(const int index) const {
+    return index >= 0 && index < static_cast<int>(disabled.size()) && disabled[index];
+  }
+
+  // Next selectable row in `step` direction, wrapping. Returns the starting index
+  // unchanged when every row is disabled, so a fully disabled pop-up cannot spin forever.
+  int nextEnabled(const int from, const int step) const {
+    const int count = static_cast<int>(ownedStrings.size());
+    if (count <= 0) return from;
+    int index = from;
+    for (int tried = 0; tried < count; tried++) {
+      index = (index + step + count) % count;
+      if (!isDisabled(index)) return index;
+    }
+    return from;
+  }
+
   struct Layout {
     Rect dialog{0, 0, 0, 0};
     std::vector<Rect> options;
@@ -185,6 +229,9 @@ class OptionPopup {
   bool active = false;
   std::string title;
   std::vector<std::string> ownedStrings;
+  // Empty when every row is selectable, which is every caller except the Quick Menu.
+  std::vector<bool> disabled;
+  bool leftAligned = false;
   int selectedIndex = 0;
   std::function<void(int)> onSelectCallback;
   mutable Layout layout;

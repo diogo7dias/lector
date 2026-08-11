@@ -4,6 +4,7 @@
 #include <Epub/Section.h>
 
 #include <optional>
+#include <vector>
 
 #include "BookmarkEntry.h"
 #include "EndOfBookOptions.h"
@@ -12,6 +13,7 @@
 #include "ReaderPrefs.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/SdStatsFiles.h"
 
@@ -149,6 +151,14 @@ class EpubReaderActivity final : public Activity {
   bool pendingDeleteBook = false;
   // Next-book suggestion menu for the End-of-Book screen
   EndOfBookOptions endOfBookOptions;
+  // Quick Menu: the pop-up a binding set to Menu Pop-up opens over the page. Owned by the
+  // reader rather than being its own activity so the page underneath is never repainted —
+  // the pop-up is drawn straight onto the framebuffer the page already occupies.
+  OptionPopup quickMenu;
+  // Parallel to quickMenu's rows: the binding value each row runs. The pop-up reports an
+  // index, and the row order depends on which items are ticked, so the mapping cannot be
+  // recomputed from the settings mask alone at callback time.
+  std::vector<uint8_t> quickMenuFunctions;
 
   // Back and Confirm are acted on at RELEASE here, while child screens (the Settings
   // family) close on PRESS. These pair each release with the press this activity saw, so
@@ -285,10 +295,17 @@ class EpubReaderActivity final : public Activity {
   void openDictionaryWordSelect();
   // Opens the Grab Quote word-range picker on the current page.
   void openQuoteGrab();
-  // Runs one of the CrossPointSettings::LONG_PRESS_MENU_FUNCTION actions. Shared by the
-  // long-press and double-click Confirm bindings so both offer the same behaviour.
-  // Returns true when the function actually ran.
+  // Runs one of the CrossPointSettings::LONG_PRESS_MENU_FUNCTION actions. Shared by all
+  // three bindings (long-press Confirm, hold inside the menu, double-click power) so each
+  // one offers exactly the same list. Returns true when the function actually ran.
   bool runBoundMenuFunction(uint8_t function);
+  // True when `function` could run right now: the page has a footnote, paragraph numbering
+  // is on, KOReader credentials exist, and so on. The Quick Menu marks the rest [X] rather
+  // than hiding them, so rows never move under the user's thumb.
+  bool boundMenuFunctionAvailable(uint8_t function) const;
+  // Opens the Quick Menu over the current page, listing the actions ticked into
+  // SETTINGS.popupItems. No-op when nothing is ticked.
+  void openQuickMenu();
   // Opens the Reading Stats screen for this book plus the all-books totals.
   void openReadingStats();
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
@@ -356,6 +373,12 @@ class EpubReaderActivity final : public Activity {
   // speed would only burn battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
+  // Arms the power double-click only when a function is actually bound to it, so the
+  // ~280 ms hold-back on a single power click is paid only by a reader that uses it.
+  bool wantsPowerDoubleClick() const override {
+    return SETTINGS.doubleClickPowerFunction != CrossPointSettings::LP_MENU_DISABLED;
+  }
+  void runPowerDoubleClick() override;
   bool handleForcedRefresh() override {
     {
       RenderLock lock(*this);

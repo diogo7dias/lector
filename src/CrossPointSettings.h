@@ -21,17 +21,22 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     CUSTOM = 2,
     COVER = 3,
     COVER_CUSTOM = 4,
+    // RETIRED: no longer offered in Settings, and fromJson() migrates a stored 5 to DARK.
+    // The slot stays so every value after it keeps its meaning; renderBlankSleepScreen()
+    // and its switch case stay too, so re-offering it is a one-line change.
     BLANK = 5,
     QUICK_RESUME = 6,
     // Appended at the end: the stored value is the persisted setting, so new faces
     // must never be inserted before an existing one.
     STATS_DASHBOARD = 7,
-    // Keeps the last reader page on the panel and draws a thin frame around it.
+    // RETIRED (2026-08-11, Diogo): kept the last reader page and drew a frame around it,
+    // except the frame never appeared on the device. All of its behaviour is deleted —
+    // the renderer, the frame-colour setting, and its branch in enterDeepSleep. The slot
+    // stays reserved so the values around it keep their meaning, and fromJson() migrates
+    // a stored 8 to DARK. Quick Resume on Timeout covers the "keep my page" case.
     FREEZE = 8,
     SLEEP_SCREEN_MODE_COUNT
   };
-  // Frame colour drawn around the screen in the FREEZE sleep mode.
-  enum SLEEP_FRAME_COLOR { SLEEP_FRAME_BLACK = 0, SLEEP_FRAME_WHITE = 1, SLEEP_FRAME_COLOR_COUNT };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -174,11 +179,38 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
     LP_MENU_GRAB_QUOTE = 4,
+    // Appended for the shared binding list (0.20). Order is frozen: the values
+    // below double as bit positions in popupItems, so reordering them would both
+    // shift saved bindings and silently re-tick a different set of pop-up rows.
+    LP_MENU_SELECT_CHAPTER = 5,
+    LP_MENU_GO_TO_PERCENT = 6,
+    LP_MENU_GO_TO_PARAGRAPH = 7,
+    LP_MENU_FOOTNOTES = 8,
+    LP_MENU_TEXT_SETTINGS = 9,
+    LP_MENU_READER_SETTINGS = 10,
+    LP_MENU_TOGGLE_STATUS_BAR = 11,
+    // Not an action: opens the pop-up built from popupItems. Always last, and it is
+    // the only value runBoundMenuFunction() refuses to run, so a pop-up cannot list
+    // itself and recurse.
+    LP_MENU_POPUP = 12,
+    // Holds the wallpaper the lock screen last showed, instead of picking a new one at
+    // the next sleep. Appended after LP_MENU_POPUP, so Menu Pop-up is no longer the last
+    // value even though it is still the only non-action one.
+    LP_MENU_WALLPAPER_HOLD = 13,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
-  // Hide battery percentage
-  enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
+  // Actions that may be ticked into the pop-up: every binding value except Disabled
+  // and Menu Pop-up itself. Used by the tick screen and by the pop-up builder, so
+  // both agree on the row order without either owning a second list.
+  static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
+      LP_MENU_KOSYNC,         LP_MENU_BOOKMARK,        LP_MENU_DICTIONARY,        LP_MENU_GRAB_QUOTE,
+      LP_MENU_SELECT_CHAPTER, LP_MENU_GO_TO_PERCENT,   LP_MENU_GO_TO_PARAGRAPH,   LP_MENU_FOOTNOTES,
+      LP_MENU_TEXT_SETTINGS,  LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
+
+  // Cap on ticked pop-up rows. OptionPopup does not scroll: it grows until it runs off
+  // the panel, and a pop-up you have to scroll is slower than the menu it replaces.
+  static constexpr uint8_t POPUP_ITEM_MAX = 8;
 
   // Page turn button long press behavior
   enum LONG_PRESS_BUTTON_BEHAVIOR {
@@ -195,6 +227,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum UI_THEME { LECTOR = 0 };
 
   // Image rendering in EPUB reader
+  // Images are always drawn. PLACEHOLDER (alt text only) and SUPPRESS were retired
+  // 2026-08-11 (Diogo) and the Settings row went with them.
+  //
+  // The values, the ReaderRenderSpec field and the parser branches that read it all stay.
+  // spec.imageRendering is serialised into every cached section and compared on load, so
+  // deleting it would change the section file format and force every book on the card to
+  // re-index. Both spec builders now hard-set IMAGES_DISPLAY instead, which reaches stored
+  // per-book overrides and reader presets as well as the global value — and which makes a
+  // section cached under the old placeholder layout mismatch and rebuild, but only for the
+  // books that actually used it.
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
   // Paragraph numbering mode. The value is per-book (ReaderPrefs::paragraphNumbering);
@@ -240,6 +282,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.
+  //
+  // No longer a Display row: it is reached from the in-book menu and from any binding set
+  // to Hold Wallpaper, both of which act on the wallpaper the lock screen actually showed.
+  // With no SettingsList entry the generic loop cannot carry it, so it is saved and loaded
+  // by hand in toJson/fromJson.
   uint8_t wallpaperRotationPaused = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
@@ -375,8 +422,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
-  // Hide battery percentage
-  uint8_t hideBatteryPercentage = HIDE_NEVER;
   // Long-press page turn button behavior
   uint8_t longPressButtonBehavior = OFF;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
@@ -388,6 +433,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // needs. Costs nothing when Disabled, and nothing when set: the menu acts on release,
   // so a plain tap is unaffected either way.
   uint8_t menuHoldFunction = LP_MENU_DISABLED;
+  // Double-click of the power button while reading an EPUB. Shares the same
+  // LONG_PRESS_MENU_FUNCTION list as the two bindings above.
+  //
+  // Unlike those two this one is not free when set: nothing can tell a single click
+  // from the first half of a double click until the window closes, so arming it delays
+  // every single power click by DoubleClickDetector::WINDOW_MS. That cost is confined
+  // to the EPUB reader (main.cpp only arms the detector there) and disappears entirely
+  // at LP_MENU_DISABLED, which is why Disabled is the default.
+  uint8_t doubleClickPowerFunction = LP_MENU_DISABLED;
+  // Which actions the Menu Pop-up lists, as a bitmask indexed by LONG_PRESS_MENU_FUNCTION
+  // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
+  // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
+  // At most POPUP_ITEM_MAX bits are ever set; the tick screen enforces it.
+  uint16_t popupItems = 0;
   // UI Theme
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
@@ -453,9 +512,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
   // so it can never wedge boot.
   uint8_t openRandomRecentOnBoot = 0;
-  // Colour of the FREEZE sleep face's border. Black reads on a light page, white on a
-  // dark one, and the frozen page can be either.
-  uint8_t sleepFrameColor = SLEEP_FRAME_BLACK;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the
@@ -490,6 +546,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MIN_READING_STATS_IDLE_UNITS = 3;
   static constexpr uint8_t MAX_READING_STATS_IDLE_UNITS = 60;
   uint16_t readingStatsIdleSeconds() const { return static_cast<uint16_t>(readingStatsIdleUnits) * 10u; }
+  // Retired: no Settings row, so nothing persists or changes it. Kept as the source the
+  // per-book ReaderPrefs snapshot copies, so that field starts at IMAGES_DISPLAY too.
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
@@ -513,6 +571,28 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint16_t getPowerButtonDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 200;
   }
+  // Pop-up membership. The mask layout has exactly one owner: these three.
+  bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }
+  uint8_t popupItemCount() const {
+    uint8_t n = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
+      if (isPopupItem(fn)) n++;
+    }
+    return n;
+  }
+  // Refuses to tick past POPUP_ITEM_MAX and reports whether the mask actually moved,
+  // so the tick screen can say "full" instead of silently doing nothing.
+  bool setPopupItem(const uint8_t function, const bool on) {
+    if (isPopupItem(function) == on) return false;
+    if (on && popupItemCount() >= POPUP_ITEM_MAX) return false;
+    if (on) {
+      popupItems |= static_cast<uint16_t>(1u << function);
+    } else {
+      popupItems &= static_cast<uint16_t>(~(1u << function));
+    }
+    return true;
+  }
+
   int getReaderFontId() const;
   // Font id for the TXT reader, resolved from the txt* fields above rather than the
   // EPUB reader selection, so changing one never moves the other.

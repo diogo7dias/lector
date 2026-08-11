@@ -316,6 +316,12 @@ bool MappedInputManager::wasPressed(const Button button) const {
 
 bool MappedInputManager::wasReleased(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
+  // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
+  // back for one window and then replays it here, so every consumer keeps its existing code.
+  if (button == Button::Power) {
+    if (powerReleaseInjected) return true;
+    if (powerReleaseSuppressed) return false;
+  }
   return mapButton(button, &HalGPIO::wasReleased);
 }
 

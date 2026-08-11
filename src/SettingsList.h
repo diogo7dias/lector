@@ -16,7 +16,21 @@
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
+#include "util/BoundMenuLabels.h"
 #include "util/DictionaryRegistry.h"
+
+// Labels for the three bindings that share LONG_PRESS_MENU_FUNCTION (Long-press Menu,
+// Menu Hold, Double-Click Power). ENUM settings persist by INDEX, so entry i MUST be the
+// label for enum value i; walking the values in order is what guarantees that, rather than
+// a hand-written list that could be reordered and silently reinterpret every saved binding.
+inline std::vector<StrId> boundFunctionLabels() {
+  std::vector<StrId> labels;
+  labels.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
+  for (uint8_t value = 0; value < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT; value++) {
+    labels.push_back(boundMenuActionLabel(value));
+  }
+  return labels;
+}
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -199,6 +213,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
     sleepScreenValues[CrossPointSettings::COVER] = StrId::STR_COVER;
     sleepScreenValues[CrossPointSettings::COVER_CUSTOM] = StrId::STR_COVER_CUSTOM;
+    // BLANK and FREEZE are retired (see SLEEP_SCREEN_MODE). Their labels stay so the array
+    // remains index-aligned with the enum — the value is what persists — but both are
+    // listed in withHiddenEnumValues() below and never reach the picker.
     sleepScreenValues[CrossPointSettings::BLANK] = StrId::STR_NONE_OPT;
     sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
     sleepScreenValues[CrossPointSettings::STATS_DASHBOARD] = StrId::STR_STATS_DASHBOARD;
@@ -207,9 +224,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     std::vector<SettingInfo> v = {
         // --- Display ---
         SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
-                          "sleepScreen", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SLEEP_FRAME_COLOR, &CrossPointSettings::sleepFrameColor,
-                          {StrId::STR_BLACK, StrId::STR_WHITE}, "sleepFrameColor", StrId::STR_CAT_DISPLAY),
+                          "sleepScreen", StrId::STR_CAT_DISPLAY)
+            .withHiddenEnumValues({CrossPointSettings::BLANK, CrossPointSettings::FREEZE}),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                           {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
@@ -226,13 +242,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
                             "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Toggle(StrId::STR_PAUSE_WALLPAPER_ROTATION, &CrossPointSettings::wallpaperRotationPaused,
-                            "wallpaperRotationPaused", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
                           {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
-                          StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_HIDE_BATTERY, &CrossPointSettings::hideBatteryPercentage,
-                          {StrId::STR_NEVER, StrId::STR_IN_READER, StrId::STR_ALWAYS}, "hideBatteryPercentage",
                           StrId::STR_CAT_DISPLAY),
         // Keeps this fork's extra "Never" option, which upstream does not have.
         SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
@@ -337,9 +348,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
-        SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
-                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
-                          "imageRendering", StrId::STR_CAT_READER),
         // Defaults for the three per-book looks that used to be reachable only from the
         // in-book menu. Changing one here sets what the NEXT freshly opened book starts
         // with; a book that already has its own override keeps its own value, and the
@@ -364,14 +372,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                          {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY,
-                           StrId::STR_GRAB_QUOTE},
+        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction, boundFunctionLabels(),
                           "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction,
-                          {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY,
-                           StrId::STR_GRAB_QUOTE},
+        SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
                           "menuHoldFunction", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
+                          boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(
             StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},

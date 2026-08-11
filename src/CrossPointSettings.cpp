@@ -95,6 +95,11 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  // Menu Pop-up membership — a uint16_t mask, so the generic uint8_t loop cannot carry it.
+  doc["popupItems"] = popupItems;
+  // Hold Wallpaper — no longer a SettingsList row (it lives in the in-book menu), so the
+  // generic loop no longer sees it.
+  doc["wallpaperRotationPaused"] = wallpaperRotationPaused;
   // Marks the one-time 0.8.2 reading-defaults migration in fromJson as done.
   doc["readingDefaults0820"] = true;
   // TXT reader font — set from the in-book TXT popup, not in SettingsList.
@@ -194,6 +199,37 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
 
+  // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
+  wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
+
+  // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, and FREEZE has
+  // no behaviour left at all, so a settings file still naming one would sleep into nothing.
+  // Fold both to the default face and rewrite the file so the migration happens once.
+  if (sleepScreen == BLANK || sleepScreen == FREEZE) {
+    sleepScreen = DARK;
+    needsResave = true;
+  }
+
+  // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
+  // future-version settings file cannot set a bit no builder knows how to draw, and
+  // trimmed to POPUP_ITEM_MAX so a file claiming twenty rows cannot build a pop-up
+  // taller than the panel.
+  {
+    uint16_t storedPopupItems = doc["popupItems"] | (uint16_t)0;
+    uint16_t validMask = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) validMask |= static_cast<uint16_t>(1u << fn);
+    storedPopupItems &= validMask;
+    popupItems = 0;
+    uint8_t kept = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
+      if (!((storedPopupItems >> fn) & 1u)) continue;
+      if (kept >= POPUP_ITEM_MAX) break;
+      popupItems |= static_cast<uint16_t>(1u << fn);
+      kept++;
+    }
+    if (popupItems != storedPopupItems) needsResave = true;
+  }
+
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and
   // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is
   // renderable at those sizes, so the range is unambiguous and folds to the
@@ -273,7 +309,10 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.embeddedStyle = embeddedStyle != 0;
-  spec.imageRendering = imageRendering;
+  // Hard-set, not read: see the note on IMAGE_RENDERING. This is the choke point that
+  // makes a stored placeholder or suppress value in a per-book override or a reader preset
+  // irrelevant without touching the section file format.
+  spec.imageRendering = IMAGES_DISPLAY;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
   spec.guideDotsEnabled = guideDotsEnabled != 0;
   spec.firstLineIndentMode = firstLineIndentMode;
@@ -378,7 +417,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = prefs.hyphenationEnabled != 0;
   spec.embeddedStyle = prefs.embeddedStyle != 0;
-  spec.imageRendering = prefs.imageRendering;
+  spec.imageRendering = IMAGES_DISPLAY;  // see the matching note in the global builder above
   spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
   spec.guideDotsEnabled = prefs.guideDotsEnabled != 0;
   spec.firstLineIndentMode = prefs.firstLineIndentMode;

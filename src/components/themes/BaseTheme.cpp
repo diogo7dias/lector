@@ -474,8 +474,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   renderer.fillRect(rect.x + rect.width - clusterWidth, rect.y, clusterWidth,
                     renderer.getLineHeight(batteryPercentFontId) + 10, false);
 
-  const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+  // The percentage is always drawn: the setting that used to hide it was removed, and its
+  // default was "never hide", so this is the behaviour every existing device already had.
+  constexpr bool showBatteryPercentage = true;
   // Position icon at right edge, drawBatteryRight will place text to the left
   const int batteryX = rect.x + rect.width - batteryRightPadding - BaseMetrics::values.batteryWidth;
   drawBatteryRight(renderer,
@@ -1159,7 +1160,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int sepGap = 4;   // even gap each side of the bar
   const int sepBarW = 1;  // bar thickness
   const int sepW = sepGap + sepBarW + sepGap;
-  const bool showBattery = SETTINGS.hideBatteryPercentage == CrossPointSettings::HIDE_NEVER;
+  // Always shown — see the note on showBatteryPercentage in drawHeader().
+  constexpr bool showBattery = true;
 
   // --- Build the bar on the STACK: one fixed segment array per anchor. No heap in
   // this render path (it runs on the lock-holding, stack-tight render task). Short
@@ -1343,7 +1345,7 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 }
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                                int selectedIndex) const {
+                                int selectedIndex, bool leftAlign) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -1430,7 +1432,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
     const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
     const int textY = itemY + (rowHeight - optionLineHeight) / 2;
-    const int textX = itemRectX + (itemRectW - textW) / 2;
+    const int textX = leftAlign ? itemRectX + selectionHPadding : itemRectX + (itemRectW - textW) / 2;
     // Unselected items: text is dark (invert=true means draw on white bg).
     // Selected on dark bg: text must be white (invert=false).
     // Selected on light bg: text stays dark (invert=true).

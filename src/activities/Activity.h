@@ -46,6 +46,12 @@ class Activity {
   virtual bool isReaderActivity() const { return false; }
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
+
+  // Power double-click. Only the EPUB reader answers these, and only while it is the
+  // activity on top: main.cpp arms the detector from wantsPowerDoubleClick() alone, so a
+  // child screen opened from the book (dictionary, chapter list) never pays the delay.
+  virtual bool wantsPowerDoubleClick() const { return false; }
+  virtual void runPowerDoubleClick() {}
   virtual bool isHomeActivity() const { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
 
