@@ -353,6 +353,11 @@ void setup() {
 #endif
 
   HalSystem::begin();
+  // checkPanic() clears the watchdog capture marker after a successful SD dump,
+  // so isRebootFromPanic() stops answering true partway through setup(). Latch
+  // the boot classification here, before that happens, and use it everywhere
+  // below.
+  const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
   // Bound the target range too — RTC_NOINIT memory is uninitialized on cold boot.
@@ -484,9 +489,8 @@ void setup() {
   // advertises a book it will not open. Back-held and readerActivityLoadCount are the
   // routing block's own escape hatches and are re-checked there.
   std::string randomBookPath;
-  if (SETTINGS.openRandomRecentOnBoot && !recoveryFirmwareMode && !HalSystem::isRebootFromPanic() &&
-      resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
-      !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+  if (SETTINGS.openRandomRecentOnBoot && !recoveryFirmwareMode && !rebootedFromPanic && resume != BootResume::Silent &&
+      APP_STATE.readerActivityLoadCount == 0 && !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
     randomBookPath = pickRandomRecentBookPath();
     if (!randomBookPath.empty()) setUnlockBannerBookPath(randomBookPath);
   }
@@ -614,7 +618,7 @@ void setup() {
     const esp_reset_reason_t rst = esp_reset_reason();
     const bool wantsWallpaperIndex = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
                                      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
-    if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !HalSystem::isRebootFromPanic() && wantsWallpaperIndex) {
+    if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !rebootedFromPanic && wantsWallpaperIndex) {
       if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild ||
           (rst != ESP_RST_SW && crosspoint::sleep::windex::folderTailMoved())) {
         crosspoint::sleep::windex::reconcileAtColdBoot(renderer);
@@ -626,7 +630,7 @@ void setup() {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
-  } else if (HalSystem::isRebootFromPanic()) {
+  } else if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
     activityManager.goToCrashReport();
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&

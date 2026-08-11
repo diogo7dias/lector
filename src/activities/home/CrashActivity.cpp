@@ -14,7 +14,10 @@ void CrashActivity::onEnter() {
   if (panicMessage.empty()) {
     panicMessage = tr(STR_CRASH_NO_REASON);
   }
-  HalSystem::clearPanic();
+  // Deliberately no clearPanic() here. checkPanic() already marks the capture
+  // consumed once the report reached the card, and the next ordinary boot
+  // clears the rest in begin(). Clearing it here would also drop a capture
+  // whose SD write failed, which is the one case worth keeping.
 
   requestUpdateAndWait();
 }
