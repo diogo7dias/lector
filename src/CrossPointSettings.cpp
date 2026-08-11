@@ -97,6 +97,9 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   }
   // Menu Pop-up membership — a uint16_t mask, so the generic uint8_t loop cannot carry it.
   doc["popupItems"] = popupItems;
+  // Hold Wallpaper — no longer a SettingsList row (it lives in the in-book menu), so the
+  // generic loop no longer sees it.
+  doc["wallpaperRotationPaused"] = wallpaperRotationPaused;
   // Marks the one-time 0.8.2 reading-defaults migration in fromJson as done.
   doc["readingDefaults0820"] = true;
   // TXT reader font — set from the in-book TXT popup, not in SettingsList.
@@ -195,6 +198,17 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
+
+  // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
+  wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
+
+  // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, and FREEZE has
+  // no behaviour left at all, so a settings file still naming one would sleep into nothing.
+  // Fold both to the default face and rewrite the file so the migration happens once.
+  if (sleepScreen == BLANK || sleepScreen == FREEZE) {
+    sleepScreen = DARK;
+    needsResave = true;
+  }
 
   // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
   // future-version settings file cannot set a bit no builder knows how to draw, and

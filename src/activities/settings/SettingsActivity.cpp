@@ -249,9 +249,23 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (setting.enumValues.size() > 2) {
       const auto valuePtr = setting.valuePtr;
-      optionPopup.show(setting.nameId, setting.enumValues.data(), static_cast<int>(setting.enumValues.size()),
-                       currentValue, [this, valuePtr, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
-                         SETTINGS.*valuePtr = idx;
+      // Retired options keep their enum slot but leave the picker, so the popup runs on a
+      // filtered list and offeredValues maps a popup row back to the value it stands for.
+      std::vector<StrId> offeredLabels;
+      std::vector<uint8_t> offeredValues;
+      offeredLabels.reserve(setting.enumValues.size());
+      offeredValues.reserve(setting.enumValues.size());
+      int currentRow = 0;
+      for (uint8_t value = 0; value < static_cast<uint8_t>(setting.enumValues.size()); value++) {
+        if (setting.isEnumValueHidden(value)) continue;
+        if (value == currentValue) currentRow = static_cast<int>(offeredValues.size());
+        offeredLabels.push_back(setting.enumValues[value]);
+        offeredValues.push_back(value);
+      }
+      optionPopup.show(setting.nameId, offeredLabels.data(), static_cast<int>(offeredLabels.size()), currentRow,
+                       [this, valuePtr, offeredValues, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
+                         if (idx < 0 || idx >= static_cast<int>(offeredValues.size())) return;
+                         SETTINGS.*valuePtr = offeredValues[idx];
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
                          rebuildSettingsLists();
@@ -259,7 +273,16 @@ void SettingsActivity::toggleCurrentSetting() {
       requestUpdate();
       return;
     }
-    SETTINGS.*(setting.valuePtr) = (currentValue + 1) % static_cast<uint8_t>(setting.enumValues.size());
+    // Two-value settings cycle in place. The loop steps over hidden values for the same
+    // reason the picker skips them; it is bounded by the value count, so an enum whose
+    // every value is hidden simply stays where it is.
+    const auto valueCount = static_cast<uint8_t>(setting.enumValues.size());
+    uint8_t nextValue = currentValue;
+    for (uint8_t step = 0; step < valueCount; step++) {
+      nextValue = (nextValue + 1) % valueCount;
+      if (!setting.isEnumValueHidden(nextValue)) break;
+    }
+    SETTINGS.*(setting.valuePtr) = nextValue;
   } else if (setting.type == SettingType::ENUM && setting.valueGetter && setting.valueSetter) {
     const uint8_t totalValues = setting.enumStringValues.empty()
                                     ? static_cast<uint8_t>(setting.enumValues.size())

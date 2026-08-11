@@ -213,6 +213,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
     sleepScreenValues[CrossPointSettings::COVER] = StrId::STR_COVER;
     sleepScreenValues[CrossPointSettings::COVER_CUSTOM] = StrId::STR_COVER_CUSTOM;
+    // BLANK and FREEZE are retired (see SLEEP_SCREEN_MODE). Their labels stay so the array
+    // remains index-aligned with the enum — the value is what persists — but both are
+    // listed in withHiddenEnumValues() below and never reach the picker.
     sleepScreenValues[CrossPointSettings::BLANK] = StrId::STR_NONE_OPT;
     sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
     sleepScreenValues[CrossPointSettings::STATS_DASHBOARD] = StrId::STR_STATS_DASHBOARD;
@@ -221,9 +224,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     std::vector<SettingInfo> v = {
         // --- Display ---
         SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
-                          "sleepScreen", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_SLEEP_FRAME_COLOR, &CrossPointSettings::sleepFrameColor,
-                          {StrId::STR_BLACK, StrId::STR_WHITE}, "sleepFrameColor", StrId::STR_CAT_DISPLAY),
+                          "sleepScreen", StrId::STR_CAT_DISPLAY)
+            .withHiddenEnumValues({CrossPointSettings::BLANK, CrossPointSettings::FREEZE}),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                           {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_SLEEP_COVER_FILTER, &CrossPointSettings::sleepScreenCoverFilter,
@@ -240,8 +242,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                             "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, &CrossPointSettings::showSleepWallpaperPosition,
                             "showSleepWallpaperPosition", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Toggle(StrId::STR_PAUSE_WALLPAPER_ROTATION, &CrossPointSettings::wallpaperRotationPaused,
-                            "wallpaperRotationPaused", StrId::STR_CAT_DISPLAY),
         SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
                           {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
                           StrId::STR_CAT_DISPLAY),

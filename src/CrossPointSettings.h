@@ -21,17 +21,22 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     CUSTOM = 2,
     COVER = 3,
     COVER_CUSTOM = 4,
+    // RETIRED: no longer offered in Settings, and fromJson() migrates a stored 5 to DARK.
+    // The slot stays so every value after it keeps its meaning; renderBlankSleepScreen()
+    // and its switch case stay too, so re-offering it is a one-line change.
     BLANK = 5,
     QUICK_RESUME = 6,
     // Appended at the end: the stored value is the persisted setting, so new faces
     // must never be inserted before an existing one.
     STATS_DASHBOARD = 7,
-    // Keeps the last reader page on the panel and draws a thin frame around it.
+    // RETIRED (2026-08-11, Diogo): kept the last reader page and drew a frame around it,
+    // except the frame never appeared on the device. All of its behaviour is deleted —
+    // the renderer, the frame-colour setting, and its branch in enterDeepSleep. The slot
+    // stays reserved so the values around it keep their meaning, and fromJson() migrates
+    // a stored 8 to DARK. Quick Resume on Timeout covers the "keep my page" case.
     FREEZE = 8,
     SLEEP_SCREEN_MODE_COUNT
   };
-  // Frame colour drawn around the screen in the FREEZE sleep mode.
-  enum SLEEP_FRAME_COLOR { SLEEP_FRAME_BLACK = 0, SLEEP_FRAME_WHITE = 1, SLEEP_FRAME_COLOR_COUNT };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
   enum SLEEP_SCREEN_COVER_FILTER {
     NO_FILTER = 0,
@@ -188,6 +193,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // the only value runBoundMenuFunction() refuses to run, so a pop-up cannot list
     // itself and recurse.
     LP_MENU_POPUP = 12,
+    // Holds the wallpaper the lock screen last showed, instead of picking a new one at
+    // the next sleep. Appended after LP_MENU_POPUP, so Menu Pop-up is no longer the last
+    // value even though it is still the only non-action one.
+    LP_MENU_WALLPAPER_HOLD = 13,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
@@ -195,9 +204,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // and Menu Pop-up itself. Used by the tick screen and by the pop-up builder, so
   // both agree on the row order without either owning a second list.
   static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
-      LP_MENU_KOSYNC,         LP_MENU_BOOKMARK,        LP_MENU_DICTIONARY,       LP_MENU_GRAB_QUOTE,
-      LP_MENU_SELECT_CHAPTER, LP_MENU_GO_TO_PERCENT,   LP_MENU_GO_TO_PARAGRAPH,  LP_MENU_FOOTNOTES,
-      LP_MENU_TEXT_SETTINGS,  LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR};
+      LP_MENU_KOSYNC,         LP_MENU_BOOKMARK,        LP_MENU_DICTIONARY,        LP_MENU_GRAB_QUOTE,
+      LP_MENU_SELECT_CHAPTER, LP_MENU_GO_TO_PERCENT,   LP_MENU_GO_TO_PARAGRAPH,   LP_MENU_FOOTNOTES,
+      LP_MENU_TEXT_SETTINGS,  LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
 
   // Cap on ticked pop-up rows. OptionPopup does not scroll: it grows until it runs off
   // the panel, and a pop-up you have to scroll is slower than the menu it replaces.
@@ -266,6 +275,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Hold the current wallpaper instead of picking a new one at every sleep.
   // Applies only to the /sleep folder rotation; a fixed /sleep.pxc or /sleep.bmp
   // never rotates in the first place.
+  //
+  // No longer a Display row: it is reached from the in-book menu and from any binding set
+  // to Hold Wallpaper, both of which act on the wallpaper the lock screen actually showed.
+  // With no SettingsList entry the generic loop cannot carry it, so it is saved and loaded
+  // by hand in toJson/fromJson.
   uint8_t wallpaperRotationPaused = 0;
   // Status bar (per-item v2 model). Legacy fixed-slot fields were removed. XTC keeps its own overlay.
   uint8_t xtcStatusBarMode = XTC_STATUS_BAR_HIDE;
@@ -493,9 +507,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
   // so it can never wedge boot.
   uint8_t openRandomRecentOnBoot = 0;
-  // Colour of the FREEZE sleep face's border. Black reads on a light page, white on a
-  // dark one, and the frozen page can be either.
-  uint8_t sleepFrameColor = SLEEP_FRAME_BLACK;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the
