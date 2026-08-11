@@ -309,7 +309,10 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.embeddedStyle = embeddedStyle != 0;
-  spec.imageRendering = imageRendering;
+  // Hard-set, not read: see the note on IMAGE_RENDERING. This is the choke point that
+  // makes a stored placeholder or suppress value in a per-book override or a reader preset
+  // irrelevant without touching the section file format.
+  spec.imageRendering = IMAGES_DISPLAY;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
   spec.guideDotsEnabled = guideDotsEnabled != 0;
   spec.firstLineIndentMode = firstLineIndentMode;
@@ -414,7 +417,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = prefs.hyphenationEnabled != 0;
   spec.embeddedStyle = prefs.embeddedStyle != 0;
-  spec.imageRendering = prefs.imageRendering;
+  spec.imageRendering = IMAGES_DISPLAY;  // see the matching note in the global builder above
   spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
   spec.guideDotsEnabled = prefs.guideDotsEnabled != 0;
   spec.firstLineIndentMode = prefs.firstLineIndentMode;

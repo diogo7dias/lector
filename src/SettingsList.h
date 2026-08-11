@@ -348,9 +348,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
-        SettingInfo::Enum(StrId::STR_IMAGES, &CrossPointSettings::imageRendering,
-                          {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
-                          "imageRendering", StrId::STR_CAT_READER),
         // Defaults for the three per-book looks that used to be reachable only from the
         // in-book menu. Changing one here sets what the NEXT freshly opened book starts
         // with; a book that already has its own override keeps its own value, and the

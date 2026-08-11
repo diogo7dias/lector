@@ -227,6 +227,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum UI_THEME { LECTOR = 0 };
 
   // Image rendering in EPUB reader
+  // Images are always drawn. PLACEHOLDER (alt text only) and SUPPRESS were retired
+  // 2026-08-11 (Diogo) and the Settings row went with them.
+  //
+  // The values, the ReaderRenderSpec field and the parser branches that read it all stay.
+  // spec.imageRendering is serialised into every cached section and compared on load, so
+  // deleting it would change the section file format and force every book on the card to
+  // re-index. Both spec builders now hard-set IMAGES_DISPLAY instead, which reaches stored
+  // per-book overrides and reader presets as well as the global value — and which makes a
+  // section cached under the old placeholder layout mismatch and rebuild, but only for the
+  // books that actually used it.
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
   // Paragraph numbering mode. The value is per-book (ReaderPrefs::paragraphNumbering);
@@ -536,6 +546,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MIN_READING_STATS_IDLE_UNITS = 3;
   static constexpr uint8_t MAX_READING_STATS_IDLE_UNITS = 60;
   uint16_t readingStatsIdleSeconds() const { return static_cast<uint16_t>(readingStatsIdleUnits) * 10u; }
+  // Retired: no Settings row, so nothing persists or changes it. Kept as the source the
+  // per-book ReaderPrefs snapshot copies, so that field starts at IMAGES_DISPLAY too.
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
