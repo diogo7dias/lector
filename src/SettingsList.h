@@ -23,6 +23,12 @@
 // Menu Hold, Double-Click Power). ENUM settings persist by INDEX, so entry i MUST be the
 // label for enum value i; walking the values in order is what guarantees that, rather than
 // a hand-written list that could be reordered and silently reinterpret every saved binding.
+// Binding values that keep their slot but are no longer offered. Shared by all three
+// binding rows so one of them cannot quietly go on offering a retired action.
+inline std::vector<uint8_t> retiredBoundFunctions() {
+  return {CrossPointSettings::LP_MENU_SELECT_CHAPTER, CrossPointSettings::LP_MENU_GO_TO_PERCENT};
+}
+
 inline std::vector<StrId> boundFunctionLabels() {
   std::vector<StrId> labels;
   labels.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
@@ -373,11 +379,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction, boundFunctionLabels(),
-                          "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
+                          "longPressMenuFunction", StrId::STR_CAT_CONTROLS)
+            .withHiddenEnumValues(retiredBoundFunctions()),
         SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
-                          "menuHoldFunction", StrId::STR_CAT_CONTROLS),
+                          "menuHoldFunction", StrId::STR_CAT_CONTROLS)
+            .withHiddenEnumValues(retiredBoundFunctions()),
         SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
-                          boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS),
+                          boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
+            .withHiddenEnumValues(retiredBoundFunctions()),
         SettingInfo::Enum(
             StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},

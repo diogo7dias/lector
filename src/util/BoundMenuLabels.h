@@ -39,6 +39,10 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_READER_SETTINGS;
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
       return StrId::STR_STATUS_BAR;
+    case CrossPointSettings::LP_MENU_BOOKMARKS:
+      return StrId::STR_BOOKMARKS;
+    case CrossPointSettings::LP_MENU_VIEW_QUOTES:
+      return StrId::STR_VIEW_QUOTES;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
       // Reuses the retired Display row's label rather than the in-book menu's, which
       // flips between "Hold this wallpaper" and "Resume rotation" with the current state.

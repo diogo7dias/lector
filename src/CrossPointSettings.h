@@ -186,6 +186,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // Appended for the shared binding list (0.20). Order is frozen: the values
     // below double as bit positions in popupItems, so reordering them would both
     // shift saved bindings and silently re-tick a different set of pop-up rows.
+    // RETIRED 2026-08-11 (Diogo): both left the offered list. The values stay so every
+    // binding value after them keeps its meaning, they are listed in withHiddenEnumValues()
+    // in SettingsList.h, and fromJson folds a binding still set to one of them to Disabled.
     LP_MENU_SELECT_CHAPTER = 5,
     LP_MENU_GO_TO_PERCENT = 6,
     LP_MENU_GO_TO_PARAGRAPH = 7,
@@ -201,6 +204,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // the next sleep. Appended after LP_MENU_POPUP, so Menu Pop-up is no longer the last
     // value even though it is still the only non-action one.
     LP_MENU_WALLPAPER_HOLD = 13,
+    // The list of saved bookmarks, next to the toggle that adds one.
+    LP_MENU_BOOKMARKS = 14,
+    // The saved-quotes viewer, next to Grab Quote that writes to it.
+    LP_MENU_VIEW_QUOTES = 15,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 
@@ -208,9 +215,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // and Menu Pop-up itself. Used by the tick screen and by the pop-up builder, so
   // both agree on the row order without either owning a second list.
   static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
-      LP_MENU_KOSYNC,         LP_MENU_BOOKMARK,        LP_MENU_DICTIONARY,        LP_MENU_GRAB_QUOTE,
-      LP_MENU_SELECT_CHAPTER, LP_MENU_GO_TO_PERCENT,   LP_MENU_GO_TO_PARAGRAPH,   LP_MENU_FOOTNOTES,
-      LP_MENU_TEXT_SETTINGS,  LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
+      LP_MENU_KOSYNC,        LP_MENU_BOOKMARK,        LP_MENU_BOOKMARKS,         LP_MENU_DICTIONARY,
+      LP_MENU_GRAB_QUOTE,    LP_MENU_VIEW_QUOTES,     LP_MENU_GO_TO_PARAGRAPH,   LP_MENU_FOOTNOTES,
+      LP_MENU_TEXT_SETTINGS, LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
 
   // Cap on ticked pop-up rows. OptionPopup does not scroll: it grows until it runs off
   // the panel, and a pop-up you have to scroll is slower than the menu it replaces.

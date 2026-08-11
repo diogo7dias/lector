@@ -527,9 +527,18 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       return prefs_.paragraphNumbering != 0;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
       return !currentPageFootnotes.empty();
+    case CrossPointSettings::LP_MENU_BOOKMARKS:
+      // Same test the in-book menu uses for its own Bookmarks row: an empty list screen
+      // is a dead press.
+      return !cachedBookmarks.empty();
+    case CrossPointSettings::LP_MENU_VIEW_QUOTES:
+      // Only once Grab Quote has actually written this book's sidecar.
+      return Storage.exists(quote_text::quotesFilePathFor(epub->getPath()).c_str());
+    // Retired, and never offered again — but a settings file from 0.20.0 could still name
+    // one, so they answer "not available" rather than falling into the default below.
     case CrossPointSettings::LP_MENU_SELECT_CHAPTER:
     case CrossPointSettings::LP_MENU_GO_TO_PERCENT:
-      return epub != nullptr;
+      return false;
     case CrossPointSettings::LP_MENU_POPUP:
       // An empty pop-up is a dead press; Pop-up Items has not been filled in yet.
       return SETTINGS.popupItemCount() > 0;
@@ -574,11 +583,11 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     // The rest reuse the in-book menu's own entry points rather than repeating them, so a
     // binding and the matching menu row can never drift apart.
-    case CrossPointSettings::LP_MENU_SELECT_CHAPTER:
-      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER);
+    case CrossPointSettings::LP_MENU_BOOKMARKS:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::BOOKMARKS);
       return true;
-    case CrossPointSettings::LP_MENU_GO_TO_PERCENT:
-      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT);
+    case CrossPointSettings::LP_MENU_VIEW_QUOTES:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::VIEW_QUOTES);
       return true;
     case CrossPointSettings::LP_MENU_GO_TO_PARAGRAPH:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH);
@@ -668,21 +677,31 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  // Must run before any early return below, so a genuine press is never missed. See
-  // ReaderUtils::ButtonPressLatch: the reader acts on release, child screens close on
-  // press, and an unpaired release used to throw the user out of the book.
-  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
-  confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
-
-  // The Quick Menu owns every button while it is up. Placed after the latches above so a
-  // press it consumes is still paired with its release, and before every other handler so
-  // no page turn or menu open leaks through from underneath it.
+  // The Quick Menu owns every button while it is up, and it MUST be offered them BEFORE
+  // the latches below observe anything.
+  //
+  // The pop-up acts on button PRESS; the latches exist to pair a press with its release.
+  // Observing first latched a press the pop-up then consumed, so on the next pass — with
+  // the pop-up already closed — the trailing release reached handleBackNavigation with a
+  // latched press behind it and read as a genuine Back on the page: closing the pop-up
+  // sent the reader to the home screen. Confirm had the same hole, being gated by the
+  // same latch, and would have reopened the reader menu.
+  //
+  // Handled here, a press the pop-up eats is never latched at all, and the stray-release
+  // branch in handleBackNavigation swallows the trailing release exactly as it does for
+  // any child screen that closes on press.
   if (quickMenu.handleInput(mappedInput, [this] { requestUpdate(); })) {
     // The pop-up painted a framed panel straight onto the page. The page repaint that
     // replaces it must be a cleanup refresh, or the frame ghosts through it.
     if (!quickMenu.isActive()) scheduleGhostCleanup();
     return;
   }
+
+  // Must run before any early return below, so a genuine press is never missed. See
+  // ReaderUtils::ButtonPressLatch: the reader acts on release, child screens close on
+  // press, and an unpaired release used to throw the user out of the book.
+  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
+  confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
 
   // Idle glyph prewarm for the likely next page (currentPage + 1). The scan
   // pass draws nothing (FCM scan mode suppresses pixels), so the displayed
