@@ -57,6 +57,13 @@ class HalPowerManager {
   static constexpr unsigned long IDLE_DOWNCLOCK_MS = 500;     // full speed -> LOW_POWER_FREQ
   static constexpr unsigned long IDLE_LIGHT_SLEEP_MS = 1000;  // 100 Hz polling -> light sleep
 
+  // Panel rails off. Deliberately later than IDLE_LIGHT_SLEEP_MS is early: the rails only
+  // need to be down while the device sits, and powering them back up costs a PON wait on
+  // the very next paint. Two seconds is long enough that ordinary reading — a page turn
+  // every few seconds — never pays it, and short enough that a device put down never sits
+  // powered long enough to drift. See the call site in loop() for the failure it fixes.
+  static constexpr unsigned long IDLE_PANEL_POWER_OFF_MS = 2000;
+
   static constexpr unsigned long BATTERY_POLL_MS = 1500;     // ms
   static constexpr unsigned long LIGHT_SLEEP_SLICE_MS = 50;  // ms
 

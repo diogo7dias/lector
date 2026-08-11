@@ -172,6 +172,10 @@ void HalDisplay::deepSleep() {
   einkDisplay.deepSleep();
 }
 
+// Safe to call at any time and as often as you like: the driver keeps its own power flag
+// and returns immediately when the rails are already down, so a repeat costs no bus traffic.
+void HalDisplay::powerOffPanel() { einkDisplay.powerOffPanel(); }
+
 void HalDisplay::setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel)) {
   einkDisplay.setBusyWaitSliceHook(sliceHook);
 }

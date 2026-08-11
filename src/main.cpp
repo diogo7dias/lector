@@ -864,6 +864,19 @@ void loop() {
     yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     const unsigned long idleMs = millis() - lastActivityTime;
+    // Drop the panel's rails before the chip starts light-sleeping.
+    //
+    // The image is bistable and needs no power to stay put, but the paint path never asked
+    // the controller to power down (every displayBuffer/refreshDisplay call in this fork
+    // takes the default turnOffScreen=false), so the rails stayed live from the first paint
+    // until the device slept. A powered controller with no waveform running keeps a weak
+    // bias on the pixels, and left alone the image drifts into speckle — reported on an X3
+    // as a clean screen that degraded within seconds of being put down, with no input.
+    //
+    // This costs nothing visible: no flash, no waveform, and the next paint brings the
+    // rails back up by itself. Repeat calls are free, so no "already off" flag is kept
+    // here — the driver holds that state and returns immediately when it is already down.
+    if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS) display.powerOffPanel();
     if (idleMs >= HalPowerManager::IDLE_LIGHT_SLEEP_MS) {
       // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence).
       // Race-to-sleep: run the brief wake windows at normal clock, not LOW_POWER_FREQ.

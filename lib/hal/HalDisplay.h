@@ -56,6 +56,11 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
+  // Drop the panel's high-voltage rails while leaving the image on the glass. The next
+  // paint powers them back up on its own, so this is free to call whenever the device is
+  // about to sit idle. Costs no flash and nothing visible. See PanelDriver::powerOff.
+  void powerOffPanel();
+
   // Install the slice hook that replaces the BUSY poll delay on proven-long
   // waits (see EpdBus::setBusyWaitSliceHook for the contract)
   void setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel));
