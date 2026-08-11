@@ -56,6 +56,10 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
+  // Make the next refresh a FULL one, whatever it asks for. Used at boot to clear whatever
+  // the panel was still holding from the previous session. See DisplayRefreshPolicy.
+  void forceNextFullRefresh() { refreshPolicy.forceNextFull(); }
+
   // Install the slice hook that replaces the BUSY poll delay on proven-long
   // waits (see EpdBus::setBusyWaitSliceHook for the contract)
   void setBusyWaitSliceHook(bool (*sliceHook)(int8_t busyPin, uint8_t busyLevel));

@@ -21,7 +21,18 @@ class DisplayRefreshPolicy {
   Mode choose(Mode requested, uint32_t nowMs);
   void reset();
 
+  // Promote the next refresh — whatever it asks for — to a FULL, once.
+  //
+  // A cold boot inherits whatever charge the panel was already carrying, and the first
+  // paint is normally a differential FAST, which drives only the pixels that changed. Every
+  // unchanged pixel keeps the old image, so the previous session shows through the new
+  // screen as speckle and stale text. Boot paths that deliberately preserve the panel (a
+  // quick resume over a retained frame, a wallpaper wake that already runs its own FULL)
+  // do not set this; every other boot does, and pays one flash to start from a clean panel.
+  void forceNextFull() { forceFull_ = true; }
+
  private:
   uint8_t consecutiveFast_ = 0;
   uint8_t fastSinceFull_ = 0;
+  bool forceFull_ = false;
 };
