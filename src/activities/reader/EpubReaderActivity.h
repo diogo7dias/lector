@@ -37,8 +37,6 @@ class EpubReaderActivity final : public Activity {
   // Paragraph numbers (#10): per-spine visible-paragraph counts for whole-book
   // numbering, captured as pages render and persisted to paragraph_counts.bin so
   // the whole-book base survives reopen. Finalizes as the book is read through.
-  std::vector<uint16_t> sectionParagraphCounts_;
-  bool paragraphCountsDirty_ = false;
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -272,9 +270,8 @@ class EpubReaderActivity final : public Activity {
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
-  // Jump to a paragraph number as shown by the paragraph-number marks. Per-chapter
-  // mode treats the number as a local ordinal; whole-book mode converts it to the
-  // owning chapter + local ordinal via sectionParagraphCounts_.
+  // Jump to a paragraph number as shown by the paragraph-number marks. Numbering restarts
+  // at 1 in every chapter, so the number is always an ordinal within the current one.
   void jumpToParagraph(int target);
   // First page of a loaded section whose lines reach the given per-chapter ordinal
   // (returns the last page when the ordinal is past the chapter's paragraphs).
@@ -341,10 +338,6 @@ class EpubReaderActivity final : public Activity {
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
-  uint32_t wholeBookParagraphBase(int spineIndex) const;
-  std::string paragraphCountsPath() const;
-  void loadParagraphCounts();
-  void saveParagraphCounts();
   void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();

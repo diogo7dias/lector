@@ -353,8 +353,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         // with; a book that already has its own override keeps its own value, and the
         // in-book menu still overrides any of them per book.
         SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBERS, &CrossPointSettings::paragraphNumbering,
-                          {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER, StrId::STR_PARA_NUM_BOOK},
-                          "paragraphNumbering", StrId::STR_CAT_READER),
+                          {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER}, "paragraphNumbering",
+                          StrId::STR_CAT_READER),
         SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
                           {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE}, "paragraphNumberSize",
                           StrId::STR_CAT_READER),

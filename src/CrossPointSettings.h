@@ -240,13 +240,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
   // Paragraph numbering mode. The value is per-book (ReaderPrefs::paragraphNumbering);
-  // this enum is only the shared value type. Numbers are baked into the page cache and
-  // drawn in the left margin at render time (no reflow), so switching is instant and
-  // needs no cache rebuild.
+  // this enum is only the shared value type. Numbers are drawn in the left margin at
+  // render time from an ordinal already baked into the page cache (no reflow), so
+  // switching is instant and needs no cache rebuild.
+  // Whole-book numbering (value 2) was removed 2026-08-11 (Diogo). It could only learn a
+  // chapter's paragraph count by DRAWING that chapter, so an unread chapter counted as
+  // zero and every number shifted as more of the book was read — a number written down
+  // one day pointed at a different paragraph the next. Counting properly would mean
+  // indexing the whole book up front, which is exactly what this reader avoids.
+  // A stored 2 is clamped to PARA_NUM_CHAPTER on load.
   enum PARAGRAPH_NUMBERING {
     PARA_NUM_OFF = 0,
     PARA_NUM_CHAPTER = 1,  // resets to 1 at each chapter
-    PARA_NUM_BOOK = 2,     // continuous across the whole book
     PARAGRAPH_NUMBERING_COUNT
   };
 

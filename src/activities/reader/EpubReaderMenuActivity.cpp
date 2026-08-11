@@ -335,7 +335,7 @@ void EpubReaderMenuActivity::loop() {
     }
 
     if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
-      // Cycle Off / Per Chapter / Whole Book in place; applied by the reader on exit.
+      // Cycle Off / Per Chapter in place; applied by the reader on exit.
       selectedParagraphNumbering = (selectedParagraphNumbering + 1) % CrossPointSettings::PARAGRAPH_NUMBERING_COUNT;
       requestUpdate();
       return;
