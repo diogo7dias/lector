@@ -258,6 +258,14 @@ bool ActivityManager::isReaderActivity() const {
 
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
+bool ActivityManager::wantsPowerDoubleClick() const {
+  return currentActivity && currentActivity->wantsPowerDoubleClick();
+}
+
+void ActivityManager::runPowerDoubleClick() {
+  if (currentActivity) currentActivity->runPowerDoubleClick();
+}
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 ScreenshotInfo ActivityManager::getScreenshotInfo() const {

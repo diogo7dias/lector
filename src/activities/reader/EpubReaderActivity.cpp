@@ -58,6 +58,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
 #include "util/BookmarkUtil.h"
+#include "util/BoundMenuLabels.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
 #include "util/ScreenshotUtil.h"
@@ -515,7 +516,43 @@ void EpubReaderActivity::openQuoteGrab() {
       });
 }
 
+bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) const {
+  switch (function) {
+    case CrossPointSettings::LP_MENU_KOSYNC:
+      return KOREADER_STORE.hasCredentials();
+    case CrossPointSettings::LP_MENU_DICTIONARY:
+      // No dictionary folder configured means the picker would open only to report it.
+      return SETTINGS.dictionaryName[0] != '\0' && section != nullptr;
+    case CrossPointSettings::LP_MENU_GRAB_QUOTE:
+      // The picker is handed this section and outlives the call, so a missing one is fatal.
+      return section != nullptr;
+    case CrossPointSettings::LP_MENU_GO_TO_PARAGRAPH:
+      // The number to type is the one the marks print; with numbering off there is none.
+      return prefs_.paragraphNumbering != 0;
+    case CrossPointSettings::LP_MENU_FOOTNOTES:
+      return !currentPageFootnotes.empty();
+    case CrossPointSettings::LP_MENU_SELECT_CHAPTER:
+    case CrossPointSettings::LP_MENU_GO_TO_PERCENT:
+      return epub != nullptr;
+    case CrossPointSettings::LP_MENU_POPUP:
+      // An empty pop-up is a dead press; Pop-up Items has not been filled in yet.
+      return SETTINGS.popupItemCount() > 0;
+    case CrossPointSettings::LP_MENU_BOOKMARK:
+    case CrossPointSettings::LP_MENU_TEXT_SETTINGS:
+    case CrossPointSettings::LP_MENU_READER_SETTINGS:
+    case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+      return true;
+    case CrossPointSettings::LP_MENU_DISABLED:
+    default:
+      return false;
+  }
+}
+
 bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
+  // Every caller treats false as "the press was not consumed", so refusing here is what
+  // keeps a bound-but-impossible action from swallowing the button.
+  if (!boundMenuFunctionAvailable(function)) return false;
+
   switch (function) {
     case CrossPointSettings::LP_MENU_BOOKMARK:
       if (showBookmarkMessage) return false;
@@ -535,10 +572,90 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
     case CrossPointSettings::LP_MENU_GRAB_QUOTE:
       openQuoteGrab();
       return true;
+    // The rest reuse the in-book menu's own entry points rather than repeating them, so a
+    // binding and the matching menu row can never drift apart.
+    case CrossPointSettings::LP_MENU_SELECT_CHAPTER:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER);
+      return true;
+    case CrossPointSettings::LP_MENU_GO_TO_PERCENT:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PERCENT);
+      return true;
+    case CrossPointSettings::LP_MENU_GO_TO_PARAGRAPH:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH);
+      return true;
+    case CrossPointSettings::LP_MENU_FOOTNOTES:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::FOOTNOTES);
+      return true;
+    case CrossPointSettings::LP_MENU_TEXT_SETTINGS:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS);
+      return true;
+    case CrossPointSettings::LP_MENU_READER_SETTINGS:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::READER_SETTINGS);
+      return true;
+    case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+      // Not a menu row: the menu toggles this live and reports it through MenuResult, so
+      // there is no MenuAction to reuse. sbOffBar is passed unchanged — this flips the
+      // per-book bar only, never the global hidden-bar progress setting.
+      applyStatusBar(prefs_.statusBarEnabled ? 0 : 1, SETTINGS.sbOffBar);
+      return true;
+    case CrossPointSettings::LP_MENU_POPUP:
+      openQuickMenu();
+      return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
       return false;
   }
+}
+
+void EpubReaderActivity::runPowerDoubleClick() {
+  // The pop-up already owns the buttons; a second double click while it is up must not
+  // rebuild it underneath itself.
+  if (quickMenu.isActive()) return;
+
+  const uint8_t function = SETTINGS.doubleClickPowerFunction;
+  // Bound but impossible right now (no footnote on this page, numbering off, no KOReader
+  // credentials). Saying so beats a button that silently does nothing.
+  if (!runBoundMenuFunction(function)) {
+    GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
+    scheduleGhostCleanup();
+    requestUpdate();
+  }
+}
+
+void EpubReaderActivity::openQuickMenu() {
+  const auto& functions = CrossPointSettings::POPUP_ITEM_FUNCTIONS;
+
+  std::vector<std::string> labels;
+  std::vector<bool> disabledRows;
+  labels.reserve(CrossPointSettings::POPUP_ITEM_MAX);
+  disabledRows.reserve(CrossPointSettings::POPUP_ITEM_MAX);
+  quickMenuFunctions.clear();
+  quickMenuFunctions.reserve(CrossPointSettings::POPUP_ITEM_MAX);
+
+  for (const uint8_t function : functions) {
+    if (!SETTINGS.isPopupItem(function)) continue;
+    const bool available = boundMenuFunctionAvailable(function);
+    // Fixed-width status column, and the pop-up is left-aligned, so ticking or losing a
+    // footnote never shifts a label sideways.
+    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(boundMenuActionLabel(function)));
+    disabledRows.push_back(!available);
+    quickMenuFunctions.push_back(function);
+  }
+
+  if (quickMenuFunctions.empty()) return;
+
+  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, 0, true, [this](const int index) {
+    if (index < 0 || index >= static_cast<int>(quickMenuFunctions.size())) return;
+    const uint8_t function = quickMenuFunctions[index];
+    // The pop-up has already closed itself by the time this runs, so the action draws
+    // over a page the pop-up no longer owns.
+    if (!runBoundMenuFunction(function)) {
+      GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
+      scheduleGhostCleanup();
+    }
+    requestUpdate();
+  });
+  requestUpdate();
 }
 
 void EpubReaderActivity::loop() {
@@ -553,6 +670,16 @@ void EpubReaderActivity::loop() {
   // press, and an unpaired release used to throw the user out of the book.
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
   confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
+
+  // The Quick Menu owns every button while it is up. Placed after the latches above so a
+  // press it consumes is still paired with its release, and before every other handler so
+  // no page turn or menu open leaks through from underneath it.
+  if (quickMenu.handleInput(mappedInput, [this] { requestUpdate(); })) {
+    // The pop-up painted a framed panel straight onto the page. The page repaint that
+    // replaces it must be a cleanup refresh, or the frame ghosts through it.
+    if (!quickMenu.isActive()) scheduleGhostCleanup();
+    return;
+  }
 
   // Idle glyph prewarm for the likely next page (currentPage + 1). The scan
   // pass draws nothing (FCM scan mode suppresses pixels), so the displayed
@@ -2151,6 +2278,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!epub) {
     return;
   }
+
+  // The Quick Menu is an overlay, not a screen: it paints straight onto the page already
+  // in the framebuffer and returns, so opening it costs one popup-sized refresh instead of
+  // a full page repaint. Closing it calls requestUpdate(), which lands here again with the
+  // pop-up inactive and redraws the page normally.
+  if (quickMenu.processRender(renderer, mappedInput)) return;
 
   const auto showPendingSyncSaveError = [this]() {
     if (!pendingSyncSaveError) return;

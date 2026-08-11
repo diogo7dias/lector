@@ -30,6 +30,7 @@ enum class SettingAction {
   Language,
   DownloadFonts,
   TextSettings,
+  PopupItems,
 };
 
 struct SettingInfo {

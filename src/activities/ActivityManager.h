@@ -104,6 +104,10 @@ class ActivityManager {
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
   bool handleForcedRefresh();
+  // Forwarded to the CURRENT activity only — unlike isReaderActivity(), which is also true
+  // while a child screen launched from the reader sits on top of it.
+  bool wantsPowerDoubleClick() const;
+  void runPowerDoubleClick();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 

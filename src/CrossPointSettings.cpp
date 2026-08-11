@@ -95,6 +95,8 @@ void CrossPointSettings::toJson(JsonDocument& doc) const {
   if (sdFontFamilyName[0] != '\0') {
     doc["sdFontFamilyName"] = sdFontFamilyName;
   }
+  // Menu Pop-up membership — a uint16_t mask, so the generic uint8_t loop cannot carry it.
+  doc["popupItems"] = popupItems;
   // Marks the one-time 0.8.2 reading-defaults migration in fromJson as done.
   doc["readingDefaults0820"] = true;
   // TXT reader font — set from the in-book TXT popup, not in SettingsList.
@@ -193,6 +195,26 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   frontButtonRight =
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
+
+  // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
+  // future-version settings file cannot set a bit no builder knows how to draw, and
+  // trimmed to POPUP_ITEM_MAX so a file claiming twenty rows cannot build a pop-up
+  // taller than the panel.
+  {
+    uint16_t storedPopupItems = doc["popupItems"] | (uint16_t)0;
+    uint16_t validMask = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) validMask |= static_cast<uint16_t>(1u << fn);
+    storedPopupItems &= validMask;
+    popupItems = 0;
+    uint8_t kept = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
+      if (!((storedPopupItems >> fn) & 1u)) continue;
+      if (kept >= POPUP_ITEM_MAX) break;
+      popupItems |= static_cast<uint16_t>(1u << fn);
+      kept++;
+    }
+    if (popupItems != storedPopupItems) needsResave = true;
+  }
 
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and
   // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is

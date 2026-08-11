@@ -1343,7 +1343,7 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 }
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                                int selectedIndex) const {
+                                int selectedIndex, bool leftAlign) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
@@ -1430,7 +1430,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
     const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
     const int textY = itemY + (rowHeight - optionLineHeight) / 2;
-    const int textX = itemRectX + (itemRectW - textW) / 2;
+    const int textX = leftAlign ? itemRectX + selectionHPadding : itemRectX + (itemRectW - textW) / 2;
     // Unselected items: text is dark (invert=true means draw on white bg).
     // Selected on dark bg: text must be white (invert=false).
     // Selected on light bg: text stays dark (invert=true).

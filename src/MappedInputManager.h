@@ -75,6 +75,24 @@ class MappedInputManager {
   // Returns the raw front button index that was pressed this frame (or -1 if none).
   int getPressedFrontButton() const;
 
+  // Power-release gating for the reader's double-click detector. main.cpp owns the state and
+  // sets this once per loop pass, before any consumer reads an edge.
+  //
+  //  - suppress: hide this pass's power release from everyone while the detector waits to
+  //    see whether a second click is coming. Without it the release would still reach
+  //    main's FORCE_REFRESH check and the reader's page-turn / footnote handlers, and the
+  //    delay would buy nothing.
+  //  - inject: manufacture a release on the pass the detector rules the click Single. Every
+  //    downstream consumer then sees exactly the edge it would have seen without the
+  //    feature, only ~280 ms later, so none of them needs to know the detector exists.
+  //
+  // Only Button::Power is affected, and only until the next call — main.cpp clears it every
+  // pass, so a stale override cannot outlive the loop iteration that set it.
+  void setPowerReleaseOverride(const bool suppress, const bool inject) {
+    powerReleaseSuppressed = suppress;
+    powerReleaseInjected = inject;
+  }
+
   // True when the control axis is flipped relative to the physical buttons: the user opted into
   // orientation-following front buttons AND the screen is *currently rendered* rotated (INVERTED /
   // LANDSCAPE_CCW). Keyed on the live renderer orientation rather than the persisted reader setting,
@@ -99,6 +117,9 @@ class MappedInputManager {
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
                          bool hasSubtitle) const;
   void rememberTouchHeldTime() const;
+
+  bool powerReleaseSuppressed = false;
+  bool powerReleaseInjected = false;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;

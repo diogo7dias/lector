@@ -174,8 +174,34 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_BOOKMARK = 2,
     LP_MENU_DICTIONARY = 3,
     LP_MENU_GRAB_QUOTE = 4,
+    // Appended for the shared binding list (0.20). Order is frozen: the values
+    // below double as bit positions in popupItems, so reordering them would both
+    // shift saved bindings and silently re-tick a different set of pop-up rows.
+    LP_MENU_SELECT_CHAPTER = 5,
+    LP_MENU_GO_TO_PERCENT = 6,
+    LP_MENU_GO_TO_PARAGRAPH = 7,
+    LP_MENU_FOOTNOTES = 8,
+    LP_MENU_TEXT_SETTINGS = 9,
+    LP_MENU_READER_SETTINGS = 10,
+    LP_MENU_TOGGLE_STATUS_BAR = 11,
+    // Not an action: opens the pop-up built from popupItems. Always last, and it is
+    // the only value runBoundMenuFunction() refuses to run, so a pop-up cannot list
+    // itself and recurse.
+    LP_MENU_POPUP = 12,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
+
+  // Actions that may be ticked into the pop-up: every binding value except Disabled
+  // and Menu Pop-up itself. Used by the tick screen and by the pop-up builder, so
+  // both agree on the row order without either owning a second list.
+  static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
+      LP_MENU_KOSYNC,         LP_MENU_BOOKMARK,        LP_MENU_DICTIONARY,       LP_MENU_GRAB_QUOTE,
+      LP_MENU_SELECT_CHAPTER, LP_MENU_GO_TO_PERCENT,   LP_MENU_GO_TO_PARAGRAPH,  LP_MENU_FOOTNOTES,
+      LP_MENU_TEXT_SETTINGS,  LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR};
+
+  // Cap on ticked pop-up rows. OptionPopup does not scroll: it grows until it runs off
+  // the panel, and a pop-up you have to scroll is slower than the menu it replaces.
+  static constexpr uint8_t POPUP_ITEM_MAX = 8;
 
   // Hide battery percentage
   enum HIDE_BATTERY_PERCENTAGE { HIDE_NEVER = 0, HIDE_READER = 1, HIDE_ALWAYS = 2, HIDE_BATTERY_PERCENTAGE_COUNT };
@@ -388,6 +414,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // needs. Costs nothing when Disabled, and nothing when set: the menu acts on release,
   // so a plain tap is unaffected either way.
   uint8_t menuHoldFunction = LP_MENU_DISABLED;
+  // Double-click of the power button while reading an EPUB. Shares the same
+  // LONG_PRESS_MENU_FUNCTION list as the two bindings above.
+  //
+  // Unlike those two this one is not free when set: nothing can tell a single click
+  // from the first half of a double click until the window closes, so arming it delays
+  // every single power click by DoubleClickDetector::WINDOW_MS. That cost is confined
+  // to the EPUB reader (main.cpp only arms the detector there) and disappears entirely
+  // at LP_MENU_DISABLED, which is why Disabled is the default.
+  uint8_t doubleClickPowerFunction = LP_MENU_DISABLED;
+  // Which actions the Menu Pop-up lists, as a bitmask indexed by LONG_PRESS_MENU_FUNCTION
+  // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
+  // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
+  // At most POPUP_ITEM_MAX bits are ever set; the tick screen enforces it.
+  uint16_t popupItems = 0;
   // UI Theme
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
@@ -513,6 +553,28 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint16_t getPowerButtonDuration() const {
     return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 200;
   }
+  // Pop-up membership. The mask layout has exactly one owner: these three.
+  bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }
+  uint8_t popupItemCount() const {
+    uint8_t n = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
+      if (isPopupItem(fn)) n++;
+    }
+    return n;
+  }
+  // Refuses to tick past POPUP_ITEM_MAX and reports whether the mask actually moved,
+  // so the tick screen can say "full" instead of silently doing nothing.
+  bool setPopupItem(const uint8_t function, const bool on) {
+    if (isPopupItem(function) == on) return false;
+    if (on && popupItemCount() >= POPUP_ITEM_MAX) return false;
+    if (on) {
+      popupItems |= static_cast<uint16_t>(1u << function);
+    } else {
+      popupItems &= static_cast<uint16_t>(~(1u << function));
+    }
+    return true;
+  }
+
   int getReaderFontId() const;
   // Font id for the TXT reader, resolved from the txt* fields above rather than the
   // EPUB reader selection, so changing one never moves the other.

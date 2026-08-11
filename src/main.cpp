@@ -43,6 +43,7 @@
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/ButtonNavigator.h"
+#include "util/DoubleClickDetector.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -717,6 +718,11 @@ void loop() {
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP);
   gpio.update();
 
+  // Cleared here, once, so that every early return below (the screenshot combo, the sleep
+  // paths) leaves the power release ungated. The double-click block further down is the
+  // only thing that ever sets it, and only for the pass that sets it.
+  mappedInputManager.setPowerReleaseOverride(false, false);
+
   renderer.setFadingFix(SETTINGS.fadingFix);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
@@ -790,6 +796,38 @@ void loop() {
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;
+  }
+
+  // Power double-click, EPUB reader only.
+  //
+  // Sits below the screenshot combo and both sleep checks, so holding to sleep and
+  // Power+Down still win outright, and above every consumer of a power release, so a click
+  // is held back before anything acts on it. Nothing can tell a single click from the first
+  // half of a double click until the window closes, which is why a click is delayed rather
+  // than acted on and undone.
+  //
+  // The detector is static: it must survive between loop passes. It is reset whenever the
+  // feature is not armed, so a click pending when the book closes cannot fire into the
+  // screen that replaced it.
+  {
+    static reader_input::DoubleClickDetector powerClicks;
+    if (!activityManager.wantsPowerDoubleClick()) {
+      powerClicks.reset();
+    } else {
+      // The RAW edge, deliberately: mappedInputManager.wasReleased() is what the override
+      // below rewrites, and feeding the detector its own output would latch it.
+      const bool released = gpio.wasReleased(HalGPIO::BTN_POWER);
+      const auto event = powerClicks.update(released, millis());
+      if (event == reader_input::DoubleClickDetector::Event::Double) {
+        activityManager.runPowerDoubleClick();
+      }
+      // Hide the release while the verdict is pending (and on the pass the verdict is
+      // Double, whose second edge belongs to the double click); replay it on the pass the
+      // verdict is Single, where every consumer below sees the edge it always saw.
+      mappedInputManager.setPowerReleaseOverride(
+          powerClicks.waiting() || event == reader_input::DoubleClickDetector::Event::Double,
+          event == reader_input::DoubleClickDetector::Event::Single);
+    }
   }
 
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.

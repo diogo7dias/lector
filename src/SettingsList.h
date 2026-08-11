@@ -16,7 +16,21 @@
 #include "KOReaderCredentialStore.h"
 #include "ReaderFontSizes.h"
 #include "activities/settings/SettingsActivity.h"
+#include "util/BoundMenuLabels.h"
 #include "util/DictionaryRegistry.h"
+
+// Labels for the three bindings that share LONG_PRESS_MENU_FUNCTION (Long-press Menu,
+// Menu Hold, Double-Click Power). ENUM settings persist by INDEX, so entry i MUST be the
+// label for enum value i; walking the values in order is what guarantees that, rather than
+// a hand-written list that could be reordered and silently reinterpret every saved binding.
+inline std::vector<StrId> boundFunctionLabels() {
+  std::vector<StrId> labels;
+  labels.reserve(CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT);
+  for (uint8_t value = 0; value < CrossPointSettings::LONG_PRESS_MENU_FUNCTION_COUNT; value++) {
+    labels.push_back(boundMenuActionLabel(value));
+  }
+  return labels;
+}
 
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
@@ -364,14 +378,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
                            StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
                           "longPressButtonBehavior", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
-                          {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY,
-                           StrId::STR_GRAB_QUOTE},
+        SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction, boundFunctionLabels(),
                           "longPressMenuFunction", StrId::STR_CAT_CONTROLS),
-        SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction,
-                          {StrId::STR_KOSYNC, StrId::STR_DISABLED, StrId::STR_BOOKMARK_OPTION, StrId::STR_DICTIONARY,
-                           StrId::STR_GRAB_QUOTE},
+        SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
                           "menuHoldFunction", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
+                          boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS),
         SettingInfo::Enum(
             StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
             {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},

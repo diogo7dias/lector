@@ -18,6 +18,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
 #include "OtaUpdateActivity.h"
+#include "PopupItemsActivity.h"
 #include "SdCardFontSystem.h"
 #include "SdFirmwareUpdateActivity.h"
 #include "SettingsList.h"
@@ -73,6 +74,13 @@ void SettingsActivity::rebuildSettingsLists() {
   // Append ACTION items
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  // Pop-up Items only exists to serve a binding set to Menu Pop-up, so it is offered
+  // only while at least one of the three bindings actually opens one.
+  if (SETTINGS.doubleClickPowerFunction == CrossPointSettings::LP_MENU_POPUP ||
+      SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_POPUP ||
+      SETTINGS.menuHoldFunction == CrossPointSettings::LP_MENU_POPUP) {
+    controlsSettings.push_back(SettingInfo::Action(StrId::STR_POPUP_ITEMS, SettingAction::PopupItems));
+  }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
@@ -322,6 +330,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::PopupItems:
+        startActivityForResult(std::make_unique<PopupItemsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::KOReaderSync:
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput), resultHandler);
