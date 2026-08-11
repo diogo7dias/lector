@@ -60,6 +60,9 @@ class HomeActivity final : public Activity {
   // Header extras: the pages tile and, on boards with an RTC, the clock.
   void drawHomeHeaderExtras() const;
   void loadRecentBooks(int maxBooks);
+  // Opens the Reading Stats screen for recentBooks[0], read straight off the card. Only
+  // called with a non-empty recentBooks.
+  void openRecentBookStats();
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

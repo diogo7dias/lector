@@ -47,6 +47,12 @@ bool bookCacheKeyForPath(const std::string& path, BookCacheKey& key);
 // progress that would be destroyed.
 bool collectLiveBookCacheKeys(std::vector<BookCacheKey>& live);
 
+// The cache directory a book at `path` uses, e.g. "/.crosspoint/epub_1234...". Empty for
+// extensions no reader caches. Same prefix + hash the readers compute for themselves, so
+// callers outside a reader (the home screen reading a book's stats without opening it) do
+// not have to reproduce that rule.
+std::string bookCacheDirForPath(const std::string& path);
+
 // Removes every /.crosspoint cache directory whose book is no longer on the card.
 // Returns false, having deleted nothing, when the live-book walk fails.
 bool cleanOrphanBookCaches(int& removedCount, int& keptCount, int& failedCount);

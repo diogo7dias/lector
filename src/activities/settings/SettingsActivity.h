@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "components/ValueBarPopup.h"
 #include "util/ButtonNavigator.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
@@ -188,6 +189,10 @@ class SettingsActivity final : public Activity {
   bool quickResumeTimeoutAutoEnabled = false;
 
   OptionPopup optionPopup;
+  // Numeric rows open a slider instead of stepping by one per press. Stepping meant up to
+  // 57 presses to cross the Reading Idle Limit range, and wrapping past the maximum to get
+  // back. Same component TextSettingsActivity already uses for the margin rows.
+  ValueBarPopup valueBar;
 
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];

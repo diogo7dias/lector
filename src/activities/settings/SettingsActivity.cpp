@@ -144,6 +144,7 @@ void SettingsActivity::onExit() {
 
 void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   bool hasChangedCategory = false;
 
@@ -298,12 +299,19 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    const int8_t currentValue = SETTINGS.*(setting.valuePtr);
-    if (currentValue + setting.valueRange.step > setting.valueRange.max) {
-      SETTINGS.*(setting.valuePtr) = setting.valueRange.min;
-    } else {
-      SETTINGS.*(setting.valuePtr) = currentValue + setting.valueRange.step;
-    }
+    // Front Left/Right step by the setting's own step; the side buttons jump by five of
+    // them, so a wide range is crossed in a few presses rather than tapped across one at
+    // a time. Back cancels, which stepping in place could not offer.
+    const auto valuePtr = setting.valuePtr;
+    valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, setting.valueRange.step,
+                  setting.valueRange.step * 5, SETTINGS.*(setting.valuePtr), setting.nameId,
+                  [this, valuePtr](const int chosen) {
+                    SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
+                    SETTINGS.saveToFile();
+                    rebuildSettingsLists();
+                  });
+    requestUpdate();
+    return;
   } else if (setting.type == SettingType::STRING) {
     // Free-text entry via the on-screen keyboard. Handles both direct char[] fields
     // (stringOffset into SETTINGS) and dynamic getter/setter string settings.
@@ -450,6 +458,7 @@ void SettingsActivity::openSleepTimeoutPicker() {
 
 void SettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
+  if (valueBar.processRender(renderer, mappedInput)) return;
 
   renderer.clearScreen();
 
@@ -494,7 +503,18 @@ void SettingsActivity::render(RenderLock&&) {
             valueText = I18N.get(setting.enumValues[value]);
           }
         } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
+          if (setting.nameId == StrId::STR_READING_IDLE_LIMIT) {
+            // Stored in 10-second units, which means nothing on screen. Whole minutes
+            // read as minutes; the steps between them read as seconds.
+            char valueBuffer[32];
+            const unsigned seconds = SETTINGS.readingStatsIdleSeconds();
+            if (seconds % 60 == 0) {
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT), seconds / 60);
+            } else {
+              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SECONDS_VALUE_FORMAT), seconds);
+            }
+            valueText = valueBuffer;
+          } else if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
             char valueBuffer[32];
             if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
               valueText = tr(STR_SLEEP_NEVER);

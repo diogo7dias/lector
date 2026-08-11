@@ -100,6 +100,15 @@ bool bookCacheKeyForPath(const std::string& path, BookCacheKey& key) {
   return true;
 }
 
+std::string bookCacheDirForPath(const std::string& path) {
+  BookCacheKey key;
+  if (!bookCacheKeyForPath(path, key)) return {};
+  const char* prefix = EPUB_PREFIX;
+  if (key.prefix == BookCacheKey::TXT) prefix = TXT_PREFIX;
+  if (key.prefix == BookCacheKey::XTC) prefix = XTC_PREFIX;
+  return std::string(CACHE_DIR) + "/" + prefix + std::to_string(key.hash);
+}
+
 void clearBookCache(const std::string& path) {
   if (FsHelpers::hasEpubExtension(path)) {
     Epub(path, CACHE_DIR).clearCache();
