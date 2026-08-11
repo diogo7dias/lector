@@ -287,6 +287,38 @@ void markDirtyIfSleepPath(const char* path) {
   if (under("/sleep/") || under("/.sleep/") || under("/sleep pause/")) markDirty();
 }
 
+void noteFavoriteRename(const std::string& oldPath, const std::string& newPath) {
+  // Only the folder the records were scanned from. A rename anywhere else
+  // (a pause-folder move, a book cover) leaves this snapshot alone, and those
+  // paths mark dirty themselves.
+  const uint8_t dirId = APP_STATE.sleepIndexDirId;
+  const std::string prefix = std::string(dirPathForId(dirId)) + "/";
+  const auto nameIn = [&prefix](const std::string& path) -> std::string {
+    if (path.size() <= prefix.size() || path.compare(0, prefix.size(), prefix) != 0) return {};
+    std::string name = path.substr(prefix.size());
+    // A deeper path is a different folder, not a name in this one.
+    return name.find('/') == std::string::npos ? name : std::string{};
+  };
+
+  const std::string oldName = nameIn(oldPath);
+  const std::string newName = nameIn(newPath);
+  if (oldName.empty() || newName.empty() || oldName == newName) return;
+  // Both sides must be entries the walk would have counted, or the delta would
+  // describe a fingerprint the folder never had.
+  if (!isWallpaperName(oldName) || !isWallpaperName(newName)) return;
+  if (oldName.size() >= kRecordBytes || newName.size() >= kRecordBytes) return;
+
+  HalFile file;
+  if (!Storage.openFileForRead("WIDX", newPath.c_str(), file)) return;
+  const uint32_t after = folderEntryHash(file, newName.c_str(), newName.size());
+  const uint32_t before = folderEntryHash(file, oldName.c_str(), oldName.size());
+  file.close();
+
+  // Commutative wrap-sum: swapping one entry's contribution is exact.
+  APP_STATE.sleepIndexFingerprint += after - before;
+  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
+}
+
 bool folderTailMoved() {
   const uint8_t dirId = resolveSleepDirId();
   if (dirId != APP_STATE.sleepIndexDirId) return true;

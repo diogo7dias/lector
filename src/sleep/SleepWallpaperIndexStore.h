@@ -86,6 +86,22 @@ void markDirty();
 // code (web upload/rename/delete) that touches arbitrary paths.
 void markDirtyIfSleepPath(const char* path);
 
+// MAIN TASK ONLY: a favorite toggle renamed a wallpaper in place, inside the
+// indexed folder. Membership did not change, so the folder needs no walk — but
+// the rename moved BOTH of the boot gate's markers: the name feeds the
+// fingerprint, and SdFat creates the new directory entry before freeing the
+// old one, which can push the folder's last live slot out. Left alone, the next
+// unlock reads a wallpaper toggle as "files were added to the card" and pays a
+// full folder scan that appends nothing. This re-anchors the snapshot in place
+// instead: one file stat for the exact fingerprint delta (a FAT rename copies
+// every field but the name, so the mtime and size are still the old entry's),
+// plus a millisecond tail probe. The index record keeps the OLD name; the pick
+// resolves it through favoriteCounterpart(), so the wallpaper keeps its place
+// in the current lap and the record is refreshed at the next rebuild.
+// No-op for any path outside the indexed folder. The caller owes the
+// state.json save.
+void noteFavoriteRename(const std::string& oldPath, const std::string& newPath);
+
 // MAIN TASK ONLY, boot gate: cheap change probe, milliseconds and no UI. True
 // when the sleep folder's last live directory slot (or the resolved folder
 // itself) differs from the last reconcile's snapshot — FAT appends extend the

@@ -85,6 +85,41 @@ TEST(SleepIndexReconcile, CounterpartSuppressesFavoriteRenameAppends) {
   EXPECT_FALSE(knownToIndex(set, "c.pxc"));   // genuinely new
 }
 
+// A favorite toggle renames in place, and the device patches the persisted
+// fingerprint by the two entry hashes rather than re-walking the folder. That
+// patch has to land exactly where a full rescan would, or the saved snapshot
+// starts lying and every later unlock scans again. mtime and size are the same
+// on both sides because a FAT rename copies every field but the name.
+TEST(SleepIndexReconcile, FavoriteRenamePatchMatchesAFullRescan) {
+  const std::vector<Entry> before = {{"a.pxc", 111, 900}, {"b.pxc", 222, 1200}, {"c.bmp", 333, 1500}};
+  const uint32_t snapshot = fingerprintOf(before);
+
+  std::vector<Entry> after = before;
+  after[1].name = "b_F.pxc";
+  const uint32_t patched =
+      snapshot + sleep_reconcile::entryHash("b_F.pxc", 222, 1200) - sleep_reconcile::entryHash("b.pxc", 222, 1200);
+  EXPECT_EQ(patched, fingerprintOf(after));
+
+  // Unfavoriting returns to the original, so a toggle on and off leaves no
+  // drift for a later reconcile to trip over.
+  const uint32_t undone =
+      patched + sleep_reconcile::entryHash("b.pxc", 222, 1200) - sleep_reconcile::entryHash("b_F.pxc", 222, 1200);
+  EXPECT_EQ(undone, snapshot);
+}
+
+// The point of the patch: with the snapshot re-anchored, the cold boot decides
+// there is nothing to do. An unpatched snapshot would order an append pass that
+// the counterpart rule then makes append nothing.
+TEST(SleepIndexReconcile, PatchedSnapshotKeepsTheColdBootFromWalking) {
+  auto in = cleanInput();
+  in.scannedFingerprint = 1234;  // folder as it reads after the rename
+  in.snapFingerprint = 1234;     // snapshot patched at rename time
+  EXPECT_EQ(sleep_reconcile::decidePlan(in), Plan::NoChange);
+
+  in.snapFingerprint = 999;  // the old behaviour: snapshot left stale
+  EXPECT_EQ(sleep_reconcile::decidePlan(in), Plan::IncrementalAppend);
+}
+
 TEST(SleepIndexReconcile, NameHashSetMembership) {
   NameHashSet set;
   set.reserve(3);

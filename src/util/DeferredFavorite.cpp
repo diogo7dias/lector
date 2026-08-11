@@ -10,6 +10,7 @@
 #include <mutex>
 
 #include "CrossPointState.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 
 namespace DeferredFavorite {
 namespace {
@@ -154,6 +155,10 @@ void reconcile() {
   for (const Outcome& outcome : done) {
     if (outcome.ok) {
       anySucceeded = true;
+      // The worker did the rename; APP_STATE belongs to this task, so the index
+      // snapshot is re-anchored here. Without it the rename looks like new files
+      // on the card and the next unlock walks the whole sleep folder.
+      crosspoint::sleep::windex::noteFavoriteRename(outcome.fromPath, outcome.toPath);
       continue;
     }
     // The name this rename was supposed to create does not exist, so put the reference
@@ -166,9 +171,10 @@ void reconcile() {
 
   // One save for the batch. It persists whatever the reference now is, which is the point
   // of saving at all: an unexpected reset must not leave the card pointing at a name that
-  // no longer exists. No sleepIndexDirty mark: a favorite rename keeps the folder's
-  // membership — the index resolves the old record through favoriteCounterpart(), so
-  // forcing a reconcile here only bought an "Indexing wallpapers" popup on the next boot.
+  // no longer exists. It also persists the index snapshot the loop above re-anchored.
+  // No sleepIndexDirty mark: a favorite rename keeps the folder's membership — the index
+  // resolves the old record through favoriteCounterpart(), so forcing a reconcile here
+  // only bought a folder scan on the next boot.
   if (anySucceeded) {
     APP_STATE.saveToFile();
   }

@@ -44,6 +44,10 @@ SetFavoriteResult setFavorite(const std::string& path, const bool favorite, std:
     if (Storage.exists(targetPath.c_str())) return SetFavoriteResult::RenameConflict;
     if (!Storage.rename(currentPath.c_str(), targetPath.c_str())) return SetFavoriteResult::RenameFailed;
     replacePathReferences(currentPath, targetPath);
+    // Re-anchor the wallpaper index's change markers, which this rename moved
+    // without changing what the folder holds. Skipped and the next unlock pays
+    // a full folder scan for nothing.
+    crosspoint::sleep::windex::noteFavoriteRename(currentPath, targetPath);
     currentPath = targetPath;
     // Persist the reference fixup above. There is no favorites list to maintain:
     // the _F suffix on currentPath IS the favorite state now.
