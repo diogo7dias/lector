@@ -3,15 +3,6 @@
 DisplayRefreshPolicy::Mode DisplayRefreshPolicy::choose(const Mode requested, uint32_t /*nowMs*/) {
   Mode chosen = requested;
 
-  // A forced FULL outranks everything below: it exists because the panel's contents are
-  // unknown, and no counter can tell us that.
-  if (forceFull_) {
-    forceFull_ = false;
-    consecutiveFast_ = 0;
-    fastSinceFull_ = 0;
-    return Mode::Full;
-  }
-
   // Cap consecutive FAST refreshes so panel ghosting is still periodically
   // cleaned. We deliberately do NOT promote on idle time: on an e-reader "idle"
   // is the user reading the current page, which routinely exceeds a minute, so

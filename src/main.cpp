@@ -520,22 +520,6 @@ void setup() {
   // Dropping it cannot leave a blank screen, because the retained wallpaper stays on the
   // panel underneath until the next activity paints over it.
 
-  // Start this boot from a known panel, unless this boot path is one that deliberately keeps
-  // what is already up there.
-  //
-  // The panel holds its last image with no power, so a boot inherits every mark the previous
-  // session left — including a long run of crash reboots, which paint and never clean. The
-  // first paint is a differential FAST, which drives only the pixels that changed, so all of
-  // that inheritance shows through the new screen. Device photo, lector.exp.15 on an X3: a
-  // freshly flashed home screen under heavy speckle with an older book title still legible
-  // across the status bar. The anti-ghost cap cannot catch this — it needs 12 FAST passes for
-  // a clean and 48 for a FULL, and a boot never gets that far.
-  //
-  // Excluded: a quick resume, which restores the saved frame and drives only the banner
-  // pixels over it, and a wallpaper wake, which already runs its own FULL over a blanked
-  // buffer. Forcing a flash into either would undo the thing they exist to do.
-  if (resume != BootResume::QuickResume && !wallpaperWake) display.forceNextFullRefresh();
-
   switch (resume) {
     case BootResume::Silent:
       // Splash skipped: the routing block below picks the target activity; the
@@ -571,9 +555,6 @@ void setup() {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
       } else {
-        // Frame file missing, so the panel holds something unknown rather than the frame this
-        // path was going to draw over. Treat it like any other cold boot.
-        display.forceNextFullRefresh();
         activityManager.goToBoot();  // frame file missing, fall back to the splash
       }
       break;
