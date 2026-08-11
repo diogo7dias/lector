@@ -16,6 +16,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/BannerStyle.h"
+#include "components/OptionPopupGeometry.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
@@ -1347,37 +1348,25 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                 int selectedIndex, bool leftAlign) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
 
   // One size for the whole popup, the same one the menu rows behind it use. The title
   // used to be a step larger, which read as bold against the options under it.
-  constexpr int optionFontId = UI_10_FONT_ID;
-  constexpr EpdFontFamily::Style optionStyle = EpdFontFamily::REGULAR;
+  constexpr int optionFontId = option_popup::FONT_ID;
+  constexpr EpdFontFamily::Style optionStyle = option_popup::FONT_STYLE;
 
-  const int itemSpacing = metrics.optionPopupItemSpacing;
-  const int innerPadding = metrics.optionPopupInnerPadding;
+  // Shared with OptionPopup's hit-test layout, so a tap always resolves to the row it landed on.
+  const auto geometry = option_popup::compute(renderer, metrics, title, options);
+  const int innerPadding = geometry.innerPadding;
   const int selectionHPadding = metrics.optionPopupSelectionHPadding;
-  const int selectionVPadding = metrics.optionPopupSelectionVPadding;
-
-  const int optionLineHeight = renderer.getLineHeight(optionFontId);
-  const int titleLineHeight = renderer.getLineHeight(optionFontId);
-  const int rowHeight = optionLineHeight + selectionVPadding * 2;
-
-  int maxTextWidth = renderer.getTextWidth(optionFontId, title, optionStyle);
-  for (const auto& opt : options) {
-    int w = renderer.getTextWidth(optionFontId, opt.c_str(), optionStyle);
-    if (w > maxTextWidth) maxTextWidth = w;
-  }
+  const int rowHeight = geometry.rowHeight;
+  const int rowPitch = geometry.rowPitch;
+  const int titleLineHeight = geometry.titleLineHeight;
 
   const int optionCount = static_cast<int>(options.size());
-  const int listHeight = rowHeight * optionCount + itemSpacing * (optionCount - 1);
-  const int dialogW = std::min((maxTextWidth + innerPadding * 2 + selectionHPadding * 2) * 12 / 10,
-                               pageWidth - metrics.optionPopupDialogSideMargin * 2);
-  const int contentHeight = titleLineHeight + metrics.optionPopupTitleGap + listHeight;
-  const int dialogH = contentHeight + innerPadding * 2;
-  const int dialogX = (pageWidth - dialogW) / 2;
-  const int dialogY = (pageHeight - dialogH) / 2;
+  const int dialogW = geometry.dialogW;
+  const int dialogH = geometry.dialogH;
+  const int dialogX = geometry.dialogX;
+  const int dialogY = geometry.dialogY;
 
   const int frameThickness = metrics.popupFrameThickness;
   const int frameRadius = metrics.popupCornerRadius;
@@ -1407,12 +1396,13 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   y += metrics.optionPopupTitleGap;
 
-  const int itemRectX = dialogX + innerPadding;
-  const int itemRectW = dialogW - innerPadding * 2;
+  const int itemRectX = geometry.itemRectX;
+  const int itemRectW = geometry.itemRectW;
   const int selectionRadius = metrics.optionPopupSelectionRadius;
+  const int optionLineHeight = renderer.getLineHeight(optionFontId);
 
   for (int i = 0; i < optionCount; i++) {
-    const int itemY = y + i * (rowHeight + itemSpacing);
+    const int itemY = geometry.firstItemY + i * rowPitch;
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
 

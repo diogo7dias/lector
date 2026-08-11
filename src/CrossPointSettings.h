@@ -219,9 +219,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
       LP_MENU_GRAB_QUOTE,    LP_MENU_VIEW_QUOTES,     LP_MENU_GO_TO_PARAGRAPH,   LP_MENU_FOOTNOTES,
       LP_MENU_TEXT_SETTINGS, LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
 
-  // Cap on ticked pop-up rows. OptionPopup does not scroll: it grows until it runs off
-  // the panel, and a pop-up you have to scroll is slower than the menu it replaces.
-  static constexpr uint8_t POPUP_ITEM_MAX = 8;
+  // Cap on ticked pop-up rows. Every action can be ticked at once; the ceiling only exists
+  // because popupItems is a 16-bit mask, so 16 is as many bits as there are to set. The
+  // pop-up itself no longer needs the cap to stay on screen — option_popup::compute()
+  // tightens its spacing when the rows would otherwise run off the panel.
+  static constexpr uint8_t POPUP_ITEM_MAX = 16;
 
   // Page turn button long press behavior
   enum LONG_PRESS_BUTTON_BEHAVIOR {
