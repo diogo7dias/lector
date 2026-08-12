@@ -248,6 +248,11 @@ void enterDeepSleep(bool fromTimeout = false) {
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
   // A custom sleep image already provides retained boot-time content. Keep it
   // on-panel until the first useful reader or home paint replaces it.
+  //
+  // Upstream (#2989) sets this false for every sleep mode. Lector does not: the
+  // wallpaper wake face — blank the panel on the button press, then draw the
+  // unlock banners in one FULL pass — lives on the BootResume::Splash path, so
+  // routing every wake to SplashlessWake would silently delete it.
   APP_STATE.showBootScreen =
       !(isQuickResumeSleep || SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM);
 
@@ -263,9 +268,8 @@ void enterDeepSleep(bool fromTimeout = false) {
   // the card here would only slow the lock for a frame nothing reads.
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
-  } else if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM &&
-             Storage.exists(SLEEP_FRAME_FILE)) {
-    // A stale Quick Resume frame must not turn a custom wake into the loading-icon path.
+  } else if (Storage.exists(SLEEP_FRAME_FILE)) {
+    // A stale Quick Resume frame must not replace the selected sleep screen during wake.
     Storage.remove(SLEEP_FRAME_FILE);
   }
 
@@ -475,9 +479,12 @@ void setup() {
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see
   // HalDisplay::begin), so the first paint is FAST_REFRESH (~500ms) over the
   // retained frame and input dispatches against a visible UI.
-  const BootResume resume = isSilentReboot              ? BootResume::Silent
-                            : !APP_STATE.showBootScreen ? BootResume::SplashlessWake
-                                                        : BootResume::Splash;
+  // Only a verified deep-sleep wake may use the one-shot persisted flag.
+  // Otherwise a stale flag could suppress the splash on a cold boot.
+  const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
+  const BootResume resume = isSilentReboot                             ? BootResume::Silent
+                            : isSleepWake && !APP_STATE.showBootScreen ? BootResume::SplashlessWake
+                                                                       : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
 
   // "Open a random book on boot": pick the target BEFORE the unlock banners paint, so the
@@ -534,7 +541,9 @@ void setup() {
       // us in a splashless-with-no-frame loop on the next boot.
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
-      if (loadSleepFrameBuffer()) {
+      // exists() first: a missing frame file is the ordinary case for a sleep mode that
+      // never saved one, and the check costs less than an open that is going to fail.
+      if (Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer()) {
         // Frame restored: draw the wake/unlock banners over the retained wallpaper
         // (version + resuming book on top, custom footer on the bottom), matching old
         // lector. The banners are the loading face; input stays gated until the reader
