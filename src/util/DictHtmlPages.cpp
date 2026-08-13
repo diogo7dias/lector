@@ -222,8 +222,14 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     // handling, the only path that dereferences it.
     auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
         nullptr, tmpPath, renderer, SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-        SETTINGS.extraParagraphSpacing, SETTINGS.paragraphAlignment, viewportWidth, viewportHeight,
-        SETTINGS.hyphenationEnabled, SETTINGS.focusReadingEnabled,
+        SETTINGS.extraParagraphSpacing, SETTINGS.paragraphSpacing, SETTINGS.paragraphAlignment, viewportWidth,
+        viewportHeight, SETTINGS.hyphenationEnabled, SETTINGS.focusReadingEnabled,
+        // A definition is a short popup, not a page of the book: guide dots and the
+        // first-line indent are reading-surface furniture and only add noise here.
+        // Percent mode at 0 is how "no indent" is spelled: there is no NONE mode, and
+        // BOOK mode would honour whatever indent the definition's own markup carries.
+        /*guideDotsEnabled=*/false, /*firstLineIndentMode=*/CrossPointSettings::FIRST_LINE_INDENT_PERCENT,
+        /*firstLineIndentPercent=*/0,
         [&pagesOut, &resourceLimitHit, &retainedElements](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
           if (resourceLimitHit) return;
           const size_t pageElements = page->elements.size();
