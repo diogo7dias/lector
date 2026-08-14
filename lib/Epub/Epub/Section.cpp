@@ -81,7 +81,11 @@ namespace {
 // v50: a flush inside a <ruby> group no longer splits the group, so the annotated
 //      word keeps its ruby text (upstream #3102; upstream numbered it v40). Word
 //      positions move on ruby books, so cached pages must be rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 50;
+// v51: Focus Reading emphasis became a byte annotation on a whole word instead of a
+//      separate suffix token, and a visible hyphen or dash inside a word is now a break
+//      opportunity (upstream #2892; upstream numbered it v38). Both change where lines
+//      break, so pages cached by older versions no longer match.
+constexpr uint8_t SECTION_FILE_VERSION = 51;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
