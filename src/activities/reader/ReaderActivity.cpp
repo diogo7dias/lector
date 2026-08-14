@@ -29,7 +29,9 @@ bool ReaderActivity::isTxtFile(const std::string& path) {
          FsHelpers::hasMarkdownExtension(path);  // Treat .md as txt files (until we have a markdown reader)
 }
 
-bool ReaderActivity::isBmpFile(const std::string& path) { return FsHelpers::hasBmpExtension(path); }
+bool ReaderActivity::isImageFile(const std::string& path) {
+  return FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path);
+}
 
 int ReaderActivity::initialRefreshCountdown() const {
   if (!allowFastInitialRefresh) return 0;
@@ -170,7 +172,7 @@ void ReaderActivity::onEnter() {
   }
 
   currentBookPath = initialBookPath;
-  if (isBmpFile(initialBookPath)) {
+  if (isImageFile(initialBookPath)) {
     onGoToBmpViewer(initialBookPath);
   } else if (hasPxcExtension(initialBookPath)) {
     onGoToPxcViewer(initialBookPath);

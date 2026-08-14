@@ -1,6 +1,7 @@
 #include "SleepActivity.h"
 
 #include <Epub.h>
+#include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
@@ -25,6 +26,7 @@
 #include "StatsDashboardPolicy.h"
 #include "StatsDashboardRenderer.h"
 #include "activities/reader/ReaderUtils.h"
+#include "components/BannerStyle.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
@@ -142,7 +144,8 @@ std::string pickWallpaperByJump(HalFile& dir) {
 
 // Kept separate from /sleep.pxc, /sleep.bmp and /.sleep so alpha art never mixes
 // into the full-screen wallpaper rotation (and never reaches the wallpaper index).
-constexpr char TRANSPARENT_SLEEP_ROOT[] = "/sleep-overlay.bmp";
+constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
+constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
 constexpr char TRANSPARENT_SLEEP_DIR[] = "/.sleep-overlay";
 constexpr char TRANSPARENT_SLEEP_LEGACY_DIR[] = "/sleep-overlay";
 constexpr uint8_t MIN_VISIBLE_ALPHA = 8;
@@ -181,6 +184,59 @@ uint32_t readLE32(HalFile& file) {
   const auto b3 = static_cast<uint8_t>(c3 < 0 ? 0 : c3);
   return static_cast<uint32_t>(b0) | (static_cast<uint32_t>(b1) << 8) | (static_cast<uint32_t>(b2) << 16) |
          (static_cast<uint32_t>(b3) << 24);
+}
+
+uint32_t readBE32(HalFile& file) {
+  const int c0 = file.read();
+  const int c1 = file.read();
+  const int c2 = file.read();
+  const int c3 = file.read();
+  if (c0 < 0 || c1 < 0 || c2 < 0 || c3 < 0) return 0;
+  return (static_cast<uint32_t>(c0) << 24) | (static_cast<uint32_t>(c1) << 16) | (static_cast<uint32_t>(c2) << 8) |
+         static_cast<uint32_t>(c3);
+}
+
+// PNG colour-type codes, fixed by the PNG specification. Spelled out here rather than
+// pulled from <PNGdec.h>: that header drags in zlib's zutil.h, which does not survive
+// this translation unit's include set, and five spec constants are not worth the tangle.
+constexpr int PNG_COLOR_GRAYSCALE = 0;
+constexpr int PNG_COLOR_TRUECOLOR = 2;
+constexpr int PNG_COLOR_INDEXED = 3;
+constexpr int PNG_COLOR_GRAY_ALPHA = 4;
+constexpr int PNG_COLOR_TRUECOLOR_ALPHA = 6;
+
+bool isValidPngHeader(HalFile& file) {
+  static constexpr uint8_t PNG_SIGNATURE[8] = {0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A};
+  static constexpr uint32_t MAX_SOURCE_PIXELS = 2048u * 1536u;
+  uint8_t signature[8];
+  if (!file.seek(0) || file.read(signature, sizeof(signature)) != static_cast<int>(sizeof(signature)) ||
+      !std::equal(std::begin(signature), std::end(signature), std::begin(PNG_SIGNATURE))) {
+    return false;
+  }
+
+  const uint32_t ihdrLength = readBE32(file);
+  char chunkType[4];
+  if (file.read(reinterpret_cast<uint8_t*>(chunkType), sizeof(chunkType)) != static_cast<int>(sizeof(chunkType)) ||
+      ihdrLength != 13 || !std::equal(std::begin(chunkType), std::end(chunkType), "IHDR")) {
+    return false;
+  }
+
+  const uint32_t width = readBE32(file);
+  const uint32_t height = readBE32(file);
+  const int bitDepth = file.read();
+  const int colorType = file.read();
+  const int compression = file.read();
+  const int filter = file.read();
+  const int interlace = file.read();
+
+  const bool supportedBitDepth =
+      bitDepth == 8 || ((colorType == PNG_COLOR_GRAYSCALE || colorType == PNG_COLOR_INDEXED) &&
+                        (bitDepth == 1 || bitDepth == 2 || bitDepth == 4));
+  const bool supportedColorType = colorType == PNG_COLOR_GRAYSCALE || colorType == PNG_COLOR_TRUECOLOR ||
+                                  colorType == PNG_COLOR_INDEXED || colorType == PNG_COLOR_GRAY_ALPHA ||
+                                  colorType == PNG_COLOR_TRUECOLOR_ALPHA;
+  return width > 0 && height > 0 && width <= 2048 && height <= 3072 && width * height <= MAX_SOURCE_PIXELS &&
+         supportedBitDepth && supportedColorType && compression == 0 && filter == 0 && interlace == 0;
 }
 
 // Where a bitmap lands on the panel: centred, scaled down to fit, and cropped to
@@ -484,11 +540,34 @@ std::string pickOverlayFromDir(const char* dirPath) {
       resetTaskWatchdogIfSubscribed();
       vTaskDelay(1);
     }
-    const bool isDir = dirFile.isDirectory();
+    if (dirFile.isDirectory()) {
+      dirFile.close();
+      continue;
+    }
     dirFile.getName(name, sizeof(name));
-    dirFile.close();  // only the name is needed; never open/parse the file here
-    if (isDir || name[0] == '\0' || name[0] == '.') continue;
-    if (!FsHelpers::hasBmpExtension(name)) continue;
+    if (name[0] == '\0' || name[0] == '.') {
+      dirFile.close();
+      continue;
+    }
+
+    const bool isBmp = FsHelpers::hasBmpExtension(name);
+    const bool isPng = FsHelpers::hasPngExtension(std::string_view{name});
+    if (!isBmp && !isPng) {
+      dirFile.close();
+      continue;
+    }
+
+    // Headers are checked here, unlike the wallpaper folder walk above which only
+    // looks at names. Exactly one file gets rendered per sleep, so an unreadable
+    // candidate would cost the user the whole face and drop them to the default
+    // logo screen. An overlay folder holds a handful of files, so the per-file
+    // header read is affordable; a wallpaper folder holds thousands and is not.
+    const bool isValid = isBmp ? Bitmap(dirFile).parseHeaders() == BmpReaderError::Ok : isValidPngHeader(dirFile);
+    dirFile.close();
+    if (!isValid) {
+      LOG_DBG("SLP", "Skipping invalid sleep overlay: %s", name);
+      continue;
+    }
 
     ++seen;
     if (random(static_cast<long>(seen)) == 0) chosen = name;
@@ -496,6 +575,40 @@ std::string pickOverlayFromDir(const char* dirPath) {
   dir.close();
 
   return chosen.empty() ? std::string() : prefix + chosen;
+}
+
+// Shows the "Entering sleep" popup without leaving it in the framebuffer, so a
+// transparent overlay still composites onto the clean page underneath.
+//
+// Upstream (#2974) computes the band from popup metrics this fork does not have: its
+// popup is a centred dialog, lector's is a banner strip pinned to the top edge. The
+// geometry here mirrors BaseTheme::drawBannerStrip — black backing from physical row 0
+// down through the viewable inset, then PAD + line + PAD, with the rule inside that.
+bool drawSleepPopupPreservingFrame(GfxRenderer& renderer) {
+  int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+  const int bandTop = 0;
+  const int bandHeight =
+      std::min(renderer.getScreenHeight(), viewTop + banner::PAD * 2 + renderer.getLineHeight(banner::FONT_ID));
+  if (bandHeight <= 0) return false;
+  const size_t bandBytes = renderer.getRegionByteSize(0, bandTop, renderer.getScreenWidth(), bandHeight);
+
+  auto savedBand = makeUniqueNoThrow<uint8_t[]>(bandBytes);
+  if (!savedBand) {
+    LOG_ERR("SLP", "OOM: sleep popup background (%u bytes)", static_cast<unsigned>(bandBytes));
+    return false;
+  }
+  if (!renderer.copyRegionToBuffer(0, bandTop, renderer.getScreenWidth(), bandHeight, savedBand.get(), bandBytes)) {
+    LOG_ERR("SLP", "Failed to save sleep popup background");
+    return false;
+  }
+
+  GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  if (!renderer.copyBufferToRegion(0, bandTop, renderer.getScreenWidth(), bandHeight, savedBand.get(), bandBytes)) {
+    LOG_ERR("SLP", "Failed to restore sleep popup background");
+    return false;
+  }
+  return true;
 }
 
 }  // namespace
@@ -553,10 +666,19 @@ void SleepActivity::renderSleepScreen() const {
   }
 
   // Transparent overlays composite onto the page the user locked from, so this path
-  // must reach the renderer with the panel untouched: no "Entering sleep" popup and
-  // no deepCleanPanel blank below, both of which exist to stop a wallpaper ghosting
-  // over the old page. Here the old page IS the background.
+  // must reach the renderer with that page intact. It skips the deepCleanPanel blank
+  // below, which exists to stop a wallpaper ghosting over the old page — here the old
+  // page IS the background.
+  //
+  // The "Entering sleep" popup still runs, because decoding an overlay takes a moment
+  // and the user needs to see the press registered. It is drawn and then lifted back
+  // out of the framebuffer, so it appears on the panel without ending up baked into
+  // the background the overlay composites onto.
   if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM) {
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    }
+    drawSleepPopupPreservingFrame(renderer);
     if (APP_STATE.lastSleepFromReader) {
       renderer.setOrientation(GfxRenderer::Orientation::Portrait);
     }
@@ -1057,26 +1179,66 @@ bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog
   return true;
 }
 
-void SleepActivity::renderTransparentCustomSleepScreen() const {
-  // /sleep-overlay.bmp at the card root wins, mirroring how /sleep.bmp outranks
-  // the /.sleep folder on the custom face.
-  {
-    HalFile rootFile;
-    if (Storage.openFileForRead("SLP", TRANSPARENT_SLEEP_ROOT, rootFile)) {
-      if (renderSleepOverlayFile(rootFile, TRANSPARENT_SLEEP_ROOT)) return;
-    }
+bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
+  ImageDimensions dimensions;
+  if (!PngToFramebufferConverter::getDimensionsStatic(path, dimensions)) return false;
+
+  const auto placement = calculateBitmapPlacement(dimensions.width, dimensions.height, renderer);
+  RenderConfig config;
+  config.x = placement.x;
+  config.y = placement.y;
+  config.maxWidth = renderer.getScreenWidth();
+  config.maxHeight = renderer.getScreenHeight();
+  config.useDithering = false;
+  config.sourceCropX = placement.cropX;
+  config.sourceCropY = placement.cropY;
+  config.useExactDimensions = placement.cropX > 0.0f || placement.cropY > 0.0f;
+  config.preserveAlpha = true;
+
+  PngToFramebufferConverter converter;
+  LOG_DBG("SLP", "Rendering transparent PNG overlay: %s (%dx%d)", path.c_str(), dimensions.width, dimensions.height);
+
+  if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
+  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
+  if (!converter.decodeToFramebuffer(path, renderer, config)) {
+    renderer.setRenderMode(GfxRenderer::BW);
+    return true;
   }
+  renderer.copyGrayscaleLsbBuffers();
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
+  if (!converter.decodeToFramebuffer(path, renderer, config)) {
+    renderer.setRenderMode(GfxRenderer::BW);
+    return true;
+  }
+  renderer.copyGrayscaleMsbBuffers();
+
+  renderer.displayGrayBuffer();
+  renderer.setRenderMode(GfxRenderer::BW);
+  return true;
+}
+
+bool SleepActivity::renderSleepOverlayPath(const std::string& path) const {
+  if (FsHelpers::hasPngExtension(path)) {
+    return Storage.exists(path.c_str()) && renderTransparentOverlayPng(path);
+  }
+
+  HalFile file;
+  return Storage.openFileForRead("SLP", path, file) && renderSleepOverlayFile(file, path.c_str());
+}
+
+void SleepActivity::renderTransparentCustomSleepScreen() const {
+  if (renderSleepOverlayPath(TRANSPARENT_SLEEP_ROOT_BMP)) return;
+  if (renderSleepOverlayPath(TRANSPARENT_SLEEP_ROOT_PNG)) return;
 
   std::string selectedPath = pickOverlayFromDir(TRANSPARENT_SLEEP_DIR);
   if (selectedPath.empty()) selectedPath = pickOverlayFromDir(TRANSPARENT_SLEEP_LEGACY_DIR);
 
-  if (!selectedPath.empty()) {
-    HalFile overlayFile;
-    if (Storage.openFileForRead("SLP", selectedPath, overlayFile) &&
-        renderSleepOverlayFile(overlayFile, selectedPath.c_str())) {
-      return;
-    }
-  }
+  if (!selectedPath.empty() && renderSleepOverlayPath(selectedPath)) return;
 
   // Nothing to composite. The panel still holds the page the user locked from, which
   // reads as "sleep did nothing", so fall back to a real sleep face — and blank first,

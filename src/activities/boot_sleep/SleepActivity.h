@@ -33,6 +33,11 @@ class SleepActivity final : public Activity {
   // with a Bayer dither on the alpha channel, so partial transparency survives a
   // 1-bit panel. Falls back to a plain over-draw for any other BMP.
   bool renderSleepOverlayFile(HalFile& file, const char* pathForLog) const;
+  // PNG overlays go through the shared EPUB image decoder instead, which already
+  // handles every PNG colour type; it grew a preserve-alpha mode for this.
+  bool renderTransparentOverlayPng(const std::string& path) const;
+  // Dispatches one overlay path to the PNG or the BMP renderer by extension.
+  bool renderSleepOverlayPath(const std::string& path) const;
   void renderTransparentCustomSleepScreen() const;
   // Reading-stats dashboard over the current book's cover. Falls back to the default
   // face when there is no open book, the format has no stats, or no cover can be made.

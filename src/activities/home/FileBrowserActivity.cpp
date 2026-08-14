@@ -83,9 +83,11 @@ void FileBrowserActivity::loadFiles() {
         }
       } else if (FsHelpers::hasEpubExtension(filename) || FsHelpers::hasXtcExtension(filename) ||
                  FsHelpers::hasTxtExtension(filename) || FsHelpers::hasMarkdownExtension(filename) ||
-                 FsHelpers::hasBmpExtension(filename) || hasPxcExtension(filename)) {
+                 FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename) ||
+                 hasPxcExtension(filename)) {
         // .pxc joins the list so a wallpaper folder can be browsed and triaged on
-        // the device; selecting one opens PxcViewerActivity.
+        // the device; selecting one opens PxcViewerActivity. .png joins it so a
+        // transparent sleep overlay can be previewed the same way.
         if (!files.push(filename)) break;
       }
     }

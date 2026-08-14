@@ -26,6 +26,11 @@ class BmpViewerActivity final : public Activity {
   void doToggleFavorite();
   void doTogglePause();
   void promptDelete();
+  // A PNG can only become the sleep image while the Transparent face is selected;
+  // every other face reads .bmp only, so offering it there would write a file
+  // nothing ever renders.
+  bool canSetSleepCover() const;
+  bool renderPng();
 
   std::string filePath;
   // Arena-backed and bounded; see NameList. A wallpaper folder with thousands of

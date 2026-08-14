@@ -1,6 +1,7 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
+#include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -14,6 +15,12 @@
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
 #include "util/FavoriteImage.h"
+
+namespace {
+constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
+constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
+constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
+}  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
     : Activity("BmpViewer", renderer, mappedInput), filePath(std::move(path)) {}
@@ -40,7 +47,7 @@ void BmpViewerActivity::loadSiblingImages() {
       file.getName(name, sizeof(name));
       if (name[0] != '.') {
         const std::string_view fname(name);
-        if (FsHelpers::checkFileExtension(fname, ".bmp")) {
+        if (FsHelpers::hasBmpExtension(fname) || FsHelpers::hasPngExtension(fname)) {
           // Bounded on purpose: this folder can hold thousands of images, and an
           // unbounded name list exhausts the heap into a throwing allocation.
           if (!siblingImages.push(fname)) break;
@@ -73,10 +80,34 @@ void BmpViewerActivity::drawHints() {
   const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
   const char* pauseLabel =
       filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
+  // Blank rather than "Set sleep cover" when the file cannot become one: a .png is
+  // only usable as a sleep image while the Transparent face is selected.
   const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
-                             : mappedInput.mapLabels(tr(STR_BACK), tr(STR_SET_SLEEP_COVER), (hasPrevious ? "<" : ""),
-                                                     (hasNext ? ">" : ""));
+                             : mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
+                                                     (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+bool BmpViewerActivity::canSetSleepCover() const {
+  return FsHelpers::hasBmpExtension(filePath) ||
+         (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
+          FsHelpers::hasPngExtension(filePath));
+}
+
+bool BmpViewerActivity::renderPng() {
+  ImageDimensions dimensions;
+  if (!PngToFramebufferConverter::getDimensionsStatic(filePath, dimensions)) return false;
+  if (dimensions.width <= 0 || dimensions.height <= 0) return false;
+
+  const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
+                               static_cast<float>(renderer.getScreenHeight()) / dimensions.height);
+  const int width = std::min(renderer.getScreenWidth(), static_cast<int>(dimensions.width * std::min(scale, 1.0f)));
+  const int height = std::min(renderer.getScreenHeight(), static_cast<int>(dimensions.height * std::min(scale, 1.0f)));
+  RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
+                      height};
+
+  PngToFramebufferConverter converter;
+  return converter.decodeToFramebuffer(filePath, renderer, config);
 }
 
 void BmpViewerActivity::onEnter() {
@@ -86,13 +117,28 @@ void BmpViewerActivity::onEnter() {
     loadSiblingImages();
   }
 
-  HalFile file;
-
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
-  // 1. Open the file
+  if (FsHelpers::hasPngExtension(filePath)) {
+    renderer.clearScreen();
+    if (renderPng()) {
+      // drawHints(), not a private label set: a .png sitting in a sleep folder must
+      // offer the same favourite/pause/delete triage a .bmp or .pxc does there.
+      drawHints();
+      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+    } else {
+      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    }
+    return;
+  }
+
+  HalFile file;
+  // 1. Open the BMP file
   if (Storage.openFileForRead("BMP", filePath, file)) {
     Bitmap bitmap(file, true);
 
@@ -165,7 +211,11 @@ void BmpViewerActivity::doSetSleepCover() {
   // overlay" — copying to /sleep.bmp would write a file that face never reads, and
   // switching the mode to CUSTOM behind the user's back would drop them out of it.
   const bool transparentMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
-  const char* destination = transparentMode ? "/sleep-overlay.bmp" : "/sleep.bmp";
+  if (!canSetSleepCover()) return;
+
+  const char* destination =
+      transparentMode ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
+                      : CUSTOM_SLEEP_ROOT_BMP;
 
   // Already the destination: nothing to copy, and opening it for write would truncate
   // the very file being read.
@@ -232,7 +282,7 @@ void BmpViewerActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (triage) {
       doToggleFavorite();
-    } else {
+    } else if (canSetSleepCover()) {
       doSetSleepCover();
     }
     return;
