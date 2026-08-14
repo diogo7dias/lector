@@ -70,7 +70,12 @@ namespace {
 //      and must be rebuilt. Pagination itself is unchanged; this is a RAM fix, cutting
 //      up to ~32 KB of vector slots and up to MAX_ANCHORS_PER_CHAPTER separate heap
 //      blocks out of a chapter parse, and allocating nothing per entry on lookup.
-constexpr uint8_t SECTION_FILE_VERSION = 47;
+// v48: ruby annotations no longer shift the words under them at render time. Layout
+//      reserves the annotation's overhang on both edges of the line instead, so a wide
+//      annotation can never spill past the right margin when the line is justified, and
+//      CJK lines stop breaking early to leave room for it (upstream #2781; upstream
+//      numbered it v36). Line breaks move, so every cached page must be rebuilt.
+constexpr uint8_t SECTION_FILE_VERSION = 48;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
