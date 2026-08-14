@@ -226,6 +226,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
     sleepScreenValues[CrossPointSettings::STATS_DASHBOARD] = StrId::STR_STATS_DASHBOARD;
     sleepScreenValues[CrossPointSettings::FREEZE] = StrId::STR_FREEZE;
+    sleepScreenValues[CrossPointSettings::TRANSPARENT_CUSTOM] = StrId::STR_TRANSPARENT;
 
     // The list is appended one entry at a time instead of being written as a single
     // braced initializer. A braced list materializes ALL entries as one temporary array

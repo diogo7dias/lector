@@ -4,6 +4,7 @@
 #include "activities/Activity.h"
 
 class Bitmap;
+class HalFile;
 
 class SleepActivity final : public Activity {
  public:
@@ -24,7 +25,15 @@ class SleepActivity final : public Activity {
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
-  void renderBitmapSleepScreen(const Bitmap& bitmap) const;
+  // preserveBackground keeps whatever the panel is already holding and draws the bitmap
+  // over it: no initial clear, and no cover filter (the filter is about how a full-screen
+  // wallpaper looks, and inverting a composite would invert the retained page too).
+  void renderBitmapSleepScreen(const Bitmap& bitmap, bool preserveBackground = false) const;
+  // Alpha overlay over the retained page. Reads a 32-bit BGRA BMP and composites it
+  // with a Bayer dither on the alpha channel, so partial transparency survives a
+  // 1-bit panel. Falls back to a plain over-draw for any other BMP.
+  bool renderSleepOverlayFile(HalFile& file, const char* pathForLog) const;
+  void renderTransparentCustomSleepScreen() const;
   // Reading-stats dashboard over the current book's cover. Falls back to the default
   // face when there is no open book, the format has no stats, or no cover can be made.
   void renderStatsDashboardSleepScreen() const;

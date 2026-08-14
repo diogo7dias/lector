@@ -35,6 +35,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // stays reserved so the values around it keep their meaning, and fromJson() migrates
     // a stored 8 to DARK. Quick Resume on Timeout covers the "keep my page" case.
     FREEZE = 8,
+    // Draws an alpha overlay over whatever the panel is already holding, instead of
+    // replacing it. Upstream (#2937) gave this slot 7; here 7 is already STATS_DASHBOARD,
+    // so it is appended after FREEZE — the stored value is the persisted setting.
+    TRANSPARENT_CUSTOM = 9,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
