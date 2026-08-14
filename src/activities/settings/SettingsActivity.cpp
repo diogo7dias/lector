@@ -35,6 +35,54 @@
 const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
                                                               StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
 
+namespace {
+
+// One section of a tab: the heading, then the rows under it in display order.
+struct SettingsGroup {
+  StrId heading;
+  std::vector<StrId> members;
+};
+
+// Reorders a tab's rows into the given sections and inserts a heading above each.
+// The group map, not SettingsList.h's declaration order, decides what the user sees.
+//
+// A group whose rows are all absent contributes no heading, which is what keeps the
+// headings honest when a conditional row drops out (Quick-return from footnotes, Pop-up
+// Items, Screen Cleanup on X4) or when a whole group is board-specific.
+//
+// Rows the map does not mention keep their relative order and are appended at the end
+// under no heading. That is deliberate: a setting added to SettingsList.h later stays
+// reachable on the device even if whoever added it never touched this map.
+void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup>& groups) {
+  std::vector<SettingInfo> grouped;
+  grouped.reserve(rows.size() + groups.size());
+  std::vector<bool> placed(rows.size(), false);
+
+  for (const auto& group : groups) {
+    bool headingDrawn = false;
+    for (const StrId member : group.members) {
+      for (size_t i = 0; i < rows.size(); ++i) {
+        if (placed[i] || rows[i].nameId != member) continue;
+        if (!headingDrawn) {
+          grouped.push_back(SettingInfo::Header(group.heading));
+          headingDrawn = true;
+        }
+        grouped.push_back(rows[i]);
+        placed[i] = true;
+        break;
+      }
+    }
+  }
+
+  for (size_t i = 0; i < rows.size(); ++i) {
+    if (!placed[i]) grouped.push_back(rows[i]);
+  }
+
+  rows.swap(grouped);
+}
+
+}  // namespace
+
 void SettingsActivity::rebuildSettingsLists() {
   displaySettings.clear();
   readerSettings.clear();
@@ -94,6 +142,60 @@ void SettingsActivity::rebuildSettingsLists() {
   readerSettings.insert(readerSettings.begin() + 1,
                         SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
+
+  // Section headings. Applied last so the ACTION rows spliced in above are grouped
+  // alongside the settings they belong with rather than stranded at the ends.
+  applyGroups(
+      displaySettings,
+      {
+          {StrId::STR_GRP_SLEEP_SCREEN,
+           {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_WAKE_STRAIGHT_TO_BOOK,
+            StrId::STR_SLEEP_FOOTER_TEXT}},
+          {StrId::STR_GRP_WALLPAPER,
+           {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SLEEP_IMAGE_QUALITY,
+            StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
+            StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
+          {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_REFRESH_ACTION, StrId::STR_SUNLIGHT_FADING_FIX}},
+          {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
+      });
+
+  applyGroups(readerSettings,
+              {
+                  {StrId::STR_GRP_TEXT, {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_DICTIONARY}},
+                  {StrId::STR_GRP_PAGE,
+                   {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE}},
+                  {StrId::STR_GRP_LOOK,
+                   {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_NIGHT_MODE,
+                    StrId::STR_CUSTOMISE_STATUS_BAR}},
+              });
+
+  applyGroups(
+      controlsSettings,
+      {
+          {StrId::STR_GRP_BUTTONS,
+           {StrId::STR_REMAP_FRONT_BUTTONS, StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, StrId::STR_SIDE_BTN_LAYOUT}},
+          {StrId::STR_GRP_POWER_BUTTON,
+           {StrId::STR_SHORT_PWR_BTN, StrId::STR_PWR_BTN_FOOTNOTE_BACK, StrId::STR_DOUBLE_CLICK_POWER}},
+          // Pop-up Items sits with the bindings, because it only configures what the
+          // pop-up those bindings open actually contains.
+          {StrId::STR_GRP_HOLD,
+           {StrId::STR_LONG_PRESS_BEHAVIOR, StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
+          {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
+      });
+
+  applyGroups(
+      systemSettings,
+      {
+          {StrId::STR_GRP_POWER, {StrId::STR_TIME_TO_SLEEP}},
+          {StrId::STR_GRP_LIBRARY,
+           {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_RANDOM_ON_BOOT,
+            StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
+          {StrId::STR_GRP_STATS, {StrId::STR_TRACK_READING_STATS, StrId::STR_READING_IDLE_LIMIT}},
+          {StrId::STR_GRP_NETWORK, {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS}},
+          {StrId::STR_GRP_DEVICE,
+           {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
+            StrId::STR_SD_FIRMWARE_UPDATE}},
+      });
 
   // Update currentSettings pointer and count for the active category
   switch (selectedCategoryIndex) {
@@ -191,12 +293,12 @@ void SettingsActivity::loop() {
   }
 
   buttonNavigator.onNextRelease([this] {
-    selectedSettingIndex = ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1);
+    selectedSettingIndex = skipHeaders(ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1), true);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousRelease([this] {
-    selectedSettingIndex = ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1);
+    selectedSettingIndex = skipHeaders(ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1), false);
     requestUpdate();
   });
 
@@ -215,12 +317,36 @@ void SettingsActivity::loop() {
   if (hasChangedCategory) {
     selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
     applyCategorySelection();
+    // Every tab now opens on a heading, so the first row has to be stepped past.
+    // The old tab's scroll position means nothing in the new one.
+    selectedSettingIndex = skipHeaders(selectedSettingIndex, true);
+    listScrollOffset = 0;
   }
+}
+
+bool SettingsActivity::isHeaderRow(const int navIndex) const {
+  const int row = navIndex - 1;
+  if (currentSettings == nullptr || row < 0 || row >= settingsCount) return false;
+  return (*currentSettings)[row].isHeader;
+}
+
+int SettingsActivity::skipHeaders(int navIndex, const bool forward) const {
+  const int ring = settingsCount + 1;
+  // Bounded by the ring length: a list that somehow held nothing but headings would
+  // otherwise spin here forever.
+  for (int guard = 0; guard < ring && isHeaderRow(navIndex); ++guard) {
+    navIndex = forward ? ButtonNavigator::nextIndex(navIndex, ring) : ButtonNavigator::previousIndex(navIndex, ring);
+  }
+  return navIndex;
 }
 
 void SettingsActivity::toggleCurrentSetting() {
   int selectedSetting = selectedSettingIndex - 1;
   if (selectedSetting < 0 || selectedSetting >= settingsCount) {
+    return;
+  }
+  // Confirm on a heading does nothing; it is a divider, not an option.
+  if ((*currentSettings)[selectedSetting].isHeader) {
     return;
   }
 
@@ -423,6 +549,9 @@ void SettingsActivity::toggleCurrentSetting() {
   SETTINGS.saveToFile();
   rebuildSettingsLists();
   selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
+  // A toggle can add or remove rows (Quick-return from footnotes, Pop-up Items), which
+  // shifts everything below it and can slide a heading under the cursor.
+  selectedSettingIndex = skipHeaders(selectedSettingIndex, true);
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
@@ -543,7 +672,7 @@ void SettingsActivity::render(RenderLock&&) {
         }
         return valueText;
       },
-      true);
+      true, nullptr, UI_10_FONT_ID, [&settings](int i) { return settings[i].isHeader; }, &listScrollOffset);
 
   // Draw help text
   const auto confirmLabel =

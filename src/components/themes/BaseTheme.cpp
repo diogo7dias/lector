@@ -16,6 +16,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/BannerStyle.h"
+#include "components/ListScrollPolicy.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/UITheme.h"
 #include "components/icons/bookmark.h"
@@ -389,13 +390,29 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<UIIcon(int index)>& rowIcon,
                          const std::function<std::string(int index)>& rowValue, bool highlightValue,
                          const std::function<bool(int index)>& rowDimmed, int itemFontId,
-                         const std::function<bool(int index)>& rowIsHeader) const {
+                         const std::function<bool(int index)>& rowIsHeader, int* scrollOffset) const {
   int rowHeight =
       (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
   int pageItems = rowHeight > 0 ? std::max(1, rect.height / rowHeight) : 1;
 
-  const int totalPages = (itemCount + pageItems - 1) / pageItems;
-  if (totalPages > 1) {
+  // Scrolling callers own their window start; paging callers get it snapped to a
+  // whole page, exactly as before.
+  int windowStart;
+  bool showUpArrow;
+  bool showDownArrow;
+  if (scrollOffset != nullptr) {
+    *scrollOffset = list_scroll::nextScrollOffset(*scrollOffset, selectedIndex, pageItems, itemCount);
+    windowStart = *scrollOffset;
+    // Here the arrows mean "more above" and "more below", which can differ.
+    showUpArrow = windowStart > 0;
+    showDownArrow = windowStart + pageItems < itemCount;
+  } else {
+    windowStart = selectedIndex / pageItems * pageItems;
+    const int totalPages = (itemCount + pageItems - 1) / pageItems;
+    showUpArrow = showDownArrow = totalPages > 1;
+  }
+
+  if (showUpArrow || showDownArrow) {
     constexpr int indicatorWidth = 20;
     constexpr int arrowSize = 6;
     constexpr int margin = 15;  // Offset from right edge
@@ -405,32 +422,35 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     const int indicatorBottom = rect.y + rect.height - arrowSize;
 
     // Draw up arrow at top (^) - narrow point at top, wide base at bottom
-    for (int i = 0; i < arrowSize; ++i) {
-      const int lineWidth = 1 + i * 2;
-      const int startX = centerX - i;
-      renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
+    if (showUpArrow) {
+      for (int i = 0; i < arrowSize; ++i) {
+        const int lineWidth = 1 + i * 2;
+        const int startX = centerX - i;
+        renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
+      }
     }
 
     // Draw down arrow at bottom (v) - wide base at top, narrow point at bottom
-    for (int i = 0; i < arrowSize; ++i) {
-      const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
-      const int startX = centerX - (arrowSize - 1 - i);
-      renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
-                        indicatorBottom - arrowSize + 1 + i);
+    if (showDownArrow) {
+      for (int i = 0; i < arrowSize; ++i) {
+        const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
+        const int startX = centerX - (arrowSize - 1 - i);
+        renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
+                          indicatorBottom - arrowSize + 1 + i);
+      }
     }
   }
 
   // Draw selection
   int contentWidth = rect.width - 5;
   if (selectedIndex >= 0) {
-    renderer.fillRect(rect.x, rect.y + selectedIndex % pageItems * rowHeight - 2, rect.width, rowHeight);
+    renderer.fillRect(rect.x, rect.y + (selectedIndex - windowStart) * rowHeight - 2, rect.width, rowHeight);
   }
   constexpr int minValueGap = 10;
 
   // Draw all items
-  const auto pageStartIndex = selectedIndex / pageItems * pageItems;
-  for (int i = pageStartIndex; i < itemCount && i < pageStartIndex + pageItems; i++) {
-    const int itemY = rect.y + (i % pageItems) * rowHeight;
+  for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
+    const int itemY = rect.y + (i - windowStart) * rowHeight;
 
     // Section heading: the label, then a rule filling the rest of the row's width so the
     // eye reads it as a divider rather than as another option it could pick.
