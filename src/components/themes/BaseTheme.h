@@ -211,7 +211,14 @@ class BaseTheme {
                         // never highlighted. They occupy a normal row slot, so paging and
                         // the selection maths are unchanged. The caller is responsible for
                         // skipping them when moving the selection.
-                        const std::function<bool(int index)>& rowIsHeader = nullptr) const;
+                        const std::function<bool(int index)>& rowIsHeader = nullptr,
+                        // Opt in to scrolling instead of paging. Left null, the list snaps its
+                        // window to whole pages as it always has. Pass a caller-owned offset
+                        // that survives between frames and the window instead slides by the
+                        // least amount that keeps the selected row visible, so the rows around
+                        // the cursor hold still as it moves. drawList writes the clamped offset
+                        // back, so the caller never has to correct it (see ListScrollPolicy.h).
+                        int* scrollOffset = nullptr) const;
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,

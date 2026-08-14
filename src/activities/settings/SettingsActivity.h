@@ -49,8 +49,12 @@ struct SettingInfo {
 
   const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
-  bool obfuscated = false;               // Save/load via base64 obfuscation (passwords)
-  bool inTextSettings = false;           // Surfaced in the Text Settings screen; hidden from the flat Reader list
+  // Section heading rather than a setting: drawn as a label with a rule, never
+  // selectable. Built only by SettingsActivity::rebuildSettingsLists, never by
+  // getSettingsList, so headings stay out of JSON persistence and the web API.
+  bool isHeader = false;
+  bool obfuscated = false;      // Save/load via base64 obfuscation (passwords)
+  bool inTextSettings = false;  // Surfaced in the Text Settings screen; hidden from the flat Reader list
 
   // Enum values that are no longer offered but must keep their slot. ENUM settings persist
   // by index, so a retired option cannot simply be deleted from enumValues without
@@ -108,6 +112,15 @@ struct SettingInfo {
     s.enumValues = std::move(values);
     s.key = key;
     s.category = category;
+    return s;
+  }
+
+  static SettingInfo Header(StrId nameId) {
+    SettingInfo s;
+    s.nameId = nameId;
+    s.type = SettingType::ACTION;
+    s.action = SettingAction::None;
+    s.isHeader = true;
     return s;
   }
 
@@ -196,6 +209,15 @@ class SettingsActivity final : public Activity {
 
   static constexpr int categoryCount = 4;
   static const StrId categoryNames[categoryCount];
+
+  // Window start for the settings list, owned here so it survives between frames.
+  // Reset whenever the list underneath it changes identity (tab change, re-entry).
+  int listScrollOffset = 0;
+
+  bool isHeaderRow(int navIndex) const;
+  // Walks past section headings to the next landable position, so the cursor never
+  // rests on one. navIndex is a position on the nav ring (0 = tab bar).
+  int skipHeaders(int navIndex, bool forward) const;
 
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
