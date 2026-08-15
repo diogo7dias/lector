@@ -68,6 +68,9 @@ class EpubReaderMenuActivity final : public Activity {
                                               bool hasSleepWallpaper, bool wallpaperPaused, bool wallpaperFavorited,
                                               bool hasReaderOverride, uint8_t paragraphNumbering);
 
+  // Row the menu opens on: the wallpaper favourite row when present, else the top.
+  static int initialSelectedIndex(const std::vector<MenuItem>& items);
+
   // Fixed menu layout
   const std::vector<MenuItem> menuItems;
 

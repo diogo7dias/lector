@@ -1,4 +1,4 @@
-> **ROCKY RULE — HIGHEST:** Talk caveman. Short. Few small words. One idea per line. No walls of text, ever. Every turn, every project. Only code, commits, security notes, and irreversible-action confirmations stay plain exact English. This is the global rule; it cannot be lowered here.
+> **Z81 RULE — HIGHEST:** Name is Z81. Caveman speak, ultra level: drop articles, filler, pleasantries, hedging. Fragments fine. Strip conjunctions when cause-then-effect stay unambiguous. One word when one word enough. State each fact once. Most answers 1-5 lines. One idea per line. No contractions. Never invent abbreviations, never use arrows. Never drop not/never/no/only/except. No walls of text, ever. Broken grammar fine, broken meaning never. Every turn, every project. Only code, commits, security notes, and irreversible-action confirmations stay plain exact English. This is the global rule; it cannot be lowered here.
 
 # CrossPoint Reader Development Guide
 
@@ -696,6 +696,55 @@ Tested in all 4 orientations with 5MB+ files.
 - Files excluded by `.gitignore` would be included — always run `git status` and cross-check against `.gitignore` before staging (e.g., `*.generated.h`, `.pio/`, `compile_commands.json`, `platformio.local.ini`)
 
 **Rule**: **If uncertain, ASK before committing.**
+
+### Worktree Hygiene
+
+**CRITICAL**: Worktrees in this repository are expensive. A single worktree that has been built once carries its own `.cache/` (ESP-IDF ccache), `.pio/`, `build/`, and `managed_components/`. Observed cost is 1.3 GB to 11 GB for a normal feature worktree, and over 50 GB for a full ESP-IDF migration worktree. These directories are gitignored, so `git status` looks clean while tens of gigabytes sit on disk.
+
+**Worktrees live in** `.claude/worktrees/<branch-name>`.
+
+**The rule**: A worktree is deleted in the same session its branch is merged. Merging without removing the worktree is an incomplete task, exactly like leaving a build broken.
+
+**Removal procedure** (run from the primary checkout at the repository root):
+
+```bash
+# 1. Confirm the branch is fully merged. No output plus exit code 0 means merged.
+git merge-base --is-ancestor <branch> origin/main && echo MERGED || echo NOT MERGED
+
+# 2. Confirm nothing is uncommitted or untracked in the worktree.
+git -C .claude/worktrees/<name> status --porcelain --untracked-files=all
+
+# 3. Inspect ignored files that are NOT build artifacts before discarding them.
+#    Note: --untracked-files=no suppresses this listing. Do not add that flag.
+git -C .claude/worktrees/<name> status --porcelain --ignored | grep '^!!'
+
+# 4. Remove the worktree, then prune the administrative records.
+git worktree remove .claude/worktrees/<name>
+git worktree prune
+
+# 5. Delete the merged branch.
+git branch -d <branch>
+
+# 6. Remove any empty parent directory left behind by a nested worktree path.
+rmdir .claude/worktrees/<parent> 2>/dev/null
+```
+
+**Session-start audit**. Run this check when opening this repository:
+
+```bash
+git worktree list
+du -sh .claude/worktrees 2>/dev/null
+```
+
+If `.claude/worktrees` holds more than 3 entries, or exceeds 10 GB, stop and clean up before creating another worktree.
+
+**DO NOT**:
+- Create a new worktree while merged worktrees are still on disk. Clean first, then create.
+- Assume a clean `git status` means the worktree is cheap. The heavy directories are gitignored and invisible to `git status`.
+- Delete a worktree that is checked out on `main`, or one modified within the last 48 hours, without asking. That is likely live work, not leftovers.
+- Use `git worktree remove --force` before running steps 1 through 3. `--force` discards uncommitted and untracked files permanently.
+
+**Why this rule exists**: An audit on 2026-08-12 found 9 worktrees consuming 77 GB, of which 8 sat on branches already merged into `origin/main`. Removing those 8 reclaimed 24 GB. The work was never at risk; the disk was. Merged worktrees serve no purpose and are pure cost.
 
 ---
 

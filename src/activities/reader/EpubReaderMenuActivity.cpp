@@ -17,6 +17,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     : Activity("EpubReaderMenu", renderer, mappedInput),
       menuItems(buildMenuItems(hasFootnotes, hasBookmarks, hasQuotes, hasSleepWallpaper, wallpaperPaused,
                                wallpaperFavorited, hasReaderOverride, paragraphNumbering)),
+      selectedIndex(initialSelectedIndex(menuItems)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -92,6 +93,18 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::buildMenuI
     items.push_back({MenuAction::WALLPAPER_DELETE, StrId::STR_TRIAGE_DELETE});
   }
   return items;
+}
+
+int EpubReaderMenuActivity::initialSelectedIndex(const std::vector<MenuItem>& items) {
+  // Open with the cursor already on the sleep-wallpaper favourite/unfavourite
+  // row so triaging the last-shown wallpaper is a single Confirm press. The row
+  // only exists when a last-shown wallpaper is known; otherwise start at the top.
+  for (size_t i = 0; i < items.size(); ++i) {
+    if (items[i].action == MenuAction::WALLPAPER_FAVORITE) {
+      return static_cast<int>(i);
+    }
+  }
+  return 0;
 }
 
 void EpubReaderMenuActivity::onEnter() {
