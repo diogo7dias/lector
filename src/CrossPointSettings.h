@@ -706,6 +706,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 
+  // Frontlight (X4 Pro and other boards the SDK reports a frontlight for). The
+  // rows are filtered out of Settings on a board without one, but the values
+  // still persist so moving an SD card between devices keeps them.
+  uint8_t frontlightBrightness = 60;
+  uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm; ignored without warm/cold LEDs
+  uint8_t frontlightOn = 0;
+  // Bring the light back by itself on wake. Off by default: a light that
+  // switches itself on in a bright room is worse than one you turn on.
+  // Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
+  uint8_t frontlightRestoreOnWake = 0;
+
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;
   static constexpr uint8_t MAX_SLEEP_TIMEOUT_MINUTES = SLEEP_TIMEOUT_NEVER_MINUTES;

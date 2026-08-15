@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -43,6 +44,7 @@
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
+#include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
@@ -573,6 +575,11 @@ void setup() {
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
   logWakeTimingToPerfLog();
+  // Brightness and warmth always come back; whether the light itself does is
+  // FrontlightBootPolicy's call. Inert on a board without a frontlight.
+  Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
+                   frontlight::restoreLightOnAtBoot(
+                       {SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0, isSilentReboot}));
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {

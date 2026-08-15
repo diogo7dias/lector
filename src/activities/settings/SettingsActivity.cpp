@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
+#include <HalFrontlight.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -40,6 +41,19 @@
 #include "sleep/SleepWallpaperIndexStore.h"
 
 namespace {
+
+// Push a just-changed frontlight row down to the hardware, so the light answers
+// the row instead of waiting for the next boot. No-op for every other row, and
+// on a board with no frontlight (HalFrontlight is inert there).
+void applyFrontlightSetting(uint8_t CrossPointSettings::* const valuePtr) {
+  if (valuePtr == &CrossPointSettings::frontlightOn) {
+    Frontlight.setOn(SETTINGS.frontlightOn != 0);
+  } else if (valuePtr == &CrossPointSettings::frontlightBrightness) {
+    Frontlight.setBrightness(SETTINGS.frontlightBrightness);
+  } else if (valuePtr == &CrossPointSettings::frontlightWarmth) {
+    Frontlight.setWarmth(SETTINGS.frontlightWarmth);
+  }
+}
 
 // One section of the list: the heading, then the rows under it in display order.
 struct SettingsGroup {
@@ -164,6 +178,11 @@ void SettingsActivity::rebuildSettingsList() {
                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
                   {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
+                  // Absent on a board with no frontlight, and applyGroups draws no
+                  // heading for a group whose rows are all missing.
+                  {StrId::STR_GRP_FRONTLIGHT,
+                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
+                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
@@ -319,6 +338,7 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+    applyFrontlightSetting(setting.valuePtr);
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (setting.enumValues.size() > 2) {
@@ -391,6 +411,7 @@ void SettingsActivity::toggleCurrentSetting() {
                   setting.valueRange.step * 5, SETTINGS.*(setting.valuePtr), setting.nameId,
                   [this, valuePtr](const int chosen) {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
+                    applyFrontlightSetting(valuePtr);
                     SETTINGS.saveToFile();
                     rebuildSettingsList();
                     restoreCursorAfterRebuild();
