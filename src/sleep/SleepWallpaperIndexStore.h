@@ -51,8 +51,9 @@ constexpr size_t kRecordBytes = 160;
 
 // Folder id persisted in the header and APP_STATE.sleepIndexDirId.
 const char* dirPathForId(uint8_t dirId);
-// 1 = /.sleep when it exists (preferred, mirrors the sleep screen's priority),
-// else 0 = /sleep.
+// 0 = /sleep, 1 = /.sleep. The folder holding wallpapers wins and the visible
+// one wins a tie; see SleepFolderPolicy.h for why. The sleep screen calls this
+// too, so the index and the pick can never disagree about the folder.
 uint8_t resolveSleepDirId();
 
 // Random access into the built index. Open once per pick session.
@@ -176,6 +177,13 @@ void markDirtyIfSleepPath(const char* path);
 // No-op for any path outside the indexed folder. The caller owes the
 // state.json save.
 void noteFavoriteRename(const std::string& oldPath, const std::string& newPath);
+
+// MAIN TASK ONLY, boot gate: true when the folder the rotation should read is
+// no longer the one the index was built from. Checked on EVERY boot, software
+// resets included, because the resolution itself can change without the card
+// changing — a firmware update that alters the /sleep versus /.sleep rule, or a
+// folder emptying out. Two directory opens and two slot probes, no walk.
+bool indexedFolderChanged();
 
 // MAIN TASK ONLY, boot gate: cheap change probe, milliseconds and no UI. True
 // when the sleep folder's last live directory slot (or the resolved folder

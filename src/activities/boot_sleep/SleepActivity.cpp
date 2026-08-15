@@ -836,10 +836,6 @@ void SleepActivity::renderStatsDashboardSleepScreen() const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
-  // Check if we have a /.sleep (preferred) or /sleep directory
-  const char* sleepDir = nullptr;
-  auto dir = Storage.open("/.sleep");
-
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
@@ -854,7 +850,6 @@ void SleepActivity::renderCustomSleepScreen() const {
       renderBitmapSleepScreen(bitmap);
       APP_STATE.lastSleepWallpaperPath = "/sleep.bmp";
       file.close();
-      if (dir) dir.close();
       return;
     }
     file.close();
@@ -877,21 +872,18 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
       LOG_INF("SLP", "Loaded: /sleep.pxc");
       APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
-      if (dir) dir.close();
       return;
     }
   }
 
-  if (dir && dir.isDirectory()) {
-    sleepDir = "/.sleep";
-  } else {
-    dir = Storage.open("/sleep");
-    if (dir && dir.isDirectory()) {
-      sleepDir = "/sleep";
-    }
-  }
+  // Which wallpaper folder to rotate over. Resolved through the index store so
+  // the pick and the index can never disagree about it: /sleep wins, /.sleep is
+  // the fallback for cards written by older firmware. Asked only here, below the
+  // root-file tier above, which outranks the folder either way.
+  const char* const sleepDir = crosspoint::sleep::windex::dirPathForId(crosspoint::sleep::windex::resolveSleepDirId());
+  auto dir = Storage.open(sleepDir);
 
-  if (sleepDir) {
+  if (dir && dir.isDirectory()) {
     std::string chosen;
 
     // Rotation paused: keep showing the wallpaper that is already up instead of

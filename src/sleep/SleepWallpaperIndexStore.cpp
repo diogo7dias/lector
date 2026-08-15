@@ -11,6 +11,7 @@
 
 #include "CrossPointState.h"
 #include "DirSlotProbe.h"
+#include "SleepFolderPolicy.h"
 #include "SleepIndexReconcilePolicy.h"
 #include "WallpaperNames.h"
 #include "components/BusyBanner.h"
@@ -225,14 +226,17 @@ bool buildBlocking(const uint8_t dirId, ProgressPopup* progress) {
 
 }  // namespace
 
-const char* dirPathForId(const uint8_t dirId) { return dirId == 1 ? "/.sleep" : "/sleep"; }
+const char* dirPathForId(const uint8_t dirId) { return dirId == sleep_folder::kHiddenDirId ? "/.sleep" : "/sleep"; }
 
 uint8_t resolveSleepDirId() {
-  // Mirrors the sleep screen's folder priority: /.sleep wins when it exists.
-  auto hidden = Storage.open("/.sleep");
-  const bool preferHidden = hidden && hidden.isDirectory();
-  if (hidden) hidden.close();
-  return preferHidden ? 1 : 0;
+  // One slot probe per folder, never a walk: "is there a live entry at all?".
+  const auto holdsEntries = [](const char* path) {
+    auto dir = Storage.open(path);
+    const bool populated = dir && dir.isDirectory() && entryExistsAt(dir, 0);
+    if (dir) dir.close();
+    return populated;
+  };
+  return sleep_folder::chooseDirId(holdsEntries("/sleep"), holdsEntries("/.sleep"));
 }
 
 bool Reader::open() {
@@ -453,6 +457,8 @@ void noteFavoriteRename(const std::string& oldPath, const std::string& newPath) 
   APP_STATE.sleepIndexFingerprint += after - before;
   APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
 }
+
+bool indexedFolderChanged() { return resolveSleepDirId() != APP_STATE.sleepIndexDirId; }
 
 bool folderTailMoved() {
   const uint8_t dirId = resolveSleepDirId();
