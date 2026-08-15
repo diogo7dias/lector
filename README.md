@@ -41,7 +41,7 @@ E-reader firmware for the Xteink X3 and X4.
 - Hold the current wallpaper instead of rotating it.
 - `.pxc` wallpapers accepted.
 - Stats Dashboard and Freeze sleep faces.
-- [Wallpaper Converter](https://diogo7dias.github.io/lector-wallpaper-converter/): turn any image into an X3/X4 wallpaper in your browser.
+- [Wallpaper Converter](https://diogo7dias.github.io/lector-xteink-firmware/): turn any image into an X3/X4 wallpaper in your browser, or pick one from the gallery there.
 
 ### Elsewhere
 
