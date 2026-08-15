@@ -676,9 +676,11 @@ void setup() {
     asyncBlankInFlight = true;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
+  // Recovery firmware mode: hold a side button together with the power button at boot to skip
+  // directly to the SD-card firmware update screen. Useful on devices where USB flashing has
+  // been locked down (e.g. recent X3 firmware). BTN_UP everywhere except the X4 Pro, whose
+  // BTN_UP sits on GPIO0, the boot-strap pin: holding that at boot drops the chip into the ROM
+  // bootloader instead of into our firmware, so the chord uses BTN_DOWN there.
   //
   // This runs AFTER the panel is up, not before. The check waits out a fixed window
   // measured from gpio.begin(), and everything that happens inside that window is free:
@@ -709,23 +711,31 @@ void setup() {
     //
     // The loop still stops the moment UP is confirmed: once the answer is yes, waiting
     // longer cannot change it.
-    constexpr unsigned long kInputSettleMs = 500;
-    const auto upConfirmed = [] {
+    //
+    // None of that ladder reasoning applies to the X4 Pro: its side buttons are plain
+    // debounced digital inputs that read true almost immediately, so the settle window is
+    // 20 ms there instead of 500. The two-sample confirm stays either way; on a digital
+    // input it costs one extra 6 ms read and rules out a single nudged sample all the same.
+    const bool isX4Pro = BoardConfig::isX4Pro();
+    const unsigned long inputSettleMs = isX4Pro ? 20 : 500;
+    const uint8_t chordButton = isX4Pro ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
+    const auto chordConfirmed = [chordButton] {
       gpio.update();
-      if (!gpio.isPressed(HalGPIO::BTN_UP)) return false;
+      if (!gpio.isPressed(chordButton)) return false;
       delay(6);
       gpio.update();
-      return gpio.isPressed(HalGPIO::BTN_UP);
+      return gpio.isPressed(chordButton);
     };
-    while (millis() - inputStartedMs < kInputSettleMs) {
-      if (upConfirmed()) {
+    while (millis() - inputStartedMs < inputSettleMs) {
+      if (chordConfirmed()) {
         recoveryFirmwareMode = true;
         break;
       }
       delay(10);
     }
-    if (!recoveryFirmwareMode && upConfirmed()) recoveryFirmwareMode = true;
-    if (recoveryFirmwareMode) LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+    if (!recoveryFirmwareMode && chordConfirmed()) recoveryFirmwareMode = true;
+    if (recoveryFirmwareMode)
+      LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", isX4Pro ? "DOWN" : "UP");
   }
 
   WakeTiming::mark(WakeTiming::Stage::InputSettled);
