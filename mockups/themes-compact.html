@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lector — compact theme mockups</title>
+<style>
+  /* ===== Monochrome tokens (mostly white; dark = reverse) ===== */
+  :root{
+    --bg:#ffffff; --panel:#ffffff; --alt:#f4f4f4; --ink:#111111; --dim:#666666;
+    --faint:#8c8c8c; --line:#dcdcdc; --hair:#ececec; --fill:#111111; --fillink:#ffffff;
+    --sel:#eeeeee; --mono:ui-monospace,'SF Mono',Menlo,'Cascadia Code',Consolas,monospace;
+    --sans:-apple-system,system-ui,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0a0a0a; --panel:#111111; --alt:#161616; --ink:#f2f2f2; --dim:#a6a6a6;
+    --faint:#7a7a7a; --line:#2a2a2a; --hair:#1c1c1c; --fill:#f2f2f2; --fillink:#0a0a0a;
+    --sel:#1e1e1e;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:13px;line-height:1.35;-webkit-font-smoothing:antialiased}
+  .app{max-width:760px;margin:0 auto;padding:0 8px 40px}
+  a{color:inherit;text-decoration:none}
+  .tnum{font-variant-numeric:tabular-nums}
+
+  /* ===== Switcher ===== */
+  .switch{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:6px;background:var(--bg);border-bottom:1px solid var(--line);padding:8px 2px;margin-bottom:10px}
+  .switch b{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+  .seg{display:flex;border:1px solid var(--line)}
+  .seg button{border:0;border-right:1px solid var(--line);background:var(--panel);color:var(--dim);font:inherit;font-size:12px;font-weight:600;padding:5px 11px;cursor:pointer}
+  .seg button:last-child{border-right:0}
+  .seg button[aria-pressed="true"]{background:var(--fill);color:var(--fillink)}
+  .switch .sp{margin-left:auto}
+  .tgl{border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;font-weight:600;padding:5px 10px;cursor:pointer}
+  .note{color:var(--faint);font-size:11px;text-align:center;margin:14px 0 0}
+
+  /* shared bits */
+  .eyebrow{font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
+  .chip{border:1px solid var(--line);padding:1px 6px;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+  .kbtn{border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-size:12px;padding:4px 9px;cursor:pointer}
+  .kbtn.solid{background:var(--fill);color:var(--fillink);border-color:var(--fill)}
+  [hidden]{display:none!important}
+
+  /* =================================================================
+     THEME 1 — LEDGER  (dense table / spreadsheet)
+     ================================================================= */
+  #ledger .topbar{display:flex;align-items:baseline;gap:10px;border-bottom:2px solid var(--ink);padding-bottom:6px}
+  #ledger .brand{font-weight:800;letter-spacing:.04em;font-size:16px}
+  #ledger .brand span{font-weight:400;color:var(--dim);font-size:11px;letter-spacing:.14em;text-transform:uppercase;margin-left:6px}
+  #ledger .status{margin-left:auto;display:flex;gap:6px;align-items:center}
+  #ledger .tabs{display:flex;gap:0;border-bottom:1px solid var(--line);margin-top:8px}
+  #ledger .tabs button{border:0;border-right:1px solid var(--line);background:transparent;color:var(--dim);font:inherit;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:6px 14px;cursor:pointer}
+  #ledger .tabs button[aria-selected="true"]{background:var(--fill);color:var(--fillink)}
+  #ledger .crumbar{display:flex;align-items:center;gap:6px;padding:7px 2px;border-bottom:1px solid var(--hair);font-size:12px;color:var(--dim)}
+  #ledger .crumbar b{color:var(--ink)}
+  #ledger .crumbar .sp{margin-left:auto;display:flex;gap:5px}
+  #ledger table{width:100%;border-collapse:collapse}
+  #ledger thead th{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);text-align:left;font-weight:700;padding:6px 8px;border-bottom:1px solid var(--line)}
+  #ledger thead th.r,#ledger td.r{text-align:right}
+  #ledger tbody td{padding:5px 8px;border-bottom:1px solid var(--hair);font-size:12.5px;white-space:nowrap}
+  #ledger tbody tr{cursor:default}
+  #ledger tbody tr:hover{background:var(--alt)}
+  #ledger tbody tr.sel{background:var(--sel);box-shadow:inset 3px 0 0 var(--ink)}
+  #ledger td.nm{width:99%;max-width:0;overflow:hidden;text-overflow:ellipsis}
+  #ledger td.k,#ledger td.sz,#ledger td.rd{color:var(--dim);font-size:11.5px}
+  #ledger td.sz,#ledger td.rd{font-variant-numeric:tabular-nums;width:1%}
+  #ledger td.k{width:1%}
+  #ledger .fold{font-weight:700}
+  #ledger .fold .tri{color:var(--faint);margin-right:5px;font-size:10px}
+  #ledger .ck{display:inline-block;width:11px;height:11px;border:1px solid var(--line);margin-right:8px;vertical-align:-1px}
+  #ledger tr.sel .ck{background:var(--fill);border-color:var(--fill)}
+  #ledger tfoot td{padding:8px;color:var(--faint);font-size:11px;border-top:1px solid var(--line)}
+
+  /* =================================================================
+     THEME 2 — PORTAL  (modular boxes, information-dense grid)
+     ================================================================= */
+  #portal .masthead{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-bottom:0;padding:8px 10px;background:var(--panel)}
+  #portal .masthead .b{font-weight:800;font-size:15px;letter-spacing:.03em}
+  #portal .masthead .b i{font-style:normal;color:var(--dim);font-weight:400;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;margin-left:6px}
+  #portal .masthead .sp{margin-left:auto;display:flex;gap:5px}
+  #portal .navstrip{display:flex;border:1px solid var(--line);background:var(--fill)}
+  #portal .navstrip a{color:var(--fillink);opacity:.7;font-size:11.5px;font-weight:600;letter-spacing:.04em;padding:6px 12px;border-right:1px solid rgba(128,128,128,.35)}
+  #portal .navstrip a.on{opacity:1;background:var(--bg);color:var(--ink)}
+  #portal .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  #portal .mod{border:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-width:0}
+  #portal .mod.span{grid-column:1 / -1}
+  #portal .mod h3{margin:0;background:var(--fill);color:var(--fillink);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:5px 9px;display:flex;align-items:center}
+  #portal .mod h3 a{margin-left:auto;opacity:.75;font-size:10px;font-weight:600}
+  #portal .mod .body{padding:2px 0}
+  #portal .li{display:flex;align-items:center;gap:8px;padding:5px 9px;border-bottom:1px solid var(--hair);font-size:12.5px}
+  #portal .li:last-child{border-bottom:0}
+  #portal .li:hover{background:var(--alt)}
+  #portal .li .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #portal .li .ct,#portal .li .sz{color:var(--dim);font-size:11px;font-variant-numeric:tabular-nums}
+  #portal .li .dot{width:6px;height:6px;border:1px solid var(--ink);flex:none}
+  #portal .li .dot.f{background:var(--ink)}
+  #portal .foldgrid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--hair)}
+  #portal .foldgrid .fc{background:var(--panel);padding:7px 9px;display:flex;align-items:baseline;gap:6px;font-size:12.5px}
+  #portal .foldgrid .fc:hover{background:var(--alt)}
+  #portal .foldgrid .fc b{font-weight:700}
+  #portal .foldgrid .fc .n{margin-left:auto;color:var(--dim);font-size:11px;font-variant-numeric:tabular-nums}
+  #portal .qk{display:flex;flex-wrap:wrap;gap:6px;padding:9px}
+  #portal .bookrow{display:flex;align-items:center;gap:9px;padding:6px 9px;border-bottom:1px solid var(--hair)}
+  #portal .bookrow:last-child{border-bottom:0}
+  #portal .cover{width:26px;height:36px;border:1px solid var(--line);flex:none;display:grid;place-items:center;font-size:8px;text-align:center;color:var(--dim);overflow:hidden;padding:2px}
+  #portal .bookrow .meta{flex:1;min-width:0}
+  #portal .bookrow .t{font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #portal .bookrow .a{color:var(--dim);font-size:11px}
+
+  /* =================================================================
+     THEME 3 — CONSOLE  (two-pane sidebar, monospace data)
+     ================================================================= */
+  #console .bar{display:flex;align-items:center;gap:8px;border:1px solid var(--line);padding:6px 9px;font-family:var(--mono);font-size:12px}
+  #console .bar .b{font-weight:700;letter-spacing:.02em}
+  #console .bar .path{color:var(--dim)}
+  #console .bar .path b{color:var(--ink)}
+  #console .bar .sp{margin-left:auto;display:flex;gap:6px}
+  #console .bar .mini{border:1px solid var(--line);padding:2px 7px;font-size:11px;cursor:pointer;background:var(--panel);color:var(--ink)}
+  #console .panes{display:grid;grid-template-columns:150px 1fr;border:1px solid var(--line);border-top:0}
+  #console .side{border-right:1px solid var(--line);background:var(--panel);font-family:var(--mono);font-size:12px;padding:4px 0}
+  #console .side .h{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);padding:6px 9px 3px}
+  #console .side .t{padding:3px 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;color:var(--dim)}
+  #console .side .t:hover{background:var(--alt);color:var(--ink)}
+  #console .side .t.on{background:var(--fill);color:var(--fillink)}
+  #console .side .t .in{color:var(--faint)}
+  #console .main{min-width:0;background:var(--panel)}
+  #console .colhead,#console .frow{display:grid;grid-template-columns:1fr 54px 60px 46px;align-items:center}
+  #console .colhead{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);border-bottom:1px solid var(--line)}
+  #console .colhead span{padding:5px 8px;border-right:1px solid var(--hair)}
+  #console .colhead span:last-child{border-right:0}
+  #console .frow{font-family:var(--mono);font-size:11.5px;border-bottom:1px solid var(--hair);cursor:default}
+  #console .frow:hover{background:var(--alt)}
+  #console .frow.sel{background:var(--sel)}
+  #console .frow span{padding:4px 8px;border-right:1px solid var(--hair);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #console .frow span:last-child{border-right:0}
+  #console .frow .r{text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+  #console .frow .nm .g{color:var(--faint)}
+  #console .statusline{display:flex;gap:10px;border:1px solid var(--line);border-top:0;padding:4px 9px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  #console .statusline b{color:var(--ink);font-weight:700}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="switch">
+    <b>Theme</b>
+    <div class="seg" id="seg">
+      <button data-t="ledger" aria-pressed="true">Ledger</button>
+      <button data-t="portal" aria-pressed="false">Portal</button>
+      <button data-t="console" aria-pressed="false">Console</button>
+    </div>
+    <span class="sp"></span>
+    <button class="tgl" id="tgl">◐ Light / Dark</button>
+  </div>
+
+  <!-- ============ THEME 1: LEDGER ============ -->
+  <section id="ledger">
+    <div class="topbar">
+      <div class="brand">LECTOR<span>library over wifi</span></div>
+      <div class="status"><span class="chip">Unlocked</span><span class="chip">X4 · 12.3 GB free</span></div>
+    </div>
+    <div class="tabs">
+      <button aria-selected="true">Files</button>
+      <button aria-selected="false">OPDS</button>
+    </div>
+    <div class="crumbar">
+      <a>SD</a><span>/</span><a>Books</a><span>/</span><b>Fiction</b>
+      <span class="sp"><button class="kbtn">+ New folder</button><button class="kbtn solid">↑ Upload</button></span>
+    </div>
+    <table>
+      <thead><tr><th>Name</th><th>Kind</th><th class="r">Size</th><th class="r">Read</th></tr></thead>
+      <tbody>
+        <tr><td class="nm fold"><span class="ck"></span><span class="tri">▸</span>Sci-Fi</td><td class="k">Folder</td><td class="sz r">34 items</td><td class="rd r">—</td></tr>
+        <tr><td class="nm fold"><span class="ck"></span><span class="tri">▸</span>Classics</td><td class="k">Folder</td><td class="sz r">12 items</td><td class="rd r">—</td></tr>
+        <tr><td class="nm"><span class="ck"></span>The Left Hand of Darkness.epub</td><td class="k">EPUB</td><td class="sz r">1.2 MB</td><td class="rd r">78%</td></tr>
+        <tr class="sel"><td class="nm"><span class="ck"></span>Hyperion — Dan Simmons.epub</td><td class="k">EPUB</td><td class="sz r">2.0 MB</td><td class="rd r">new</td></tr>
+        <tr class="sel"><td class="nm"><span class="ck"></span>notes-annotations.txt</td><td class="k">TXT</td><td class="sz r">14 KB</td><td class="rd r">—</td></tr>
+        <tr><td class="nm"><span class="ck"></span>cover-scan.png</td><td class="k">PNG</td><td class="sz r">340 KB</td><td class="rd r">—</td></tr>
+        <tr><td class="nm"><span class="ck"></span>Dune — Frank Herbert.epub</td><td class="k">EPUB</td><td class="sz r">1.8 MB</td><td class="rd r">3%</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="4">6 files · 2 folders · 2 selected — 32 GB card, 12.3 GB free</td></tr></tfoot>
+    </table>
+  </section>
+
+  <!-- ============ THEME 2: PORTAL ============ -->
+  <section id="portal" hidden>
+    <div class="masthead">
+      <div class="b">LECTOR<i>library over wifi</i></div>
+      <div class="sp"><span class="chip">Unlocked</span><span class="chip">12.3 GB free</span></div>
+    </div>
+    <div class="navstrip">
+      <a class="on">Files</a><a>OPDS</a><a>Settings</a><a>Fonts</a>
+    </div>
+    <div class="grid">
+      <div class="mod">
+        <h3>Folders <a>SD / Books / Fiction</a></h3>
+        <div class="foldgrid">
+          <div class="fc"><b>Sci-Fi</b><span class="n">34</span></div>
+          <div class="fc"><b>Classics</b><span class="n">12</span></div>
+          <div class="fc"><b>Poetry</b><span class="n">5</span></div>
+          <div class="fc"><b>Drafts</b><span class="n">2</span></div>
+        </div>
+      </div>
+      <div class="mod">
+        <h3>Actions</h3>
+        <div class="qk">
+          <button class="kbtn solid">↑ Upload</button>
+          <button class="kbtn">+ Folder</button>
+          <button class="kbtn">Move</button>
+          <button class="kbtn">Delete</button>
+          <button class="kbtn">Select all</button>
+        </div>
+      </div>
+      <div class="mod span">
+        <h3>Files — Fiction <a>6 items · 2 selected</a></h3>
+        <div class="body">
+          <div class="li"><span class="dot f"></span><span class="nm">The Left Hand of Darkness.epub</span><span class="ct">EPUB · 78%</span><span class="sz">1.2 MB</span></div>
+          <div class="li"><span class="dot f"></span><span class="nm">Hyperion — Dan Simmons.epub</span><span class="ct">EPUB · new</span><span class="sz">2.0 MB</span></div>
+          <div class="li"><span class="dot"></span><span class="nm">notes-annotations.txt</span><span class="ct">TXT</span><span class="sz">14 KB</span></div>
+          <div class="li"><span class="dot"></span><span class="nm">cover-scan.png</span><span class="ct">PNG</span><span class="sz">340 KB</span></div>
+          <div class="li"><span class="dot f"></span><span class="nm">Dune — Frank Herbert.epub</span><span class="ct">EPUB · 3%</span><span class="sz">1.8 MB</span></div>
+        </div>
+      </div>
+      <div class="mod span">
+        <h3>OPDS — Standard Ebooks <a>browse ›</a></h3>
+        <div class="body">
+          <div class="bookrow"><div class="cover">The Time Machine</div><div class="meta"><div class="t">The Time Machine</div><div class="a">H. G. Wells · EPUB · 220 KB</div></div><button class="kbtn solid">Get</button></div>
+          <div class="bookrow"><div class="cover">Middle march</div><div class="meta"><div class="t">Middlemarch</div><div class="a">George Eliot · EPUB · 1.4 MB</div></div><button class="kbtn">Saved</button></div>
+          <div class="bookrow"><div class="cover">Franken stein</div><div class="meta"><div class="t">Frankenstein</div><div class="a">Mary Shelley · EPUB · 410 KB</div></div><button class="kbtn solid">Get</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ THEME 3: CONSOLE ============ -->
+  <section id="console" hidden>
+    <div class="bar">
+      <span class="b">LECTOR</span>
+      <span class="path">/SD/Books/<b>Fiction</b></span>
+      <span class="sp"><button class="mini">+ folder</button><button class="mini">upload</button><button class="mini">move</button><button class="mini">del</button></span>
+    </div>
+    <div class="panes">
+      <div class="side">
+        <div class="h">Tree</div>
+        <div class="t">SD</div>
+        <div class="t"><span class="in">└ </span>Books</div>
+        <div class="t on"><span class="in">&nbsp;&nbsp;└ </span>Fiction</div>
+        <div class="t"><span class="in">&nbsp;&nbsp;&nbsp;&nbsp;├ </span>Sci-Fi</div>
+        <div class="t"><span class="in">&nbsp;&nbsp;&nbsp;&nbsp;└ </span>Classics</div>
+        <div class="t"><span class="in">└ </span>Sleep</div>
+        <div class="h">Catalogs</div>
+        <div class="t">Standard Ebooks</div>
+        <div class="t">Project Gutenberg</div>
+      </div>
+      <div class="main">
+        <div class="colhead"><span>Name</span><span>Kind</span><span class="r">Size</span><span class="r">Read</span></div>
+        <div class="frow"><span class="nm"><span class="g">DIR </span>Sci-Fi</span><span>folder</span><span class="r">34</span><span class="r">—</span></div>
+        <div class="frow"><span class="nm"><span class="g">DIR </span>Classics</span><span>folder</span><span class="r">12</span><span class="r">—</span></div>
+        <div class="frow"><span class="nm">Left_Hand_of_Darkness.epub</span><span>epub</span><span class="r">1.2M</span><span class="r">78%</span></div>
+        <div class="frow sel"><span class="nm">Hyperion_Simmons.epub</span><span>epub</span><span class="r">2.0M</span><span class="r">new</span></div>
+        <div class="frow sel"><span class="nm">notes-annotations.txt</span><span>txt</span><span class="r">14K</span><span class="r">—</span></div>
+        <div class="frow"><span class="nm">cover-scan.png</span><span>png</span><span class="r">340K</span><span class="r">—</span></div>
+        <div class="frow"><span class="nm">Dune_Herbert.epub</span><span>epub</span><span class="r">1.8M</span><span class="r">3%</span></div>
+      </div>
+    </div>
+    <div class="statusline"><span>items <b>8</b></span><span>sel <b>2</b></span><span>free <b>12.3G</b>/32G</span><span>wifi <b>ok</b></span><span>lock <b>open</b></span></div>
+  </section>
+
+  <div class="note">mockup · monochrome, mostly white with a dark reverse · flip themes + light/dark up top</div>
+</div>
+
+<script>
+  var seg=document.getElementById('seg'), root=document.documentElement;
+  var sections={ledger:document.getElementById('ledger'),portal:document.getElementById('portal'),console:document.getElementById('console')};
+  seg.querySelectorAll('button').forEach(function(b){
+    b.onclick=function(){
+      seg.querySelectorAll('button').forEach(function(x){x.setAttribute('aria-pressed', x===b);});
+      for(var k in sections) sections[k].hidden = (k!==b.dataset.t);
+      window.scrollTo(0,0);
+    };
+  });
+  document.getElementById('tgl').onclick=function(){
+    root.setAttribute('data-theme', root.getAttribute('data-theme')==='dark'?'light':'dark');
+  };
+</script>
+</body>
+</html>

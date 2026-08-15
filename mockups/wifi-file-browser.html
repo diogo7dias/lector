@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lector — Library over the air (mockup)</title>
+<style>
+  /* ---------- Design tokens ---------- */
+  :root{
+    --paper:#f3efe6; --surface:#fbf9f4; --surface-2:#f0ebe0;
+    --ink:#26231d; --ink-soft:#5f5a4f; --ink-faint:#8b8577;
+    --line:#e2dccf; --line-soft:#ece6da;
+    --accent:#236b63; --accent-soft:#e2efec; --accent-ink:#ffffff;
+    --danger:#a83c2c; --danger-soft:#f6e6e2; --danger-ink:#ffffff;
+    --lamp:#c98a2e;
+    --radius:12px; --radius-sm:9px;
+    --shadow:0 1px 2px rgba(40,33,20,.05), 0 8px 24px -12px rgba(40,33,20,.18);
+    --shadow-lift:0 2px 6px rgba(40,33,20,.08), 0 18px 40px -18px rgba(40,33,20,.30);
+    --serif:'Iowan Old Style','Palatino Linotype',Palatino,'Book Antiqua',Georgia,serif;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,'Cascadia Code',monospace;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --paper:#151719; --surface:#1d2023; --surface-2:#23272b;
+      --ink:#e9e5db; --ink-soft:#a8a296; --ink-faint:#726d63;
+      --line:#2b2f34; --line-soft:#23272b;
+      --accent:#52b7ab; --accent-soft:#17302e; --accent-ink:#0c1413;
+      --danger:#e07a63; --danger-soft:#33211d; --danger-ink:#160b08;
+      --lamp:#d9a04a;
+      --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 26px -14px rgba(0,0,0,.6);
+      --shadow-lift:0 2px 8px rgba(0,0,0,.5), 0 22px 48px -20px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#151719; --surface:#1d2023; --surface-2:#23272b;
+    --ink:#e9e5db; --ink-soft:#a8a296; --ink-faint:#726d63;
+    --line:#2b2f34; --line-soft:#23272b;
+    --accent:#52b7ab; --accent-soft:#17302e; --accent-ink:#0c1413;
+    --danger:#e07a63; --danger-soft:#33211d; --danger-ink:#160b08;
+    --lamp:#d9a04a;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 26px -14px rgba(0,0,0,.6);
+    --shadow-lift:0 2px 8px rgba(0,0,0,.5), 0 22px 48px -20px rgba(0,0,0,.7);
+  }
+  :root[data-theme="light"]{
+    --paper:#f3efe6; --surface:#fbf9f4; --surface-2:#f0ebe0;
+    --ink:#26231d; --ink-soft:#5f5a4f; --ink-faint:#8b8577;
+    --line:#e2dccf; --line-soft:#ece6da;
+    --accent:#236b63; --accent-soft:#e2efec; --accent-ink:#ffffff;
+    --danger:#a83c2c; --danger-soft:#f6e6e2; --danger-ink:#ffffff;
+    --lamp:#c98a2e;
+    --shadow:0 1px 2px rgba(40,33,20,.05), 0 8px 24px -12px rgba(40,33,20,.18);
+    --shadow-lift:0 2px 6px rgba(40,33,20,.08), 0 18px 40px -18px rgba(40,33,20,.30);
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--sans); color:var(--ink); background:var(--paper);
+    -webkit-font-smoothing:antialiased; line-height:1.45;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .wrap{max-width:720px; margin:0 auto; padding:14px 14px 40px}
+
+  /* ---------- Top bar ---------- */
+  .topbar{display:flex; align-items:center; gap:10px; padding:6px 2px 12px}
+  .brand{display:flex; align-items:baseline; gap:8px; margin-right:auto}
+  .brand h1{font-family:var(--serif); font-weight:600; font-size:22px; letter-spacing:.2px; margin:0}
+  .brand .dot{width:7px; height:7px; border-radius:50%; background:var(--lamp); box-shadow:0 0 0 3px color-mix(in srgb, var(--lamp) 22%, transparent); align-self:center}
+  .brand small{color:var(--ink-faint); font-size:12px}
+  .chip{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:600;
+    padding:6px 10px; border-radius:999px; border:1px solid var(--line); background:var(--surface); color:var(--ink-soft)}
+  .chip svg{width:14px; height:14px}
+  .chip.lock{color:var(--accent); border-color:color-mix(in srgb,var(--accent) 35%, var(--line))}
+  .iconbtn{display:inline-grid; place-items:center; width:36px; height:36px; border-radius:10px;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); cursor:pointer}
+  .iconbtn:hover{color:var(--ink); border-color:var(--ink-faint)}
+
+  /* ---------- Tabs ---------- */
+  .tabs{display:flex; gap:4px; background:var(--surface-2); border:1px solid var(--line-soft);
+    padding:4px; border-radius:12px; margin-bottom:14px}
+  .tabs button{flex:1; border:0; background:transparent; color:var(--ink-soft); font-family:inherit;
+    font-size:14px; font-weight:600; padding:9px; border-radius:9px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:7px}
+  .tabs button svg{width:16px; height:16px}
+  .tabs button[aria-selected="true"]{background:var(--surface); color:var(--ink); box-shadow:var(--shadow)}
+
+  /* ---------- Card ---------- */
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden}
+
+  /* ---------- Path + actions row ---------- */
+  .pathrow{display:flex; align-items:center; gap:8px; padding:11px 12px; border-bottom:1px solid var(--line-soft)}
+  .crumbs{display:flex; align-items:center; gap:4px; flex-wrap:wrap; font-size:13.5px; min-width:0}
+  .crumbs a{color:var(--ink-soft); text-decoration:none; padding:3px 7px; border-radius:7px; white-space:nowrap}
+  .crumbs a:hover{background:var(--surface-2); color:var(--ink)}
+  .crumbs a.here{color:var(--ink); font-weight:650}
+  .crumbs .sep{color:var(--ink-faint); font-size:12px}
+  .spring{margin-left:auto}
+  .btn{display:inline-flex; align-items:center; gap:7px; font-family:inherit; font-size:13.5px; font-weight:600;
+    padding:8px 12px; border-radius:10px; border:1px solid var(--line); background:var(--surface); color:var(--ink); cursor:pointer; white-space:nowrap}
+  .btn svg{width:15px; height:15px}
+  .btn:hover{border-color:var(--ink-faint)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+  .btn.primary:hover{filter:brightness(1.05)}
+  .btn.ghost{border-color:transparent; background:transparent; color:var(--ink-soft)}
+  .btn.danger{background:var(--danger); border-color:var(--danger); color:var(--danger-ink)}
+  .btn.small{padding:6px 10px; font-size:12.5px}
+
+  /* ---------- Selection toolbar ---------- */
+  .selbar{display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--accent-soft);
+    border-bottom:1px solid var(--line-soft); color:var(--ink)}
+  .selbar .count{font-weight:700; font-size:13.5px; color:var(--accent)}
+  .selbar .spring2{margin-left:auto; display:flex; gap:6px}
+
+  /* ---------- File list ---------- */
+  .list{display:flex; flex-direction:column}
+  .row{display:flex; align-items:center; gap:12px; padding:11px 12px; border-bottom:1px solid var(--line-soft); cursor:pointer; position:relative}
+  .row:last-child{border-bottom:0}
+  .row:hover{background:var(--surface-2)}
+  .row.sel{background:var(--accent-soft)}
+  .row.sel:hover{background:color-mix(in srgb,var(--accent-soft) 80%, var(--accent))}
+  .check{width:20px; height:20px; border-radius:6px; border:1.5px solid var(--line); flex:none; display:grid; place-items:center; background:var(--surface)}
+  .row.sel .check{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+  .check svg{width:13px; height:13px; opacity:0}
+  .row.sel .check svg{opacity:1}
+  .ic{width:34px; height:34px; border-radius:9px; flex:none; display:grid; place-items:center}
+  .ic svg{width:19px; height:19px}
+  .ic.folder{background:color-mix(in srgb,var(--lamp) 16%, var(--surface)); color:var(--lamp)}
+  .ic.epub{background:var(--accent-soft); color:var(--accent)}
+  .ic.txt{background:var(--surface-2); color:var(--ink-soft)}
+  .ic.img{background:color-mix(in srgb,#6b7fd1 16%, var(--surface)); color:#6b7fd1}
+  .meta{min-width:0; flex:1}
+  .name{font-size:14.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .sub{font-size:12px; color:var(--ink-faint); margin-top:1px; display:flex; gap:8px}
+  .sub .tag{font-family:var(--mono); font-size:11px}
+  .size{font-family:var(--mono); font-size:12.5px; color:var(--ink-soft); flex:none; font-variant-numeric:tabular-nums}
+  .rowacts{display:flex; gap:2px; flex:none; opacity:0; transition:opacity .12s}
+  .row:hover .rowacts{opacity:1}
+  .kebab{width:32px; height:32px; border-radius:8px; border:1px solid transparent; background:transparent; color:var(--ink-faint); cursor:pointer; display:grid; place-items:center}
+  .kebab:hover{background:var(--surface); border-color:var(--line); color:var(--ink)}
+  .kebab svg{width:16px;height:16px}
+  .chev{color:var(--ink-faint); flex:none}
+  .chev svg{width:16px;height:16px}
+
+  /* upload strip */
+  .uprow{display:flex; align-items:center; gap:12px; padding:12px; border-bottom:1px solid var(--line-soft); background:var(--surface-2)}
+  .uprow .ic{background:var(--accent-soft); color:var(--accent)}
+  .bar{height:6px; border-radius:99px; background:var(--line); overflow:hidden; margin-top:6px}
+  .bar > i{display:block; height:100%; background:var(--accent); border-radius:99px}
+
+  /* dropzone hint */
+  .foot{padding:12px; color:var(--ink-faint); font-size:12.5px; text-align:center; border-top:1px dashed var(--line)}
+
+  /* ---------- OPDS ---------- */
+  .srvlist{display:flex; flex-direction:column}
+  .srv{display:flex; align-items:center; gap:12px; padding:12px; border-bottom:1px solid var(--line-soft); cursor:pointer}
+  .srv:hover{background:var(--surface-2)}
+  .srv .ic{background:var(--accent-soft); color:var(--accent)}
+  .book{display:flex; gap:12px; padding:12px; border-bottom:1px solid var(--line-soft); align-items:center}
+  .cover{width:44px; height:62px; border-radius:6px; flex:none; background:linear-gradient(150deg,var(--accent),color-mix(in srgb,var(--accent) 55%, #000));
+    box-shadow:var(--shadow); display:grid; place-items:center; color:var(--accent-ink); font-family:var(--serif); font-size:10px; text-align:center; padding:4px}
+  .book .meta .name{white-space:normal}
+  .banner{display:flex; gap:9px; align-items:flex-start; padding:11px 12px; background:var(--danger-soft); color:var(--ink); font-size:12.5px; border-bottom:1px solid var(--line-soft)}
+  .banner.info{background:color-mix(in srgb,var(--lamp) 14%, var(--surface))}
+  .banner svg{width:16px;height:16px;flex:none;margin-top:1px;color:var(--danger)}
+  .banner.info svg{color:var(--lamp)}
+
+  /* ---------- Modal ---------- */
+  .modal-scrim{position:fixed; inset:0; background:rgba(20,17,10,.42); display:grid; place-items:center; padding:18px; z-index:40}
+  :root[data-theme="dark"] .modal-scrim{background:rgba(0,0,0,.6)}
+  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .modal-scrim{background:rgba(0,0,0,.6)}}
+  .modal{width:100%; max-width:400px; background:var(--surface); border:1px solid var(--line); border-radius:16px; box-shadow:var(--shadow-lift); overflow:hidden}
+  .modal h3{margin:0; font-size:16.5px; font-family:var(--serif); font-weight:600}
+  .modal .mhead{padding:16px 16px 4px}
+  .modal .mbody{padding:6px 16px 14px; color:var(--ink-soft); font-size:13.5px}
+  .modal .mact{display:flex; gap:8px; padding:12px 16px; border-top:1px solid var(--line-soft); background:var(--surface-2)}
+  .modal .mact .spring{margin-left:auto}
+  .warnbox{display:flex; gap:11px; padding:13px; border-radius:12px; background:var(--danger-soft); margin:6px 16px 0}
+  .warnbox svg{width:20px; height:20px; color:var(--danger); flex:none; margin-top:1px}
+  .warnbox b{color:var(--ink)}
+
+  /* PIN */
+  .pin{display:flex; flex-direction:column; align-items:center; gap:4px; padding:22px 16px 6px}
+  .pinlamp{width:46px;height:46px;border-radius:14px;display:grid;place-items:center;background:var(--accent-soft);color:var(--accent);margin-bottom:6px}
+  .pinlamp svg{width:24px;height:24px}
+  .pindots{display:flex; gap:10px; margin:16px 0 6px}
+  .pindot{width:46px; height:56px; border-radius:12px; border:1.5px solid var(--line); background:var(--surface-2);
+    display:grid; place-items:center; font-family:var(--mono); font-size:24px; font-weight:600; color:var(--ink)}
+  .pindot.on{border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft)}
+  .pinhint{color:var(--ink-faint); font-size:12.5px; text-align:center; max-width:280px}
+
+  /* move picker */
+  .pick{max-height:230px; overflow:auto; margin:4px 6px}
+  .pick .p{display:flex; align-items:center; gap:10px; padding:9px 10px; border-radius:9px; cursor:pointer; font-size:14px}
+  .pick .p:hover{background:var(--surface-2)}
+  .pick .p.on{background:var(--accent-soft); color:var(--accent); font-weight:650}
+  .pick .p .ic{width:28px;height:28px}
+  .pick .p .ic svg{width:16px;height:16px}
+  .pick .p.indent{margin-left:22px}
+
+  /* demo switcher */
+  .demobar{position:sticky; top:0; z-index:20; margin:0 0 12px; background:color-mix(in srgb,var(--paper) 88%, transparent); backdrop-filter:blur(8px); padding:8px 0}
+  .demobar .inner{display:flex; gap:6px; overflow:auto; padding-bottom:2px}
+  .demobar button{border:1px solid var(--line); background:var(--surface); color:var(--ink-soft); font-family:inherit; font-weight:600; font-size:12.5px; padding:7px 11px; border-radius:99px; cursor:pointer; white-space:nowrap}
+  .demobar button.on{background:var(--ink); color:var(--paper); border-color:var(--ink)}
+  .note{color:var(--ink-faint); font-size:12px; text-align:center; margin:14px 4px 0; font-family:var(--mono)}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="demobar"><div class="inner" id="demobar">
+    <button data-demo="files" class="on">Files</button>
+    <button data-demo="select">Multi-select</button>
+    <button data-demo="upload">Uploading</button>
+    <button data-demo="delete">Delete folder</button>
+    <button data-demo="move">Move picker</button>
+    <button data-demo="pin">PIN lock</button>
+    <button data-demo="opds">OPDS shelf</button>
+    <button data-demo="opds-hotspot">OPDS (hotspot)</button>
+  </div></div>
+
+  <div class="topbar">
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>Lector</h1>
+      <small>library over the air</small>
+    </div>
+    <span class="chip lock" title="Unlocked this session">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0"/></svg>
+      Unlocked
+    </span>
+    <button class="iconbtn" id="themebtn" title="Toggle theme">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+    </button>
+  </div>
+
+  <div class="tabs" id="tabs">
+    <button aria-selected="true" data-tab="files">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+      Files
+    </button>
+    <button aria-selected="false" data-tab="opds">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h9v18H6a2 2 0 0 0-2 2z"/><path d="M15 3h3a2 2 0 0 1 2 2v16"/></svg>
+      OPDS
+    </button>
+  </div>
+
+  <!-- ================= FILES ================= -->
+  <div class="card" id="filecard">
+    <div class="pathrow">
+      <div class="crumbs">
+        <a href="#">SD</a><span class="sep">›</span>
+        <a href="#">Books</a><span class="sep">›</span>
+        <a href="#" class="here">Fiction</a>
+      </div>
+      <div class="spring"></div>
+      <button class="btn small" id="newfolderbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 11v5M9.5 13.5h5"/></svg>New</button>
+      <button class="btn small primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M5 20h14"/></svg>Upload</button>
+    </div>
+
+    <!-- selection toolbar (multi-select demo) -->
+    <div class="selbar" id="selbar" hidden>
+      <span class="count">2 selected</span>
+      <div class="spring2">
+        <button class="btn small" id="movebtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>Move</button>
+        <button class="btn small" ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>Download</button>
+        <button class="btn small danger" id="delselbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg>Delete</button>
+        <button class="btn small ghost" id="deselbtn">Cancel</button>
+      </div>
+    </div>
+
+    <!-- upload strip (uploading demo) -->
+    <div class="uprow" id="uprow" hidden>
+      <div class="ic epub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 9l5-5 5 5"/></svg></div>
+      <div class="meta">
+        <div class="name">Dune — Frank Herbert.epub</div>
+        <div class="bar"><i style="width:64%"></i></div>
+      </div>
+      <div class="size">64%</div>
+    </div>
+
+    <div class="list" id="filelist">
+      <!-- folders -->
+      <div class="row" data-type="folder">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></div>
+        <div class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+        <div class="meta"><div class="name">Sci-Fi</div><div class="sub"><span>34 items</span></div></div>
+        <div class="rowacts">
+          <button class="kebab" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+          <button class="kebab" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="kebab" title="Delete" id="delfolderbtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+        <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+      <div class="row" data-type="folder">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></div>
+        <div class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+        <div class="meta"><div class="name">Classics</div><div class="sub"><span>12 items</span></div></div>
+        <div class="rowacts">
+          <button class="kebab" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+          <button class="kebab" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="kebab" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+        <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+      <!-- files -->
+      <div class="row" data-type="file" data-selectable>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></div>
+        <div class="ic epub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h9v18H6a2 2 0 0 0-2 2z"/><path d="M15 3h3a2 2 0 0 1 2 2v16"/></svg></div>
+        <div class="meta"><div class="name">The Left Hand of Darkness.epub</div><div class="sub"><span class="tag">EPUB</span><span>· 78% read</span></div></div>
+        <div class="size">1.2 MB</div>
+        <div class="rowacts">
+          <button class="kebab" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+          <button class="kebab" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="kebab" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+      </div>
+      <div class="row sel" data-type="file" data-selectable>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></div>
+        <div class="ic epub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h9v18H6a2 2 0 0 0-2 2z"/><path d="M15 3h3a2 2 0 0 1 2 2v16"/></svg></div>
+        <div class="meta"><div class="name">Hyperion — Dan Simmons.epub</div><div class="sub"><span class="tag">EPUB</span><span>· new</span></div></div>
+        <div class="size">2.0 MB</div>
+        <div class="rowacts">
+          <button class="kebab" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+          <button class="kebab" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="kebab" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+      </div>
+      <div class="row sel" data-type="file" data-selectable>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></div>
+        <div class="ic txt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h9l4 4v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M8 12h8M8 16h8M8 8h4"/></svg></div>
+        <div class="meta"><div class="name">notes-annotations.txt</div><div class="sub"><span class="tag">TXT</span></div></div>
+        <div class="size">14 KB</div>
+        <div class="rowacts">
+          <button class="kebab" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+          <button class="kebab" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="kebab" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+      </div>
+      <div class="row" data-type="file" data-selectable>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 12l4 4 10-10"/></svg></div>
+        <div class="ic img"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 16l-5-5L5 20"/></svg></div>
+        <div class="meta"><div class="name">cover-scan.png</div><div class="sub"><span class="tag">PNG</span></div></div>
+        <div class="size">340 KB</div>
+        <div class="rowacts">
+          <button class="kebab" title="Rename"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L18 10l-4-4L4 16z"/><path d="M13 7l4 4"/></svg></button>
+          <button class="kebab" title="Move"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
+          <button class="kebab" title="Delete"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M6 7l1 13h10l1-13"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="foot">Drag files here to upload · 12.3 GB free of 32 GB</div>
+  </div>
+
+  <!-- ================= OPDS ================= -->
+  <div class="card" id="opdscard" hidden>
+    <div class="banner info" id="opdshotspotbanner" hidden>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <div><b>OPDS needs the internet.</b> You are in Hotspot mode, which has no internet. Reconnect with <b>Join Network</b> to download books.</div>
+    </div>
+
+    <div class="pathrow" id="opdscrumbs">
+      <div class="crumbs">
+        <a href="#">Catalogs</a><span class="sep">›</span>
+        <a href="#" class="here">Standard Ebooks</a>
+      </div>
+      <div class="spring"></div>
+      <button class="btn small"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>Add server</button>
+    </div>
+
+    <!-- server list -->
+    <div class="srvlist" id="srvlist" hidden>
+      <div class="srv">
+        <div class="ic epub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h9v18H6a2 2 0 0 0-2 2z"/><path d="M15 3h3a2 2 0 0 1 2 2v16"/></svg></div>
+        <div class="meta"><div class="name">Standard Ebooks</div><div class="sub">standardebooks.org/opds</div></div>
+        <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+      <div class="srv">
+        <div class="ic epub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5a2 2 0 0 1 2-2h9v18H6a2 2 0 0 0-2 2z"/><path d="M15 3h3a2 2 0 0 1 2 2v16"/></svg></div>
+        <div class="meta"><div class="name">Project Gutenberg</div><div class="sub">m.gutenberg.org · lock icon = login saved</div></div>
+        <span class="chev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6l6 6-6 6"/></svg></span>
+      </div>
+    </div>
+
+    <!-- browsed catalog -->
+    <div id="opdsbooks">
+      <div class="uprow" id="opdsdl">
+        <div class="ic epub"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 11l5 5 5-5"/></svg></div>
+        <div class="meta"><div class="name">Downloading — Middlemarch.epub</div><div class="bar"><i style="width:41%"></i></div></div>
+        <div class="size">41%</div>
+      </div>
+      <div class="book">
+        <div class="cover">The Time Machine</div>
+        <div class="meta"><div class="name">The Time Machine</div><div class="sub">H. G. Wells · EPUB · 220 KB</div></div>
+        <button class="btn small primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>Get</button>
+      </div>
+      <div class="book">
+        <div class="cover">Middlemarch</div>
+        <div class="meta"><div class="name">Middlemarch</div><div class="sub">George Eliot · EPUB · 1.4 MB</div></div>
+        <button class="btn small"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>Saved</button>
+      </div>
+      <div class="book">
+        <div class="cover">Frankenstein</div>
+        <div class="meta"><div class="name">Frankenstein</div><div class="sub">Mary Shelley · EPUB · 410 KB</div></div>
+        <button class="btn small primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M7 11l5 5 5-5"/><path d="M5 20h14"/></svg>Get</button>
+      </div>
+      <div class="foot">Downloads land in /Books · tap a shelf to go deeper</div>
+    </div>
+  </div>
+
+  <div class="note">mockup · not wired · flip states with the pills up top · toggle light/dark with the moon</div>
+</div>
+
+<!-- ================= MODALS ================= -->
+<div class="modal-scrim" id="m-delete" hidden>
+  <div class="modal">
+    <div class="mhead"><h3>Delete folder?</h3></div>
+    <div class="warnbox">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+      <div>Delete <b>“Sci-Fi”</b> and everything inside it — <b>34 files</b> in 3 subfolders. This cannot be undone.</div>
+    </div>
+    <div class="mbody" style="padding-top:12px">Your reading progress for those books is removed too.</div>
+    <div class="mact">
+      <span class="spring"></span>
+      <button class="btn" data-close>Keep</button>
+      <button class="btn danger" data-close>Delete all</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-scrim" id="m-move" hidden>
+  <div class="modal">
+    <div class="mhead"><h3>Move 2 items to…</h3></div>
+    <div class="pick">
+      <div class="p"><span class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>SD (root)</div>
+      <div class="p on indent"><span class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Books</div>
+      <div class="p indent" style="margin-left:44px"><span class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Sci-Fi</div>
+      <div class="p indent" style="margin-left:44px"><span class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Classics</div>
+      <div class="p"><span class="ic folder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>Sleep</div>
+    </div>
+    <div class="mact"><span class="spring"></span><button class="btn" data-close>Cancel</button><button class="btn primary" data-close>Move here</button></div>
+  </div>
+</div>
+
+<div class="modal-scrim" id="m-pin" hidden>
+  <div class="modal">
+    <div class="pin">
+      <div class="pinlamp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+      <h3 style="font-family:var(--serif);margin:0;font-size:18px">Enter the access code</h3>
+      <div class="pindots"><div class="pindot on">7</div><div class="pindot on">2</div><div class="pindot">·</div><div class="pindot">·</div></div>
+      <div class="pinhint">Look at your reader’s screen. It shows a 4-digit code next to the QR. Type it here once.</div>
+    </div>
+    <div class="mact"><span class="spring"></span><button class="btn ghost" data-close>Later</button><button class="btn primary" data-close>Unlock</button></div>
+  </div>
+</div>
+
+<div class="modal-scrim" id="m-newfolder" hidden>
+  <div class="modal">
+    <div class="mhead"><h3>New folder</h3></div>
+    <div class="mbody">
+      <input style="width:100%;font-family:inherit;font-size:15px;padding:11px 12px;border-radius:10px;border:1.5px solid var(--accent);background:var(--surface-2);color:var(--ink);outline:none" value="Poetry" />
+    </div>
+    <div class="mact"><span class="spring"></span><button class="btn" data-close>Cancel</button><button class="btn primary" data-close>Create</button></div>
+  </div>
+</div>
+
+<script>
+  // theme toggle
+  const root=document.documentElement;
+  document.getElementById('themebtn').onclick=()=>{
+    const cur=root.getAttribute('data-theme');
+    const sysDark=matchMedia('(prefers-color-scheme:dark)').matches;
+    const isDark = cur? cur==='dark' : sysDark;
+    root.setAttribute('data-theme', isDark?'light':'dark');
+  };
+
+  // tabs
+  const tabs=document.getElementById('tabs');
+  const fileCard=document.getElementById('filecard'), opdsCard=document.getElementById('opdscard');
+  tabs.querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    tabs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected', x===b));
+    const t=b.dataset.tab; fileCard.hidden=t!=='files'; opdsCard.hidden=t!=='opds';
+  });
+
+  // modal open/close
+  const openM=id=>document.getElementById(id).hidden=false;
+  document.querySelectorAll('[data-close]').forEach(b=>b.onclick=e=>e.target.closest('.modal-scrim').hidden=true);
+  document.querySelectorAll('.modal-scrim').forEach(s=>s.addEventListener('click',e=>{if(e.target===s)s.hidden=true}));
+  document.getElementById('delfolderbtn').onclick=e=>{e.stopPropagation();openM('m-delete')};
+  document.getElementById('delselbtn').onclick=()=>openM('m-delete');
+  document.getElementById('movebtn').onclick=()=>openM('m-move');
+  document.getElementById('newfolderbtn').onclick=()=>openM('m-newfolder');
+
+  // selection helpers
+  const selbar=document.getElementById('selbar');
+  document.getElementById('deselbtn')&&(document.getElementById('deselbtn').onclick=()=>setDemo('files'));
+
+  // demo switcher
+  const demobar=document.getElementById('demobar');
+  const uprow=document.getElementById('uprow'), opdsdl=document.getElementById('opdsdl');
+  const srvlist=document.getElementById('srvlist'), opdsbooks=document.getElementById('opdsbooks');
+  const opdscrumbs=document.getElementById('opdscrumbs'), hotspot=document.getElementById('opdshotspotbanner');
+  function clearSel(){document.querySelectorAll('.row.sel').forEach(r=>r.classList.remove('sel'));}
+  function setSel(){document.querySelectorAll('#filelist .row[data-selectable]').forEach((r,i)=>{if(i===1||i===2)r.classList.add('sel')});}
+  function setDemo(d){
+    demobar.querySelectorAll('button').forEach(x=>x.classList.toggle('on', x.dataset.demo===d));
+    document.querySelectorAll('.modal-scrim').forEach(s=>s.hidden=true);
+    // reset
+    selbar.hidden=true; uprow.hidden=true; clearSel();
+    const filesTab = d.startsWith('opds')?'opds':'files';
+    tabs.querySelectorAll('button').forEach(x=>x.setAttribute('aria-selected', x.dataset.tab===filesTab));
+    fileCard.hidden=filesTab!=='files'; opdsCard.hidden=filesTab!=='files'?false:true;
+    // opds sub-state
+    srvlist.hidden=true; opdsbooks.hidden=false; opdscrumbs.hidden=false; hotspot.hidden=true; opdsdl.hidden=false;
+
+    if(d==='select'){ setSel(); selbar.hidden=false; }
+    else if(d==='upload'){ uprow.hidden=false; }
+    else if(d==='delete'){ openM('m-delete'); }
+    else if(d==='move'){ setSel(); selbar.hidden=false; openM('m-move'); }
+    else if(d==='pin'){ openM('m-pin'); }
+    else if(d==='opds'){ /* books view default */ }
+    else if(d==='opds-hotspot'){ hotspot.hidden=false; opdsdl.hidden=true; srvlist.hidden=false; opdsbooks.hidden=true; opdscrumbs.hidden=true; }
+  }
+  demobar.querySelectorAll('button').forEach(b=>b.onclick=()=>setDemo(b.dataset.demo));
+  setDemo('files');
+</script>
+</body>
+</html>

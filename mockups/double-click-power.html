@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lector — Double-Click Power button</title>
+<style>
+  :root{ --ink:#111; --paper:#fff; }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; padding:24px 16px 64px;
+    background:#e7e5e0; color:#111;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  }
+  h1{ font-size:20px; margin:0 0 4px; }
+  .sub{ font-size:13px; color:#555; margin:0 0 24px; max-width:760px; line-height:1.5; }
+  .grid{ display:flex; flex-wrap:wrap; gap:28px; justify-content:center; align-items:flex-start; }
+  .cell{ width:300px; }
+  .cap{ font-size:12px; line-height:1.45; color:#333; margin-top:10px; }
+  .cap b{ display:block; font-size:13px; color:#000; margin-bottom:2px; }
+
+  /* the 480x800 panel, scaled to 300px wide */
+  .panel{
+    width:480px; height:800px;
+    transform:scale(.625); transform-origin:top left;
+    background:var(--paper); color:var(--ink);
+    position:relative; overflow:hidden;
+    border:1px solid #999;
+    font-family:"DejaVu Sans Mono","Courier New",monospace;
+    -webkit-font-smoothing:none; font-smooth:never;
+  }
+  .panelbox{ width:300px; height:500px; overflow:hidden; }
+
+  /* status bar */
+  .sbar{ position:absolute; top:0; left:0; right:0; height:30px; display:flex;
+         align-items:center; justify-content:space-between; padding:0 12px;
+         font-size:14px; border-bottom:1px solid var(--ink); }
+  /* screen title */
+  .stitle{ position:absolute; top:30px; left:0; right:0; height:44px;
+           display:flex; align-items:center; padding:0 14px; font-size:19px;
+           border-bottom:2px solid var(--ink); }
+  /* settings rows */
+  .rows{ position:absolute; top:74px; left:0; right:0; bottom:44px; }
+  .row{ height:44px; display:flex; align-items:center; justify-content:space-between;
+        padding:0 14px; font-size:16px; border-bottom:1px dotted #888; }
+  .row .val{ font-size:15px; opacity:.85; }
+  .row.sel{ background:var(--ink); color:var(--paper); }
+  .row.sel .val{ opacity:1; }
+  .row.head{ height:32px; font-size:13px; letter-spacing:.12em; border-bottom:1px solid var(--ink);
+             background:#ddd; }
+  .row.off{ color:#999; }
+  /* button hints */
+  .hints{ position:absolute; left:0; right:0; bottom:0; height:44px; display:flex;
+          border-top:2px solid var(--ink); font-size:13px; }
+  .hints div{ flex:1; display:flex; align-items:center; justify-content:center;
+              border-right:1px solid var(--ink); }
+  .hints div:last-child{ border-right:0; }
+
+  /* popup — matches BaseTheme::drawOptionPopup: white halo, black ring, white body */
+  .halo{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+         background:var(--paper); padding:4px; }
+  .pop{ border:4px solid var(--ink); background:var(--paper); padding:14px 0 12px; }
+  .pop .ptitle{ text-align:center; font-size:17px; padding:0 18px 10px; }
+  .pop .psep{ height:1px; background:var(--ink); margin:0 14px 8px; }
+  .pop .pitem{ font-size:16px; padding:5px 22px; margin:0 12px; text-align:center; white-space:nowrap; }
+  .pop .pitem.sel{ background:var(--ink); color:var(--paper); }
+  /* quick menu: left aligned with a fixed 4-char status column */
+  .pop.quick .pitem{ text-align:left; }
+  .pop.quick .st{ display:inline-block; width:3.2em; }
+  .pop .pitem.dis{ color:#9a9a9a; }
+  .pop .pitem.sel.dis{ background:#bdbdbd; color:#4a4a4a; }
+  .pop .pcount{ text-align:center; font-size:13px; padding:8px 18px 0; }
+
+  /* reader page behind the quick menu */
+  .page{ position:absolute; top:36px; left:26px; right:26px; bottom:34px;
+         font-family:Georgia,serif; font-size:15.5px; line-height:1.55; text-align:justify;
+         color:#111; }
+  .veil{ position:absolute; inset:0; background:rgba(255,255,255,.55); }
+  .rsbar{ position:absolute; left:0; right:0; bottom:0; height:26px; display:flex;
+          align-items:center; justify-content:space-between; padding:0 14px; font-size:12px;
+          font-family:"DejaVu Sans Mono",monospace; border-top:1px solid #444; }
+
+  .note{ max-width:820px; margin:36px auto 0; font-size:13.5px; line-height:1.6; color:#222; }
+  .note h2{ font-size:15px; margin:22px 0 6px; }
+  .note code{ background:#fff; border:1px solid #ccc; padding:1px 4px; font-size:12.5px; }
+  .note ul{ margin:6px 0; padding-left:20px; }
+</style>
+</head>
+<body>
+
+<h1>lector — Double-Click Power button</h1>
+<p class="sub">Panels are 480 × 800, the real X3 / X4 panel, shown at 62.5%. Popup styling follows
+<code>BaseTheme::drawOptionPopup</code>: white halo, black ring, white body, selected row inverted, UI font never bold.</p>
+
+<div class="grid">
+
+  <!-- 1. Settings > Controls -->
+  <div class="cell">
+    <div class="panelbox"><div class="panel">
+      <div class="sbar"><span>Settings</span><span>84%</span></div>
+      <div class="stitle">Controls</div>
+      <div class="rows">
+        <div class="row head">BUTTON ACTIONS</div>
+        <div class="row sel"><span>Double-Click Power</span><span class="val">Menu Pop-up &gt;</span></div>
+        <div class="row"><span>Pop-up Items</span><span class="val">3 of 8 &gt;</span></div>
+        <div class="row"><span>Long-press Menu</span><span class="val">KOSync &gt;</span></div>
+        <div class="row"><span>Menu Hold</span><span class="val">Grab Quote &gt;</span></div>
+        <div class="row head">POWER BUTTON</div>
+        <div class="row"><span>Short Power Button</span><span class="val">Force Refresh &gt;</span></div>
+        <div class="row"><span>Power Button Duration</span><span class="val">800 ms &gt;</span></div>
+        <div class="row"><span>Footnote Back</span><span class="val">On &gt;</span></div>
+      </div>
+      <div class="hints"><div>Back</div><div>Select</div><div>Up</div><div>Down</div></div>
+    </div></div>
+    <p class="cap"><b>1 · Settings › Controls</b>
+      Two new rows. <i>Double-Click Power</i> picks one action. <i>Pop-up Items</i> only appears
+      when that action is Menu Pop-up, and shows how many of the 8 slots are used.</p>
+  </div>
+
+  <!-- 2. Action chooser -->
+  <div class="cell">
+    <div class="panelbox"><div class="panel">
+      <div class="sbar"><span>Settings</span><span>84%</span></div>
+      <div class="stitle">Controls</div>
+      <div class="rows">
+        <div class="row off"><span>Double-Click Power</span><span class="val">Menu Pop-up &gt;</span></div>
+        <div class="row off"><span>Pop-up Items</span><span class="val">3 of 8 &gt;</span></div>
+        <div class="row off"><span>Long-press Menu</span><span class="val">KOSync &gt;</span></div>
+      </div>
+      <div class="halo"><div class="pop">
+        <div class="ptitle">Double-Click Power</div>
+        <div class="psep"></div>
+        <div class="pitem">Disabled</div>
+        <div class="pitem">KOSync</div>
+        <div class="pitem">Toggle Bookmark</div>
+        <div class="pitem">Look Up</div>
+        <div class="pitem">Grab Quote</div>
+        <div class="pitem">Select Chapter</div>
+        <div class="pitem">Go to Percent</div>
+        <div class="pitem">Go to Paragraph</div>
+        <div class="pitem">Footnotes</div>
+        <div class="pitem">Text Settings</div>
+        <div class="pitem">Reader Settings</div>
+        <div class="pitem">Toggle Status Bar</div>
+        <div class="pitem sel">Menu Pop-up</div>
+      </div></div>
+      <div class="hints"><div>Back</div><div>Select</div><div>Up</div><div>Down</div></div>
+    </div></div>
+    <p class="cap"><b>2 · The action list</b>
+      13 values. The same list feeds all three bindings, so Long-press Menu and Menu Hold gain
+      every action too. Order is fixed forever: new actions append at the end, or saved settings shift.</p>
+  </div>
+
+  <!-- 3. Pop-up Items chooser -->
+  <div class="cell">
+    <div class="panelbox"><div class="panel">
+      <div class="sbar"><span>Settings</span><span>84%</span></div>
+      <div class="stitle">Pop-up Items &nbsp;·&nbsp; 3 of 8</div>
+      <div class="rows">
+        <div class="row"><span>[ ] &nbsp;KOSync</span></div>
+        <div class="row"><span>[x] &nbsp;Toggle Bookmark</span></div>
+        <div class="row sel"><span>[x] &nbsp;Look Up</span></div>
+        <div class="row"><span>[x] &nbsp;Grab Quote</span></div>
+        <div class="row"><span>[ ] &nbsp;Select Chapter</span></div>
+        <div class="row"><span>[ ] &nbsp;Go to Percent</span></div>
+        <div class="row"><span>[ ] &nbsp;Go to Paragraph</span></div>
+        <div class="row"><span>[ ] &nbsp;Footnotes</span></div>
+        <div class="row"><span>[ ] &nbsp;Text Settings</span></div>
+        <div class="row"><span>[ ] &nbsp;Reader Settings</span></div>
+        <div class="row"><span>[ ] &nbsp;Toggle Status Bar</span></div>
+      </div>
+      <div class="hints"><div>Back</div><div>Tick</div><div>Up</div><div>Down</div></div>
+    </div></div>
+    <p class="cap"><b>3 · Pop-up Items</b>
+      All 11 actions, always in this order. Confirm ticks and unticks. At 8 ticks the next
+      tick is refused with a one-line banner. Order in the pop-up follows this list, not the order you ticked.</p>
+  </div>
+
+  <!-- 4. Quick menu in book -->
+  <div class="cell">
+    <div class="panelbox"><div class="panel">
+      <div class="page">
+        and the road bent away under the pines, so that for a while he could
+        see neither the house he had left nor the one he was walking toward.
+        The rain had stopped an hour before. Everything still dripped. He
+        counted his steps for a time, then stopped counting, and the counting
+        went on somewhere behind his thinking, the way a stream keeps going
+        after you have turned your back on it. There was a gate at the top of
+        the rise. It had been painted green once. He put his hand on it and
+        did not open it, and stood there long enough for the cold to find the
+        wet cuffs of his coat.
+      </div>
+      <div class="veil"></div>
+      <div class="halo"><div class="pop quick">
+        <div class="ptitle">Quick Menu</div>
+        <div class="psep"></div>
+        <div class="pitem"><span class="st">&nbsp;</span>Toggle Bookmark</div>
+        <div class="pitem sel"><span class="st">&nbsp;</span>Look Up</div>
+        <div class="pitem"><span class="st">&nbsp;</span>Grab Quote</div>
+        <div class="pitem dis"><span class="st">[X]</span>Footnotes</div>
+        <div class="pitem dis"><span class="st">[X]</span>Go to Paragraph</div>
+      </div></div>
+      <div class="rsbar"><span>The Gate · ch 7</span><span>41%</span></div>
+    </div></div>
+    <p class="cap"><b>4 · Double-click, inside a book</b>
+      Rows are left aligned with a fixed status column so the <code>[X]</code> never shifts the labels.
+      <code>[X]</code> means the action cannot run right now: this page has no footnote, and paragraph
+      numbering is off. The cursor skips those rows. Back closes. The reader page behind is never repainted.</p>
+  </div>
+
+</div>
+
+<div class="note">
+  <h2>What happens when you press</h2>
+  <ul>
+    <li>Power held past <code>powerButtonDuration</code> → sleep. Unchanged, and it always wins.</li>
+    <li>Power + Down → screenshot. Unchanged, and it is checked before the click logic.</li>
+    <li>One click, inside a book, feature on → wait 280 ms. No second click → the normal
+      <code>shortPwrBtn</code> action runs, just 280 ms later.</li>
+    <li>Second click inside 280 ms → the bound action runs; the single-press action is dropped.</li>
+    <li>Outside a book → no wait at all. The power button behaves exactly as it does today.</li>
+    <li>Feature set to Disabled → no wait anywhere. Byte-for-byte today's behaviour.</li>
+  </ul>
+
+  <h2>Where the code goes</h2>
+  <ul>
+    <li><code>CrossPointSettings.h</code> — widen <code>LONG_PRESS_MENU_FUNCTION</code> to 13 values,
+      append only. Add <code>doubleClickPowerFunction</code> and a <code>popupItems</code> bitmask (one uint16).</li>
+    <li><code>SettingsList.h</code> — one Enum row, one custom row opening the tick screen.</li>
+    <li><code>EpubReaderActivity::runBoundMenuFunction</code> — grows from 4 cases to 12, plus the
+      pop-up case. Each new case reuses the entry point the menu already calls.</li>
+    <li>New <code>PopupItemsActivity</code> — the tick list. Small, one file.</li>
+    <li>The click detector lives in <code>EpubReaderActivity</code>, not <code>main.cpp</code>, so the
+      280 ms wait cannot leak outside a book.</li>
+  </ul>
+
+  <h2>Known risks</h2>
+  <ul>
+    <li>Settings order is load-bearing. <code>LP_MENU_KOSYNC == 0</code> and
+      <code>LP_MENU_DISABLED == 1</code> already. Any new default must be 1, never 0, or closing the
+      menu starts a WiFi sync.</li>
+    <li>Grab Quote hands the picker a raw <code>Section*</code>. It must run last, after any live toggle
+      that could repaginate, exactly as the Menu Hold path already does.</li>
+    <li>A press must act within 500 ms or die. 280 ms plus dispatch stays inside that.</li>
+  </ul>
+</div>
+
+</body>
+</html>
