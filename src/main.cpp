@@ -42,6 +42,7 @@
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "sleep/WakeFacePolicy.h"
 #include "util/ButtonNavigator.h"
 #include "util/DoubleClickDetector.h"
 #include "util/ScreenshotUtil.h"
@@ -246,15 +247,17 @@ void enterDeepSleep(bool fromTimeout = false) {
       SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
       (fromTimeout &&
        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
-  // A custom sleep image already provides retained boot-time content. Keep it
-  // on-panel until the first useful reader or home paint replaces it.
-  //
-  // Upstream (#2989) sets this false for every sleep mode. Lector does not: the
-  // wallpaper wake face — blank the panel on the button press, then draw the
-  // unlock banners in one FULL pass — lives on the BootResume::Splash path, so
-  // routing every wake to SplashlessWake would silently delete it.
-  APP_STATE.showBootScreen =
-      !(isQuickResumeSleep || SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM);
+  // Only a wake that restores the exact frame already on the glass may suppress the
+  // boot presentation — see WakeFacePolicy.h. A custom wallpaper is arbitrary artwork
+  // that the wake paints over, so it keeps the boot presentation: the wallpaper wake
+  // face (blank the panel on the button press, then draw the unlock banners in one
+  // FULL pass) lives on the BootResume::Splash path, and routing a custom sleep face
+  // to SplashlessWake silently deletes that clearing pass.
+  const wake_face::SleepFace sleepFace = isQuickResumeSleep ? wake_face::SleepFace::QuickResumeFrame
+                                         : SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM
+                                             ? wake_face::SleepFace::CustomWallpaper
+                                             : wake_face::SleepFace::Other;
+  APP_STATE.showBootScreen = !wake_face::retainsPanelForWake(sleepFace);
 
   APP_STATE.saveToFile();
 
