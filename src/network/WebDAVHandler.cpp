@@ -106,9 +106,17 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
       }
       if (!_putOk) Storage.remove(tempPath.c_str());
     }
-    // Same mark the plain-HTTP upload sets: a wallpaper written over WebDAV
-    // must reach the rotation index at the post-session reconcile.
-    if (_putOk) crosspoint::sleep::windex::markDirtyIfSleepPath(_putPath.c_str());
+    // A wallpaper written over WebDAV reaches the rotation index right here: a
+    // fresh file appends its own record (no folder walk at the next boot), an
+    // overwrite only changes content the fingerprint covers, so that one still
+    // goes through the dirty mark and the reconcile.
+    if (_putOk) {
+      if (_putExisted) {
+        crosspoint::sleep::windex::markDirtyIfSleepPath(_putPath.c_str());
+      } else {
+        crosspoint::sleep::windex::noteCreated(_putPath.c_str());
+      }
+    }
     LOG_DBG("DAV", "PUT END: %u bytes, ok=%d", raw.totalSize, _putOk);
 
   } else if (raw.status == RAW_ABORTED) {
@@ -439,8 +447,12 @@ void WebDAVHandler::handleDelete(WebServer& s) {
   } else {
     file.close();
     clearBookCache(path.c_str());
+    // Planned while the file still exists: the index keeps the slot as a hole
+    // and the snapshot is patched in place, so no boot pays a folder walk.
+    const auto pendingDelete = crosspoint::sleep::windex::planDeletion(path.c_str());
     if (Storage.remove(path.c_str())) {
-      crosspoint::sleep::windex::markDirtyIfSleepPath(path.c_str());
+      crosspoint::sleep::windex::commitDeletion(pendingDelete);
+      if (!pendingDelete.valid) crosspoint::sleep::windex::markDirtyIfSleepPath(path.c_str());
       s.send(204);
     } else {
       s.send(500, "text/plain", "Failed to delete file");
@@ -549,13 +561,21 @@ void WebDAVHandler::handleMove(WebServer& s) {
   }
 
   clearBookCache(srcPath.c_str());
+  // Either end of the move can be a sleep folder (in or out both change it).
+  // Out of the indexed folder is a deletion, into it is a creation; both are
+  // exact one-entry patches, so neither end needs a walk.
+  const auto pendingDelete = crosspoint::sleep::windex::planDeletion(srcPath.c_str());
   bool success = file.rename(dstPath.c_str());
   file.close();
 
   if (success) {
-    // Either end of the move can be a sleep folder (in or out both change it).
-    crosspoint::sleep::windex::markDirtyIfSleepPath(srcPath.c_str());
-    crosspoint::sleep::windex::markDirtyIfSleepPath(dstPath.c_str());
+    crosspoint::sleep::windex::commitDeletion(pendingDelete);
+    if (!pendingDelete.valid) crosspoint::sleep::windex::markDirtyIfSleepPath(srcPath.c_str());
+    if (dstExists) {
+      crosspoint::sleep::windex::markDirtyIfSleepPath(dstPath.c_str());
+    } else {
+      crosspoint::sleep::windex::noteCreated(dstPath.c_str());
+    }
     s.send(dstExists ? 204 : 201);
   } else {
     s.send(500, "text/plain", "Move failed");
@@ -650,7 +670,11 @@ void WebDAVHandler::handleCopy(WebServer& s) {
   dstFile.close();
 
   if (copyOk) {
-    crosspoint::sleep::windex::markDirtyIfSleepPath(dstPath.c_str());
+    if (dstExists) {
+      crosspoint::sleep::windex::markDirtyIfSleepPath(dstPath.c_str());
+    } else {
+      crosspoint::sleep::windex::noteCreated(dstPath.c_str());
+    }
     s.send(dstExists ? 204 : 201);
   } else {
     Storage.remove(dstPath.c_str());

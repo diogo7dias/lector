@@ -46,6 +46,7 @@ struct QueueState {
 struct Result {
   std::string basename;       // next live wallpaper; empty when none found
   bool needsRebuild = false;  // exhausted the skip budget — index is stale
+  bool lapWrapped = false;    // this pick completed a lap (every record shown once)
 };
 
 // Manual "Shuffle Wallpapers": a fresh lap over everything, fresh queue folded in.
@@ -102,7 +103,10 @@ Result pickNext(QueueState& s, const size_t recordCount, const uint32_t randA, c
     // lap wrap inside the skip walk does not repeat the same shuffle.
     const bool wrapped = sleep_rotation::advance(cursor, recordCount, randA ^ static_cast<uint32_t>(i + 1),
                                                  randB + static_cast<uint32_t>(i));
-    if (wrapped) s.freshNext = static_cast<uint32_t>(recordCount);  // lap complete → fresh folded into new lap
+    if (wrapped) {
+      s.freshNext = static_cast<uint32_t>(recordCount);  // lap complete → fresh folded into new lap
+      result.lapWrapped = true;  // sticky: a wrap consumed while skipping dead slots still counts
+    }
     if (tryCandidate(std::move(name))) return result;
   }
   result.needsRebuild = true;

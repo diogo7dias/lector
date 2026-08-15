@@ -39,8 +39,7 @@ struct Fake {
           const std::string ext = ".pxc";
           if (n.size() < ext.size()) return std::string();
           const std::string stem = n.substr(0, n.size() - ext.size());
-          if (stem.size() >= 2 && stem.substr(stem.size() - 2) == "_F")
-            return stem.substr(0, stem.size() - 2) + ext;
+          if (stem.size() >= 2 && stem.substr(stem.size() - 2) == "_F") return stem.substr(0, stem.size() - 2) + ext;
           return stem + "_F" + ext;
         });
   }
@@ -249,4 +248,36 @@ TEST(SleepQueuePolicy, PropertyNoIntraLapRepeats) {
     EXPECT_TRUE(segmentShown.insert(r.basename).second)
         << "repeat within one lap segment at step " << step << " (seeded " << s.cursor.seededCount << ")";
   }
+}
+
+// The pick reports the lap wrap so the device can defer index compaction to the
+// end of a lap: holes left by deletes stay cheap until every wallpaper in the
+// lap has been shown once, and only then is a rebuild worth its scan.
+TEST(SleepQueuePolicy, ReportsTheLapWrap) {
+  Fake fake;
+  for (int i = 0; i < 4; ++i) fake.addLive("w" + std::to_string(i) + ".pxc");
+
+  QueueState s;
+  sleep_queue::reshuffle(s, fake.records.size(), 7, 13);
+
+  // One full lap: exactly the last pick of the lap reports the wrap.
+  for (size_t i = 0; i < fake.records.size(); ++i) {
+    const Result r = fake.pick(s);
+    ASSERT_FALSE(r.basename.empty());
+    const bool isLastOfLap = i + 1 == fake.records.size();
+    EXPECT_EQ(r.lapWrapped, isLastOfLap) << "pick " << i;
+  }
+}
+
+// A pick served from the fresh region is not a lap wrap.
+TEST(SleepQueuePolicy, FreshPickDoesNotReportALapWrap) {
+  Fake fake;
+  for (int i = 0; i < 3; ++i) fake.addLive("w" + std::to_string(i) + ".pxc");
+  QueueState s;
+  sleep_queue::reshuffle(s, fake.records.size(), 7, 13);
+  fake.addLive("fresh.pxc");  // appended after the lap was seeded
+
+  const Result r = fake.pick(s);
+  EXPECT_EQ(r.basename, "fresh.pxc");
+  EXPECT_FALSE(r.lapWrapped);
 }

@@ -63,11 +63,11 @@ TEST(SleepIndexReconcile, FingerprintSeesEveryKindOfChange) {
   const std::vector<Entry> base = {{"x.pxc", 100, 5000}, {"y.bmp", 200, 6000}};
   const uint32_t fp = fingerprintOf(base);
 
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5000}}));                                       // removed
+  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5000}}));                                         // removed
   EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5000}, {"y.bmp", 200, 6000}, {"n.pxc", 1, 2}}));  // added
-  EXPECT_NE(fp, fingerprintOf({{"x2.pxc", 100, 5000}, {"y.bmp", 200, 6000}}));                // renamed
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5001}, {"y.bmp", 200, 6000}}));                 // replaced (size)
-  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 101, 5000}, {"y.bmp", 200, 6000}}));                 // touched (mtime)
+  EXPECT_NE(fp, fingerprintOf({{"x2.pxc", 100, 5000}, {"y.bmp", 200, 6000}}));                  // renamed
+  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 100, 5001}, {"y.bmp", 200, 6000}}));                   // replaced (size)
+  EXPECT_NE(fp, fingerprintOf({{"x.pxc", 101, 5000}, {"y.bmp", 200, 6000}}));                   // touched (mtime)
 }
 
 // A favorite toggle renames the file; the counterpart membership check must
@@ -209,4 +209,78 @@ TEST(SleepIndexReconcile, DecidePlanMatrix) {
     in.scannedLive = 21000;
     EXPECT_EQ(sleep_reconcile::decidePlan(in), Plan::FullRebuild);
   }
+}
+
+// ── In-place snapshot deltas (no folder walk) ────────────────────────────────
+// A device-side delete or single-file add is fully described by one entry hash,
+// so the snapshot can be patched in place and the next boot skips the walk.
+
+TEST(SleepIndexSnapshot, DeletionRemovesTheEntryContributionExactly) {
+  const uint32_t hashA = sleep_reconcile::entryHash("a.pxc", 111, 5000);
+  const uint32_t hashB = sleep_reconcile::entryHash("b.pxc", 222, 6000);
+
+  sleep_reconcile::Snapshot snap;
+  snap.fingerprint = hashA + hashB;
+  snap.liveCount = 2;
+  snap.deadSlots = 0;
+
+  const sleep_reconcile::Snapshot after = sleep_reconcile::applyDeletion(snap, hashB);
+  EXPECT_EQ(after.fingerprint, hashA);
+  EXPECT_EQ(after.liveCount, 1u);
+  EXPECT_EQ(after.deadSlots, 1u);
+}
+
+// Deleting every wallpaper must not underflow the live count.
+TEST(SleepIndexSnapshot, DeletionClampsAtZeroLive) {
+  sleep_reconcile::Snapshot snap;
+  snap.fingerprint = 7;
+  snap.liveCount = 0;
+  snap.deadSlots = 3;
+
+  const sleep_reconcile::Snapshot after = sleep_reconcile::applyDeletion(snap, 7);
+  EXPECT_EQ(after.liveCount, 0u);
+  EXPECT_EQ(after.deadSlots, 4u);
+}
+
+// A single-file add appends one record: the contribution goes in, no dead slot.
+TEST(SleepIndexSnapshot, AdditionAddsTheEntryContribution) {
+  const uint32_t hashA = sleep_reconcile::entryHash("a.pxc", 111, 5000);
+  const uint32_t hashNew = sleep_reconcile::entryHash("new.bmp", 333, 7000);
+
+  sleep_reconcile::Snapshot snap;
+  snap.fingerprint = hashA;
+  snap.liveCount = 1;
+  snap.deadSlots = 2;
+
+  const sleep_reconcile::Snapshot after = sleep_reconcile::applyAddition(snap, hashNew);
+  EXPECT_EQ(after.fingerprint, hashA + hashNew);
+  EXPECT_EQ(after.liveCount, 2u);
+  EXPECT_EQ(after.deadSlots, 2u);
+}
+
+// Add then delete the same entry returns the snapshot's fingerprint to where it
+// started (wrap-sum arithmetic, so this holds across uint32 overflow too).
+TEST(SleepIndexSnapshot, AddThenDeleteRestoresTheFingerprint) {
+  const uint32_t hashNew = sleep_reconcile::entryHash("new.bmp", 333, 7000);
+  sleep_reconcile::Snapshot snap;
+  snap.fingerprint = 0xFFFFFFF0u;
+  snap.liveCount = 4;
+
+  const sleep_reconcile::Snapshot round =
+      sleep_reconcile::applyDeletion(sleep_reconcile::applyAddition(snap, hashNew), hashNew);
+  EXPECT_EQ(round.fingerprint, snap.fingerprint);
+  EXPECT_EQ(round.liveCount, snap.liveCount);
+}
+
+// Holes are cheap until they are not: a handful of deletes must NOT force a
+// rebuild (that is the whole point of deferring), a pileup must.
+TEST(SleepIndexSnapshot, DeadSlotsDemandRebuildOnlyPastTheThreshold) {
+  EXPECT_FALSE(sleep_reconcile::deadSlotsDemandRebuild(/*recordCount=*/5000, /*deadSlots=*/0));
+  EXPECT_FALSE(sleep_reconcile::deadSlotsDemandRebuild(5000, 1));
+  EXPECT_FALSE(sleep_reconcile::deadSlotsDemandRebuild(5000, 1250));  // exactly count/4
+  EXPECT_TRUE(sleep_reconcile::deadSlotsDemandRebuild(5000, 1251));
+
+  // Small folders keep the 64-slot floor: 10 records, 40 deletes tolerated.
+  EXPECT_FALSE(sleep_reconcile::deadSlotsDemandRebuild(10, 40));
+  EXPECT_TRUE(sleep_reconcile::deadSlotsDemandRebuild(10, 65));
 }

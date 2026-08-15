@@ -165,6 +165,7 @@ void resetRotationState(const uint32_t count, const uint32_t fingerprint, const 
   APP_STATE.sleepIndexDirId = dirId;
   APP_STATE.sleepIndexDirty = false;
   APP_STATE.sleepIndexNeedsRebuild = false;
+  APP_STATE.sleepIndexDeadSlots = 0;  // a rebuild compacts every hole away
   APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
 }
 
@@ -265,6 +266,140 @@ std::string Reader::nameAt(const size_t index) {
   return std::string(record);
 }
 
+namespace {
+
+// Basename of `path` when it sits directly inside the indexed folder and is an
+// entry the walk would have counted; empty otherwise.
+std::string indexedNameIn(const std::string& path, const uint8_t dirId) {
+  const std::string prefix = std::string(dirPathForId(dirId)) + "/";
+  if (path.size() <= prefix.size() || path.compare(0, prefix.size(), prefix) != 0) return {};
+  const std::string name = path.substr(prefix.size());
+  if (name.find('/') != std::string::npos) return {};  // deeper path, different folder
+  if (name.size() >= kRecordBytes || !isWallpaperName(name)) return {};
+  return name;
+}
+
+sleep_reconcile::Snapshot snapshotFromState() {
+  sleep_reconcile::Snapshot s;
+  s.fingerprint = APP_STATE.sleepIndexFingerprint;
+  s.liveCount = APP_STATE.sleepIndexLiveCount;
+  s.deadSlots = APP_STATE.sleepIndexDeadSlots;
+  return s;
+}
+
+void storeSnapshot(const sleep_reconcile::Snapshot& s) {
+  APP_STATE.sleepIndexFingerprint = s.fingerprint;
+  APP_STATE.sleepIndexLiveCount = s.liveCount;
+  APP_STATE.sleepIndexDeadSlots = s.deadSlots;
+}
+
+// Records currently in the index file, 0 when there is no usable index.
+uint32_t indexRecordCount() {
+  Reader reader;
+  if (!reader.open()) return 0;
+  return static_cast<uint32_t>(reader.recordCount());
+}
+
+}  // namespace
+
+PendingDeletion planDeletion(const std::string& path) {
+  PendingDeletion pending;
+  const uint8_t dirId = APP_STATE.sleepIndexDirId;
+  const std::string name = indexedNameIn(path, dirId);
+  if (name.empty()) return pending;
+  // Only meaningful against a live index: with none, the next boot builds one.
+  if (APP_STATE.sleepIndexLiveCount == 0) return pending;
+
+  HalFile file;
+  if (!Storage.openFileForRead("WIDX", path.c_str(), file)) return pending;
+  pending.entryHash = folderEntryHash(file, name.c_str(), name.size());
+  file.close();
+  pending.path = path;
+  pending.valid = true;
+  return pending;
+}
+
+// Path of the delete the last commitDeletion() patched in, consumed by
+// deletionWasAccounted(). Main task only, one delete at a time.
+std::string& accountedDelete() {
+  static std::string path;
+  return path;
+}
+
+void commitDeletion(const PendingDeletion& pending, const bool persist) {
+  if (!pending.valid) return;
+  accountedDelete() = pending.path;
+  storeSnapshot(sleep_reconcile::applyDeletion(snapshotFromState(), pending.entryHash));
+  if (persist) finishDeletions();
+}
+
+void finishDeletions() {
+  // The removed directory entries can free the folder's last live slot, so the
+  // boot gate's tail marker has to move with them or the next unlock pays a
+  // walk that would find nothing but the holes already accounted for.
+  APP_STATE.sleepIndexTailSlot = probeTailSlot(APP_STATE.sleepIndexDirId);
+  if (sleep_reconcile::deadSlotsDemandRebuild(indexRecordCount(), APP_STATE.sleepIndexDeadSlots)) {
+    APP_STATE.sleepIndexNeedsRebuild = true;
+  }
+  APP_STATE.saveToFile();
+}
+
+bool deletionWasAccounted(const std::string& path) {
+  if (accountedDelete().empty() || accountedDelete() != path) return false;
+  accountedDelete().clear();
+  return true;
+}
+
+void noteCreated(const std::string& path) {
+  const uint8_t dirId = APP_STATE.sleepIndexDirId;
+  const std::string name = indexedNameIn(path, dirId);
+  if (name.empty()) {
+    markDirtyIfSleepPath(path.c_str());
+    return;
+  }
+
+  HalFile file;
+  if (!Storage.openFileForRead("WIDX", path.c_str(), file)) {
+    markDirty();
+    return;
+  }
+  const uint32_t hash = folderEntryHash(file, name.c_str(), name.size());
+  file.close();
+
+  // Append at a record-aligned end of file: a torn tail from an earlier crash
+  // is overwritten rather than extended.
+  const uint32_t recordCount = indexRecordCount();
+  if (recordCount == 0 || recordCount >= sleep_reconcile::kMaxEntries) {
+    markDirty();  // no index yet, or full: let the cold-boot path decide
+    return;
+  }
+  bool appended = false;
+  HalFile idx = Storage.open(kIndexPath, O_RDWR);
+  if (idx) {
+    if (idx.seek((static_cast<size_t>(recordCount) + 1) * kRecordBytes) &&
+        writeRecord(idx, name.c_str(), name.size())) {
+      idx.flush();
+      appended = true;
+    }
+    idx.close();
+  }
+  if (!appended) {
+    markDirty();
+    return;
+  }
+
+  storeSnapshot(sleep_reconcile::applyAddition(snapshotFromState(), hash));
+  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
+  APP_STATE.saveToFile();
+}
+
+void noteLapWrapped() {
+  if (APP_STATE.sleepIndexDeadSlots == 0 || APP_STATE.sleepIndexNeedsRebuild) return;
+  // Lap over: every wallpaper has been shown once, so compacting the holes now
+  // costs the user nothing in rotation fairness.
+  APP_STATE.sleepIndexNeedsRebuild = true;
+}
+
 void noteMutation() { s_pendingMutation = true; }
 
 bool hasPendingMutation() { return s_pendingMutation; }
@@ -349,20 +484,23 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
   if (s_pendingMutation) markDirty();  // fold a pre-boot RAM mark (defensive)
   const uint8_t dirId = resolveSleepDirId();
 
-  // Pass A: fingerprint the folder. Late banner — an unchanged folder's scan
-  // paints nothing unless it genuinely drags past the banner delay.
+  // Late banner — an unchanged folder's check paints nothing unless it
+  // genuinely drags past the banner delay.
   BusyBanner banner(renderer, tr(STR_CHECKING_WALLPAPERS));
   uint32_t liveCount = 0;
   uint32_t fingerprint = 0;
-  walkFolder(dirPathForId(dirId), liveCount, fingerprint, nullptr, [](HalFile&, const char*, size_t) {});
 
   sleep_reconcile::DecideInput in;
   in.dirty = APP_STATE.sleepIndexDirty;
   in.needsRebuildFlag = APP_STATE.sleepIndexNeedsRebuild;
-  in.scannedLive = liveCount;
-  in.scannedFingerprint = fingerprint;
   in.snapLive = APP_STATE.sleepIndexLiveCount;
   in.snapFingerprint = APP_STATE.sleepIndexFingerprint;
+  // Pre-walk: the folder has not been counted yet, so seed the scan halves with
+  // the snapshot. Every rule that fires here (unusable index, folder switch,
+  // rebuild flag, empty index, incremental cap) is decided by flags and record
+  // counts alone; the scan-dependent rules only matter after the walk below.
+  in.scannedLive = in.snapLive;
+  in.scannedFingerprint = in.snapFingerprint;
 
   uint32_t recordCount = 0;
   {
@@ -374,17 +512,10 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
   }
 
   auto plan = sleep_reconcile::decidePlan(in);
-  if (plan == sleep_reconcile::Plan::NoChange) {
-    // Reachable only through a tail-probe mismatch (the boot gate skips clean
-    // folders): entries relocated but the content is identical. Re-anchor the
-    // probe or every following boot would walk the folder again.
-    const uint32_t tailNow = probeTailSlot(dirId);
-    if (APP_STATE.sleepIndexTailSlot != tailNow) {
-      APP_STATE.sleepIndexTailSlot = tailNow;
-      APP_STATE.saveToFile();
-    }
-    return;
-  }
+  // Reached only via the boot gate's tail probe, which already said something
+  // moved: the pre-walk verdict can be NoChange, but the walk below is what
+  // proves it. Fall into the append path and let it decide on real numbers.
+  if (plan == sleep_reconcile::Plan::NoChange) plan = sleep_reconcile::Plan::IncrementalAppend;
 
   // Shown lazily: a rebuild is always real work, but an append pass that turns
   // out to find nothing new (a dirty mark from a rename or a delete) stays
@@ -393,28 +524,31 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
   if (plan == sleep_reconcile::Plan::FullRebuild) progress.show();
 
   if (plan == sleep_reconcile::Plan::IncrementalAppend) {
-    // Pass B: hash the known records (transient, freed before boot continues).
+    // Pass 1: hash the known records (transient, freed before boot continues).
+    // Read sequentially in record chunks — one block read per 25 records, not
+    // a seek per record.
     sleep_reconcile::NameHashSet known;
     known.reserve(recordCount);
     {
       Reader reader;
       if (reader.open()) {
-        for (uint32_t i = 0; i < recordCount; ++i) {
-          const std::string name = reader.nameAt(i);
-          if (!name.empty()) known.add(sleep_reconcile::nameHash(name));
-          if (i % kWdtInterval == 0) {
+        size_t seen = 0;
+        reader.forEachName([&](const std::string_view name) {
+          known.add(sleep_reconcile::nameHash(name));
+          if (++seen % kWdtInterval == 0) {
             resetTaskWatchdogIfSubscribed();
             vTaskDelay(1);
           }
-        }
+        });
       }
     }
     known.finalize();
 
-    // Pass C: rescan; unknown names (and unknown under their favorite-rename
-    // counterpart — a toggle keeps its record) are appended at EOF as the
-    // fresh region. Seek record-aligned so a torn tail from an earlier crash
-    // is overwritten, not extended.
+    // Pass 2: the ONE folder walk. It counts, fingerprints, and appends the
+    // unknown names (unknown under their favorite-rename counterpart too — a
+    // toggle keeps its record) at EOF as the fresh region, all in a single
+    // sweep. Seek record-aligned so a torn tail from an earlier crash is
+    // overwritten, not extended.
     uint32_t appends = 0;
     bool appendFailed = false;
     liveCount = 0;
@@ -448,14 +582,27 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
       // Finalize the incremental path: snapshot updated, appended records are
       // the fresh region ([old recordCount, new recordCount) — freshNext
       // already points at or before its start).
+      const uint32_t newCount = recordCount + appends;
+      // The walk just measured the truth, so the deferred-delete counter is
+      // re-derived from it rather than carried forward.
+      const uint32_t deadSlots = newCount > liveCount ? newCount - liveCount : 0;
+      const uint32_t tailNow = probeTailSlot(dirId);
+      const uint32_t freshNext = APP_STATE.sleepFreshNext > newCount ? newCount : APP_STATE.sleepFreshNext;
+      // A walk that found the folder exactly as the snapshot describes it (the
+      // tail probe fired on a relocated directory entry) must not spend an SD
+      // write to restate what is already on disk.
+      const bool changed = liveCount != APP_STATE.sleepIndexLiveCount ||
+                           fingerprint != APP_STATE.sleepIndexFingerprint || dirId != APP_STATE.sleepIndexDirId ||
+                           APP_STATE.sleepIndexDirty || deadSlots != APP_STATE.sleepIndexDeadSlots ||
+                           tailNow != APP_STATE.sleepIndexTailSlot || freshNext != APP_STATE.sleepFreshNext;
       APP_STATE.sleepIndexLiveCount = liveCount;
       APP_STATE.sleepIndexFingerprint = fingerprint;
       APP_STATE.sleepIndexDirId = dirId;
       APP_STATE.sleepIndexDirty = false;
-      APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
-      const uint32_t newCount = recordCount + appends;
-      if (APP_STATE.sleepFreshNext > newCount) APP_STATE.sleepFreshNext = newCount;
-      APP_STATE.saveToFile();
+      APP_STATE.sleepIndexTailSlot = tailNow;
+      APP_STATE.sleepIndexDeadSlots = deadSlots;
+      APP_STATE.sleepFreshNext = freshNext;
+      if (changed) APP_STATE.saveToFile();
       LOG_INF("WIDX", "Sleep index reconciled: +%u of %u live", static_cast<unsigned>(appends),
               static_cast<unsigned>(liveCount));
       return;

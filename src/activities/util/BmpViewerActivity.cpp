@@ -14,6 +14,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "util/FavoriteImage.h"
 
 namespace {
@@ -386,12 +387,16 @@ void BmpViewerActivity::promptDelete() {
           onEnter();
           return;
         }
+        // Measured while the file still exists: an on-device delete then costs
+        // the index one dead slot instead of a folder walk at the next unlock.
+        const auto pendingDelete = crosspoint::sleep::windex::planDeletion(doomed);
         if (!Storage.remove(doomed.c_str())) {
           GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
           delay(1000);
           onEnter();
           return;
         }
+        crosspoint::sleep::windex::commitDeletion(pendingDelete);
         // The wake path re-renders the last wallpaper; a dead path
         // there sends the next wake to the boot logo for no reason.
         FavoriteImage::removePathReferences(doomed);

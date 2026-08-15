@@ -71,8 +71,12 @@ void replacePathReferences(const std::string& oldPath, const std::string& newPat
 }
 
 void removePathReferences(const std::string& path) {
-  // Same funnel as replacePathReferences, for the delete flows.
-  crosspoint::sleep::windex::markDirty();
+  // Same funnel as replacePathReferences, for the delete flows. Callers that
+  // accounted for the delete in place (planDeletion + commitDeletion) have
+  // already patched the snapshot, so this only marks dirty when the snapshot
+  // still counts the file — otherwise every on-device delete would re-arm the
+  // folder walk the in-place patch exists to avoid.
+  if (!crosspoint::sleep::windex::deletionWasAccounted(path)) crosspoint::sleep::windex::markDirty();
   if (APP_STATE.lastSleepWallpaperPath == path) APP_STATE.lastSleepWallpaperPath.clear();
 }
 

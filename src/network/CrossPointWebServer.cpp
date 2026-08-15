@@ -774,11 +774,11 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
         clearBookCache(filePath.c_str());
-        // A wallpaper landed over WiFi: flag the index so the post-session
-        // restart reconciles and the new file jumps the rotation queue.
-        // Handlers run on the main task (handleClient is called from the
-        // activity loop), so the persisted mark is safe here.
-        crosspoint::sleep::windex::markDirtyIfSleepPath(filePath.c_str());
+        // A wallpaper landed over WiFi: append its index record right here so
+        // the new file jumps the rotation queue without the next boot paying a
+        // folder walk. Handlers run on the main task (handleClient is called
+        // from the activity loop), so the persisted patch is safe here.
+        crosspoint::sleep::windex::noteCreated(filePath.c_str());
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1073,6 +1073,9 @@ void CrossPointWebServer::handleDelete() const {
 
   // Iterate over paths and delete each item
   bool allSuccess = true;
+  // Set when at least one deleted file was patched into the wallpaper index in
+  // place; the index bookkeeping is then flushed once after the loop.
+  bool wallpapersDeleted = false;
   String failedItems;
 
   for (const auto& p : paths) {
@@ -1139,9 +1142,22 @@ void CrossPointWebServer::handleDelete() const {
     } else {
       // It's a file (or couldn't open as dir) — remove file
       if (f) f.close();
+      // Measured while the file still exists: a delete is fully described by
+      // its entry hash, so the index keeps the slot as a hole and the next
+      // boot skips the folder walk entirely.
+      const auto pendingDelete = crosspoint::sleep::windex::planDeletion(itemPath.c_str());
       success = Storage.remove(itemPath.c_str());
       clearBookCache(itemPath.c_str());
-      if (success) crosspoint::sleep::windex::markDirtyIfSleepPath(itemPath.c_str());
+      if (success) {
+        // Batched: a multi-select delete patches the snapshot per file but
+        // pays the tail probe and the state.json write once, after the loop.
+        crosspoint::sleep::windex::commitDeletion(pendingDelete, /*persist=*/false);
+        if (pendingDelete.valid) {
+          wallpapersDeleted = true;
+        } else {
+          crosspoint::sleep::windex::markDirtyIfSleepPath(itemPath.c_str());
+        }
+      }
     }
 
     if (!success) {
@@ -1149,6 +1165,8 @@ void CrossPointWebServer::handleDelete() const {
       allSuccess = false;
     }
   }
+
+  if (wallpapersDeleted) crosspoint::sleep::windex::finishDeletions();
 
   if (allSuccess) {
     server->send(200, "text/plain", "All items deleted successfully");

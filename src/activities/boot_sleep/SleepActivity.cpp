@@ -940,8 +940,14 @@ void SleepActivity::renderCustomSleepScreen() const {
             prefix + result.basename == previousWallpaper) {
           auto again = sleep_queue::pickNext(queueState, reader.recordCount(), esp_random(), esp_random(), nameAt,
                                              liveInFolder, counterpart);
+          const bool wrapped = result.lapWrapped || again.lapWrapped;
           if (!again.basename.empty()) result = std::move(again);
+          result.lapWrapped = wrapped;  // a wrap in either pick still ended the lap
         }
+        // Lap over: every wallpaper has now been shown once, so this is the
+        // cheapest possible moment to compact the holes that in-place deletes
+        // left behind. Flags the next cold boot; nothing happens tonight.
+        if (result.lapWrapped) windex::noteLapWrapped();
         // Persist the advanced state even when the render below fails: the
         // cursor must step PAST a present-but-unrenderable file, or every
         // sleep would retry it and show the logo face forever. A crash before
