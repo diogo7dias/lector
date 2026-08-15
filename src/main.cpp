@@ -462,22 +462,29 @@ void setup() {
       break;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
+  // Recovery firmware mode: hold a side button together with the power button at boot to skip
+  // directly to the SD-card firmware update screen. Useful on devices where USB flashing has
+  // been locked down (e.g. recent X3 firmware).
   bool recoveryFirmwareMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
     // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
     // settle window even if the loop body takes longer than expected on slow boots.
+    //
+    // The X4 Pro is the exception on both counts: its side buttons are plain debounced digital
+    // inputs that read true almost immediately, and the chord uses BTN_DOWN because its BTN_UP
+    // sits on GPIO0, the boot-strap pin — holding that at boot drops the chip into the ROM
+    // bootloader instead of into our firmware.
+    const bool isX4Pro = BoardConfig::isX4Pro();
+    const unsigned long settleMs = isX4Pro ? 20 : 500;
     const unsigned long settleStart = millis();
-    while (millis() - settleStart < 500) {
+    while (millis() - settleStart < settleMs) {
       gpio.update();
       delay(10);
     }
-    if (gpio.isPressed(HalGPIO::BTN_UP)) {
+    if (gpio.isPressed(isX4Pro ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP)) {
       recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+      LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", isX4Pro ? "DOWN" : "UP");
     }
   }
 
