@@ -33,6 +33,11 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t sleepIndexDirId = 0;          // 0 = /sleep, 1 = /.sleep
   bool sleepIndexDirty = false;         // a mutation hook flagged the folder
   bool sleepIndexNeedsRebuild = false;  // pick exhausted its skip budget
+  // Records whose file is gone (deleted or moved out) but whose slot is still
+  // in the index. Maintained in place by the delete hooks so a delete costs no
+  // folder walk; the pick skips these slots and a compacting rebuild is
+  // deferred until the lap ends or the ratio passes deadSlotsDemandRebuild().
+  uint32_t sleepIndexDeadSlots = 0;
   // Last live directory slot at the last reconcile. On the Xteink boards a
   // battery lock is a full power cut, so every unlock arrives as a power-on
   // reset — this probe result is what lets those boots skip the folder walk

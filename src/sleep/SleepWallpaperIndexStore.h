@@ -31,7 +31,9 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <string>
+#include <string_view>
 
 #include "SleepQueuePolicy.h"
 
@@ -63,12 +65,85 @@ class Reader {
   uint8_t dirId() const { return headerDirId; }
   // Basename at `index`, or empty on a read error / blank record.
   std::string nameAt(size_t index);
+  // Sequential sweep over every record, `cb(std::string_view name)`. Reads in
+  // multi-record chunks instead of one seek+read per record, so hashing a 5000
+  // record index is a handful of block reads rather than 5000 of them. Blank
+  // records are skipped. Returns false when the file is not open.
+  template <typename NameFn>
+  bool forEachName(NameFn&& cb) {
+    if (!file || count == 0) return false;
+    if (!file.seek(kRecordBytes)) return false;  // past the header slot
+    char chunk[kReadChunkRecords * kRecordBytes];
+    for (size_t done = 0; done < count;) {
+      const size_t batch = (count - done) < kReadChunkRecords ? (count - done) : kReadChunkRecords;
+      const int want = static_cast<int>(batch * kRecordBytes);
+      if (file.read(chunk, want) != want) return false;
+      for (size_t i = 0; i < batch; ++i) {
+        char* record = chunk + i * kRecordBytes;
+        record[kRecordBytes - 1] = '\0';
+        if (record[0] != '\0') cb(std::string_view(record, std::strlen(record)));
+      }
+      done += batch;
+    }
+    return true;
+  }
 
  private:
+  // 8 records = 1280 bytes per read: an order of magnitude fewer reads than one
+  // seek per record, without putting a 4 KB buffer on the boot task's stack.
+  static constexpr size_t kReadChunkRecords = 8;
+
   HalFile file;
   size_t count = 0;
   uint8_t headerDirId = 0;
 };
+
+// Snapshot patch for a wallpaper about to be deleted from (or moved out of) the
+// indexed folder. Built BEFORE the file disappears, because the delta needs the
+// entry's mtime and size. `valid` is false for anything outside the indexed
+// folder or unreadable — commit then does nothing.
+struct PendingDeletion {
+  bool valid = false;
+  uint32_t entryHash = 0;
+  std::string path;
+};
+
+// MAIN TASK ONLY. Stat the file and build its snapshot delta. Call immediately
+// before removing or renaming the file away.
+PendingDeletion planDeletion(const std::string& path);
+
+// MAIN TASK ONLY. Apply a planned deletion after the remove/rename succeeded:
+// the record stays in the index as a dead slot the pick skips, the snapshot is
+// patched in place, and the folder is NOT marked dirty — so the next boot still
+// matches and skips the walk. Saves state.json. A pileup of dead slots (or the
+// end of the current lap) is what eventually triggers a compacting rebuild.
+// Pass persist=false inside a delete loop and call finishDeletions() once at
+// the end: the snapshot patch itself is cheap, but the tail re-probe and the
+// state.json write are not worth paying per file.
+void commitDeletion(const PendingDeletion& pending, bool persist = true);
+
+// Re-anchor the boot gate's tail marker, re-check the dead-slot threshold, and
+// save state. Only needed after commitDeletion(..., /*persist=*/false).
+void finishDeletions();
+
+// True when `path` is the delete commitDeletion() just accounted for in place
+// (and consumes that mark). The shared reference-cleanup helper asks this so a
+// delete already patched into the snapshot does not also mark the folder dirty
+// and re-arm the folder walk the patch exists to avoid.
+bool deletionWasAccounted(const std::string& path);
+
+// MAIN TASK ONLY. A new wallpaper file was created in the indexed folder:
+// append its record at end of file and patch the snapshot, no folder walk. The
+// appended record lands in the fresh region, so it is served at the next lock,
+// exactly as a walking reconcile would have done. Falls back to markDirty()
+// when the index cannot be extended (absent, full, name too long). Saves
+// state.json. `path` must already exist on disk.
+void noteCreated(const std::string& path);
+
+// MAIN TASK ONLY. A pick just completed a lap. Compaction of dead slots is
+// deferred to exactly this moment: every wallpaper of the lap has now been
+// shown once, so flag a rebuild for the next cold boot when holes exist.
+void noteLapWrapped();
 
 // Task-safe RAM mark: "the sleep folder was mutated this session". Callable
 // from any task (background rename worker, web server handlers) — it never

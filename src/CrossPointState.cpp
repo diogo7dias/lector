@@ -14,6 +14,7 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["sleepIndexDirty"] = sleepIndexDirty;
   doc["sleepIndexNeedsRebuild"] = sleepIndexNeedsRebuild;
   doc["sleepIndexTailSlot"] = sleepIndexTailSlot;
+  doc["sleepIndexDeadSlots"] = sleepIndexDeadSlots;
   doc["sleepCursorPos"] = sleepCursorPos;
   doc["sleepCursorMult"] = sleepCursorMult;
   doc["sleepCursorOff"] = sleepCursorOff;
@@ -37,6 +38,7 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   sleepIndexDirty = doc["sleepIndexDirty"] | false;
   sleepIndexNeedsRebuild = doc["sleepIndexNeedsRebuild"] | false;
   sleepIndexTailSlot = doc["sleepIndexTailSlot"] | static_cast<uint32_t>(0);
+  sleepIndexDeadSlots = doc["sleepIndexDeadSlots"] | static_cast<uint32_t>(0);
   sleepCursorPos = doc["sleepCursorPos"] | static_cast<uint32_t>(0);
   sleepCursorMult = doc["sleepCursorMult"] | static_cast<uint32_t>(1);
   sleepCursorOff = doc["sleepCursorOff"] | static_cast<uint32_t>(0);

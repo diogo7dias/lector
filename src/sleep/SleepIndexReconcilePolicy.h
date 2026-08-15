@@ -76,6 +76,41 @@ class NameHashSet {
   std::vector<uint64_t> hashes;
 };
 
+// Persisted folder snapshot the boot gate compares against. A device-side
+// mutation (delete, single-file add) is fully described by one entryHash, so it
+// patches this in place instead of marking the folder dirty — the next boot
+// then matches the snapshot and skips the walk entirely.
+struct Snapshot {
+  uint32_t fingerprint = 0;
+  uint32_t liveCount = 0;
+  uint32_t deadSlots = 0;  // records with no live file behind them
+};
+
+// A wallpaper left the folder: drop its contribution, leave its record behind
+// as a hole the pick skips. The fingerprint is a wrap-sum, so the subtraction
+// is exact even across uint32 overflow.
+inline Snapshot applyDeletion(Snapshot s, const uint32_t entryHash) {
+  s.fingerprint -= entryHash;
+  if (s.liveCount > 0) --s.liveCount;
+  ++s.deadSlots;
+  return s;
+}
+
+// A wallpaper arrived and its record was appended at end of file: no hole, so
+// the dead-slot count is untouched.
+inline Snapshot applyAddition(Snapshot s, const uint32_t entryHash) {
+  s.fingerprint += entryHash;
+  ++s.liveCount;
+  return s;
+}
+
+// Holes cost one skipped record per pick (budget kMaxDeadSlotSkips) and dead
+// weight in the index file, so they are tolerated up to the same ratio the
+// walking reconcile uses. Past it the index needs compacting.
+inline bool deadSlotsDemandRebuild(const uint32_t recordCount, const uint32_t deadSlots) {
+  return deadSlots > std::max(kDeadSlotFloor, recordCount / 4);
+}
+
 enum class Plan : uint8_t {
   NoChange,           // index trusted as-is, nothing written
   IncrementalAppend,  // hash records, append unknown folder names at EOF

@@ -16,6 +16,7 @@
 #include "fontIds.h"
 #include "sleep/SdSleepImageFs.h"
 #include "sleep/SleepPauseToggle.h"
+#include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperNeighbour.h"
 #include "util/FavoriteImage.h"
 
@@ -163,11 +164,15 @@ void PxcViewerActivity::loop() {
                                render();
                                return;
                              }
+                             // Measured while the file still exists: an on-device delete then
+                             // costs the index one dead slot instead of a folder walk.
+                             const auto pendingDelete = crosspoint::sleep::windex::planDeletion(filePath);
                              if (!Storage.remove(filePath.c_str())) {
                                LOG_ERR("PXC", "Failed to delete: %s", filePath.c_str());
                                render();
                                return;
                              }
+                             crosspoint::sleep::windex::commitDeletion(pendingDelete);
                              // The wake path re-renders this file to composite the unlock banners
                              // over it; leaving a dead path there means the next wake falls back to
                              // the boot logo for no reason.
