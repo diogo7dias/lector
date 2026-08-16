@@ -29,6 +29,10 @@ class ReaderActivity final : public Activity {
 
   void onGoBack();
   int initialRefreshCountdown() const;
+  // Fetch the remote position for the book about to open and reboot into it with that
+  // position waiting. Returns true when it rebooted (nothing after the call runs), false
+  // when there was nothing to fetch and this open should continue normally.
+  bool autoSyncPullBeforeOpen();
 
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,

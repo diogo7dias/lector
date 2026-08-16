@@ -1547,8 +1547,9 @@ void EpubReaderActivity::autoSyncPushOnLeavingBook() {
 }
 
 void EpubReaderActivity::applyPendingAutoSyncPull() {
-  const auto pending = KOReaderAutoSync::takePendingPull();
-  if (!pending || !epub) return;
+  if (!epub) return;
+  const auto pending = KOReaderAutoSync::takePendingPull(epub->getPath());
+  if (!pending) return;
 
   // Furthest wins. The device that is already ahead keeps its place, so opening a book
   // that was only ever read here never drags the reader backwards.

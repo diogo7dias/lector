@@ -267,9 +267,15 @@ void autoSyncBeforeLock() {
   KOReaderAutoSync::stopWifi();
 }
 
+// Locking ends the wake, and the other device may move while this one is asleep, so every
+// book is owed a fresh pull on the next open. Called for both lock causes, unlike the push
+// above: forgetting costs nothing, and a timeout lock ends the wake just the same.
+void forgetAutoSyncPullsForLock() { KOReaderAutoSync::forgetPullsOnLock(); }
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+  forgetAutoSyncPullsForLock();
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -706,26 +712,6 @@ void setup() {
       activityManager.goHome();
     }
   } else {
-    // Unlocking back into a book is where automatic sync collects the position another
-    // device pushed. It runs here, before the EPUB is loaded, so the TLS handshake gets
-    // a clean heap, and it ends in a silent restart because stopping the radio does not
-    // give that heap back. The reboot lands on the BootResume::Silent branch above,
-    // which does not fetch again, so this cannot loop.
-    if (ko_auto_sync::shouldPullOnBookOpen(KOReaderAutoSync::currentGate())) {
-      BusyBanner banner(renderer, tr(STR_AUTO_SYNC_PULLING));
-      banner.showNow();
-      bool stashed = false;
-      if (KOReaderAutoSync::connectSavedWifi()) {
-        stashed = KOReaderAutoSync::fetchAndStashRemote(APP_STATE.openEpubPath);
-      }
-      KOReaderAutoSync::stopWifi();
-      if (stashed) {
-        silentRestartToReader();
-      }
-      // Nothing to apply: fall through and open the book on this boot rather than
-      // spending a reboot on a fetch that found nothing.
-    }
-
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";

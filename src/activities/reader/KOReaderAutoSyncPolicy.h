@@ -19,6 +19,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <string_view>
 
 namespace ko_auto_sync {
 
@@ -73,6 +74,7 @@ inline constexpr uint32_t kPendingPullMagic = 0x4B4F5041;  // "KOPA"
 // RTC_NOINIT memory, which cannot hold anything that owns heap.
 struct PendingPull {
   uint32_t magic = 0;
+  uint32_t bookKey = 0;  // Which book this position belongs to; see bookKey() below
   uint16_t xpathLength = 0;
   char xpath[kMaxXPathLength + 1] = {};
   float percentage = 0.0f;
@@ -81,10 +83,50 @@ struct PendingPull {
   bool hasParagraphIndex = false;
 };
 
+// Record of the last book pulled during this wake, so stepping out to the library and
+// back into the same book does not pay for a second round trip. Cleared when the device
+// locks: after that, the other device may have moved and a fresh pull is owed. Also lives
+// in RTC memory, so it carries its own stamp.
+inline constexpr uint32_t kPullMemoryMagic = 0x4B4F504D;  // "KOPM"
+
+struct PullMemory {
+  uint32_t magic = 0;
+  uint32_t bookKey = 0;
+};
+
+// Identifies a book by path, small enough to keep in RTC memory. FNV-1a, offset by one
+// so no path can hash to zero and be mistaken for an empty record.
+inline uint32_t bookKey(const std::string_view path) {
+  uint32_t hash = 2166136261u;
+  for (const char c : path) {
+    hash ^= static_cast<uint8_t>(c);
+    hash *= 16777619u;
+  }
+  return hash == 0 ? 1u : hash;
+}
+
+inline bool alreadyPulledThisWake(const PullMemory& memory, const uint32_t key) {
+  if (memory.magic != kPullMemoryMagic) return false;
+  return memory.bookKey == key;
+}
+
+// TLS validates certificates against the clock, so an unset clock has to be fixed before
+// the handshake. Anything from 2024 onwards is a clock somebody has already set.
+inline constexpr int64_t kEarliestPlausibleTime = 1704067200;  // 2024-01-01T00:00:00Z
+
+inline bool clockLooksSet(const int64_t epochSeconds) { return epochSeconds >= kEarliestPlausibleTime; }
+
 inline bool isPendingPullValid(const PendingPull& pending) {
   if (pending.magic != kPendingPullMagic) return false;
   if (pending.xpathLength == 0) return false;
   return pending.xpathLength <= kMaxXPathLength;
+}
+
+// A fetched position belongs to one book. The handoff crosses a reboot, and what opens on
+// the other side is not guaranteed to be the book that was opening when it was written.
+inline bool pendingPullMatchesBook(const PendingPull& pending, const uint32_t key) {
+  if (!isPendingPullValid(pending)) return false;
+  return pending.bookKey == key;
 }
 
 }  // namespace ko_auto_sync

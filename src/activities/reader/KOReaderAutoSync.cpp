@@ -5,7 +5,9 @@
 #include <esp_sntp.h>
 #include <esp_wifi.h>
 
+#include <algorithm>
 #include <cstring>
+#include <ctime>
 
 #include "KOReaderCredentialStore.h"
 #include "KOReaderDocumentId.h"
@@ -18,6 +20,9 @@ namespace {
 // RTC_NOINIT memory is deliberately not cleared on a software reset; the magic
 // stamp inside the struct is what tells a real handoff from leftover bytes.
 RTC_NOINIT_ATTR ko_auto_sync::PendingPull rtcPendingPull;
+
+// Which book was last pulled during this wake. Cleared when the device locks.
+RTC_NOINIT_ATTR ko_auto_sync::PullMemory rtcPullMemory;
 
 // Saved networks are read lazily by WifiSelectionActivity, which auto sync never opens,
 // so on a boot that goes straight into a book nothing has read them yet. Loaded once per
@@ -37,7 +42,15 @@ std::string documentHashFor(const std::string& path) {
 
 // The sync server is HTTPS and certificates are checked against the clock, so a
 // device that booted with an unset RTC must learn the time before the handshake.
+//
+// A device whose clock is already set skips this entirely, which is the single biggest
+// saving on the path: the wait below can reach 5 seconds, and it would otherwise be paid
+// on every automatic sync, in front of a user waiting for a page.
 void syncTimeWithNTP() {
+  if (ko_auto_sync::clockLooksSet(static_cast<int64_t>(time(nullptr)))) {
+    return;
+  }
+
   if (esp_sntp_enabled()) {
     esp_sntp_stop();
   }
@@ -100,10 +113,13 @@ bool connectSavedWifi(const uint32_t timeoutMs) {
   WiFi.mode(WIFI_STA);
   WiFi.disconnect(true, true);
   delay(100);
-  WiFi.setScanMethod(WIFI_ALL_CHANNEL_SCAN);
-  WiFi.setSortMethod(WIFI_CONNECT_AP_BY_SIGNAL);
+  // Fast scan, unlike the network picker: it stops at the first matching access point
+  // instead of sweeping every channel to find the strongest one. A user standing in front
+  // of a book they want open would rather join a weaker AP now than wait for the sweep.
+  WiFi.setScanMethod(WIFI_FAST_SCAN);
 
-  // The network the user last joined by hand is the one most likely in range.
+  // The network the user last joined by hand is the one most likely in range, and gets
+  // the whole budget: this is a device that lives in one or two places.
   const std::string lastSsid = WIFI_STORE.getLastConnectedSsid();
   if (!lastSsid.empty()) {
     if (const auto credential = WIFI_STORE.findCredential(lastSsid)) {
@@ -111,14 +127,21 @@ bool connectSavedWifi(const uint32_t timeoutMs) {
     }
   }
 
-  // Auto sync must not stall a lock or an unlock for minutes, so the remaining
-  // networks share what is left of one timeout rather than each getting a full one.
-  const uint32_t perNetworkMs = timeoutMs / 2;
+  // Everything else shares one further budget between them, so a card holding eight saved
+  // networks and standing in range of none of them still gives up in seconds, not minutes.
+  size_t remaining = 0;
   for (size_t i = 0; i < savedCount; i++) {
-    const auto credential = WIFI_STORE.getCredentialAt(i);
-    if (!credential) continue;
-    if (credential->ssid == lastSsid) continue;  // already tried above
-    if (joinNetwork(*credential, perNetworkMs)) return true;
+    const auto ssid = WIFI_STORE.getSsidAt(i);
+    if (ssid && *ssid != lastSsid) remaining++;
+  }
+  if (remaining > 0) {
+    const uint32_t perNetworkMs = std::max<uint32_t>(1500, timeoutMs / remaining);
+    for (size_t i = 0; i < savedCount; i++) {
+      const auto credential = WIFI_STORE.getCredentialAt(i);
+      if (!credential) continue;
+      if (credential->ssid == lastSsid) continue;  // already tried above
+      if (joinNetwork(*credential, perNetworkMs)) return true;
+    }
   }
 
   LOG_DBG("KOAuto", "No saved network reachable");
@@ -207,6 +230,7 @@ bool fetchAndStashRemote(const std::string& epubPath) {
 
   ko_auto_sync::PendingPull pending;
   pending.magic = ko_auto_sync::kPendingPullMagic;
+  pending.bookKey = ko_auto_sync::bookKey(epubPath);
   pending.xpathLength = static_cast<uint16_t>(remote.progress.size());
   std::memcpy(pending.xpath, remote.progress.data(), pending.xpathLength);
   pending.xpath[pending.xpathLength] = '\0';
@@ -224,8 +248,8 @@ bool fetchAndStashRemote(const std::string& epubPath) {
   return true;
 }
 
-std::optional<ko_auto_sync::PendingPull> takePendingPull() {
-  if (!ko_auto_sync::isPendingPullValid(rtcPendingPull)) {
+std::optional<ko_auto_sync::PendingPull> takePendingPull(const std::string& epubPath) {
+  if (!ko_auto_sync::pendingPullMatchesBook(rtcPendingPull, ko_auto_sync::bookKey(epubPath))) {
     return std::nullopt;
   }
   const ko_auto_sync::PendingPull pending = rtcPendingPull;
@@ -233,6 +257,21 @@ std::optional<ko_auto_sync::PendingPull> takePendingPull() {
   return pending;
 }
 
+bool hasPendingPullFor(const std::string& epubPath) {
+  return ko_auto_sync::pendingPullMatchesBook(rtcPendingPull, ko_auto_sync::bookKey(epubPath));
+}
+
 void clearPendingPull() { rtcPendingPull.magic = 0; }
+
+bool pullIsWorthMaking(const std::string& epubPath) {
+  return !ko_auto_sync::alreadyPulledThisWake(rtcPullMemory, ko_auto_sync::bookKey(epubPath));
+}
+
+void notePullMade(const std::string& epubPath) {
+  rtcPullMemory.magic = ko_auto_sync::kPullMemoryMagic;
+  rtcPullMemory.bookKey = ko_auto_sync::bookKey(epubPath);
+}
+
+void forgetPullsOnLock() { rtcPullMemory.magic = 0; }
 
 }  // namespace KOReaderAutoSync

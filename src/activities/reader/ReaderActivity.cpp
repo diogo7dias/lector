@@ -8,9 +8,12 @@
 #include <optional>
 
 #include "CrossPointSettings.h"
+#include "CrossPointState.h"
 #include "Epub.h"
 #include "EpubReaderActivity.h"
+#include "KOReaderAutoSync.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
 #include "Xtc.h"
@@ -156,6 +159,39 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
       std::make_unique<TxtReaderActivity>(renderer, mappedInput, std::move(txt), initialRefreshCountdown()));
 }
 
+bool ReaderActivity::autoSyncPullBeforeOpen() {
+  if (!ko_auto_sync::shouldPullOnBookOpen(KOReaderAutoSync::currentGate())) return false;
+  // Already fetched for this book since the last lock. Nothing can have changed on the
+  // other device in between, so this open goes straight to the page.
+  if (!KOReaderAutoSync::pullIsWorthMaking(initialBookPath)) return false;
+  // A position is already waiting: this is the reboot the fetch below asked for, and the
+  // reader is about to apply it. Fetching again here would loop forever.
+  if (KOReaderAutoSync::hasPendingPullFor(initialBookPath)) return false;
+
+  BusyBanner banner(renderer, tr(STR_AUTO_SYNC_PULLING));
+  banner.showNow();
+
+  bool stashed = false;
+  if (KOReaderAutoSync::connectSavedWifi()) {
+    stashed = KOReaderAutoSync::fetchAndStashRemote(initialBookPath);
+  }
+  KOReaderAutoSync::stopWifi();
+  KOReaderAutoSync::notePullMade(initialBookPath);
+
+  if (!stashed) {
+    // Nothing came back. Opening the book on this boot costs the user nothing extra:
+    // the handshake that fragmented the heap either never happened or failed early.
+    return false;
+  }
+
+  // silentRestartToReader() reopens whatever openEpubPath names, which is still the
+  // previous book until EpubReaderActivity::onEnter() runs. Point it at this one.
+  APP_STATE.openEpubPath = initialBookPath;
+  APP_STATE.saveToFile();
+  silentRestartToReader();
+  return true;  // not reached
+}
+
 void ReaderActivity::onEnter() {
   Activity::onEnter();
 
@@ -191,6 +227,12 @@ void ReaderActivity::onEnter() {
     }
     onGoToTxtReader(std::move(txt));
   } else {
+    // Automatic sync collects the position another device pushed here, before the EPUB is
+    // loaded: the TLS handshake gets a clean heap, and the reader that opens afterwards
+    // gets one that a handshake has not fragmented. Only EPUBs — KOReader sync has no
+    // notion of the other formats.
+    if (autoSyncPullBeforeOpen()) return;  // rebooted into this book with a position waiting
+
     auto epub = loadEpub(initialBookPath);
     if (!epub) {
       onGoBack();
