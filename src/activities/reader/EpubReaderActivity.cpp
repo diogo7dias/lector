@@ -863,10 +863,18 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
-  // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
-  // following the hold does not also open the menu.
-  if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
+  // Enter reader menu activity on Confirm or a downward swipe from the top edge.
+  //
+  // With no function bound to a long press, Confirm carries exactly one action, so the
+  // menu opens the instant the button goes down. With one bound the two cannot be told
+  // apart until the button comes up, so the menu waits for the release, and a hold that
+  // already fired its function sets ignoreNextConfirmRelease to keep that release from
+  // also opening the menu.
+  const bool confirmHasHold = SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED;
+  const bool confirmEdge = confirmHasHold
+                               ? confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))
+                               : mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+  if (confirmEdge) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
     } else {
@@ -961,42 +969,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = mappedInput.getHeldTime();
-  const bool longPress = heldMs > ReaderUtils::SKIP_HOLD_MS;
-
-  // Don't skip chapter after screenshot
+  // Screenshot is Power plus Down together; neither half should also turn a page.
   if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
-    return;
-  }
-
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    if (!nextTriggered && section && section->currentPage > 0) {
-      section->currentPage = 0;
-      requestUpdate();
-      return;
-    }
-
-    // We don't want to delete the section mid-render, so grab the semaphore
-    {
-      RenderLock lock(*this);
-      nextPageNumber = 0;
-      if (nextTriggered) {
-        currentSpineIndex++;
-      } else if (currentSpineIndex > 0) {
-        currentSpineIndex--;
-      }
-      section.reset();
-    }
-    requestUpdate();
-    return;
-  }
-
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
-    const uint8_t newOrientation =
-        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
-                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
-    applyOrientation(newOrientation);
-    requestUpdate();
     return;
   }
 

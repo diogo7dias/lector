@@ -12,7 +12,6 @@ namespace ReaderUtils {
 
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr unsigned long GO_BACK_OR_HOME_MS = GO_HOME_MS;
-constexpr unsigned long SKIP_HOLD_MS = 700;
 constexpr unsigned long BOOKMARK_HOLD_MS = 400;
 
 constexpr unsigned long BOOKMARK_MESSAGE_DURATION_MS = 2500;
@@ -41,20 +40,21 @@ struct PageTurnResult {
   bool next;
 };
 
+// Always the press edge. Page turning is the one thing the device does constantly,
+// so it is the one thing that must never wait: nothing is bound to holding a page
+// turn button any more, which is what makes firing this early unambiguous.
+//
+// Power is the exception and stays on the release, because a short press turning the
+// page has to be told apart from a hold (sleep) and from a double click.
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
-  const bool usePress = SETTINGS.longPressButtonBehavior == SETTINGS.OFF;
   const bool swapFront = input.isNavDirectionSwapped();
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
-  const bool prev =
-      (usePress ? (input.wasPressed(MappedInputManager::Button::PageBack) || input.wasPressed(prevButton))
-                : (input.wasReleased(MappedInputManager::Button::PageBack) || input.wasReleased(prevButton)));
+  const bool prev = input.wasPressed(MappedInputManager::Button::PageBack) || input.wasPressed(prevButton);
   const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
                          input.wasReleased(MappedInputManager::Button::Power);
   const bool next =
-      usePress
-          ? (input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn || input.wasPressed(nextButton))
-          : (input.wasReleased(MappedInputManager::Button::PageForward) || powerTurn || input.wasReleased(nextButton));
+      input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn || input.wasPressed(nextButton);
   return {prev, next};
 }
 

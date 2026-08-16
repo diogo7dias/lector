@@ -62,15 +62,11 @@ EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputMana
   }
 
   // Selection movement on the standard list navigation buttons (side Up/Down plus front
-  // Left/Right, orientation swap included). It follows the reader's page-turn semantics
-  // (press-triggered by default, release-triggered when a long-press behavior is
-  // configured, same rule as ReaderUtils::detectPageTurn). This matters on entry: with
-  // press-triggered turns, the press that turned the final page already fired in the
-  // reader, and its release must not double-fire into this menu.
-  const bool usePress = SETTINGS.longPressButtonBehavior == CrossPointSettings::OFF;
-  const auto triggered = [&](const MappedInputManager::Button button) {
-    return usePress ? input.wasPressed(button) : input.wasReleased(button);
-  };
+  // Left/Right, orientation swap included), on the press like every other list. The
+  // press that turned the final page already fired in the reader; its release cannot
+  // double-fire here, because this screen arrives through a transition that arms the
+  // input gate.
+  const auto triggered = [&](const MappedInputManager::Button button) { return input.wasPressed(button); };
   const int itemCount = static_cast<int>(names.size()) + 1;  // + "Home" entry
   if (triggered(MappedInputManager::Button::NavPrevious)) {
     selector = ButtonNavigator::previousIndex(selector, itemCount);  // wraps to the bottom

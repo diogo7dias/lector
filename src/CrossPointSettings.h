@@ -252,14 +252,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // tightens its spacing when the rows would otherwise run off the panel.
   static constexpr uint8_t POPUP_ITEM_MAX = 16;
 
-  // Page turn button long press behavior
-  enum LONG_PRESS_BUTTON_BEHAVIOR {
-    OFF = 0,
-    CHAPTER_SKIP = 1,
-    ORIENTATION_CHANGE = 2,
-    LONG_PRESS_BUTTON_BEHAVIOR_COUNT
-  };
-
   // UI Theme
   // Lector ships a single UI theme (the CrossPoint "Classic" base, renamed). All
   // lector UI/look customization lives in BaseTheme; the multi-theme picker was
@@ -470,8 +462,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
-  // Long-press page turn button behavior
-  uint8_t longPressButtonBehavior = OFF;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
