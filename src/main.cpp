@@ -619,11 +619,12 @@ void setup() {
   // reset reason alone cannot separate "wake" from "the card was out". The
   // walk therefore runs only when something says the folder changed: a
   // persisted dirty mark (WiFi file browser, pause moves, deletes), the pick's
-  // needs-rebuild flag, or the millisecond tail-slot probe seeing the folder
-  // grow (card-added files extend the FAT slot tail). A clean unlock pays the
-  // probe and skips the walk — no banner, no folder scan. A plain software
+  // needs-rebuild flag, or the millisecond folder probe seeing the last live
+  // directory slot move or the folder's own timestamp change (either one means
+  // files were written from a computer). A clean unlock pays the probe and
+  // skips the walk — no banner, no folder scan. A plain software
   // restart with no dirty mark (a settings-only WiFi session, OTA) skips the
-  // tail probe: the folder's contents cannot change behind a running device
+  // folder probe: the folder's contents cannot change behind a running device
   // except through the hooked paths. Which folder to read can still change
   // across an update, so that one check runs on every boot.
   {
@@ -633,7 +634,7 @@ void setup() {
     if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !rebootedFromPanic && wantsWallpaperIndex) {
       if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild ||
           crosspoint::sleep::windex::indexedFolderChanged() ||
-          (rst != ESP_RST_SW && crosspoint::sleep::windex::folderTailMoved())) {
+          (rst != ESP_RST_SW && crosspoint::sleep::windex::folderLooksChanged())) {
         crosspoint::sleep::windex::reconcileAtColdBoot(renderer);
       }
     }
