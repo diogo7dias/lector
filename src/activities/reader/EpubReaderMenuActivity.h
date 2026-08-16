@@ -14,6 +14,7 @@ class EpubReaderMenuActivity final : public Activity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
+    SECTION_HEADER,  // not an action: the marker a section heading row carries
     SELECT_CHAPTER,
     FOOTNOTES,
     TEXT_SETTINGS,
@@ -72,6 +73,11 @@ class EpubReaderMenuActivity final : public Activity {
   struct MenuItem {
     MenuAction action;
     StrId labelId;
+    // Section heading rather than a row: drawn as a filled bar, never landable. The
+    // nav ring steps past it, so no handler ever sees SECTION_HEADER.
+    bool isHeader = false;
+
+    static MenuItem Header(const StrId labelId) { return MenuItem{MenuAction::SECTION_HEADER, labelId, true}; }
   };
 
   // One tab page: which tab it is, the label drawn in the tab bar, its rows, and where
@@ -98,6 +104,11 @@ class EpubReaderMenuActivity final : public Activity {
   TabPage& activeTab() { return tabs[activeTabIndex]; }
   const TabPage& activeTab() const { return tabs[activeTabIndex]; }
   // Move to another tab, wrapping. The cursor of the tab being left is kept.
+  // True when this nav-ring position is a section heading (ring 0 is the tab bar).
+  bool isHeaderRing(int ringIndex) const;
+  // Walks on in `direction` until the ring position is landable, so a heading is never
+  // selected and Confirm can never fire on one.
+  int stepPastHeaders(int ringIndex, int direction) const;
   void switchTab(int direction = 1);
   void closeCancelled();
 
