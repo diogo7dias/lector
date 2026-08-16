@@ -32,6 +32,23 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.paragraphNumbering = SETTINGS.paragraphNumbering;
   p.paragraphNumberSize = SETTINGS.paragraphNumberSize;
   p.statusBarEnabled = SETTINGS.sbEnabled;
+  p.sbBatteryPos = SETTINGS.sbBatteryPos;
+  p.sbClockPos = SETTINGS.sbClockPos;
+  p.sbTitlePos = SETTINGS.sbTitlePos;
+  p.sbTitleSource = SETTINGS.sbTitleSource;
+  p.sbTitleTruncate = SETTINGS.sbTitleTruncate;
+  p.sbPagePos = SETTINGS.sbPagePos;
+  p.sbPageFormat = SETTINGS.sbPageFormat;
+  p.sbBookPctPos = SETTINGS.sbBookPctPos;
+  p.sbChapterPctPos = SETTINGS.sbChapterPctPos;
+  p.sbChapterNumPos = SETTINGS.sbChapterNumPos;
+  p.sbSessionPagesPos = SETTINGS.sbSessionPagesPos;
+  p.sbBookBar = SETTINGS.sbBookBar;
+  p.sbChapterBar = SETTINGS.sbChapterBar;
+  p.sbBarThickness = SETTINGS.sbBarThickness;
+  p.sbFloatingBar = SETTINGS.sbFloatingBar;
+  p.sbBarOutline = SETTINGS.sbBarOutline;
+  p.sbOffBar = SETTINGS.sbOffBar;
   // Zero-pad then copy so the trailing bytes are canonical for whole-blob memcmp.
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(p.sdFontFamilyName) - 1);

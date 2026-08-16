@@ -226,8 +226,10 @@ TEST(ReaderPrefs, ParagraphNumberSizeDefaultsToDouble) {
 TEST(ReaderPrefs, EachOlderRecordIsAStrictPrefixOfTheCurrentOne) {
   EXPECT_EQ(offsetof(ReaderPrefs, paragraphNumberSize), READER_PREFS_V8_SIZE);
   EXPECT_EQ(offsetof(ReaderPrefs, statusBarEnabled), READER_PREFS_V9_SIZE);
+  EXPECT_EQ(offsetof(ReaderPrefs, sbBatteryPos), READER_PREFS_V10_SIZE);
   EXPECT_EQ(READER_PREFS_V8_SIZE + 1, READER_PREFS_V9_SIZE);
-  EXPECT_EQ(sizeof(ReaderPrefs), READER_PREFS_V9_SIZE + 1);
+  EXPECT_EQ(READER_PREFS_V9_SIZE + 1, READER_PREFS_V10_SIZE);
+  EXPECT_LT(READER_PREFS_V10_SIZE, sizeof(ReaderPrefs));
 }
 
 // The one rule both readers share. Getting a size wrong here does not fail loudly: it
@@ -235,6 +237,7 @@ TEST(ReaderPrefs, EachOlderRecordIsAStrictPrefixOfTheCurrentOne) {
 TEST(ReaderPrefs, RecordSizeIsKnownForEveryReadableVersionAndZeroOtherwise) {
   for (uint8_t v = 5; v <= 8; v++) EXPECT_EQ(READER_PREFS_V8_SIZE, readerPrefsRecordSize(v));
   EXPECT_EQ(READER_PREFS_V9_SIZE, readerPrefsRecordSize(9));
+  EXPECT_EQ(READER_PREFS_V10_SIZE, readerPrefsRecordSize(10));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
   EXPECT_EQ(0u, readerPrefsRecordSize(4));
   EXPECT_EQ(0u, readerPrefsRecordSize(0));
@@ -422,4 +425,30 @@ TEST(ReaderOverrideDecision, SdFontNameChangeIsWritten) {
   const auto decision = decideReaderOverride(live, book, /*bookIsCustom=*/true);
   EXPECT_EQ(ReaderOverrideAction::Write, decision.action);
   EXPECT_STREQ("Bookerly", decision.prefs.sdFontFamilyName);
+}
+
+// The status bar's WHERE went per-book in v11. A v10 sidecar stops before that block,
+// so every anchor must fall back to its default rather than eating whatever followed —
+// a misread here would park the battery or the title at a position the user never chose.
+TEST(ReaderPrefs, Version10SidecarKeepsEverythingAndDefaultsTheStatusBarLayout) {
+  ReaderPrefs legacy = makeSample();
+  legacy.statusBarEnabled = 0;  // a real v10 user choice that must survive
+  std::stringstream ss;
+  const uint8_t v10 = 10;
+  ss.write(reinterpret_cast<const char*>(&v10), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V10_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(0, loaded.statusBarEnabled);
+
+  const ReaderPrefs fresh;
+  EXPECT_EQ(fresh.sbBatteryPos, loaded.sbBatteryPos);
+  EXPECT_EQ(fresh.sbTitlePos, loaded.sbTitlePos);
+  EXPECT_EQ(fresh.sbPagePos, loaded.sbPagePos);
+  EXPECT_EQ(fresh.sbBookBar, loaded.sbBookBar);
+  EXPECT_EQ(fresh.sbBarThickness, loaded.sbBarThickness);
+  EXPECT_EQ(fresh.sbOffBar, loaded.sbOffBar);
 }

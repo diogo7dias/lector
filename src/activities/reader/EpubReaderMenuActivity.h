@@ -35,6 +35,7 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PAPERBACK_STATUS,    // toggle heavier ink for status bar text
     TOGGLE_STATUS_BAR,          // show or hide the reading status bar for this book only
     TOGGLE_PROGRESS_BAR,        // cycle Off / Slim / Medium / Fat for the bar that outlives a hidden status bar
+    CUSTOMISE_STATUS_BAR,       // open the full per-item status bar screen for this book
     GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
     READING_STATS,              // per-book and all-books reading statistics

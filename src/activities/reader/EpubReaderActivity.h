@@ -323,6 +323,8 @@ class EpubReaderActivity final : public Activity {
   void persistReaderSettingsEdit(const ReaderPrefs& live) const;
   static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
   // Delete this book's override and follow the global settings again.
+  // Reads the Customise Status Bar screen's result back into this book's override.
+  void applyStatusBarEdit();
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.
   void reloadForReaderPrefsChange();
