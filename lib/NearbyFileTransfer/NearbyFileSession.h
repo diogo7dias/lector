@@ -139,7 +139,11 @@ class TransferSession {
   const std::string& destinationPath() const { return destinationPath_; }
   uint64_t transferredBytes() const { return session_.transferredBytes(); }
   uint32_t crc32() const { return session_.crc32(); }
-  /** Identifies this transfer in every packet, so two nearby pairs cannot mix. */
+  /**
+   * Stamped into every outgoing packet. Each side generates its own, and nothing
+   * filters on it today; pairing is by MAC, which onEvent enforces once two
+   * readers are talking.
+   */
   uint32_t sessionId() const { return session_.id(); }
   int progressPercent() const;
   /**

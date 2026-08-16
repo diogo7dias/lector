@@ -163,7 +163,9 @@ bool NearbyFileTransferActivity::writeChunk(const uint8_t* data, const size_t le
 void NearbyFileTransferActivity::finishWithError(const char* message) {
   errorMessage = message;
   session.cancel(millis());
-  runSessionActions();
+  // The cancel packet is left for the next drain rather than sent from here:
+  // this is reached from inside runSessionActions() while sending a chunk, and
+  // draining again from within that loop would nest the same queue.
   discardPartialFile();
   closeFiles();
   requestUpdate(true);
