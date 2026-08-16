@@ -90,11 +90,16 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 47
+### Version 49
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 49 keeps the version 48 serialized layout unchanged. It was bumped
+because an image's top margin is now clamped so a full-viewport-height image
+cannot overflow the page bottom (upstream #2959, which numbered it v39): older
+caches can hold placements that panels with no bottom inset refuse to draw.
 
 Version 47 changes `AnchorEntry` from a length-prefixed string to a `u64`
 `arxHash64` of the anchor. Anchors are only compared for equality, never
@@ -158,10 +163,10 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 46
+#define EXPECTED_VERSION 49
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
-#define FOOTNOTE_HREF_LEN 96
+#define FOOTNOTE_HREF_LEN 256
 
 struct String {
     u32 length [[hidden, comment("String byte length")]];
