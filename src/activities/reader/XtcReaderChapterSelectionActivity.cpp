@@ -56,7 +56,7 @@ void XtcReaderChapterSelectionActivity::loop() {
   const int pageItems = getPageItems();
   const int totalItems = static_cast<int>(xtc->getChapters().size());
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
@@ -72,16 +72,16 @@ void XtcReaderChapterSelectionActivity::loop() {
     }
   };
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     selectChapter();
   }
 
-  buttonNavigator.onNextRelease([this, totalItems] {
+  buttonNavigator.onNextStep([this, totalItems] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, totalItems] {
+  buttonNavigator.onPreviousStep([this, totalItems] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
     requestUpdate();
   });

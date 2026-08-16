@@ -30,9 +30,10 @@ class ButtonNavigator final {
   void onPreviousPress(const Callback& callback);
   void onPress(const Buttons& buttons, const Callback& callback);
 
-  void onNextRelease(const Callback& callback);
-  void onPreviousRelease(const Callback& callback);
-  void onRelease(const Buttons& buttons, const Callback& callback);
+  // One step on the press, then auto-repeat while held (see onContinuous).
+  void onNextStep(const Callback& callback);
+  void onPreviousStep(const Callback& callback);
+  void onStep(const Buttons& buttons, const Callback& callback);
 
   void onNextContinuous(const Callback& callback);
   void onPreviousContinuous(const Callback& callback);

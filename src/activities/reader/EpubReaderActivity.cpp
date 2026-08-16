@@ -20,7 +20,6 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
-#include "BookInfoActivity.h"
 #include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
@@ -47,6 +46,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "StealLookActivity.h"
+#include "activities/settings/StatusBarSettingsActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -66,7 +66,6 @@
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 // pages per minute, first item is 1 to prevent division by zero if accessed
-constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
 // paragraph_counts.bin: [uint8 version][uint16 spineCount][uint16 count]*spineCount.
@@ -358,13 +357,12 @@ void EpubReaderActivity::openReaderMenu() {
           renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
           prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
-          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, SETTINGS.sbOffBar, hasSleepWallpaper, wallpaperFavorited,
+          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, prefs_.sbOffBar, hasSleepWallpaper, wallpaperFavorited,
           wallpaperPausable, hasQuotes),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
         applyOrientation(menu.orientation);
-        toggleAutoPageTurn(menu.pageTurnOption);
         applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
         applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
         // Last of the live toggles because it is the only one that repaginates.
@@ -604,8 +602,8 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
       // Not a menu row: the menu toggles this live and reports it through MenuResult, so
       // there is no MenuAction to reuse. sbOffBar is passed unchanged — this flips the
-      // per-book bar only, never the global hidden-bar progress setting.
-      applyStatusBar(prefs_.statusBarEnabled ? 0 : 1, SETTINGS.sbOffBar);
+      // master switch only, leaving the hidden-bar progress choice alone.
+      applyStatusBar(prefs_.statusBarEnabled ? 0 : 1, prefs_.sbOffBar);
       return true;
     case CrossPointSettings::LP_MENU_POPUP:
       openQuickMenu();
@@ -823,32 +821,6 @@ void EpubReaderActivity::loop() {
     pendingReadFolderMove = false;
   }
 
-  if (automaticPageTurnActive) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      automaticPageTurnActive = false;
-      // updates chapter title space to indicate page turn disabled
-      requestUpdate();
-      return;
-    }
-
-    if (!section) {
-      requestUpdate();
-      return;
-    }
-
-    // Skips page turn if renderingMutex is busy
-    if (RenderLock::peek()) {
-      lastPageTurnTime = millis();
-      return;
-    }
-
-    if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
-      pageTurn(true);
-      return;
-    }
-  }
-
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showBookmarkMessage = false;
     // The banner sat over the page; clear its residue on the paint that removes it.
@@ -891,10 +863,18 @@ void EpubReaderActivity::loop() {
     }
   }
 
-  // Enter reader menu activity on short-press Confirm or a downward swipe from the top edge. A long-press
-  // that fired a bound function (bookmark or KOReader sync) sets ignoreNextConfirmRelease so the release
-  // following the hold does not also open the menu.
-  if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
+  // Enter reader menu activity on Confirm or a downward swipe from the top edge.
+  //
+  // With no function bound to a long press, Confirm carries exactly one action, so the
+  // menu opens the instant the button goes down. With one bound the two cannot be told
+  // apart until the button comes up, so the menu waits for the release, and a hold that
+  // already fired its function sets ignoreNextConfirmRelease to keep that release from
+  // also opening the menu.
+  const bool confirmHasHold = SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED;
+  const bool confirmEdge = confirmHasHold
+                               ? confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))
+                               : mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+  if (confirmEdge) {
     if (ignoreNextConfirmRelease) {
       ignoreNextConfirmRelease = false;
     } else {
@@ -989,42 +969,8 @@ void EpubReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = mappedInput.getHeldTime();
-  const bool longPress = heldMs > ReaderUtils::SKIP_HOLD_MS;
-
-  // Don't skip chapter after screenshot
+  // Screenshot is Power plus Down together; neither half should also turn a page.
   if (gpio.wasReleased(HalGPIO::BTN_POWER) && gpio.wasReleased(HalGPIO::BTN_DOWN)) {
-    return;
-  }
-
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP) {
-    if (!nextTriggered && section && section->currentPage > 0) {
-      section->currentPage = 0;
-      requestUpdate();
-      return;
-    }
-
-    // We don't want to delete the section mid-render, so grab the semaphore
-    {
-      RenderLock lock(*this);
-      nextPageNumber = 0;
-      if (nextTriggered) {
-        currentSpineIndex++;
-      } else if (currentSpineIndex > 0) {
-        currentSpineIndex--;
-      }
-      section.reset();
-    }
-    requestUpdate();
-    return;
-  }
-
-  if (longPress && SETTINGS.longPressButtonBehavior == SETTINGS.ORIENTATION_CHANGE) {
-    const uint8_t newOrientation =
-        nextTriggered ? (SETTINGS.orientation - 1 + SETTINGS.ORIENTATION_COUNT) % SETTINGS.ORIENTATION_COUNT
-                      : (SETTINGS.orientation + 1) % SETTINGS.ORIENTATION_COUNT;
-    applyOrientation(newOrientation);
-    requestUpdate();
     return;
   }
 
@@ -1351,21 +1297,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
-      // The screen itself reads nothing: hand it the metadata already in memory and
-      // a thumbnail path, rendering one first if this book has never needed a cover.
-      constexpr int kInfoCoverHeight = 360;
-      std::string coverPath;
-      if (epub->generateThumbBmp(kInfoCoverHeight)) {
-        const std::string path = epub->getThumbBmpPath(kInfoCoverHeight);
-        if (Storage.exists(path.c_str())) coverPath = path;
-      }
-      startActivityForResult(
-          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub->getTitle(), epub->getAuthor(),
-                                             epub->getLanguage(), epub->getDescription(), coverPath),
-          [this](const ActivityResult&) { requestUpdate(); });
-      break;
-    }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH: {
       // Ask for a paragraph number, then jump to it (the number shown by the marks).
       startActivityForResult(
@@ -1465,10 +1396,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-      onGoHome();
-      return;
-    }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
       {
         RenderLock lock(*this);
@@ -1516,6 +1443,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       SETTINGS.beginReaderEditOverlay(prefs_, &EpubReaderActivity::readerEditSinkThunk, this);
       startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                              [this](const ActivityResult&) { applyReaderSettingsEdit(); });
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::CUSTOMISE_STATUS_BAR: {
+      // The book's own bar values are already overlaid on the live sb* fields, so the
+      // existing Customise Status Bar screen edits THIS BOOK in place, and the result
+      // callback captures them back into the override.
+      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { applyStatusBarEdit(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::RESET_READER_SETTINGS: {
@@ -1727,6 +1662,42 @@ void EpubReaderActivity::applyReaderSettingsEdit() {
   requestUpdate();
 }
 
+void EpubReaderActivity::applyStatusBarEdit() {
+  // Only the status bar block is read back: the screen edits nothing else, and pulling a
+  // whole ReaderPrefs::fromGlobal() here would overwrite this book's font and margins
+  // with the global ones.
+  ReaderPrefs edited = prefs_;
+  edited.statusBarEnabled = SETTINGS.sbEnabled;
+  edited.sbBatteryPos = SETTINGS.sbBatteryPos;
+  edited.sbClockPos = SETTINGS.sbClockPos;
+  edited.sbTitlePos = SETTINGS.sbTitlePos;
+  edited.sbTitleSource = SETTINGS.sbTitleSource;
+  edited.sbTitleTruncate = SETTINGS.sbTitleTruncate;
+  edited.sbPagePos = SETTINGS.sbPagePos;
+  edited.sbPageFormat = SETTINGS.sbPageFormat;
+  edited.sbBookPctPos = SETTINGS.sbBookPctPos;
+  edited.sbChapterPctPos = SETTINGS.sbChapterPctPos;
+  edited.sbChapterNumPos = SETTINGS.sbChapterNumPos;
+  edited.sbSessionPagesPos = SETTINGS.sbSessionPagesPos;
+  edited.sbBookBar = SETTINGS.sbBookBar;
+  edited.sbChapterBar = SETTINGS.sbChapterBar;
+  edited.sbBarThickness = SETTINGS.sbBarThickness;
+  edited.sbFloatingBar = SETTINGS.sbFloatingBar;
+  edited.sbBarOutline = SETTINGS.sbBarOutline;
+  edited.sbOffBar = SETTINGS.sbOffBar;
+  if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
+    requestUpdate();
+    return;
+  }
+  prefs_ = edited;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  // The bar's height and edges decide the reserved bands, so the viewport changed and
+  // the chapter has to be laid out again — the same path any margin change takes.
+  reloadForReaderPrefsChange();
+  requestUpdate();
+}
+
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
   Storage.remove(readerOverridePath().c_str());
   prefs_ = ReaderPrefs::fromGlobal();
@@ -1748,20 +1719,16 @@ void EpubReaderActivity::applyParagraphNumbering(const uint8_t mode, const uint8
 
 void EpubReaderActivity::applyStatusBar(const uint8_t enabled, const uint8_t progressBar) {
   const bool barChanged = enabled != prefs_.statusBarEnabled;
-  // Progress Bar is a global setting, not a per-book one, so it is compared against
-  // SETTINGS rather than prefs_. The value-change guard is what keeps this off the
-  // SPIFFS write path on every menu close.
-  const bool progressBarChanged = progressBar != SETTINGS.sbOffBar;
+  // Both are per-book now, so both are compared against this book's prefs. The
+  // value-change guard is what keeps this off the card write path on every menu close.
+  const bool progressBarChanged = progressBar != prefs_.sbOffBar;
   if (!barChanged && !progressBarChanged) return;
-  if (barChanged) {
-    prefs_.statusBarEnabled = enabled;
-    prefsCustom_ = true;
-    writeReaderOverride(prefs_);
-  }
-  if (progressBarChanged) {
-    SETTINGS.sbOffBar = progressBar;
-    SETTINGS.saveToFile();
-  }
+  prefs_.statusBarEnabled = enabled;
+  prefs_.sbOffBar = progressBar;
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  // Republish so everything that measures the bar sees this book's new values.
+  SETTINGS.setStatusBarOverride(prefs_);
   // Unlike the toggles above these change the reserved top/bottom bands, so the viewport
   // changes and the chapter has to be laid out again. Same path as any margin change: the
   // reading position is held as a paragraph across the rebuild. Both are applied before
@@ -2156,26 +2123,6 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
   drawSegments();
 }
 
-void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
-    automaticPageTurnActive = false;
-    return;
-  }
-
-  lastPageTurnTime = millis();
-  // calculates page turn duration by dividing by number of pages
-  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_RATES[selectedPageTurnOption];
-  automaticPageTurnActive = true;
-
-  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-  // resets cached section so that space is reserved for auto page turn indicator when None or progress bar only
-  if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
-    // Preserve current reading position so we can restore after reflow.
-    RenderLock lock(*this);
-    dropSectionForRelayout();
-  }
-}
-
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   // A page turn is authoritative: do not let a resume/reflow position captured
   // at session start snap the reader back after the incremental build completes.
@@ -2229,7 +2176,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
       }
     }
   }
-  lastPageTurnTime = millis();
   requestUpdate();
 }
 
@@ -2271,7 +2217,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
     GUI.drawPopup(renderer, msg);
     scheduleGhostCleanup();
-    automaticPageTurnActive = false;
   };
 
   // edge case handling for sub-zero spine index
@@ -2291,7 +2236,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
-    automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
   }
@@ -2299,7 +2243,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Publish this book's status bar switch before anything measures or draws the bar.
   // Set here rather than beside each `prefs_ =` assignment so it cannot fall out of
   // step with the prefs the layout below is about to use. Cleared in onExit().
-  SETTINGS.setStatusBarOverride(prefs_.statusBarEnabled);
+  SETTINGS.setStatusBarOverride(prefs_);
 
   // Apply screen viewable areas and additional padding
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -2312,11 +2256,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // re-paginates the section cache like any margin change.
   // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
   // height in whichever edge holds the title so the reading text is pushed clear.
-  // Auto page turn shows a one-line countdown in the title slot, so skip the wrap
-  // reservation then.
   int sbTitleExtraPx = 0;
-  if (!automaticPageTurnActive && SETTINGS.statusBarEnabled() &&
-      SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && SETTINGS.sbTitleTruncate == 0) {
+  if (SETTINGS.statusBarEnabled() && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
+      SETTINGS.sbTitleTruncate == 0) {
     std::string sbTitle;
     if (SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
       const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
@@ -2332,9 +2274,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                           SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true, sbTitleTop ? sbTitleExtraPx : 0);
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true, sbTitleTop ? 0 : sbTitleExtraPx);
-  // Auto page turn shows a one-line countdown in the title slot; reserve a top band for it.
-  const int autoTurnBand = automaticPageTurnActive ? UITheme::getInstance().getMetrics().statusBarVerticalMargin : 0;
-  orientedMarginTop += std::max<int>(sbTop, autoTurnBand);
+  orientedMarginTop += sbTop;
   orientedMarginBottom += sbBottom;
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -2710,7 +2650,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::REGULAR);
     renderStatusBar();
     renderer.displayBuffer();
-    automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
   }
@@ -2720,7 +2659,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::REGULAR);
     renderStatusBar();
     renderer.displayBuffer();
-    automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
   }
@@ -2733,7 +2671,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     auto p = section->loadPage(section->currentPage);
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
-      automaticPageTurnActive = false;
       // Retrying rebuilds a transiently corrupt section and usually recovers, but a page that keeps
       // failing would loop forever on a blank screen, so bound the retries before giving up.
       const bool giveUp = ++pageLoadRetryCount > MAX_PAGE_LOAD_RETRIES;
@@ -3199,14 +3136,6 @@ void EpubReaderActivity::renderStatusBar() const {
   // hides the item instead of showing a 0 that will never move.
   if (statsTrackingActive) d.sessionPages = static_cast<int>(statsSession.currentSession().pagesTurned);
   d.bookmarked = currentPageBookmarked;
-
-  // Auto page turn: show the countdown in the title slot (wherever the title is
-  // anchored). If the title item is off the countdown simply isn't shown.
-  if (automaticPageTurnActive && pageTurnDuration > 0) {
-    const std::string label = std::string(tr(STR_AUTO_TURN_ENABLED)) + std::to_string(60 * 1000 / pageTurnDuration);
-    d.bookTitle = label;
-    d.chapterTitle = label;
-  }
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so
   // nothing drawn afterwards inherits the smear.

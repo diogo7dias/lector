@@ -82,8 +82,6 @@ class EpubReaderActivity final : public Activity {
   // Resolved in render() once the section is loaded/built far enough, then cleared. Unlike a
   // settings-change reposition it always resolves by content, so it survives any re-pagination.
   std::optional<uint32_t> pendingOffsetJump;
-  unsigned long lastPageTurnTime = 0UL;
-  unsigned long pageTurnDuration = 0UL;
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;
@@ -96,7 +94,6 @@ class EpubReaderActivity final : public Activity {
   uint8_t pageLoadRetryCount = 0;
   static constexpr uint8_t MAX_PAGE_LOAD_RETRIES = 3;
   bool skipNextButtonCheck = false;  // Skip button processing for one frame after subactivity exit
-  bool automaticPageTurnActive = false;
   bool showBookmarkMessage = false;
   // "No dictionary set" popup, shown when a lookup is triggered without a configured dictionary.
   bool showDictionaryMessage = false;
@@ -326,6 +323,8 @@ class EpubReaderActivity final : public Activity {
   void persistReaderSettingsEdit(const ReaderPrefs& live) const;
   static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
   // Delete this book's override and follow the global settings again.
+  // Reads the Customise Status Bar screen's result back into this book's override.
+  void applyStatusBarEdit();
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.
   void reloadForReaderPrefsChange();
@@ -342,7 +341,6 @@ class EpubReaderActivity final : public Activity {
   void drawParagraphNumbers(const Page& page, int marginLeft, int marginTop, int fontId);
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
-  void toggleAutoPageTurn(uint8_t selectedPageTurnOption);
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();
   void addBookmark();

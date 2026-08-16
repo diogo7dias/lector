@@ -7,6 +7,29 @@
 
 #include "activities/reader/ReaderPrefs.h"
 
+// The whole status bar configuration as one value, so it can be swapped in and out
+// atomically while a book with its own bar is open.
+struct StatusBarBlock {
+  uint8_t enabled = 1;
+  uint8_t batteryPos = 0;
+  uint8_t clockPos = 0;
+  uint8_t titlePos = 0;
+  uint8_t titleSource = 0;
+  uint8_t titleTruncate = 0;
+  uint8_t pagePos = 0;
+  uint8_t pageFormat = 0;
+  uint8_t bookPctPos = 0;
+  uint8_t chapterPctPos = 0;
+  uint8_t chapterNumPos = 0;
+  uint8_t sessionPagesPos = 0;
+  uint8_t bookBar = 0;
+  uint8_t chapterBar = 0;
+  uint8_t barThickness = 0;
+  uint8_t floatingBar = 0;
+  uint8_t barOutline = 0;
+  uint8_t offBar = 0;
+};
+
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   // Private constructor for singleton
@@ -229,14 +252,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // tightens its spacing when the rows would otherwise run off the panel.
   static constexpr uint8_t POPUP_ITEM_MAX = 16;
 
-  // Page turn button long press behavior
-  enum LONG_PRESS_BUTTON_BEHAVIOR {
-    OFF = 0,
-    CHAPTER_SKIP = 1,
-    ORIENTATION_CHANGE = 2,
-    LONG_PRESS_BUTTON_BEHAVIOR_COUNT
-  };
-
   // UI Theme
   // Lector ships a single UI theme (the CrossPoint "Classic" base, renamed). All
   // lector UI/look customization lives in BaseTheme; the multi-theme picker was
@@ -447,8 +462,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // 2=Title). See OpdsFilenameFormat. Persisted via a category-less SettingInfo::Enum,
   // edited from the OPDS server list; hidden from the on-device Settings screen.
   uint8_t opdsFilenameFormat = 0;
-  // Long-press page turn button behavior
-  uint8_t longPressButtonBehavior = OFF;
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
@@ -677,18 +690,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // leak a book's per-book values into the global settings.json.
   bool saveToFile() const;
 
-  // ── Per-book status bar switch ─────────────────────────────────────────────
-  // The EPUB reader owns a book that may have turned the status bar off for itself
-  // (ReaderPrefs::statusBarEnabled). Everything that draws or reserves space for the
-  // bar asks statusBarEnabled(), which returns the book's answer while a book is open
-  // and the global one everywhere else.
+  // ── Per-book status bar ────────────────────────────────────────────────────
+  // The EPUB reader owns a book with its own status bar: master switch, and where
+  // every item sits (ReaderPrefs, the sb* block). While that book is open the book's
+  // values are overlaid onto the live sb* fields, so the hundred-odd places that draw
+  // or measure the bar keep reading the same fields and cannot drift from each other.
   //
-  // Deliberately NOT done by writing the book's value into sbEnabled: that field is
-  // persisted, so a book's choice could leak into settings.json and silently become
-  // the user's global setting. This override is runtime-only and never saved.
-  void setStatusBarOverride(const uint8_t enabled) { sbEnabledOverride_ = static_cast<int8_t>(enabled ? 1 : 0); }
-  void clearStatusBarOverride() { sbEnabledOverride_ = -1; }
-  bool statusBarEnabled() const { return sbEnabledOverride_ >= 0 ? sbEnabledOverride_ != 0 : sbEnabled != 0; }
+  // Runtime only. The global values are backed up on the way in, restored on the way
+  // out, and swapped back for the duration of any saveToFile() that lands mid-book, so
+  // a book's layout can never leak into settings.json and silently become the user's
+  // global setting. Same guarantee the reader-edit overlay gives, same mechanism.
+  void setStatusBarOverride(const ReaderPrefs& prefs);
+  void clearStatusBarOverride();
+  bool statusBarOverrideActive() const { return sbOverrideActive_; }
+  bool statusBarEnabled() const { return sbEnabled != 0; }
 
   // ── Progress bars while the status bar is hidden ───────────────────────────
   // The Book Bar / Chapter Bar edges are part of the status bar, so hiding the bar
@@ -721,9 +736,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // to [MIN..MAX]_LINE_SPACING_PERCENT. Restored granular model (old lector).
   static float resolveLineCompression(uint8_t lineSpacingPercent);
 
-  // -1 = no book open, follow the global sbEnabled. 0/1 = the open book's own choice.
-  int8_t sbEnabledOverride_ = -1;
   bool readerEditOverlayActive_ = false;
+  // The global status bar block, held while a book's own layout is overlaid on it.
+  bool sbOverrideActive_ = false;
+  StatusBarBlock sbGlobalBackup_{};
+  // Reads the live sb* fields into a block, and writes one back over them.
+  StatusBarBlock captureStatusBarBlock() const;
+  void applyStatusBarBlock(const StatusBarBlock& b);
   ReaderPrefs readerEditBackup_;
   ReaderEditSink readerEditSink_ = nullptr;
   void* readerEditSinkCtx_ = nullptr;

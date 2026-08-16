@@ -77,17 +77,17 @@ void OpdsBookBrowserActivity::loop() {
     return;
   }
 
-  if (consumeConfirm && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     consumeConfirm = false;
     return;
   }
-  if (consumeBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (consumeBack && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     consumeBack = false;
     return;
   }
 
   if (state == BrowserState::ERROR) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
         state = BrowserState::LOADING;
         statusMessage = tr(STR_LOADING);
@@ -96,14 +96,14 @@ void OpdsBookBrowserActivity::loop() {
       } else {
         launchWifiSelection();
       }
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       navigateBack();
     }
     return;
   }
 
   if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       state == BrowserState::CHECK_WIFI ? onGoHome() : navigateBack();
     }
     return;
@@ -119,20 +119,20 @@ void OpdsBookBrowserActivity::loop() {
       }
     };
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       activateSelected();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       navigateBack();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
     }
 
     if (!entries.empty()) {
-      buttonNavigator.onNextRelease([this] {
+      buttonNavigator.onNextStep([this] {
         selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
         requestUpdate();
       });
-      buttonNavigator.onPreviousRelease([this] {
+      buttonNavigator.onPreviousStep([this] {
         selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
         requestUpdate();
       });

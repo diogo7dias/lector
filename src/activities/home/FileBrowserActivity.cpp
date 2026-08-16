@@ -201,17 +201,11 @@ void FileBrowserActivity::onEnter() {
   selectorIndex = 0;
   pendingFullRefresh = true;
 
-  // If Confirm was held while this activity opened (typical when launched from a menu), ignore
-  // its release — otherwise we'd immediately auto-open whatever is at index 0.
-  lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
-
   auto root = Storage.open(basepath.c_str());
   if (!root) {
     basepath = "/";
     loadFiles();
   } else if (!root.isDirectory()) {
-    lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
-
     const std::string oldPath = basepath;
     basepath = FsHelpers::extractFolderPath(basepath);
     loadFiles();
@@ -314,32 +308,11 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::loop() {
-  // Long press BACK (1s+) goes to root folder (Books mode only).
-  // In firmware-pick mode we keep navigation simple: short Back = up dir / cancel.
-  if (mode == Mode::Books && mappedInput.isPressed(MappedInputManager::Button::Back) &&
-      mappedInput.getHeldTime() >= GO_HOME_MS && basepath != "/" && !lockLongPressBack) {
-    basepath = "/";
-    loadFiles();
-    selectorIndex = 0;
-    requestUpdate();
-    return;
-  }
-
-  if (lockLongPressBack && mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    lockLongPressBack = false;
-    return;
-  }
-
   // Rows have variable heights now, so a fixed items-per-page is meaningless. The page jump
   // steps by however many rows the last draw actually fit on screen.
   const int pageItems = std::max(1, lastVisibleIdx - firstVisibleIdx + 1);
 
-  auto activateSelected = [this] {
-    if (lockNextConfirmRelease) {
-      lockNextConfirmRelease = false;
-      return;
-    }
-
+  auto activateSelected = [this](const bool holdAction) {
     const int row = static_cast<int>(selectorIndex);
     if (rowKindAt(row) == RowKind::Search) {
       openSearchEntry();
@@ -366,18 +339,16 @@ void FileBrowserActivity::loop() {
       return;
     }
 
-    if (mode == Mode::Books && mappedInput.getHeldTime() >= GO_HOME_MS) {
+    if (mode == Mode::Books && holdAction) {
       // --- LONG PRESS ACTION: DELETE FILE OR DIRECTORY ---
       std::string cleanBasePath = basepath;
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
       const std::string fullPath = cleanBasePath + entry;
 
       auto handler = [this, fullPath](const ActivityResult& res) {
-        // The confirmation popup acts on button press; if that button is still
-        // held when we resume, swallow its release so it doesn't also act here
-        // (Back would go up a directory, Confirm would open the selection).
-        lockLongPressBack = mappedInput.isPressed(MappedInputManager::Button::Back);
-        lockNextConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+        // Nothing to swallow here any more: ActivityManager arms the input gate on
+        // every screen change, so a button still held when this screen comes back
+        // is ignored until it is released.
         if (!res.isCancelled) {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           if (removeDirFile(fullPath)) {
@@ -420,14 +391,41 @@ void FileBrowserActivity::loop() {
     return;
   };
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-    activateSelected();
-    return;
+  // Confirm carries two actions, so it cannot fire on the press: the firmware has to
+  // wait to learn which one was meant. The hold half no longer waits for the release
+  // though — it fires the moment the threshold passes, and the delete it opens asks
+  // for confirmation anyway.
+  switch (confirmHold.update(mappedInput.isPressed(MappedInputManager::Button::Confirm),
+                             mappedInput.wasReleased(MappedInputManager::Button::Confirm), mappedInput.getHeldTime(),
+                             GO_HOME_MS)) {
+    case hold_button::Fired::Hold:
+      activateSelected(/*holdAction=*/true);
+      return;
+    case hold_button::Fired::Short:
+      activateSelected(/*holdAction=*/false);
+      return;
+    case hold_button::Fired::None:
+      break;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    // Short press: go up one directory, or go home if at root
-    if (mappedInput.getHeldTime() < GO_HOME_MS) {
+  // Back holds to jump to the root folder and taps to go up one directory, but only in
+  // Books mode below the root. Anywhere else it carries no hold action, so it fires on
+  // the press like any single-action button.
+  const bool backHasHold = mode == Mode::Books && basepath != "/";
+  const auto backFired = backHasHold
+                             ? backHold.update(mappedInput.isPressed(MappedInputManager::Button::Back),
+                                               mappedInput.wasReleased(MappedInputManager::Button::Back),
+                                               mappedInput.getHeldTime(), GO_HOME_MS)
+                             : backHold.updatePressOnly(mappedInput.wasPressed(MappedInputManager::Button::Back));
+  if (backFired == hold_button::Fired::Hold) {
+    basepath = "/";
+    loadFiles();
+    selectorIndex = 0;
+    requestUpdate();
+    return;
+  }
+  if (backFired == hold_button::Fired::Short) {
+    {
       if (basepath != "/") {
         const std::string oldPath = basepath;
 
@@ -468,13 +466,13 @@ void FileBrowserActivity::loop() {
     scrollOffset = std::clamp(scrollOffset, 0, std::max(0, listSize - 1));
   };
 
-  buttonNavigator.onNextRelease([this, listSize, followSelection] {
+  buttonNavigator.onNextStep([this, listSize, followSelection] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, listSize, followSelection] {
+  buttonNavigator.onPreviousStep([this, listSize, followSelection] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     followSelection();
     requestUpdate();

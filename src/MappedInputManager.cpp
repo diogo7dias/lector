@@ -310,11 +310,16 @@ bool MappedInputManager::wasHomeGesture() const {
 }
 
 bool MappedInputManager::wasPressed(const Button button) const {
+  // The press that opened this screen may still be down; see armAfterScreenChange().
+  if (armingGate.armed()) return false;
   if (button == Button::Back && wasBackGesture()) return true;
   return mapButton(button, &HalGPIO::wasPressed);
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  // Swallowed with the press it belongs to, or the release of the opening press would
+  // land on the screen that press just opened.
+  if (armingGate.armed()) return false;
   if (button == Button::Back && wasBackGesture()) return true;
   // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
   // back for one window and then replays it here, so every consumer keeps its existing code.
@@ -327,9 +332,18 @@ bool MappedInputManager::wasReleased(const Button button) const {
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }
 
-bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
+bool MappedInputManager::isAnyPressed() const {
+  // Every physical button, not the logical ones: a logical button can map to two
+  // physical ones and a screen change must wait for whichever is actually down.
+  for (uint8_t i = HalGPIO::BTN_BACK; i <= HalGPIO::BTN_POWER; ++i) {
+    if (gpio.isPressed(i)) return true;
+  }
+  return false;
+}
 
-bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
+bool MappedInputManager::wasAnyPressed() const { return !armingGate.armed() && gpio.wasAnyPressed(); }
+
+bool MappedInputManager::wasAnyReleased() const { return !armingGate.armed() && gpio.wasAnyReleased(); }
 
 unsigned long MappedInputManager::getHeldTime() const {
   if (!gpio.wasAnyPressed() && !gpio.wasAnyReleased() && touchHeldOverrideValid &&

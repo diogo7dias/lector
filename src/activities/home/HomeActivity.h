@@ -19,9 +19,6 @@ class HomeActivity final : public Activity {
   int firstVisibleBookIdx = 0;
   int lastVisibleBookIdx = 0;
   bool hasOpdsServers = false;
-  // Home can be entered while Back is still held (e.g. leaving Settings with
-  // Back): ignore that stale release until a fresh press is seen here.
-  bool backPressSeen = false;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
 

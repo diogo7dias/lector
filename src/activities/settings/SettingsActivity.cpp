@@ -179,7 +179,7 @@ void SettingsActivity::rebuildSettingsLists() {
           // Pop-up Items sits with the bindings, because it only configures what the
           // pop-up those bindings open actually contains.
           {StrId::STR_GRP_HOLD,
-           {StrId::STR_LONG_PRESS_BEHAVIOR, StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
+           {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
           {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
       });
 
@@ -292,12 +292,12 @@ void SettingsActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextRelease([this] {
+  buttonNavigator.onNextStep([this] {
     selectedSettingIndex = skipHeaders(ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1), true);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this] {
+  buttonNavigator.onPreviousStep([this] {
     selectedSettingIndex = skipHeaders(ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1), false);
     requestUpdate();
   });

@@ -72,43 +72,59 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     return pages.back().items;
   };
 
+  // Appends a section: the heading, then its rows. A group whose rows all dropped out
+  // (a conditional row that does not apply to this book) contributes no heading, so a
+  // heading on screen always has something under it.
+  const auto group = [](std::vector<MenuItem>& items, const StrId heading, std::vector<MenuItem> members) {
+    if (members.empty()) return;
+    items.push_back(MenuItem::Header(heading));
+    for (auto& member : members) items.push_back(member);
+  };
+
   // --- Navigate: everything that moves the reading position ---------------------
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
-    items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
-    items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+    std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
+                                   {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
     // Jump to a paragraph number — only meaningful when this book shows paragraph
     // numbers. Toggle numbering on, reopen the menu, and this row appears.
     if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
-      items.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
+      position.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
     }
+    group(items, StrId::STR_GRP_POSITION, std::move(position));
+
+    std::vector<MenuItem> marks;
     if (hasBookmarks) {
-      items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
+      marks.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
     }
-    items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
+    marks.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
     if (hasFootnotes) {
-      items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+      marks.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
     }
+    group(items, StrId::STR_GRP_MARKS, std::move(marks));
   }
 
   // --- This Book: what the book says about itself, and what you take out of it ---
   {
     auto& items = page(Tab::ThisBook, StrId::STR_SEC_THIS_BOOK);
-    items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
-    items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
-    items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
-    items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
+    group(items, StrId::STR_GRP_READ,
+          {{MenuAction::READING_STATS, StrId::STR_READING_STATS}, {MenuAction::DICTIONARY, StrId::STR_LOOKUP}});
+
+    std::vector<MenuItem> quotes{{MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE}};
     // Reading the quotes back only makes sense once this book has a sidecar to read;
     // the caller checks for the file so this stays free of storage access.
     if (hasQuotes) {
-      items.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
+      quotes.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
     }
-    // Undoing the open belongs with the book itself, not with the device tools, and it
-    // sits last here because it is the one row that leaves the book.
-    items.push_back({MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK});
-    // Deleting is the harder version of the row above it: removing only unfiles the
-    // book, this erases the file. It asks for confirmation before doing anything.
-    items.push_back({MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK});
+    group(items, StrId::STR_GRP_QUOTES, std::move(quotes));
+
+    // Undoing the open belongs with the book itself, not with the device tools, and both
+    // rows sit last because they are the ones that leave the book. Deleting is the harder
+    // version of removing: removing only unfiles the book, this erases the file. It asks
+    // for confirmation before doing anything.
+    group(items, StrId::STR_GRP_REMOVE,
+          {{MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK},
+           {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}});
   }
 
   // --- Look: everything that changes how the page is drawn ----------------------
@@ -116,24 +132,29 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     auto& items = page(Tab::Look, StrId::STR_SEC_LOOK);
     // Per-book reader settings. "Reset" only appears once this book has its own
     // override (otherwise it already follows the global settings).
-    items.push_back({MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS});
+    std::vector<MenuItem> thisBook{{MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS}};
     if (hasReaderOverride) {
-      items.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
+      thisBook.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
     }
     // Sits with the reader settings because that is what it changes: it copies another
     // book's look onto this one, once. The picker itself reports when nothing qualifies.
-    items.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
+    thisBook.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
     // Same cluster for the same reason: a saved look applied to this book. Steal Look
     // takes one from another book, this takes one from the named sets on the card.
-    items.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
-    items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS});
+    thisBook.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
+    group(items, StrId::STR_GRP_THIS_BOOK, std::move(thisBook));
+
+    std::vector<MenuItem> pageGroup{{MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS}};
     // Size sits directly under the mode it belongs to, and only when there is
     // something to size. Turn numbering on, reopen the menu, and the row appears.
     if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
-      items.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE, StrId::STR_PARAGRAPH_NUMBER_SIZE});
+      pageGroup.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE, StrId::STR_PARAGRAPH_NUMBER_SIZE});
     }
-    items.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
-    items.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+    pageGroup.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
+    pageGroup.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+    group(items, StrId::STR_GRP_PAGE, std::move(pageGroup));
+
+    items.push_back(MenuItem::Header(StrId::STR_GRP_STATUS_BAR));
     items.push_back({MenuAction::TOGGLE_STATUS_BAR, StrId::STR_STATUS_BAR});
     // Directly under the row it depends on, and only while that row reads OFF: with the
     // bar shown the progress bars already draw from Book Bar / Chapter Bar + Bar
@@ -143,7 +164,11 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     if (!statusBar) {
       items.push_back({MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
     }
-    items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+    // Everything the bar can show, and where, for this book alone. Seeded from the
+    // global layout the first time this book gets an override.
+    items.push_back({MenuAction::CUSTOMISE_STATUS_BAR, StrId::STR_CUSTOMISE_STATUS_BAR});
+
+    group(items, StrId::STR_GRP_SCREEN, {{MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION}});
   }
 
   // --- Sleep Screen: triage for the wallpaper the lock screen just showed -------
@@ -170,12 +195,11 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
   // --- Device: everything that is not about this book ---------------------------
   {
     auto& items = page(Tab::Device, StrId::STR_SEC_DEVICE);
-    items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
-    items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
-    items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
-    items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
-    items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
-    items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
+    group(items, StrId::STR_GRP_TOOLS,
+          {{MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
+           {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
+           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS}});
+    group(items, StrId::STR_GRP_STORAGE, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
   }
 
   return pages;
@@ -203,6 +227,23 @@ void EpubReaderMenuActivity::syncProgressBarRow() {
   }
 }
 
+bool EpubReaderMenuActivity::isHeaderRing(const int ringIndex) const {
+  if (ringIndex <= 0) return false;  // 0 is the tab bar, never a heading
+  const auto& items = activeTab().items;
+  const size_t row = static_cast<size_t>(ringIndex - 1);
+  return row < items.size() && items[row].isHeader;
+}
+
+int EpubReaderMenuActivity::stepPastHeaders(int ringIndex, const int direction) const {
+  const int ringSize = static_cast<int>(activeTab().items.size()) + 1;
+  // Bounded by the ring so a tab that somehow held nothing but headings cannot spin.
+  for (int guard = 0; guard < ringSize && isHeaderRing(ringIndex); ++guard) {
+    ringIndex = direction >= 0 ? ButtonNavigator::nextIndex(ringIndex, ringSize)
+                               : ButtonNavigator::previousIndex(ringIndex, ringSize);
+  }
+  return ringIndex;
+}
+
 void EpubReaderMenuActivity::switchTab(const int direction) {
   const int count = static_cast<int>(tabs.size());
   if (count <= 1) return;
@@ -215,7 +256,13 @@ void EpubReaderMenuActivity::switchTab(const int direction) {
   // TextSettingsActivity::switchTab does the same for the same reason.
   const bool onTabBar = activeTab().selectedIndex == 0;
   activeTabIndex = (activeTabIndex + direction + count) % count;
-  if (onTabBar) activeTab().selectedIndex = 0;
+  if (onTabBar) {
+    activeTab().selectedIndex = 0;
+  } else {
+    // The remembered position was landable when this tab was left, but a conditional row
+    // may have come or gone since, so re-settle it off any heading it now sits on.
+    activeTab().selectedIndex = stepPastHeaders(activeTab().selectedIndex, 1);
+  }
   requestUpdate();
 }
 
@@ -237,7 +284,6 @@ void EpubReaderMenuActivity::closeCancelled() {
   result.isCancelled = true;
   result.data = MenuResult{-1,
                            pendingOrientation,
-                           selectedPageTurnOption,
                            selectedParagraphNumbering,
                            selectedParagraphNumberSize,
                            selectedPaperbackBody,
@@ -299,7 +345,8 @@ void EpubReaderMenuActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Back closes the menu and carries no hold, so it goes on the press.
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     closeCancelled();
     return;
   }
@@ -318,16 +365,6 @@ void EpubReaderMenuActivity::loop() {
       optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
                        pendingOrientation, [this](int idx) {
                          pendingOrientation = idx;
-                         requestUpdate();
-                       });
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
-      optionPopup.show(I18N.get(StrId::STR_AUTO_TURN_PAGES_PER_MIN), pageTurnLabels.data(),
-                       static_cast<int>(pageTurnLabels.size()), selectedPageTurnOption, [this](int idx) {
-                         selectedPageTurnOption = idx;
                          requestUpdate();
                        });
       requestUpdate();
@@ -382,9 +419,9 @@ void EpubReaderMenuActivity::loop() {
     // through pays one. The row label is right the next time the menu opens because the
     // reader moves APP_STATE to the new name before it returns.
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
-                         selectedParagraphNumbering, selectedParagraphNumberSize, selectedPaperbackBody,
-                         selectedPaperbackStatus, selectedStatusBar, selectedProgressBar, firedHoldFunction});
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedParagraphNumbering,
+                         selectedParagraphNumberSize, selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar,
+                         selectedProgressBar, firedHoldFunction});
     finish();
   };
 
@@ -406,20 +443,26 @@ void EpubReaderMenuActivity::loop() {
   // other is released in the same pass.
   const int ringSize = static_cast<int>(activeTab().items.size()) + 1;
 
-  buttonNavigator.onNextRelease([this, ringSize] {
-    activeTab().selectedIndex = ButtonNavigator::nextIndex(activeTab().selectedIndex, ringSize);
+  buttonNavigator.onNextStep([this, ringSize] {
+    activeTab().selectedIndex = stepPastHeaders(ButtonNavigator::nextIndex(activeTab().selectedIndex, ringSize), 1);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, ringSize] {
-    activeTab().selectedIndex = ButtonNavigator::previousIndex(activeTab().selectedIndex, ringSize);
+  buttonNavigator.onPreviousStep([this, ringSize] {
+    activeTab().selectedIndex =
+        stepPastHeaders(ButtonNavigator::previousIndex(activeTab().selectedIndex, ringSize), -1);
     requestUpdate();
   });
 
   buttonNavigator.onNextContinuous([this] { switchTab(); });
   buttonNavigator.onPreviousContinuous([this] { switchTab(-1); });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // With a function bound to the menu hold, Confirm carries two actions and cannot be
+  // resolved until the button comes up. With nothing bound there is nothing to tell
+  // apart, so the row activates the instant Confirm goes down.
+  const bool confirmHasHold = SETTINGS.menuHoldFunction != CrossPointSettings::LP_MENU_DISABLED;
+  if (confirmHasHold ? mappedInput.wasReleased(MappedInputManager::Button::Confirm)
+                     : mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     activateSelected();
     return;
   }
@@ -509,9 +552,6 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         if (value == MenuAction::ROTATE_SCREEN) {
           // Render current orientation value on the right edge of the content area.
           return I18N.get(orientationLabels[pendingOrientation]);
-        } else if (value == MenuAction::AUTO_PAGE_TURN) {
-          // Render current page turn value on the right edge of the content area.
-          return pageTurnLabels[selectedPageTurnOption];
         } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
           // Render current paragraph-numbering mode on the right edge.
           return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
@@ -529,7 +569,7 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return "";
         }
       },
-      true, nullptr, UI_10_FONT_ID);
+      true, nullptr, UI_10_FONT_ID, [this](int index) { return activeTab().items[index].isHeader; });
 
   // Footer / Hints. On the tab bar the Confirm button moves to the next tab, so the hint
   // names that tab rather than saying "Select" — that is what makes tab switching

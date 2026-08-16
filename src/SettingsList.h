@@ -429,11 +429,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     &CrossPointSettings::frontButtonFollowOrientation, "frontButtonFollowOrientation",
                                     StrId::STR_CAT_CONTROLS));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_LONG_PRESS_BEHAVIOR, &CrossPointSettings::longPressButtonBehavior,
-                                  {StrId::STR_LONG_PRESS_BEHAVIOR_OFF, StrId::STR_LONG_PRESS_BEHAVIOR_SKIP,
-                                   StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
-                                  "longPressButtonBehavior", StrId::STR_CAT_CONTROLS));
-
     v.push_back(SettingInfo::Enum(StrId::STR_LONG_PRESS_MENU, &CrossPointSettings::longPressMenuFunction,
                                   boundFunctionLabels(), "longPressMenuFunction", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions()));

@@ -124,7 +124,7 @@ void TextSettingsActivity::loop() {
   if (valueBar_.handleInput(mappedInput, [this] { requestUpdate(); })) return;     // bar owns input while open
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
   }
@@ -141,12 +141,12 @@ void TextSettingsActivity::loop() {
 
   const int ringSize = currentListSize() + 1;  // +1 for the tab bar at position 0
 
-  buttonNavigator_.onNextRelease([this, ringSize] {
+  buttonNavigator_.onNextStep([this, ringSize] {
     selectedIndex() = ButtonNavigator::nextIndex(selectedIndex(), ringSize);
     requestUpdate();
   });
 
-  buttonNavigator_.onPreviousRelease([this, ringSize] {
+  buttonNavigator_.onPreviousStep([this, ringSize] {
     selectedIndex() = ButtonNavigator::previousIndex(selectedIndex(), ringSize);
     requestUpdate();
   });

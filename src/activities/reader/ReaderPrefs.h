@@ -56,7 +56,7 @@ struct ReaderPrefs {
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 10;  // v10: per-book status bar on/off
+  static constexpr uint8_t VERSION = 11;  // v11: per-book status bar layout
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -119,13 +119,36 @@ struct ReaderPrefs {
   // (see READER_PREFS_V8_SIZE below). Any future field must also go last, for the
   // same reason.
   uint8_t paragraphNumberSize = 1;  // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
-  // Status bar on/off for this book, seeded from the global SETTINGS.sbEnabled. The
-  // WHAT and WHERE of each status bar item stays global; only the master switch is
-  // per-book. Turning it off frees the reserved top/bottom bands, which changes the
-  // viewport and therefore repaginates this book's cache like any margin change.
+  // Status bar on/off for this book, seeded from the global SETTINGS.sbEnabled.
+  // Turning it off frees the reserved top/bottom bands, which changes the viewport and
+  // therefore repaginates this book's cache like any margin change.
   //
   // APPENDED LAST. See the note above paragraphNumberSize.
   uint8_t statusBarEnabled = 1;
+
+  // The whole status bar layout, per book, seeded from the global settings the first
+  // time this book gets a sidecar. Defaults below mirror CrossPointSettings so a
+  // record written before v11 falls back to the same layout the firmware ships with,
+  // rather than to a blank bar.
+  //
+  // APPENDED LAST as one block. See the note above paragraphNumberSize.
+  uint8_t sbBatteryPos = 4;       // CrossPointSettings::SB_ANCHOR_BL
+  uint8_t sbClockPos = 0;         // SB_ANCHOR_OFF
+  uint8_t sbTitlePos = 5;         // SB_ANCHOR_BC
+  uint8_t sbTitleSource = 0;      // SB_TITLE_CHAPTER
+  uint8_t sbTitleTruncate = 0;    // greedy, no ellipsis
+  uint8_t sbPagePos = 6;          // SB_ANCHOR_BR
+  uint8_t sbPageFormat = 0;       // SB_PAGE_FRACTION
+  uint8_t sbBookPctPos = 6;       // SB_ANCHOR_BR
+  uint8_t sbChapterPctPos = 0;    // SB_ANCHOR_OFF
+  uint8_t sbChapterNumPos = 0;    // SB_ANCHOR_OFF
+  uint8_t sbSessionPagesPos = 0;  // SB_ANCHOR_OFF
+  uint8_t sbBookBar = 0;          // SB_EDGE_OFF
+  uint8_t sbChapterBar = 0;       // SB_EDGE_OFF
+  uint8_t sbBarThickness = 1;     // SB_BAR_MEDIUM
+  uint8_t sbFloatingBar = 0;
+  uint8_t sbBarOutline = 0;
+  uint8_t sbOffBar = 0;  // SB_OFFBAR_OFF
 
   // Snapshot the current global reader settings. Zero-pads sdFontFamilyName so the
   // trailing bytes are canonical and whole-blob memcmp change-detection is exact.
@@ -136,6 +159,7 @@ struct ReaderPrefs {
 // appended. They live out here because offsetof needs the completed type.
 inline constexpr size_t READER_PREFS_V8_SIZE = offsetof(ReaderPrefs, paragraphNumberSize);
 inline constexpr size_t READER_PREFS_V9_SIZE = offsetof(ReaderPrefs, statusBarEnabled);
+inline constexpr size_t READER_PREFS_V10_SIZE = offsetof(ReaderPrefs, sbBatteryPos);
 
 // Bytes to read for a record written by `version`, or 0 when that version cannot be
 // read at all. One rule, shared by the stream and HalFile overloads, so the host tests
@@ -144,6 +168,7 @@ inline constexpr size_t READER_PREFS_V9_SIZE = offsetof(ReaderPrefs, statusBarEn
 inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version >= 5 && version <= 8) return READER_PREFS_V8_SIZE;
   if (version == 9) return READER_PREFS_V9_SIZE;
+  if (version == 10) return READER_PREFS_V10_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -154,8 +179,10 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
 static_assert(alignof(ReaderPrefs) == 1, "ReaderPrefs must stay byte-aligned POD");
 static_assert(READER_PREFS_V9_SIZE == READER_PREFS_V8_SIZE + 1,
               "paragraphNumberSize must sit between the v8 and v9 record ends, with no padding");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V9_SIZE + 1,
-              "statusBarEnabled must be the last field, with no padding before it");
+static_assert(READER_PREFS_V10_SIZE == READER_PREFS_V9_SIZE + 1,
+              "statusBarEnabled must sit between the v9 and v10 record ends, with no padding");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V10_SIZE + 17,
+              "the v11 status bar block must be the last 17 bytes, with no padding before it");
 
 // ── Mid-edit override decision ────────────────────────────────────────────────
 // While the in-book Reader Settings screen is open, the edited values live on the

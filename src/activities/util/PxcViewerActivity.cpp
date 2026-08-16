@@ -129,7 +129,7 @@ void PxcViewerActivity::openNeighbour(const int delta) {
 void PxcViewerActivity::loop() {
   Activity::loop();
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     // Hand the browser the file this viewer was showing so it reopens on that
     // row. After a delete the file is gone, so fall back to the folder.
     activityManager.goToFileBrowser(fileStillPresent ? filePath : folderOf(filePath));
@@ -138,7 +138,7 @@ void PxcViewerActivity::loop() {
 
   // Confirm favourites, because it is the action this screen exists for and the
   // one that gets used most while triaging a folder.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
     std::string updated;
     const auto result = FavoriteImage::setFavorite(filePath, makeFavorite, &updated);
@@ -156,7 +156,7 @@ void PxcViewerActivity::loop() {
 
   // Left deletes, behind a confirmation. On success the browser reopens at this
   // file's folder; on cancel or failure the viewer re-renders.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     startActivityForResult(std::make_unique<ConfirmationActivity>(
                                renderer, mappedInput, tr(STR_DELETE) + std::string("? "), baseNameOf(filePath)),
                            [this](const ActivityResult& res) {
@@ -184,7 +184,7 @@ void PxcViewerActivity::loop() {
   }
 
   // Right moves the wallpaper between /sleep and "/sleep pause".
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     if (!crosspoint::sleep::isUnderSleepDirs(filePath)) return;
 
     // Work out where to go next BEFORE the move, while the file is still in place
@@ -216,11 +216,11 @@ void PxcViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     openNeighbour(-1);
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     openNeighbour(1);
     return;
   }

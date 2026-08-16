@@ -21,9 +21,9 @@ void ButtonNavigator::onNextPress(const Callback& callback) { onPress(getNextBut
 
 void ButtonNavigator::onPreviousPress(const Callback& callback) { onPress(getPreviousButtons(), callback); }
 
-void ButtonNavigator::onNextRelease(const Callback& callback) { onRelease(getNextButtons(), callback); }
+void ButtonNavigator::onNextStep(const Callback& callback) { onStep(getNextButtons(), callback); }
 
-void ButtonNavigator::onPreviousRelease(const Callback& callback) { onRelease(getPreviousButtons(), callback); }
+void ButtonNavigator::onPreviousStep(const Callback& callback) { onStep(getPreviousButtons(), callback); }
 
 void ButtonNavigator::onNextContinuous(const Callback& callback) { onContinuous(getNextButtons(), callback); }
 
@@ -39,18 +39,21 @@ void ButtonNavigator::onPress(const Buttons& buttons, const Callback& callback) 
   }
 }
 
-void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback) {
-  const bool wasReleased = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
+void ButtonNavigator::onStep(const Buttons& buttons, const Callback& callback) {
+  // One step the instant the button goes down. Holding then repeats through
+  // onContinuous, which only starts after continuousStartMs, so the press and the
+  // first repeat can never fire in the same hold.
+  const bool pressed = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
+    return mappedInput != nullptr && mappedInput->wasPressed(button);
+  });
+  if (pressed) callback();
+
+  // The release itself no longer moves anything; it only ends a repeat run so the
+  // next hold has to earn its delay again.
+  const bool released = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
     return mappedInput != nullptr && mappedInput->wasReleased(button);
   });
-
-  if (wasReleased) {
-    if (lastContinuousNavTime == 0) {
-      callback();
-    }
-
-    lastContinuousNavTime = 0;
-  }
+  if (released) lastContinuousNavTime = 0;
 }
 
 void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callback) {

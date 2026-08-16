@@ -273,14 +273,14 @@ void BmpViewerActivity::loop() {
     return true;
   };
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     activityManager.goToFileBrowser(filePath);
     return;
   }
 
   const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (triage) {
       doToggleFavorite();
     } else if (canSetSleepCover()) {
@@ -289,7 +289,7 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     if (triage) {
       promptDelete();
     } else {
@@ -298,7 +298,7 @@ void BmpViewerActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     if (triage) {
       doTogglePause();
     } else {
@@ -309,12 +309,12 @@ void BmpViewerActivity::loop() {
 
   // Siblings stay on Up/Down whatever the folder, so stepping through a wallpaper
   // folder is the same movement in both viewers.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     openSibling(-1);
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Down)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     openSibling(1);
     return;
   }

@@ -168,6 +168,10 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
 }
 
 void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
+  // Buttons act on the press, so the press that caused this transition is very likely
+  // still held. Make the incoming screen wait for the release before it reads anything,
+  // or one push would fire on both screens.
+  mappedInput.armAfterScreenChange();
   // Note: no lock here, this is usually called by loop() and we may run into deadlock
   if (currentActivity) {
     // Defer launch if we're currently in an activity, to avoid deleting the current activity
@@ -236,6 +240,10 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem) {
 void ActivityManager::goToCrashReport() { replaceActivity(std::make_unique<CrashActivity>(renderer, mappedInput)); }
 
 void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
+  // Buttons act on the press, so the press that caused this transition is very likely
+  // still held. Make the incoming screen wait for the release before it reads anything,
+  // or one push would fire on both screens.
+  mappedInput.armAfterScreenChange();
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while pushActivity is not expected");
@@ -246,6 +254,10 @@ void ActivityManager::pushActivity(std::unique_ptr<Activity>&& activity) {
 }
 
 void ActivityManager::popActivity() {
+  // Buttons act on the press, so the press that caused this transition is very likely
+  // still held. Make the incoming screen wait for the release before it reads anything,
+  // or one push would fire on both screens.
+  mappedInput.armAfterScreenChange();
   if (pendingActivity) {
     // Should never happen in practice
     LOG_ERR("ACT", "pendingActivity while popActivity is not expected");

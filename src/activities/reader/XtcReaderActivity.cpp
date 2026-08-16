@@ -152,10 +152,8 @@ void XtcReaderActivity::loop() {
     return;
   }
 
-  const unsigned long heldMs = mappedInput.getHeldTime();
-  const bool skipPages =
-      SETTINGS.longPressButtonBehavior == SETTINGS.CHAPTER_SKIP && heldMs > ReaderUtils::SKIP_HOLD_MS;
-  const int skipAmount = skipPages ? 10 : 1;
+  // Page turn buttons carry nothing but the page turn now, so every turn is one page.
+  constexpr int skipAmount = 1;
 
   if (prevTriggered) {
     // Backward is re-reading, not progress: close the page out rather than credit it.

@@ -164,20 +164,20 @@ void ReaderPresetsActivity::loop() {
       return;  // closing press still held
     }
     popupClosing = false;
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       return;  // swallow the release that closed the popup
     }
   }
 
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, true);
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     activateSelected();
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     ActivityResult res;
     res.isCancelled = true;
     setResult(std::move(res));

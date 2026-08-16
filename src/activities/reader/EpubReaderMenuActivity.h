@@ -14,17 +14,16 @@ class EpubReaderMenuActivity final : public Activity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
+    SECTION_HEADER,  // not an action: the marker a section heading row carries
     SELECT_CHAPTER,
     FOOTNOTES,
     TEXT_SETTINGS,
     GO_TO_PERCENT,
-    AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,
     TOGGLE_BOOKMARK,
     SCREENSHOT,
     DISPLAY_QR,
-    GO_HOME,
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
@@ -36,9 +35,9 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PAPERBACK_STATUS,    // toggle heavier ink for status bar text
     TOGGLE_STATUS_BAR,          // show or hide the reading status bar for this book only
     TOGGLE_PROGRESS_BAR,        // cycle Off / Slim / Medium / Fat for the bar that outlives a hidden status bar
+    CUSTOMISE_STATUS_BAR,       // open the full per-item status bar screen for this book
     GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
-    BOOK_INFO,                  // cover, author, language and the publisher synopsis
     READING_STATS,              // per-book and all-books reading statistics
     STEAL_LOOK,                 // copy another book's reader settings onto this one
     READING_THEMES,             // saved reader looks: apply one to this book, or save this one
@@ -75,6 +74,11 @@ class EpubReaderMenuActivity final : public Activity {
   struct MenuItem {
     MenuAction action;
     StrId labelId;
+    // Section heading rather than a row: drawn as a filled bar, never landable. The
+    // nav ring steps past it, so no handler ever sees SECTION_HEADER.
+    bool isHeader = false;
+
+    static MenuItem Header(const StrId labelId) { return MenuItem{MenuAction::SECTION_HEADER, labelId, true}; }
   };
 
   // One tab page: which tab it is, the label drawn in the tab bar, its rows, and where
@@ -101,6 +105,11 @@ class EpubReaderMenuActivity final : public Activity {
   TabPage& activeTab() { return tabs[activeTabIndex]; }
   const TabPage& activeTab() const { return tabs[activeTabIndex]; }
   // Move to another tab, wrapping. The cursor of the tab being left is kept.
+  // True when this nav-ring position is a section heading (ring 0 is the tab bar).
+  bool isHeaderRing(int ringIndex) const;
+  // Walks on in `direction` until the ring position is landable, so a heading is never
+  // selected and Confirm can never fire on one.
+  int stepPastHeaders(int ringIndex, int direction) const;
   void switchTab(int direction = 1);
   void closeCancelled();
 
@@ -121,7 +130,6 @@ class EpubReaderMenuActivity final : public Activity {
   std::string author;
   std::string chapterName;
   uint8_t pendingOrientation = 0;
-  uint8_t selectedPageTurnOption = 0;
   uint8_t selectedParagraphNumbering = 0;
   uint8_t selectedParagraphNumberSize = 1;
   // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
@@ -142,7 +150,6 @@ class EpubReaderMenuActivity final : public Activity {
   // Same four labels the Customise Status Bar screen uses for this setting.
   const std::vector<StrId> progressBarLabels = {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM,
                                                 StrId::STR_FAT};
-  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

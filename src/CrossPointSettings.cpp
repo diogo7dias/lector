@@ -461,6 +461,85 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
 }
 
+StatusBarBlock CrossPointSettings::captureStatusBarBlock() const {
+  StatusBarBlock b;
+  b.enabled = sbEnabled;
+  b.batteryPos = sbBatteryPos;
+  b.clockPos = sbClockPos;
+  b.titlePos = sbTitlePos;
+  b.titleSource = sbTitleSource;
+  b.titleTruncate = sbTitleTruncate;
+  b.pagePos = sbPagePos;
+  b.pageFormat = sbPageFormat;
+  b.bookPctPos = sbBookPctPos;
+  b.chapterPctPos = sbChapterPctPos;
+  b.chapterNumPos = sbChapterNumPos;
+  b.sessionPagesPos = sbSessionPagesPos;
+  b.bookBar = sbBookBar;
+  b.chapterBar = sbChapterBar;
+  b.barThickness = sbBarThickness;
+  b.floatingBar = sbFloatingBar;
+  b.barOutline = sbBarOutline;
+  b.offBar = sbOffBar;
+  return b;
+}
+
+void CrossPointSettings::applyStatusBarBlock(const StatusBarBlock& b) {
+  sbEnabled = b.enabled;
+  sbBatteryPos = b.batteryPos;
+  sbClockPos = b.clockPos;
+  sbTitlePos = b.titlePos;
+  sbTitleSource = b.titleSource;
+  sbTitleTruncate = b.titleTruncate;
+  sbPagePos = b.pagePos;
+  sbPageFormat = b.pageFormat;
+  sbBookPctPos = b.bookPctPos;
+  sbChapterPctPos = b.chapterPctPos;
+  sbChapterNumPos = b.chapterNumPos;
+  sbSessionPagesPos = b.sessionPagesPos;
+  sbBookBar = b.bookBar;
+  sbChapterBar = b.chapterBar;
+  sbBarThickness = b.barThickness;
+  sbFloatingBar = b.floatingBar;
+  sbBarOutline = b.barOutline;
+  sbOffBar = b.offBar;
+}
+
+void CrossPointSettings::setStatusBarOverride(const ReaderPrefs& prefs) {
+  // Back up the true global block once: reopening the menu re-publishes the book's
+  // values, and a second capture would back up the book's own layout as "global".
+  if (!sbOverrideActive_) {
+    sbGlobalBackup_ = captureStatusBarBlock();
+    sbOverrideActive_ = true;
+  }
+  StatusBarBlock b;
+  b.enabled = prefs.statusBarEnabled;
+  b.batteryPos = prefs.sbBatteryPos;
+  b.clockPos = prefs.sbClockPos;
+  b.titlePos = prefs.sbTitlePos;
+  b.titleSource = prefs.sbTitleSource;
+  b.titleTruncate = prefs.sbTitleTruncate;
+  b.pagePos = prefs.sbPagePos;
+  b.pageFormat = prefs.sbPageFormat;
+  b.bookPctPos = prefs.sbBookPctPos;
+  b.chapterPctPos = prefs.sbChapterPctPos;
+  b.chapterNumPos = prefs.sbChapterNumPos;
+  b.sessionPagesPos = prefs.sbSessionPagesPos;
+  b.bookBar = prefs.sbBookBar;
+  b.chapterBar = prefs.sbChapterBar;
+  b.barThickness = prefs.sbBarThickness;
+  b.floatingBar = prefs.sbFloatingBar;
+  b.barOutline = prefs.sbBarOutline;
+  b.offBar = prefs.sbOffBar;
+  applyStatusBarBlock(b);
+}
+
+void CrossPointSettings::clearStatusBarOverride() {
+  if (!sbOverrideActive_) return;
+  applyStatusBarBlock(sbGlobalBackup_);
+  sbOverrideActive_ = false;
+}
+
 void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues, const ReaderEditSink sink,
                                                 void* sinkCtx) {
   if (!readerEditOverlayActive_) {
@@ -486,6 +565,19 @@ ReaderPrefs CrossPointSettings::endReaderEditOverlay() {
 }
 
 bool CrossPointSettings::saveToFile() const {
+  // A book's own status bar layout is overlaid on the live sb* fields. Swap the true
+  // global block back for the write, exactly as the reader-edit overlay below does for
+  // the reader fields, so a book's bar can never become the global one.
+  if (sbOverrideActive_) {
+    auto* self = const_cast<CrossPointSettings*>(this);
+    const StatusBarBlock booksBlock = captureStatusBarBlock();
+    self->applyStatusBarBlock(sbGlobalBackup_);
+    self->sbOverrideActive_ = false;
+    const bool ok = self->saveToFile();
+    self->applyStatusBarBlock(booksBlock);
+    self->sbOverrideActive_ = true;
+    return ok;
+  }
   if (!readerEditOverlayActive_) {
     return PersistableStore<CrossPointSettings>::saveToFile();
   }

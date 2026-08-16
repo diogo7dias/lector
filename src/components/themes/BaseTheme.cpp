@@ -452,19 +452,17 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
     const int itemY = rect.y + (i - windowStart) * rowHeight;
 
-    // Section heading: the label, then a rule filling the rest of the row's width so the
-    // eye reads it as a divider rather than as another option it could pick.
+    // Section heading: a filled bar spanning the list, label centred and knocked out
+    // white. Deliberately the same fill the selected row uses — a heading is never
+    // landable (the caller's navigation steps past it), so the two can never be on
+    // screen in a way that makes one look like the other, and one solid band reads as
+    // a divider far better at e-ink contrast than a hairline rule does.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
       const std::string headingText = rowTitle(i);
-      const int headingX = rect.x + BaseMetrics::values.contentSidePadding;
-      renderer.drawText(itemFontId, headingX, itemY, headingText.c_str());
+      renderer.fillRect(rect.x, itemY - 2, rect.width, rowHeight);
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
-      const int ruleX = headingX + headingW + 8;
-      const int ruleRight = rect.x + contentWidth - BaseMetrics::values.contentSidePadding;
-      if (ruleRight > ruleX) {
-        renderer.drawLine(ruleX, itemY + renderer.getFontAscenderSize(itemFontId) / 2, ruleRight,
-                          itemY + renderer.getFontAscenderSize(itemFontId) / 2);
-      }
+      const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
+      renderer.drawText(itemFontId, headingX, itemY, headingText.c_str(), /*black=*/false);
       continue;
     }
 
