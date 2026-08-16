@@ -150,11 +150,16 @@ std::string FileBrowserActivity::rowValue(const int row) const {
 }
 
 void FileBrowserActivity::applySearch(const std::string& query) {
-  searchQuery = query;
-  filtered = searchActive() ? librarysearch::rankMatches(files, searchQuery) : std::vector<int>{};
-  // Land on the first result, which is the whole point of having searched.
-  selectorIndex = static_cast<size_t>(std::min(headerRowCount(), std::max(0, totalRowCount() - 1)));
-  scrollOffset = 0;
+  {
+    // The render task walks `filtered` to map rows onto files; swapping it mid-draw
+    // would index the wrong entries.
+    RenderLock lock(*this);
+    searchQuery = query;
+    filtered = searchActive() ? librarysearch::rankMatches(files, searchQuery) : std::vector<int>{};
+    // Land on the first result, which is the whole point of having searched.
+    selectorIndex = static_cast<size_t>(std::min(headerRowCount(), std::max(0, totalRowCount() - 1)));
+    scrollOffset = 0;
+  }
   requestUpdate(true);
 }
 
@@ -353,13 +358,18 @@ void FileBrowserActivity::loop() {
           LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
           if (removeDirFile(fullPath)) {
             LOG_DBG("FileBrowser", "Deleted successfully");
-            loadFiles();
-            const int rows = totalRowCount();
-            if (rows == 0) {
-              selectorIndex = 0;
-            } else if (selectorIndex >= static_cast<size_t>(rows)) {
-              // Move selection to the new "last" item
-              selectorIndex = static_cast<size_t>(rows - 1);
+            {
+              // buildScreen() reads files/basepath on the render task; loadFiles() frees and
+              // rebuilds those strings, so the swap has to happen under the render lock.
+              RenderLock lock(*this);
+              loadFiles();
+              const int rows = totalRowCount();
+              if (rows == 0) {
+                selectorIndex = 0;
+              } else if (selectorIndex >= static_cast<size_t>(rows)) {
+                // Move selection to the new "last" item
+                selectorIndex = static_cast<size_t>(rows - 1);
+              }
             }
 
             requestUpdate(true);
@@ -380,9 +390,13 @@ void FileBrowserActivity::loop() {
       if (basepath.back() != '/') basepath += "/";
 
       if (isDirectory) {
-        basepath += entry.substr(0, entry.length() - 1);
-        loadFiles();
-        selectorIndex = 0;
+        {
+          // Same race as the delete path: swap the listing under the render lock.
+          RenderLock lock(*this);
+          basepath += entry.substr(0, entry.length() - 1);
+          loadFiles();
+          selectorIndex = 0;
+        }
         requestUpdate();
       } else {
         onSelectBook(basepath + entry);
@@ -418,9 +432,12 @@ void FileBrowserActivity::loop() {
                                                mappedInput.getHeldTime(), GO_HOME_MS)
                              : backHold.updatePressOnly(mappedInput.wasPressed(MappedInputManager::Button::Back));
   if (backFired == hold_button::Fired::Hold) {
-    basepath = "/";
-    loadFiles();
-    selectorIndex = 0;
+    {
+      RenderLock lock(*this);
+      basepath = "/";
+      loadFiles();
+      selectorIndex = 0;
+    }
     requestUpdate();
     return;
   }
@@ -429,13 +446,16 @@ void FileBrowserActivity::loop() {
       if (basepath != "/") {
         const std::string oldPath = basepath;
 
-        basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-        if (basepath.empty()) basepath = "/";
-        loadFiles();
+        {
+          RenderLock lock(*this);
+          basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+          if (basepath.empty()) basepath = "/";
+          loadFiles();
 
-        const auto pos = oldPath.find_last_of('/');
-        const std::string dirName = oldPath.substr(pos + 1) + "/";
-        selectorIndex = findEntryRow(dirName);
+          const auto pos = oldPath.find_last_of('/');
+          const std::string dirName = oldPath.substr(pos + 1) + "/";
+          selectorIndex = findEntryRow(dirName);
+        }
 
         requestUpdate();
       } else if (mode == Mode::PickFirmware) {
