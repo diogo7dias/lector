@@ -2,8 +2,6 @@
 
 #include <HalGPIO.h>
 
-#include "util/InputArmingPolicy.h"
-
 class GfxRenderer;
 
 class MappedInputManager {
@@ -36,22 +34,10 @@ class MappedInputManager {
 
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
-  // Called once per main-loop pass. Also settles the arming gate below, so a screen
-  // opened by a still-held press starts reading only after that press comes back up.
-  void update() const {
-    gpio.update();
-    armingGate.update(isAnyPressed());
-  }
+  void update() const { gpio.update(); }
 
-  // True while any physical button is down. Used by the arming gate; also the honest
-  // answer to "is the user still holding what opened this screen".
+  // True while any physical button is down.
   bool isAnyPressed() const;
-
-  // A screen change happened: swallow button edges until everything is released. See
-  // util/InputArmingPolicy.h for why. Called by ActivityManager on every transition,
-  // so no screen has to remember to do it.
-  void armAfterScreenChange() const { armingGate.arm(); }
-  bool inputArmed() const { return armingGate.armed(); }
   bool wasPressed(Button button) const;
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
@@ -135,9 +121,6 @@ class MappedInputManager {
                          bool hasSubtitle) const;
   void rememberTouchHeldTime() const;
 
-  // Mutable because the whole read API is const and the gate is bookkeeping, not state
-  // the caller can see: it only ever suppresses edges.
-  mutable input_arming::Gate armingGate;
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;
 

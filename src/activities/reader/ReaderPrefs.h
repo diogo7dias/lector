@@ -150,6 +150,34 @@ struct ReaderPrefs {
   uint8_t sbBarOutline = 0;
   uint8_t sbOffBar = 0;  // SB_OFFBAR_OFF
 
+  // Copy the status bar block from `source`.
+  //
+  // A sidecar written before v11 stops before that block, so every field would
+  // otherwise fall back to the constructed default: the layout this firmware ships
+  // with, not the one the user configured. Reading a book with an older sidecar would
+  // then silently rearrange its status bar. Migration seeds the block from the live
+  // global settings instead, which is what the user already sees everywhere else.
+  void adoptStatusBarFrom(const ReaderPrefs& source) {
+    statusBarEnabled = source.statusBarEnabled;
+    sbBatteryPos = source.sbBatteryPos;
+    sbClockPos = source.sbClockPos;
+    sbTitlePos = source.sbTitlePos;
+    sbTitleSource = source.sbTitleSource;
+    sbTitleTruncate = source.sbTitleTruncate;
+    sbPagePos = source.sbPagePos;
+    sbPageFormat = source.sbPageFormat;
+    sbBookPctPos = source.sbBookPctPos;
+    sbChapterPctPos = source.sbChapterPctPos;
+    sbChapterNumPos = source.sbChapterNumPos;
+    sbSessionPagesPos = source.sbSessionPagesPos;
+    sbBookBar = source.sbBookBar;
+    sbChapterBar = source.sbChapterBar;
+    sbBarThickness = source.sbBarThickness;
+    sbFloatingBar = source.sbFloatingBar;
+    sbBarOutline = source.sbBarOutline;
+    sbOffBar = source.sbOffBar;
+  }
+
   // Snapshot the current global reader settings. Zero-pads sdFontFamilyName so the
   // trailing bytes are canonical and whole-blob memcmp change-detection is exact.
   static ReaderPrefs fromGlobal();

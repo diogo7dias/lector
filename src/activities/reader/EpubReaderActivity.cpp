@@ -1564,6 +1564,12 @@ void EpubReaderActivity::loadReaderPrefs() {
       if (prefs_.paragraphNumbering >= CrossPointSettings::PARAGRAPH_NUMBERING_COUNT) {
         prefs_.paragraphNumbering = CrossPointSettings::PARA_NUM_CHAPTER;
       }
+      // A sidecar older than v11 stops before the status bar block, so those fields
+      // came back as this firmware's shipped defaults rather than the layout the user
+      // configured. Seed them from the global settings, which is the bar every other
+      // book already shows. Applied straight away, unlike the reading defaults below:
+      // it is what stops an old book silently rearranging its status bar on first open.
+      if (migrated) prefs_.adoptStatusBarFrom(ReaderPrefs::fromGlobal());
       prefsCustom_ = true;
       // An upgraded sidecar is not applied here. The saved page number was produced by
       // the OLD layout, so the chapter is laid out that way first, the reading position

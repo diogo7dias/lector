@@ -452,3 +452,35 @@ TEST(ReaderPrefs, Version10SidecarKeepsEverythingAndDefaultsTheStatusBarLayout) 
   EXPECT_EQ(fresh.sbBarThickness, loaded.sbBarThickness);
   EXPECT_EQ(fresh.sbOffBar, loaded.sbOffBar);
 }
+
+// Migration must not hand an old book this firmware's shipped bar. The block is
+// seeded from the settings the user already sees, or opening a book written before
+// v11 silently rearranges its status bar.
+TEST(ReaderPrefs, AdoptStatusBarFromCopiesTheWholeBlockAndNothingElse) {
+  ReaderPrefs global;
+  global.statusBarEnabled = 0;
+  global.sbBatteryPos = 3;
+  global.sbTitlePos = 1;
+  global.sbPagePos = 2;
+  global.sbBookBar = 2;
+  global.sbBarThickness = 2;
+  global.sbFloatingBar = 1;
+  global.sbOffBar = 3;
+
+  ReaderPrefs book = makeSample();
+  const uint8_t keptFontSize = book.fontPointSize;
+  const uint8_t keptMargin = book.screenMargin;
+  book.adoptStatusBarFrom(global);
+
+  EXPECT_EQ(0, book.statusBarEnabled);
+  EXPECT_EQ(3, book.sbBatteryPos);
+  EXPECT_EQ(1, book.sbTitlePos);
+  EXPECT_EQ(2, book.sbPagePos);
+  EXPECT_EQ(2, book.sbBookBar);
+  EXPECT_EQ(2, book.sbBarThickness);
+  EXPECT_EQ(1, book.sbFloatingBar);
+  EXPECT_EQ(3, book.sbOffBar);
+  // The book's own reading settings are untouched: this copies the bar, nothing else.
+  EXPECT_EQ(keptFontSize, book.fontPointSize);
+  EXPECT_EQ(keptMargin, book.screenMargin);
+}
