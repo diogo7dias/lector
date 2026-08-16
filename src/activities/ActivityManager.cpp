@@ -262,6 +262,16 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
+bool ActivityManager::captureAutoSyncSnapshot(KOReaderAutoSync::Snapshot& outSnapshot) const {
+  if (currentActivity && currentActivity->captureAutoSyncSnapshot(outSnapshot)) return true;
+  // The reader stays on the stack while one of its child screens is on top, and
+  // locking from a chapter list is still locking out of a book.
+  for (auto it = stackActivities.rbegin(); it != stackActivities.rend(); ++it) {
+    if ((*it)->captureAutoSyncSnapshot(outSnapshot)) return true;
+  }
+  return false;
+}
+
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::wantsPowerDoubleClick() const {

@@ -7,6 +7,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
@@ -198,7 +199,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     group(items, StrId::STR_GRP_TOOLS,
           {{MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
            {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
-           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS}});
+           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
+           {MenuAction::TOGGLE_KOSYNC_AUTO, StrId::STR_AUTO_SYNC}});
     group(items, StrId::STR_GRP_STORAGE, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
   }
 
@@ -405,6 +407,15 @@ void EpubReaderMenuActivity::loop() {
       requestUpdate();
       return;
     }
+    if (selectedAction == MenuAction::TOGGLE_KOSYNC_AUTO) {
+      // Device-wide and stored with the sync credentials rather than with this book's
+      // settings, so it is written straight through instead of being applied on exit.
+      // One SD write per press, which is what a checkbox row costs everywhere else.
+      KOREADER_STORE.setAutoSync(!KOREADER_STORE.getAutoSync());
+      KOREADER_STORE.saveToFile();
+      requestUpdate();
+      return;
+    }
     if (selectedAction == MenuAction::TOGGLE_PROGRESS_BAR) {
       // Cycle Off / Slim / Medium / Fat in place; the reader applies it on exit.
       selectedProgressBar = (selectedProgressBar + 1) % CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT;
@@ -563,6 +574,8 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_STATUS_BAR) {
           return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+        } else if (value == MenuAction::TOGGLE_KOSYNC_AUTO) {
+          return I18N.get(KOREADER_STORE.getAutoSync() ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
         } else if (value == MenuAction::TOGGLE_PROGRESS_BAR) {
           return I18N.get(progressBarLabels[selectedProgressBar % progressBarLabels.size()]);
         } else {

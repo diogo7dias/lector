@@ -154,6 +154,13 @@ class EpubReaderActivity final : public Activity {
   // index, and the row order depends on which items are ticked, so the mapping cannot be
   // recomputed from the settings mask alone at callback time.
   std::vector<uint8_t> quickMenuFunctions;
+  // Banner naming where automatic sync put the reader, after a position arrived from
+  // another device. Same timed-banner shape as the bookmark message: drawn over the
+  // first rendered page, cleared by the reader's own timer.
+  std::string resumeBannerText;
+  bool showResumeBanner = false;
+  unsigned long resumeBannerTime = 0;
+  static constexpr unsigned long RESUME_BANNER_DURATION_MS = 4000;
 
   // Back and Confirm are acted on at RELEASE here, while child screens (the Settings
   // family) close on PRESS. These pair each release with the press this activity saw, so
@@ -309,6 +316,13 @@ class EpubReaderActivity final : public Activity {
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();
+  // Unattended push taken on the way out of the book. Does nothing unless automatic
+  // sync is on and the device can reach a saved network; when it does run it ends in
+  // a silent restart, so nothing after the call in the caller is reached.
+  void autoSyncPushOnLeavingBook();
+  // Apply the position automatic sync fetched before this boot, if one is waiting for
+  // this book, and describe it for the resume banner. Called once, from onEnter().
+  void applyPendingAutoSyncPull();
   void applyOrientation(uint8_t orientation);
   // Per-book reader settings (#9).
   std::string readerOverridePath() const;
@@ -385,5 +399,6 @@ class EpubReaderActivity final : public Activity {
     return true;
   }
   ScreenshotInfo getScreenshotInfo() const override;
+  bool captureAutoSyncSnapshot(KOReaderAutoSync::Snapshot& outSnapshot) const override;
   CrossPointPosition getCurrentPosition() const;
 };

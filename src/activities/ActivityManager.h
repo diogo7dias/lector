@@ -17,6 +17,10 @@
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
+namespace KOReaderAutoSync {
+struct Snapshot;  // forward declaration
+}
+
 enum class HomeMenuItem { NONE, FILE_BROWSER, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
 
 /**
@@ -110,6 +114,9 @@ class ActivityManager {
   void runPowerDoubleClick();
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
+  // Reading position for automatic KOReader sync, taken from the reader wherever it
+  // sits — it stays on the stack while a child screen (menu, dictionary) is on top.
+  bool captureAutoSyncSnapshot(KOReaderAutoSync::Snapshot& outSnapshot) const;
 
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.

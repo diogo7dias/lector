@@ -26,6 +26,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
   doc["matchMethod"] = static_cast<uint8_t>(getMatchMethod());
   doc["sendMetadata"] = getSendMetadata();
   doc["syncBehavior"] = static_cast<uint8_t>(getSyncBehavior());
+  doc["autoSync"] = getAutoSync();
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
@@ -70,6 +71,8 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
     setSyncBehavior(KOReaderSyncBehavior::ASK_EVERY_TIME);
     needsResave = true;
   }
+
+  setAutoSync(doc["autoSync"] | false);
 
   if (needsResave) {
     LOG_DBG("KRS", "Resaving KOReader credentials to update format");
@@ -150,4 +153,9 @@ void KOReaderCredentialStore::setSyncBehavior(KOReaderSyncBehavior behavior) {
   }
   syncBehavior = behavior;
   LOG_DBG("KRS", "Set sync behavior: %s", behavior == KOReaderSyncBehavior::SMART ? "Smart" : "Ask");
+}
+
+void KOReaderCredentialStore::setAutoSync(const bool enabled) {
+  autoSync = enabled;
+  LOG_DBG("KRS", "Set auto sync: %s", enabled ? "true" : "false");
 }

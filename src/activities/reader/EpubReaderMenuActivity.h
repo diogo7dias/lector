@@ -25,6 +25,7 @@ class EpubReaderMenuActivity final : public Activity {
     SCREENSHOT,
     DISPLAY_QR,
     SYNC,
+    TOGGLE_KOSYNC_AUTO,  // turn unattended two-way KOReader sync on or off, in place
     DELETE_CACHE,
     DICTIONARY,
     READER_SETTINGS,            // open this book's per-book reader settings

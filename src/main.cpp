@@ -37,7 +37,9 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
+#include "activities/reader/KOReaderAutoSync.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
@@ -236,6 +238,33 @@ static bool loadSleepFrameBuffer() {
   }
   Storage.remove(SLEEP_FRAME_FILE);
   return true;
+}
+
+// Push the current reading position before a deliberate lock, when automatic KOReader
+// sync is on. Deep sleep resets the chip, so the heap TLS fragments is never used again
+// and no silent restart is owed here — unlike every other network path in the firmware.
+//
+// Only the power-button lock reaches this: an inactivity timeout is unattended, and
+// paying several seconds of radio for it would drain the battery of a device left open.
+void autoSyncBeforeLock() {
+  const auto gate = KOReaderAutoSync::currentGate();
+  if (!ko_auto_sync::shouldPushOnSleep(gate, ko_auto_sync::SleepCause::PowerButton,
+                                       activityManager.isReaderActivity())) {
+    return;
+  }
+
+  KOReaderAutoSync::Snapshot snapshot;
+  if (!activityManager.captureAutoSyncSnapshot(snapshot)) return;
+
+  BusyBanner banner(renderer, tr(STR_AUTO_SYNC_PUSHING));
+  banner.showNow();
+
+  if (KOReaderAutoSync::connectSavedWifi()) {
+    KOReaderAutoSync::pushProgress(snapshot);
+  }
+  // enterDeepSleep() tears the radio down again; this only ends the session early so the
+  // sleep screen is not drawn with the modem still holding its power domain.
+  KOReaderAutoSync::stopWifi();
 }
 
 // Enter deep sleep mode
@@ -677,6 +706,26 @@ void setup() {
       activityManager.goHome();
     }
   } else {
+    // Unlocking back into a book is where automatic sync collects the position another
+    // device pushed. It runs here, before the EPUB is loaded, so the TLS handshake gets
+    // a clean heap, and it ends in a silent restart because stopping the radio does not
+    // give that heap back. The reboot lands on the BootResume::Silent branch above,
+    // which does not fetch again, so this cannot loop.
+    if (ko_auto_sync::shouldPullOnBookOpen(KOReaderAutoSync::currentGate())) {
+      BusyBanner banner(renderer, tr(STR_AUTO_SYNC_PULLING));
+      banner.showNow();
+      bool stashed = false;
+      if (KOReaderAutoSync::connectSavedWifi()) {
+        stashed = KOReaderAutoSync::fetchAndStashRemote(APP_STATE.openEpubPath);
+      }
+      KOReaderAutoSync::stopWifi();
+      if (stashed) {
+        silentRestartToReader();
+      }
+      // Nothing to apply: fall through and open the book on this boot rather than
+      // spending a reboot on a fetch that found nothing.
+    }
+
     // Clear app state to avoid getting into a boot loop if the epub doesn't load
     const auto path = APP_STATE.openEpubPath;
     APP_STATE.openEpubPath = "";
@@ -818,6 +867,7 @@ void loop() {
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;
     }
+    autoSyncBeforeLock();
     enterDeepSleep();
     // This should never be hit as `enterDeepSleep` calls esp_deep_sleep_start
     return;

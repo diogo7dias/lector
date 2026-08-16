@@ -13,6 +13,10 @@
 #include "RenderLock.h"
 #include "util/ScreenshotInfo.h"
 
+namespace KOReaderAutoSync {
+struct Snapshot;
+}
+
 class Activity {
   friend class ActivityManager;
 
@@ -58,6 +62,11 @@ class Activity {
   virtual void runPowerDoubleClick() {}
   virtual bool isHomeActivity() const { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }
+
+  // Fill in the reading position automatic KOReader sync would upload, while the
+  // book is still in RAM. Only the EPUB reader answers. Returns false when there
+  // is nothing worth uploading, which is also the answer from every other screen.
+  virtual bool captureAutoSyncSnapshot(KOReaderAutoSync::Snapshot&) const { return false; }
 
   // Start a new activity without destroying the current one
   // Note: requestUpdate() will be invoked automatically once resultHandler finishes

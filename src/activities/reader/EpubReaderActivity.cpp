@@ -30,6 +30,7 @@
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "KOReaderAutoSync.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -45,11 +46,13 @@
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SilentRestart.h"
 #include "StealLookActivity.h"
 #include "activities/settings/StatusBarSettingsActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
@@ -214,6 +217,11 @@ void EpubReaderActivity::onEnter() {
   RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
 
   loadCachedBookmarks();
+
+  // A position fetched from the sync server before this boot is applied here, after
+  // the saved position was read and before the first page is laid out, so the book
+  // opens where the other device left off rather than jumping once it is on screen.
+  applyPendingAutoSyncPull();
 
   // Trigger first update
   requestUpdate();
@@ -828,6 +836,14 @@ void EpubReaderActivity::loop() {
     requestUpdate();
   }
 
+  // The resume banner names a place the user has to be able to read and recognise, so it
+  // stays up longer than the bookmark confirmation, which only echoes a press.
+  if (showResumeBanner && (millis() - resumeBannerTime) >= RESUME_BANNER_DURATION_MS) {
+    showResumeBanner = false;
+    scheduleGhostCleanup();
+    requestUpdate();
+  }
+
   if (showDictionaryMessage && (millis() - dictionaryMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
     showDictionaryMessage = false;
     scheduleGhostCleanup();
@@ -916,6 +932,9 @@ void EpubReaderActivity::loop() {
   if (ReaderUtils::handleBackNavigation(mappedInput, activityManager, epub ? epub->getPath().c_str() : "",
                                         {this, [](void* ctx) { static_cast<EpubReaderActivity*>(ctx)->onGoHome(); }},
                                         backLatch_)) {
+    // Leaving the book for the library or the home screen is one of the moments
+    // automatic sync pushes. It never returns: the upload ends in a silent reboot.
+    autoSyncPushOnLeavingBook();
     return;
   }
 
@@ -1458,6 +1477,137 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+bool EpubReaderActivity::captureAutoSyncSnapshot(KOReaderAutoSync::Snapshot& outSnapshot) const {
+  if (!epub) return false;
+
+  const CrossPointPosition position = getCurrentPosition();
+  SavedProgressPosition koPosition = ProgressMapper::toSavedProgress(epub, position);
+  if (koPosition.xpath.empty()) {
+    LOG_ERR("KOAuto", "No XPath for the current page; skipping automatic sync");
+    return false;
+  }
+
+  outSnapshot.epubPath = epub->getPath();
+  outSnapshot.position = std::move(koPosition);
+  outSnapshot.spineIndex = position.spineIndex;
+  outSnapshot.pageNumber = position.pageNumber;
+  outSnapshot.totalPagesInSpine = position.totalPages;
+  if (position.hasParagraphIndex) {
+    outSnapshot.paragraphIndex = position.paragraphIndex;
+  }
+  // Only read when the metadata setting is on: both are cheap, but sending them is
+  // the user's choice and an unread field is one less thing to keep consistent.
+  if (KOREADER_STORE.getSendMetadata()) {
+    outSnapshot.title = epub->getTitle();
+    outSnapshot.authors = epub->getAuthor();
+  }
+  return true;
+}
+
+void EpubReaderActivity::autoSyncPushOnLeavingBook() {
+  if (!ko_auto_sync::shouldPushOnLeavingBook(KOReaderAutoSync::currentGate())) return;
+
+  KOReaderAutoSync::Snapshot snapshot;
+  if (!captureAutoSyncSnapshot(snapshot)) return;
+
+  // The user is on their way out, so the page they are looking at is the record.
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  saveProgress(currentSpineIndex, currentPage, totalPages);
+
+  // This function ends in a reboot, so the activity teardown that normally follows the
+  // navigation queued above never runs. Run it here instead, while the EPUB is still
+  // loaded: it is what writes this session's reading stats and the home-list progress
+  // badge, and losing those every time the user closes a book would be a silent cost of
+  // switching automatic sync on.
+  onExit();
+
+  BusyBanner banner(renderer, tr(STR_AUTO_SYNC_PUSHING));
+  banner.showNow();
+
+  // Free the ~65KB the TLS handshake needs. Safe here because this book is closing:
+  // the activity that replaces this one is already queued.
+  {
+    RenderLock lock(*this);
+    ImageBlock::setExtractor(nullptr, nullptr);
+    section.reset();
+    epub.reset();
+  }
+
+  if (KOReaderAutoSync::connectSavedWifi()) {
+    KOReaderAutoSync::pushProgress(snapshot);
+  }
+  KOReaderAutoSync::stopWifi();
+
+  // Stopping the radio does not give back the heap TLS fragmented, so the way out of
+  // a network session is always a reboot — the same rule the manual sync screen follows.
+  silentRestart();
+}
+
+void EpubReaderActivity::applyPendingAutoSyncPull() {
+  const auto pending = KOReaderAutoSync::takePendingPull();
+  if (!pending || !epub) return;
+
+  // Furthest wins. The device that is already ahead keeps its place, so opening a book
+  // that was only ever read here never drags the reader backwards.
+  //
+  // The section is not built yet, so the local position comes from what the progress
+  // file just gave onEnter(): chapter, page, and that chapter's page count from the last
+  // session. Using the chapter alone would score the reader at the chapter's start and
+  // let a remote position sitting a few pages back still win.
+  const float chapterProgress = cachedChapterTotalPageCount > 0 ? static_cast<float>(nextPageNumber) /
+                                                                      static_cast<float>(cachedChapterTotalPageCount)
+                                                                : 0.0f;
+  const float localPercentage = epub->calculateProgress(currentSpineIndex, chapterProgress);
+  if (!ko_auto_sync::remoteIsFurther(localPercentage, pending->percentage)) {
+    LOG_DBG("KOAuto", "Local %.4f is at or past remote %.4f; staying put", localPercentage, pending->percentage);
+    return;
+  }
+
+  SavedProgressPosition remote{std::string(pending->xpath, pending->xpathLength), pending->percentage};
+  const CrossPointPosition target =
+      ProgressMapper::toCrossPoint(epub, remote, renderer, currentSpineIndex, cachedChapterTotalPageCount);
+  if (target.spineIndex < 0 || target.spineIndex >= epub->getSpineItemsCount()) {
+    LOG_ERR("KOAuto", "Remote position maps outside this book; staying where we were");
+    return;
+  }
+
+  std::optional<uint32_t> offset;
+  if (target.hasVisibleTextOffset) offset = target.visibleTextOffset;
+  if (!EpubReaderUtils::saveProgress(*epub, target.spineIndex, target.pageNumber, 0, offset)) {
+    LOG_ERR("KOAuto", "Could not save the position that came from sync");
+    return;
+  }
+  // The in-memory copies of what the progress file said were read a few lines earlier in
+  // onEnter(); they have just been overwritten on the card, so they have to move too or
+  // the first layout would resolve the old offset inside the new chapter.
+  currentSpineIndex = target.spineIndex;
+  cachedSpineIndex = target.spineIndex;
+  nextPageNumber = target.pageNumber;
+  cachedVisibleTextOffset = offset;
+
+  // Name the place rather than the numbers: chapter and paragraph are what the user can
+  // find again on the other device, while a page number is layout-dependent.
+  const int tocIndex = epub->getTocIndexForSpineIndex(target.spineIndex);
+  const std::string chapter = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : "";
+  const uint16_t paragraph = target.hasParagraphIndex     ? target.paragraphIndex
+                             : pending->hasParagraphIndex ? pending->paragraphIndex
+                                                          : 0;
+
+  char banner[160];
+  if (!chapter.empty() && paragraph > 0) {
+    snprintf(banner, sizeof(banner), tr(STR_RESUME_CHAPTER_PARAGRAPH), chapter.c_str(),
+             static_cast<unsigned>(paragraph));
+  } else if (!chapter.empty()) {
+    snprintf(banner, sizeof(banner), tr(STR_RESUME_CHAPTER), chapter.c_str());
+  } else {
+    snprintf(banner, sizeof(banner), tr(STR_RESUME_PERCENT), static_cast<double>(pending->percentage) * 100.0);
+  }
+  resumeBannerText = banner;
+  showResumeBanner = true;
+  resumeBannerTime = millis();
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
@@ -2736,6 +2886,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   if (showBookmarkMessage) {
     GUI.drawPopup(renderer, bookmarkRemoved ? tr(STR_BOOKMARK_REMOVED) : tr(STR_BOOKMARK_ADDED));
+  }
+
+  if (showResumeBanner) {
+    GUI.drawPopup(renderer, resumeBannerText.c_str());
   }
 
   if (showDictionaryMessage) {
