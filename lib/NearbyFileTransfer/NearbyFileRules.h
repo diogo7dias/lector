@@ -80,9 +80,15 @@ bool fitsOnCard(uint64_t sizeBytes, uint64_t freeBytes);
  *
  * `folder` is the card root when empty. Returns an empty string when every
  * candidate up to MAX_COLLISION_ATTEMPTS is taken.
+ *
+ * `candidate` builds the Nth name to try; the caller passes the firmware's own
+ * naming helper, so a received duplicate is named exactly as one filed by any
+ * other path, and this library stays free of app headers.
  */
+using CandidateNamer = std::function<std::string(std::string_view name, std::string_view folder, int index)>;
+
 std::string resolveDestination(std::string_view folder, const std::string& safeName,
-                               const std::function<bool(const std::string&)>& exists);
+                               const std::function<bool(const std::string&)>& exists, const CandidateNamer& candidate);
 
 /** Runs the whole offer through the checks above in one call. */
 OfferCheck checkOffer(std::string_view offeredName, uint64_t sizeBytes, uint64_t freeBytes);

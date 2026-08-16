@@ -10,6 +10,7 @@
 #include <cstddef>
 
 #include "MappedInputManager.h"
+#include "NearbyFileTransferActivity.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
 #include "WifiSelectionActivity.h"
@@ -131,6 +132,14 @@ void CrossPointWebServerActivity::onNetworkModeSelected(const NetworkMode mode) 
 
   networkMode = mode;
   isApMode = (mode == NetworkMode::CREATE_HOTSPOT);
+
+  if (mode == NetworkMode::NEARBY_READER) {
+    // Nothing here applies: no WiFi, no web server, no DNS. Hand straight over
+    // to the reader-to-reader screen, which owns the radio for its lifetime.
+    activityManager.replaceActivity(
+        std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Receive));
+    return;
+  }
 
   if (mode == NetworkMode::CONNECT_CALIBRE) {
     startActivityForResult(

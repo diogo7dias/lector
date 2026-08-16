@@ -4,10 +4,16 @@
 #include <string>
 
 #include "lib/NearbyFileTransfer/NearbyFileRules.h"
+#include "util/BookFilingNames.h"
 
 namespace {
 
 using namespace nearby_file;
+
+// The firmware's own naming helper, which is what the activity passes in.
+const CandidateNamer NAMER = [](const std::string_view name, const std::string_view folder, const int index) {
+  return bookfiling::destinationCandidate(name, folder, index);
+};
 
 }  // namespace
 
@@ -73,15 +79,15 @@ TEST(NearbyFileRules, NamesAroundAFileThatIsAlreadyThere) {
   const std::set<std::string> existing = {"/books/Book.epub", "/books/Book (2).epub"};
   const auto exists = [&existing](const std::string& path) { return existing.count(path) > 0; };
 
-  EXPECT_EQ(resolveDestination("/books", "Book.epub", exists), "/books/Book (3).epub");
-  EXPECT_EQ(resolveDestination("/books", "Other.epub", exists), "/books/Other.epub");
+  EXPECT_EQ(resolveDestination("/books", "Book.epub", exists, NAMER), "/books/Book (3).epub");
+  EXPECT_EQ(resolveDestination("/books", "Other.epub", exists, NAMER), "/books/Other.epub");
   // The card root is spelled as an empty folder, so a destination reads "/name".
-  EXPECT_EQ(resolveDestination("", "Book.epub", exists), "/Book.epub");
+  EXPECT_EQ(resolveDestination("", "Book.epub", exists, NAMER), "/Book.epub");
 }
 
 TEST(NearbyFileRules, GivesUpRatherThanLoopingForeverOnCollisions) {
   const auto everythingExists = [](const std::string&) { return true; };
-  EXPECT_TRUE(resolveDestination("/books", "Book.epub", everythingExists).empty());
+  EXPECT_TRUE(resolveDestination("/books", "Book.epub", everythingExists, NAMER).empty());
 }
 
 TEST(NearbyFileRules, ValidatesAWholeOfferInOneCall) {

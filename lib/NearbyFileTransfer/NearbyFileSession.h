@@ -139,6 +139,8 @@ class TransferSession {
   const std::string& destinationPath() const { return destinationPath_; }
   uint64_t transferredBytes() const { return session_.transferredBytes(); }
   uint32_t crc32() const { return session_.crc32(); }
+  /** Identifies this transfer in every packet, so two nearby pairs cannot mix. */
+  uint32_t sessionId() const { return session_.id(); }
   int progressPercent() const;
   /**
    * True when a partly written file is on the card and must be deleted: the

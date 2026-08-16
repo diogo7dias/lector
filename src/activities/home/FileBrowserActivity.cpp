@@ -14,12 +14,14 @@
 #include "MappedInputManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/home/LibrarySearch.h"
+#include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookFilingNames.h"
 #include "util/BusyTick.h"
 #include "util/FavoriteImageNames.h"
 
@@ -312,7 +314,49 @@ bool FileBrowserActivity::removeDirFile(const std::string& fullPath) {
   return true;
 }
 
+void FileBrowserActivity::confirmDelete(const std::string& fullPath) {
+  auto handler = [this, fullPath](const ActivityResult& res) {
+    // Nothing to swallow here any more: ActivityManager arms the input gate on
+    // every screen change, so a button still held when this screen comes back
+    // is ignored until it is released.
+    if (!res.isCancelled) {
+      LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
+      if (removeDirFile(fullPath)) {
+        LOG_DBG("FileBrowser", "Deleted successfully");
+        {
+          // buildScreen() reads files/basepath on the render task; loadFiles() frees and
+          // rebuilds those strings, so the swap has to happen under the render lock.
+          RenderLock lock(*this);
+          loadFiles();
+          const int rows = totalRowCount();
+          if (rows == 0) {
+            selectorIndex = 0;
+          } else if (selectorIndex >= static_cast<size_t>(rows)) {
+            // Move selection to the new "last" item
+            selectorIndex = static_cast<size_t>(rows - 1);
+          }
+        }
+
+        requestUpdate(true);
+      } else {
+        LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
+      }
+    } else {
+      LOG_DBG("FileBrowser", "Delete cancelled by user");
+    }
+  };
+
+  const std::string heading = tr(STR_DELETE) + std::string("? ");
+  startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading,
+                                                                std::string(bookfiling::fileNameOf(fullPath))),
+                         handler);
+}
+
 void FileBrowserActivity::loop() {
+  // While the file-action pop-up is up it owns every button, so nothing below
+  // can move the selection or open a file underneath it.
+  if (fileActionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
   // Rows have variable heights now, so a fixed items-per-page is meaningless. The page jump
   // steps by however many rows the last draw actually fit on screen.
   const int pageItems = std::max(1, lastVisibleIdx - firstVisibleIdx + 1);
@@ -345,47 +389,32 @@ void FileBrowserActivity::loop() {
     }
 
     if (mode == Mode::Books && holdAction) {
-      // --- LONG PRESS ACTION: DELETE FILE OR DIRECTORY ---
+      // --- LONG PRESS ACTION: SEND OR DELETE ---
       std::string cleanBasePath = basepath;
       if (cleanBasePath.back() != '/') cleanBasePath += "/";
       const std::string fullPath = cleanBasePath + entry;
 
-      auto handler = [this, fullPath](const ActivityResult& res) {
-        // Nothing to swallow here any more: ActivityManager arms the input gate on
-        // every screen change, so a button still held when this screen comes back
-        // is ignored until it is released.
-        if (!res.isCancelled) {
-          LOG_DBG("FileBrowser", "Attempting to delete: %s", fullPath.c_str());
-          if (removeDirFile(fullPath)) {
-            LOG_DBG("FileBrowser", "Deleted successfully");
-            {
-              // buildScreen() reads files/basepath on the render task; loadFiles() frees and
-              // rebuilds those strings, so the swap has to happen under the render lock.
-              RenderLock lock(*this);
-              loadFiles();
-              const int rows = totalRowCount();
-              if (rows == 0) {
-                selectorIndex = 0;
-              } else if (selectorIndex >= static_cast<size_t>(rows)) {
-                // Move selection to the new "last" item
-                selectorIndex = static_cast<size_t>(rows - 1);
-              }
-            }
-
-            requestUpdate(true);
+      // A folder cannot be sent, so its hold still goes straight to the delete
+      // confirmation rather than opening a pop-up with one usable row.
+      if (!isDirectory && nearby_file::isAcceptedFilename(entry)) {
+        static constexpr StrId actions[] = {StrId::STR_NEARBY_SEND_FILE, StrId::STR_DELETE};
+        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, 2, 0, [this, fullPath](const int choice) {
+          if (choice == 0) {
+            activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
+                renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
           } else {
-            LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
+            confirmDelete(fullPath);
           }
-        } else {
-          LOG_DBG("FileBrowser", "Delete cancelled by user");
-        }
-      };
+        });
+        requestUpdate();
+        return;
+      }
 
-      std::string heading = tr(STR_DELETE) + std::string("? ");
-
-      startActivityForResult(std::make_unique<ConfirmationActivity>(renderer, mappedInput, heading, entry), handler);
+      confirmDelete(fullPath);
       return;
-    } else {
+    }
+
+    {
       // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
       if (basepath.back() != '/') basepath += "/";
 
@@ -537,6 +566,8 @@ std::string getFileExtension(const std::string& filename) {
 }
 
 void FileBrowserActivity::render(RenderLock&&) {
+  if (fileActionPopup.processRender(renderer, mappedInput)) return;
+
   renderer.clearScreen();
 
   const auto pageWidth = renderer.getScreenWidth();

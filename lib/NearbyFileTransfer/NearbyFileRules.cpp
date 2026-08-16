@@ -4,8 +4,6 @@
 #include <array>
 #include <cctype>
 
-#include "util/BookFilingNames.h"
-
 namespace nearby_file {
 namespace {
 
@@ -95,14 +93,12 @@ bool fitsOnCard(const uint64_t sizeBytes, const uint64_t freeBytes) {
 }
 
 std::string resolveDestination(const std::string_view folder, const std::string& safeName,
-                               const std::function<bool(const std::string&)>& exists) {
-  if (safeName.empty()) return {};
+                               const std::function<bool(const std::string&)>& exists, const CandidateNamer& candidate) {
+  if (safeName.empty() || !candidate || !exists) return {};
 
   for (int attempt = 1; attempt <= MAX_COLLISION_ATTEMPTS; attempt++) {
-    // Reuses the naming the card already uses when filing a book, so a received
-    // duplicate reads the same as one produced by any other path in the firmware.
-    const std::string candidate = bookfiling::destinationCandidate(safeName, folder, attempt);
-    if (!exists(candidate)) return candidate;
+    const std::string path = candidate(safeName, folder, attempt);
+    if (!exists(path)) return path;
   }
   return {};
 }

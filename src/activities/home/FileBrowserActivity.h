@@ -9,6 +9,7 @@
 
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
+#include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 #include "util/HoldButtonPolicy.h"
 
@@ -20,8 +21,12 @@ class FileBrowserActivity final : public Activity {
  private:
   // Deletion
   bool removeDirFile(const std::string& fullPath);
+  // Opens the delete confirmation for one entry.
+  void confirmDelete(const std::string& fullPath);
 
   ButtonNavigator buttonNavigator;
+  // Holding Confirm on a file opens this: send it to a nearby reader, or delete it.
+  OptionPopup fileActionPopup;
 
   size_t selectorIndex = 0;
 
