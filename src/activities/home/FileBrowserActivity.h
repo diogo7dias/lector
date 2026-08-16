@@ -10,6 +10,7 @@
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
+#include "util/HoldButtonPolicy.h"
 
 class FileBrowserActivity final : public Activity {
  public:
@@ -31,10 +32,11 @@ class FileBrowserActivity final : public Activity {
   int firstVisibleIdx = 0;
   int lastVisibleIdx = 0;
 
-  bool lockLongPressBack = false;
   // True when this activity was entered while Confirm was already held; we must swallow the next
-  // release so we don't immediately auto-open the first entry.
-  bool lockNextConfirmRelease = false;
+  // Confirm and Back each carry a short and a hold action; the trackers decide which
+  // fired and keep the hold from also counting as a short press on the way up.
+  hold_button::Tracker confirmHold;
+  hold_button::Tracker backHold;
   // Spend one FULL refresh on the next frame, then fall back to FAST. Set on entry
   // and on return from a child activity, since the panel may arrive here carrying
   // ghosts from screens that only ever paint FAST.
