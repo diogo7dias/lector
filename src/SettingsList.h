@@ -462,6 +462,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         {CrossPointSettings::MIN_SLEEP_TIMEOUT_MINUTES, CrossPointSettings::MAX_SLEEP_TIMEOUT_MINUTES, 1},
         "sleepTimeoutMinutes", StrId::STR_CAT_SYSTEM));
 
+    // How this reader introduces itself during Nearby Position Sync. Left empty
+    // it falls back to a generated "Lector-XXXX" from the MAC.
+    v.push_back(SettingInfo::String(StrId::STR_DEVICE_NAME, &SETTINGS.deviceName[0], sizeof(SETTINGS.deviceName),
+                                    "deviceName", StrId::STR_CAT_SYSTEM));
+
     v.push_back(SettingInfo::Toggle(StrId::STR_OPEN_RANDOM_ON_BOOT, &CrossPointSettings::openRandomRecentOnBoot,
                                     "openRandomRecentOnBoot", StrId::STR_CAT_SYSTEM));
 

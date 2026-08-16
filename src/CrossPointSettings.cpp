@@ -3,8 +3,10 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <ObfuscationUtils.h>
+#include <esp_mac.h>
 
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <iterator>
 #include <string>
@@ -346,6 +348,23 @@ unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   const uint8_t minutes =
       std::clamp(sleepTimeoutMinutes, MIN_SLEEP_TIMEOUT_MINUTES, static_cast<uint8_t>(SLEEP_TIMEOUT_NEVER_MINUTES - 1));
   return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
+}
+
+const char* CrossPointSettings::getEffectiveDeviceName() const {
+  if (deviceName[0] != '\0') return deviceName;
+
+  // Built once and kept: the MAC does not change while the device is running,
+  // and callers hand this straight to a packet encoder or a renderer.
+  static char generated[sizeof(deviceName)] = "";
+  if (generated[0] == '\0') {
+    uint8_t mac[6] = {};
+    if (esp_read_mac(mac, ESP_MAC_WIFI_STA) == ESP_OK) {
+      std::snprintf(generated, sizeof(generated), "Lector-%02X%02X", mac[4], mac[5]);
+    } else {
+      std::snprintf(generated, sizeof(generated), "Lector");
+    }
+  }
+  return generated;
 }
 
 int CrossPointSettings::getRefreshFrequency() const {

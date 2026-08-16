@@ -198,7 +198,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     group(items, StrId::STR_GRP_TOOLS,
           {{MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
            {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
-           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS}});
+           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
+           {MenuAction::NEARBY_SYNC, StrId::STR_NEARBY_SYNC}});
     group(items, StrId::STR_GRP_STORAGE, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
   }
 

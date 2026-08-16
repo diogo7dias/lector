@@ -33,6 +33,7 @@
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
+#include "NearbyPositionSyncActivity.h"
 #include "ParagraphNumberLayout.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
@@ -1426,6 +1427,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       launchKOReaderSync();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::NEARBY_SYNC: {
+      launchNearbyPositionSync();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
@@ -1458,6 +1463,56 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+void EpubReaderActivity::launchNearbyPositionSync() {
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  std::optional<uint16_t> paragraphIndex;
+  if (section && currentPage >= 0 && currentPage < section->pageCount) {
+    const uint16_t paragraphPage =
+        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
+    if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
+      paragraphIndex = *pIdx;
+    }
+  }
+
+  // Computed while the Epub is still in RAM, exactly as the KOSync path does:
+  // the position travels as an xpath, so it must be resolved before the book is
+  // released.
+  CrossPointPosition localPos = getCurrentPosition();
+  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
+  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
+  const std::string savedEpubPath = epub->getPath();
+
+  // goToReader() on the way back reads this file, so a failed write aborts the
+  // sync rather than risking a return to the wrong page.
+  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
+    LOG_ERR("NBPS", "Aborting nearby sync because current progress could not be saved");
+    pendingSyncSaveError = true;
+    requestUpdate();
+    return;
+  }
+
+  // Release Epub and Section before the radio comes up: ESP-NOW needs less heap
+  // than the TLS handshake KOSync makes room for, but it still needs room.
+  {
+    RenderLock lock(*this);
+    if (section) {
+      nextPageNumber = section->currentPage;
+    }
+    // The image extractor holds a raw pointer into this epub (see onEnter);
+    // clear it before the early release, mirroring onExit(), or a later image
+    // render would call through a dangling context.
+    ImageBlock::setExtractor(nullptr, nullptr);
+    section.reset();
+    epub.reset();
+  }
+
+  activityManager.replaceActivity(std::make_unique<NearbyPositionSyncActivity>(
+      renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
+      std::move(localChapterName), paragraphIndex));
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {

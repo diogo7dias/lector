@@ -504,6 +504,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Custom text for the wake/unlock screen bottom banner (restored old lector).
   // Empty = the default displayed string "READ UNTIL YOU DIE." (not stored here).
   char customFooter[64] = "";
+  // How this reader introduces itself to another reader over Nearby Position Sync,
+  // so a sync screen can say whose page it is offering rather than showing a MAC
+  // address. Empty = the generated fallback from getEffectiveDeviceName().
+  // The wire format caps a name at 20 bytes; the extra slack is for the NUL and
+  // for a stored name being truncated at send time rather than at entry.
+  char deviceName[24] = "";
   // Paperback Look: smear drawn glyph pixels +1px right/+1px down for heavier ink.
   // Two independent toggles, both default ON: body = reader page text (EPUB/TXT/XTC),
   // status = the reading-screen status bar. The global values are the default that
@@ -669,6 +675,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   float getReaderLineCompression() const;
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
+
+  /**
+   * The name this reader shows to another reader during Nearby Position Sync.
+   *
+   * Falls back to "Lector-XXXX", the last two bytes of the WiFi MAC, when no
+   * name has been set, so two readers on a table are still told apart without
+   * anyone having to name them first.
+   */
+  const char* getEffectiveDeviceName() const;
 
   // ── Per-book reader-settings edit overlay ──────────────────────────────────
   // Overlays a book's ReaderPrefs onto the live reader fields so the existing
