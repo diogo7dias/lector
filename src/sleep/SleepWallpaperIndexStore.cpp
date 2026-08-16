@@ -154,6 +154,25 @@ uint32_t probeTailSlot(const uint8_t dirId) {
   return static_cast<uint32_t>(liveSlotCount(dir));
 }
 
+// The folder's own FAT modify date and time, packed into one uint32. 0 means
+// missing folder or a driver that does not report one; see folderMarkersChanged
+// for how that case is handled. One directory open, no probing at all.
+uint32_t probeDirStamp(const uint8_t dirId) {
+  auto dir = Storage.open(dirPathForId(dirId));
+  if (!dir || !dir.isDirectory()) return 0;
+  uint16_t fdate = 0, ftime = 0;
+  if (!dir.getModifyDateTime(&fdate, &ftime)) return 0;
+  return (static_cast<uint32_t>(fdate) << 16) | ftime;
+}
+
+// Re-anchor both boot-gate markers on the folder as it stands right now.
+// Every in-place mutation ends with this, so a hooked change never leaves the
+// gate thinking the card was touched from outside.
+void stampFolderMarkers(const uint8_t dirId) {
+  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
+  APP_STATE.sleepIndexDirStamp = probeDirStamp(dirId);
+}
+
 // Reset the rotation to "fresh shuffled lap over `count`, nothing pending" and
 // stamp the snapshot. Caller saves state.json (exactly once per reconcile).
 void resetRotationState(const uint32_t count, const uint32_t fingerprint, const uint32_t liveCount,
@@ -167,7 +186,7 @@ void resetRotationState(const uint32_t count, const uint32_t fingerprint, const 
   APP_STATE.sleepIndexDirty = false;
   APP_STATE.sleepIndexNeedsRebuild = false;
   APP_STATE.sleepIndexDeadSlots = 0;  // a rebuild compacts every hole away
-  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
+  stampFolderMarkers(dirId);
 }
 
 // Full scan -> tmp file -> rotate. The live index is replaced atomically; a
@@ -338,10 +357,11 @@ void commitDeletion(const PendingDeletion& pending, const bool persist) {
 }
 
 void finishDeletions() {
-  // The removed directory entries can free the folder's last live slot, so the
-  // boot gate's tail marker has to move with them or the next unlock pays a
-  // walk that would find nothing but the holes already accounted for.
-  APP_STATE.sleepIndexTailSlot = probeTailSlot(APP_STATE.sleepIndexDirId);
+  // The removed directory entries can free the folder's last live slot and they
+  // restamp the folder, so the boot gate's markers have to move with them or the
+  // next unlock pays a walk that would find nothing but the holes already
+  // accounted for.
+  stampFolderMarkers(APP_STATE.sleepIndexDirId);
   if (sleep_reconcile::deadSlotsDemandRebuild(indexRecordCount(), APP_STATE.sleepIndexDeadSlots)) {
     APP_STATE.sleepIndexNeedsRebuild = true;
   }
@@ -393,7 +413,7 @@ void noteCreated(const std::string& path) {
   }
 
   storeSnapshot(sleep_reconcile::applyAddition(snapshotFromState(), hash));
-  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
+  stampFolderMarkers(dirId);
   APP_STATE.saveToFile();
 }
 
@@ -455,15 +475,16 @@ void noteFavoriteRename(const std::string& oldPath, const std::string& newPath) 
 
   // Commutative wrap-sum: swapping one entry's contribution is exact.
   APP_STATE.sleepIndexFingerprint += after - before;
-  APP_STATE.sleepIndexTailSlot = probeTailSlot(dirId);
+  stampFolderMarkers(dirId);
 }
 
 bool indexedFolderChanged() { return resolveSleepDirId() != APP_STATE.sleepIndexDirId; }
 
-bool folderTailMoved() {
+bool folderLooksChanged() {
   const uint8_t dirId = resolveSleepDirId();
   if (dirId != APP_STATE.sleepIndexDirId) return true;
-  return probeTailSlot(dirId) != APP_STATE.sleepIndexTailSlot;
+  return sleep_folder::folderMarkersChanged(probeTailSlot(dirId), probeDirStamp(dirId), APP_STATE.sleepIndexTailSlot,
+                                            APP_STATE.sleepIndexDirStamp);
 }
 
 sleep_queue::QueueState loadQueueState() {
@@ -593,19 +614,22 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
       // re-derived from it rather than carried forward.
       const uint32_t deadSlots = newCount > liveCount ? newCount - liveCount : 0;
       const uint32_t tailNow = probeTailSlot(dirId);
+      const uint32_t stampNow = probeDirStamp(dirId);
       const uint32_t freshNext = APP_STATE.sleepFreshNext > newCount ? newCount : APP_STATE.sleepFreshNext;
       // A walk that found the folder exactly as the snapshot describes it (the
-      // tail probe fired on a relocated directory entry) must not spend an SD
+      // boot gate fired on a relocated directory entry) must not spend an SD
       // write to restate what is already on disk.
       const bool changed = liveCount != APP_STATE.sleepIndexLiveCount ||
                            fingerprint != APP_STATE.sleepIndexFingerprint || dirId != APP_STATE.sleepIndexDirId ||
                            APP_STATE.sleepIndexDirty || deadSlots != APP_STATE.sleepIndexDeadSlots ||
-                           tailNow != APP_STATE.sleepIndexTailSlot || freshNext != APP_STATE.sleepFreshNext;
+                           tailNow != APP_STATE.sleepIndexTailSlot || stampNow != APP_STATE.sleepIndexDirStamp ||
+                           freshNext != APP_STATE.sleepFreshNext;
       APP_STATE.sleepIndexLiveCount = liveCount;
       APP_STATE.sleepIndexFingerprint = fingerprint;
       APP_STATE.sleepIndexDirId = dirId;
       APP_STATE.sleepIndexDirty = false;
       APP_STATE.sleepIndexTailSlot = tailNow;
+      APP_STATE.sleepIndexDirStamp = stampNow;
       APP_STATE.sleepIndexDeadSlots = deadSlots;
       APP_STATE.sleepFreshNext = freshNext;
       if (changed) APP_STATE.saveToFile();

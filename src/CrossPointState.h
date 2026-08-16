@@ -43,6 +43,12 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // reset — this probe result is what lets those boots skip the folder walk
   // when nothing was added (FAT appends extend the slot tail).
   uint32_t sleepIndexTailSlot = 0;
+  // The sleep folder's own FAT modify date and time at the last reconcile,
+  // packed as (date << 16) | time. Second signal beside the slot tail: a delete
+  // frees its slots in place, so files added later can reuse those holes and
+  // leave the tail identical while the folder's timestamp still moves. 0 means
+  // the driver reported none, and the comparison then falls back to the tail.
+  uint32_t sleepIndexDirStamp = 0;
   uint32_t sleepCursorPos = 0;
   uint32_t sleepCursorMult = 1;
   uint32_t sleepCursorOff = 0;

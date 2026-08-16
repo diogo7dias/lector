@@ -10,8 +10,9 @@
  *
  * The folder is walked ONLY when it looks changed. A battery lock on the
  * Xteink boards is a full power cut, so every unlock boots as a power-on
- * reset; the boot gate therefore asks folderTailMoved() — a millisecond
- * slot-tail probe — before paying the walk, and a clean unlock scans nothing.
+ * reset; the boot gate therefore asks folderLooksChanged() — a millisecond
+ * slot-tail and folder-timestamp probe — before paying the walk, and a clean
+ * unlock scans nothing.
  * When the walk does run, new files are appended at EOF as the "fresh" region
  * the pick serves next; a folder that drifted too far (bad header, folder
  * switch, dead-slot pileup) is rebuilt from scratch into a tmp file and
@@ -186,12 +187,14 @@ void noteFavoriteRename(const std::string& oldPath, const std::string& newPath);
 bool indexedFolderChanged();
 
 // MAIN TASK ONLY, boot gate: cheap change probe, milliseconds and no UI. True
-// when the sleep folder's last live directory slot (or the resolved folder
-// itself) differs from the last reconcile's snapshot — FAT appends extend the
-// slot tail, so card-added files move it. Exists because a battery lock on the
-// Xteink boards is a full power cut: every unlock arrives as a power-on reset,
-// and without this probe every unlock would pay the folder walk.
-bool folderTailMoved();
+// when the sleep folder's last live directory slot, its own modify timestamp,
+// or the resolved folder itself differs from the last reconcile's markers. Two
+// signals because a FAT delete frees its slots in place: files added later can
+// reuse those holes and leave the slot tail identical, and only the folder
+// timestamp catches that. Exists because a battery lock on the Xteink boards is
+// a full power cut: every unlock arrives as a power-on reset, and without this
+// probe every unlock would pay the folder walk.
+bool folderLooksChanged();
 
 // MAIN TASK ONLY, cold boot: one folder walk; a trusted index returns without
 // writing anything; a changed folder appends the new names (they jump the

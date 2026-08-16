@@ -35,4 +35,30 @@ inline uint8_t chooseDirId(const bool plainHasEntries, const bool hiddenHasEntri
   return kPlainDirId;
 }
 
+// Does the folder look different from the last reconcile's markers?
+//
+// Two independent signals, because neither alone is sound:
+//
+//   tail  — the slot offset of the folder's last live FAT directory entry.
+//           Files appended to a directory push it out, which is what catches
+//           images copied onto the card. It is NOT monotone in file count: a
+//           FAT delete only marks its slots free in place and the directory
+//           never shrinks, so files written later can land in those holes and
+//           leave the tail byte-identical.
+//   stamp — the folder's own FAT modify date and time, packed into one uint32.
+//           Desktop operating systems restamp a directory when its contents
+//           change, so it catches exactly the hole-reuse case the tail misses.
+//
+// A current stamp of 0 means "this driver does not report one". Comparing it
+// would force a walk on every single boot, so that case falls back to the tail
+// alone. A saved stamp of 0 is the opposite situation: markers written before
+// this signal existed. That resolves itself with one walk, which restamps them,
+// so it counts as a change rather than silently leaving the signal inert.
+inline bool folderMarkersChanged(const uint32_t tailNow, const uint32_t stampNow, const uint32_t tailSaved,
+                                 const uint32_t stampSaved) {
+  if (tailNow != tailSaved) return true;
+  if (stampNow == 0) return false;
+  return stampNow != stampSaved;
+}
+
 }  // namespace sleep_folder
