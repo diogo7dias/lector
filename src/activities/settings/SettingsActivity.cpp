@@ -292,12 +292,12 @@ void SettingsActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextRelease([this] {
+  buttonNavigator.onNextStep([this] {
     selectedSettingIndex = skipHeaders(ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1), true);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this] {
+  buttonNavigator.onPreviousStep([this] {
     selectedSettingIndex = skipHeaders(ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1), false);
     requestUpdate();
   });

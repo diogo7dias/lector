@@ -56,12 +56,12 @@ void EpubReaderChapterSelectionActivity::loop() {
     selectChapter();
   }
 
-  buttonNavigator.onNextRelease([this, totalItems] {
+  buttonNavigator.onNextStep([this, totalItems] {
     selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, totalItems] {
+  buttonNavigator.onPreviousStep([this, totalItems] {
     selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
     requestUpdate();
   });

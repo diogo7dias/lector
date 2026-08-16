@@ -40,11 +40,11 @@ void PopupItemsActivity::loop() {
 
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
 
-  buttonNavigator.onNextRelease([this] {
+  buttonNavigator.onNextStep([this] {
     selectedIndex = ButtonNavigator::nextIndex(selectedIndex, ITEM_COUNT);
     requestUpdate();
   });
-  buttonNavigator.onPreviousRelease([this] {
+  buttonNavigator.onPreviousStep([this] {
     selectedIndex = ButtonNavigator::previousIndex(selectedIndex, ITEM_COUNT);
     requestUpdate();
   });

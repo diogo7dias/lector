@@ -442,12 +442,12 @@ void EpubReaderMenuActivity::loop() {
   // other is released in the same pass.
   const int ringSize = static_cast<int>(activeTab().items.size()) + 1;
 
-  buttonNavigator.onNextRelease([this, ringSize] {
+  buttonNavigator.onNextStep([this, ringSize] {
     activeTab().selectedIndex = stepPastHeaders(ButtonNavigator::nextIndex(activeTab().selectedIndex, ringSize), 1);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, ringSize] {
+  buttonNavigator.onPreviousStep([this, ringSize] {
     activeTab().selectedIndex =
         stepPastHeaders(ButtonNavigator::previousIndex(activeTab().selectedIndex, ringSize), -1);
     requestUpdate();

@@ -468,13 +468,13 @@ void FileBrowserActivity::loop() {
     scrollOffset = std::clamp(scrollOffset, 0, std::max(0, listSize - 1));
   };
 
-  buttonNavigator.onNextRelease([this, listSize, followSelection] {
+  buttonNavigator.onNextStep([this, listSize, followSelection] {
     selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousRelease([this, listSize, followSelection] {
+  buttonNavigator.onPreviousStep([this, listSize, followSelection] {
     selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     followSelection();
     requestUpdate();
