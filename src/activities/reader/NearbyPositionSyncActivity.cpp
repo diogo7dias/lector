@@ -200,11 +200,19 @@ void NearbyPositionSyncActivity::loop() {
   // chapter rather than only a raw section number.
   if (session.hasPeerPosition() && !peerPositionMapped) {
     ensureEpubLoaded();
-    SavedProgressPosition peerSaved;
-    peerSaved.xpath = session.peerPosition().xpath.data();
-    peerSaved.percentage = percentageFromQ(session.peerPosition().percentageQ);
-    peerLocalPosition = ProgressMapper::toCrossPoint(epub, peerSaved, renderer, currentSpineIndex, totalPagesInSpine,
-                                                     totalPagesInSpine);
+    if (epub) {
+      SavedProgressPosition peerSaved;
+      peerSaved.xpath = session.peerPosition().xpath.data();
+      peerSaved.percentage = percentageFromQ(session.peerPosition().percentageQ);
+      peerLocalPosition = ProgressMapper::toCrossPoint(epub, peerSaved, renderer, currentSpineIndex, totalPagesInSpine,
+                                                       totalPagesInSpine);
+    } else {
+      // Nothing to resolve the xpath against, and toCrossPoint() dereferences the
+      // book on its first line. Show the raw numbers the peer sent instead.
+      peerLocalPosition.spineIndex = session.peerPosition().spineIndex;
+      peerLocalPosition.pageNumber = session.peerPosition().pageNumber;
+      peerLocalPosition.totalPages = session.peerPosition().totalPages;
+    }
     peerPositionMapped = true;
   }
 
