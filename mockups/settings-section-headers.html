@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lector — settings section headers</title>
+<style>
+  :root { --ink: #000; --paper: #fff; }
+  body {
+    margin: 0; padding: 24px 16px 48px;
+    background: #d8d8d4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 17px; margin: 0 0 4px; }
+  p.note { font-size: 13px; margin: 0 0 24px; color: #444; max-width: 720px; line-height: 1.45; }
+  .row { display: flex; flex-wrap: wrap; gap: 20px; justify-content: center; }
+  figure { margin: 0; }
+  figcaption { font-size: 12px; text-align: center; margin: 8px 0 0; font-weight: 600; }
+  figcaption small { display: block; font-weight: 400; color: #555; margin-top: 2px; }
+
+  /* 480 x 800 panel, shown at 0.62 scale so several fit side by side */
+  .panel {
+    width: 298px; height: 420px;
+    background: var(--paper); color: var(--ink);
+    border: 1px solid #999;
+    box-shadow: 0 2px 6px rgba(0,0,0,.18);
+    display: flex; flex-direction: column;
+    font-family: "DejaVu Sans", Verdana, sans-serif;
+    overflow: hidden;
+  }
+  .statusbar {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; padding: 5px 12px; border-bottom: 1px solid var(--ink);
+  }
+  .tabs { display: flex; font-size: 10px; border-bottom: 1px solid var(--ink); }
+  .tabs span { flex: 1; text-align: center; padding: 5px 0; }
+  .tabs span.on { background: var(--ink); color: var(--paper); }
+  .list { flex: 1; }
+
+  .item {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px; padding: 7px 12px;
+  }
+  .item.sel { background: var(--ink); color: var(--paper); }
+  .item .val { font-size: 11px; }
+
+  /* Current style: label plus a rule filling the rest of the row */
+  .head-now {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; padding: 7px 12px 3px; letter-spacing: .06em;
+  }
+  .head-now .rule { flex: 1; height: 1px; background: var(--ink); }
+
+  /* Proposed: filled bar, centred label */
+  .head-bar {
+    background: var(--ink); color: var(--paper);
+    font-size: 11px; text-align: center;
+    padding: 5px 0; letter-spacing: .10em;
+  }
+  .head-bar.inset { margin: 4px 12px; }
+  .head-bar.tall { padding: 8px 0; }
+  .head-bar.spaced { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Settings section headers — 4 options</h1>
+<p class="note">
+  Same tab and same rows in every panel, so only the section header changes.
+  Panel 1 is what the firmware draws today. Panels 2 to 4 are the black bar with
+  white centred text, differing only in how the bar meets the screen edge and how
+  tall it is. Selected row is drawn inverted, exactly as the device does, so you can
+  check the bar does not read as a selected row.
+</p>
+
+<div class="row">
+
+  <figure>
+    <div class="panel">
+      <div class="statusbar"><span>Settings</span><span>78%</span></div>
+      <div class="tabs"><span>Reading</span><span class="on">Look</span><span>Controls</span><span>System</span></div>
+      <div class="list">
+        <div class="head-now"><span>TEXT</span><span class="rule"></span></div>
+        <div class="item"><span>Font</span><span class="val">Bookerly</span></div>
+        <div class="item"><span>Font size</span><span class="val">11</span></div>
+        <div class="item"><span>Line spacing</span><span class="val">Normal</span></div>
+        <div class="head-now"><span>PAGE</span><span class="rule"></span></div>
+        <div class="item sel"><span>Margins</span><span class="val">Medium</span></div>
+        <div class="item"><span>Justify text</span><span class="val">On</span></div>
+        <div class="head-now"><span>STATUS BAR</span><span class="rule"></span></div>
+        <div class="item"><span>Status bar</span><span class="val">On</span></div>
+        <div class="item"><span>Progress bar</span><span class="val">On</span></div>
+      </div>
+    </div>
+    <figcaption>1 — Today<small>label plus rule, left aligned</small></figcaption>
+  </figure>
+
+  <figure>
+    <div class="panel">
+      <div class="statusbar"><span>Settings</span><span>78%</span></div>
+      <div class="tabs"><span>Reading</span><span class="on">Look</span><span>Controls</span><span>System</span></div>
+      <div class="list">
+        <div class="head-bar">TEXT</div>
+        <div class="item"><span>Font</span><span class="val">Bookerly</span></div>
+        <div class="item"><span>Font size</span><span class="val">11</span></div>
+        <div class="item"><span>Line spacing</span><span class="val">Normal</span></div>
+        <div class="head-bar">PAGE</div>
+        <div class="item sel"><span>Margins</span><span class="val">Medium</span></div>
+        <div class="item"><span>Justify text</span><span class="val">On</span></div>
+        <div class="head-bar">STATUS BAR</div>
+        <div class="item"><span>Status bar</span><span class="val">On</span></div>
+        <div class="item"><span>Progress bar</span><span class="val">On</span></div>
+      </div>
+    </div>
+    <figcaption>2 — Full-width bar<small>bar touches both edges</small></figcaption>
+  </figure>
+
+  <figure>
+    <div class="panel">
+      <div class="statusbar"><span>Settings</span><span>78%</span></div>
+      <div class="tabs"><span>Reading</span><span class="on">Look</span><span>Controls</span><span>System</span></div>
+      <div class="list">
+        <div class="head-bar inset">TEXT</div>
+        <div class="item"><span>Font</span><span class="val">Bookerly</span></div>
+        <div class="item"><span>Font size</span><span class="val">11</span></div>
+        <div class="item"><span>Line spacing</span><span class="val">Normal</span></div>
+        <div class="head-bar inset">PAGE</div>
+        <div class="item sel"><span>Margins</span><span class="val">Medium</span></div>
+        <div class="item"><span>Justify text</span><span class="val">On</span></div>
+        <div class="head-bar inset">STATUS BAR</div>
+        <div class="item"><span>Status bar</span><span class="val">On</span></div>
+        <div class="item"><span>Progress bar</span><span class="val">On</span></div>
+      </div>
+    </div>
+    <figcaption>3 — Inset bar<small>same side margin as the rows</small></figcaption>
+  </figure>
+
+  <figure>
+    <div class="panel">
+      <div class="statusbar"><span>Settings</span><span>78%</span></div>
+      <div class="tabs"><span>Reading</span><span class="on">Look</span><span>Controls</span><span>System</span></div>
+      <div class="list">
+        <div class="head-bar tall">TEXT</div>
+        <div class="item"><span>Font</span><span class="val">Bookerly</span></div>
+        <div class="item"><span>Font size</span><span class="val">11</span></div>
+        <div class="item"><span>Line spacing</span><span class="val">Normal</span></div>
+        <div class="head-bar tall spaced">PAGE</div>
+        <div class="item sel"><span>Margins</span><span class="val">Medium</span></div>
+        <div class="item"><span>Justify text</span><span class="val">On</span></div>
+        <div class="head-bar tall spaced">STATUS BAR</div>
+        <div class="item"><span>Status bar</span><span class="val">On</span></div>
+        <div class="item"><span>Progress bar</span><span class="val">On</span></div>
+      </div>
+    </div>
+    <figcaption>4 — Full-width, taller, breathing room<small>costs one row of list space per section</small></figcaption>
+  </figure>
+
+</div>
+</body>
+</html>

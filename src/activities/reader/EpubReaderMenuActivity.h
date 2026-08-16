@@ -18,13 +18,11 @@ class EpubReaderMenuActivity final : public Activity {
     FOOTNOTES,
     TEXT_SETTINGS,
     GO_TO_PERCENT,
-    AUTO_PAGE_TURN,
     ROTATE_SCREEN,
     BOOKMARKS,
     TOGGLE_BOOKMARK,
     SCREENSHOT,
     DISPLAY_QR,
-    GO_HOME,
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
@@ -38,7 +36,6 @@ class EpubReaderMenuActivity final : public Activity {
     TOGGLE_PROGRESS_BAR,        // cycle Off / Slim / Medium / Fat for the bar that outlives a hidden status bar
     GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
-    BOOK_INFO,                  // cover, author, language and the publisher synopsis
     READING_STATS,              // per-book and all-books reading statistics
     STEAL_LOOK,                 // copy another book's reader settings onto this one
     READING_THEMES,             // saved reader looks: apply one to this book, or save this one
@@ -121,7 +118,6 @@ class EpubReaderMenuActivity final : public Activity {
   std::string author;
   std::string chapterName;
   uint8_t pendingOrientation = 0;
-  uint8_t selectedPageTurnOption = 0;
   uint8_t selectedParagraphNumbering = 0;
   uint8_t selectedParagraphNumberSize = 1;
   // Per-book Paperback Look, toggled live in the menu; returned via MenuResult.
@@ -142,7 +138,6 @@ class EpubReaderMenuActivity final : public Activity {
   // Same four labels the Customise Status Bar screen uses for this setting.
   const std::vector<StrId> progressBarLabels = {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM,
                                                 StrId::STR_FAT};
-  const std::vector<const char*> pageTurnLabels = {I18N.get(StrId::STR_STATE_OFF), "1", "3", "6", "12"};
   int currentPage = 0;
   int totalPages = 0;
   int bookProgressPercent = 0;

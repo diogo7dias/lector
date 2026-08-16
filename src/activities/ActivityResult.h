@@ -21,7 +21,6 @@ struct KeyboardResult {
 struct MenuResult {
   int action = -1;
   uint8_t orientation = 0;
-  uint8_t pageTurnOption = 0;
   uint8_t paragraphNumbering = 0;
   // Per-book paragraph-number size (0 = Small, 1 = Double), cycled in the menu.
   uint8_t paragraphNumberSize = 1;

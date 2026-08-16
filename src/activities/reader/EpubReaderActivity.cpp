@@ -20,7 +20,6 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
-#include "BookInfoActivity.h"
 #include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
@@ -66,7 +65,6 @@
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 // pages per minute, first item is 1 to prevent division by zero if accessed
-constexpr int PAGE_TURN_RATES[] = {1, 1, 3, 6, 12};
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
 // paragraph_counts.bin: [uint8 version][uint16 spineCount][uint16 count]*spineCount.
@@ -364,7 +362,6 @@ void EpubReaderActivity::openReaderMenu() {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
         applyOrientation(menu.orientation);
-        toggleAutoPageTurn(menu.pageTurnOption);
         applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
         applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
         // Last of the live toggles because it is the only one that repaginates.
@@ -821,32 +818,6 @@ void EpubReaderActivity::loop() {
     pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;
-  }
-
-  if (automaticPageTurnActive) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-      automaticPageTurnActive = false;
-      // updates chapter title space to indicate page turn disabled
-      requestUpdate();
-      return;
-    }
-
-    if (!section) {
-      requestUpdate();
-      return;
-    }
-
-    // Skips page turn if renderingMutex is busy
-    if (RenderLock::peek()) {
-      lastPageTurnTime = millis();
-      return;
-    }
-
-    if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
-      pageTurn(true);
-      return;
-    }
   }
 
   if (showBookmarkMessage && (millis() - bookmarkMessageTime) >= ReaderUtils::BOOKMARK_MESSAGE_DURATION_MS) {
@@ -1351,21 +1322,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
           });
       break;
     }
-    case EpubReaderMenuActivity::MenuAction::BOOK_INFO: {
-      // The screen itself reads nothing: hand it the metadata already in memory and
-      // a thumbnail path, rendering one first if this book has never needed a cover.
-      constexpr int kInfoCoverHeight = 360;
-      std::string coverPath;
-      if (epub->generateThumbBmp(kInfoCoverHeight)) {
-        const std::string path = epub->getThumbBmpPath(kInfoCoverHeight);
-        if (Storage.exists(path.c_str())) coverPath = path;
-      }
-      startActivityForResult(
-          std::make_unique<BookInfoActivity>(renderer, mappedInput, epub->getTitle(), epub->getAuthor(),
-                                             epub->getLanguage(), epub->getDescription(), coverPath),
-          [this](const ActivityResult&) { requestUpdate(); });
-      break;
-    }
     case EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH: {
       // Ask for a paragraph number, then jump to it (the number shown by the marks).
       startActivityForResult(
@@ -1464,10 +1420,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             onGoHome();
           });
       break;
-    }
-    case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-      onGoHome();
-      return;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
       {
@@ -2156,26 +2108,6 @@ void EpubReaderActivity::drawQuoteUnderlines(const Page& page, const int marginL
   drawSegments();
 }
 
-void EpubReaderActivity::toggleAutoPageTurn(const uint8_t selectedPageTurnOption) {
-  if (selectedPageTurnOption == 0 || selectedPageTurnOption >= std::size(PAGE_TURN_RATES)) {
-    automaticPageTurnActive = false;
-    return;
-  }
-
-  lastPageTurnTime = millis();
-  // calculates page turn duration by dividing by number of pages
-  pageTurnDuration = (1UL * 60 * 1000) / PAGE_TURN_RATES[selectedPageTurnOption];
-  automaticPageTurnActive = true;
-
-  const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
-  // resets cached section so that space is reserved for auto page turn indicator when None or progress bar only
-  if (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight()) {
-    // Preserve current reading position so we can restore after reflow.
-    RenderLock lock(*this);
-    dropSectionForRelayout();
-  }
-}
-
 void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   // A page turn is authoritative: do not let a resume/reflow position captured
   // at session start snap the reader back after the incremental build completes.
@@ -2229,7 +2161,6 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
       }
     }
   }
-  lastPageTurnTime = millis();
   requestUpdate();
 }
 
@@ -2271,7 +2202,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     }
     GUI.drawPopup(renderer, msg);
     scheduleGhostCleanup();
-    automaticPageTurnActive = false;
   };
 
   // edge case handling for sub-zero spine index
@@ -2291,7 +2221,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.clearScreen();
     endOfBookOptions.render(renderer, mappedInput);
     renderer.displayBuffer();
-    automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
   }
@@ -2312,11 +2241,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // re-paginates the section cache like any margin change.
   // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
   // height in whichever edge holds the title so the reading text is pushed clear.
-  // Auto page turn shows a one-line countdown in the title slot, so skip the wrap
-  // reservation then.
   int sbTitleExtraPx = 0;
-  if (!automaticPageTurnActive && SETTINGS.statusBarEnabled() &&
-      SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && SETTINGS.sbTitleTruncate == 0) {
+  if (SETTINGS.statusBarEnabled() && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
+      SETTINGS.sbTitleTruncate == 0) {
     std::string sbTitle;
     if (SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
       const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
@@ -2332,9 +2259,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                           SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
   const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true, sbTitleTop ? sbTitleExtraPx : 0);
   const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true, sbTitleTop ? 0 : sbTitleExtraPx);
-  // Auto page turn shows a one-line countdown in the title slot; reserve a top band for it.
-  const int autoTurnBand = automaticPageTurnActive ? UITheme::getInstance().getMetrics().statusBarVerticalMargin : 0;
-  orientedMarginTop += std::max<int>(sbTop, autoTurnBand);
+  orientedMarginTop += sbTop;
   orientedMarginBottom += sbBottom;
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -2710,7 +2635,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::REGULAR);
     renderStatusBar();
     renderer.displayBuffer();
-    automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
   }
@@ -2720,7 +2644,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderer.drawCenteredText(UI_12_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::REGULAR);
     renderStatusBar();
     renderer.displayBuffer();
-    automaticPageTurnActive = false;
     showPendingSyncSaveError();
     return;
   }
@@ -2733,7 +2656,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     auto p = section->loadPage(section->currentPage);
     if (!p) {
       LOG_ERR("ERS", "Failed to load page from SD - clearing section cache");
-      automaticPageTurnActive = false;
       // Retrying rebuilds a transiently corrupt section and usually recovers, but a page that keeps
       // failing would loop forever on a blank screen, so bound the retries before giving up.
       const bool giveUp = ++pageLoadRetryCount > MAX_PAGE_LOAD_RETRIES;
@@ -3199,14 +3121,6 @@ void EpubReaderActivity::renderStatusBar() const {
   // hides the item instead of showing a 0 that will never move.
   if (statsTrackingActive) d.sessionPages = static_cast<int>(statsSession.currentSession().pagesTurned);
   d.bookmarked = currentPageBookmarked;
-
-  // Auto page turn: show the countdown in the title slot (wherever the title is
-  // anchored). If the title item is off the countdown simply isn't shown.
-  if (automaticPageTurnActive && pageTurnDuration > 0) {
-    const std::string label = std::string(tr(STR_AUTO_TURN_ENABLED)) + std::to_string(60 * 1000 / pageTurnDuration);
-    d.bookTitle = label;
-    d.chapterTitle = label;
-  }
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so
   // nothing drawn afterwards inherits the smear.

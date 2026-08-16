@@ -94,7 +94,6 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
   // --- This Book: what the book says about itself, and what you take out of it ---
   {
     auto& items = page(Tab::ThisBook, StrId::STR_SEC_THIS_BOOK);
-    items.push_back({MenuAction::BOOK_INFO, StrId::STR_BOOK_INFO});
     items.push_back({MenuAction::READING_STATS, StrId::STR_READING_STATS});
     items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
     items.push_back({MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE});
@@ -170,12 +169,10 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
   // --- Device: everything that is not about this book ---------------------------
   {
     auto& items = page(Tab::Device, StrId::STR_SEC_DEVICE);
-    items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
     items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
     items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
     items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
     items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
-    items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
   }
 
   return pages;
@@ -237,7 +234,6 @@ void EpubReaderMenuActivity::closeCancelled() {
   result.isCancelled = true;
   result.data = MenuResult{-1,
                            pendingOrientation,
-                           selectedPageTurnOption,
                            selectedParagraphNumbering,
                            selectedParagraphNumberSize,
                            selectedPaperbackBody,
@@ -324,16 +320,6 @@ void EpubReaderMenuActivity::loop() {
       return;
     }
 
-    if (selectedAction == MenuAction::AUTO_PAGE_TURN) {
-      optionPopup.show(I18N.get(StrId::STR_AUTO_TURN_PAGES_PER_MIN), pageTurnLabels.data(),
-                       static_cast<int>(pageTurnLabels.size()), selectedPageTurnOption, [this](int idx) {
-                         selectedPageTurnOption = idx;
-                         requestUpdate();
-                       });
-      requestUpdate();
-      return;
-    }
-
     if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
       // Cycle Off / Per Chapter in place; applied by the reader on exit.
       selectedParagraphNumbering = (selectedParagraphNumbering + 1) % CrossPointSettings::PARAGRAPH_NUMBERING_COUNT;
@@ -382,9 +368,9 @@ void EpubReaderMenuActivity::loop() {
     // through pays one. The row label is right the next time the menu opens because the
     // reader moves APP_STATE to the new name before it returns.
 
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedPageTurnOption,
-                         selectedParagraphNumbering, selectedParagraphNumberSize, selectedPaperbackBody,
-                         selectedPaperbackStatus, selectedStatusBar, selectedProgressBar, firedHoldFunction});
+    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedParagraphNumbering,
+                         selectedParagraphNumberSize, selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar,
+                         selectedProgressBar, firedHoldFunction});
     finish();
   };
 
@@ -509,9 +495,6 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
         if (value == MenuAction::ROTATE_SCREEN) {
           // Render current orientation value on the right edge of the content area.
           return I18N.get(orientationLabels[pendingOrientation]);
-        } else if (value == MenuAction::AUTO_PAGE_TURN) {
-          // Render current page turn value on the right edge of the content area.
-          return pageTurnLabels[selectedPageTurnOption];
         } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
           // Render current paragraph-numbering mode on the right edge.
           return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
