@@ -68,7 +68,7 @@ void BookStatsActivity::onEnter() {
 }
 
 void BookStatsActivity::loop() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (page_ == Page::AllBooks) {
       page_ = Page::CurrentBook;
       requestUpdate();
@@ -93,7 +93,7 @@ void BookStatsActivity::loop() {
     }
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) confirmReset();
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmReset();
 }
 
 void BookStatsActivity::confirmReset() {

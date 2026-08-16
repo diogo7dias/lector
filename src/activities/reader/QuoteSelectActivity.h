@@ -102,8 +102,4 @@ class QuoteSelectActivity final : public Activity {
   std::vector<uint32_t> committedMarks;
   // Captured when the start word is confirmed, while its page is still loaded.
   quote_text::QuoteAnchor startAnchor;
-
-  // Entered while Confirm is still held (menu Confirm-release): ignore the stale
-  // release until a fresh press is seen.
-  bool confirmPressSeen = false;
 };

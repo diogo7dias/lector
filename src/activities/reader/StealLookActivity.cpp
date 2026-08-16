@@ -39,7 +39,7 @@ void StealLookActivity::onExit() {
 void StealLookActivity::loop() {
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, true);
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (!candidates.empty() && selectorIndex < candidates.size()) {
       setResult(FilePathResult{candidates[selectorIndex].cachePath});
       finish();
@@ -47,7 +47,7 @@ void StealLookActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     ActivityResult res;
     res.isCancelled = true;
     setResult(std::move(res));

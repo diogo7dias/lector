@@ -79,7 +79,9 @@ void EpubReaderBookmarksActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Back carries no hold here, so it closes on the press. Confirm cannot: holding it
+  // deletes, so which action was meant is only known when it comes back up.
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));

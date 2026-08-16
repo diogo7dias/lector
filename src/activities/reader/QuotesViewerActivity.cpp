@@ -208,7 +208,7 @@ void QuotesViewerActivity::deleteSelected() {
 void QuotesViewerActivity::loop() {
   if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) confirmHoldConsumed = false;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));

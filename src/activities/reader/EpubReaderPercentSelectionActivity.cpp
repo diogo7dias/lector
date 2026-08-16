@@ -39,7 +39,7 @@ void EpubReaderPercentSelectionActivity::adjustPercent(const int delta) {
 
 void EpubReaderPercentSelectionActivity::loop() {
   // Back cancels, confirm selects, arrows adjust the percent.
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     ActivityResult result;
     result.isCancelled = true;
     setResult(std::move(result));
@@ -47,7 +47,7 @@ void EpubReaderPercentSelectionActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     setResult(PercentResult{percent});
     finish();
     return;

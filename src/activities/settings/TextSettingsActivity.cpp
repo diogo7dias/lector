@@ -124,7 +124,7 @@ void TextSettingsActivity::loop() {
   if (valueBar_.handleInput(mappedInput, [this] { requestUpdate(); })) return;     // bar owns input while open
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
   }

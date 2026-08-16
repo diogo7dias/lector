@@ -313,9 +313,8 @@ bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::s
 }
 
 void QuoteSelectActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen = true;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (phase == Phase::SelectEnd) {
       // Drop the whole selection, including any pages it had run into.
       phase = Phase::SelectStart;
@@ -334,7 +333,7 @@ void QuoteSelectActivity::loop() {
   // A selection that has already crossed a page can be saved even from a page with no
   // words of its own (an image page), so the picker never traps the user there.
   const bool canConfirm = !words.empty() || (phase == Phase::SelectEnd && !committedText.empty());
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && canConfirm) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && canConfirm) {
     if (phase == Phase::SelectStart) {
       startWord = cursor;
       // Capture the anchor now: the selection may leave this page, and the paragraph

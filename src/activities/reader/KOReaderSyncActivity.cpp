@@ -535,8 +535,8 @@ void KOReaderSyncActivity::loop() {
       returnToReader();
       return;
     }
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       returnToReader();
     }
     return;
@@ -552,28 +552,28 @@ void KOReaderSyncActivity::loop() {
     };
 
     // Navigate options
-    if (mappedInput.wasReleased(MappedInputManager::Button::Up) ||
-        mappedInput.wasReleased(MappedInputManager::Button::Left)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
-    } else if (mappedInput.wasReleased(MappedInputManager::Button::Down) ||
-               mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    } else if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+               mappedInput.wasPressed(MappedInputManager::Button::Right)) {
       selectedOption = (selectedOption + 1) % 2;  // Wrap around among 2 options
       requestUpdate();
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       chooseSelected();
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       returnToReader();
     }
     return;
   }
 
   if (state == NO_REMOTE_PROGRESS) {
-    if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       // Calculate hash if not done yet
       if (documentHash.empty()) {
         if (KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME) {
@@ -585,7 +585,7 @@ void KOReaderSyncActivity::loop() {
       performUpload();
     }
 
-    if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       returnToReader();
     }
     return;

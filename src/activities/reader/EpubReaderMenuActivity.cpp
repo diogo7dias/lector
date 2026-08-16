@@ -345,7 +345,8 @@ void EpubReaderMenuActivity::loop() {
     }
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  // Back closes the menu and carries no hold, so it goes on the press.
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     closeCancelled();
     return;
   }
@@ -456,7 +457,12 @@ void EpubReaderMenuActivity::loop() {
   buttonNavigator.onNextContinuous([this] { switchTab(); });
   buttonNavigator.onPreviousContinuous([this] { switchTab(-1); });
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  // With a function bound to the menu hold, Confirm carries two actions and cannot be
+  // resolved until the button comes up. With nothing bound there is nothing to tell
+  // apart, so the row activates the instant Confirm goes down.
+  const bool confirmHasHold = SETTINGS.menuHoldFunction != CrossPointSettings::LP_MENU_DISABLED;
+  if (confirmHasHold ? mappedInput.wasReleased(MappedInputManager::Button::Confirm)
+                     : mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     activateSelected();
     return;
   }

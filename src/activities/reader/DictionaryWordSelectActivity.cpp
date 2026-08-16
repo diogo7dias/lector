@@ -236,13 +236,12 @@ void DictionaryWordSelectActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressSeen = true;
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && confirmPressSeen && !words.empty()) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) && !words.empty()) {
     performLookup();
     return;
   }
