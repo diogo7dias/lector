@@ -29,9 +29,15 @@ class NearbyFileTransferActivity final : public Activity {
  public:
   enum class Mode : uint8_t { Send, Receive };
 
-  /** `sourcePath` is the file to send, and is ignored when receiving. */
+  /**
+   * `sourcePath` is the file to send, and is ignored when receiving.
+   *
+   * `returnToReaderPath` is set when this was opened from inside a book: the
+   * reader released the book to make room for the radio, so leaving has to reopen
+   * it rather than drop the user on the home screen.
+   */
   explicit NearbyFileTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Mode mode,
-                                      std::string sourcePath = {});
+                                      std::string sourcePath = {}, std::string returnToReaderPath = {});
 
   void onEnter() override;
   void onExit() override;
@@ -59,6 +65,8 @@ class NearbyFileTransferActivity final : public Activity {
   void discardPartialFile();
   void closeFiles();
   void finishWithError(const char* message);
+  /** Leaves the screen, back to the book when it was opened from one. */
+  void leave();
 
   void renderSearching(const Rect& screen, int top) const;
   void renderPeerList(const Rect& screen, int top) const;
@@ -68,6 +76,7 @@ class NearbyFileTransferActivity final : public Activity {
 
   Mode mode;
   std::string sourcePath;
+  std::string returnToReaderPath;
   std::string sourceName;
   uint64_t sourceSize = 0;
 

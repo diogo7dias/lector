@@ -235,6 +235,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LP_MENU_BOOKMARKS = 14,
     // The saved-quotes viewer, next to Grab Quote that writes to it.
     LP_MENU_VIEW_QUOTES = 15,
+    // Sends this book's own file to another reader over ESP-NOW. Bindable to a
+    // button, but deliberately absent from POPUP_ITEM_FUNCTIONS below: popupItems
+    // is a 16-bit mask keyed by these values, and bit 15 is already the last one
+    // there is. Listing it in the pop-up means widening that mask and migrating
+    // every stored value.
+    LP_MENU_NEARBY_SEND_BOOK = 16,
     LONG_PRESS_MENU_FUNCTION_COUNT
   };
 

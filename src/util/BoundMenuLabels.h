@@ -48,6 +48,8 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       // flips between "Hold this wallpaper" and "Resume rotation" with the current state.
       // A binding names the action, not what it will do next time.
       return StrId::STR_PAUSE_WALLPAPER_ROTATION;
+    case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
+      return StrId::STR_NEARBY_SEND_FILE;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;

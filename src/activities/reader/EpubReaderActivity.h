@@ -311,6 +311,8 @@ class EpubReaderActivity final : public Activity {
   bool launchKOReaderSync();
   // Trades this book's position with another reader over ESP-NOW, no network involved.
   void launchNearbyPositionSync();
+  // Sends this book's own file to another reader over ESP-NOW.
+  void launchNearbyBookSend();
   void applyOrientation(uint8_t orientation);
   // Per-book reader settings (#9).
   std::string readerOverridePath() const;

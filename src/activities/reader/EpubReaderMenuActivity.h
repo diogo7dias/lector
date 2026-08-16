@@ -25,7 +25,8 @@ class EpubReaderMenuActivity final : public Activity {
     SCREENSHOT,
     DISPLAY_QR,
     SYNC,
-    NEARBY_SYNC,  // trade the reading position with another reader over ESP-NOW
+    NEARBY_SYNC,       // trade the reading position with another reader over ESP-NOW
+    NEARBY_SEND_BOOK,  // send this book itself to another reader over ESP-NOW
     DELETE_CACHE,
     DICTIONARY,
     READER_SETTINGS,            // open this book's per-book reader settings

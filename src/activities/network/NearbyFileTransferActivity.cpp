@@ -31,8 +31,20 @@ constexpr const char* DESTINATION_FOLDER = bookfiling::ROOT_FOLDER;
 }  // namespace
 
 NearbyFileTransferActivity::NearbyFileTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                                       const Mode mode, std::string sourcePath)
-    : Activity("NearbyFileTransfer", renderer, mappedInput), mode(mode), sourcePath(std::move(sourcePath)) {}
+                                                       const Mode mode, std::string sourcePath,
+                                                       std::string returnToReaderPath)
+    : Activity("NearbyFileTransfer", renderer, mappedInput),
+      mode(mode),
+      sourcePath(std::move(sourcePath)),
+      returnToReaderPath(std::move(returnToReaderPath)) {}
+
+void NearbyFileTransferActivity::leave() {
+  if (!returnToReaderPath.empty()) {
+    activityManager.goToReader(returnToReaderPath);
+    return;
+  }
+  activityManager.popActivity();
+}
 
 void NearbyFileTransferActivity::onEnter() {
   Activity::onEnter();
@@ -354,7 +366,7 @@ void NearbyFileTransferActivity::loop() {
   if (radioFailed || sourceUnreadable) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      activityManager.popActivity();
+      leave();
     }
     return;
   }
@@ -401,7 +413,7 @@ void NearbyFileTransferActivity::loop() {
     // vanishing, so it stops waiting instead of timing out.
     session.cancel(millis());
     runSessionActions();
-    activityManager.popActivity();
+    leave();
     return;
   }
 
@@ -429,7 +441,7 @@ void NearbyFileTransferActivity::loop() {
     autoReturnAt = millis() + AUTO_RETURN_DELAY_MS;
   }
   if (autoReturnAt != 0 && millis() >= autoReturnAt) {
-    activityManager.popActivity();
+    leave();
     return;
   }
 

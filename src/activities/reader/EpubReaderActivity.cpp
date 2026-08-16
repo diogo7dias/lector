@@ -47,6 +47,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "StealLookActivity.h"
+#include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/settings/StatusBarSettingsActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -587,6 +588,9 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_VIEW_QUOTES:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::VIEW_QUOTES);
+      return true;
+    case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::NEARBY_SEND_BOOK);
       return true;
     case CrossPointSettings::LP_MENU_GO_TO_PARAGRAPH:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH);
@@ -1431,6 +1435,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       launchNearbyPositionSync();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::NEARBY_SEND_BOOK: {
+      launchNearbyBookSend();
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       startActivityForResult(
           std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
@@ -1463,6 +1471,38 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
   }
+}
+
+void EpubReaderActivity::launchNearbyBookSend() {
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  const std::string savedEpubPath = epub->getPath();
+
+  // The transfer screen reopens this book on the way out, and goToReader() reads
+  // this file to know where to land, so a failed write aborts the send.
+  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
+    LOG_ERR("NBFT", "Aborting nearby send because current progress could not be saved");
+    pendingSyncSaveError = true;
+    requestUpdate();
+    return;
+  }
+
+  // Release Epub and Section before the radio comes up, as the sync paths do.
+  {
+    RenderLock lock(*this);
+    if (section) {
+      nextPageNumber = section->currentPage;
+    }
+    // The image extractor holds a raw pointer into this epub (see onEnter);
+    // clear it before the early release, mirroring onExit(), or a later image
+    // render would call through a dangling context.
+    ImageBlock::setExtractor(nullptr, nullptr);
+    section.reset();
+    epub.reset();
+  }
+
+  activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
+      renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, savedEpubPath, savedEpubPath));
 }
 
 void EpubReaderActivity::launchNearbyPositionSync() {
