@@ -90,6 +90,15 @@ class SyncSession {
   const CompactPosition& peerPosition() const { return peerPosition_; }
   const CompactPosition& localPosition() const { return localPosition_; }
 
+  /**
+   * How the decoded packets were classified. Two readers stuck searching look the
+   * same whether each hears only itself, hears a stranger it has already paired
+   * away from, or hears nothing, and the counts separate those cases.
+   */
+  uint16_t packetsFromSelf() const { return packetsFromSelf_; }
+  uint16_t packetsFromOthers() const { return packetsFromOthers_; }
+  uint16_t packetsFromPeer() const { return packetsFromPeer_; }
+
   /** True when the peer is further into the book than this device. */
   bool peerIsFurtherAlong() const;
   /** True when both devices are on the same page of the same book. */
@@ -119,6 +128,9 @@ class SyncSession {
   uint32_t lastPositionSendMs_ = 0;
   uint32_t lastApplySendMs_ = 0;
   uint32_t lastPeerPacketMs_ = 0;
+  uint16_t packetsFromSelf_ = 0;
+  uint16_t packetsFromOthers_ = 0;
+  uint16_t packetsFromPeer_ = 0;
   bool helloSent_ = false;
   bool positionSent_ = false;
   bool applySent_ = false;

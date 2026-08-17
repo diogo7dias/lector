@@ -50,9 +50,16 @@ void SyncSession::onPacket(const PacketView& packet, const uint32_t nowMs) {
   if (isFinished()) return;
   // The radio can hear this device's own broadcast; syncing with itself would
   // pair the session against its own position and never progress.
-  if (packet.deviceMac == localMac_) return;
+  if (packet.deviceMac == localMac_) {
+    packetsFromSelf_++;
+    return;
+  }
   // Once paired, a third reader in the room is not part of this conversation.
-  if (hasPeer_ && packet.deviceMac != peerMac_) return;
+  if (hasPeer_ && packet.deviceMac != peerMac_) {
+    packetsFromOthers_++;
+    return;
+  }
+  packetsFromPeer_++;
 
   if (!hasPeer_) {
     if (packet.type != PacketType::HELLO) return;

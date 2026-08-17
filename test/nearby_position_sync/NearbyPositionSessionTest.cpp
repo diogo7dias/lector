@@ -16,6 +16,7 @@ constexpr const char* OUR_HASH = "0123456789abcdef0123456789abcdef";
 constexpr const char* THEIR_HASH = "fedcba9876543210fedcba9876543210";
 constexpr std::array<uint8_t, MAC_BYTES> PEER_MAC = {0xaa, 0xbb, 0xcc, 0x01, 0x02, 0x03};
 constexpr std::array<uint8_t, MAC_BYTES> STRANGER_MAC = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66};
+constexpr std::array<uint8_t, MAC_BYTES> OUR_MAC = {0x24, 0x6f, 0x28, 0x77, 0x88, 0x99};
 
 CompactPosition positionAt(const char* hash, const uint16_t spine, const uint16_t page, const float percentage) {
   CompactPosition pos;
@@ -282,6 +283,34 @@ TEST(NearbyPositionSession, IgnoresOurOwnEchoedBroadcast) {
 
   EXPECT_FALSE(session.hasPeer());
   EXPECT_EQ(session.state(), SyncState::SEARCHING);
+}
+
+TEST(NearbyPositionSession, CountsWhereEachPacketCameFrom) {
+  // These counts are shown on the searching screen. A reader that hears only its
+  // own broadcasts and one that hears nothing look the same on the panel, and the
+  // counts are the only thing that separates them.
+  uint32_t now = 1000;
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  session.setLocalMac(OUR_MAC);
+  drain(session, now);
+
+  PacketView echo = packetFrom(OUR_MAC, PacketType::HELLO);
+  echo.position = positionAt(OUR_HASH, 3, 10, 0.25f);
+  session.onPacket(echo, now);
+  session.onPacket(echo, now);
+  EXPECT_EQ(session.packetsFromSelf(), 2);
+  EXPECT_EQ(session.packetsFromPeer(), 0);
+
+  PacketView hello = packetFrom(PEER_MAC, PacketType::HELLO);
+  hello.position = positionAt(OUR_HASH, 9, 12, 0.62f);
+  session.onPacket(hello, now);
+  ASSERT_TRUE(session.hasPeer());
+  EXPECT_EQ(session.packetsFromPeer(), 1);
+
+  session.onPacket(packetFrom(STRANGER_MAC, PacketType::HELLO), now);
+  EXPECT_EQ(session.packetsFromOthers(), 1);
+  EXPECT_EQ(session.packetsFromPeer(), 1);
 }
 
 TEST(NearbyPositionSession, KnowsWhichSideIsFurtherAlong) {

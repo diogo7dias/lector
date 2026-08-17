@@ -66,7 +66,22 @@ class EspNowLink {
    */
   bool nextReceived(Received& received);
 
+  /**
+   * Counters for the searching screen. Two readers that cannot find each other
+   * look identical from the outside whether nothing is heard, what is heard does
+   * not decode, or only this device's own frames come back, and the difference
+   * decides where to look. They are shown on the device because the readers are
+   * tested away from a serial cable.
+   */
+  uint16_t framesHeard() const { return framesHeard_; }
+  uint16_t framesNotDecoded() const { return framesNotDecoded_; }
+  uint16_t framesSent() const { return framesSent_; }
+
  private:
   freeink::nearby::EspNowTransport transport_;
   std::array<uint8_t, nearby_position::MAC_BYTES> localMac_ = {};
+
+  uint16_t framesHeard_ = 0;
+  uint16_t framesNotDecoded_ = 0;
+  uint16_t framesSent_ = 0;
 };
