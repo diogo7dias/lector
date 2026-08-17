@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -86,12 +87,41 @@ class FontDownloadActivity : public Activity {
   int downloadingFamilyIndex_ = 0;
   std::string errorMessage_;
   bool cancelRequested_ = false;
+  // Which attempt at the current file is running, 0 while the first one is in
+  // flight. Shown on the progress screen so a slow retry does not look like a
+  // hang.
+  int retryAttempt_ = 0;
+
+  /** Attempts per file and per manifest fetch, first try included. */
+  static constexpr int MAX_ATTEMPTS = 3;
+  /** Pause before a retry; the second retry waits twice this. */
+  static constexpr uint32_t RETRY_DELAY_MS = 1500;
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
-  void downloadFamily(ManifestFamily& family);
+  /**
+   * Downloads one family's files. Returns false with errorMessage_ set when a
+   * file could not be fetched or did not survive its checks, and leaves the
+   * state alone so a batch can carry on with the next family.
+   */
+  bool downloadFamily(ManifestFamily& family);
+  /** downloadFamily() plus the COMPLETE or ERROR screen, for a single pick. */
+  void downloadSingleFamily(ManifestFamily& family);
+  /**
+   * Fetches one font file, checks it, and retries a few times before giving up.
+   *
+   * A dropped connection, a stalled read, or a body that arrives corrupted are
+   * all normal over patchy WiFi, and one of them used to end the whole install.
+   * Returns false only once every attempt has failed, or straight away when the
+   * reader cancelled.
+   */
+  bool downloadFileWithRetries(const ManifestFile& file, const char* destPath);
+  /** Waits `ms`, staying responsive to a cancel press. Returns false if cancelled. */
+  bool waitBeforeRetry(uint32_t ms);
   void downloadAll();
   void updateAll();
+  /** Downloads every family `wanted` selects, carrying on past any that fail. */
+  void runBatch(const std::function<bool(const ManifestFamily&)>& wanted);
   static bool computeFileCrc32(const char* path, uint32_t& outCrc);
   bool showDownloadAllRow() const;
   bool showUpdateAllRow() const;
