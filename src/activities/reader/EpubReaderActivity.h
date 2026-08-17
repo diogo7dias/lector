@@ -390,4 +390,15 @@ class EpubReaderActivity final : public Activity {
   }
   ScreenshotInfo getScreenshotInfo() const override;
   CrossPointPosition getCurrentPosition() const;
+
+  /**
+   * The paragraph a sync should point at: the last one with text on the page
+   * being read.
+   *
+   * The section's page table records the paragraph that was still being laid out
+   * when each page filled up, so the entry for the current page names the
+   * paragraph the reader can see at the bottom of it. Returns nothing when there
+   * is no section loaded or no paragraph table for it.
+   */
+  std::optional<uint16_t> visibleParagraphIndex() const;
 };

@@ -1508,14 +1508,7 @@ void EpubReaderActivity::launchNearbyBookSend() {
 void EpubReaderActivity::launchNearbyPositionSync() {
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-  std::optional<uint16_t> paragraphIndex;
-  if (section && currentPage >= 0 && currentPage < section->pageCount) {
-    const uint16_t paragraphPage =
-        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
-    if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
-      paragraphIndex = *pIdx;
-    }
-  }
+  const std::optional<uint16_t> paragraphIndex = visibleParagraphIndex();
 
   // Computed while the Epub is still in RAM, exactly as the KOSync path does:
   // the position travels as an xpath, so it must be resolved before the book is
@@ -1560,14 +1553,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-  std::optional<uint16_t> paragraphIndex;
-  if (section && currentPage >= 0 && currentPage < section->pageCount) {
-    const uint16_t paragraphPage =
-        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
-    if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
-      paragraphIndex = *pIdx;
-    }
-  }
+  const std::optional<uint16_t> paragraphIndex = visibleParagraphIndex();
 
   // Pre-compute local KO position and chapter name while Epub is still in RAM.
   CrossPointPosition localPos = getCurrentPosition();
@@ -3413,17 +3399,16 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   return info;
 }
 
+std::optional<uint16_t> EpubReaderActivity::visibleParagraphIndex() const {
+  const int currentPage = section ? section->currentPage : nextPageNumber;
+  if (!section || currentPage < 0 || currentPage >= section->pageCount) return std::nullopt;
+  return section->getParagraphIndexForPage(static_cast<uint16_t>(currentPage));
+}
+
 CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-  std::optional<uint16_t> paragraphIndex;
-  if (section && currentPage >= 0 && currentPage < section->pageCount) {
-    const uint16_t paragraphPage =
-        currentPage > 0 ? static_cast<uint16_t>(currentPage - 1) : static_cast<uint16_t>(currentPage);
-    if (const auto pIdx = section->getParagraphIndexForPage(paragraphPage)) {
-      paragraphIndex = *pIdx;
-    }
-  }
+  const std::optional<uint16_t> paragraphIndex = visibleParagraphIndex();
 
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
   if (section && currentPage >= 0 && currentPage < section->pageCount) {
