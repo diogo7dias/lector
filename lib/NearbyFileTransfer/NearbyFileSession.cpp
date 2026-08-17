@@ -105,9 +105,10 @@ void TransferSession::onEvent(const TransferEvent& incoming, const uint32_t nowM
 
     case TransferEventKind::ACK:
       if (state_ == TransferState::TRANSFERRING && chunkInFlight_) {
-        // The SDK session only advances on the acknowledgement it is waiting
-        // for, so a duplicate or stale ACK cannot skip a chunk.
-        if (session_.acceptAcknowledgement(session_.nextSequence() + 1)) {
+        // The sequence the other reader sent, not one computed here: the SDK only
+        // advances on the acknowledgement it is waiting for, and passing it its
+        // own expected value would make every ACK look like the right one.
+        if (session_.acceptAcknowledgement(incoming.sequence)) {
           session_.advanceSentBytes(chunkLength_);
           chunkOffset_ += chunkLength_;
           chunkInFlight_ = false;
@@ -180,8 +181,12 @@ bool TransferSession::acceptChunk(const uint32_t sequence, const uint8_t* data, 
   return true;
 }
 
-void TransferSession::onChunkSent(const uint16_t length, const uint32_t nowMs) {
+void TransferSession::onChunkSent(const uint8_t* data, const uint16_t length, const uint32_t nowMs) {
   if (state_ != TransferState::TRANSFERRING) return;
+  // Only the first send of a chunk contributes to the checksum. Chunks go out in
+  // file order and the offset only advances on an acknowledgement, so hashing
+  // here produces the same value the receiver builds from what it wrote.
+  if (!chunkInFlight_ && data != nullptr) session_.includeBytes(data, length);
   chunkLength_ = length;
   chunkOffered_ = false;
   chunkInFlight_ = true;

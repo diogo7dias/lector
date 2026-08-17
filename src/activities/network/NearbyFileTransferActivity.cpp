@@ -156,7 +156,7 @@ void NearbyFileTransferActivity::sendChunk(const TransferAction& action) {
   }
 
   if (!sendPacket(PacketType::Data, action.peerMac, action.sequence, buffer.data(), action.length)) return;
-  session.onChunkSent(action.length, millis());
+  session.onChunkSent(buffer.data(), action.length, millis());
 }
 
 bool NearbyFileTransferActivity::writeChunk(const uint8_t* data, const size_t length) {
@@ -272,6 +272,7 @@ void NearbyFileTransferActivity::pumpRadio() {
         break;
       case PacketType::Ack:
         incomingEvent.kind = TransferEventKind::ACK;
+        incomingEvent.sequence = view.sequence;
         session.onEvent(incomingEvent, now);
         break;
       case PacketType::Complete: {

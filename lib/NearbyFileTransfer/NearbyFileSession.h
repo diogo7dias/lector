@@ -88,6 +88,10 @@ struct TransferEvent {
   std::array<uint8_t, freeink::nearby::MAC_BYTES> sourceMac = {};
   std::string deviceName;
   std::string fileName;
+  // ACK: the next chunk the other reader expects. Checked rather than assumed,
+  // because a receiver acknowledges repeats too, so an ACK for a chunk already
+  // past must not advance the one now in flight.
+  uint32_t sequence = 0;
   uint64_t fileSize = 0;
   uint32_t crc32 = 0;
   bool success = false;
@@ -113,8 +117,14 @@ class TransferSession {
 
   /** Sender: the reader picked which device to send to. */
   void choosePeer(const std::array<uint8_t, freeink::nearby::MAC_BYTES>& mac, uint32_t nowMs);
-  /** Sender: the activity put `length` bytes of the current chunk on the air. */
-  void onChunkSent(uint16_t length, uint32_t nowMs);
+  /**
+   * Sender: the activity put `length` bytes of the current chunk on the air.
+   *
+   * The bytes are passed in because the checksum the receiver is asked to match
+   * is built here, one chunk at a time in file order. A resend of a chunk still
+   * in flight is not hashed again, so retries cannot corrupt the running value.
+   */
+  void onChunkSent(const uint8_t* data, uint16_t length, uint32_t nowMs);
 
   /** Receiver: the reader accepted, and the activity resolved where it goes. */
   void acceptOffer(const std::string& destinationPath, uint32_t nowMs);

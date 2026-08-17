@@ -28,10 +28,20 @@ bool contains(const std::vector<TransferAction>& actions, const TransferActionKi
   return false;
 }
 
+/** Filler for tests about the choreography rather than the content of a chunk. */
+const std::vector<uint8_t> FILLER(TransferSession::chunkBytes(), 0x5A);
+
 TransferEvent event(const TransferEventKind kind, const std::array<uint8_t, 6>& mac = PEER_MAC) {
   TransferEvent incoming;
   incoming.kind = kind;
   incoming.sourceMac = mac;
+  return incoming;
+}
+
+/** The acknowledgement a receiver sends once it has written chunk `sequence`. */
+TransferEvent ackFor(const uint32_t sequence, const std::array<uint8_t, 6>& mac = PEER_MAC) {
+  TransferEvent incoming = event(TransferEventKind::ACK, mac);
+  incoming.sequence = sequence + 1;
   return incoming;
 }
 
@@ -135,16 +145,16 @@ TEST(NearbyFileSession, SenderWalksThroughTheFileOneChunkAtATime) {
 
   // Nothing more goes out until the reader acknowledges what was already sent,
   // so a slow card on the far end cannot be flooded.
-  session.onChunkSent(chunk, now);
+  session.onChunkSent(FILLER.data(), chunk, now);
   EXPECT_FALSE(contains(drain(session, now), TransferActionKind::SEND_DATA));
 
-  session.onEvent(event(TransferEventKind::ACK), now);
+  session.onEvent(ackFor(0), now);
   ASSERT_TRUE(session.nextAction(now, action));
   EXPECT_EQ(action.sequence, 1u);
   EXPECT_EQ(action.offset, chunk);
 
-  session.onChunkSent(chunk, now);
-  session.onEvent(event(TransferEventKind::ACK), now);
+  session.onChunkSent(FILLER.data(), chunk, now);
+  session.onEvent(ackFor(1), now);
 
   // The last chunk is only what is left, never a full one past the end.
   ASSERT_TRUE(session.nextAction(now, action));
@@ -159,7 +169,7 @@ TEST(NearbyFileSession, SenderRepeatsAChunkThatIsNeverAcknowledged) {
 
   TransferAction action;
   ASSERT_TRUE(session.nextAction(now, action));
-  session.onChunkSent(chunk, now);
+  session.onChunkSent(FILLER.data(), chunk, now);
 
   now += CHUNK_RETRY_INTERVAL_MS;
   ASSERT_TRUE(session.nextAction(now, action));
@@ -174,7 +184,7 @@ TEST(NearbyFileSession, SenderGivesUpOnAReaderThatStopsAnswering) {
 
   TransferAction action;
   ASSERT_TRUE(session.nextAction(now, action));
-  session.onChunkSent(action.length, now);
+  session.onChunkSent(FILLER.data(), action.length, now);
 
   drain(session, now + PEER_SILENCE_TIMEOUT_MS);
   EXPECT_EQ(session.state(), TransferState::FAILED);
@@ -187,8 +197,8 @@ TEST(NearbyFileSession, SenderFinishesByHandingOverTheChecksum) {
 
   TransferAction action;
   ASSERT_TRUE(session.nextAction(now, action));
-  session.onChunkSent(chunk, now);
-  session.onEvent(event(TransferEventKind::ACK), now);
+  session.onChunkSent(FILLER.data(), chunk, now);
+  session.onEvent(ackFor(0), now);
 
   ASSERT_TRUE(session.nextAction(now, action));
   EXPECT_EQ(action.kind, TransferActionKind::SEND_COMPLETE);
@@ -207,8 +217,8 @@ TEST(NearbyFileSession, SenderReportsAFailedVerificationOnTheOtherSide) {
 
   TransferAction action;
   ASSERT_TRUE(session.nextAction(now, action));
-  session.onChunkSent(chunk, now);
-  session.onEvent(event(TransferEventKind::ACK), now);
+  session.onChunkSent(FILLER.data(), chunk, now);
+  session.onEvent(ackFor(0), now);
   drain(session, now);
 
   TransferEvent result = event(TransferEventKind::RESULT);
@@ -351,6 +361,110 @@ TEST(NearbyFileSession, ReceiverRejectsAFileThatArrivedCorrupted) {
   EXPECT_TRUE(session.shouldDiscardPartialFile());
 }
 
+TEST(NearbyFileSession, APairOfReadersAgreesOnTheChecksumOfTheWholeFile) {
+  // The two sides were only ever tested apart, each against a checksum it had
+  // computed itself, so a sender that hashed nothing at all looked correct: it
+  // sent every byte, reached 100%, and then failed verification every time.
+  uint32_t now = 1000;
+  const uint16_t chunk = TransferSession::chunkBytes();
+
+  // Varied content on purpose. A file of one repeated byte hashes the same
+  // however the chunks are ordered, and would not catch a checksum built from
+  // the wrong bytes.
+  std::vector<uint8_t> file(chunk * 2 + 37);
+  for (size_t index = 0; index < file.size(); index++) file[index] = static_cast<uint8_t>(index * 31 + 7);
+
+  TransferSession sender;
+  sender.beginSend("Book.epub", file.size(), now);
+  drain(sender, now);
+  sender.onEvent(event(TransferEventKind::ADVERTISE), now);
+  sender.choosePeer(PEER_MAC, now);
+  drain(sender, now);
+
+  TransferSession receiver;
+  receiver.beginReceive(now);
+  TransferEvent offer = event(TransferEventKind::OFFER);
+  offer.fileName = "Book.epub";
+  offer.fileSize = file.size();
+  receiver.onEvent(offer, now);
+  receiver.acceptOffer("/books/Book.epub", now);
+  drain(receiver, now);
+  sender.onEvent(event(TransferEventKind::ACCEPT), now);
+
+  // Stands in for the card on the receiving end: only what the session agreed to
+  // write is appended, exactly as the activity does.
+  std::vector<uint8_t> written;
+
+  TransferAction action;
+  // Bounded so a stall fails the test rather than hanging it.
+  for (int step = 0; step < 200; step++) {
+    if (sender.state() == TransferState::DONE || sender.state() == TransferState::FAILED) break;
+    if (!sender.nextAction(now, action)) {
+      now += CHUNK_RETRY_INTERVAL_MS;
+      continue;
+    }
+
+    if (action.kind == TransferActionKind::SEND_DATA) {
+      const uint8_t* slice = file.data() + action.offset;
+      sender.onChunkSent(slice, action.length, now);
+      if (receiver.acceptChunk(action.sequence, slice, action.length, now)) {
+        written.insert(written.end(), slice, slice + action.length);
+      }
+    } else if (action.kind == TransferActionKind::SEND_COMPLETE) {
+      TransferEvent complete = event(TransferEventKind::COMPLETE);
+      complete.crc32 = sender.crc32();
+      receiver.onEvent(complete, now);
+    }
+
+    // Whatever the receiver has to say goes back to the sender.
+    for (const TransferAction& reply : drain(receiver, now)) {
+      if (reply.kind == TransferActionKind::SEND_ACK) {
+        TransferEvent acknowledgement = event(TransferEventKind::ACK);
+        acknowledgement.sequence = reply.sequence;
+        sender.onEvent(acknowledgement, now);
+      } else if (reply.kind == TransferActionKind::SEND_RESULT) {
+        TransferEvent result = event(TransferEventKind::RESULT);
+        result.success = reply.success;
+        sender.onEvent(result, now);
+      }
+    }
+  }
+
+  EXPECT_EQ(written, file);
+  EXPECT_EQ(sender.transferredBytes(), file.size());
+  EXPECT_EQ(sender.crc32(), receiver.crc32()) << "the sender must hash the bytes it sends, or every transfer fails";
+  EXPECT_EQ(receiver.state(), TransferState::DONE);
+  EXPECT_EQ(sender.state(), TransferState::DONE);
+}
+
+TEST(NearbyFileSession, SenderIgnoresAnAcknowledgementForAChunkAlreadyPast) {
+  // A receiver acknowledges repeats as well as new chunks, so after a lost ACK
+  // and a resend there are two acknowledgements in the air for the same chunk.
+  // Accepting the stale one advances past a chunk the receiver never got, which
+  // tears a hole in the file.
+  uint32_t now = 1000;
+  const uint16_t chunk = TransferSession::chunkBytes();
+  TransferSession session = acceptedSender(chunk * 4, now);
+
+  TransferAction action;
+  ASSERT_TRUE(session.nextAction(now, action));
+  session.onChunkSent(FILLER.data(), chunk, now);
+  session.onEvent(ackFor(0), now);
+
+  ASSERT_TRUE(session.nextAction(now, action));
+  ASSERT_EQ(action.sequence, 1u);
+  session.onChunkSent(FILLER.data(), chunk, now);
+
+  // The repeat of chunk 0 draws a second acknowledgement naming the same chunk.
+  session.onEvent(ackFor(0), now);
+  EXPECT_EQ(session.transferredBytes(), chunk) << "a stale ACK must not count chunk 1 as delivered";
+
+  now += CHUNK_RETRY_INTERVAL_MS;
+  ASSERT_TRUE(session.nextAction(now, action));
+  EXPECT_EQ(action.sequence, 1u) << "chunk 1 is still outstanding and must be resent";
+  EXPECT_EQ(action.offset, chunk);
+}
+
 TEST(NearbyFileSession, IgnoresATransferPacketFromSomeoneElse) {
   uint32_t now = 1000;
   const uint16_t chunk = TransferSession::chunkBytes();
@@ -358,12 +472,12 @@ TEST(NearbyFileSession, IgnoresATransferPacketFromSomeoneElse) {
 
   TransferAction action;
   ASSERT_TRUE(session.nextAction(now, action));
-  session.onChunkSent(chunk, now);
+  session.onChunkSent(FILLER.data(), chunk, now);
 
   // A third reader in the room cannot advance someone else's transfer. Bytes
   // count as transferred when the real peer acknowledges them, so a stranger's
   // ACK must leave the total alone and the chunk still outstanding.
-  session.onEvent(event(TransferEventKind::ACK, OTHER_MAC), now);
+  session.onEvent(ackFor(0, OTHER_MAC), now);
   EXPECT_FALSE(session.nextAction(now, action));
   EXPECT_EQ(session.transferredBytes(), 0u);
 
@@ -405,7 +519,7 @@ TEST(NearbyFileSession, ReportsProgressWhileItRuns) {
 
   TransferAction action;
   ASSERT_TRUE(session.nextAction(now, action));
-  session.onChunkSent(chunk, now);
-  session.onEvent(event(TransferEventKind::ACK), now);
+  session.onChunkSent(FILLER.data(), chunk, now);
+  session.onEvent(ackFor(0), now);
   EXPECT_EQ(session.progressPercent(), 25);
 }
