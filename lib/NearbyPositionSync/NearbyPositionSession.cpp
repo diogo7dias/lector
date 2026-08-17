@@ -62,13 +62,21 @@ void SyncSession::onPacket(const PacketView& packet, const uint32_t nowMs) {
   packetsFromPeer_++;
 
   if (!hasPeer_) {
-    if (packet.type != PacketType::HELLO) return;
+    // Any packet that names the book pairs, not only an announcement. The reader
+    // that pairs first stops announcing itself and talks straight to this one, so
+    // holding out for another HELLO leaves both sides searching until they give
+    // up. NAME and ACK carry no book, and the sender repeats its position until
+    // acknowledged, so ignoring those costs nothing.
+    if (packet.type != PacketType::HELLO && packet.type != PacketType::POSITION &&
+        packet.type != PacketType::APPLY) {
+      return;
+    }
     if (!sameBook(packet.position)) {
       state_ = SyncState::BOOK_MISMATCH;
       return;
     }
     pairWith(packet, nowMs);
-    return;
+    // Falls through, so the position this packet carried is not thrown away.
   }
 
   lastPeerPacketMs_ = nowMs;

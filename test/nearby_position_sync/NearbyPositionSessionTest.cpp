@@ -327,3 +327,115 @@ TEST(NearbyPositionSession, KnowsWhichSideIsFurtherAlong) {
   EXPECT_FALSE(level.peerIsFurtherAlong());
   EXPECT_TRUE(level.positionsMatch());
 }
+
+TEST(NearbyPositionSession, PairsWithAReaderThatIsAlreadyTalkingToUs) {
+  // The other reader heard our announcement, paired, and stopped announcing
+  // itself: from then on it only sends its position, straight to us. Waiting for
+  // an announcement that will never come again leaves both readers searching.
+  uint32_t now = 1000;
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  session.setLocalMac(OUR_MAC);
+  drain(session, now);
+
+  PacketView position = packetFrom(PEER_MAC, PacketType::POSITION);
+  position.position = positionAt(OUR_HASH, 9, 12, 0.62f);
+  session.onPacket(position, now);
+
+  EXPECT_TRUE(session.hasPeer());
+  EXPECT_TRUE(session.hasPeerPosition());
+  EXPECT_EQ(session.state(), SyncState::COMPARING);
+  EXPECT_TRUE(contains(drain(session, now), ActionKind::SEND_ACK));
+}
+
+TEST(NearbyPositionSession, ARequestToMoveAlsoPairsAnUnpairedReader) {
+  uint32_t now = 1000;
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  session.setLocalMac(OUR_MAC);
+  drain(session, now);
+
+  PacketView apply = packetFrom(PEER_MAC, PacketType::APPLY);
+  apply.position = positionAt(OUR_HASH, 9, 12, 0.62f);
+  session.onPacket(apply, now);
+
+  EXPECT_TRUE(session.hasPeer());
+  EXPECT_EQ(session.state(), SyncState::APPLY_REQUESTED);
+}
+
+TEST(NearbyPositionSession, ADifferentBookIsStillRefusedWhenPairingOnAPosition) {
+  uint32_t now = 1000;
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  session.setLocalMac(OUR_MAC);
+  drain(session, now);
+
+  PacketView position = packetFrom(PEER_MAC, PacketType::POSITION);
+  position.position = positionAt(THEIR_HASH, 9, 12, 0.62f);
+  session.onPacket(position, now);
+
+  EXPECT_EQ(session.state(), SyncState::BOOK_MISMATCH);
+  EXPECT_FALSE(session.hasPeerPosition());
+}
+
+TEST(NearbyPositionSession, TwoReadersPairWhenOnlyOneOfThemHeardAnAnnouncement) {
+  // The real failure on two devices: whoever pairs first stops announcing itself,
+  // so if its own announcement was lost the other reader searches until it gives
+  // up while the first talks to a reader that is not listening.
+  const std::array<uint8_t, MAC_BYTES> LEFT_MAC = OUR_MAC;
+  const std::array<uint8_t, MAC_BYTES> RIGHT_MAC = PEER_MAC;
+
+  uint32_t now = 1000;
+  SyncSession left;
+  SyncSession right;
+  left.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  right.begin(positionAt(OUR_HASH, 9, 12, 0.62f), now);
+  left.setLocalMac(LEFT_MAC);
+  right.setLocalMac(RIGHT_MAC);
+
+  bool leftHelloDelivered = false;
+  const auto deliver = [&](SyncSession& from, const std::array<uint8_t, MAC_BYTES>& fromMac, SyncSession& to) {
+    for (const Action& action : drain(from, now)) {
+      PacketView packet;
+      packet.deviceMac = fromMac;
+      packet.position = from.localPosition();
+      switch (action.kind) {
+        case ActionKind::BROADCAST_HELLO:
+          packet.type = PacketType::HELLO;
+          // The first announcement from the left reader never arrives, which is
+          // what puts the two sides out of step.
+          if (&from == &left && !leftHelloDelivered) {
+            leftHelloDelivered = true;
+            continue;
+          }
+          break;
+        case ActionKind::SEND_NAME:
+          packet.type = PacketType::NAME;
+          packet.deviceName = "Reader";
+          break;
+        case ActionKind::SEND_POSITION:
+          packet.type = PacketType::POSITION;
+          break;
+        case ActionKind::SEND_ACK:
+          packet.type = PacketType::ACK;
+          break;
+        case ActionKind::SEND_APPLY:
+          packet.type = PacketType::APPLY;
+          break;
+      }
+      to.onPacket(packet, now);
+    }
+  };
+
+  for (int step = 0; step < 200; step++) {
+    deliver(right, RIGHT_MAC, left);
+    deliver(left, LEFT_MAC, right);
+    if (left.state() == SyncState::COMPARING && right.state() == SyncState::COMPARING) break;
+    now += 100;
+  }
+
+  EXPECT_EQ(left.state(), SyncState::COMPARING);
+  EXPECT_EQ(right.state(), SyncState::COMPARING);
+  EXPECT_TRUE(left.hasPeerPosition());
+  EXPECT_TRUE(right.hasPeerPosition());
+}
