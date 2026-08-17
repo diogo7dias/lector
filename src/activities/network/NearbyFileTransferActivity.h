@@ -68,6 +68,9 @@ class NearbyFileTransferActivity final : public Activity {
   /** Leaves the screen, back to the book when it was opened from one. */
   void leave();
 
+  /** Wrapping area for a line of explanation under a heading. */
+  Rect detailBounds(const Rect& screen, int top) const;
+
   void renderSearching(const Rect& screen, int top) const;
   void renderPeerList(const Rect& screen, int top) const;
   void renderOfferPrompt(const Rect& screen, int top) const;
@@ -103,6 +106,8 @@ class NearbyFileTransferActivity final : public Activity {
   unsigned long lastProgressDrawMs = 0;
   int lastDrawnPercent = -1;
   static constexpr unsigned long PROGRESS_REDRAW_INTERVAL_MS = 1200;
+  /** Lines a wrapped explanation may take before it is cut. */
+  static constexpr int DETAIL_MAX_LINES = 3;
 
   nearby_file::TransferState renderedState = nearby_file::TransferState::LISTENING;
   size_t renderedPeerCount = 0;

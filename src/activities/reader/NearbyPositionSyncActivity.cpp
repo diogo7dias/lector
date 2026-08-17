@@ -251,17 +251,30 @@ void NearbyPositionSyncActivity::loop() {
   }
 }
 
+Rect NearbyPositionSyncActivity::detailBounds(const Rect& screen, const int top) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int width = std::max(1, screen.width - metrics.contentSidePadding * 2);
+  // Inset by the side padding, then wrapped inside that width. A whole hint
+  // sentence is wider than this screen, and unwrapped centred text runs off both
+  // edges instead of breaking.
+  return Rect{screen.x + metrics.contentSidePadding, top, width,
+              renderer.getLineHeight(UI_10_FONT_ID) * DETAIL_MAX_LINES};
+}
+
 void NearbyPositionSyncActivity::renderSearching(const Rect& screen, const int top) const {
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, tr(STR_NEARBY_SEARCHING), true,
                             EpdFontFamily::REGULAR);
-  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, tr(STR_NEARBY_SEARCHING_HINT));
+  UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID,
+                                   tr(STR_NEARBY_SEARCHING_HINT), DETAIL_MAX_LINES, true, EpdFontFamily::REGULAR,
+                                   UITheme::TextVerticalAlignment::TOP);
 }
 
 void NearbyPositionSyncActivity::renderMessage(const Rect& screen, const int top, const char* message,
                                                const char* detail) const {
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, message, true, EpdFontFamily::REGULAR);
   if (detail && detail[0] != '\0') {
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, detail);
+    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, detail, DETAIL_MAX_LINES,
+                                     true, EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
   }
 }
 

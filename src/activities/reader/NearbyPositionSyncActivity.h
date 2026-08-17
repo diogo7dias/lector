@@ -63,6 +63,9 @@ class NearbyPositionSyncActivity final : public Activity {
    */
   void ensureEpubLoaded();
 
+  /** Wrapping area for a line of explanation under a heading. */
+  Rect detailBounds(const Rect& screen, int top) const;
+
   void renderSearching(const Rect& screen, int top) const;
   void renderComparison(const Rect& screen, int top);
   void renderMessage(const Rect& screen, int top, const char* message, const char* detail) const;
@@ -98,4 +101,6 @@ class NearbyPositionSyncActivity final : public Activity {
 
   unsigned long autoReturnAt = 0;
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1400;
+  /** Lines a wrapped explanation may take before it is cut. */
+  static constexpr int DETAIL_MAX_LINES = 3;
 };

@@ -451,11 +451,22 @@ void NearbyFileTransferActivity::loop() {
   }
 }
 
+Rect NearbyFileTransferActivity::detailBounds(const Rect& screen, const int top) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int width = std::max(1, screen.width - metrics.contentSidePadding * 2);
+  // Inset by the side padding, then wrapped inside that width. A book file name
+  // is easily wider than this screen, and unwrapped centred text runs off both
+  // edges instead of breaking.
+  return Rect{screen.x + metrics.contentSidePadding, top, width,
+              renderer.getLineHeight(UI_10_FONT_ID) * DETAIL_MAX_LINES};
+}
+
 void NearbyFileTransferActivity::renderMessage(const Rect& screen, const int top, const char* message,
                                                const char* detail) const {
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, message, true, EpdFontFamily::REGULAR);
   if (detail && detail[0] != '\0') {
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, detail);
+    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, detail, DETAIL_MAX_LINES,
+                                     true, EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
   }
 }
 
@@ -463,7 +474,9 @@ void NearbyFileTransferActivity::renderSearching(const Rect& screen, const int t
   const char* primary = mode == Mode::Send ? tr(STR_NEARBY_LOOKING_FOR_READERS) : tr(STR_NEARBY_WAITING_TO_RECEIVE);
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, primary, true, EpdFontFamily::REGULAR);
   if (mode == Mode::Send) {
-    UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 40, sourceName.c_str());
+    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, sourceName.c_str(),
+                                     DETAIL_MAX_LINES, true, EpdFontFamily::REGULAR,
+                                     UITheme::TextVerticalAlignment::TOP);
   }
 }
 
