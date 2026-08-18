@@ -1,401 +1,500 @@
-# CrossPoint User Guide
+<!-- lector-version: 0.24.0 -->
 
-Welcome to the **CrossPoint** firmware. This guide outlines the hardware controls, navigation, and reading features of the device.
+# Lector User Guide
 
-- [CrossPoint User Guide](#crosspoint-user-guide)
-  - [1. Hardware Overview](#1-hardware-overview)
-    - [Button Layout](#button-layout)
-    - [Taking a Screenshot](#taking-a-screenshot)
-  - [2. Power \& Startup](#2-power--startup)
-    - [Power On / Off](#power-on--off)
-    - [First Launch](#first-launch)
-  - [3. Screens](#3-screens)
-    - [3.1 Home Screen](#31-home-screen)
-    - [3.2 Reading Mode](#32-reading-mode)
-    - [3.3 Browse Files Screen](#33-browse-files-screen)
-    - [3.4 Recent Books Screen](#34-recent-books-screen)
-    - [3.5 File Transfer Screen](#35-file-transfer-screen)
-    - [3.5.1 Calibre Wireless Transfers](#351-calibre-wireless-transfers)
-      - [Installing the Plugin in Calibre](#installing-the-plugin-in-calibre)
-      - [Configuring the CrossPoint Plugin in Calibre](#configuring-the-crosspoint-plugin-in-calibre)
-      - [Uploading Books](#uploading-books)
-      - [Removing a Book](#removing-a-book)
-    - [3.6 Settings](#36-settings)
-      - [3.6.1 Display](#361-display)
-      - [3.6.2 Reader](#362-reader)
-      - [3.6.3 Controls](#363-controls)
-      - [3.6.4 System](#364-system)
-      - [3.6.5 OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries)
-      - [3.6.6 Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds)
-      - [3.6.7 KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)
-        - [Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)](#option-a-crosspoint-sync-server-synccrosspointreadercom-default)
-        - [Option B: Legacy Public KOReader Server (`sync.koreader.rocks`)](#option-b-legacy-public-koreader-server-synckoreaderrocks)
-        - [Option C: Self-Hosted Server (Docker Compose)](#option-c-self-hosted-server-docker-compose)
-        - [Syncing While Reading](#syncing-while-reading)
-    - [3.7 Sleep Screen](#37-sleep-screen)
-      - [Cover settings](#cover-settings)
-      - [Custom images](#custom-images)
-    - [3.8 Custom Fonts (SD Card)](#38-custom-fonts-sd-card)
-  - [4. Reading Mode](#4-reading-mode)
-    - [Page Turning](#page-turning)
-    - [Chapter Navigation](#chapter-navigation)
-    - [Auto Page Turn](#auto-page-turn)
-    - [Tilt Page Turn (X3 only)](#tilt-page-turn-x3-only)
-    - [Footnote Navigation](#footnote-navigation)
-    - [System Navigation](#system-navigation)
-    - [Supported Languages](#supported-languages)
-  - [5. Reader Menu](#5-reader-menu)
-    - [5.1 Chapter Selection](#51-chapter-selection)
-    - [5.2 Bookmarks](#52-bookmarks)
-  - [6. Current Limitations \& Roadmap](#6-current-limitations--roadmap)
-  - [7. Troubleshooting Issues \& Escaping Bootloop](#7-troubleshooting-issues--escaping-bootloop)
+Lector is e-reader firmware for the Xteink X3 and X4. This guide covers the buttons, the
+screens, the in-book menu, and every setting the firmware ships with.
 
-## 1. Hardware Overview
+A few names on the device and on the SD card still read "CrossPoint", the project Lector
+forked from: the `/.crosspoint` folder on the card, the `crosspoint.local` web address, and
+the CrossPoint Reader plugin for Calibre. Those are written exactly as they appear.
 
-The device utilises the standard buttons on the Xteink X4 (in the same layout as the manufacturer firmware, by default):
+Contents:
 
-### Button Layout
-
-| Location        | Buttons                                              |
-| --------------- | ---------------------------------------------------- |
-| **Bottom Edge** | **Back**, **Confirm**, **Left**, **Right**           |
-| **Right Side**  | **Power**, **Volume Up**, **Volume Down**, **Reset** |
-
-Button layout can be customized in the **[Controls Settings](#363-controls)**.
-
-### Taking a Screenshot
-
-When the Power Button and Volume Down button are pressed at the same time, it will take a screenshot and save it in the folder `screenshots/`.
-
-Alternatively, while reading a book, press the **Confirm** button to open the reader menu and select **Take screenshot**.
+- [1. Buttons](#1-buttons)
+- [2. Power, sleep and wake](#2-power-sleep-and-wake)
+- [3. Home screen](#3-home-screen)
+- [4. Browsing files](#4-browsing-files)
+- [5. Reading](#5-reading)
+- [6. The in-book menu](#6-the-in-book-menu)
+- [7. Bookmarks, quotes and reading stats](#7-bookmarks-quotes-and-reading-stats)
+- [8. Sleep screen and wallpapers](#8-sleep-screen-and-wallpapers)
+- [9. Getting books onto the device](#9-getting-books-onto-the-device)
+- [10. Syncing reading position](#10-syncing-reading-position)
+- [11. Fonts and dictionaries](#11-fonts-and-dictionaries)
+- [12. Settings reference](#12-settings-reference)
+- [13. Updating the firmware](#13-updating-the-firmware)
+- [14. Troubleshooting](#14-troubleshooting)
 
 ---
 
-## 2. Power & Startup
+## 1. Buttons
 
-### Power On / Off
+Lector uses the buttons the device already has, in the manufacturer's layout by default.
 
-To turn the device on or off, **press and hold the Power button for approximately half a second**.
-In the **[Controls Settings](#363-controls)** you can configure the power button to turn the device off with a short press instead of a long one.
+| Location    | Buttons                                  |
+| ----------- | ---------------------------------------- |
+| Bottom edge | Back, Confirm, Left, Right               |
+| Right side  | Power, Volume Up, Volume Down, Reset     |
 
-To reboot the device (for example after a firmware update or if it's frozen), press and release the Reset button, and then quickly press and hold the Power button for a few seconds.
+Throughout this guide the side buttons are called **Volume Up** and **Volume Down**, and the
+bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 
-### First Launch
+The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
+and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
 
-Upon turning the device on for the first time, you will be placed on the **[Home](#31-home-screen)** screen.
+### Taking a screenshot
+
+Hold **Power** and **Volume Down** together. The image is written to `/screenshots/` on the
+SD card as a BMP file.
+
+Screenshots can also be taken from inside a book: open the in-book menu, go to the **Device**
+tab, and pick **Take screenshot**. A screenshot taken this way is filed under a folder named
+after the book, and its filename records the chapter, page and percentage.
+
+---
+
+## 2. Power, sleep and wake
+
+### Power on and off
+
+Press and hold **Power** for about half a second.
+
+With **Settings > Controls > Short Power Button Click** set to **Sleep**, the hold that puts
+the device to sleep is much shorter (about a tenth of a second); every other value keeps the
+longer hold, so a stray press cannot switch the device off.
+
+To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
+
+### Sleep
+
+The device sleeps after the inactivity set in **Settings > System > Time to Sleep**, anywhere
+from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while asleep is the sleep screen, covered in
+[section 8](#8-sleep-screen-and-wallpapers).
+
+**Wake Straight to Book** (Display settings) takes a wake from sleep back into the book
+without stopping at any other screen.
+
+### First launch
+
+The first boot lands on the [Home screen](#3-home-screen). Later boots reopen the book you
+were reading, unless **Open Random Book on Boot** is on, which opens a random recent book
+instead.
+
+On a fresh card, Lector creates the folders it uses: `/read`, `/recents`, `/sleep` and
+`/sleep pause` (that last name contains a space).
+
+---
+
+## 3. Home screen
+
+The Home screen is the entry point. It lists the books you have been reading, and below them:
+
+- **Continue Reading** — reopen the most recent book. Present in themes that put it in the
+  menu, and only once something has been read.
+- **Browse Files** — the file browser.
+- **OPDS Browser** — shown once at least one catalog is configured, see
+  [section 9](#9-getting-books-onto-the-device).
+- **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Settings** — see [section 12](#12-settings-reference).
+
+**Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
+the current book, or open [Reading Stats](#7-bookmarks-quotes-and-reading-stats).
+
+**Settings > Display > Author On Home** switches the author line between initials and the
+full name.
+
+---
+
+## 4. Browsing files
+
+The file browser shows the current folder path at the top, files with their extensions, and
+folders in brackets, for example `[folder-name]`.
+
+- **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
+  either one to move a whole page at a time.
+- **Open** — **Confirm** opens the folder, book or image under the cursor.
+- **File actions** — hold **Confirm** on an entry. A file another reader can accept opens a
+  small menu offering **Send to Nearby Reader** and **Delete**; anything else goes straight to
+  the delete confirmation. Nothing is deleted without confirming.
+- **Search** — search inside the current folder, with the results ranked by how well they
+  match.
+
+Renaming and moving files is done from the web interface rather than on the device, see
+[section 9](#9-getting-books-onto-the-device).
+
+**Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear.
+**File Browser Order** lists a folder alphabetically or in random order.
+
+### What Lector can open
+
+| Type            | Opens as                                              |
+| --------------- | ----------------------------------------------------- |
+| `.epub`         | The full reader: chapters, footnotes, bookmarks, quotes |
+| `.txt`          | Plain-text reader                                     |
+| `.xtc`          | XTC reader, the Xteink book format                    |
+| `.bmp`          | Image viewer                                          |
+| `.pxc`          | Image viewer for the packed wallpaper format          |
+| `.bin`          | Offered as a firmware file, see [section 13](#13-updating-the-firmware) |
+
+From the image viewers you can set the picture as your sleep wallpaper.
+
+### Filing books automatically
+
+Three System settings move books for you as you read:
+
+- **Move Finished Books to Read Folder** — a finished book moves to `/read`.
+- **Move Opened Books to Recents Folder** — an opened book moves to `/recents`.
+- **Clear Read Books from Recent List** — a finished book drops off the recents list.
+
+---
+
+## 5. Reading
+
+### Turning pages
+
+| Action        | Buttons                          |
+| ------------- | -------------------------------- |
+| Previous page | **Left** or **Volume Up**        |
+| Next page     | **Right** or **Volume Down**     |
+
+**Settings > Controls > Side Button Layout (reader)** swaps the two side buttons or disables
+them while reading. **Orient front buttons** turns the bottom-edge buttons along with the
+page when you read in landscape.
+
+With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
+the page.
+
+### Chapters
+
+Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Holding a page
+turn button does nothing: page turning fires on the press, so the page never waits to find out
+whether a hold was coming.
+
+### Footnotes
+
+In an EPUB with footnotes, open a footnote from its reference and return afterwards to where
+you were. Falling asleep or closing the book while a footnote is open still reopens the book
+at your reading position, not at the footnote.
+
+**Short Power Button Click > Footnotes** opens the footnotes for the page with a short press;
+when the page holds a single footnote, it opens that one directly.
+**Quick-return from footnotes** makes a short power press act as **Back** while a footnote is
+on screen.
+
+### Leaving the book
+
+- **Back** closes the book and returns Home.
+- **Hold Back** returns to the file browser, opened in the book's own folder. **Settings > Controls > Short Back to File
+  Browser** swaps the two, so a short press goes to the browser instead.
+- **Confirm** opens the [in-book menu](#6-the-in-book-menu).
+- **Hold Confirm** runs whatever **Settings > Controls > Long press while reading** is bound
+  to. A short press always opens the menu.
+
+### Holds and double clicks
+
+Three Controls settings bind an action to a gesture. They share one list of actions, so any
+of them can be pointed at any action.
+
+- **Long press while reading** — holding **Confirm** in the book.
+- **Hold in in-book menu** — holding **Confirm** with the menu open.
+- **Double-click power** — two quick presses of **Power**.
+
+**Pop-up Items** decides which rows the quick pop-up those bindings can open actually
+contains.
+
+### Reading in landscape
+
+**Settings > Reader > Reading Orientation** offers Portrait, Landscape CW, Portrait 180° and
+Landscape CCW. The in-book menu can rotate the screen without leaving the book.
+
+---
+
+## 6. The in-book menu
+
+Press **Confirm** while reading. The menu opens in tabs; **Left** and **Right** move within a
+tab, and the tab strip runs across the top. Rows that do not apply to the open book are not
+shown at all.
+
+### Navigate
+
+- **Select Chapter** — the table of contents.
+- **Go to %** — jump by percentage.
+- **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
+- **Bookmarks** — the list, shown once the book has one.
+- **Toggle Bookmark** — drop or lift a bookmark on this page.
+- **Footnotes** — shown only in books that have them.
+
+### This Book
+
+- **Reading Stats** — this book's numbers.
+- **Look Up** — pick a word on the page and read its definition. Needs a dictionary, see
+  [section 11](#11-fonts-and-dictionaries).
+- **Grab Quote** — save a passage from this page.
+- **View Quotes** — read back what you saved, shown once the book has quotes.
+- **Remove This Book** — unfile the book from recents; the file stays on the card.
+- **Delete Book** — erase the file, after a confirmation.
+
+### Look
+
+- **Reader Settings** — text settings for this book alone.
+- **Reset Reader Settings** — drop the per-book override, shown only when one exists.
+- **Steal Look** — copy another book's look onto this one, once.
+- **Reading Themes** — apply a saved look. Up to 8 themes are kept.
+- **Paragraph Numbers**, **Number Size**, **Paperback Look**, **Paperback Status**.
+- **Status Bar** — show or hide it. With the bar hidden, a **Progress Bar** row appears in its
+  place.
+- **Customise Status Bar** — everything the bar can show and where, for this book.
+- **Orientation** — rotate the screen.
+
+### Sleep Screen
+
+This tab appears only when the last sleep screen was a wallpaper that is still on the card.
+
+- **Favorite** or **Unfavorite** this wallpaper.
+- **Pause Wallpaper** — move it out of the rotation, into `/sleep pause`.
+- **Hold This Wallpaper** or **Resume Wallpaper Rotation** — keep showing this one, or start
+  rotating again.
+- **Delete Wallpaper** — erase the file.
+
+### Device
+
+- **Take screenshot**.
+- **Show page as QR**.
+- **Sync Progress** — KOReader sync, see [section 10](#10-syncing-reading-position).
+- **Nearby Sync** — take a position from another Lector nearby.
+- **Send to Nearby Reader** — send this file to another Lector nearby.
+- **Delete Book Cache** — clear this book's layout cache; it is rebuilt on the next open.
+
+Press **Back** to close the menu.
+
+---
+
+## 7. Bookmarks, quotes and reading stats
+
+### Bookmarks
+
+Bind **Long press while reading** to **Bookmark** and hold **Confirm** to drop one, or use
+**Toggle Bookmark** in the menu. Open the list from **Navigate > Bookmarks**, press
+**Confirm** on an entry to jump there. To delete one, hold **Confirm** on it, then confirm.
+
+Bookmarks are stored as JSON under `/.crosspoint/bookmarks`.
+
+### Quotes
+
+**Grab Quote** saves a passage from the current page. Quotes for a book live beside it on the
+card as a plain-text sidecar named after the book, for example `Book_QUOTES.txt`, with the
+chapter and anchor recorded next to each quote. **View Quotes** reads them back on the
+device.
+
+### Reading stats
+
+With **Settings > System > Track Reading Stats** on, Lector records reading time and pages.
+**Reading Idle Limit** sets how long a page can sit untouched before that time stops counting.
+Stats are visible from the Home screen and per book from the in-book menu, and the sleep
+screen can show a stats dashboard.
+
+---
+
+## 8. Sleep screen and wallpapers
+
+**Settings > Display > Sleep Screen** decides what the panel shows while the device sleeps:
+
+| Mode           | Behaviour                                                                        |
+| -------------- | -------------------------------------------------------------------------------- |
+| Dark           | The logo on a dark background.                                                    |
+| Light          | The logo on a white background.                                                   |
+| Custom         | A wallpaper from the SD card. Falls back to Dark when none is found.              |
+| Cover          | The open book's cover. Falls back to Dark when no book is open.                   |
+| Cover + Custom | The cover while you are reading, a custom wallpaper otherwise.                    |
+| Quick Resume   | The text of the last page, with a moon icon at the edge, so waking returns to that page immediately. |
+| Stats Dashboard| Your reading statistics.                                                          |
+| Transparent    | A BMP or PNG overlay drawn on top of whatever the screen was showing.             |
+
+**Quick Resume on Timeout** turns on the Quick Resume face for sleeps caused by inactivity,
+whatever the Sleep Screen setting says.
+
+### Wallpaper files
+
+Wallpapers are `.bmp` or `.pxc` files. The `.pxc` format is the packed 2-bit format the
+[Lector converter](https://diogo7dias.github.io/lector-xteink-firmware/) writes.
+
+- **A folder of wallpapers (recommended):** put files in `/sleep`. One is chosen each time
+  the device sleeps. A hidden `/.sleep` folder is also read.
+- **A single wallpaper:** put `sleep.bmp` or `sleep.pxc` in the root of the card. A root file
+  takes priority over the folders.
+
+Size the image to the panel: **480x800** on the X4, **528x792** on the X3.
+
+Wallpaper rows in the in-book menu's Sleep Screen tab favourite, pause, hold and delete the
+wallpaper the device just showed. Paused wallpapers move to `/sleep pause` and stop appearing
+in the rotation. **Settings > Display > Shuffle Wallpapers** reshuffles the order.
+
+Four Display settings decide what is drawn over a wallpaper: **Show Wallpaper Name**, **Show
+Favorite Badge**, **Show Wallpaper Position** and **Sleep Footer Text** (your own line of
+text). **Sleep Image Quality** trades rendering time against how the image looks: **Fast** or
+**Pretty**.
+
+### Cover settings
+
+For **Cover** and **Cover + Custom**:
+
+- **Sleep Screen Cover Mode** — **Fit** (scaled to fit, white borders) or **Crop** (scaled and
+  cropped to fill).
+- **Sleep Screen Cover Filter** — **None** (grayscale), **Contrast** (black and white) or
+  **Inverted**.
+
+### Transparent overlays
+
+Overlays are drawn over the current screen instead of replacing it, so they need an alpha
+channel: a PNG, or a 32-bit BGRA BMP. In a regular BMP, white is treated as transparent.
+
+- **A folder of overlays:** `/.sleep-overlay`, or `/sleep-overlay`.
+- **A single overlay:** `/sleep-overlay.bmp` or `/sleep-overlay.png` in the root. A root BMP
+  wins over a root PNG, and both win over the folders.
 
 > [!NOTE]
-> On subsequent restarts, the firmware will automatically reopen the last book you were reading.
+> `.pxc` cannot be an overlay. The format is already quantised to four opaque levels and
+> carries no alpha channel.
 
 ---
 
-## 3. Screens
+## 9. Getting books onto the device
 
-### 3.1 Home Screen
+The simplest route is a card reader: copy files onto the SD card. Everything below is the
+wireless alternative.
 
-The Home screen is the main entry point to the firmware. From here you can navigate to **[Reading Mode](#4-reading-mode)** with the most recently read book, the **[Browse Files](#33-browse-files-screen)** screen, the **[Recent Books](#34-recent-books-screen)** screen, the **[File Transfer](#35-file-transfer-screen)** screen, or **[Settings](#36-settings)**.
+### File Transfer
 
-### 3.2 Reading Mode
+**Home > File Transfer** offers four modes:
 
-See [Reading Mode](#4-reading-mode) below for more information.
+- **Join a Network** — connect to an existing Wi-Fi network.
+- **Create Hotspot** — the device makes a network for your computer or phone to join.
+- **Calibre Wireless** — Calibre device transfers, below.
+- **Nearby Reader** — receive a file straight from another Lector, below.
 
-### 3.3 Browse Files Screen
+In the first two modes the device runs a web server. Open `http://<device-ip>/` in a browser,
+or `http://crosspoint.local`. The web interface uploads and downloads files, manages fonts,
+and edits Wi-Fi networks and OPDS servers at `http://<device-ip>/settings`. It also speaks
+**WebDAV**, so the card can be mounted as a network drive.
 
-The Browse Files screen acts as a file and folder browser. The full path to the current directory is shown at the top of the screen. File extensions are displayed alongside each filename, and directories are shown with brackets (e.g. `[folder-name]`). Hidden directories (those beginning with `.`) are also visible.
+While joined to a network, the screen shows the Wi-Fi signal strength in dBm.
 
-* **Navigate List:** Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to move the selection cursor up and down through folders and books. You can also long-press these buttons to scroll a full page up or down.
-* **Open Selection:** Press **Confirm** to open a folder or start reading a selected book. Selecting a `.bmp` file will open the image viewer.
-* **Delete Files or Folders:** Hold and release **Confirm** to delete the selected file or folder. You will be given an option to either confirm or cancel. Multiple files can be selected for deletion in a single operation.
-* **Rename or Move:** Files can be renamed or moved to a different folder from within the browse screen.
+See [docs/webserver.md](./docs/webserver.md) for the full web server documentation, including
+managing files from the command line with `curl`.
 
-### 3.4 Recent Books Screen
+### Calibre wireless transfers
 
-The Recent Books screen lists the most recently opened books in a chronological view, displaying title and author.
+Lector works with the CrossPoint Reader device plugin for Calibre.
 
-### 3.5 File Transfer Screen
+Installing the plugin:
 
-The File Transfer screen allows you to upload and manage files on the device. When you enter the screen, choose **Join a Network**, **Calibre Wireless**, or **Create Hotspot**. The reader then starts the web server for the selected mode.
+1. Download the latest `crosspoint_reader` plugin from
+   [the plugin releases page](https://github.com/crosspoint-reader/calibre-plugins/releases).
+2. In Calibre, open **Preferences > Plugins > Load plugin from file** and pick the zip.
+3. Restart Calibre.
 
-See the [web server docs](./docs/webserver.md) for more information on how to connect to the web server and upload files.
+Configuring it:
 
-The web interface also supports **WebDAV**, allowing you to mount the device as a network drive and manage files directly from your computer's file manager.
-
-Download links for files already on the device are available in the web interface, so you can retrieve books or screenshots over Wi-Fi without connecting a cable.
-
-A **Wi-Fi signal strength indicator** (dBm) is displayed on-screen during joined-network web server sessions.
-
-> [!TIP]
-> Advanced users can also manage files programmatically or via the command line using `curl`. See the [web server docs](./docs/webserver.md) for details.
-> [!TIP]
-> If your EPUBs have compatibility issues, you can run the built-in **EPUB Optimizer** directly from the device to clean up and reprocess books for better rendering.
-
-### 3.5.1 Calibre Wireless Transfers
-
-CrossPoint supports sending books from Calibre using the CrossPoint Reader device plugin.
-
-#### Installing the Plugin in Calibre
-
-If you don't already have the plugin installed:
-
-1. Head to https://github.com/crosspoint-reader/calibre-plugins/releases to download the latest version of the crosspoint_reader plugin.
-2. Download the zip file.
-3. Open Calibre → Preferences → Plugins → Load plugin from file → Select the zip file.
+1. Open **Preferences > Plugins**, search for "crosspoint", and click **Customize plugin**.
+2. Set **Host** to your device's IP address.
+3. Leave the other fields alone, unless you want uploads in a subfolder: set **Upload path**
+   to a path relative to the root, for example `/mybooks`.
 4. Restart Calibre.
 
-#### Configuring the CrossPoint Plugin in Calibre
-1. In Calibre select Preferences.
-2. In the Preferences dialog select Plugins.
-3. In Plugins search for "crosspoint".
-4. Click on "Customize plugin".
-5. Update the value for "Host" to match the IP for your device.
-6. Leave the other settings as they are.
-7. [optional] Modify the "Upload path" to point to a subfolder other than the root "/" folder. Enter this as a path relative to the root folder. Example: `/mybooks`
-8. Restart Calibre.
+<img width="420" height="385" alt="The CrossPoint Reader plugin settings dialog in Calibre" src="https://github.com/user-attachments/assets/01fc7e33-a9a7-48ba-9e26-2e68d1f9daec" />
 
-<img width="420" height="385" alt="Image" src="https://github.com/user-attachments/assets/01fc7e33-a9a7-48ba-9e26-2e68d1f9daec" />
+Sending books:
 
-#### Uploading Books
+1. On the device, open **File Transfer > Calibre Wireless** and join a network.
+2. In Calibre, select one or more books, right-click, then **Send to Device > Send to main
+   memory**.
 
-To upload a book using the CrossPoint plugin in Calibre:
+The plugin creates a folder for the author and copies the book into it.
 
-1. On the device: File Transfer -> Calibre Wireless, then join a network.
-2. Select one or more books.
-3. Right-click on that selection.
-4. Select "Send to Device" > "Send to main memory"
+<img width="783" height="310" alt="Sending books to the device from the Calibre library view" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
 
-The CrossPoint plugin will connect to your device, create a folder for the book's author in the root folder (or the folder you configured for the plugin), then copy the book into that folder.
+Books cannot be removed through Calibre. Delete them from the device or the web interface.
 
-<img width="783" height="310" alt="Image" src="https://github.com/user-attachments/assets/741b0909-2e1d-4f16-8af0-2c43fbda5ce6" />
+### Nearby Reader
 
-#### Removing a Book
+Two Lector devices can pass a file directly, with no network in between.
 
-Books cannot be removed from your device through Calibre. Use the web interface instead.
+1. On the receiving device, open **File Transfer > Nearby Reader**.
+2. On the sending device, select the file in the browser and choose **Send to Nearby Reader**,
+   or use the same row in the in-book menu's Device tab to send the open book.
+3. The receiving device asks before accepting, and reports the name and size.
 
-### 3.6 Settings
+Turn Wi-Fi and File Transfer off first: the radio cannot do both at once, and the device says
+so if it is busy.
 
-The Settings screen allows you to configure the device's behavior. There are a few settings you can adjust:
+### OPDS catalogs
 
-#### 3.6.1 Display
+**Settings > System > OPDS Servers** stores up to 8 catalogs. Each entry has a name, the
+catalog root URL (for a Calibre Content Server, usually ending in `/opds`), and optional
+username and password. Authentication is HTTP Basic; set Calibre to Basic rather than Digest.
 
-- **Sleep Screen**: Which sleep screen to display when the device sleeps:
-  
-  - "Dark" (default) - The default dark Crosspoint logo sleep screen
-  - "Light" - The same default sleep screen, on a white background
-  - "Custom" - Custom images from the SD card; see [Sleep Screen](#37-sleep-screen) below for more information
-  - "Cover" - The book cover image (Note: this is experimental and may not work as expected)
-  - "None" - A blank screen
-  - "Cover + Custom" - The book cover image while actively reading, falls back to "Custom" behavior otherwise
-  - "Quick resume" - The text of the last page read will be displayed on the sleep screen and a moon icon is shown on the edge of the screen. Waking up the device will return to the same page of the opened book. This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book.
+Browse and download from **Home > OPDS Browser**. Where downloads land (**Download folder**)
+and how they are named (**Filename format**: Author - Title, Title - Author, or Title) are set
+from the OPDS screens and the web interface, not from the on-device Settings menu.
 
-- **Sleep Screen Cover Mode**: How to display the book cover when "Cover" sleep screen is selected:
-  
-  - "Fit" (default) - Scale the image down to fit centered on the screen, padding with white borders as necessary
-  - "Crop" - Scale the image down and crop as necessary to try to fill the screen (Note: this is experimental and may not work as expected)
+Catalogs can also be managed from the web interface at `http://<device-ip>/settings`.
 
-- **Sleep Screen Cover Filter**: What filter will be applied to the book cover when "Cover" sleep screen is selected:
-  
-  - "None" (default) - The cover image will be converted to a grayscale image and displayed as it is
-  - "Contrast" - The image will be displayed as a black & white image without grayscale conversion
-  - "Inverted" - The image will be inverted as in white & black and will be displayed without grayscale conversion
+---
 
-- **Quick Resume on Timeout**: Whether to enable the "Quick Resume" sleep screen when the device goes to sleep due to inactivity (System > Time to Sleep). This is useful for quickly resuming reading without waiting for the device to fully wake up and load the book. This overwrites the Sleep Screen Cover Mode when enabled.
+## 10. Syncing reading position
 
-- **Status Bar**: Configure the status bar displayed while reading:
-  
-  - "None" - No status bar
-  - "No Progress" - Show status bar without reading progress
-  - "Full w/ Percentage" - Show status bar with book progress (as percentage)
-  - "Full w/ Book Bar" - Show status bar with book progress (as bar)
-  - "Book Bar Only" - Show book progress (as bar)
-  - "Full w/ Chapter Bar" - Show status bar with chapter progress (as bar)
+### Nearby Sync
 
-- **Hide Battery %**: Configure where to suppress the battery percentage display in the status bar; the battery icon will still be shown:
-  
-  - "Never" (default) - Always show battery percentage
-  - "In Reader" - Show battery percentage everywhere except in reading mode
-  - "Always" - Always hide battery percentage
+The fastest way to move a position between two Lector devices. Open the same book on both,
+then pick **Nearby Sync** from the in-book menu's Device tab on each. The devices find each
+other and show both pages, so you can **Take their page** or **Send my page**.
 
-- **Refresh Frequency**: Set how often the screen does a full refresh while reading to reduce ghosting; options are every 1, 5, 10, 15, or 30 pages, or Never.
+The screen says what happened: both on the same page, they are further ahead, moved to their
+page, and so on. It also says when the other reader has a different book open, when nothing
+answered, and when the radio is busy with Wi-Fi or File Transfer.
 
-- **UI Theme**: Set which UI theme to use:
-  
-  - "Classic" - The original Crosspoint theme
-  - "Lyra" - The new theme for Crosspoint featuring rounded elements and menu icons
-  - "Lyra Extended" - Lyra, but displays 3 books instead of 1 on the **[Home Screen](#31-home-screen)**
-  - "RoundedRaff" - A rounded theme with additional visual styling
+### KOReader sync
 
-- **Sunlight Fading Fix**: Configure whether to enable a software-fix for the issue where white X4 models may fade when used in direct sunlight:
-  
-  - "OFF" (default) - Disable the fix
-  - "ON" - Enable the fix
+Lector syncs progress with KOReader-compatible sync servers, so KOReader apps and devices can
+share a position with it.
 
-> [!NOTE]
-> A battery charging indicator is shown on the battery icon whenever the device is actively charging.
+Settings live in **Settings > System > KOReader Sync**: **Username**, **Password**, **Sync
+Server URL**, **Document Matching** (Filename or Binary), **Send Document Metadata**, and
+**Sync Behavior**.
 
-#### 3.6.2 Reader
+**Sync Behavior** is **Smart sync** for new configurations, which resolves the simple cases on
+its own: upload when the server has nothing, do nothing when both sides agree, upload when
+local is ahead, apply the remote when the remote is ahead. Configurations migrated from older
+firmware keep **Ask every time**, which offers **Apply Remote** and **Upload Local** on every
+sync. Either can be changed at any time.
 
-- **Reader Font Family**: Choose the font used for reading:
-  
-  - "Noto Serif" (default) - Google's serif font
-  - "Noto Sans" - Google's sans-serif font
+To sync, open the in-book menu and pick **Sync Progress** from the Device tab, or bind a hold
+to **KOSync** in **Settings > Controls**.
 
-- **Reader Font Size**: Adjust the text size for reading; options are "Small", "Medium" (default), "Large", or "X Large".
+#### Option A: the CrossPoint sync server (default)
 
-- **Reader Line Spacing**: Adjust the spacing between lines; options are "Tight", "Normal" (default), or "Wide".
+With **Sync Server URL** left empty, Lector uses `https://sync.crosspointreader.com`, which
+speaks the standard KOReader sync protocol. Positions are recorded as chapter-content offsets
+and sent as the matching KOReader XPath, so devices with different fonts and layouts land on
+the same text.
 
-- **Reader Screen Margin**: Controls the screen margins in Reading Mode between 5 and 40 pixels in 5-pixel increments.
+1. Open **Settings > System > KOReader Sync**.
+2. Set **Username** and **Password** (type the plain password; the device computes the MD5
+   itself). Use the same values on every device.
+3. Leave **Sync Server URL** empty.
+4. On the first device run **Sign Up** once. On the others run **Authenticate**.
 
-- **Reader Paragraph Alignment**: Set the alignment of paragraphs; options are "Justified" (default), "Left", "Center", or "Right".
+Accounts are per server. An account on `sync.koreader.rocks` does not exist on this one.
 
-- **Embedded Style**: Whether to use the EPUB file's embedded HTML and CSS stylisation and formatting; options are "ON" or "OFF".
+#### Option B: the public KOReader server
 
-- **Hyphenation**: Whether to hyphenate text in Reading Mode; options are "ON" or "OFF".
+1. Set **Sync Server URL** to `https://sync.koreader.rocks`. An empty URL points at the
+   CrossPoint server instead, so this one has to be typed in.
+2. Set **Username** and **Password** to your existing KOReader Sync credentials.
+3. Run **Authenticate**.
 
-- **Reading Orientation**: Set the screen orientation for reading EPUB files:
-  
-  - "Portrait" (default) - Standard portrait orientation
-  - "Landscape CW" - Landscape, rotated clockwise
-  - "Inverted" - Portrait, upside down
-  - "Landscape CCW" - Landscape, rotated counter-clockwise
-
-- **Extra Paragraph Spacing**: Set how to handle paragraph breaks:
-  
-  - "ON" - Vertical space will be added between paragraphs in Reading Mode
-  - "OFF" - Paragraphs will not have vertical space added, but will have first-line indentation
-
-- **Dictionary**: Select the StarDict dictionary used for word lookups while reading, or "None" to disable lookups. *(Only shown when at least one dictionary folder exists under `/dictionaries/` on the SD card — see [docs/dictionary.md](docs/dictionary.md) for setup and usage.)*
-
-- **Text Anti-Aliasing**: Whether to show smooth grey edges (anti-aliasing) on text in reading mode. Note this slows down page turns slightly.
-
-- **Images**: Whether to display embedded images (JPG/PNG) found in EPUB files; options are "ON" (default) or "OFF".
-
-- **Focus Reading**: Bolds the first part of each word to create visual fixation points, similar to Bionic Reading. This can help improve reading speed and focus; options are "ON" or "OFF" (default).
-
-#### 3.6.3 Controls
-
-- **Remap Front Buttons**: A menu for customising the function of each bottom edge button.
-
-- **Side Button Layout (reader)**: Swap the order of the up and down volume buttons from "Prev/Next" (default) to "Next/Prev". You can also disable them entirely. This change is only in effect when reading.
-
-- **Long-press Chapter Skip**: Set whether long-pressing page turn buttons skips to the next/previous chapter:
-  
-  - "Chapter Skip" (default) - Long-pressing skips to next/previous chapter
-  - "Page Scroll" - Long-pressing scrolls a page up/down
-- **Long-press Menu**: Selects the function bound to holding the menu button (Confirm) while reading an EPUB. **Cycles through the available functions** each time the setting is selected — additional functions may be added in future releases, so this is not a binary on/off toggle. A short press of Confirm always opens the reader menu as normal:
-  - "Bookmark" (default) - Hold Confirm (~0.4 second) to drop a bookmark at the current page.
-  - "KOSync" - Hold Confirm (~1 second) to launch KOReader sync directly.
-  - "Dictionary" - Hold Confirm (~0.4 second) to start dictionary word selection on the current page (see [docs/dictionary.md](docs/dictionary.md)).
-  - "Disabled" - Long-press is ignored; only short-press opens the reader menu.
-
-- **Short Power Button Click**: Controls the effect of a short click of the power button:
-  
-  - "Ignore" (default) - Require a long press to turn off the device
-  - "Sleep" - A short press puts the device into sleep mode
-  - "Page Turn" - A short press in reading mode turns to the next page; a long press turns the device off
-  - "Footnotes" - A short press in reading mode opens the footnotes submenu; if only one footnote is present on the page, the referenced page is opened directly. The short press on the power button can be used to select the footnote in the submenu, and to go back to the original page after finish reading the footnote (like the back button).
-  - "Refresh" - A short press triggers a manual full-screen refresh, useful for clearing ghosting
-- **Quick-return from footnotes**: Toggles on and off the quick return functionality from the footnotes. When the functionality it's active, a short press of the power button will act as the back button from the footnotes page.
-
-#### 3.6.4 System
-
-- **Time to Sleep**: Set the duration of inactivity before the device automatically goes to sleep; options are 1, 3, 5, 10 (default), 15 or 30 minutes.
-
-- **Wi-Fi Networks**: Connect to Wi-Fi networks for file transfers and firmware updates.
-
-- **KOReader Sync**: Options for setting up KOReader for syncing book progress. **Smart sync** is the default for new configurations and auto-resolves simple push/pull decisions. Existing credential files retain **Ask every time** when migrated; you can switch Sync Behavior at any time if you prefer manual confirmation.
-
-- **OPDS Servers**: Manage one or more OPDS [(Open Publication Distribution System)](https://en.wikipedia.org/wiki/Open_Publication_Distribution_System) libraries for browsing and downloading books. See [OPDS Servers (Multiple Libraries)](#365-opds-servers-multiple-libraries) below.
-
-- **Clear Reading Cache**: Clear the internal SD card cache.
-
-- **Check for updates**: Check for Crosspoint firmware updates over Wi-Fi. Firmware can also be updated without a USB connection by placing a `firmware.bin` file on the SD card.
-
-- **Language**: Set the UI language. CrossPoint supports 24 languages: English, Spanish, French, German, Czech, Brazilian Portuguese, Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish, Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian, and Hebrew.
-
-- **Manage Fonts**: Browse, download, and manage custom font families installed from the SD card. See [Custom Fonts (SD Card)](#38-custom-fonts-sd-card) for more information.
-
-#### 3.6.5 OPDS Servers (Multiple Libraries)
-
-CrossPoint supports saving multiple OPDS servers and switching between them when browsing catalogs.
-
-1. Open **Settings -> System -> OPDS Servers**.
-
-2. Select **Add Server** to create a new entry, or select an existing server to edit it.
-
-3. Configure these fields:
-   
-   - **Server Name**: Optional display name (for example, "Home Calibre" or "Public Catalog").
-   
-   - **OPDS Server URL**: Full catalog root URL (for Calibre Content Server, usually ends with `/opds`).
-   
-   - **Username / Password**: Optional credentials for authenticated servers.
-
-4. Use **Delete Server** inside a server entry to remove it.
-
-Behavior notes:
-
-- You can store up to 8 OPDS servers.
-- OPDS authentication supports HTTP Basic auth. If you use Calibre Content Server with authentication enabled, set it to Basic (not Digest).
-
-You can also manage OPDS servers from the web interface while in File Transfer mode:
-
-1. Connect to the device web UI.
-2. Open `http://<device-ip>/settings`.
-3. Use the **OPDS Servers** card to add, edit, or delete entries.
-
-For web-based Wi-Fi network management, see [Web Settings (Wi-Fi + OPDS)](#366-web-settings-wi-fi--opds).
-
-#### 3.6.6 Web Settings (Wi-Fi + OPDS)
-
-While in **File Transfer** mode, the web settings page includes management cards for both **Wi-Fi Networks** and **OPDS Servers**.
-
-1. On device: open **File Transfer** and connect through **Join a Network** or **Create Hotspot**.
-2. In a browser, open `http://<device-ip>/settings` or `http://crosspoint.local`.
-3. In **Wi-Fi Networks**, add, edit, or delete saved network entries (SSID + optional password).
-4. In **OPDS Servers**, add, edit, or delete OPDS catalogs.
-
-Behavior notes:
-
-- Passwords are never shown back in the web UI after saving.
-- Leaving Password blank while editing keeps the existing saved password unchanged.
-- The web UI can save hidden-network SSIDs, but connecting to hidden networks still depends on the device-side Wi-Fi connection flow.
-
-#### 3.6.7 KOReader Sync Quick Setup
-
-CrossPoint can sync reading progress with KOReader-compatible sync servers.
-It also interoperates with KOReader apps/devices when they use the same server and credentials.
-
-##### Option A: CrossPoint Sync Server (`sync.crosspointreader.com`, default)
-
-When **Sync Server URL** is left empty, CrossPoint uses the free CrossPoint sync server at `https://sync.crosspointreader.com`. It speaks the standard KOReader sync protocol (so KOReader apps can use it too). CrossPoint records page starts as chapter-content offsets and sends the corresponding standard KOReader XPath, so devices with different fonts or layouts can return to the same text.
-
-1. On each CrossPoint device:
-
-   - Go to **Settings -> System -> KOReader Sync**.
-
-   - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
-
-   - Leave **Sync Server URL** empty (or set it to `https://sync.crosspointreader.com`).
-
-   - On the first device, run **Sign Up** once to create the account directly from the device. On every other device, just run **Authenticate**.
-
-Accounts are per server. Existing `sync.koreader.rocks` credentials do not exist on the CrossPoint server; either sign up again with the same username/password or use Option B to keep using the legacy server.
-
-##### Option B: Legacy Public KOReader Server (`sync.koreader.rocks`)
-
-Use this if you already sync KOReader devices against the official public server.
-
-1. On each CrossPoint device:
-
-   - Go to **Settings -> System -> KOReader Sync**.
-
-   - Set **Sync Server URL** to `https://sync.koreader.rocks` (required; an empty URL now points at the CrossPoint server instead).
-
-   - Set **Username** and **Password** to your existing KOReader Sync credentials.
-
-   - Run **Authenticate**.
-
-2. If you do not have an account yet, run **Sign Up** on the device, or register once with curl:
+If you have no account yet, run **Sign Up** on the device, or register with curl:
 
 ```bash
 USERNAME="user"
@@ -408,9 +507,10 @@ curl -i "https://sync.koreader.rocks/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
-When this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, pick a different username or use that existing account.
+`HTTP 402` with `{"code":2002,"message":"Username is already registered."}` means that name is
+taken.
 
-##### Option C: Self-Hosted Server (Docker Compose)
+#### Option C: your own server
 
 1. Start a sync server:
 
@@ -440,7 +540,8 @@ podman compose up -d
 ```
 
 > [!NOTE]
-> `ENABLE_USER_REGISTRATION=true` is convenient for first setup. After creating your users, set it to `false` (or remove it) to avoid unexpected registrations.
+> `ENABLE_USER_REGISTRATION=true` is convenient for the first setup. Once your users exist,
+> set it to `false` or remove it, so nobody else can register.
 
 2. Verify the server:
 
@@ -449,13 +550,14 @@ curl -H "Accept: application/vnd.koreader.v1+json" "http://<server-ip>:17200/hea
 # Expected: {"state":"OK"}
 ```
 
-3. Register a user once.
-   CrossPoint authenticates against KOReader Sync (`koreader/kosync`) using an MD5 key, so register using the MD5 of your password:
+3. Register a user once. The server authenticates on the MD5 of the password, so register
+   with that MD5:
 
 > [!WARNING]
 > Sending a reusable MD5-derived password over plain HTTP is insecure.
 > Create unique sync-only credentials and do not reuse main account passwords.
-> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN or when using untrusted networks.
+> Prefer `https://<server-ip>:7200` whenever traffic leaves a fully trusted LAN, or when using
+> untrusted networks.
 > Use `curl -k` only for self-signed certificate testing.
 
 ```bash
@@ -469,212 +571,219 @@ curl -i "http://<server-ip>:17200/users/create" \
   --data "{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD_MD5\"}"
 ```
 
-If this returns `HTTP 402` with `{"code":2002,"message":"Username is already registered."}`, the account already exists.
-
-4. On each CrossPoint device:
-   
-   - Go to **Settings -> System -> KOReader Sync**.
-   
-   - Set **Username** and **Password** (enter the plain password; CrossPoint computes MD5 internally, and use the same values on all devices).
-   
-   - Set **Sync Server URL** to `http://<server-ip>:17200`.
-   
-   - Run **Authenticate**.
-
-If you use the HTTPS listener, use `https://<server-ip>:7200` (`curl -k` only for self-signed certificate testing).
-
-##### Syncing While Reading
-
-Once any of the options above is set up, press **Confirm** while reading to open the reader menu, then select **Sync Progress**. Alternatively, set **Settings -> Controls -> Long-press Menu** to **KOSync** and hold Confirm to launch sync directly.
-
-- With **Sync Behavior** set to **Ask every time**, choose **Apply Remote** to jump to remote progress or **Upload Local** to push current progress.
-- With **Sync Behavior** set to **Smart sync**, CrossPoint auto-resolves simple cases: upload when no remote progress exists, confirm and leave both unchanged when local and remote progress are already synchronized, upload when local progress is further ahead, or apply remote when remote progress is further ahead.
-
-### 3.7 Sleep Screen
-
-The **Sleep Screen** setting controls what is displayed when the device goes to sleep:
-
-| Mode               | Behavior                                                                                                                     |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
-| **Dark** (default) | The CrossPoint logo on a dark background.                                                                                    |
-| **Light**          | The CrossPoint logo on a white background.                                                                                   |
-| **Custom**         | A custom image from the SD card (see below). Falls back to **Dark** if no custom image is found.                             |
-| **Cover**          | The cover of the currently open book. Falls back to **Dark** if no book is open.                                             |
-| **Cover + Custom** | The cover of the currently open book, shown only while actively reading. Falls back to **Custom** behavior when not reading. |
-| **Transparent**    | A BMP or PNG overlay drawn over the current screen. Supports PNG and 32-bit BGRA alpha transparency, and treats white as transparent in regular BMPs. Falls back to **Dark** if no valid overlay image is found. |
-| **None**           | A blank screen.                                                                                                              |
-
-#### Cover settings
-
-When using **Cover** or **Cover + Custom**, two additional settings apply:
-
-- **Sleep Screen Cover Mode**: **Fit** (scale to fit, white borders) or **Crop** (scale and crop to fill the screen).
-- **Sleep Screen Cover Filter**: **None** (grayscale), **Contrast** (black & white), or **Inverted** (inverted black & white).
-
-#### Custom images
-
-To use custom sleep images, set the sleep screen mode to **Custom** or **Cover + Custom**, then place images on the SD card:
-
-- **Multiple Images (recommended):** Create a `.sleep` directory in the root of the SD card and place any number of `.bmp` images inside. One will be randomly selected each time the device sleeps. (A directory named `sleep` is also accepted as a fallback.)
-- **Single Image:** Place a file named `sleep.bmp` in the root directory. This takes priority over the `.sleep`/`sleep` directories.
-
-#### Transparent overlay images
-
-To use transparent sleep overlays, set the sleep screen mode to **Transparent**, then place BMP or PNG files on the SD card:
-
-- **Multiple Images (recommended):** Create a `.sleep-overlay` directory in the root of the SD card and place any number of valid overlay `.bmp` or `.png` images inside. One will be randomly selected each time the device sleeps. A directory named `sleep-overlay` is also accepted as a fallback.
-- **Single Image:** Place `sleep-overlay.bmp` or `sleep-overlay.png` in the root directory. A root BMP takes priority over a root PNG, and both take priority over the `.sleep-overlay`/`sleep-overlay` directories.
-
-Transparent overlay files are intentionally separate from normal sleep images. Regular BMP formats supported by CrossPoint are accepted; white pixels leave the existing screen unchanged. For per-pixel alpha transparency, use a PNG with an alpha channel or a 32-bit BGRA BMP with both visible and non-opaque pixels. Opaque white pixels in alpha images erase the content behind them.
-
-> [!TIP]
-> For best results:
-> - For non-transparent **Custom** mode, use uncompressed BMP files with 24-bit color depth.
-> - For **Transparent** mode, use a PNG or uncompressed 32-bit BGRA BMP for per-pixel alpha, or a regular BMP for white-as-transparent artwork.
-> - Overlays are BMP or PNG only. The `.pxc` wallpaper format carries no alpha channel, so it cannot be used as an overlay.
-> - X4: Use a resolution of 480x800 pixels to match the device's screen resolution.
-> - X3: Use a resolution of 528x792 pixels to match the device's screen resolution.
-
-> [!TIP]
-> You can set an image as the sleep screen cover directly from the BMP image viewer in the **[Browse Files](#33-browse-files-screen)** screen.
+4. On each device, open **Settings > System > KOReader Sync**, set **Username** and
+   **Password**, set **Sync Server URL** to `http://<server-ip>:17200`, and run
+   **Authenticate**. For the HTTPS listener use `https://<server-ip>:7200`.
 
 ---
 
-### 3.8 Custom Fonts (SD Card)
+## 11. Fonts and dictionaries
 
-CrossPoint supports loading additional fonts from the SD card, extending beyond the two built-in families (Noto Serif, Noto Sans). Custom fonts can include extended Unicode coverage, enabling CJK (Chinese, Japanese, Korean) and other scripts.
+### Fonts
 
-There are three ways to install fonts:
+Lector ships with Noto Serif and Noto Sans. Fonts on the SD card are added to that list, and
+can bring scripts the built-in fonts do not cover, including Chinese, Japanese and Korean.
 
-1. **Download from device (recommended):** Go to **Settings -> System -> Manage Fonts**, browse the available font families, and select one to download over Wi-Fi.
-2. **Upload via web interface:** While in **File Transfer** mode, open the web UI in a browser and navigate to the **Fonts** tab to upload `.cpfont` files.
-3. **Manual SD card copy:** Download font files from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts) and copy them to `/.fonts/` (preferred) or `/fonts/` on your SD card.
+Three ways to install one:
 
-Once installed, custom fonts appear in **Settings → Reader → Font Family** alongside the built-in fonts.
+1. **From the device:** **Settings > Reader > Manage Fonts**, then pick a family to download
+   over Wi-Fi.
+2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
+   `.cpfont` files.
+3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.
+   Files come from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
 
-See [docs/sd-card-fonts.md](./docs/sd-card-fonts.md) for full installation details and SD card folder structure.
+Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
+details are in [docs/sd-card-fonts.md](./docs/sd-card-fonts.md).
 
----
+### Dictionaries
 
-## 4. Reading Mode
+Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pick one in
+**Settings > Reader > Dictionary**; the row only appears once a dictionary folder exists.
 
-Once you have opened a book, the button layout changes to facilitate reading.
-
-### Page Turning
-
-| Action            | Buttons                              |
-| ----------------- | ------------------------------------ |
-| **Previous Page** | Press **Left** _or_ **Volume Up**    |
-| **Next Page**     | Press **Right** _or_ **Volume Down** |
-
-The role of the volume (side) buttons can be swapped in the **[Controls Settings](#363-controls)**.
-
-If the **Short Power Button Click** setting is set to "Page Turn", you can also turn to the next page by briefly pressing the Power button.
-
-### Chapter Navigation
-
-* **Next Chapter:** Press and **hold** the **Right** (or **Volume Down**) button briefly, then release.
-* **Previous Chapter:** Press and **hold** the **Left** (or **Volume Up**) button briefly, then release.
-
-This feature can be disabled in the **[Controls Settings](#363-controls)** to help avoid changing chapters by mistake.
-
-### Auto Page Turn
-
-Auto Page Turn automatically advances pages at a set interval, useful for hands-free reading. This feature can be enabled and configured from the **[Reader Menu](#5-reader-menu)** while reading an EPUB.
-
-### Tilt Page Turn (X3 only)
-
-On the **Xteink X3**, the gyroscope can be used to turn pages by tilting the device. This feature is available in the Controls settings.
-
-### Footnote Navigation
-
-When reading an EPUB that contains footnotes, you can navigate to the footnote text by selecting the footnote reference in the book. From the footnote, you can return to your original reading position.
-
-If the device goes to sleep or you close the book while viewing a footnote, the book reopens to your original reading position, not the footnote.
-
-### System Navigation
-
-* **Return to Home:** Press the **Back** button to close the book and return to the **[Home](#31-home-screen)** screen.
-* **Return to Browse Files:** Press and hold the **Back** button to close the book and return to the **[Browse Files](#33-browse-files-screen)** screen.
-* **Reader Menu:** Press **Confirm** to open the **[Reader Menu](#5-reader-menu)**, which includes chapter navigation, reading options, and more.
-* **Long-press Confirm (configurable):** Holding **Confirm** runs the function chosen by the **Long-press Menu** setting in **[Controls Settings](#363-controls)** — "Bookmark" (default) drops a bookmark, "KOSync" launches KOReader Sync, "Dictionary" starts a word lookup, "Disabled" does nothing. A short press always opens the Reader Menu.
-
-### Supported Languages
-
-CrossPoint renders text using the following Unicode character blocks, enabling support for a wide range of languages:
-
-* **Latin Script (Basic, Supplement, Extended-A/B):** Covers English, German, French, Spanish, Portuguese, Italian, Dutch, Swedish, Norwegian, Danish, Finnish, Polish, Czech, Hungarian, Romanian, Slovak, Slovenian, Turkish, Catalan, and others.
-* **Cyrillic Script (Standard and Extended):** Covers Russian, Ukrainian, Belarusian, Bulgarian, Serbian, Macedonian, Kazakh, Kyrgyz, Mongolian, and others.
-* **Vietnamese:** Supported via extended Latin glyph coverage in the built-in reader fonts.
-
-What is not supported with built-in reader fonts: Chinese, Japanese, Korean, Arabic, Greek, Hebrew, and Farsi. However, **CJK, Hebrew, Greek, and other extended scripts can be enabled by installing custom SD card fonts** — see [Custom Fonts (SD Card)](#38-custom-fonts-sd-card).
+Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
+**Settings > Controls**. Setup and usage are covered in
+[docs/dictionary.md](./docs/dictionary.md).
 
 ---
 
-## 5. Reader Menu
+## 12. Settings reference
 
-Press **Confirm** while reading to open the Reader Menu. From here you can access reading utilities and navigation options without leaving the book.
+Settings are split into four categories: **Display**, **Reader**, **Controls** and **System**.
 
-Available options include:
+### 12.1 Display
 
-- **Select Chapter** – Open the table of contents to jump to a specific chapter (see [Chapter Selection](#51-chapter-selection) below).
-- **Footnotes** – Navigate to the footnotes for the current section *(only shown in books that contain footnotes)*.
-- **Look Up** – Select a word on the current page and show its dictionary definition (see [docs/dictionary.md](docs/dictionary.md)). Requires a dictionary to be selected in **Settings → Reader → Dictionary**.
-- **Reading Orientation** – Cycle through screen orientations without leaving the reader.
-- **Auto Turn (Pages Per Minute)** – Cycle through automatic page turn speed options for hands-free reading.
-- **Go to %** – Jump to a specific position in the book by percentage.
-- **Take screenshot** – Save a screenshot of the current page to the `screenshots/` folder.
-- **Show page as QR** – Display a QR code encoding the current reading position.
-- **Go Home** – Close the book and return to the Home screen.
-- **Sync Progress** – Push or pull reading progress with a KOReader sync server (see [KOReader Sync Quick Setup](#367-koreader-sync-quick-setup)).
-- **Delete Book Cache** – Clear the cached layout data for the current book, forcing a re-index on next open.
+**Sleep screen**
 
-Press **Back** at any time to close the menu and return to your current page.
+- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, Quick Resume, Stats
+  Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
+- **Quick Resume on Timeout** — ON or OFF.
+- **Wake Straight to Book** — wake goes straight back into the book.
+- **Sleep Footer Text** — your own line of text on the sleep screen.
 
-### 5.1 Chapter Selection
+**Wallpaper**
 
-Accessible by selecting **Chapters** from the Reader Menu.
+- **Sleep Screen Cover Mode** — Fit or Crop.
+- **Sleep Screen Cover Filter** — None, Contrast or Inverted.
+- **Sleep Image Quality** — Fast or Pretty.
+- **Show Wallpaper Name**, **Show Favorite Badge**, **Show Wallpaper Position** — what is
+  drawn over the wallpaper.
+- **Shuffle Wallpapers** — reshuffle the rotation now.
 
-1. Use **Left** (or **Volume Up**), or **Right** (or **Volume Down**) to highlight the desired chapter.
-2. Press **Confirm** to jump to that chapter.
-3. *Alternatively, press **Back** to cancel and return to your current page.*
+**Screen**
+
+- **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or Never.
+- **Screen Cleanup** — **Full (flash)** or **No Flash**. No Flash is an X3-only gentle pass
+  that settles unchanged pixels without a full-screen flash; because the gentle pass alone
+  lets residue build up, every fifth cleanup still runs the full pass.
+- **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
+
+**Home**
+
+- **Author On Home** — Initials or Full Name.
+
+### 12.2 Reader
+
+**Text** — **Text Settings** (below), **Manage Fonts**, **Dictionary**.
+
+**Text Settings** holds everything about the text itself:
+
+- **Reader Font Family** — Noto Serif, Noto Sans, plus any SD card families.
+- **Reader Font Size**.
+- **Line Spacing**.
+- **Uniform Margins** — ON applies one margin all round.
+- **Screen Margin**, **Top Margin**, **Bottom Margin**.
+- **Dynamic Margins** — Off, Auto (min 10px) or Auto (min 20px).
+- **First Line Indent** — Book or Custom %, with **First-Line Indent %** underneath.
+- **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
+- **Embedded Style** — honour the EPUB's own HTML and CSS.
+- **Bionic Reading** — bolds the first part of each word as a fixation point.
+- **Guide Dots**.
+- **Hyphenation**.
+- **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
+- **Text Anti-Aliasing** — smoother edges, slightly slower page turns.
+- **Debug Layout Borders** — draws the layout boxes; a diagnostic, not a reading feature.
+
+**Page**
+
+- **Reading Orientation** — Portrait, Landscape CW, Portrait 180°, Landscape CCW.
+- **Paragraph Numbers** — Off or Per Chapter, with **Number Size** (Small or Double).
+
+**Look**
+
+- **Paperback Look**, **Paperback Status Bar**.
+- **Night mode** — inverts the screen.
+- **Customise Status Bar** — see below.
+
+**Customise Status Bar** places each element in one of six slots (top left, top centre, top
+right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
+**Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
+Session**. Alongside them:
+
+- **Title Source** — Book or Chapter, and **Truncate Title**.
+- **Page Format** — `N/M` or `N left`.
+- **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim, Medium,
+  Fat), **Floating Bar** and **Bar Outline**.
+- **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
+- **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
+- **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**.
+
+### 12.3 Controls
+
+**Buttons**
+
+- **Remap Front Buttons** — reassign each bottom-edge button.
+- **Orient front buttons** — rotate their meaning with the screen.
+- **Side Button Layout (reader)** — Prev/Next, Next/Prev or Disabled.
+
+**Power button**
+
+- **Short Power Button Click** — Ignore, Sleep, Page Turn, Refresh Screen or Footnotes.
+- **Quick-return from footnotes**.
+- **Double-click power** — bind an action to two quick presses.
+
+**Hold**
+
+- **Long press while reading** — the action bound to holding Confirm in a book.
+- **Hold in in-book menu** — the action bound to holding Confirm with the menu open.
+- **Pop-up Items** — which rows the pop-up contains.
+
+**Back**
+
+- **Short Back to File Browser** — swap the short and long press of Back in a book.
+- **Home Back Button** — None, Resume or Reading Stats.
+
+### 12.4 System
+
+**Power** — **Time to Sleep**: 1 to 30 minutes, or Never. Default 10 minutes.
+
+**Library**
+
+- **Show Hidden Files**.
+- **File Browser Order** — Alphabetical or Random.
+- **Open Random Book on Boot**.
+- **Clear Read Books from Recent List**.
+- **Move Finished Books to Read Folder**.
+- **Move Opened Books to Recents Folder**.
+
+**Stats** — **Track Reading Stats** and **Reading Idle Limit**.
+
+**Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**.
+
+**Device**
+
+- **Language** — 31 languages: English, Spanish, French, German, Czech, Portuguese (Portugal
+  and Brazil), Russian, Swedish, Romanian, Catalan, Ukrainian, Belarusian, Italian, Polish,
+  Finnish, Danish, Dutch, Turkish, Kazakh, Hungarian, Lithuanian, Slovenian, Valencian,
+  Hebrew, Slovak, Vietnamese, Norwegian, Arabic, Bosnian and Indonesian.
+- **Device Name** — how this reader introduces itself to another during Nearby Sync. Left
+  empty, it falls back to a generated `Lector-XXXX` name derived from the MAC address.
+- **Clean Up Storage** — removes cached data for books that are no longer on the card. Books
+  keep their progress.
+- **Clear Reading Cache**.
+- **Check for updates** and **SD Card Firmware Update** — see
+  [section 13](#13-updating-the-firmware).
 
 ---
 
-### 5.2 Bookmarks
+## 13. Updating the firmware
 
-Bookmarks can be created to quickly save and restore your place in a book.
+Three routes:
 
-To create a bookmark, hold **Confirm** for about half a second while inside a book. A popup will appear letting you know a bookmark was created. The popup message will automatically disappear in a couple of seconds.
+- **Over Wi-Fi:** **Settings > System > Check for updates**.
+- **From the SD card:** put a firmware `.bin` on the card and use **Settings > System > SD
+  Card Firmware Update**, or open the `.bin` from the file browser.
+- **Over USB:** the [Lector flasher](https://diogo7dias.github.io/lector-xteink-firmware/)
+  installs over Web Serial from a browser.
 
-To open bookmarks, press **Confirm** while inside a book. Then navigate to the **Bookmarks** menu. Bookmarks can be opened by navigating to them and pressing **Confirm**, which will redirect you to that place in the book. You can delete bookmarks by holding **Confirm** for about 0.7 seconds, and then pressing **Confirm** again to confirm deletion, or **Back** to cancel.
-
-Bookmarks are stored in the `.crosspoint/bookmarks` folder in the JSON format.
-
-## 6. Current Limitations & Roadmap
-
-Please note that this firmware is currently in active development. The following features are **not yet supported** but are planned for future updates:
-
-* **Cover Images:** Large cover images embedded into EPUB require several seconds (~10s for ~2000 pixel tall image) to convert for sleep screen and home screen thumbnail. Consider optimizing the EPUB with e.g. https://github.com/bigbag/epub-to-xtc-converter to speed this up.
-* **Unsupported Image Formats:** Most JPG and PNG images in EPUBs render correctly. GIFs and progressive JPEGs are not supported and will fall back to an `[Image]` placeholder.
-* 
-* **Dictionary Lookup:** Inline word lookup is not yet implemented.
+If the device will not boot far enough to reach Settings, hold **Volume Up** together with
+**Power** at boot. That goes straight to the SD card firmware update screen, which is the way
+back on devices where USB flashing is locked down.
 
 ---
 
-## 7. Troubleshooting Issues & Escaping Bootloop
+## 14. Troubleshooting
 
-If an issue or crash is encountered while using Crosspoint, feel free to raise an issue ticket and attach the logs.
+**The device is stuck in a bootloop.** Press and release **Reset**, then hold **Back** and
+**Power** to boot to the Home screen. If that does not work, hold **Volume Up** and **Power**
+at boot to reach the SD card firmware update screen.
 
-**Crash reports on SD card:** After a crash, CrossPoint automatically saves a crash report to the SD card (no USB connection needed). Check the root of the SD card for a crash log file and include it with any bug report.
+**Something is broken after a settings or cache change.** Delete the `.crosspoint` folder on
+the card, or just the parts of it that matter: `settings.json`, `state.json`, or the `epub_*`
+cache folders.
 
-**Serial monitor logs:** For more detailed debugging, connect the device to a computer and run the custom debugging monitor script (requires Python 3 with `pyserial`, `colorama`, and `matplotlib`; install via `pip3 install pyserial colorama matplotlib`):
+**A crash happened.** Lector writes a crash report to the SD card without needing a USB
+connection. Attach that file to any bug report.
+
+**More detail is needed.** Connect the device over USB and run the debugging monitor (needs
+Python 3 with `pyserial`, `colorama` and `matplotlib`; install with
+`pip3 install pyserial colorama matplotlib`):
 
 ```
 python3 scripts/debugging_monitor.py
 ```
 
-The script auto-detects the serial port. You can also specify one explicitly:
+It finds the serial port on its own, or takes one:
 
 ```
 python3 scripts/debugging_monitor.py /dev/ttyACM0        # Linux
@@ -682,22 +791,14 @@ python3 scripts/debugging_monitor.py /dev/tty.usbmodem1  # macOS
 python3 scripts/debugging_monitor.py COM7                # Windows
 ```
 
-**Features:**
-
-- Color-coded log output by category (errors, memory, display, EPUB parsing, etc.)
-- Live memory usage graph (free RAM, total RAM, max contiguous allocation) updated every second
-- Interactive command prompt — type a command and press Enter to send it to the device
-- Screenshot capture — saves the current display to `screenshot.bmp` when triggered by the device
-
-**Options:**
+It colour-codes the log by category, graphs free memory once a second, sends commands you type
+back to the device, and saves screenshots the device triggers to `screenshot.bmp`.
 
 | Option               | Description                                               |
 | -------------------- | --------------------------------------------------------- |
 | `--baud RATE`        | Baud rate (default: 115200)                               |
 | `--filter KEYWORD`   | Show only lines containing the keyword (case-insensitive) |
 | `--suppress KEYWORD` | Hide lines containing the keyword (case-insensitive)      |
-
-**Examples:**
 
 ```
 # Show only memory-related log lines
@@ -709,6 +810,11 @@ python3 scripts/debugging_monitor.py --suppress "[SD]"
 
 Press **Ctrl-C** or close the graph window to exit.
 
-If the device is stuck in a bootloop, press and release the Reset button. Then, press and hold on to the configured Back button and the Power Button to boot to the Home Screen.
+### Known limits
 
-There can be issues with broken cache or config. In this case, delete the `.crosspoint` directory on your SD card (or consider deleting only `settings.json`, `state.json`, or `epub_*` cache directories in the `.crosspoint/` folder).
+- **Large cover images** slow the first open: a cover around 2000 pixels tall takes several
+  seconds to convert for the sleep screen and the home thumbnail.
+- **GIFs and progressive JPEGs** in EPUBs are not rendered, and fall back to an `[Image]`
+  placeholder. Ordinary JPEG and PNG images render.
+
+Bugs and logs are welcome as issue tickets.

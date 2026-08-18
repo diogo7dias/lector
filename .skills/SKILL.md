@@ -581,6 +581,25 @@ clang-format -i src/**/*.cpp src/**/*.h
 
 ---
 
+## User Guide Upkeep
+
+`USER_GUIDE.md` is the single source for the user-facing manual. The Lector site renders it
+into the guide page at build time and keeps no copy of its own, so the file in this repository
+is what readers see.
+
+**Rules:**
+
+1. A change that alters what the user sees or does — a new screen, a new or renamed setting, a
+   changed button gesture, a moved menu row, a new supported file type or folder — updates
+   `USER_GUIDE.md` in the same commit as the code.
+2. The stamp on line 1, `<!-- lector-version: X.Y.Z -->`, names the build the guide describes.
+   Move it as part of the release commit that bumps the firmware version.
+3. The site build fails when the stamp does not match the version the site serves, so a release
+   that leaves the guide behind goes red rather than publishing stale instructions.
+4. The site's markdown renderer covers headings, lists, tables, fenced code, links, images,
+   GitHub alerts (`> [!NOTE]`) and raw `<img>` tags. Any other syntax fails the build on
+   purpose; rewrite the line rather than reaching for it.
+
 ## Git Workflow and Repository Awareness
 
 ### Repository Detection Protocol
