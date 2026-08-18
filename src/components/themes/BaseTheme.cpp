@@ -27,7 +27,6 @@
 namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
-constexpr int subtitleY = 738;
 constexpr int bookmarkStatusIconWidth = 16;
 constexpr int bookmarkStatusIconHeight = 14;
 constexpr int bookmarkStatusIconGap = 4;
@@ -546,6 +545,16 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     auto truncatedSubtitle = renderer.truncatedText(
         SMALL_FONT_ID, subtitle, rect.width - BaseMetrics::values.contentSidePadding * 2, EpdFontFamily::REGULAR);
     int truncatedSubtitleWidth = renderer.getTextWidth(SMALL_FONT_ID, truncatedSubtitle.c_str());
+    // The subtitle (the firmware version, on the Settings screen) sits at the BOTTOM right,
+    // above the button hints. Its Y used to be the constant 738, measured against one panel:
+    // the hints band starts at screenHeight - buttonHintsHeight, which is 752 on the X3's
+    // 792-row portrait screen, so the version ran into the Down hint. Derive it instead, and
+    // keep a gap so descenders never touch the band either.
+    constexpr int subtitleGap = 6;
+    int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
+    renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+    const int subtitleY = renderer.getScreenHeight() - viewBottom - BaseMetrics::values.buttonHintsHeight -
+                          renderer.getLineHeight(SMALL_FONT_ID) - subtitleGap;
     renderer.drawText(SMALL_FONT_ID,
                       rect.x + rect.width - BaseMetrics::values.contentSidePadding - truncatedSubtitleWidth, subtitleY,
                       truncatedSubtitle.c_str(), true);
