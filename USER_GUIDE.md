@@ -64,6 +64,10 @@ With **Settings > Controls > Short Power Button Click** set to **Sleep**, the ho
 the device to sleep is much shorter (about a tenth of a second); every other value keeps the
 longer hold, so a stray press cannot switch the device off.
 
+Waking is a separate setting: **Settings > Controls > Wake Hold**. **Normal** needs the usual
+half-second hold, so a press in a bag cannot wake the reader; **Fast** wakes on any press.
+Readers that already had Sleep selected keep the fast wake they had.
+
 Binding an action to **Double-click power** turns that shortcut off again: the first of the
 two presses would otherwise sleep the device before the second one arrived. Sleep then needs
 the normal half-second hold, and the double-click action works as bound.
@@ -709,6 +713,7 @@ Session**. Alongside them:
 **Power button**
 
 - **Short Power Button Click** — Ignore, Sleep, Page Turn, Refresh Screen or Footnotes.
+- **Wake Hold** — Normal or Fast, for the hold that wakes the device from sleep.
 - **Quick-return from footnotes**.
 - **Double-click power** — bind an action to two quick presses. While something is bound
   here, **Short Power Button Click > Sleep** stops sleeping on a single press, since that

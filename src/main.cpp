@@ -436,7 +436,7 @@ void setup() {
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
-      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getPowerButtonDuration(), SETTINGS.shortPressSleeps())) {
+      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getWakeHoldMs(), SETTINGS.wakeHoldIsFast())) {
         powerManager.startDeepSleep(gpio);
       }
       wakePowerReleasePending = true;
@@ -812,7 +812,7 @@ void loop() {
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
   if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
-      gpio.getPowerButtonHeldTime() > SETTINGS.getPowerButtonDuration()) {
+      gpio.getPowerButtonHeldTime() > SETTINGS.getSleepHoldMs()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
       return;

@@ -204,6 +204,15 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
   wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
 
+  // Wake Hold arrived in 0.24.2. Before it, Short Power Button Click = Sleep also dropped
+  // the WAKE threshold to 10 ms, so anyone who chose Sleep already had a fast wake. A
+  // settings file written before this key existed therefore carries that forward rather
+  // than silently making their wake slower; every other file keeps the Normal default.
+  if (!doc["wakeHold"].is<uint8_t>() && shortPwrBtn == SHORT_PWRBTN::SLEEP) {
+    wakeHold = WAKE_HOLD_FAST;
+    needsResave = true;
+  }
+
   // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, and FREEZE has
   // no behaviour left at all, so a settings file still naming one would sleep into nothing.
   // Fold both to the default face and rewrite the file so the migration happens once.
