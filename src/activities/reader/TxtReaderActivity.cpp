@@ -559,6 +559,35 @@ void TxtReaderActivity::relayoutForFontChange() {
   requestUpdate();
 }
 
+void TxtReaderActivity::runPowerDoubleClick() {
+  // The pop-up owns the buttons while it is up; a double click must not act underneath it.
+  if (settingsPopup.isActive()) return;
+
+  switch (simple_reader_shortcut::resolve(SETTINGS.doubleClickPowerFunction, /*supportsStatusBarToggle=*/true)) {
+    case simple_reader_shortcut::Action::ToggleStatusBar:
+      SETTINGS.sbEnabled = SETTINGS.sbEnabled ? 0 : 1;
+      SETTINGS.saveToFile();
+      // The bar's band overlaps the reading margin, so showing or hiding it changes the
+      // viewport and therefore how many lines fit a page. Re-index rather than repaint,
+      // and keep the reader on the byte it was showing (the font-change path already
+      // does exactly this).
+      relayoutForFontChange();
+      break;
+    case simple_reader_shortcut::Action::WallpaperHold:
+      SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
+      SETTINGS.saveToFile();
+      GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+      requestUpdate();
+      break;
+    case simple_reader_shortcut::Action::None:
+      // Reachable for Hold Wallpaper only: arming asks whether a wallpaper path exists,
+      // and the card read that confirms the file is still there happens here.
+      GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
+      requestUpdate();
+      break;
+  }
+}
+
 void TxtReaderActivity::askDeleteBook() {
   if (!txt) return;
   const std::string path = txt->getPath();

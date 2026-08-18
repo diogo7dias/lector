@@ -372,10 +372,24 @@ class EpubReaderActivity final : public Activity {
   // speed would only burn battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
-  // Arms the power double-click only when a function is actually bound to it, so the
-  // ~280 ms hold-back on a single power click is paid only by a reader that uses it.
+  // Arms the power double-click only when the bound function could actually run right
+  // now. Every single power click pays the detector's ~280 ms hold-back while it waits
+  // for a second one, and a page turn on Power is the thing that lag is most felt on, so
+  // a binding that cannot fire on this page (footnotes bound with none here, Go to
+  // Paragraph with numbering off, KOSync with no credentials) leaves clicks instant.
   bool wantsPowerDoubleClick() const override {
-    return SETTINGS.doubleClickPowerFunction != CrossPointSettings::LP_MENU_DISABLED;
+    const uint8_t function = SETTINGS.doubleClickPowerFunction;
+    switch (function) {
+      case CrossPointSettings::LP_MENU_DISABLED:
+        return false;
+      // These two answer by reading the card, and this runs on EVERY main-loop pass, so
+      // they arm unconditionally and report themselves unavailable at the press instead.
+      case CrossPointSettings::LP_MENU_VIEW_QUOTES:
+      case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
+        return true;
+      default:
+        return boundMenuFunctionAvailable(function);
+    }
   }
   void runPowerDoubleClick() override;
   bool appliesNightMode() const override { return true; }

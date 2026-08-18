@@ -212,6 +212,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
 
+  // How long Power must be held to wake the device from deep sleep. Normal rejects a
+  // pocket brush; Fast wakes on any press, which is what Short Power Button Click = Sleep
+  // used to force on everyone who picked it (one setting, two behaviours).
+  enum WAKE_HOLD { WAKE_HOLD_NORMAL = 0, WAKE_HOLD_FAST = 1, WAKE_HOLD_COUNT };
+
   // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
   // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
   // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
@@ -404,6 +409,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Wake hold. Defaults to Normal, including for a settings file that predates this
+  // setting and chose Sleep — fromJson carries those forward to Fast, so nobody's wake
+  // gets slower without them asking (see the migration there).
+  uint8_t wakeHold = WAKE_HOLD_NORMAL;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -629,12 +638,28 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
-  // Hold-to-wake threshold. 200 ms is long enough to reject a pocket brush but short
-  // enough that the device feels instant in the hand. HalGPIO::verifyPowerButtonWakeup
+  // Hold-to-sleep threshold. 200 ms is long enough to reject a pocket brush but short
+  // enough that the device feels instant in the hand.
+  //
+  // Short-press-to-sleep drops it to 10 ms, so the press itself sleeps the device rather
+  // than waiting out a hold. That cannot coexist with a power double click: the main loop
+  // would sleep on the FIRST press, long before the detector could see a second release,
+  // so the bound function would never run. A bound double click therefore wins, and
+  // sleeping goes back to the normal hold.
+  uint16_t getSleepHoldMs() const { return shortPressSleeps() ? 10 : 200; }
+  // Hold-to-wake threshold, its own setting since 0.24.2. HalGPIO::verifyPowerButtonWakeup
   // returns as soon as the held time crosses this, so the wake happens under the finger
-  // with no release required.
-  uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 200;
+  // with no release required; Fast skips the check altogether.
+  uint16_t getWakeHoldMs() const { return 200; }
+  bool wakeHoldIsFast() const { return wakeHold == WAKE_HOLD_FAST; }
+  // True when a function is bound to the power double click (see doubleClickPowerFunction).
+  bool powerDoubleClickBound() const { return doubleClickPowerFunction != LP_MENU_DISABLED; }
+  // Whether a single power press sleeps the device. Every consumer of the Sleep value of
+  // shortPwrBtn must ask this rather than comparing the setting itself, so the double-click
+  // override is applied in one place: the wake-hold verification, the sleep threshold, and
+  // the shared Confirm/Power boards that route a short press to Power instead of Confirm.
+  bool shortPressSleeps() const {
+    return shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP && !powerDoubleClickBound();
   }
   // Pop-up membership. The mask layout has exactly one owner: these three.
   bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }

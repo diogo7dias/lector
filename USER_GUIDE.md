@@ -64,6 +64,14 @@ With **Settings > Controls > Short Power Button Click** set to **Sleep**, the ho
 the device to sleep is much shorter (about a tenth of a second); every other value keeps the
 longer hold, so a stray press cannot switch the device off.
 
+Waking is a separate setting: **Settings > Controls > Wake Hold**. **Normal** needs the usual
+half-second hold, so a press in a bag cannot wake the reader; **Fast** wakes on any press.
+Readers that already had Sleep selected keep the fast wake they had.
+
+Binding an action to **Double-click power** turns that shortcut off again: the first of the
+two presses would otherwise sleep the device before the second one arrived. Sleep then needs
+the normal half-second hold, and the double-click action works as bound.
+
 To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
 
 Boot, the plain sleep screen and the unlock screen all show one of six engraved crests
@@ -715,8 +723,19 @@ Session**. Alongside them:
 **Power button**
 
 - **Short Power Button Click** — Ignore, Sleep, Page Turn, Refresh Screen or Footnotes.
+- **Wake Hold** — Normal or Fast, for the hold that wakes the device from sleep.
 - **Quick-return from footnotes**.
-- **Double-click power** — bind an action to two quick presses.
+- **Double-click power** — bind an action to two quick presses. While something is bound
+  here, **Short Power Button Click > Sleep** stops sleeping on a single press, since that
+  press is the first half of the double click.
+  Most bindings act through the in-book menu, which only EPUB books have. In a `.txt` book
+  the double click runs **Status Bar** and **Hold Wallpaper**; in an `.xtc` book, **Hold
+  Wallpaper**. Bound to anything else, it stays inactive there and the power button keeps
+  its normal, undelayed behaviour.
+  A single power click waits about a quarter of a second while the reader watches for a
+  second one, which is noticeable when Power also turns the page. That wait is only paid
+  while the bound action can actually run: with **Footnotes** bound, a page without
+  footnotes turns instantly, and a page with them does not.
 
 **Hold**
 

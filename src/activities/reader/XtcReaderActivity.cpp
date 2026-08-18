@@ -57,6 +57,23 @@ void XtcReaderActivity::onEnter() {
   requestUpdate();
 }
 
+void XtcReaderActivity::runPowerDoubleClick() {
+  // Wallpaper Hold is the only binding this reader can run; wantsPowerDoubleClick() keeps
+  // the detector disarmed for every other one. It can still resolve to None here: arming
+  // only checks that a wallpaper path exists, and this is where the card is asked whether
+  // the file is still on it.
+  if (simple_reader_shortcut::resolve(SETTINGS.doubleClickPowerFunction, /*supportsStatusBarToggle=*/false) !=
+      simple_reader_shortcut::Action::WallpaperHold) {
+    GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
+    requestUpdate();
+    return;
+  }
+  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
+  SETTINGS.saveToFile();
+  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+  requestUpdate();
+}
+
 void XtcReaderActivity::onExit() {
   Activity::onExit();
 

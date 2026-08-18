@@ -235,7 +235,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // "Stack protection fault" during boot before anything painted. push_back keeps
     // exactly one SettingInfo temporary alive at a time.
     std::vector<SettingInfo> v;
-    v.reserve(87);
+    v.reserve(88);
     // --- Display ---
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                                   std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
@@ -449,6 +449,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Enum(StrId::STR_MENU_HOLD, &CrossPointSettings::menuHoldFunction, boundFunctionLabels(),
                                   "menuHoldFunction", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions()));
+
+    v.push_back(SettingInfo::Enum(StrId::STR_WAKE_HOLD, &CrossPointSettings::wakeHold,
+                                  {StrId::STR_WAKE_HOLD_NORMAL, StrId::STR_WAKE_HOLD_FAST}, "wakeHold",
+                                  StrId::STR_CAT_CONTROLS));
 
     v.push_back(SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
                                   boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
