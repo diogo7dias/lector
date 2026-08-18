@@ -713,6 +713,10 @@ Session**. Alongside them:
 - **Double-click power** — bind an action to two quick presses. While something is bound
   here, **Short Power Button Click > Sleep** stops sleeping on a single press, since that
   press is the first half of the double click.
+  Most bindings act through the in-book menu, which only EPUB books have. In a `.txt` book
+  the double click runs **Status Bar** and **Hold Wallpaper**; in an `.xtc` book, **Hold
+  Wallpaper**. Bound to anything else, it stays inactive there and the power button keeps
+  its normal, undelayed behaviour.
 
 **Hold**
 

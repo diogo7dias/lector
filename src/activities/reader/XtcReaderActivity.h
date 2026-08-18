@@ -14,6 +14,7 @@
 
 #include "EndOfBookOptions.h"
 #include "ReaderUtils.h"
+#include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/SdStatsFiles.h"
@@ -64,6 +65,13 @@ class XtcReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  // No in-book menu here either, and this reader's status bar is the three-way
+  // xtcStatusBarMode rather than the shared toggle, so the runnable subset is smaller
+  // than the TXT reader's (see SimpleReaderShortcut.h).
+  bool wantsPowerDoubleClick() const override {
+    return simple_reader_shortcut::armsDoubleClick(/*supportsStatusBarToggle=*/false);
+  }
+  void runPowerDoubleClick() override;
   bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {

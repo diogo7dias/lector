@@ -6,6 +6,7 @@
 
 #include "CrossPointSettings.h"
 #include "ReaderUtils.h"
+#include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
 #include "reading_stats/ReaderStatsSession.h"
@@ -82,6 +83,14 @@ class TxtReaderActivity final : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
+  // This reader has no in-book menu, so most bound functions cannot run here. The
+  // detector is armed only for the ones that can (see SimpleReaderShortcut.h), so a
+  // binding this reader cannot honour does not cost every power click the ~280 ms
+  // hold-back the detector needs.
+  bool wantsPowerDoubleClick() const override {
+    return simple_reader_shortcut::armsDoubleClick(/*supportsStatusBarToggle=*/true);
+  }
+  void runPowerDoubleClick() override;
   bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {

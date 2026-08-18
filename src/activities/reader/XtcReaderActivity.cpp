@@ -57,6 +57,19 @@ void XtcReaderActivity::onEnter() {
   requestUpdate();
 }
 
+void XtcReaderActivity::runPowerDoubleClick() {
+  // Wallpaper Hold is the only binding this reader can run; wantsPowerDoubleClick()
+  // keeps the detector disarmed for every other one, so nothing else reaches here.
+  if (simple_reader_shortcut::resolve(SETTINGS.doubleClickPowerFunction, /*supportsStatusBarToggle=*/false) !=
+      simple_reader_shortcut::Action::WallpaperHold) {
+    return;
+  }
+  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
+  SETTINGS.saveToFile();
+  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+  requestUpdate();
+}
+
 void XtcReaderActivity::onExit() {
   Activity::onExit();
 
