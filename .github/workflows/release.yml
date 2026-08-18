@@ -38,6 +38,42 @@ jobs:
           key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
           restore-keys: pio-${{ runner.os }}-
 
+      # The device shows CROSSPOINT_VERSION, built from platformio.ini's crosspoint.version;
+      # the flasher site shows a string derived from this tag. Two sources, so a tag pushed
+      # without bumping platformio.ini would put "lector 0.24.2" on the site and leave
+      # "lector 0.24.1" on the home screen, in Settings and in every crash report. Fail the
+      # release here instead, before anything is built or published.
+      - name: Check the tag matches the firmware version
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          PIO_VERSION="$(sed -n 's/^version[[:space:]]*=[[:space:]]*//p' platformio.ini | head -n1)"
+          if [ -z "$PIO_VERSION" ]; then
+            echo "No version line found in platformio.ini." >&2
+            exit 1
+          fi
+          # Experimental tags carry no three-part number and ship their own version string
+          # to the site, so there is nothing to match; release candidates append -rc to the
+          # same number the tag names.
+          if [[ "$TAG" =~ ^lector\.exp\.[0-9]+$ ]]; then
+            echo "Experimental tag $TAG; skipping the version match."
+            exit 0
+          fi
+          NUM="${TAG#lector-}"
+          NUM="${NUM#v}"
+          NUM="${NUM%%-rc*}"
+          NUM="${NUM%%-RC*}"
+          EXPECTED="lector ${NUM}"
+          if [ "$PIO_VERSION" != "$EXPECTED" ]; then
+            echo "Tag/firmware version mismatch." >&2
+            echo "  tag:            $TAG" >&2
+            echo "  expected:       version = $EXPECTED" >&2
+            echo "  platformio.ini: version = $PIO_VERSION" >&2
+            echo "Bump crosspoint.version in platformio.ini to match the tag, or retag." >&2
+            exit 1
+          fi
+          echo "Tag $TAG matches platformio.ini ($PIO_VERSION)."
+
       - name: Build CrossPoint
         run: pio run -e gh_release
 
