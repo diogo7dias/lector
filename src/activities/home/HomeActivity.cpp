@@ -56,6 +56,20 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 
     recentBooks.push_back(book);
   }
+
+  // One SD pass for every CJK title and author on the home list; repaints then
+  // hit the resident tables instead of re-reading per-string (upstream #3071).
+  // Titles and authors draw in the same font and style here (drawRecentBookList
+  // joins them into one row string), so a single batch covers both: even
+  // indices are titles, odd ones authors.
+  renderer.prewarmFallbackText(
+      UI_10_FONT_ID,
+      [](const void* ctx, uint32_t i) -> const char* {
+        const auto& books = *static_cast<const std::vector<RecentBook>*>(ctx);
+        const RecentBook& book = books[i / 2];
+        return (i % 2 == 0) ? book.title.c_str() : book.author.c_str();
+      },
+      &recentBooks, static_cast<uint32_t>(recentBooks.size()) * 2);
 }
 
 void HomeActivity::onEnter() {

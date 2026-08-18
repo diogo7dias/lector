@@ -46,6 +46,10 @@ static constexpr gpio_num_t GPIO_BATTERY_LATCH = GPIO_NUM_13;
 // PowerManager::powerDownRailsForSleep() drops it for deep sleep, but neither knows GPIO13 is
 // a flash pad, and the IDF flash-leakage workaround pulls DIO-unused flash pads low on every
 // light-sleep entry. Only a pad hold survives that, and only this file knows to apply one.
+//
+// The isXteinkDevice() guard is also what keeps this off non-Xteink boards, where GPIO13 is an
+// ordinary signal rather than a power control -- on the X4 Pro it is the display chip select
+// (upstream #2998), so driving and holding it here would break the panel.
 static bool hasFlashPadBatteryLatch() { return gpio.isXteinkDevice(); }
 
 // Pin the battery latch high and pad-hold it across a light sleep. The hold overrides both

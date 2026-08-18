@@ -107,6 +107,27 @@ void FileBrowserActivity::loadFiles() {
   searchQuery.clear();
   filtered.clear();
   folderHasEntries = !files.empty();
+
+  prewarmRowGlyphs();
+}
+
+// One SD pass for every CJK filename in the folder; repaints then hit the
+// resident tables instead of re-reading per-string. Adapted from upstream
+// #3071, which batches in rebuildRowItems() -- this browser has no row-item
+// cache, so the batch runs once per listing and the getter re-derives each
+// label through rowTitle().
+void FileBrowserActivity::prewarmRowGlyphs() const {
+  renderer.prewarmFallbackText(
+      UI_10_FONT_ID,
+      [](const void* ctx, uint32_t i) -> const char* {
+        const auto* self = static_cast<const FileBrowserActivity*>(ctx);
+        self->prewarmScratch = self->rowTitle(static_cast<int>(i));
+        return self->prewarmScratch.c_str();
+      },
+      this, static_cast<uint32_t>(totalRowCount()));
+  // The bottom path band draws in SMALL_FONT_ID, a different fallback table
+  // than the rows, so it needs its own pass rather than joining the batch.
+  renderer.prewarmFallbackText(SMALL_FONT_ID, basepath.c_str());
 }
 
 int FileBrowserActivity::headerRowCount() const {

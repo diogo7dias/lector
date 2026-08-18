@@ -75,6 +75,11 @@ class FileBrowserActivity final : public Activity {
   int fileIndexAt(int row) const;
   std::string rowTitle(int row) const;
   std::string rowValue(int row) const;
+  // Holds the row label the batch prewarm getter is handing back: rowTitle()
+  // returns a temporary, and the getter must return a pointer that stays valid
+  // until the batch reads it (see prewarmRowGlyphs()).
+  mutable std::string prewarmScratch;
+  void prewarmRowGlyphs() const;
   void openSearchEntry();
   void applySearch(const std::string& query);
   void clearSearch();
