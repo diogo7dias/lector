@@ -286,7 +286,10 @@ void HomeActivity::render(RenderLock&&) {
       backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
       break;
     case CrossPointSettings::HOME_BACK_STATS:
-      backLabel = recentBooks.empty() ? "" : tr(STR_READING_STATS);
+      // "Stats", not "Reading Stats": a button hint has one small box to live in, and the
+      // longer wording was the only label in the firmware wide enough to need wrapping.
+      // The in-book menu row keeps the full name, where there is room for it.
+      backLabel = recentBooks.empty() ? "" : tr(STR_STATS);
       break;
     case CrossPointSettings::HOME_BACK_NONE:
     default:
