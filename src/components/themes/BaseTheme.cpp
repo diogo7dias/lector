@@ -262,17 +262,34 @@ void BaseTheme::drawHintLabel(GfxRenderer& renderer, const int fontId, const cha
     return;
   }
 
+  // A label too wide to fit drops to the smaller UI font before it is allowed to wrap.
+  // Two UI_10 lines stack as tall as the button itself (2 x 19 + 2 = 40 against a
+  // 40-pixel box), so the second line landed on the border and lost its bottom rows —
+  // "Reading Stats" on the home screen showed "Reading" over a clipped "Stats". One
+  // smaller line beats two clipped ones; only a label too wide even for that wraps, and
+  // by then the smaller glyphs leave room for both lines.
+  constexpr int lineGap = 2;
+  int wrapFontId = fontId;
+  if (fontId != SMALL_FONT_ID) {
+    const int smallWidth = renderer.getTextWidth(SMALL_FONT_ID, label);
+    if (smallWidth <= maxTextWidth) {
+      renderer.drawText(SMALL_FONT_ID, x + (boxWidth - 1 - smallWidth) / 2,
+                        boxTop + (boxHeight - renderer.getTextHeight(SMALL_FONT_ID)) / 2, label);
+      return;
+    }
+    wrapFontId = SMALL_FONT_ID;
+  }
+
   // Spaced by the glyph height, not getLineHeight() — that returns the font's
   // full advanceY (leading included), which stacks two lines taller than the
   // button and clips the second one.
-  constexpr int lineGap = 2;
-  const int step = renderer.getTextHeight(fontId) + lineGap;
-  const auto lines = renderer.wrappedText(fontId, label, maxTextWidth, 2);
+  const int step = renderer.getTextHeight(wrapFontId) + lineGap;
+  const auto lines = renderer.wrappedText(wrapFontId, label, maxTextWidth, 2);
   const int block = static_cast<int>(lines.size()) * step - lineGap;
   int lineY = boxTop + std::max(1, (boxHeight - block) / 2);
   for (const auto& line : lines) {
-    const int lineWidth = renderer.getTextWidth(fontId, line.c_str());
-    renderer.drawText(fontId, x + (boxWidth - 1 - lineWidth) / 2, lineY, line.c_str());
+    const int lineWidth = renderer.getTextWidth(wrapFontId, line.c_str());
+    renderer.drawText(wrapFontId, x + (boxWidth - 1 - lineWidth) / 2, lineY, line.c_str());
     lineY += step;
   }
 }
