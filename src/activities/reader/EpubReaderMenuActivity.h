@@ -94,6 +94,10 @@ class EpubReaderMenuActivity final : public Activity {
     int selectedIndex = 0;
   };
 
+  // Maps a CrossPointSettings::BOOK_MENU_TAB value onto the tab it names. Unknown
+  // values fall back to Navigate, so a setting written by a newer firmware cannot
+  // leave the menu pointing at nothing.
+  static Tab tabForSetting(uint8_t setting);
   // Builds only the tabs that have something to show, so indices into the result are
   // NOT Tab values and the Sleep tab simply is not there when no wallpaper is in play.
   static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,

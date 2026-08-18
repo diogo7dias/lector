@@ -35,9 +35,22 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
-  // Open on the wallpaper tab when there is one: this menu is normally reached by
-  // waking the device, and the wallpaper rows act on the image the lock screen just
-  // showed — the one thing here that is about the moment rather than the book.
+  // Start on the tab the user picked in Settings. buildTabs() only builds the tabs
+  // that have something to show, so the chosen tab can be absent (Look has no rows
+  // in a book with no reader override); the search simply finds nothing then and the
+  // menu stays on the first tab.
+  const Tab preferredTab = tabForSetting(SETTINGS.bookMenuTab);
+  for (int i = 0; i < static_cast<int>(tabs.size()); i++) {
+    if (tabs[i].tab == preferredTab) {
+      activeTabIndex = i;
+      break;
+    }
+  }
+
+  // The wallpaper tab wins over that preference when it exists: this menu is normally
+  // reached by waking the device, and the wallpaper rows act on the image the lock
+  // screen just showed — the one thing here that is about the moment rather than the
+  // book, and gone again on the next sleep.
   for (int i = 0; i < static_cast<int>(tabs.size()); i++) {
     if (tabs[i].tab == Tab::Sleep) {
       activeTabIndex = i;
@@ -53,6 +66,19 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       }
       break;
     }
+  }
+}
+
+EpubReaderMenuActivity::Tab EpubReaderMenuActivity::tabForSetting(const uint8_t setting) {
+  switch (setting) {
+    case CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK:
+      return Tab::ThisBook;
+    case CrossPointSettings::BOOK_MENU_TAB_LOOK:
+      return Tab::Look;
+    case CrossPointSettings::BOOK_MENU_TAB_DEVICE:
+      return Tab::Device;
+    default:
+      return Tab::Navigate;
   }
 }
 
