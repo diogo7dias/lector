@@ -1086,7 +1086,14 @@ void SleepActivity::deepCleanPanel() const {
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
 // waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
+// Every mode except Light wants the crest inverted, including the ones that land here
+// because their own artwork was missing (a Custom wallpaper with no file, Cover with no
+// book). The transparent-overlay fallback is the exception and asks for light explicitly.
 void SleepActivity::renderDefaultSleepScreen() const {
+  renderDefaultSleepScreen(SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT);
+}
+
+void SleepActivity::renderDefaultSleepScreen(const bool darkBackground) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -1101,8 +1108,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
   renderer.drawCenteredText(SMALL_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
 
-  // Make sleep screen dark unless light is selected in settings
-  if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
+  if (darkBackground) {
     renderer.invertScreen();
   }
 
@@ -1257,9 +1263,13 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   // Nothing to composite. The panel still holds the page the user locked from, which
   // reads as "sleep did nothing", so fall back to a real sleep face — and blank first,
   // since this path skipped deepCleanPanel on the way in.
+  // Not dark. The mode asked for a picture drawn over the page, and the page it would
+  // have drawn over is a light one; inverting here (which the settings-derived polarity
+  // does for every mode except Light) put the crest in white on a black screen, which is
+  // neither what this mode asked for nor what the missing overlay would have looked like.
   LOG_ERR("SLP", "No valid transparent sleep overlay found");
   deepCleanPanel();
-  renderDefaultSleepScreen();
+  renderDefaultSleepScreen(/*darkBackground=*/false);
 }
 
 void SleepActivity::renderCoverSleepScreen() const {

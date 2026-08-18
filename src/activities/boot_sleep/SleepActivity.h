@@ -22,6 +22,12 @@ class SleepActivity final : public Activity {
   // Keeps the page already on the panel and adds a thin border. Must not be preceded
   // by the popup or the deep clean.
   void deepCleanPanel() const;
+  // darkBackground: the crest screen normally inverts, which is what Dark (and every
+  // mode that falls back to it) asks for. The transparent-overlay fallback passes false:
+  // that mode never asked for a dark screen, it asked for a picture over the page.
+  void renderDefaultSleepScreen(bool darkBackground) const;
+  // The polarity the sleep-screen setting implies, for the callers that fall back to the
+  // crest screen because their own artwork was missing.
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
