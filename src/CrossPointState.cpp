@@ -7,6 +7,7 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["readerActivityLoadCount"] = readerActivityLoadCount;
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
+  doc["lastBootLogo"] = lastBootLogo;
   doc["lastSleepWallpaperPath"] = lastSleepWallpaperPath;
   doc["sleepIndexLiveCount"] = sleepIndexLiveCount;
   doc["sleepIndexFingerprint"] = sleepIndexFingerprint;
@@ -29,6 +30,7 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
+  lastBootLogo = doc["lastBootLogo"] | (uint8_t)0;
   lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
   // Missing keys fall back to "no index yet" defaults, so a pre-index
   // state.json (or one from the removed recency-buffer era) forces a clean

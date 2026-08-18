@@ -29,7 +29,7 @@
 #include "components/BannerStyle.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "images/Logo120.h"
+#include "images/BootLogos.h"
 #include "images/MoonIcon.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/ReadingStatsClock.h"
@@ -1081,9 +1081,15 @@ void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::REGULAR);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_SLEEPING));
+  // A crest per sleep, recorded so the wake can redraw the same one (see BootActivity).
+  // enterDeepSleep() saves APP_STATE before this runs, so the index would be lost without
+  // marking the state dirty for the save onEnter() performs after the render.
+  APP_STATE.lastBootLogo = bootlogos::randomIndex();
+  stateDirty = true;
+  const int logoSize = bootlogos::kLogoSize;
+  const int logoY = (pageHeight - logoSize) / 2 - 20;
+  renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
+  renderer.drawCenteredText(SMALL_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
 
   // Make sleep screen dark unless light is selected in settings
   if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
