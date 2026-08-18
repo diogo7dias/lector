@@ -580,8 +580,10 @@ void TxtReaderActivity::runPowerDoubleClick() {
       requestUpdate();
       break;
     case simple_reader_shortcut::Action::None:
-      // Unreachable: wantsPowerDoubleClick() leaves the detector disarmed for a binding
-      // this reader cannot run, so no double click is ever reported in that case.
+      // Reachable for Hold Wallpaper only: arming asks whether a wallpaper path exists,
+      // and the card read that confirms the file is still there happens here.
+      GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
+      requestUpdate();
       break;
   }
 }

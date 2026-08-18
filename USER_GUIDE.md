@@ -717,6 +717,10 @@ Session**. Alongside them:
   the double click runs **Status Bar** and **Hold Wallpaper**; in an `.xtc` book, **Hold
   Wallpaper**. Bound to anything else, it stays inactive there and the power button keeps
   its normal, undelayed behaviour.
+  A single power click waits about a quarter of a second while the reader watches for a
+  second one, which is noticeable when Power also turns the page. That wait is only paid
+  while the bound action can actually run: with **Footnotes** bound, a page without
+  footnotes turns instantly, and a page with them does not.
 
 **Hold**
 

@@ -52,9 +52,20 @@ inline Action resolve(const uint8_t function, const bool supportsStatusBarToggle
 // True when the double-click detector is worth arming: every power click pays the
 // detector's ~280 ms hold-back while it waits for a second one, so a reader that could
 // only answer "not available" leaves it disarmed and keeps its clicks instant.
+//
+// Deliberately NOT resolve(): this runs on every main-loop pass, and resolve() asks the
+// card whether the last wallpaper is still there. The cheap half of that test (is there a
+// path at all) decides the arming; the card read happens once, at the press.
 inline bool armsDoubleClick(const bool supportsStatusBarToggle) {
-  return SETTINGS.powerDoubleClickBound() &&
-         resolve(SETTINGS.doubleClickPowerFunction, supportsStatusBarToggle) != Action::None;
+  if (!SETTINGS.powerDoubleClickBound()) return false;
+  switch (SETTINGS.doubleClickPowerFunction) {
+    case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+      return supportsStatusBarToggle;
+    case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
+      return !APP_STATE.lastSleepWallpaperPath.empty();
+    default:
+      return false;
+  }
 }
 
 }  // namespace simple_reader_shortcut
