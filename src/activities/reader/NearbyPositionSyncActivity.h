@@ -103,8 +103,4 @@ class NearbyPositionSyncActivity final : public Activity {
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1400;
   /** Lines a wrapped explanation may take before it is cut. */
   static constexpr int DETAIL_MAX_LINES = 3;
-
-  unsigned long lastSearchDrawMs = 0;
-  /** How often the searching screen refreshes its radio counters. */
-  static constexpr unsigned long SEARCH_REDRAW_INTERVAL_MS = 1500;
 };

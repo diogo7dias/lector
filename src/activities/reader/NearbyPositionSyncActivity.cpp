@@ -246,16 +246,16 @@ void NearbyPositionSyncActivity::loop() {
   // than snapping straight back into the book.
   if (state == SyncState::SHARED && autoReturnAt == 0) autoReturnAt = millis() + AUTO_RETURN_DELAY_MS;
 
-  // The searching screen carries live counters, so it is redrawn on a slow timer
-  // rather than only when the state changes. The interval is long because the
-  // panel cannot refresh cheaply.
-  if (state == SyncState::SEARCHING && millis() - lastSearchDrawMs >= SEARCH_REDRAW_INTERVAL_MS) {
-    lastSearchDrawMs = millis();
-    requestUpdate();
-    return;
-  }
-
   if (state != renderedState || session.hasPeerPosition() != renderedPeerPosition || choice != renderedChoice) {
+    // The radio counts are worth one line when a sync ends badly: they say
+    // whether nothing was heard, whether what arrived was not this protocol, and
+    // who sent it. The readers are used away from a serial cable, so this is
+    // read back from the log after the fact.
+    if (state != renderedState && (state == SyncState::TIMED_OUT || state == SyncState::PEER_LOST)) {
+      LOG_INF(LOG_TAG, "Sync ended: sent %u heard %u undecoded %u, self %u peer %u other %u", link.framesSent(),
+              link.framesHeard(), link.framesNotDecoded(), session.packetsFromSelf(), session.packetsFromPeer(),
+              session.packetsFromOthers());
+    }
     requestUpdate();
   }
 }
@@ -276,20 +276,6 @@ void NearbyPositionSyncActivity::renderSearching(const Rect& screen, const int t
   UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID,
                                    tr(STR_NEARBY_SEARCHING_HINT), DETAIL_MAX_LINES, true, EpdFontFamily::REGULAR,
                                    UITheme::TextVerticalAlignment::TOP);
-
-  // What the radio is actually doing, on the device, because the readers are
-  // tested away from a serial cable. sent counts packets handed to the radio,
-  // heard counts frames that arrived, undecoded ones were not this protocol,
-  // self are this device's own broadcasts coming back, and peer are the ones the
-  // session acted on. Anything other than sent rising alone narrows the fault to
-  // one boundary.
-  char diagnostics[64];
-  std::snprintf(diagnostics, sizeof(diagnostics), "sent %u heard %u undecoded %u", link.framesSent(),
-                link.framesHeard(), link.framesNotDecoded());
-  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 140, diagnostics);
-  std::snprintf(diagnostics, sizeof(diagnostics), "self %u peer %u other %u", session.packetsFromSelf(),
-                session.packetsFromPeer(), session.packetsFromOthers());
-  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top + 165, diagnostics);
 }
 
 void NearbyPositionSyncActivity::renderMessage(const Rect& screen, const int top, const char* message,
