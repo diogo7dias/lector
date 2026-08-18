@@ -78,7 +78,10 @@ namespace {
 // v49: an image's top margin is clamped so a full-viewport-height image cannot overflow
 //      the page bottom (upstream #2959; upstream numbered it v39). Older caches can hold
 //      placements that panels with no bottom inset refuse to draw.
-constexpr uint8_t SECTION_FILE_VERSION = 49;
+// v50: a flush inside a <ruby> group no longer splits the group, so the annotated
+//      word keeps its ruby text (upstream #3102; upstream numbered it v40). Word
+//      positions move on ruby books, so cached pages must be rebuilt.
+constexpr uint8_t SECTION_FILE_VERSION = 50;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
