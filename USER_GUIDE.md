@@ -64,6 +64,10 @@ With **Settings > Controls > Short Power Button Click** set to **Sleep**, the ho
 the device to sleep is much shorter (about a tenth of a second); every other value keeps the
 longer hold, so a stray press cannot switch the device off.
 
+Binding an action to **Double-click power** turns that shortcut off again: the first of the
+two presses would otherwise sleep the device before the second one arrived. Sleep then needs
+the normal half-second hold, and the double-click action works as bound.
+
 To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
 
 ### Sleep
@@ -706,7 +710,9 @@ Session**. Alongside them:
 
 - **Short Power Button Click** — Ignore, Sleep, Page Turn, Refresh Screen or Footnotes.
 - **Quick-return from footnotes**.
-- **Double-click power** — bind an action to two quick presses.
+- **Double-click power** — bind an action to two quick presses. While something is bound
+  here, **Short Power Button Click > Sleep** stops sleeping on a single press, since that
+  press is the first half of the double click.
 
 **Hold**
 

@@ -619,7 +619,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // returns as soon as the held time crosses this, so the wake happens under the finger
   // with no release required.
   uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP) ? 10 : 200;
+    // Short-press-to-sleep drops the threshold to 10 ms, so the press itself sleeps the
+    // device rather than waiting out a hold. That cannot coexist with a power double
+    // click: the main loop sleeps on the FIRST press, long before the detector could see
+    // a second release, so the bound function would never run. A bound double click
+    // therefore wins, and sleeping goes back to the normal hold.
+    return shortPressSleeps() ? 10 : 200;
+  }
+  // True when a function is bound to the power double click (see doubleClickPowerFunction).
+  bool powerDoubleClickBound() const { return doubleClickPowerFunction != LP_MENU_DISABLED; }
+  // Whether a single power press sleeps the device. Every consumer of the Sleep value of
+  // shortPwrBtn must ask this rather than comparing the setting itself, so the double-click
+  // override is applied in one place: the wake-hold verification, the sleep threshold, and
+  // the shared Confirm/Power boards that route a short press to Power instead of Confirm.
+  bool shortPressSleeps() const {
+    return shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP && !powerDoubleClickBound();
   }
   // Pop-up membership. The mask layout has exactly one owner: these three.
   bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }
