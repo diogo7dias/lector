@@ -66,6 +66,10 @@ longer hold, so a stray press cannot switch the device off.
 
 To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
 
+Boot, the plain sleep screen and the unlock screen all show one of six engraved crests
+between the two banners. The sleep screen picks one at random, and waking redraws that same
+crest rather than swapping it under you.
+
 ### Sleep
 
 The device sleeps after the inactivity set in **Settings > System > Time to Sleep**, anywhere
@@ -307,8 +311,8 @@ screen can show a stats dashboard.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Dark           | The logo on a dark background.                                                    |
-| Light          | The logo on a white background.                                                   |
+| Dark           | A crest on a dark background, picked at random from six.                          |
+| Light          | The same crest on a white background.                                             |
 | Custom         | A wallpaper from the SD card. Falls back to Dark when none is found.              |
 | Cover          | The open book's cover. Falls back to Dark when no book is open.                   |
 | Cover + Custom | The cover while you are reading, a custom wallpaper otherwise.                    |

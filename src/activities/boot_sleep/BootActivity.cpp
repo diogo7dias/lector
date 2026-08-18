@@ -6,7 +6,8 @@
 #include "PxcSleepRenderer.h"
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
-#include "images/Logo120.h"
+#include "CrossPointState.h"
+#include "images/BootLogos.h"
 
 void BootActivity::onEnter() {
   Activity::onEnter();
@@ -26,9 +27,15 @@ void BootActivity::onEnter() {
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  renderer.drawImage(Logo120, (pageWidth - 120) / 2, (pageHeight - 120) / 2, 120, 120);
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 70, tr(STR_CROSSPOINT), true, EpdFontFamily::REGULAR);
-  renderer.drawCenteredText(SMALL_FONT_ID, pageHeight / 2 + 95, tr(STR_BOOTING));
+  // The crest the last logo sleep drew, so an unlock reveals the screen the user left
+  // rather than swapping the artwork under them. A cold boot has no such sleep behind
+  // it and APP_STATE carries the default index, which is a crest either way.
+  const int logoSize = bootlogos::kLogoSize;
+  const int logoY = (pageHeight - logoSize) / 2 - 20;
+  renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
+  // No name line under it: the crest carries the wording, and the top banner already
+  // spells out the firmware and version.
+  renderer.drawCenteredText(SMALL_FONT_ID, logoY + logoSize + 12, tr(STR_BOOTING));
   // Framed top and bottom banners, same as the quick-resume wake path. Only a
   // quick-resume sleep keeps a saved frame to composite over, and every other sleep
   // screen (wallpaper, cover, dark) wakes through here — without this the banners
