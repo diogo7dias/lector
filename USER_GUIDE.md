@@ -1,4 +1,4 @@
-<!-- lector-version: 0.24.0 -->
+<!-- lector-version: 0.24.1 -->
 
 # Lector User Guide
 
@@ -454,6 +454,9 @@ The screen says what happened: both on the same page, they are further ahead, mo
 page, and so on. It also says when the other reader has a different book open, when nothing
 answered, and when the radio is busy with Wi-Fi or File Transfer.
 
+The position that travels points at the last paragraph on the page you are looking at, so the
+other device opens where you were reading rather than a paragraph behind.
+
 ### KOReader sync
 
 Lector syncs progress with KOReader-compatible sync servers, so KOReader apps and devices can
@@ -587,7 +590,10 @@ can bring scripts the built-in fonts do not cover, including Chinese, Japanese a
 Three ways to install one:
 
 1. **From the device:** **Settings > Reader > Manage Fonts**, then pick a family to download
-   over Wi-Fi.
+   over Wi-Fi. A file that fails or arrives damaged is fetched again, up to three attempts,
+   and the screen says which attempt is running. **Download all** and **Update all** carry on
+   past a family that will not install and name the ones that failed at the end. An update
+   that fails leaves the copy already on the card in place.
 2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
    `.cpfont` files.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.
