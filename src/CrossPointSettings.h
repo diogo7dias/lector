@@ -80,6 +80,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_STATS = 2, HOME_BACK_ACTION_COUNT };
   enum AUTHOR_DISPLAY { AUTHOR_INITIALS = 0, AUTHOR_FULL_NAME = 1, AUTHOR_DISPLAY_COUNT };
 
+  // Which tab the in-book menu opens on. Index-aligned with the picker labels in
+  // SettingsList.h, and mapped onto EpubReaderMenuActivity::Tab at open time. The
+  // Sleep tab is deliberately not offered: it only exists while the lock screen has
+  // a wallpaper to act on, and it keeps taking priority when it does.
+  enum BOOK_MENU_TAB {
+    BOOK_MENU_TAB_NAVIGATE = 0,
+    BOOK_MENU_TAB_THIS_BOOK = 1,
+    BOOK_MENU_TAB_LOOK = 2,
+    BOOK_MENU_TAB_DEVICE = 3,
+    BOOK_MENU_TAB_COUNT
+  };
+
   // Status bar: the legacy fixed-slot enums (STATUS_BAR_PROGRESS_BAR / _THICKNESS /
   // _TITLE / _CLOCK_MODE) were removed with the v1 renderer. XTC keeps its own mode.
   enum XTC_STATUS_BAR_MODE {
@@ -499,6 +511,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
   uint8_t embeddedStyle = 1;
+  // Which tab the in-book menu opens on (see BOOK_MENU_TAB). Navigate by default,
+  // which is where chapters, bookmarks and the percent jump live.
+  uint8_t bookMenuTab = BOOK_MENU_TAB_NAVIGATE;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored

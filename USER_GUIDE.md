@@ -216,6 +216,11 @@ Press **Confirm** while reading. The menu opens in tabs; **Left** and **Right** 
 tab, and the tab strip runs across the top. Rows that do not apply to the open book are not
 shown at all.
 
+The menu opens on **Navigate**. **Settings > Reader > Book Menu Opens On** changes that to
+**Book**, **Look** or **Device** instead. Waking the device onto a wallpaper still opens the
+**Sleep Screen** tab, since its rows act on the image just shown and it disappears again on
+the next sleep.
+
 ### Navigate
 
 - **Select Chapter** — the table of contents.
@@ -674,6 +679,7 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 
 - **Reading Orientation** — Portrait, Landscape CW, Portrait 180°, Landscape CCW.
 - **Paragraph Numbers** — Off or Per Chapter, with **Number Size** (Small or Double).
+- **Book Menu Opens On** — which tab the in-book menu starts on: Navigate, Book, Look or Device.
 
 **Look**
 

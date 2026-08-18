@@ -235,7 +235,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // "Stack protection fault" during boot before anything painted. push_back keeps
     // exactly one SettingInfo temporary alive at a time.
     std::vector<SettingInfo> v;
-    v.reserve(86);
+    v.reserve(87);
     // --- Display ---
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
                                   std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
@@ -407,6 +407,19 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
                                   {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE},
                                   "paragraphNumberSize", StrId::STR_CAT_READER));
+
+    // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
+    // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
+    // settings persist by index.
+    {
+      std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
+      v.push_back(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab,
+                                    std::move(bookMenuTabValues), "bookMenuTab", StrId::STR_CAT_READER));
+    }
 
     v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
                                     "paperbackLookBody", StrId::STR_CAT_READER));
