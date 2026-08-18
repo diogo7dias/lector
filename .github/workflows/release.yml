@@ -56,7 +56,16 @@ jobs:
           # to the site, so there is nothing to match; release candidates append -rc to the
           # same number the tag names.
           if [[ "$TAG" =~ ^lector\.exp\.[0-9]+$ ]]; then
-            echo "Experimental tag $TAG; skipping the version match."
+            # The experimental channel publishes the tag name itself as the version, so
+            # the firmware string has to be that same name, not a stable number.
+            if [ "$PIO_VERSION" != "$TAG" ]; then
+              echo "Tag/firmware version mismatch." >&2
+              echo "  tag:            $TAG" >&2
+              echo "  expected:       version = $TAG" >&2
+              echo "  platformio.ini: version = $PIO_VERSION" >&2
+              exit 1
+            fi
+            echo "Experimental tag $TAG matches platformio.ini."
             exit 0
           fi
           NUM="${TAG#lector-}"
