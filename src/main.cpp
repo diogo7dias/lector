@@ -488,6 +488,7 @@ void setup() {
                             : isSleepWake && !APP_STATE.showBootScreen ? BootResume::SplashlessWake
                                                                        : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
+  bool needsWakeRefresh = false;
 
   // "Open a random book on boot": pick the target BEFORE the unlock banners paint, so the
   // banner names the book this boot is about to open instead of the previous one. The
@@ -570,6 +571,11 @@ void setup() {
         }
       } else if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
+      } else {
+        // Custom sleep face with no saved frame: nothing paints here, so the panel still
+        // physically shows the sleep image. Tell the first Home paint to clear it with one
+        // HALF_REFRESH instead of leaving the image under the menu (upstream #3009).
+        needsWakeRefresh = true;
       }
       break;
     case BootResume::Splash:
@@ -673,7 +679,7 @@ void setup() {
       APP_STATE.saveToFile();
       activityManager.goToReader(randomBookPath);
     } else {
-      activityManager.goHome();
+      activityManager.goHome(HomeMenuItem::NONE, needsWakeRefresh);
     }
   } else {
     // Clear app state to avoid getting into a boot loop if the epub doesn't load

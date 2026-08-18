@@ -5,6 +5,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Utf8.h>
@@ -299,7 +300,16 @@ void HomeActivity::render(RenderLock&&) {
   const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  renderer.displayBuffer();
+  if (cleanInitialRefresh) {
+    // Splashless wake with a custom sleep face and no saved frame: the panel still
+    // physically shows the sleep image, and a FAST_REFRESH would leave it under the menu.
+    // One HALF_REFRESH on this first paint clears it without a second refresh pass
+    // (upstream #3009). One-shot: later Home paints go back to the cheap path.
+    cleanInitialRefresh = false;
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  } else {
+    renderer.displayBuffer();
+  }
 }
 
 void HomeActivity::drawHomeHeaderExtras() const {
