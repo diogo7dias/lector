@@ -2,7 +2,6 @@
 
 #include <CrossPointSettings.h>
 #include <GfxRenderer.h>
-#include <HalGPIO.h>
 #include <Logging.h>
 
 #include "MappedInputManager.h"
@@ -64,57 +63,14 @@ inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
 // renderer.waitRefreshComplete() and must rebuild the differential baseline
 // before the next page turn (the tiled grayscale cleanup does).
 inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntilFullRefresh, bool async = false) {
-  // Refresh Frequency = Never reports 0. Honour it here rather than at the counter,
-  // because several callers hard-set pagesUntilFullRefresh to 1 to force a cleanup
-  // pass (after an INDEXING popup, after an image page); the setting has to win over
-  // those too, or "Never" would still flash.
-  const int cycle = SETTINGS.getRefreshFrequency();
-  const bool never = cycle == 0;
-  const bool refreshDue = !never && pagesUntilFullRefresh <= 1;
-  // Upstream #2818: on the X3 the OEM grayscale-base waveform turns the page while
-  // gently settling unchanged black and white pixels, so the periodic cleanup costs
-  // no full-screen flash. Opt-in, X3 only, and never when the cleanup is switched off
-  // entirely. Kept at == 1 rather than <= 1 so the hard-set cleanups above (popup
-  // ghosts, image pages) still get the strong HALF pass they were asked for.
-  bool useBwReinforcement = !never && pagesUntilFullRefresh == 1 && gpio.deviceIsX3() &&
-                            SETTINGS.refreshAction == CrossPointSettings::REFRESH_ACTION_BW_REINFORCEMENT;
-
-  // The gentle pass is bounded, because on its own it loses. It only nudges unchanged
-  // pixels toward their target and never drives them to a rail, so residue accumulates
-  // instead of clearing: an X3 device test on 2026-08-09 reached strong ghosting over a
-  // long reading run with the setting on. Every kFlashPeriod-th cleanup therefore runs
-  // the real HALF pass, which drives every pixel regardless of what is already there.
-  //
-  // At the default 15-page refresh frequency that is one flash every 75 pages instead of
-  // every 15 — most of the benefit, with the residue bounded rather than unbounded.
-  //
-  // The counter is static rather than per-reader on purpose: residue belongs to the
-  // panel, not to the book that happens to be open, so closing a book must not reset it.
-  // A deep sleep does reset it, which is harmless — a wake already does a full sync.
-  static constexpr int kFlashPeriod = 5;
-  static int gentleCleanupsSinceFlash = 0;
-  if (useBwReinforcement) {
-    if (gentleCleanupsSinceFlash >= kFlashPeriod - 1) {
-      useBwReinforcement = false;
-      gentleCleanupsSinceFlash = 0;
-    } else {
-      gentleCleanupsSinceFlash++;
-    }
-  }
-  const auto mode = refreshDue ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
-
-  if (useBwReinforcement) {
-    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-  } else if (async) {
+  const auto mode = (pagesUntilFullRefresh <= 1) ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+  if (async) {
     renderer.displayBufferAsync(mode);
   } else {
     renderer.displayBuffer(mode);
   }
-  if (never) {
-    return;
-  }
-  if (refreshDue) {
-    pagesUntilFullRefresh = cycle;
+  if (pagesUntilFullRefresh <= 1) {
+    pagesUntilFullRefresh = SETTINGS.getRefreshFrequency();
   } else {
     pagesUntilFullRefresh--;
   }

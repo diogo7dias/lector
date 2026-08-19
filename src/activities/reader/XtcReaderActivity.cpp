@@ -398,9 +398,8 @@ void XtcReaderActivity::renderPage() {
       }
     }
 
-    // Refresh Frequency = Never reports 0; skip the periodic ghost cleanup entirely.
     const int refreshCycle = SETTINGS.getRefreshFrequency();
-    if (refreshCycle != 0 && pagesUntilFullRefresh <= 1) {
+    if (pagesUntilFullRefresh <= 1) {
       // Periodic ghost cleanup: scrub via the normal path, then run the
       // settle flavor of the grayscale base pass (DTM planes are equal after
       // the display sync, so only the gentle reinforcement cells fire).

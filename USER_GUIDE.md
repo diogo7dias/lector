@@ -655,10 +655,7 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 
 **Screen**
 
-- **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or Never.
-- **Screen Cleanup** — **Full (flash)** or **No Flash**. No Flash is an X3-only gentle pass
-  that settles unchanged pixels without a full-screen flash; because the gentle pass alone
-  lets residue build up, every fifth cleanup still runs the full pass.
+- **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**

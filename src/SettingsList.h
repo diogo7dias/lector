@@ -269,16 +269,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
                                   StrId::STR_CAT_DISPLAY));
 
-    // Keeps this fork's extra "Never" option, which upstream does not have.
-    v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-                                  {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
-                                   StrId::STR_PAGES_30, StrId::STR_NEVER},
-                                  "refreshFrequency", StrId::STR_CAT_DISPLAY));
-
-    // Upstream #2818. X3 only; the row is filtered out below on any other board.
-    v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_ACTION, &CrossPointSettings::refreshAction,
-                                  {StrId::STR_REFRESH_ACTION_FULL, StrId::STR_REFRESH_ACTION_BW_REINFORCEMENT},
-                                  "refreshAction", StrId::STR_CAT_DISPLAY));
+    // "Never" (index 5) was dropped: an X3 left without a periodic cleanup ghosts badly,
+    // and upstream never offered it. A settings file still holding 5 clamps back to the
+    // 15-page default, because load() falls back to the field default for any index past
+    // the option list.
+    v.push_back(SettingInfo::Enum(
+        StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+        {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
+        "refreshFrequency", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                     StrId::STR_CAT_DISPLAY));
@@ -688,15 +686,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }();
 
   std::vector<SettingInfo> v = baseList;
-  // Upstream #2818's no-flash cleanup uses an X3-only OEM waveform. This fork ships one
-  // binary for both boards, so the row is filtered by runtime detection (gpio.deviceIsX3)
-  // rather than upstream's compile-time BoardConfig::ACTIVE.name check, which would keep
-  // the row on an X4 running the same build.
-  if (!gpio.deviceIsX3()) {
-    v.erase(
-        std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_REFRESH_ACTION; }),
-        v.end());
-  }
   // The status-bar clock reads the RTC, which only the X3 carries. HalClock does have
   // a system-clock fallback for boards without one, but deep sleep here is a full chip
   // reset, so that clock would be lost every time the reader sleeps — a clock that is
