@@ -273,6 +273,8 @@ the next sleep.
 - **Reading Stats** — this book's numbers.
 - **Look Up** — pick a word on the page and read its definition. Needs a dictionary, see
   [section 11](#11-fonts-and-dictionaries).
+- **Lookup History** — the last 100 words you looked up, newest first. Pick one to read its
+  definition again.
 - **Grab Quote** — save a passage from this page.
 - **View Quotes** — read back what you saved, shown once the book has quotes.
 - **Remove This Book** — unfile the book from recents; the file stays on the card.
@@ -660,8 +662,9 @@ Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pic
 **Settings > Reader > Dictionary**; the row only appears once a dictionary folder exists.
 
 Look a word up from the in-book menu's **Look Up** row, or bind a hold to **Dictionary** in
-**Settings > Controls**. Setup and usage are covered in
-[docs/dictionary.md](./docs/dictionary.md).
+**Settings > Controls**. Every successful lookup is remembered: **Lookup History**, in the
+same menu, lists the last 100 words newest first and reopens any of them. Setup and usage
+are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ---
 

@@ -36,6 +36,17 @@ One word on the page becomes highlighted:
 2. Press **Confirm** to look up the highlighted word.
 3. Press **Back** to return to the reader.
 
+## Lookup History
+
+Every successful lookup is remembered. The reader menu's **Lookup History** row, beside Look
+Up, lists the last 100 headwords, newest first; picking one looks it up again and shows the
+definition. A word looked up twice moves back to the top rather than appearing twice, and
+the last row of the list clears the history.
+
+Only the words are stored, in `/.crosspoint/dict_history.json`; definitions are read back
+out of the dictionary each time, so the history costs a few kilobytes at most. Picking a
+word from the list does not change its place in the list.
+
 On the very first lookup with a dictionary (and again whenever the `.idx` or `.syn` source file changes), the reader shows *"Indexing dictionary…"* while it builds small sidecar files next to them — a `.qidx` for the word index, and a `.sidx` when a `.syn` synonym file is present. Each sidecar is rebuilt independently, only when its own source changes. This takes a few seconds for large dictionaries and makes all subsequent lookups fast. The sidecars can be deleted safely at any time — they will simply be rebuilt.
 
 ### How Lookup Works

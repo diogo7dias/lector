@@ -11,8 +11,10 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
+#include "DictHistoryStore.h"
 #include "DictionaryDefinitionActivity.h"
 #include "components/UITheme.h"
+#include "util/DictionaryFailure.h"
 
 namespace {
 
@@ -177,52 +179,26 @@ void DictionaryWordSelectActivity::performLookup() {
 
   if (found) {
     popup = Popup::None;
+    // The headword, not the word on the page: it is what the dictionary actually holds, so
+    // looking it up again from the history finds the same entry. Recorded on the way BACK
+    // from the definition, never here: writing the history means parsing and re-serialising
+    // a JSON document, and a definition can be 64 KB, so doing both at once would stack two
+    // allocations on the peak this path is already tightest at.
+    std::string looked = headword;
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict.definitionsAreHtml()),
-        [this](const ActivityResult&) { requestUpdate(); });
+        [this, looked = std::move(looked)](const ActivityResult&) {
+          DICT_HISTORY.add(looked);
+          requestUpdate();
+        });
     return;
   }
-  // Name the failure: a genuine miss is "Not found"; a word that WAS found but
-  // couldn't be read is a real error — and we distinguish decompression from a
-  // low-memory allocation from a generic read error.
-  if (!ok) {
-    popup = Popup::Error;
-    // An index build allocates a scan buffer, so it fails the same way lookups
-    // do on a fragmented heap — name that rather than a generic error.
-    switch (indexResult) {
-      case Dictionary::IndexResult::LowMemory:
-        popupMsg = StrId::STR_DICT_LOW_MEMORY;
-        break;
-      case Dictionary::IndexResult::ReadError:
-        popupMsg = StrId::STR_DICT_READ_FAILED;
-        break;
-      case Dictionary::IndexResult::Ok:
-      default:
-        popupMsg = StrId::STR_DICT_ERROR;  // dict.open() failed, not the index
-        break;
-    }
-  } else {
-    switch (result) {
-      case Dictionary::LookupResult::Decompress:
-        popup = Popup::Error;
-        popupMsg = StrId::STR_DICT_DECOMPRESS_ERROR;
-        break;
-      case Dictionary::LookupResult::LowMemory:
-        popup = Popup::Error;
-        popupMsg = StrId::STR_DICT_LOW_MEMORY;
-        break;
-      case Dictionary::LookupResult::ReadError:
-        popup = Popup::Error;
-        popupMsg = StrId::STR_DICT_READ_FAILED;
-        break;
-      case Dictionary::LookupResult::NotFound:
-      default:
-        popup = Popup::NotFound;
-        popupMsg = StrId::STR_DICT_NOT_FOUND;
-        break;
-    }
-  }
+  // Name the failure: an index/open problem and a lookup problem are told apart, and the
+  // wording of each lives in dict_failure so the history screen says the same thing.
+  const dict_failure::Message message = ok ? dict_failure::forLookup(result) : dict_failure::forIndex(indexResult);
+  popup = message.isError ? Popup::Error : Popup::NotFound;
+  popupMsg = message.id;
   popupTime = millis();
   requestUpdate();
 }
@@ -235,7 +211,6 @@ void DictionaryWordSelectActivity::loop() {
     }
     return;
   }
-
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();

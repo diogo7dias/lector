@@ -29,6 +29,7 @@ class EpubReaderMenuActivity final : public Activity {
     NEARBY_SEND_BOOK,  // send this book itself to another reader over ESP-NOW
     DELETE_CACHE,
     DICTIONARY,
+    DICTIONARY_HISTORY,         // the words looked up before, newest first
     READER_SETTINGS,            // open this book's per-book reader settings
     RESET_READER_SETTINGS,      // clear this book's override, follow global again
     TOGGLE_PARAGRAPH_NUMBERS,   // cycle off / per-chapter / whole-book in place
