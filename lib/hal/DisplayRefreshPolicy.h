@@ -21,6 +21,23 @@ class DisplayRefreshPolicy {
   Mode choose(Mode requested, uint32_t nowMs);
   void reset();
 
+  // FAST passes since the last full discharge. Deep sleep is a chip reset, so this
+  // budget dies with every lock unless the caller carries it across: a reader who
+  // sleeps the device every 20 pages would otherwise never reach MAX_FAST_BEFORE_FULL
+  // and never get the one pass that actually discharges the panel.
+  uint8_t fastSinceFull() const { return fastSinceFull_; }
+  void seedFastSinceFull(uint8_t value) {
+    fastSinceFull_ = value > MAX_FAST_BEFORE_FULL ? MAX_FAST_BEFORE_FULL : value;
+  }
+
+  // A pass that drove the panel without going through choose(): the grayscale planes,
+  // which are pushed straight to the driver. They leave charge like any other pass, so
+  // they spend the same budget; saturates rather than wrapping.
+  void noteExternalFastPass() {
+    if (consecutiveFast_ < 0xFF) ++consecutiveFast_;
+    if (fastSinceFull_ < MAX_FAST_BEFORE_FULL) ++fastSinceFull_;
+  }
+
  private:
   uint8_t consecutiveFast_ = 0;
   uint8_t fastSinceFull_ = 0;
