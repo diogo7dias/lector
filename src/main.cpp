@@ -192,6 +192,16 @@ enum class BootResume : uint8_t {
 // startDeepSleep() does not return, so a set latch only ends at the wakeup reset.
 static bool deepSleepInProgress = false;
 
+// The anti-ghost budget lives in RAM, and every reboot is a reset, so it has to be
+// written down before the device goes away. Deep sleep does this in enterDeepSleep();
+// the heap-defrag reboots below are the other routine way a session ends, and without
+// this a reader who trips one (returning from KOReader sync, leaving a WiFi screen)
+// hands the next session a budget of zero and delays the panel's next discharge.
+static void persistAntiGhostBudget() {
+  APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
+  APP_STATE.saveToFile();
+}
+
 void silentRestart() {
   if (deepSleepInProgress) return;  // sleeping supersedes the heap-defrag reboot
   silentRebootTarget = SILENT_REBOOT_TARGET_HOME;
@@ -202,6 +212,7 @@ void silentRestart() {
   // Home. Select on the default selectorIndex=0 then opens the most-recent
   // book, looking like a trampoline back to the reader they just exited.
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  persistAntiGhostBudget();
   delay(50);
   ESP.restart();
 }
@@ -212,6 +223,7 @@ void silentRestartToReader() {
   silentRebootMagic = SILENT_REBOOT_MAGIC;
   LOG_DBG("MAIN", "Silent restart (target=reader)");
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
+  persistAntiGhostBudget();
   delay(50);
   ESP.restart();
 }
@@ -330,8 +342,7 @@ void enterDeepSleep(bool fromTimeout = false) {
 
   // Read after the sleep screen has painted, so the passes it just spent are counted,
   // and written with the state the next boot reads back.
-  APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
-  APP_STATE.saveToFile();
+  persistAntiGhostBudget();
 
   PerfLog::flush();
   display.deepSleep();
