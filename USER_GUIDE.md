@@ -78,6 +78,15 @@ Boot, the plain sleep screen and the unlock screen all show one of six engraved 
 between the two banners. The sleep screen picks one at random, and waking redraws that same
 crest rather than swapping it under you.
 
+### Battery
+
+The battery percentage sits in the status bar and in the home header. When the charge drops
+to 10 percent Lector shows a **Battery low** notice over whatever you are reading; press any
+button to dismiss it and carry on. It appears once per discharge, not once per wake, and it
+arms itself again after the battery climbs back above 15 percent. It stays quiet while the
+device is plugged in, and it never interrupts a firmware update, a file transfer or the
+sleep screen.
+
 ### Sleep
 
 The device sleeps after the inactivity set in **Settings > System > Time to Sleep**, anywhere
