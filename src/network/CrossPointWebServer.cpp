@@ -1266,6 +1266,15 @@ void CrossPointWebServer::handleGetSettings() const {
             options.add(I18N.get(opt));
           }
         }
+        // Retired values (see withHiddenEnumValues): the option list stays index-aligned
+        // with the enum, because the browser sends the index back as the stored value, so
+        // the retired ones are named here instead of removed and the page skips them.
+        if (!s.hiddenEnumValues.empty()) {
+          JsonArray hidden = doc["hiddenValues"].to<JsonArray>();
+          for (const uint8_t value : s.hiddenEnumValues) {
+            hidden.add(static_cast<int>(value));
+          }
+        }
         break;
       }
       case SettingType::VALUE: {

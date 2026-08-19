@@ -43,6 +43,7 @@
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
+#include "sleep/WakeRoutePolicy.h"
 #include "util/ButtonNavigator.h"
 #include "util/DoubleClickDetector.h"
 #include "util/ScreenshotUtil.h"
@@ -215,6 +216,10 @@ void silentRestartToReader() {
   ESP.restart();
 }
 
+// Defined below setup()'s helpers; the sleep path needs it to choose the book the
+// Light sleep screen names, which happens before the wake ever runs.
+static std::string pickRandomRecentBookPath();
+
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
 
 static void saveSleepFrameBuffer() {
@@ -222,6 +227,20 @@ static void saveSleepFrameBuffer() {
   if (!Storage.openFileForWrite("SLP", SLEEP_FRAME_FILE, file)) return;
   file.write(renderer.getFrameBuffer(), renderer.getBufferSize());
   file.close();
+}
+
+// How long the wake/unlock banners are guaranteed to stay readable. A floor on the
+// banner paint, not a sleep: the next activity's own work usually outlasts it, and only
+// a wake that would have covered the banners sooner ever waits here.
+constexpr uint32_t UNLOCK_BANNER_MIN_VISIBLE_MS = 800;
+static uint32_t unlockBannersShownAt = 0;
+
+// Holds the wake until the banners have had their floor. Safe to call when they were
+// never drawn: unlockBannersShownAt stays 0 and this returns immediately.
+static void waitForUnlockBannerFloor() {
+  if (unlockBannersShownAt == 0) return;
+  const uint32_t elapsed = millis() - unlockBannersShownAt;
+  if (elapsed < UNLOCK_BANNER_MIN_VISIBLE_MS) delay(UNLOCK_BANNER_MIN_VISIBLE_MS - elapsed);
 }
 
 static bool loadSleepFrameBuffer() {
@@ -258,6 +277,32 @@ void enterDeepSleep(bool fromTimeout = false) {
                                              ? wake_face::SleepFace::CustomWallpaper
                                              : wake_face::SleepFace::Other;
   APP_STATE.showBootScreen = !wake_face::retainsPanelForWake(sleepFace);
+
+  // Quick Resume promises that unlocking changes nothing: the moon appears, the moon
+  // goes away, the page stays. Deep sleep is a chip reset, though, so only the reader
+  // page can be rebuilt on the wake — a settings screen or a file browser cannot. When
+  // the lock happens on one of those, home is painted HERE, before the moon is stamped
+  // over it and the frame is saved, so the picture that sleeps is the picture that wakes.
+  APP_STATE.quickResumeWake = isQuickResumeSleep;
+  APP_STATE.quickResumeTargetIsReader = false;
+  if (isQuickResumeSleep) {
+    const bool targetIsReader = activityManager.isReaderActivity() && !APP_STATE.openEpubPath.empty();
+    APP_STATE.quickResumeTargetIsReader = targetIsReader;
+    if (wake_route::quickResumeNeedsHomeRepaint(targetIsReader, activityManager.isHomeActivity())) {
+      activityManager.goHome();
+      activityManager.loop();  // paints immediately, like goToSleep() does
+    }
+  }
+
+  // The Light sleep face names the book the wake will open, so the choice is made here
+  // rather than on the wake: "Open a random book on boot" picking at wake time would
+  // name one book on the sleep screen and open another. Quick Resume names nothing and
+  // opens nothing new, so it leaves the field empty.
+  APP_STATE.pendingWakeBookPath.clear();
+  if (!isQuickResumeSleep && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
+    APP_STATE.pendingWakeBookPath =
+        SETTINGS.openRandomRecentOnBoot ? pickRandomRecentBookPath() : APP_STATE.openEpubPath;
+  }
 
   APP_STATE.saveToFile();
 
@@ -497,9 +542,26 @@ void setup() {
   // here, so a boot heading to recovery, the crash report, or a silent-reboot target never
   // advertises a book it will not open. Back-held and readerActivityLoadCount are the
   // routing block's own escape hatches and are re-checked there.
+  //
+  // Quick Resume opts out of the whole idea: it opens nothing new, so it must not pick a
+  // random book either. The Light face already picked one at lock time (it named the book
+  // on the sleep screen), and that stored path is reused here rather than re-rolled.
+  //
+  // Both are only honoured on an actual button wake. A cold boot (battery pulled, USB
+  // power, a flash) leaves the same fields behind in state.json, and a device that was
+  // powered off has not asked to be put back into a book.
+  const bool sleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
+  const bool quickResumeWake = sleepWake && APP_STATE.quickResumeWake && resume == BootResume::SplashlessWake;
+  const bool quickResumeTargetIsReader = APP_STATE.quickResumeTargetIsReader;
+  const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
+
   std::string randomBookPath;
-  if (SETTINGS.openRandomRecentOnBoot && !recoveryFirmwareMode && !rebootedFromPanic && resume != BootResume::Silent &&
-      APP_STATE.readerActivityLoadCount == 0 && !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+  if (!quickResumeWake && !pendingWakeBookPath.empty()) {
+    randomBookPath = pendingWakeBookPath;
+    setUnlockBannerBookPath(randomBookPath);
+  } else if (!quickResumeWake && SETTINGS.openRandomRecentOnBoot && !recoveryFirmwareMode && !rebootedFromPanic &&
+             resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
+             !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
     randomBookPath = pickRandomRecentBookPath();
     if (!randomBookPath.empty()) setUnlockBannerBookPath(randomBookPath);
   }
@@ -527,11 +589,12 @@ void setup() {
   // follows repaints straight over them. They are the loading face: they exist to show the
   // reader is busy while input is still gated, not to be read.
   //
-  // There is deliberately no minimum visible time. A 500ms floor used to hold them here,
-  // and it was pure cost on a fast wake: the work that follows takes seconds on its own, so
-  // the floor only ever fired when the banners were about to be covered promptly anyway.
-  // Dropping it cannot leave a blank screen, because the retained wallpaper stays on the
-  // panel underneath until the next activity paints over it.
+  // They do hold a floor of UNLOCK_BANNER_MIN_VISIBLE_MS, so the book title is readable
+  // rather than a flicker. It is a floor and not a delay: a wake whose next paint is
+  // already later than that pays nothing, which on a cold book open is every wake.
+  //
+  // Quick Resume draws no banners at all. Its whole promise is that unlocking changes
+  // nothing on the panel, and a banner is a change.
 
   switch (resume) {
     case BootResume::Silent:
@@ -561,7 +624,8 @@ void setup() {
           // the baseline before drawing the banners over it.
           renderer.cleanupGrayscaleWithFrameBuffer();
         }
-        drawUnlockBanners(renderer);
+        const bool bannersDrawn = !quickResumeWake;
+        if (bannersDrawn) drawUnlockBanners(renderer);
         if (useDifferentialRefresh) {
           renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
           // The panel already holds the page; the reader's first paint can go over it.
@@ -569,6 +633,9 @@ void setup() {
         } else {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
+        // Stamped after the push: the floor measures how long the banners are on the
+        // glass, not how long ago they were drawn into a buffer.
+        if (bannersDrawn) unlockBannersShownAt = millis();
       } else if (SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) {
         activityManager.goToBoot();  // frame file missing, fall back to the splash
       } else {
@@ -601,13 +668,16 @@ void setup() {
       // goes blank the moment the wake starts, while the button is still held, so there IS
       // a visible answer to the press before the page arrives.
       if (wallpaperWake) {
+        bool bannersDrawn = false;
         renderer.clearScreen();
         if (!SETTINGS.wakeStraightToBook) {
           // Banners wanted: they now sit on a blank page instead of over the wallpaper.
           // They cost only the draw — the FULL pass below happens either way.
           drawUnlockBanners(renderer);
+          bannersDrawn = true;
         }
         renderer.displayBuffer(HalDisplay::FULL_REFRESH);
+        if (bannersDrawn) unlockBannersShownAt = millis();
         allowFastInitialReaderRefresh = true;
         break;
       }
@@ -645,6 +715,41 @@ void setup() {
     }
   }
 
+  // Where this wake is allowed to land. Quick Resume and the Light face both override
+  // the ordinary conditions below; every other boot resolves to Unchanged and falls
+  // through untouched. Recovery, a panic report and a silent reboot are handled before
+  // this and keep their own targets.
+  //
+  // The Light face's book is the one it named on the sleep screen; Quick Resume returns
+  // to the book that was open when it locked.
+  const std::string forcedBookPath = quickResumeWake                ? APP_STATE.openEpubPath
+                                     : !pendingWakeBookPath.empty() ? pendingWakeBookPath
+                                                                    : APP_STATE.openEpubPath;
+  wake_route::WakeInputs wakeInputs;
+  wakeInputs.quickResume = quickResumeWake;
+  wakeInputs.quickResumeTargetIsReader = quickResumeTargetIsReader;
+  wakeInputs.forceBookOnWake = !quickResumeWake && !pendingWakeBookPath.empty();
+  wakeInputs.hasBook = !forcedBookPath.empty();
+  wakeInputs.sleptFromReader = APP_STATE.lastSleepFromReader;
+  wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
+  wakeInputs.randomBookOnBoot = SETTINGS.openRandomRecentOnBoot;
+  wakeInputs.readerCrashed = APP_STATE.readerActivityLoadCount > 0;
+  const wake_route::Route forcedRoute = (recoveryFirmwareMode || rebootedFromPanic || resume == BootResume::Silent)
+                                            ? wake_route::Route::Unchanged
+                                            : wake_route::resolve(wakeInputs);
+
+  // One-shot: consumed by this wake, so a later ordinary boot routes normally.
+  if (APP_STATE.quickResumeWake || APP_STATE.quickResumeTargetIsReader || !APP_STATE.pendingWakeBookPath.empty()) {
+    APP_STATE.quickResumeWake = false;
+    APP_STATE.quickResumeTargetIsReader = false;
+    APP_STATE.pendingWakeBookPath.clear();
+    APP_STATE.saveToFile();
+  }
+
+  // The banners have had the panel to themselves up to here; hold them for their floor
+  // before the activity below paints over them.
+  waitForUnlockBannerFloor();
+
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
     activityManager.replaceActivity(
@@ -660,6 +765,20 @@ void setup() {
     // through to the sleep-wake "resume reader" logic, which fires on stale
     // openEpubPath + lastSleepFromReader from a prior session.
     activityManager.goHome();
+  } else if (forcedRoute == wake_route::Route::ForceReader) {
+    // Quick Resume returning to its book, or the Light face opening the book it named on
+    // the sleep screen. Both bypass the ordinary conditions below on purpose: a held Back
+    // and "last sleep was not from the reader" are answers to questions neither face asks.
+    const auto path = forcedBookPath;
+    APP_STATE.openEpubPath = "";
+    APP_STATE.readerActivityLoadCount++;
+    APP_STATE.saveToFile();
+    activityManager.goToReader(path, allowFastInitialReaderRefresh);
+  } else if (forcedRoute == wake_route::Route::ForceHome) {
+    // Quick Resume that locked on a screen the reset cannot rebuild (home was painted
+    // before the moon, so this IS the picture on the glass), or either face hitting a
+    // safety valve: no book to open, or a reader that crashed last boot.
+    activityManager.goHome(HomeMenuItem::NONE, needsWakeRefresh);
   } else if (SETTINGS.openRandomRecentOnBoot || APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
     // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity

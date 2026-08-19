@@ -7,6 +7,9 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["readerActivityLoadCount"] = readerActivityLoadCount;
   doc["lastSleepFromReader"] = lastSleepFromReader;
   doc["showBootScreen"] = showBootScreen;
+  doc["quickResumeWake"] = quickResumeWake;
+  doc["quickResumeTargetIsReader"] = quickResumeTargetIsReader;
+  doc["pendingWakeBookPath"] = pendingWakeBookPath;
   doc["lastBootLogo"] = lastBootLogo;
   doc["lastSleepWallpaperPath"] = lastSleepWallpaperPath;
   doc["sleepIndexLiveCount"] = sleepIndexLiveCount;
@@ -30,6 +33,9 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   readerActivityLoadCount = doc["readerActivityLoadCount"] | static_cast<uint8_t>(0);
   lastSleepFromReader = doc["lastSleepFromReader"] | false;
   showBootScreen = doc["showBootScreen"] | true;
+  quickResumeWake = doc["quickResumeWake"] | false;
+  quickResumeTargetIsReader = doc["quickResumeTargetIsReader"] | false;
+  pendingWakeBookPath = doc["pendingWakeBookPath"] | std::string("");
   lastBootLogo = doc["lastBootLogo"] | (uint8_t)0;
   lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
   // Missing keys fall back to "no index yet" defaults, so a pre-index

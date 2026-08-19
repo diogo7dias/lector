@@ -213,11 +213,12 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, and FREEZE has
-  // no behaviour left at all, so a settings file still naming one would sleep into nothing.
-  // Fold both to the default face and rewrite the file so the migration happens once.
-  if (sleepScreen == BLANK || sleepScreen == FREEZE) {
-    sleepScreen = DARK;
+  // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, FREEZE has no
+  // behaviour left at all (so a settings file still naming one would sleep into nothing),
+  // and DARK is gone too — the crest face is light only. Fold all three to the default
+  // face and rewrite the file so the migration happens once.
+  if (sleepScreen == BLANK || sleepScreen == FREEZE || sleepScreen == DARK) {
+    sleepScreen = LIGHT;
     needsResave = true;
   }
 
