@@ -45,6 +45,7 @@
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
+#include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
@@ -517,6 +518,14 @@ void setup() {
   // device used in short sessions never reaches the full discharge and ghosts forever.
   display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
   RECENT_BOOKS.loadFromFile();
+  // One-time upgrade: books read before the reading badges existed have a percentage in
+  // the recents list and no marker beside their cache. Seeding costs at most thirteen
+  // small writes and only ever happens once per card.
+  if (!APP_STATE.readingBadgesSeeded) {
+    book_progress::backfillFromRecents();
+    APP_STATE.readingBadgesSeeded = true;
+    APP_STATE.saveToFile();
+  }
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();

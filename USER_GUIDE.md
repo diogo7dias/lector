@@ -145,6 +145,14 @@ folders in brackets, for example `[folder-name]`.
 Renaming and moving files is done from the web interface rather than on the device, see
 [section 9](#9-getting-books-onto-the-device).
 
+Each row shows its file type on the right, and a book you have opened before also shows how
+far in you are: a percentage while you are reading it, or **Read** once it is finished. The
+badge stays even after the book leaves the Recents list or is filed into `/read`. Books you
+have never opened show no badge, and comics (XTC) never carry one.
+
+Upgrading from an older release, the books still in your Recents list get their badge on the
+first boot; any other book read long ago gets one the next time you close it.
+
 **Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear.
 **File Browser Order** lists a folder alphabetically or in random order.
 
