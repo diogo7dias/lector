@@ -26,3 +26,7 @@ void setUnlockBannerBookPath(const std::string& path);
 // draw only in the BW base pass (the 1-bit draw path would otherwise set grayscale
 // plane bits in the LSB/MSB passes and grey the white pixels).
 void drawUnlockBanners(GfxRenderer& renderer);
+
+// The TOP banner only (version + the book being resumed), without the footer band.
+// Drawn by the Light sleep face, which names the book the wake is about to open.
+void drawUnlockBannerTop(GfxRenderer& renderer);

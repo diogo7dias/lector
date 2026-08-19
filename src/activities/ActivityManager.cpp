@@ -262,6 +262,8 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
+bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->name == "Home"; }
+
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
 bool ActivityManager::wantsPowerDoubleClick() const {

@@ -367,7 +367,12 @@
 
     if (setting.type === 'enum') {
       let html = '<select id="' + id + '" onchange="handleSettingChanged(\'' + setting.key + '\')">';
+      // Retired values are still listed by the firmware so the option index keeps matching
+      // the stored enum value; they are dropped here instead. A device still holding one
+      // (migration pending) keeps seeing it, so the select never shows a blank selection.
+      const hidden = Array.isArray(setting.hiddenValues) ? setting.hiddenValues : [];
       setting.options.forEach(function(opt, idx) {
+        if (hidden.indexOf(idx) !== -1 && idx !== setting.value) return;
         const selected = idx === setting.value ? ' selected' : '';
         html += '<option value="' + idx + '"' + selected + '>' + escapeHtml(opt) + '</option>';
       });

@@ -15,6 +15,17 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
+  // Quick Resume bookkeeping, written at lock and read once by the next wake.
+  // quickResumeWake marks that the frame on the glass is a Quick Resume frame, so the
+  // wake restores it, draws no unlock banners, and routes only to the screen that frame
+  // shows: the reader when quickResumeTargetIsReader, otherwise home (the lock repaints
+  // home first when the screen it locked from cannot be rebuilt after the reset).
+  bool quickResumeWake = false;
+  bool quickResumeTargetIsReader = false;
+  // The book the next wake will open, chosen at lock so the sleep screen can name it.
+  // "Open a random book on boot" would otherwise pick at wake time, naming one book on
+  // the sleep screen and opening another. Empty means "use openEpubPath".
+  std::string pendingWakeBookPath;
   // Wallpaper the last sleep screen actually rendered, or empty when the sleep screen
   // was not a wallpaper. Deep sleep is a chip reset, so the wake has no other way to
   // know what the panel is holding. The wake uses it to tell a wallpaper sleep from a

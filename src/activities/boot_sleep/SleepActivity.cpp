@@ -29,6 +29,7 @@
 #include "activities/reader/ReaderUtils.h"
 #include "components/BannerStyle.h"
 #include "components/UITheme.h"
+#include "components/UnlockBanners.h"
 #include "fontIds.h"
 #include "images/BootLogos.h"
 #include "images/MoonIcon.h"
@@ -1090,10 +1091,6 @@ void SleepActivity::deepCleanPanel() const {
 // because their own artwork was missing (a Custom wallpaper with no file, Cover with no
 // book). The transparent-overlay fallback is the exception and asks for light explicitly.
 void SleepActivity::renderDefaultSleepScreen() const {
-  renderDefaultSleepScreen(SETTINGS.sleepScreen != CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT);
-}
-
-void SleepActivity::renderDefaultSleepScreen(const bool darkBackground) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
@@ -1108,8 +1105,13 @@ void SleepActivity::renderDefaultSleepScreen(const bool darkBackground) const {
   renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
   renderer.drawCenteredText(SMALL_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
 
-  if (darkBackground) {
-    renderer.invertScreen();
+  // The book this sleep is guarding: the wake opens it, so the sleeping screen says
+  // which one, in the same banner the unlock screen uses. enterDeepSleep() chose the
+  // path (a random pick when "Open a random book on boot" is on) before this ran, so
+  // the name here and the book the wake opens are the same book by construction.
+  if (!APP_STATE.pendingWakeBookPath.empty()) {
+    setUnlockBannerBookPath(APP_STATE.pendingWakeBookPath);
+    drawUnlockBannerTop(renderer);
   }
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -1263,13 +1265,12 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   // Nothing to composite. The panel still holds the page the user locked from, which
   // reads as "sleep did nothing", so fall back to a real sleep face — and blank first,
   // since this path skipped deepCleanPanel on the way in.
-  // Not dark. The mode asked for a picture drawn over the page, and the page it would
-  // have drawn over is a light one; inverting here (which the settings-derived polarity
-  // does for every mode except Light) put the crest in white on a black screen, which is
-  // neither what this mode asked for nor what the missing overlay would have looked like.
+  // The crest face is light for every mode now (Dark is retired), which is also what
+  // this fallback always wanted: the mode asked for a picture over a light page, and the
+  // old settings-derived polarity used to invert it into white-on-black here.
   LOG_ERR("SLP", "No valid transparent sleep overlay found");
   deepCleanPanel();
-  renderDefaultSleepScreen(/*darkBackground=*/false);
+  renderDefaultSleepScreen();
 }
 
 void SleepActivity::renderCoverSleepScreen() const {

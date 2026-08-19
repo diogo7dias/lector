@@ -27,11 +27,24 @@ std::string bookTitleFromPath(const std::string& path) {
 // Empty means "name APP_STATE.openEpubPath". See setUnlockBannerBookPath().
 std::string bannerBookPathOverride;
 
+// One draw for both entry points below: the top banner is identical either way, and the
+// footer band is what the sleep face leaves out.
+void drawBanners(GfxRenderer& renderer, bool withFooter);
+
 }  // namespace
 
 void setUnlockBannerBookPath(const std::string& path) { bannerBookPathOverride = path; }
 
-void drawUnlockBanners(GfxRenderer& renderer) {
+// The top banner alone: version plus the book being resumed. Split out of
+// drawUnlockBanners() for the Light sleep face, which names the book it is about to
+// open but has no use for the footer band at the bottom of a sleeping screen.
+void drawUnlockBannerTop(GfxRenderer& renderer) { drawBanners(renderer, /*withFooter=*/false); }
+
+void drawUnlockBanners(GfxRenderer& renderer) { drawBanners(renderer, /*withFooter=*/true); }
+
+namespace {
+
+void drawBanners(GfxRenderer& renderer, const bool withFooter) {
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   const bool bwPass = renderer.getRenderMode() == GfxRenderer::BW;
@@ -73,7 +86,7 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   // --- BOTTOM banner: footer text ---
   const int botH = lh10 + pad * 2;
   const int botY = pageHeight - botH;
-  renderer.fillRect(0, botY, pageWidth, botH, true);  // black banner, drawn every pass
+  if (withFooter) renderer.fillRect(0, botY, pageWidth, botH, true);  // black banner, drawn every pass
 
   // White content (border + text) only in the BW base pass: the 1-bit draw path
   // ignores the render mode and would set the grayscale plane bits (a dark-grey nudge)
@@ -83,8 +96,8 @@ void drawUnlockBanners(GfxRenderer& renderer) {
   // One rule per banner, on the edge that faces the page: the banners span the screen
   // and reach its physical edges, so a full frame just boxes in a band.
   constexpr int rule = banner::RULE;
-  renderer.fillRect(0, topY + topH - rule, pageWidth, rule, false);  // under the top banner
-  renderer.fillRect(0, botY, pageWidth, rule, false);                // over the bottom banner
+  renderer.fillRect(0, topY + topH - rule, pageWidth, rule, false);    // under the top banner
+  if (withFooter) renderer.fillRect(0, botY, pageWidth, rule, false);  // over the bottom banner
 
   // The version string already names the firmware ("lector.c 0.0.8"), so prefixing it
   // with "Lector " read as "Lector lector.c 0.0.8".
@@ -94,6 +107,8 @@ void drawUnlockBanners(GfxRenderer& renderer) {
     renderer.drawCenteredText(banner::FONT_ID, titleY, line.c_str(), false);
     titleY += lh10;
   }
+
+  if (!withFooter) return;
 
   const char* footer = SETTINGS.customFooter[0] != '\0' ? SETTINGS.customFooter : "READ UNTIL YOU DIE.";
 #if defined(WAKE_TIMING_OVERLAY) && WAKE_TIMING_OVERLAY
@@ -110,3 +125,5 @@ void drawUnlockBanners(GfxRenderer& renderer) {
 #endif
   renderer.drawCenteredText(banner::FONT_ID, botY + pad, footer, false);
 }
+
+}  // namespace

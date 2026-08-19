@@ -319,14 +319,23 @@ screen can show a stats dashboard.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Dark           | A crest on a dark background, picked at random from six.                          |
-| Light          | The same crest on a white background.                                             |
-| Custom         | A wallpaper from the SD card. Falls back to Dark when none is found.              |
-| Cover          | The open book's cover. Falls back to Dark when no book is open.                   |
+| Light          | A crest on a white background, picked at random from six, with a banner naming the book that waking will open. |
+| Custom         | A wallpaper from the SD card. Falls back to Light when none is found.             |
+| Cover          | The open book's cover. Falls back to Light when no book is open.                  |
 | Cover + Custom | The cover while you are reading, a custom wallpaper otherwise.                    |
-| Quick Resume   | The text of the last page, with a moon icon at the edge, so waking returns to that page immediately. |
+| Quick Resume   | The screen you locked from, with a moon icon at the edge.                         |
 | Stats Dashboard| Your reading statistics.                                                          |
 | Transparent    | A BMP or PNG overlay drawn on top of whatever the screen was showing.             |
+
+On **Light**, waking always opens the book the sleep screen named, even when you locked
+from the home menu. With "Open a random book on boot" on, the random book is chosen when
+the device goes to sleep, so the name on the sleep screen is the book you get.
+
+**Quick Resume** is meant to be invisible: the moon appears when you lock, and waking puts
+you back exactly where you were with the moon gone. Nothing else is drawn over it, and
+"Open a random book on boot" does not apply to it. Because waking is a full restart, only
+a book page can be rebuilt, so locking from a menu or a settings screen shows the home
+screen from the moment you lock rather than changing under you on the way back.
 
 **Quick Resume on Timeout** turns on the Quick Resume face for sleeps caused by inactivity,
 whatever the Sleep Screen setting says.
@@ -638,7 +647,7 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 
 **Sleep screen**
 
-- **Sleep Screen** — Dark, Light, Custom, Cover, Cover + Custom, Quick Resume, Stats
+- **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Quick Resume, Stats
   Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Quick Resume on Timeout** — ON or OFF.
 - **Wake Straight to Book** — wake goes straight back into the book.

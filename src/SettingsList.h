@@ -214,6 +214,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
     std::vector<StrId> sleepScreenValues(CrossPointSettings::SLEEP_SCREEN_MODE_COUNT);
+    // DARK is retired (see SLEEP_SCREEN_MODE): the label stays for index alignment, and
+    // withHiddenEnumValues() below keeps it out of the picker.
     sleepScreenValues[CrossPointSettings::DARK] = StrId::STR_DARK;
     sleepScreenValues[CrossPointSettings::LIGHT] = StrId::STR_LIGHT;
     sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
@@ -237,9 +239,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     std::vector<SettingInfo> v;
     v.reserve(88);
     // --- Display ---
-    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
-                                  std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
-                    .withHiddenEnumValues({CrossPointSettings::BLANK, CrossPointSettings::FREEZE}));
+    v.push_back(
+        SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
+                          "sleepScreen", StrId::STR_CAT_DISPLAY)
+            .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::BLANK, CrossPointSettings::FREEZE}));
 
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                                   {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));
