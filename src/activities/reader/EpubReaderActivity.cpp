@@ -1646,6 +1646,9 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
     // Reset section to force re-layout in the new orientation.
     section.reset();
+    // Rotating moves every pixel on the panel, so the next paint takes the cleanup path
+    // for the same reason a font change does.
+    scheduleGhostCleanup();
     // Same page number, entirely different geometry: drop the remembered quote
     // underline segments so they are worked out again for the new viewport.
     underlineMemoSpine = -1;
@@ -1728,6 +1731,11 @@ void EpubReaderActivity::dropSectionForRelayout() {
     captureOrdinalAnchor();
   }
   section.reset();
+  // Every glyph on the page is about to move, so the next paint cannot be a differential
+  // one: a FAST refresh only drives the pixels it thinks changed and leaves the old font,
+  // size or spacing ghosted underneath the new layout. Put the next page on the cleanup
+  // path, which drives every pixel to its target.
+  scheduleGhostCleanup();
   // Quote underlines are memoised per (spine, page). A relayout keeps both of those
   // numbers but moves every word, so the remembered segments must go with the section.
   underlineMemoSpine = -1;
