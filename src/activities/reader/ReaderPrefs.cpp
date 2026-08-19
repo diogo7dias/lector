@@ -21,6 +21,7 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.dynamicMargins = SETTINGS.dynamicMargins;
   p.focusReadingEnabled = SETTINGS.focusReadingEnabled;
   p.guideDotsEnabled = SETTINGS.guideDotsEnabled;
+  p.guideDotsHidden = SETTINGS.guideDotsHidden;
   p.hyphenationEnabled = SETTINGS.hyphenationEnabled;
   p.embeddedStyle = SETTINGS.embeddedStyle;
   p.textAntiAliasing = SETTINGS.textAntiAliasing;

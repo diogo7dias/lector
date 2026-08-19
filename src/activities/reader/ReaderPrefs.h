@@ -91,6 +91,7 @@ struct ReaderPrefs {
   // Style tab
   uint8_t focusReadingEnabled = 0;
   uint8_t guideDotsEnabled = 0;  // middle dot between words (restored)
+  uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
   uint8_t hyphenationEnabled = 0;
   uint8_t embeddedStyle = 1;
   uint8_t textAntiAliasing = 0;  // see CrossPointSettings: the grey fade per page is not worth it

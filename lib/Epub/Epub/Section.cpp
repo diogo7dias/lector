@@ -85,6 +85,9 @@ namespace {
 //      separate suffix token, and a visible hyphen or dash inside a word is now a break
 //      opportunity (upstream #2892; upstream numbered it v38). Both change where lines
 //      break, so pages cached by older versions no longer match.
+// Not a version: the Hidden Dots sub-option (keep the widened guide-dot gap, draw no
+// dot) reuses the v37 guide-dots header byte as a three-state mode, so the header keeps
+// its size and only books whose guide-dot state actually changed are rebuilt.
 constexpr uint8_t SECTION_FILE_VERSION = 51;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
@@ -165,15 +168,15 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
     LOG_DBG("SCT", "File not open for writing header");
     return;
   }
-  static_assert(HEADER_SIZE ==
-                    sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
-                        sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) +
-                        sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
-                        sizeof(pageCount) + sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedStyle) +
-                        sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsEnabled) +
-                        sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) +
-                        sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
-                "Header size mismatch");
+  static_assert(
+      HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
+                         sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) +
+                         sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
+                         sizeof(pageCount) + sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedStyle) +
+                         sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
+                         sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) +
+                         sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+      "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
   serialization::writePod(file, SECTION_FILE_INCOMPLETE_VERSION);
@@ -188,7 +191,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.embeddedStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
-  serialization::writePod(file, spec.guideDotsEnabled);
+  serialization::writePod(file, spec.guideDotsMode);
   serialization::writePod(file, spec.firstLineIndentMode);
   serialization::writePod(file, spec.firstLineIndentPercent);
   serialization::writePod(file, pageCount);  // Placeholder for page count (will be initially 0, patched later)
@@ -228,7 +231,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     bool fileEmbeddedStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
-    bool fileGuideDotsEnabled;
+    uint8_t fileGuideDotsMode;
     uint8_t fileFirstLineIndentMode;
     uint8_t fileFirstLineIndentPercent;
     serialization::readPod(file, fileFontId);
@@ -242,7 +245,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileEmbeddedStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
-    serialization::readPod(file, fileGuideDotsEnabled);
+    serialization::readPod(file, fileGuideDotsMode);
     serialization::readPod(file, fileFirstLineIndentMode);
     serialization::readPod(file, fileFirstLineIndentPercent);
 
@@ -251,7 +254,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.paragraphAlignment != fileParagraphAlignment || spec.viewportWidth != fileViewportWidth ||
         spec.viewportHeight != fileViewportHeight || spec.hyphenationEnabled != fileHyphenationEnabled ||
         spec.embeddedStyle != fileEmbeddedStyle || spec.imageRendering != fileImageRendering ||
-        spec.focusReadingEnabled != fileFocusReadingEnabled || spec.guideDotsEnabled != fileGuideDotsEnabled ||
+        spec.focusReadingEnabled != fileFocusReadingEnabled || spec.guideDotsMode != fileGuideDotsMode ||
         spec.firstLineIndentMode != fileFirstLineIndentMode ||
         spec.firstLineIndentPercent != fileFirstLineIndentPercent) {
       file.close();
@@ -480,7 +483,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphSpacing, spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
-      spec.focusReadingEnabled, spec.guideDotsEnabled, spec.firstLineIndentMode, spec.firstLineIndentPercent,
+      spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode, spec.firstLineIndentPercent,
       [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
                      const uint32_t visibleTextOffset) {
         ctxPtr->lut.push_back(

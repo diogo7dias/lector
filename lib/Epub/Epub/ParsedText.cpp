@@ -745,7 +745,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
     // The guide dot glyph is always drawn in the regular style; preload it too so
     // the widened-gap measurement and draw never trigger on-demand SD I/O.
-    if (guideReadingEnabled) {
+    // Needed in hidden mode too: the widened gap is measured from the dot's advance.
+    if (guideDotsMode != GUIDE_DOTS_OFF) {
       renderer.ensureSdCardFontReady(fontId, GUIDE_DOT_UTF8, 0x01);
     }
   }
@@ -989,7 +990,7 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   // Guide dots only apply to pure-LTR paragraphs (they never coexist with BiDi
   // reordering). A fresh-token word (not a continuation, not a no-space break) that
   // is not line-leading gets a widened gap that holds the dot.
-  const bool guideOk = guideReadingEnabled && !blockStyle.isRtl && !hasRtlWord;
+  const bool guideOk = guideDotsMode != GUIDE_DOTS_OFF && !blockStyle.isRtl && !hasRtlWord;
 
   // DP table to store the minimum badness (cost) of lines starting at index i
   std::vector<int> dp(totalWordCount);
@@ -1110,7 +1111,7 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
   bool isFirstLine = true;
 
   // Guide dots only apply to pure-LTR paragraphs; see computeLineBreaks.
-  const bool guideOk = guideReadingEnabled && !blockStyle.isRtl && !hasRtlWord;
+  const bool guideOk = guideDotsMode != GUIDE_DOTS_OFF && !blockStyle.isRtl && !hasRtlWord;
 
   while (currentIndex < wordWidths.size()) {
     const size_t lineStart = currentIndex;
@@ -1308,7 +1309,7 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // line word k when k is a fresh-token word (not a continuation, not a no-space break)
   // and is not line-leading. Indexes the original vectors, which map 1:1 to lineWords
   // in the non-reordered LTR path (the only path where guideOk is true).
-  const bool guideOk = guideReadingEnabled && !blockStyle.isRtl && !hasRtlWord;
+  const bool guideOk = guideDotsMode != GUIDE_DOTS_OFF && !blockStyle.isRtl && !hasRtlWord;
   const auto guideDotBeforeLine = [&](const size_t k) {
     return guideOk && k > 0 && !continuesVec[lastBreakAt + k] && !noSpaceBeforeVec[lastBreakAt + k];
   };
@@ -1616,10 +1617,13 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
   // Fast path: no word on this line carries focus emphasis, so pass empty boundary/suffixX
   // vectors. TextBlock pays zero per-word RAM cost for these annotations when they are empty.
   bool lineHasFocusSplit = false;
+  // Hidden Dots keeps the widened gaps this line was laid out with, but stores no dot
+  // offsets, so the line takes the same cheap no-annotation path a dotless line takes.
+  const bool drawGuideDots = guideDotsMode == GUIDE_DOTS_VISIBLE;
   bool lineHasGuideDot = false;
   for (size_t i = 0; i < lineWordCount; i++) {
     if (focusBoundaryAt(i) != 0) lineHasFocusSplit = true;
-    if (guideDotBeforeLine(i)) lineHasGuideDot = true;
+    if (drawGuideDots && guideDotBeforeLine(i)) lineHasGuideDot = true;
     if (lineHasFocusSplit && lineHasGuideDot) break;
   }
 

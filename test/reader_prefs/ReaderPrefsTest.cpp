@@ -27,6 +27,7 @@ ReaderPrefs makeSample() {
   p.dynamicMargins = 2;
   p.focusReadingEnabled = 1;
   p.guideDotsEnabled = 1;
+  p.guideDotsHidden = 1;
   p.hyphenationEnabled = 1;
   p.embeddedStyle = 0;
   p.textAntiAliasing = 0;
@@ -56,6 +57,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.dynamicMargins, b.dynamicMargins);
   EXPECT_EQ(a.focusReadingEnabled, b.focusReadingEnabled);
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);
+  EXPECT_EQ(a.guideDotsHidden, b.guideDotsHidden);
   EXPECT_EQ(a.hyphenationEnabled, b.hyphenationEnabled);
   EXPECT_EQ(a.embeddedStyle, b.embeddedStyle);
   EXPECT_EQ(a.textAntiAliasing, b.textAntiAliasing);

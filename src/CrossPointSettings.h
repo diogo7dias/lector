@@ -521,6 +521,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored
   // (old lector). Feeds the render spec (changes word width), so it rebuilds the cache.
   uint8_t guideDotsEnabled = 0;
+  // Hidden Dots — sub-option of Guide Dots: keep the widened inter-word gap the dots
+  // create, but draw no dot in it. Only meaningful while guideDotsEnabled is on, and
+  // it feeds the render spec too, so toggling it rebuilds the cache.
+  uint8_t guideDotsHidden = 0;
   // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
   // overlay after the page renders, so it never affects layout or the cache.
   uint8_t debugBorders = 0;
