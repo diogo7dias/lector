@@ -34,6 +34,7 @@ constexpr PresetField FIELDS[] = {
     {"dynamicMargins", &ReaderPrefs::dynamicMargins},
     {"focusReadingEnabled", &ReaderPrefs::focusReadingEnabled},
     {"guideDotsEnabled", &ReaderPrefs::guideDotsEnabled},
+    {"guideDotsHidden", &ReaderPrefs::guideDotsHidden},
     {"hyphenationEnabled", &ReaderPrefs::hyphenationEnabled},
     {"embeddedStyle", &ReaderPrefs::embeddedStyle},
     {"textAntiAliasing", &ReaderPrefs::textAntiAliasing},

@@ -351,8 +351,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled,
-                                        guideDotsEnabled, blockStyle, firstLineIndentMode, firstLineIndentPercent));
+  currentTextBlock.reset(new ParsedText(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, guideDotsMode,
+                                        blockStyle, firstLineIndentMode, firstLineIndentPercent));
   // Blocks opened underneath a heading (a <br> splitting a two-line title) are heading
   // blocks too. The h1-h6 branch flags the heading's own first block directly.
   currentTextBlock->setHeading(insideHeading());
@@ -772,7 +772,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
 
     self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
-        self->extraParagraphSpacing, self->hyphenationEnabled, self->focusReadingEnabled, self->guideDotsEnabled,
+        self->extraParagraphSpacing, self->hyphenationEnabled, self->focusReadingEnabled, self->guideDotsMode,
         tableCellBlockStyle, self->firstLineIndentMode, self->firstLineIndentPercent);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
@@ -1454,7 +1454,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
     self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->hyphenationEnabled,
-                                                           self->focusReadingEnabled, self->guideDotsEnabled, flowStyle,
+                                                           self->focusReadingEnabled, self->guideDotsMode, flowStyle,
                                                            self->firstLineIndentMode, self->firstLineIndentPercent);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
@@ -1808,7 +1808,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
     self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->hyphenationEnabled,
-                                                           self->focusReadingEnabled, self->guideDotsEnabled, flowStyle,
+                                                           self->focusReadingEnabled, self->guideDotsMode, flowStyle,
                                                            self->firstLineIndentMode, self->firstLineIndentPercent);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block after table");

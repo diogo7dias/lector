@@ -220,14 +220,11 @@ void TextSettingsActivity::render(RenderLock&&) {
     }
 
     case Tab::Style: {
-      constexpr int STYLE_ROWS = static_cast<int>(StyleRow::Count);
-      static constexpr StrId ROW_NAME_IDS[STYLE_ROWS] = {StrId::STR_FOCUS_READING, StrId::STR_GUIDE_DOTS,
-                                                         StrId::STR_HYPHENATION, StrId::STR_EMBEDDED_STYLE,
-                                                         StrId::STR_TEXT_AA};
+      const auto rows = visibleStyleRows();
       GUI.drawList(
-          renderer, listRect, STYLE_ROWS, selectedItem,
-          [](int index) { return std::string(I18N.get(ROW_NAME_IDS[index])); }, nullptr, nullptr,
-          [this](int index) { return styleValueText(index); }, true);
+          renderer, listRect, static_cast<int>(rows.size()), selectedItem,
+          [this, &rows](int index) { return std::string(I18N.get(styleRowNameId(rows[index]))); }, nullptr, nullptr,
+          [this, &rows](int index) { return styleValueText(rows[index]); }, true);
       confirmLabel = onTabBar ? tr(STR_FONT) : tr(STR_TOGGLE);
       break;
     }
@@ -313,9 +310,11 @@ void TextSettingsActivity::activateRow(int row) {
       if (row >= 0 && row < static_cast<int>(rows.size())) confirmLayoutRow(rows[row]);
       break;
     }
-    case Tab::Style:
-      confirmStyleRow(row);
+    case Tab::Style: {
+      const auto rows = visibleStyleRows();
+      if (row >= 0 && row < static_cast<int>(rows.size())) confirmStyleRow(rows[row]);
       break;
+    }
     default:
       break;
   }
@@ -522,13 +521,46 @@ std::string TextSettingsActivity::layoutValueText(LayoutRow row) const {
   }
 }
 
-void TextSettingsActivity::confirmStyleRow(int row) {
-  switch (static_cast<StyleRow>(row)) {
+std::vector<TextSettingsActivity::StyleRow> TextSettingsActivity::visibleStyleRows() const {
+  std::vector<StyleRow> rows;
+  rows.reserve(static_cast<int>(StyleRow::Count));
+  rows.push_back(StyleRow::FocusReading);
+  rows.push_back(StyleRow::GuideDots);
+  // Hidden Dots only says anything about a page that is already drawing guide dots.
+  if (SETTINGS.guideDotsEnabled) rows.push_back(StyleRow::HiddenDots);
+  rows.push_back(StyleRow::Hyphenation);
+  rows.push_back(StyleRow::EmbeddedStyle);
+  rows.push_back(StyleRow::AntiAliasing);
+  return rows;
+}
+
+StrId TextSettingsActivity::styleRowNameId(const StyleRow row) const {
+  switch (row) {
+    case StyleRow::FocusReading:
+      return StrId::STR_FOCUS_READING;
+    case StyleRow::GuideDots:
+      return StrId::STR_GUIDE_DOTS;
+    case StyleRow::HiddenDots:
+      return StrId::STR_HIDDEN_DOTS;
+    case StyleRow::Hyphenation:
+      return StrId::STR_HYPHENATION;
+    case StyleRow::EmbeddedStyle:
+      return StrId::STR_EMBEDDED_STYLE;
+    default:
+      return StrId::STR_TEXT_AA;
+  }
+}
+
+void TextSettingsActivity::confirmStyleRow(const StyleRow row) {
+  switch (row) {
     case StyleRow::FocusReading:
       SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;
       break;
     case StyleRow::GuideDots:
       SETTINGS.guideDotsEnabled = !SETTINGS.guideDotsEnabled;
+      break;
+    case StyleRow::HiddenDots:
+      SETTINGS.guideDotsHidden = !SETTINGS.guideDotsHidden;
       break;
     case StyleRow::Hyphenation:
       SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled;
@@ -547,12 +579,14 @@ void TextSettingsActivity::confirmStyleRow(int row) {
   requestUpdate();
 }
 
-std::string TextSettingsActivity::styleValueText(int row) const {
-  switch (static_cast<StyleRow>(row)) {
+std::string TextSettingsActivity::styleValueText(const StyleRow row) const {
+  switch (row) {
     case StyleRow::FocusReading:
       return SETTINGS.focusReadingEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::GuideDots:
       return SETTINGS.guideDotsEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case StyleRow::HiddenDots:
+      return SETTINGS.guideDotsHidden ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::Hyphenation:
       return SETTINGS.hyphenationEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case StyleRow::EmbeddedStyle:
@@ -571,7 +605,10 @@ std::string TextSettingsActivity::styleValueText(int row) const {
 // Anti-Aliasing needs the reader's grayscale pass, which the preview pane never runs.
 bool TextSettingsActivity::focusedRowHasNoPreview() const {
   if (selectedIndex() == 0 || tab_ != Tab::Style) return false;
-  const StyleRow row = static_cast<StyleRow>(selectedIndex() - 1);
+  const auto rows = visibleStyleRows();
+  const int index = selectedIndex() - 1;
+  if (index < 0 || index >= static_cast<int>(rows.size())) return false;
+  const StyleRow row = rows[index];
   return row == StyleRow::Hyphenation || row == StyleRow::EmbeddedStyle || row == StyleRow::AntiAliasing;
 }
 
@@ -592,7 +629,7 @@ int TextSettingsActivity::currentListSize() const {
     case Tab::Layout:
       return static_cast<int>(visibleLayoutRows().size());
     case Tab::Style:
-      return static_cast<int>(StyleRow::Count);
+      return static_cast<int>(visibleStyleRows().size());
 
     default:
       return 0;

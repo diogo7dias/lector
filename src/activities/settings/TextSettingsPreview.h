@@ -23,7 +23,7 @@ struct PreviewKey {
   bool extraParagraphSpacing = false;
   bool focusReading = false;
   bool hyphenation = false;
-  bool guideDots = false;
+  uint8_t guideDotsMode = 0xFF;
   uint8_t firstLineIndentMode = 0xFF;
   uint8_t firstLineIndentPercent = 0xFF;
   bool operator==(const PreviewKey&) const = default;

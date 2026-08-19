@@ -1,6 +1,21 @@
 #pragma once
 #include <cstdint>
 
+// Guide Dots states, stored in ReaderRenderSpec::guideDotsMode.
+enum GuideDotsMode : uint8_t {
+  GUIDE_DOTS_OFF = 0,      // normal inter-word spaces
+  GUIDE_DOTS_VISIBLE = 1,  // widened gap with a middle dot drawn in it
+  GUIDE_DOTS_HIDDEN = 2,   // widened gap, no dot drawn ("Hidden Dots")
+};
+
+// The settings UI carries Guide Dots and its Hidden Dots sub-option as two independent
+// toggles; the layout engine wants one state. Hidden Dots is meaningless on its own, so
+// a stored "hidden" with dots off collapses back to off.
+constexpr uint8_t resolveGuideDotsMode(const uint8_t dotsEnabled, const uint8_t dotsHidden) {
+  if (dotsEnabled == 0) return GUIDE_DOTS_OFF;
+  return dotsHidden != 0 ? GUIDE_DOTS_HIDDEN : GUIDE_DOTS_VISIBLE;
+}
+
 // The resolved text-rendering configuration a reader hands to the layout
 // engine. Section-cache validation keys on every field: a section file built
 // with a different spec is discarded and rebuilt.
@@ -24,10 +39,15 @@ struct ReaderRenderSpec {
   bool embeddedStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
-  // Guide dots: draw a middle dot (U+00B7) in the widened gap between words as a
-  // reading aid. Widening the gap changes line breaks and page fill, so it is part
-  // of the cache key (restored old-lector model).
-  bool guideDotsEnabled = false;
+  // Guide dots: widen the gap between words as a reading aid, with a middle dot
+  // (U+00B7) drawn in it (restored old-lector model). Widening the gap changes line
+  // breaks and page fill, and the dot itself is baked into the cached blocks, so the
+  // mode is part of the cache key. Hidden mode keeps the widened gap and draws no dot.
+  //
+  // Deliberately one byte holding three states rather than two bools: it keeps the
+  // section-file header the size it has been since v37, so adding Hidden Dots costs
+  // no format version bump and no cache rebuild for books that are not using dots.
+  uint8_t guideDotsMode = GUIDE_DOTS_OFF;
   // First-line paragraph indent (restored old-lector model). mode: 0 = Book (respect
   // the CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
   // Both are part of the cache key.

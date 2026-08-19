@@ -337,7 +337,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   // irrelevant without touching the section file format.
   spec.imageRendering = IMAGES_DISPLAY;
   spec.focusReadingEnabled = focusReadingEnabled != 0;
-  spec.guideDotsEnabled = guideDotsEnabled != 0;
+  spec.guideDotsMode = ::resolveGuideDotsMode(guideDotsEnabled, guideDotsHidden);
   spec.firstLineIndentMode = firstLineIndentMode;
   spec.firstLineIndentPercent = firstLineIndentPercent;
   return spec;
@@ -457,7 +457,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.embeddedStyle = prefs.embeddedStyle != 0;
   spec.imageRendering = IMAGES_DISPLAY;  // see the matching note in the global builder above
   spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
-  spec.guideDotsEnabled = prefs.guideDotsEnabled != 0;
+  spec.guideDotsMode = ::resolveGuideDotsMode(prefs.guideDotsEnabled, prefs.guideDotsHidden);
   spec.firstLineIndentMode = prefs.firstLineIndentMode;
   spec.firstLineIndentPercent = prefs.firstLineIndentPercent;
   return spec;
@@ -479,6 +479,7 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   firstLineIndentPercent = p.firstLineIndentPercent;
   focusReadingEnabled = p.focusReadingEnabled;
   guideDotsEnabled = p.guideDotsEnabled;
+  guideDotsHidden = p.guideDotsHidden;
   hyphenationEnabled = p.hyphenationEnabled;
   embeddedStyle = p.embeddedStyle;
   textAntiAliasing = p.textAntiAliasing;

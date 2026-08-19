@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 
+#include "ReaderRenderSpec.h"
 #include "blocks/BlockStyle.h"
 #include "blocks/TextBlock.h"
 
@@ -52,7 +53,9 @@ class ParsedText {
   bool extraParagraphSpacing;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
-  bool guideReadingEnabled;  // draw a middle dot in the widened gap between words (LTR paragraphs only)
+  // Guide Dots (LTR paragraphs only): GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE (widened gap
+  // with a middle dot in it) or GUIDE_DOTS_HIDDEN (the same widened gap, no dot drawn).
+  uint8_t guideDotsMode;
   // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect the
   // CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
   uint8_t firstLineIndentMode;
@@ -100,14 +103,14 @@ class ParsedText {
 
  public:
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const bool guideReadingEnabled = false,
+                      const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t firstLineIndentMode = 0,
                       const uint8_t firstLineIndentPercent = 0)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
-        guideReadingEnabled(guideReadingEnabled),
+        guideDotsMode(guideDotsMode),
         firstLineIndentMode(firstLineIndentMode),
         firstLineIndentPercent(firstLineIndentPercent),
         isNaturalAlign(false),

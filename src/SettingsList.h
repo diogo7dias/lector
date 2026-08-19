@@ -364,6 +364,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_HIDDEN_DOTS, &CrossPointSettings::guideDotsHidden, "guideDotsHidden",
+                                    StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     v.push_back(SettingInfo::Toggle(StrId::STR_DEBUG_BORDERS, &CrossPointSettings::debugBorders, "debugBorders",
                                     StrId::STR_CAT_READER)
                     .withTextSettings());

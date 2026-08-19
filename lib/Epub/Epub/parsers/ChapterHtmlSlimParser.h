@@ -83,7 +83,7 @@ class ChapterHtmlSlimParser {
   uint16_t viewportHeight;
   bool hyphenationEnabled;
   bool focusReadingEnabled;
-  bool guideDotsEnabled;
+  uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
   uint8_t firstLineIndentMode;
   uint8_t firstLineIndentPercent;
   const CssParser* cssParser;
@@ -207,7 +207,7 @@ class ChapterHtmlSlimParser {
       std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer, const int fontId,
       const float lineCompression, const bool extraParagraphSpacing, const uint8_t paragraphSpacing,
       const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
-      const bool hyphenationEnabled, const bool focusReadingEnabled, const bool guideDotsEnabled,
+      const bool hyphenationEnabled, const bool focusReadingEnabled, const uint8_t guideDotsMode,
       const uint8_t firstLineIndentMode, const uint8_t firstLineIndentPercent,
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
       const bool embeddedStyle, const std::string& contentBase, const std::string& imageBasePath,
@@ -226,7 +226,7 @@ class ChapterHtmlSlimParser {
         viewportHeight(viewportHeight),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
-        guideDotsEnabled(guideDotsEnabled),
+        guideDotsMode(guideDotsMode),
         firstLineIndentMode(firstLineIndentMode),
         firstLineIndentPercent(firstLineIndentPercent),
         completePageFn(completePageFn),

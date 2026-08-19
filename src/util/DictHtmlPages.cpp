@@ -228,7 +228,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
         // first-line indent are reading-surface furniture and only add noise here.
         // Percent mode at 0 is how "no indent" is spelled: there is no NONE mode, and
         // BOOK mode would honour whatever indent the definition's own markup carries.
-        /*guideDotsEnabled=*/false, /*firstLineIndentMode=*/CrossPointSettings::FIRST_LINE_INDENT_PERCENT,
+        /*guideDotsMode=*/GUIDE_DOTS_OFF, /*firstLineIndentMode=*/CrossPointSettings::FIRST_LINE_INDENT_PERCENT,
         /*firstLineIndentPercent=*/0,
         [&pagesOut, &resourceLimitHit, &retainedElements](std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
           if (resourceLimitHit) return;

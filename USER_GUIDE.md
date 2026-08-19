@@ -678,7 +678,8 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 - **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
 - **Embedded Style** — honour the EPUB's own HTML and CSS.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
-- **Guide Dots**.
+- **Guide Dots** — draws a middle dot in a widened gap between words.
+- **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Hyphenation**.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
 - **Text Anti-Aliasing** — smoother edges, slightly slower page turns.

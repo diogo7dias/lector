@@ -50,7 +50,15 @@ class TextSettingsActivity final : public Activity {
     DebugBorders,
     Count
   };
-  enum class StyleRow { FocusReading, GuideDots, Hyphenation, EmbeddedStyle, AntiAliasing, Count };
+  enum class StyleRow {
+    FocusReading,
+    GuideDots,
+    HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
+    Hyphenation,
+    EmbeddedStyle,
+    AntiAliasing,
+    Count
+  };
 
   void applyFamily(int listIndex);
   void applySize(int listIndex);
@@ -58,6 +66,10 @@ class TextSettingsActivity final : public Activity {
   // uniform is off; indent % only in Custom% mode), so the visible list is built
   // from the live settings instead of being a fixed 1:1 with the enum.
   std::vector<LayoutRow> visibleLayoutRows() const;
+  // Same idea on the Style tab: Hidden Dots is a sub-option of Guide Dots and is
+  // only listed while Guide Dots is on.
+  std::vector<StyleRow> visibleStyleRows() const;
+  StrId styleRowNameId(StyleRow row) const;
   std::string layoutRowName(LayoutRow row) const;
   bool isLayoutToggleRow(LayoutRow row) const;
   void confirmLayoutRow(LayoutRow row);
@@ -65,7 +77,7 @@ class TextSettingsActivity final : public Activity {
   // Repopulates sizes_ (and currentSizeIndex_) from the active family's
   // installed point sizes. Call after any family change.
   void rebuildSizeList();
-  void confirmStyleRow(int row);
+  void confirmStyleRow(StyleRow row);
   // Applies the row at the given list index for the active tab (Confirm and tap share this).
   void activateRow(int row);
 
@@ -79,7 +91,7 @@ class TextSettingsActivity final : public Activity {
   };
   PaneGeometry paneGeometry() const;
   std::string layoutValueText(LayoutRow row) const;
-  std::string styleValueText(int row) const;
+  std::string styleValueText(StyleRow row) const;
   // True when the focused list row is a setting the preview cannot reflect.
   bool focusedRowHasNoPreview() const;
   void switchTab(int direction = 1);
