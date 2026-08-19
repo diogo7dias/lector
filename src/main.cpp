@@ -328,6 +328,11 @@ void enterDeepSleep(bool fromTimeout = false) {
     WiFi.mode(WIFI_OFF);
   }
 
+  // Read after the sleep screen has painted, so the passes it just spent are counted,
+  // and written with the state the next boot reads back.
+  APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
+  APP_STATE.saveToFile();
+
   PerfLog::flush();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -465,6 +470,10 @@ void setup() {
 
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
+  // Restore the anti-ghost budget the last session spent. Without this the count starts
+  // at zero on every wake — and since waking is a chip reset, that is every lock — so a
+  // device used in short sessions never reaches the full discharge and ghosts forever.
+  display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
   RECENT_BOOKS.loadFromFile();
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
   KOREADER_STORE.loadFromFile();

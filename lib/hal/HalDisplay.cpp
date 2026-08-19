@@ -174,6 +174,9 @@ bool HalDisplay::toggleInverted() { return einkDisplay.toggleInverted(); }
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
 void HalDisplay::deepSleep() {
+  // The budget the caller wants to carry across the lock has already been read out by
+  // then (see enterDeepSleep); this reset only clears the in-RAM copy the reset would
+  // have wiped anyway.
   refreshPolicy.reset();
   einkDisplay.deepSleep();
 }
@@ -224,7 +227,14 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::displayGrayBuffer(bool turnOffScreen) { einkDisplay.displayGrayBuffer(turnOffScreen); }
+// The grayscale planes go straight to the driver: there is no refresh mode to choose,
+// the waveform is the gray nudge. They still drive the panel and still leave charge, so
+// they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
+// or text anti-aliasing ages the panel while the budget stands still.
+void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+  refreshPolicy.noteExternalFastPass();
+  einkDisplay.displayGrayBuffer(turnOffScreen);
+}
 
 void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows) {
   einkDisplay.writeGrayscalePlaneStrip(lsbPlane ? EInkDisplay::GRAY_PLANE_LSB : EInkDisplay::GRAY_PLANE_MSB, rows,

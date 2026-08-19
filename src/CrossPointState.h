@@ -22,6 +22,10 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // home first when the screen it locked from cannot be rebuilt after the reset).
   bool quickResumeWake = false;
   bool quickResumeTargetIsReader = false;
+  // Anti-ghost budget carried across the lock: FAST panel passes since the last full
+  // discharge. Waking is a chip reset, so without this the count restarts every session
+  // and a device that is locked often never reaches the discharge threshold at all.
+  uint8_t fastRefreshesSinceFull = 0;
   // The book the next wake will open, chosen at lock so the sleep screen can name it.
   // "Open a random book on boot" would otherwise pick at wake time, naming one book on
   // the sleep screen and opening another. Empty means "use openEpubPath".

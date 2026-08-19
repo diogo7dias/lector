@@ -62,6 +62,12 @@ class HalDisplay {
   // Power management
   void deepSleep();
 
+  // Anti-ghost budget, carried across a lock by the caller. Waking from deep sleep is a
+  // chip reset, so without this the FAST budget starts at zero every session and a reader
+  // who locks the device often never earns the full discharge. See DisplayRefreshPolicy.
+  uint8_t fastRefreshesSinceFull() const { return refreshPolicy.fastSinceFull(); }
+  void seedFastRefreshesSinceFull(uint8_t value) { refreshPolicy.seedFastSinceFull(value); }
+
   // Drop the panel's high-voltage rails while leaving the image on the glass. The next
   // paint powers them back up on its own, so this is free to call whenever the device is
   // about to sit idle. Costs no flash and nothing visible. See PanelDriver::powerOff.
