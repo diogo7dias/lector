@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -92,10 +93,28 @@ class FontDownloadActivity : public Activity {
   // hang.
   int retryAttempt_ = 0;
 
+  // What the panel is currently showing. A differential refresh does not fully drive
+  // black pixels back to white, so switching screens (list -> progress -> result) or
+  // rewriting the "(n/total)" and retry lines leaves the old text behind as grey
+  // residue. Those moments take a cleanup pass; the progress bar's own ticks do not.
+  State lastDisplayedState_ = WIFI_SELECTION;
+  int lastDisplayedFamilyIndex_ = -1;
+  size_t lastDisplayedFileIndex_ = SIZE_MAX;
+  int lastDisplayedRetry_ = -1;
+  // Which PROGRESS_STEP_PERCENT bucket the drawn bar sits in, -1 before the first paint.
+  int lastDrawnProgressStep_ = -1;
+
   /** Attempts per file and per manifest fetch, first try included. */
   static constexpr int MAX_ATTEMPTS = 3;
   /** Pause before a retry; the second retry waits twice this. */
   static constexpr uint32_t RETRY_DELAY_MS = 1500;
+  /**
+   * How far the progress bar must move before the panel is redrawn. The download
+   * callback fires once per network chunk, which is hundreds of times per file, and
+   * every one of those was a full-screen refresh for a bar that had not visibly
+   * moved. Redrawing in steps keeps the bar honest and the panel clean.
+   */
+  static constexpr int PROGRESS_STEP_PERCENT = 5;
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();

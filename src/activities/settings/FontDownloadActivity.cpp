@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -299,6 +300,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       retryAttempt_ = attempt - 1;
       fileProgress_ = 0;
       fileTotal_ = file.size;
+      lastDrawnProgressStep_ = -1;
     }
     requestUpdateAndWait();
 
@@ -308,11 +310,16 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
         [this](size_t downloaded, size_t total) {
           fileProgress_ = downloaded;
           fileTotal_ = total;
+          // Cancel is polled on every chunk; only the repaint is rationed.
           mappedInput.update();
           if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
               mappedInput.wasPressed(MappedInputManager::Button::Back)) {
             cancelRequested_ = true;
           }
+          const int percent = total > 0 ? static_cast<int>(downloaded * 100 / total) : 0;
+          const int step = percent / PROGRESS_STEP_PERCENT;
+          if (step == lastDrawnProgressStep_) return;
+          lastDrawnProgressStep_ = step;
           requestUpdate(true);
         },
         &cancelRequested_);
@@ -652,9 +659,11 @@ void FontDownloadActivity::render(RenderLock&&) {
         static_cast<int>(progress * 100), 100);
 
     if (retryAttempt_ > 0) {
-      const std::string retryText = std::string(tr(STR_RETRY)) + " " + std::to_string(retryAttempt_ + 1) + "/" +
-                                    std::to_string(MAX_ATTEMPTS);
-      renderer.drawCenteredText(UI_10_FONT_ID, barY + metrics.progressBarHeight + metrics.verticalSpacing,
+      const std::string retryText =
+          std::string(tr(STR_RETRY)) + " " + std::to_string(retryAttempt_ + 1) + "/" + std::to_string(MAX_ATTEMPTS);
+      // Two gaps below the bar, not one: at one gap the line sits close enough to the
+      // bar's outline to read as touching it.
+      renderer.drawCenteredText(UI_10_FONT_ID, barY + metrics.progressBarHeight + metrics.verticalSpacing * 2,
                                 retryText.c_str());
     }
 
@@ -674,5 +683,16 @@ void FontDownloadActivity::render(RenderLock&&) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
-  renderer.displayBuffer();
+  // A differential pass leaves the previous screen showing through as grey residue,
+  // which is why the list used to sit under the progress bar for the whole download.
+  // The screen changes wholesale between states and at each new file, so those paints
+  // take a cleanup pass; the bar's own steps stay differential.
+  const bool screenChanged = state_ != lastDisplayedState_ || downloadingFamilyIndex_ != lastDisplayedFamilyIndex_ ||
+                             currentFileIndex_ != lastDisplayedFileIndex_ || retryAttempt_ != lastDisplayedRetry_;
+  lastDisplayedState_ = state_;
+  lastDisplayedFamilyIndex_ = downloadingFamilyIndex_;
+  lastDisplayedFileIndex_ = currentFileIndex_;
+  lastDisplayedRetry_ = retryAttempt_;
+
+  renderer.displayBuffer(screenChanged ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
 }
