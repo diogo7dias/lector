@@ -26,6 +26,14 @@ std::string_view fileNameOf(const std::string_view path) {
   return (lastSlash == std::string_view::npos) ? path : path.substr(lastSlash + 1);
 }
 
+std::string displayNameFor(const std::string_view title, const std::string_view path) {
+  constexpr const char* WHITESPACE = " \t\r\n";
+  const size_t first = title.find_first_not_of(WHITESPACE);
+  if (first == std::string_view::npos) return std::string(fileNameOf(path));
+  const size_t last = title.find_last_not_of(WHITESPACE);
+  return std::string(title.substr(first, last - first + 1));
+}
+
 std::string destinationCandidate(const std::string_view srcPath, const std::string_view folder, const int index) {
   const std::string_view filename = fileNameOf(srcPath);
   std::string dst(folder);

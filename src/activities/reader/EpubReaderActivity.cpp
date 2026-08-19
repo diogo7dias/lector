@@ -1410,7 +1410,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     case EpubReaderMenuActivity::MenuAction::DELETE_BOOK: {
       if (!epub) break;
       const std::string path = epub->getPath();
-      const std::string name = path.substr(path.rfind('/') + 1);
+      // The book's own title reads better in the prompt than its file name; a book
+      // whose metadata carries no usable title falls back to the name on the card.
+      const std::string name = bookfiling::displayNameFor(epub->getTitle(), path);
       // Erasing a book file cannot be undone, so it asks first. The deletion itself
       // waits for onExit, where the Epub is already released — the same ordering the
       // filing move uses, for the same reason.
