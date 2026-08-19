@@ -582,10 +582,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Off by default. The cost is that the wake shows no sign of progress: the wallpaper
   // simply sits there until the book appears.
   uint8_t wakeStraightToBook = 1;
-  // Open one of the books in progress at boot instead of resuming the last-read one
-  // (0 = resume, 1 = pick at random). Held Back and a prior reader crash both skip it,
-  // so it can never wedge boot.
-  uint8_t openRandomRecentOnBoot = 0;
+  // What boot opens by itself, before the ordinary routing has its say. OFF keeps that
+  // routing (home unless the last sleep came from the reader), LAST_BOOK always opens the
+  // last-read book, RANDOM picks one of the books in progress. Held Back and a prior
+  // reader crash skip both non-OFF modes, so neither can wedge boot.
+  enum BOOT_BOOK : uint8_t { BOOT_BOOK_OFF = 0, BOOT_BOOK_LAST = 1, BOOT_BOOK_RANDOM = 2, BOOT_BOOK_COUNT };
+  uint8_t bootBookMode = BOOT_BOOK_OFF;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order (0 = alphabetical, 1 = random). Random shuffles only the

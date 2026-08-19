@@ -489,8 +489,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::String(StrId::STR_DEVICE_NAME, &SETTINGS.deviceName[0], sizeof(SETTINGS.deviceName),
                                     "deviceName", StrId::STR_CAT_SYSTEM));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_OPEN_RANDOM_ON_BOOT, &CrossPointSettings::openRandomRecentOnBoot,
-                                    "openRandomRecentOnBoot", StrId::STR_CAT_SYSTEM));
+    v.push_back(SettingInfo::Enum(StrId::STR_OPEN_BOOK_ON_BOOT, &CrossPointSettings::bootBookMode,
+                                  {StrId::STR_BOOT_BOOK_OFF, StrId::STR_BOOT_BOOK_LAST, StrId::STR_BOOT_BOOK_RANDOM},
+                                  "bootBookMode", StrId::STR_CAT_SYSTEM));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles,
                                     "showHiddenFiles", StrId::STR_CAT_SYSTEM));

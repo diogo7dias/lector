@@ -1107,7 +1107,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
 
   // The book this sleep is guarding: the wake opens it, so the sleeping screen says
   // which one, in the same banner the unlock screen uses. enterDeepSleep() chose the
-  // path (a random pick when "Open a random book on boot" is on) before this ran, so
+  // path (the pick made by "Open Book on Boot") before this ran, so
   // the name here and the book the wake opens are the same book by construction.
   if (!APP_STATE.pendingWakeBookPath.empty()) {
     setUnlockBannerBookPath(APP_STATE.pendingWakeBookPath);

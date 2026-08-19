@@ -37,9 +37,9 @@ TEST(WakeRoutePolicy, QuickResumeFromABookReopensThatBook) {
   EXPECT_EQ(wake_route::resolve(quickResumeFromBook()), Route::ForceReader);
 }
 
-TEST(WakeRoutePolicy, QuickResumeFromABookIgnoresRandomBookOnBoot) {
+TEST(WakeRoutePolicy, QuickResumeFromABookIgnoresBookOnBoot) {
   WakeInputs in = quickResumeFromBook();
-  in.randomBookOnBoot = true;
+  in.bookOnBoot = true;
   EXPECT_EQ(wake_route::resolve(in), Route::ForceReader);
 }
 
@@ -56,10 +56,10 @@ TEST(WakeRoutePolicy, QuickResumeFromANonBookScreenLandsOnHome) {
   EXPECT_EQ(wake_route::resolve(in), Route::ForceHome);
 }
 
-TEST(WakeRoutePolicy, QuickResumeFromANonBookScreenIgnoresRandomBookOnBoot) {
+TEST(WakeRoutePolicy, QuickResumeFromANonBookScreenIgnoresBookOnBoot) {
   WakeInputs in = quickResumeFromBook();
   in.quickResumeTargetIsReader = false;
-  in.randomBookOnBoot = true;
+  in.bookOnBoot = true;
   EXPECT_EQ(wake_route::resolve(in), Route::ForceHome);
 }
 
@@ -106,7 +106,7 @@ TEST(WakeRoutePolicy, OrdinarySleepFacesAreLeftAlone) {
   in.sleptFromReader = true;
   EXPECT_EQ(wake_route::resolve(in), Route::Unchanged);
 
-  in.randomBookOnBoot = true;
+  in.bookOnBoot = true;
   EXPECT_EQ(wake_route::resolve(in), Route::Unchanged);
 }
 

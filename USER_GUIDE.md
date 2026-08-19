@@ -99,8 +99,9 @@ without stopping at any other screen.
 ### First launch
 
 The first boot lands on the [Home screen](#3-home-screen). Later boots reopen the book you
-were reading, unless **Open Random Book on Boot** is on, which opens a random recent book
-instead.
+were reading. **Open Book on Boot** changes that: **Last Book** opens the last-read book
+every time, even after the reader was closed, and **Random Book** opens one of the books in
+progress at random. Holding Back during boot skips both and lands on Home.
 
 On a fresh card, Lector creates the folders it uses: `/read`, `/recents`, `/sleep` and
 `/sleep pause` (that last name contains a space).
@@ -337,12 +338,12 @@ screen can show a stats dashboard.
 | Transparent    | A BMP or PNG overlay drawn on top of whatever the screen was showing.             |
 
 On **Light**, waking always opens the book the sleep screen named, even when you locked
-from the home menu. With "Open a random book on boot" on, the random book is chosen when
-the device goes to sleep, so the name on the sleep screen is the book you get.
+from the home menu. The book it names is chosen when the device goes to sleep, so the name
+on the sleep screen is always the book you get.
 
 **Quick Resume** is meant to be invisible: the moon appears when you lock, and waking puts
 you back exactly where you were with the moon gone. Nothing else is drawn over it, and
-"Open a random book on boot" does not apply to it. Because waking is a full restart, only
+"Open Book on Boot" does not apply to it. Because waking is a full restart, only
 a book page can be rebuilt, so locking from a menu or a settings screen shows the home
 screen from the moment you lock rather than changing under you on the way back.
 
@@ -772,7 +773,7 @@ Session**. Alongside them:
 
 - **Show Hidden Files**.
 - **File Browser Order** — Alphabetical or Random.
-- **Open Random Book on Boot**.
+- **Open Book on Boot** — Off, Last Book or Random Book.
 - **Clear Read Books from Recent List**.
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
