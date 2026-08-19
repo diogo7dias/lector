@@ -5,12 +5,14 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WiFi.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
 
 #include "CrossPointSettings.h"
 #include "FontInstaller.h"
@@ -505,13 +507,37 @@ void CrossPointWebServer::handleFileListData() const {
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
+
+  // One TCP segment's worth of entries per write. The old code called sendContent()
+  // twice per file, and every call is its own chunked-encoding chunk and its own TCP
+  // write: a folder of 6000 images meant about 12000 writes, which took long enough
+  // that the browser gave up before the listing arrived.
+  //
+  // Heap, not stack: this runs on the web-server task, and 1.4 KB is a lot to add to
+  // it. The allocation is fallible, and failing it just falls back to the old
+  // per-entry path rather than dropping the listing.
+  constexpr size_t BATCH_CAPACITY = 1400;
+  auto batch = makeUniqueNoThrow<char[]>(BATCH_CAPACITY);
+  size_t batchLen = 0;
+  const auto flushBatch = [&] {
+    if (batchLen == 0) return;
+    server->sendContent(batch.get(), batchLen);
+    batchLen = 0;
+  };
+
   char output[512];
   constexpr size_t outputSize = sizeof(output);
   bool seenFirst = false;
   JsonDocument doc;
 
-  scanFiles(currentPath.c_str(), [this, &output, &doc, seenFirst](const FileInfo& info) mutable {
+  if (batch) {
+    batch[batchLen++] = '[';
+  } else {
+    LOG_ERR("WEB", "OOM: file list batch buffer; falling back to per-entry sends");
+    server->sendContent("[");
+  }
+
+  scanFiles(currentPath.c_str(), [&](const FileInfo& info) {
     doc.clear();
     doc["name"] = info.name;
     doc["size"] = info.size;
@@ -525,14 +551,26 @@ void CrossPointWebServer::handleFileListData() const {
       return;
     }
 
-    if (seenFirst) {
-      server->sendContent(",");
+    const size_t required = written + (seenFirst ? 1 : 0);
+    if (batch) {
+      if (batchLen + required > BATCH_CAPACITY) flushBatch();
+      if (seenFirst) batch[batchLen++] = ',';
+      memcpy(batch.get() + batchLen, output, written);
+      batchLen += written;
     } else {
-      seenFirst = true;
+      if (seenFirst) server->sendContent(",");
+      server->sendContent(output);
     }
-    server->sendContent(output);
+    seenFirst = true;
   });
-  server->sendContent("]");
+
+  if (batch) {
+    if (batchLen + 1 > BATCH_CAPACITY) flushBatch();
+    batch[batchLen++] = ']';
+    flushBatch();
+  } else {
+    server->sendContent("]");
+  }
   // End of streamed response, empty chunk to signal client
   server->sendContent("");
   LOG_DBG("WEB", "Served file listing page for path: %s", currentPath.c_str());

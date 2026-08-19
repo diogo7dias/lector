@@ -4,6 +4,7 @@
 #include <ESPmDNS.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -412,7 +413,12 @@ void CrossPointWebServerActivity::render(RenderLock&&) {
       const auto top = (pageHeight - height) / 2;
       renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_STARTING_HOTSPOT));
     }
-    renderer.displayBuffer();
+    // This screen is nearly all QR code, and a differential waveform will not clear a
+    // dense block of black: the old pattern stays as speckle under the new one, which is
+    // what made the transfer screen unreadable. It repaints only on entry, on a state
+    // change and when the signal bar moves, so paying for a cleanup pass every time costs
+    // nothing anyone is waiting on.
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 }
 
