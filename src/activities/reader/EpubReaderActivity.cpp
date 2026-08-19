@@ -224,6 +224,15 @@ void EpubReaderActivity::onEnter() {
 void EpubReaderActivity::onExit() {
   Activity::onExit();
 
+  // Page turns batch their progress writes, so whatever is still queued has to land here.
+  // This is also the sleep path: ActivityManager::goToSleep() replaces this activity, which
+  // runs onExit() before the device drops into deep sleep.
+  if (!flushQueuedProgress()) {
+    LOG_ERR("ERS", "Failed to flush batched reader progress on exit");
+  }
+
+  releaseGrayscaleStripScratch();
+
   // Leaving the book is one of the two moments queued favourite renames run (the
   // other is sleep entry). Fire-and-forget: the worker's directory scans overlap
   // this exit's own card work instead of ever standing between a press and a page.
@@ -2454,6 +2463,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         };
         // Lend the framebuffer's 48 KB to the blocking full build; restored
         // (white) at scope exit, and the page render below redraws everything.
+        // The strip scratch is dead weight during a build and competes with the arena it needs.
+        releaseGrayscaleStripScratch();
         GfxRenderer::FrameBufferLoan loan(renderer);
         if (!section->createSectionFile(renderSpec, popupFn)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
@@ -2525,6 +2536,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           // background builder in loop() it has no heap gate, so an oversized chapter
           // could fail its arena allocation here and take the whole chapter down with
           // it. The loan is dropped around any popup so drawing still works.
+          releaseGrayscaleStripScratch();
           auto loan = makeUniqueNoThrow<GfxRenderer::FrameBufferLoan>(renderer);
           {
             started = section->startBuild(renderSpec, [this, &loan] {
@@ -2817,7 +2829,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // Every real page turn changes currentPage, so progress durability is unaffected.
   if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
       section->pageCount != lastSavedPageCount) {
-    if (saveProgress(currentSpineIndex, section->currentPage, section->estimatedTotalPages())) {
+    // A changed page count means the chapter was re-laid out (font, margins, spacing), so the
+    // stored pagination is now wrong and has to go to the card immediately. An ordinary page
+    // turn only moves the position, which the debouncer is allowed to batch.
+    const bool relayout = section->pageCount != lastSavedPageCount && lastSavedPageCount != -1;
+    if (queueProgressSave(currentSpineIndex, section->currentPage, section->estimatedTotalPages(), relayout)) {
       lastSavedSpineIndex = currentSpineIndex;
       lastSavedPage = section->currentPage;
       lastSavedPageCount = section->estimatedTotalPages();
@@ -2896,6 +2912,15 @@ void EpubReaderActivity::clearDeferredReposition() {
   cachedVisibleTextOffset.reset();
 }
 
+namespace {
+// Spine index and page packed into one key so the debouncer can compare positions without
+// knowing the reader's layout. Both fit: a spine has fewer than 65536 items and a chapter
+// fewer than 65536 pages.
+uint32_t positionKeyFor(const int spineIndex, const int currentPage) {
+  return (static_cast<uint32_t>(spineIndex) << 16) | static_cast<uint16_t>(currentPage);
+}
+}  // namespace
+
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   std::optional<uint32_t> offset;
   if (section && spineIndex == currentSpineIndex && currentPage >= 0 && currentPage < section->pageCount) {
@@ -2905,7 +2930,53 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
                  ? currentPageVisibleOffset
                  : section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
   }
-  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset);
+  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset)) {
+    return false;
+  }
+  // Every write clears the batch, whoever asked for it: an explicit save (sync, nearby
+  // send, chapter jump) leaves nothing behind for the flush on exit to repeat.
+  progressSaveDebouncer.markPersisted(positionKeyFor(spineIndex, currentPage), static_cast<uint32_t>(pageCount));
+  return true;
+}
+
+bool EpubReaderActivity::queueProgressSave(const int spineIndex, const int currentPage, const int pageCount,
+                                           const bool forceSave) {
+  const bool due =
+      progressSaveDebouncer.observe(positionKeyFor(spineIndex, currentPage), static_cast<uint32_t>(pageCount));
+  if (!due && !forceSave) {
+    return true;
+  }
+  return saveProgress(spineIndex, currentPage, pageCount);
+}
+
+uint8_t* EpubReaderActivity::acquireGrayscaleStripScratch(const size_t bytes) {
+  if (grayscaleStripScratch && grayscaleStripScratchBytes >= bytes) {
+    return grayscaleStripScratch.get();
+  }
+  // Orientation or panel geometry changed: drop the old block first so the new request is not
+  // asked for on top of it.
+  grayscaleStripScratch.reset();
+  grayscaleStripScratchBytes = 0;
+  grayscaleStripScratch = makeUniqueNoThrow<uint8_t[]>(bytes);
+  if (!grayscaleStripScratch) {
+    return nullptr;
+  }
+  grayscaleStripScratchBytes = bytes;
+  return grayscaleStripScratch.get();
+}
+
+void EpubReaderActivity::releaseGrayscaleStripScratch() {
+  grayscaleStripScratch.reset();
+  grayscaleStripScratchBytes = 0;
+}
+
+bool EpubReaderActivity::flushQueuedProgress() {
+  if (!progressSaveDebouncer.hasPending() || !epub) {
+    return true;
+  }
+  const uint32_t positionKey = progressSaveDebouncer.lastObservedPosition();
+  return saveProgress(static_cast<int>(positionKey >> 16), static_cast<int>(positionKey & 0xFFFFU),
+                      static_cast<int>(progressSaveDebouncer.lastObservedMetadata()));
 }
 
 void EpubReaderActivity::rememberCurrentContentOffset() {
@@ -3115,7 +3186,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
       // Per-strip scratch tier: blocking panels (X3) and the OOM fallback.
       // The strip writes below need the panel idle, so wait out any pending
       // async refresh first (no-op on blocking panels).
-      auto scratch = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(gwBytes) * STRIP_ROWS);
+      uint8_t* scratch = acquireGrayscaleStripScratch(static_cast<size_t>(gwBytes) * STRIP_ROWS);
       renderer.waitRefreshComplete();
       if (!scratch) {
         LOG_ERR("ERS", "OOM: grayscale strip scratch (%d bytes); skipping AA this page", gwBytes * STRIP_ROWS);
@@ -3132,11 +3203,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
         for (int y = 0; y < gh; y += STRIP_ROWS) {
           const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
-          renderer.beginStripTarget(scratch.get(), y, rows);
+          renderer.beginStripTarget(scratch, y, rows);
           renderer.clearScreen(0x00);
           renderGrayscalePass();
           renderer.endStripTarget();
-          renderer.writeGrayscalePlaneStrip(true, scratch.get(), y, rows);
+          renderer.writeGrayscalePlaneStrip(true, scratch, y, rows);
         }
         const auto tGrayLsb = millis();
 
@@ -3144,11 +3215,11 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
         renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
         for (int y = 0; y < gh; y += STRIP_ROWS) {
           const int rows = (gh - y < STRIP_ROWS) ? (gh - y) : STRIP_ROWS;
-          renderer.beginStripTarget(scratch.get(), y, rows);
+          renderer.beginStripTarget(scratch, y, rows);
           renderer.clearScreen(0x00);
           renderGrayscalePass();
           renderer.endStripTarget();
-          renderer.writeGrayscalePlaneStrip(false, scratch.get(), y, rows);
+          renderer.writeGrayscalePlaneStrip(false, scratch, y, rows);
         }
         const auto tGrayMsb = millis();
 

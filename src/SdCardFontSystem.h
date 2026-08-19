@@ -14,7 +14,9 @@ class SdCardFontSystem {
   SdCardFontSystem() = default;
   SdCardFontSystem(const SdCardFontSystem&) = delete;
   SdCardFontSystem& operator=(const SdCardFontSystem&) = delete;
-  /// Discover SD card fonts and load user's saved selection. Call once during setup.
+  /// Register the font-id resolver and load the user's saved SD selection. Call once during
+  /// setup. The card is only scanned here when a custom font is actually selected; with the
+  /// built-in fonts the scan is deferred to the first caller that needs the family list.
   void begin(GfxRenderer& renderer);
 
   /// Ensure the correct SD font family is loaded for the current global settings.
@@ -35,10 +37,17 @@ class SdCardFontSystem {
   int resolveFontId(const char* familyName, uint8_t pointSize) const;
 
   /// Access the registry (e.g. for settings UI to enumerate available fonts).
-  const SdCardFontRegistry& registry() const { return registry_; }
+  /// Scans the card on first use if begin() deferred it.
+  const SdCardFontRegistry& registry() const {
+    ensureDiscovered();
+    return registry_;
+  }
 
   /// Non-const access to the registry (for FontInstaller).
-  SdCardFontRegistry& registry() { return registry_; }
+  SdCardFontRegistry& registry() {
+    ensureDiscovered();
+    return registry_;
+  }
 
   /// Mark the registry as needing re-discovery.
   /// Thread-safe: can be called from the web server task.
@@ -50,6 +59,7 @@ class SdCardFontSystem {
   void refreshIfDirty() {
     if (registryDirty_.exchange(false, std::memory_order_acquire)) {
       registry_.discover();
+      discovered_ = true;
     }
   }
 
@@ -67,7 +77,14 @@ class SdCardFontSystem {
   // never do that.
   void ensureLoadedImpl(GfxRenderer& renderer, const char* wantedFamily, uint8_t pointSize, bool ownsGlobalSelection);
 
-  SdCardFontRegistry registry_;
+  // Scan the card once, on demand. Booting with the built-in fonts never needs the family
+  // list, and the scan walks both font roots probing every file, which is pure startup cost
+  // for a reader that has no SD fonts installed. mutable so the const registry() accessor can
+  // still trigger the deferred scan.
+  void ensureDiscovered() const;
+
+  mutable SdCardFontRegistry registry_;
+  mutable bool discovered_ = false;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
 };

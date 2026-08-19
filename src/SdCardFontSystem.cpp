@@ -37,9 +37,13 @@ constexpr UiFontSize kUiFontSizes[] = {
 
 }  // namespace
 
-void SdCardFontSystem::begin(GfxRenderer& renderer) {
+void SdCardFontSystem::ensureDiscovered() const {
+  if (discovered_) return;
+  discovered_ = true;
   registry_.discover();
+}
 
+void SdCardFontSystem::begin(GfxRenderer& renderer) {
   // Register this system as the SD font ID resolver in settings.
   // Uses a static trampoline since CrossPointSettings stores a plain function pointer.
   SETTINGS.sdFontIdResolver = [](void* ctx, const char* familyName, uint8_t pointSize) -> int {
@@ -47,8 +51,10 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   };
   SETTINGS.sdFontResolverCtx = this;
 
-  // If user has a saved SD font selection, load it
+  // If user has a saved SD font selection, load it. This is the only boot path that needs
+  // the family list, so it is also the only one that pays for the scan.
   if (SETTINGS.sdFontFamilyName[0] != '\0') {
+    ensureDiscovered();
     const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
     if (family) {
       if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
@@ -65,7 +71,8 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
     }
   }
 
-  LOG_DBG("SDFS", "SD font system ready (%d families discovered)", registry_.getFamilyCount());
+  LOG_DBG("SDFS", "SD font system ready (%s)",
+          discovered_ ? "card scanned" : "card scan deferred until a font list is needed");
 }
 
 void SdCardFontSystem::ensureLoaded(GfxRenderer& renderer) {
@@ -79,6 +86,12 @@ void SdCardFontSystem::ensureLoadedFor(GfxRenderer& renderer, const char* family
 
 void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wantedFamily, const uint8_t pointSize,
                                         const bool ownsGlobalSelection) {
+  // Nothing below can match a family without the card having been scanned, and a caller
+  // asking for a named family is exactly the moment a deferred scan has to happen.
+  if (wantedFamily && wantedFamily[0] != '\0') {
+    ensureDiscovered();
+  }
+
   // If the web server (or another task) installed/deleted fonts, re-discover.
   // Track whether we just re-discovered so we can force a reload below even
   // when the wanted family/size still maps to the same point size — the file
@@ -87,6 +100,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
   if (registryWasDirty) {
     LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
     registry_.discover();
+    discovered_ = true;
   }
 
   const std::string& currentFamily = manager_.currentFamilyName();

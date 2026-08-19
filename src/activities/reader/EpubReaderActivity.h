@@ -11,6 +11,7 @@
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
 #include "ReaderPrefs.h"
+#include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
@@ -186,6 +187,23 @@ class EpubReaderActivity final : public Activity {
   int lastSavedPage = -1;
   int lastSavedPageCount = -1;
 
+  // Ordinary page turns are batched instead of writing progress on each one:
+  // EpubReaderUtils::saveProgress() is a writeAtomic, several FAT operations for
+  // six bytes, and on the X3 that lands between the button press and the page.
+  // Flushed on exit, which is also the sleep path (ActivityManager::goToSleep()
+  // replaces this activity and so runs onExit()).
+  ReaderProgressSaveDebouncer progressSaveDebouncer;
+
+  // Grayscale strip scratch for the blocking (X3) tier of renderContents(). It used to be
+  // allocated and freed on every page render; a whole reading session of that churn measurably
+  // decays the largest contiguous block. Kept alive between pages instead and handed back
+  // before the heap-hungry work (section builds, leaving the book).
+  std::unique_ptr<uint8_t[]> grayscaleStripScratch;
+  size_t grayscaleStripScratchBytes = 0;
+  // Returns nullptr when the allocation fails, exactly as the old per-page allocation did.
+  uint8_t* acquireGrayscaleStripScratch(size_t bytes);
+  void releaseGrayscaleStripScratch();
+
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
   // Reader text margins from the per-book prefs: oriented viewable insets plus the
@@ -269,6 +287,11 @@ class EpubReaderActivity final : public Activity {
   void clearDeferredReposition();
   void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
+  // Page-turn path: writes only when the debouncer says the batch is due, or when
+  // forceSave is set (a re-layout changed the pagination and must not be left stale).
+  bool queueProgressSave(int spineIndex, int currentPage, int pageCount, bool forceSave = false);
+  // Write whatever the debouncer is still holding. Call before the book goes away.
+  bool flushQueuedProgress();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
   void jumpToPercent(int percent);
   // Jump to a paragraph number as shown by the paragraph-number marks. Numbering restarts
