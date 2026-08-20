@@ -21,7 +21,15 @@ uint32_t lastAsyncUs = 0;
 uint16_t lastThinkMs = kNoThink;
 uint16_t lastInkScore = 0;
 uint16_t lastInkDebt = 0;
+uint32_t lastWireUs = 0;
+uint32_t lastWaveUs = 0;
 bool haveLast = false;
+
+// Running totals of the split, so the summary can say where a whole session went rather
+// than only where the last refresh went.
+uint64_t sumWireUs = 0;
+uint64_t sumWaveUs = 0;
+uint64_t sumTotalUs = 0;
 
 uint32_t promoted = 0;
 uint8_t activePll = 0;
@@ -58,7 +66,8 @@ uint16_t takeThinkMs(const uint32_t nowMs) {
 }
 
 void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const uint32_t totalUs,
-                 const uint32_t asyncStartUs, const uint16_t thinkMs, const uint16_t inkScore, const uint16_t inkDebt) {
+                 const uint32_t asyncStartUs, const uint16_t thinkMs, const uint16_t inkScore, const uint16_t inkDebt,
+                 const uint32_t wireUs, const uint32_t waveUs) {
   if (actualMode < kModeCount) {
     ModeStats& s = stats[actualMode];
     if (s.count == 0 || totalUs < s.minUs) s.minUs = totalUs;
@@ -78,6 +87,11 @@ void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const ui
   lastThinkMs = thinkMs;
   lastInkScore = inkScore;
   lastInkDebt = inkDebt;
+  lastWireUs = wireUs;
+  lastWaveUs = waveUs;
+  sumWireUs += wireUs;
+  sumWaveUs += waveUs;
+  sumTotalUs += totalUs;
   haveLast = true;
 }
 
@@ -96,13 +110,25 @@ void formatLastLine(char* const out, const size_t outLen) {
   // Microseconds are divided down here rather than stored that way: the overlay is read
   // at arm's length on an e-ink panel, where a digit of precision past the millisecond is
   // noise. The CSV keeps the full resolution.
-  char split[16] = {0};
-  if (lastAsyncUs > 0) snprintf(split, sizeof(split), " split %lu", static_cast<unsigned long>(lastAsyncUs / 1000));
+  char split[12] = {0};
+  if (lastAsyncUs > 0) snprintf(split, sizeof(split), " s%lu", static_cast<unsigned long>(lastAsyncUs / 1000));
 
-  snprintf(out, outLen, "%s/%s think %s panel %lu%s ink %u/%u prom %lu pll %02X", modeName(lastRequested),
-           modeName(lastActual), think, static_cast<unsigned long>(lastTotalUs / 1000), split,
+  // Abbreviated deliberately. The overlay is one line drawn across the top of the panel,
+  // and the narrow axis is 480 px on X4: a spelled-out line no longer fits, and a line
+  // that does not fit is drawn off the edge, which is its own bug. The CSV on the card
+  // carries the same fields with full names in its header — that is the record; this is
+  // the glance. Fields: t think, p panel total, w wire, v waveform, s async split.
+  snprintf(out, outLen, "%s/%s t%s p%lu w%lu v%lu%s ink%u/%u pr%lu pll%02X", modeName(lastRequested),
+           modeName(lastActual), think, static_cast<unsigned long>(lastTotalUs / 1000),
+           static_cast<unsigned long>(lastWireUs / 1000), static_cast<unsigned long>(lastWaveUs / 1000), split,
            static_cast<unsigned>(lastInkScore), static_cast<unsigned>(lastInkDebt),
            static_cast<unsigned long>(promoted), static_cast<unsigned>(activePll));
+}
+
+void splitTotals(uint64_t& wireUs, uint64_t& waveUs, uint64_t& totalUs) {
+  wireUs = sumWireUs;
+  waveUs = sumWaveUs;
+  totalUs = sumTotalUs;
 }
 
 size_t formatSummary(char (*const lines)[64], const size_t maxLines) {

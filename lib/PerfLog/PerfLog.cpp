@@ -19,6 +19,8 @@ struct Record {
   uint32_t ms;
   uint32_t totalUs;
   uint32_t asyncStartUs;
+  uint32_t wireUs;  // streaming the frame into controller RAM
+  uint32_t waveUs;  // waiting on BUSY while the panel drives
   char screen[14];  // copied, see setScreen
   uint16_t seq;
   uint16_t thinkMs;
@@ -56,7 +58,8 @@ const char* modeName(const uint8_t mode) {
 void begin(const LineSink sink, const CommitSink commit) {
   lineSink = sink;
   commitSink = commit;
-  if (lineSink != nullptr) lineSink("seq,ms,screen,req,run,total_us,async_start_us,think_ms,ink,debt\n");
+  if (lineSink != nullptr)
+    lineSink("seq,ms,screen,req,run,total_us,wire_us,wave_us,async_start_us,think_ms,ink,debt\n");
   if (commitSink != nullptr) commitSink();
 }
 
@@ -68,7 +71,8 @@ void setScreen(const char* screenName) {
 }
 
 void record(const uint8_t requestedMode, const uint8_t actualMode, const uint32_t totalUs, const uint32_t asyncStartUs,
-            const uint16_t thinkMs, const uint16_t inkScore, const uint16_t inkDebt) {
+            const uint16_t thinkMs, const uint16_t inkScore, const uint16_t inkDebt, const uint32_t wireUs,
+            const uint32_t waveUs) {
   // The whole cost of a build with the setting off, on every refresh it ever performs.
   if (lineSink == nullptr) return;
 
@@ -85,6 +89,8 @@ void record(const uint8_t requestedMode, const uint8_t actualMode, const uint32_
   r.ms = millis();
   r.totalUs = totalUs;
   r.asyncStartUs = asyncStartUs;
+  r.wireUs = wireUs;
+  r.waveUs = waveUs;
   snprintf(r.screen, sizeof(r.screen), "%s", currentScreen);
   r.seq = sequence++;
   r.thinkMs = thinkMs;
@@ -120,9 +126,10 @@ void flush() {
     // spreadsheet averaging the column must not be handed a 65535 to average in.
     char think[8] = {0};
     if (r.thinkMs != PerfStats::kNoThink) snprintf(think, sizeof(think), "%u", static_cast<unsigned>(r.thinkMs));
-    snprintf(line, sizeof(line), "%u,%lu,%s,%s,%s,%lu,%lu,%s,%u,%u\n", static_cast<unsigned>(r.seq),
+    snprintf(line, sizeof(line), "%u,%lu,%s,%s,%s,%lu,%lu,%lu,%lu,%s,%u,%u\n", static_cast<unsigned>(r.seq),
              static_cast<unsigned long>(r.ms), r.screen, modeName(r.requested), modeName(r.actual),
-             static_cast<unsigned long>(r.totalUs), static_cast<unsigned long>(r.asyncStartUs), think,
+             static_cast<unsigned long>(r.totalUs), static_cast<unsigned long>(r.wireUs),
+             static_cast<unsigned long>(r.waveUs), static_cast<unsigned long>(r.asyncStartUs), think,
              static_cast<unsigned>(r.inkScore), static_cast<unsigned>(r.inkDebt));
     if (!lineSink(line)) droppedRecords++;
   }

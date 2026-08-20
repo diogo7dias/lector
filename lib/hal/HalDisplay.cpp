@@ -132,12 +132,17 @@ uint16_t HalDisplay::scoreFrame(const RefreshMode requested) {
 void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMode actual, const uint32_t totalUs,
                                    const uint32_t asyncStartUs, const uint16_t thinkMs, const uint16_t inkScore) const {
   const uint16_t debt = refreshPolicy.inkDebt();
-  PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt);
-  PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt);
+  // Read once, here, so every refresh path reports the split without having to remember
+  // to. The counters were armed by beginRefreshAccounting() at the top of that path.
+  const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
+  const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
+  PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
+  PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   const RefreshMode requested = mode;
+  EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   const uint16_t inkScore = scoreFrame(requested);
@@ -153,6 +158,7 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   const RefreshMode requested = mode;
+  EInkDisplay::resetRefreshAccounting();
   pendingAsyncStartUs = micros();
   // Taken at the start, not at completion: the press this paint answers is outstanding
   // now, and waitRefreshComplete() may be called long after a later press has landed.
@@ -196,6 +202,7 @@ bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsync
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   const RefreshMode requested = mode;
+  EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   mode = applyRefreshPolicy(mode);

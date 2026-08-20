@@ -30,24 +30,34 @@ A measurement that needs its own firmware is a measurement nobody takes.
 
 ## The overlay
 
-`FAST/HALF think 41 panel 623 split 96 ink 302/3800 prom 3 pll 09`
+`FAST/HALF t41 p623 w96 v500 s96 ink302/3800 pr3 pll09`
 
-- `req/run` — mode asked for, and mode the driver actually ran.
-- `think` — milliseconds from the button press to the refresh call. This is the firmware
-  deciding what to draw. A dash means no press was outstanding, i.e. this paint was not
-  answering a button.
-- `panel` — milliseconds the refresh call itself took.
-- `split` — on an async refresh, the part that returned before the panel had finished.
+Abbreviated because it is one line across the top of the panel and the narrow axis is
+480 px on X4. A line that does not fit is drawn off the edge, which is its own bug. The
+CSV on the card carries the same fields with full names; that is the record, this is the
+glance.
+
+- `FAST/HALF` — mode asked for, and mode the driver actually ran.
+- `t` — think: milliseconds from the button press to the refresh call. This is the
+  firmware deciding what to draw. A dash means no press was outstanding, i.e. this paint
+  was not answering a button.
+- `p` — panel: milliseconds the refresh call itself took.
+- `w` / `v` — of that panel time, wire and waveform. Wire is time inside SPI transactions,
+  streaming the frame into controller RAM. Waveform is time waiting on BUSY while the
+  panel drives. Whatever `p` does not account for is host work.
+- `s` — on an async refresh, the part that returned before the panel had finished.
+  Omitted when zero.
 - `ink` — this frame's score out of 1000, then the ink debt outstanding. A text page turn
   scores around 300, a menu row move around 10, a whole-screen inversion 1000.
-- `prom` — how many FAST requests the anti-ghost policy has promoted to something slower
+- `pr` — how many FAST requests the anti-ghost policy has promoted to something slower
   since boot.
 - `pll` — the X3 frame-clock byte in force (see below). Meaningless on X4, printed anyway
   so one format serves both devices.
 
-`think` against `panel` is the point of the overlay. A menu that feels slow is either the
-firmware being slow to decide or the ink being slow to move, and those are unrelated
-problems with unrelated fixes.
+Two comparisons are the point of the overlay. `t` against `p` says whether a slow
+interaction is the firmware deciding or the ink moving; those are unrelated problems with
+unrelated fixes. `w` against `v` then says which half of the panel time is worth attacking
+— a faster bus and fewer bytes fix one, only a different waveform fixes the other.
 
 The line describes the PREVIOUS refresh, necessarily: a refresh's cost is not known until
 the panel has finished, and by then the frame that would report it is already ink.
@@ -83,6 +93,8 @@ one row per refresh:
 | `req` | Mode the firmware asked for: `FAST`, `HALF`, `FULL` |
 | `run` | Mode actually used, after the refresh policy and the driver's own overrides |
 | `total_us` | Request to return, in microseconds: the number a finger feels |
+| `wire_us` | Of that, microseconds inside SPI transactions — streaming the frame into controller RAM |
+| `wave_us` | Of that, microseconds waiting on BUSY while the panel drives its waveform |
 | `async_start_us` | On an async refresh, the part that returned before the panel finished. 0 on a blocking refresh |
 | `think_ms` | Milliseconds from the button press that caused this paint. Empty when no press was outstanding |
 | `ink` | What this frame was scored at, 0-1000 (see `lib/hal/FrameInkMetrics.h`). 0 on paths with no framebuffer to measure |
@@ -91,15 +103,15 @@ one row per refresh:
 `req` and `run` are separate columns on purpose. Both panel drivers override the requested
 mode in places, and the size of that gap is itself one of the things being measured.
 
+`total_us - wire_us - wave_us` is host work: policy, ink scoring, and the driver's own
+per-refresh bookkeeping. Each of the three has a different fix, and a single elapsed total
+cannot tell them apart — a measured X4 FAST was 773 ms flat while the same panel's sleep
+FAST was 367 ms, and nothing in the totals said where the other 406 ms went.
+
+The end of each file carries the same split summed over the whole session, on a
+`# split wire N ms wave N ms host N ms of N ms` line.
+
 ## What it cannot see, and why
-
-The bus / waveform / post-work split lives inside the SDK, and the SDK is a submodule this
-build does not fork for a measurement.
-
-`async_start_us` is the usable stand-in. On async paths it is the time to fire the
-waveform — commands issued, bytes pushed — while `total_us` also covers the wait and the
-driver's post-work. The difference separates "pushing bytes" from "waiting for ink and
-cleaning up", which is the distinction the speed work turns on.
 
 Panel temperature is not recorded because neither driver can read one back. The
 temperature values in the drivers are constants written to the panel, not readings.

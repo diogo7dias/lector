@@ -95,4 +95,20 @@ void logPerfSummary() {
   char promotedLine[64];
   snprintf(promotedLine, sizeof(promotedLine), "promoted %lu", static_cast<unsigned long>(PerfStats::promotedCount()));
   PerfLog::note(promotedLine);
+
+  // Where the session's panel time actually went. The per-row split answers this for one
+  // refresh; this answers it for the run, which is the number that decides whether the
+  // next change should be to the waveform, to the bus, or to how much work a frame costs.
+  uint64_t wireUs = 0;
+  uint64_t waveUs = 0;
+  uint64_t totalUs = 0;
+  PerfStats::splitTotals(wireUs, waveUs, totalUs);
+  if (totalUs > 0) {
+    const uint64_t hostUs = totalUs > wireUs + waveUs ? totalUs - wireUs - waveUs : 0;
+    char splitLine[96];
+    snprintf(splitLine, sizeof(splitLine), "split wire %lu ms wave %lu ms host %lu ms of %lu ms",
+             static_cast<unsigned long>(wireUs / 1000), static_cast<unsigned long>(waveUs / 1000),
+             static_cast<unsigned long>(hostUs / 1000), static_cast<unsigned long>(totalUs / 1000));
+    PerfLog::note(splitLine);
+  }
 }

@@ -40,11 +40,30 @@ uint16_t takeThinkMs(uint32_t nowMs);
 // `inkScore` is what FrameInkMetrics made of the frame (0..1000) and `inkDebt` the running
 // total the anti-ghost policy holds after it. Both are reported because the thresholds
 // that turn them into a clean pass can only be tuned against real content.
+// `wireUs` is the time spent streaming the frame into controller RAM and `waveUs` the time
+// spent waiting on BUSY while the panel drives. Whatever the total does not account for is
+// host work. The three have completely different fixes — a faster bus, a different
+// waveform, less work per frame — and one elapsed number cannot tell them apart. A
+// measured X4 FAST was 773 ms flat while the same panel's sleep FAST was 367 ms, and
+// nothing in the totals said where the other 406 ms went.
 void noteRefresh(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t asyncStartUs, uint16_t thinkMs,
-                 uint16_t inkScore, uint16_t inkDebt);
+                 uint16_t inkScore, uint16_t inkDebt, uint32_t wireUs, uint32_t waveUs);
+
+// Session totals of that split, for the end-of-session summary written to the card.
+void splitTotals(uint64_t& wireUs, uint64_t& waveUs, uint64_t& totalUs);
 
 // One line for the on-panel overlay, describing the PREVIOUS refresh: a refresh cannot
-// report its own cost inside the frame it is drawing. Fills `out`; pass at least 64 bytes.
+// report its own cost inside the frame it is drawing. Fills `out`; pass at least 96 bytes.
+//
+// Abbreviated to fit the narrow panel axis (480 px on X4). Reading order:
+//   FAST/HALF  requested mode / mode actually run
+//   t41        think, ms from the button press to the refresh call ("-" if none)
+//   p623       panel, the whole refresh call in ms
+//   w96 v500   of that panel time, wire (frame into controller RAM) and waveform (BUSY)
+//   s96        async split: the part that returned before the panel finished (omitted if 0)
+//   ink302/3800  this frame's ink score, and the anti-ghost debt after it
+//   pr3        refreshes promoted out of FAST so far this session
+//   pll09      the X3 frame-clock byte in force (meaningless on X4, shown anyway)
 void formatLastLine(char* out, size_t outLen);
 
 // The accumulated table, one line per mode that has run, for the diagnostics screen.
