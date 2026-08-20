@@ -496,9 +496,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_HIDDEN_FILES, &CrossPointSettings::showHiddenFiles,
                                     "showHiddenFiles", StrId::STR_CAT_SYSTEM));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BROWSER_ORDER, &CrossPointSettings::bookBrowserRandomOrder,
-                                  {StrId::STR_BOOK_ORDER_ALPHABETICAL, StrId::STR_BOOK_ORDER_RANDOM},
-                                  "bookBrowserRandomOrder", StrId::STR_CAT_SYSTEM));
+    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BROWSER_ORDER, &CrossPointSettings::bookBrowserOrder,
+                                  {StrId::STR_BOOK_ORDER_ALPHABETICAL, StrId::STR_BOOK_ORDER_RANDOM,
+                                   StrId::STR_BOOK_ORDER_RECENTLY_ADDED, StrId::STR_BOOK_ORDER_LAST_READ},
+                                  "bookBrowserOrder", StrId::STR_CAT_SYSTEM));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_REMOVE_READ_FROM_RECENTS,
                                     &CrossPointSettings::removeReadBooksFromRecents, "removeReadBooksFromRecents",

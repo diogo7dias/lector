@@ -31,7 +31,8 @@ E-reader firmware for the Xteink X3 and X4.
 - Finished books are filed away automatically.
 - Search the current folder from the file browser.
 - File browser rows carry a reading badge: the saved percentage, or Read once the book is finished.
-- Random file browser order, and Open Book on Boot (last book or a random one).
+- File browser order: alphabetical, random, recently added or last read.
+- Open Book on Boot: the last book, or a random one.
 - Book Info screen with the book description.
 - In-book Delete Book, and remove from Recents from inside the book.
 - Clean Up Storage: sweeps orphaned cache only.

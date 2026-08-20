@@ -154,7 +154,15 @@ Upgrading from an older release, the books still in your Recents list get their 
 first boot; any other book read long ago gets one the next time you close it.
 
 **Settings > System > Show Hidden Files** decides whether entries beginning with `.` appear.
-**File Browser Order** lists a folder alphabetically or in random order.
+**File Browser Order** lists a folder alphabetically, in random order, by the date each file
+was added, or by when you last read it. Both date orders put the newest first and leave the
+folders at the top; books you have never opened sit at the bottom of Last Read, in name
+order. Last Read reads one small file per book, so a folder of hundreds takes a moment
+longer to open.
+
+Recently Added uses the date on the file itself, which is written by whatever put it there:
+books copied from a computer carry a real date, while books the device downloaded itself
+(Wi-Fi transfer, Calibre, OPDS) all share one, so they keep name order among themselves.
 
 ### What Lector can open
 
@@ -780,7 +788,7 @@ Session**. Alongside them:
 **Library**
 
 - **Show Hidden Files**.
-- **File Browser Order** — Alphabetical or Random.
+- **File Browser Order** — Alphabetical, Random, Recently Added or Last Read.
 - **Open Book on Boot** — Off, Last Book or Random Book.
 - **Clear Read Books from Recent List**.
 - **Move Finished Books to Read Folder**.

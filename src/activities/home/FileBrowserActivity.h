@@ -91,8 +91,22 @@ class FileBrowserActivity final : public Activity {
 
   // Data loading
   void loadFiles();
-  // Re-orders the files (never the folders) when the browser order setting is Random.
-  void shuffleFilesIfRandomOrder();
+  // Re-orders the files (never the folders) to match the browser order setting. Random
+  // shuffles in place; the two date orders sort by `sortKeys`, gathered during the listing
+  // scan. Alphabetical is the order the listing already arrives in and needs no work.
+  void applyBrowserOrder();
+  // True when the current setting needs a key per entry gathered while the folder is
+  // scanned (the two date orders, books only).
+  bool needsSortKeys() const;
+  // Appends one key, growing the buffer through the nothrow path. False means the folder is
+  // too big to key and the listing stays alphabetical.
+  bool pushSortKey(uint32_t key);
+  // Second pass for Last Read: replaces each book's placeholder key with the read counter
+  // stamped beside its cache. One SD open per book, so it feeds the watchdog as it goes.
+  void fillLastReadKeys();
+  // One sort key per entry, in listing order, or empty when the order needs none. Held for
+  // the length of a load only: the browser reads it once, in applyBrowserOrder().
+  std::vector<uint32_t> sortKeys;
   size_t findEntryRow(const std::string& name) const;
 
  public:

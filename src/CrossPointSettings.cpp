@@ -209,6 +209,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
+  // "File Browser Order" grew from a two-way alphabetical/random pick into a four-way one.
+  // The old key's two values mean the same thing under the new one, so a settings file that
+  // only carries it keeps the order it was showing.
+  if (doc["bookBrowserOrder"].isNull() && !doc["bookBrowserRandomOrder"].isNull()) {
+    bookBrowserOrder = (doc["bookBrowserRandomOrder"] | (uint8_t)0) ? BOOK_ORDER_RANDOM : BOOK_ORDER_ALPHABETICAL;
+    needsResave = true;
+  }
+
   // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
   wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
 
