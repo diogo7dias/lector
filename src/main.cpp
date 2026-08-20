@@ -38,6 +38,7 @@
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
+#include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
@@ -46,6 +47,7 @@
 #include "sleep/WakeRoutePolicy.h"
 #include "util/ButtonNavigator.h"
 #include "util/DoubleClickDetector.h"
+#include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
 
 GfxRenderer renderer(display);
@@ -865,6 +867,52 @@ static void delayWallClock(const unsigned long ms) {
   }
 }
 
+// Polls the battery and shows the low-battery notice the first time the charge drops to
+// the warning level. The rule itself lives in low_battery::resolve(), so the thresholds,
+// the hysteresis and the "no usable reading" case are covered by host tests.
+//
+// Polled on a slow timer rather than every pass: on a board with no fuel gauge each
+// reading is a fresh ADC sample plus smoothing, which is not worth paying at loop rate
+// for a value that moves over hours. The first poll waits out that interval too, so the
+// reading is a settled one rather than whatever the first sample after a boot says.
+//
+// The notice is pushed (not a replace) and only over the reader or home, so a firmware
+// update, a web transfer or the sleep screen is never interrupted by it. The "already
+// warned" latch is written by the notice itself, once it is genuinely on screen: writing
+// it here would lose the warning entirely if the activity that runs between this call and
+// the pending push replaced the pushed activity with one of its own.
+static void checkLowBatteryWarning() {
+  constexpr unsigned long POLL_INTERVAL_MS = 60000;
+  static unsigned long lastCheckMs = 0;
+
+  const unsigned long now = millis();
+  if (lastCheckMs == 0) lastCheckMs = now;  // first poll is one interval away, not immediate
+  if ((now - lastCheckMs) < POLL_INTERVAL_MS) return;
+  lastCheckMs = now;
+
+  low_battery::Inputs inputs;
+  inputs.percent = powerManager.getBatteryPercentage();
+  inputs.alreadyWarned = APP_STATE.lowBatteryWarned;
+  inputs.usbConnected = gpio.isUsbConnectedCached();
+  inputs.screenAllowed = activityManager.isReaderActivity() || activityManager.isHomeActivity();
+
+  switch (low_battery::resolve(inputs)) {
+    case low_battery::Action::ClearLatch:
+      APP_STATE.lowBatteryWarned = false;
+      APP_STATE.saveToFile();
+      break;
+    case low_battery::Action::Warn:
+      // Night mode inverts the reading surface only, so the notice has to follow whatever
+      // it was pushed over or the panel flips polarity around it.
+      activityManager.pushActivity(std::make_unique<LowBatteryNoticeActivity>(
+          renderer, mappedInputManager, inputs.percent, activityManager.isReaderActivity()));
+      break;
+    case low_battery::Action::None:
+    default:
+      break;
+  }
+}
+
 void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
@@ -1014,6 +1062,8 @@ void loop() {
   if (gpio.wasUsbStateChanged()) {
     activityManager.requestUpdate();
   }
+
+  checkLowBatteryWarning();
 
   const unsigned long activityStartTime = millis();
   activityManager.loop();
