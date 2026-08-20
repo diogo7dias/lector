@@ -40,8 +40,16 @@ class HttpDownloader {
 
   /**
    * Download a file to the SD card with optional credentials.
+   *
+   * With allowResume set, a file already on the card is treated as a partial
+   * download: the request carries a Range header, the body is appended, and a
+   * failed transfer leaves what arrived behind so the next call can carry on
+   * from there. The caller owns that leftover and must delete it once the file
+   * is no longer wanted. A server that ignores the Range and answers 200 is
+   * handled by discarding the partial and starting again.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
-                                      const std::string& username = "", const std::string& password = "");
+                                      const std::string& username = "", const std::string& password = "",
+                                      bool allowResume = false);
 };

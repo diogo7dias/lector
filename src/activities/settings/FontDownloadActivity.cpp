@@ -78,6 +78,10 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // handshake that fails while the connection settles used to end the trip here.
   auto result = HttpDownloader::OK;
   for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (!waitForWifi()) {
+      result = HttpDownloader::HTTP_ERROR;
+      break;
+    }
     result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
     if (result == HttpDownloader::OK) break;
     LOG_ERR("FONT", "Manifest fetch attempt %d of %d failed (%d)", attempt, MAX_ATTEMPTS, result);
@@ -293,7 +297,50 @@ bool FontDownloadActivity::waitBeforeRetry(const uint32_t ms) {
   return true;
 }
 
+bool FontDownloadActivity::waitForWifi() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+  LOG_DBG("FONT", "Waiting for WiFi to come back");
+  WiFi.reconnect();
+  const uint32_t until = millis() + WIFI_WAIT_MS;
+  while (static_cast<int32_t>(until - millis()) > 0) {
+    if (WiFi.status() == WL_CONNECTED) return true;
+    mappedInput.update();
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested_ = true;
+      return false;
+    }
+    delay(100);
+  }
+  LOG_ERR("FONT", "WiFi did not come back within %u ms", WIFI_WAIT_MS);
+  return false;
+}
+
+bool FontDownloadActivity::fileAlreadyInstalled(const ManifestFile& file, const char* destPath) {
+  HalFile f;
+  if (!Storage.openFileForRead("FONT", destPath, f)) return false;
+  const size_t actual = f.fileSize();
+  f.close();
+  if (actual != file.size) return false;
+  uint32_t crc = 0;
+  if (!computeFileCrc32(destPath, crc)) return false;
+  return crc == file.crc32;
+}
+
 bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, const char* destPath) {
+  // A file that survived an earlier run is not fetched again, so retrying a
+  // batch that died halfway picks up where it stopped instead of paying for
+  // every megabyte a second time.
+  if (fileAlreadyInstalled(file, destPath)) {
+    LOG_DBG("FONT", "Already installed, skipping %s", file.name.c_str());
+    return true;
+  }
+  // Anything else sitting at that path is the previous release of this font, or
+  // a partial from a run that ended long ago. Either way its bytes are not the
+  // head of the body about to be fetched, so they go before the first attempt:
+  // only partials this loop creates are resumed.
+  Storage.remove(destPath);
+
   for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     {
       RenderLock lock(*this);
@@ -303,6 +350,14 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       lastDrawnProgressStep_ = -1;
     }
     requestUpdateAndWait();
+
+    if (!waitForWifi()) {
+      if (cancelRequested_) return false;
+      errorMessage_ = "Lost WiFi connection";
+      LOG_ERR("FONT", "No WiFi for attempt %d of %d for %s", attempt, MAX_ATTEMPTS, file.name.c_str());
+      Storage.remove(destPath);
+      return false;
+    }
 
     const std::string url = baseUrl_ + file.name;
     const auto result = HttpDownloader::downloadToFile(
@@ -322,9 +377,12 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
           lastDrawnProgressStep_ = step;
           requestUpdate(true);
         },
-        &cancelRequested_);
+        &cancelRequested_, "", "", /*allowResume=*/true);
 
     if (result == HttpDownloader::ABORTED || cancelRequested_) {
+      // A cancel is an answer, not an interruption to be picked up later: leave
+      // no partial behind for the next visit to puzzle over.
+      Storage.remove(destPath);
       cancelRequested_ = true;
       return false;
     }
@@ -354,12 +412,16 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       }
     }
 
-    // Whatever landed on the card is not usable, and leaving it behind would be
-    // read as an installed style on the next visit.
-    Storage.remove(destPath);
+    // A transfer that stopped early leaves bytes the next attempt resumes from,
+    // so only a body that arrived whole and wrong is swept away here. Either way
+    // nothing usable survives a full give-up, handled below.
+    if (result == HttpDownloader::OK) Storage.remove(destPath);
     if (attempt < MAX_ATTEMPTS && !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) return false;
   }
 
+  // Out of attempts: a partial left on the card would be read as an installed
+  // style on the next visit, so it goes.
+  Storage.remove(destPath);
   LOG_ERR("FONT", "Giving up on %s after %d attempts", file.name.c_str(), MAX_ATTEMPTS);
   RenderLock lock(*this);
   retryAttempt_ = 0;

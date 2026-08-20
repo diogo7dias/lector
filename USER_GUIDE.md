@@ -644,10 +644,14 @@ can bring scripts the built-in fonts do not cover, including Chinese, Japanese a
 Three ways to install one:
 
 1. **From the device:** **Settings > Reader > Manage Fonts**, then pick a family to download
-   over Wi-Fi. A file that fails or arrives damaged is fetched again, up to three attempts,
-   and the screen says which attempt is running. **Download all** and **Update all** carry on
-   past a family that will not install and name the ones that failed at the end. An update
-   that fails leaves the copy already on the card in place.
+   over Wi-Fi. A file that fails or arrives damaged is fetched again, up to five attempts,
+   and the screen says which attempt is running. A transfer cut short carries on from where
+   it stopped rather than starting the file over, and a dropped Wi-Fi connection is waited
+   out for up to 20 seconds before the next attempt. Starting the download again after a
+   failure skips every file already on the card, so only what is missing is fetched.
+   **Download all** and **Update all** carry on past a family that will not install and name
+   the ones that failed at the end. An update that fails leaves the copy already on the card
+   in place.
 2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
    `.cpfont` files.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.
