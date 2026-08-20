@@ -5,11 +5,17 @@
 using namespace http_range;
 
 TEST(HttpRangePolicy, OnlyTwoStatusesCarryABody) {
-  EXPECT_TRUE(isBodyStatus(200));
-  EXPECT_TRUE(isBodyStatus(206));
-  EXPECT_FALSE(isBodyStatus(302));
-  EXPECT_FALSE(isBodyStatus(404));
-  EXPECT_FALSE(isBodyStatus(416));
+  EXPECT_TRUE(isBodyStatus(200, 0));
+  EXPECT_TRUE(isBodyStatus(206, 400));
+  EXPECT_FALSE(isBodyStatus(302, 0));
+  EXPECT_FALSE(isBodyStatus(404, 0));
+  EXPECT_FALSE(isBodyStatus(416, 400));
+}
+
+TEST(HttpRangePolicy, PartialContentIsRefusedWhenNoRangeWasAskedFor) {
+  // Nothing asked for a slice, so a slice is not the file: writing it would
+  // leave a body that is short but reads as complete.
+  EXPECT_FALSE(isBodyStatus(206, 0));
 }
 
 TEST(HttpRangePolicy, RangeIsCompleteOnlyForARangedRequest) {

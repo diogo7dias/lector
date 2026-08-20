@@ -103,7 +103,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
           const int code = http.getStatus();
           // Redirect bodies are drained through here too; only the final
           // response carries bytes worth keeping.
-          if (!http_range::isBodyStatus(code)) return true;
+          if (!http_range::isBodyStatus(code, sink.rangeStart)) return true;
           if (!bodyStarted) {
             bodyStarted = true;
             if (!beginBody(sink, code, http.hasContentLength(), http.getContentLength())) {
@@ -137,7 +137,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // asked for is already on the card. Whether those bytes are the right ones is
     // the caller's checksum to make.
     if (http_range::isRangeAlreadyComplete(status, sink.rangeStart)) return HttpDownloader::OK;
-    if (!http_range::isBodyStatus(status)) {
+    if (!http_range::isBodyStatus(status, sink.rangeStart)) {
       LOG_ERR("HTTP", "wolfSSL unexpected status: %d", status);
       return HttpDownloader::HTTP_ERROR;
     }
@@ -224,7 +224,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     esp_http_client_cleanup(client);
     return HttpDownloader::OK;
   }
-  if (!http_range::isBodyStatus(status)) {
+  if (!http_range::isBodyStatus(status, sink.rangeStart)) {
     LOG_ERR("HTTP", "unexpected status: %d", status);
     esp_http_client_cleanup(client);
     return HttpDownloader::HTTP_ERROR;
@@ -325,13 +325,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   // Bytes from an earlier attempt that this one can carry on from. Without
   // allowResume any leftover is stale by definition and goes.
   size_t resumeFrom = 0;
-  if (allowResume) {
+  if (allowResume && Storage.exists(destPath.c_str())) {
     HalFile existing;
     if (Storage.openFileForRead("HTTP", destPath.c_str(), existing)) {
       resumeFrom = existing.fileSize();
       existing.close();
     }
-  } else if (Storage.exists(destPath.c_str())) {
+  } else if (!allowResume && Storage.exists(destPath.c_str())) {
     Storage.remove(destPath.c_str());
   }
 
@@ -372,10 +372,13 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   file.close();
 
   if (result != OK) {
-    // A transport failure mid-body leaves usable bytes when the caller asked to
-    // resume: keep them for the next attempt. Anything else, and any partial the
-    // caller did not ask for, is swept up here.
-    if (!allowResume || result != HTTP_ERROR) Storage.remove(destPath.c_str());
+    // Only bytes that actually arrived are worth keeping for the next attempt.
+    // A failure that never reached the body (bad URL, 404, a redirect that went
+    // nowhere) leaves an empty file that would otherwise be resumed from 0 and
+    // read as a partial, so it is swept up here along with every non-resumable
+    // caller's leftovers.
+    const bool wroteNewBytes = sink.downloaded > sink.rangeStart;
+    if (!allowResume || !wroteNewBytes) Storage.remove(destPath.c_str());
     return result;
   }
   if (sink.downloaded == 0) {

@@ -647,11 +647,12 @@ Three ways to install one:
    over Wi-Fi. A file that fails or arrives damaged is fetched again, up to five attempts,
    and the screen says which attempt is running. A transfer cut short carries on from where
    it stopped rather than starting the file over, and a dropped Wi-Fi connection is waited
-   out for up to 20 seconds before the next attempt. Starting the download again after a
-   failure skips every file already on the card, so only what is missing is fetched.
-   **Download all** and **Update all** carry on past a family that will not install and name
-   the ones that failed at the end. An update that fails leaves the copy already on the card
-   in place.
+   out for up to 20 seconds per attempt. Files that did arrive are kept, so starting the
+   download again fetches only what is still missing, a few styles at a time on a poor
+   connection. **Download all** and **Update all** carry on past a family that will not
+   install and name the ones that failed at the end. A file is only put in place once it
+   matches the checksum published for it, so an update that fails leaves the copy already
+   on the card untouched.
 2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
    `.cpfont` files.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.

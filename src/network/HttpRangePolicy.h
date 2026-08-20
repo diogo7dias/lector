@@ -9,8 +9,12 @@
 namespace http_range {
 
 // Statuses that carry a body worth writing: 200 is the whole file, 206 the
-// requested slice. Everything else is a redirect, an error, or 416.
-inline bool isBodyStatus(const int status) { return status == 200 || status == 206; }
+// requested slice. Everything else is a redirect, an error, or 416. A 206 is
+// only ever an answer to a Range we sent; taking one for an unranged request
+// would treat a slice of a file as the whole of it.
+inline bool isBodyStatus(const int status, const size_t rangeStart) {
+  return status == 200 || (status == 206 && rangeStart > 0);
+}
 
 // 416 (Range Not Satisfiable) answers a range that starts at or past the end of
 // the file, so every byte asked for is already on disk. Only meaningful for a

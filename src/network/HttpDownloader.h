@@ -47,6 +47,10 @@ class HttpDownloader {
    * from there. The caller owns that leftover and must delete it once the file
    * is no longer wanted. A server that ignores the Range and answers 200 is
    * handled by discarding the partial and starting again.
+   *
+   * The offset a 206 was served from is not checked against what was asked for,
+   * so a resumed file is only as trustworthy as the caller's own verification:
+   * use allowResume for content with a checksum to test afterwards.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,

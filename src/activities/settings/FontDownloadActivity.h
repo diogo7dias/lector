@@ -114,6 +114,8 @@ class FontDownloadActivity : public Activity {
   static constexpr uint32_t RETRY_DELAY_MS = 1500;
   /** Longest wait for the access point to come back before an attempt. */
   static constexpr uint32_t WIFI_WAIT_MS = 20000;
+  /** How often a reconnect is asked for again while waiting for the link. */
+  static constexpr uint32_t RECONNECT_EVERY_MS = 5000;
   /**
    * How far the progress bar must move before the panel is redrawn. The download
    * callback fires once per network chunk, which is hundreds of times per file, and
@@ -155,6 +157,12 @@ class FontDownloadActivity : public Activity {
    * A rerun after a failure then costs nothing for the files already on the card.
    */
   static bool fileAlreadyInstalled(const ManifestFile& file, const char* destPath);
+  /**
+   * Moves a verified staging file onto the name the renderer reads, replacing
+   * the previous copy. Called only once the download passed every check, so the
+   * font on the card is never the one being replaced mid-flight.
+   */
+  static bool promoteStagedFile(const char* partPath, const char* destPath);
   void downloadAll();
   void updateAll();
   /** Downloads every family `wanted` selects, carrying on past any that fail. */
