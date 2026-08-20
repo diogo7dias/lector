@@ -448,7 +448,15 @@ void setup() {
   // enumeration before we touch the CDC state — otherwise cold boot races
   // and the host has to be physically replugged for logs to flow. Warm reboot
   // worked without the delay because USB was already enumerated.
-  delay(250);
+  //
+  // Not paid on a deep-sleep wake. That is the path a reader takes every time it is
+  // unlocked, several times an hour, and it was 250 ms of a measured ~2400 ms wake spent
+  // waiting for a host that is usually not there: the device is on battery in someone's
+  // hands. Every case where a developer IS attached still pays it — a fresh flash, a
+  // power-on with the cable in, a panic reboot — because none of those are deep-sleep
+  // wakes. The cost of being wrong is log lines missing from an unlock nobody is
+  // watching, and replugging brings them back.
+  if (esp_reset_reason() != ESP_RST_DEEPSLEEP) delay(250);
   Serial.begin(115200);
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
@@ -473,6 +481,10 @@ void setup() {
   WakeTiming::beginWake();
 
   gpio.begin();
+  // When the ADC button ladder came up. The recovery-combo check below needs the ladder to
+  // have settled, and "settled" is time since this call, not time since that check is
+  // reached — see the deadline there.
+  const unsigned long inputStartedMs = millis();
   powerManager.begin();
   halClock.begin();
   WakeTiming::mark(WakeTiming::Stage::HalReady);
@@ -578,14 +590,27 @@ void setup() {
   // flashing has been locked down (e.g. recent X3 firmware).
   bool recoveryFirmwareMode = false;
   if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
-    // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
-    // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
-    // settle window even if the loop body takes longer than expected on slow boots.
-    const unsigned long settleStart = millis();
-    while (millis() - settleStart < 500) {
+    // Refresh the cached button state until the ADC button ladder has settled — isPressed()
+    // needs ~half a second after the ladder comes up, per the HalGPIO contract.
+    //
+    // The deadline runs from gpio.begin(), not from here. It used to be a flat 500 ms
+    // measured from this point, which meant the settle window began only after the card
+    // mount and the settings load had already given the ladder a few hundred milliseconds
+    // of their own. Every wake therefore paid the full half second twice over, once
+    // implicitly and once on the clock, and a measured X3 wake spent 550 ms of ~2400 ms
+    // inside this loop. Anchoring to when the ladder actually started keeps the settle
+    // window the same length in absolute terms and stops charging for it a second time.
+    //
+    // The loop also stops the moment UP reads pressed: once the answer is yes, waiting
+    // longer cannot change it. A held combo is therefore detected at least as reliably as
+    // before, never less.
+    constexpr unsigned long kInputSettleMs = 500;
+    while (millis() - inputStartedMs < kInputSettleMs) {
       gpio.update();
+      if (gpio.isPressed(HalGPIO::BTN_UP)) break;
       delay(10);
     }
+    gpio.update();
     if (gpio.isPressed(HalGPIO::BTN_UP)) {
       recoveryFirmwareMode = true;
       LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
