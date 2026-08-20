@@ -1,5 +1,6 @@
 #include "PerfLogSink.h"
 
+#include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <PerfLog.h>
@@ -111,4 +112,12 @@ void logPerfSummary() {
              static_cast<unsigned long>(hostUs / 1000), static_cast<unsigned long>(totalUs / 1000));
     PerfLog::note(splitLine);
   }
+
+  // Should read 0. Anything else is a refresh that was handed back while the panel was
+  // still driving it -- see EpdBus::waitRefreshComplete. Written unconditionally so a
+  // clean run says so explicitly rather than by the line being absent.
+  char missedLine[64];
+  snprintf(missedLine, sizeof(missedLine), "missed busy assertions %lu",
+           static_cast<unsigned long>(EInkDisplay::missedBusyAssertions()));
+  PerfLog::note(missedLine);
 }
