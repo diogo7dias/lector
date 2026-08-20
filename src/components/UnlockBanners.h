@@ -5,7 +5,7 @@
 class GfxRenderer;
 
 // Override the book title the banner names, for boots that are about to open a book
-// other than APP_STATE.openEpubPath — today only "Open a random book on boot", which
+// other than APP_STATE.openEpubPath — today only "Open Book on Boot", which
 // picks its target after the banner would otherwise have painted the previous book.
 // Set once during setup(), before the first drawUnlockBanners() call; an empty path
 // means "use APP_STATE.openEpubPath" (the normal resume case).

@@ -233,6 +233,7 @@ void silentRestartToReader() {
 // Defined below setup()'s helpers; the sleep path needs it to choose the book the
 // Light sleep screen names, which happens before the wake ever runs.
 static std::string pickRandomRecentBookPath();
+static std::string pickBootBookPath();
 
 constexpr char SLEEP_FRAME_FILE[] = "/.crosspoint/sleep_frame.bin";
 
@@ -309,13 +310,17 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
   // The Light sleep face names the book the wake will open, so the choice is made here
-  // rather than on the wake: "Open a random book on boot" picking at wake time would
+  // rather than on the wake: "Open Book on Boot" picking at wake time would
   // name one book on the sleep screen and open another. Quick Resume names nothing and
   // opens nothing new, so it leaves the field empty.
   APP_STATE.pendingWakeBookPath.clear();
   if (!isQuickResumeSleep && SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
+    // Off names the book that is already open; the other two name the book their own
+    // pick returns. A mode that finds nothing to open deliberately names nothing: falling
+    // back to the last book here would force the wake into a book the ordinary routing
+    // would have skipped.
     APP_STATE.pendingWakeBookPath =
-        SETTINGS.openRandomRecentOnBoot ? pickRandomRecentBookPath() : APP_STATE.openEpubPath;
+        SETTINGS.bootBookMode == CrossPointSettings::BOOT_BOOK_OFF ? APP_STATE.openEpubPath : pickBootBookPath();
   }
 
   APP_STATE.saveToFile();
@@ -389,7 +394,31 @@ void setupDisplayAndFonts(bool seamless = false) {
   LOG_DBG("MAIN", "Fonts setup");
 }
 
-// A book to open when "Open a random book on boot" is on: any recent entry whose file
+// The book "Open Book on Boot" opens, or empty when the mode is Off (or nothing is
+// there to open). Last Book prefers the book the last session had open and falls back
+// to the newest entry in Recents, so a cold boot after the reader was closed still has
+// a book to return to. Either way the file has to still be on the card: a book deleted
+// from a computer would otherwise be driven at on every boot until the crash guard
+// caught it.
+static std::string pickBootBookPath() {
+  switch (SETTINGS.bootBookMode) {
+    case CrossPointSettings::BOOT_BOOK_RANDOM:
+      return pickRandomRecentBookPath();
+    case CrossPointSettings::BOOT_BOOK_LAST: {
+      if (!APP_STATE.openEpubPath.empty() && Storage.exists(APP_STATE.openEpubPath.c_str())) {
+        return APP_STATE.openEpubPath;
+      }
+      for (const auto& book : RECENT_BOOKS.getBooks()) {
+        if (!RecentBooksStore::isMissing(book)) return book.path;
+      }
+      return "";
+    }
+    default:
+      return "";
+  }
+}
+
+// A book to open when "Open Book on Boot" is set to Random: any recent entry whose file
 // is still on the card. Missing ones are skipped rather than opened and failed.
 static std::string pickRandomRecentBookPath() {
   const auto& books = RECENT_BOOKS.getBooks();
@@ -557,7 +586,7 @@ void setup() {
   bool allowFastInitialReaderRefresh = false;
   bool needsWakeRefresh = false;
 
-  // "Open a random book on boot": pick the target BEFORE the unlock banners paint, so the
+  // "Open Book on Boot": pick the target BEFORE the unlock banners paint, so the
   // banner names the book this boot is about to open instead of the previous one. The
   // result is reused by the routing block below — picking twice would name one book and
   // open another. Guarded by every condition that block uses and that is already known
@@ -577,15 +606,15 @@ void setup() {
   const bool quickResumeTargetIsReader = APP_STATE.quickResumeTargetIsReader;
   const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
 
-  std::string randomBookPath;
+  std::string bootBookPath;
   if (!quickResumeWake && !pendingWakeBookPath.empty()) {
-    randomBookPath = pendingWakeBookPath;
-    setUnlockBannerBookPath(randomBookPath);
-  } else if (!quickResumeWake && SETTINGS.openRandomRecentOnBoot && !recoveryFirmwareMode && !rebootedFromPanic &&
-             resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
+    bootBookPath = pendingWakeBookPath;
+    setUnlockBannerBookPath(bootBookPath);
+  } else if (!quickResumeWake && SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
+             !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
              !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
-    randomBookPath = pickRandomRecentBookPath();
-    if (!randomBookPath.empty()) setUnlockBannerBookPath(randomBookPath);
+    bootBookPath = pickBootBookPath();
+    if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
   }
 
   // Waking from a wallpaper sleep face: a normal (non-quick-resume) deep-sleep wake whose
@@ -754,7 +783,7 @@ void setup() {
   wakeInputs.hasBook = !forcedBookPath.empty();
   wakeInputs.sleptFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
-  wakeInputs.randomBookOnBoot = SETTINGS.openRandomRecentOnBoot;
+  wakeInputs.bookOnBoot = SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF;
   wakeInputs.readerCrashed = APP_STATE.readerActivityLoadCount > 0;
   const wake_route::Route forcedRoute = (recoveryFirmwareMode || rebootedFromPanic || resume == BootResume::Silent)
                                             ? wake_route::Route::Unchanged
@@ -801,24 +830,26 @@ void setup() {
     // before the moon, so this IS the picture on the glass), or either face hitting a
     // safety valve: no book to open, or a reader that crashed last boot.
     activityManager.goHome(HomeMenuItem::NONE, needsWakeRefresh);
-  } else if (SETTINGS.openRandomRecentOnBoot || APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
-             mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
+  } else if (SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF || APP_STATE.openEpubPath.empty() ||
+             !APP_STATE.lastSleepFromReader || mappedInputManager.isPressed(MappedInputManager::Button::Back) ||
+             APP_STATE.readerActivityLoadCount > 0) {
     // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
     // crashed (indicated by readerActivityLoadCount > 0)
     //
-    // "Open a random book on boot" jumps into one of the books in progress instead.
+    // "Open Book on Boot" jumps straight into a book instead: the last-read one, or one
+    // of the books in progress at random.
     // Skipped when Back is held (the user is asking for home) or after a reader crash,
     // so a book that cannot open can never wedge boot.
-    // randomBookPath was chosen above, before the banners painted, so the banner named
+    // bootBookPath was chosen above, before the banners painted, so the banner named
     // this exact book. Back held or a prior reader crash clears it rather than re-picking.
     const bool backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
-    if (backHeld || APP_STATE.readerActivityLoadCount > 0) randomBookPath.clear();
-    if (!randomBookPath.empty()) {
+    if (backHeld || APP_STATE.readerActivityLoadCount > 0) bootBookPath.clear();
+    if (!bootBookPath.empty()) {
       // Same crash-loop guard the resume path uses: bump the counter first so a crash
       // while opening lands on home next boot instead of trying again forever.
       APP_STATE.readerActivityLoadCount++;
       APP_STATE.saveToFile();
-      activityManager.goToReader(randomBookPath);
+      activityManager.goToReader(bootBookPath);
     } else {
       activityManager.goHome(HomeMenuItem::NONE, needsWakeRefresh);
     }

@@ -7,7 +7,7 @@
 //
 //   Quick Resume promises nothing changes. The panel already holds the screen you
 //   locked from, so the wake must rebuild that same screen and nothing else. In
-//   particular "Open a random book on boot" must not fire — it would name one book
+//   particular "Open Book on Boot" must not fire — it would name one book
 //   on the sleep screen and open another on the wake — and a held Back must not
 //   divert to home, because Back is not an escape hatch on a face that never left
 //   the screen in the first place.
@@ -49,7 +49,7 @@ struct WakeInputs {
   // The ordinary routing's own inputs, kept here so the tests state them explicitly.
   bool sleptFromReader = false;
   bool backHeld = false;
-  bool randomBookOnBoot = false;
+  bool bookOnBoot = false;
   // The reader failed to come up last boot (readerActivityLoadCount > 0).
   bool readerCrashed = false;
 };

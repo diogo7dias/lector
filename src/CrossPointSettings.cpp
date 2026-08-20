@@ -201,6 +201,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
 
+  // "Open Book on Boot" replaced the old "Open Random Book on Boot" toggle.
+  // A settings file that only carries the toggle keeps the behaviour it described: on
+  // means Random, off means the ordinary routing.
+  if (doc["bootBookMode"].isNull() && !doc["openRandomRecentOnBoot"].isNull()) {
+    bootBookMode = (doc["openRandomRecentOnBoot"] | (uint8_t)0) ? BOOT_BOOK_RANDOM : BOOT_BOOK_OFF;
+    needsResave = true;
+  }
+
   // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
   wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
 
