@@ -37,7 +37,11 @@ uint16_t takeThinkMs(uint32_t nowMs);
 // One completed refresh. `totalUs` is the whole call, `asyncStartUs` the part that
 // returned before the panel had finished (0 on a blocking refresh). `thinkMs` is the
 // value takeThinkMs() returned for this refresh, so the overlay can show the pair.
-void noteRefresh(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t asyncStartUs, uint16_t thinkMs);
+// `inkScore` is what FrameInkMetrics made of the frame (0..1000) and `inkDebt` the running
+// total the anti-ghost policy holds after it. Both are reported because the thresholds
+// that turn them into a clean pass can only be tuned against real content.
+void noteRefresh(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t asyncStartUs, uint16_t thinkMs,
+                 uint16_t inkScore, uint16_t inkDebt);
 
 // One line for the on-panel overlay, describing the PREVIOUS refresh: a refresh cannot
 // report its own cost inside the frame it is drawing. Fills `out`; pass at least 64 bytes.

@@ -30,7 +30,7 @@ A measurement that needs its own firmware is a measurement nobody takes.
 
 ## The overlay
 
-`FAST/HALF think 41 panel 623 split 96 prom 3 pll 09`
+`FAST/HALF think 41 panel 623 split 96 ink 302/3800 prom 3 pll 09`
 
 - `req/run` — mode asked for, and mode the driver actually ran.
 - `think` — milliseconds from the button press to the refresh call. This is the firmware
@@ -38,6 +38,8 @@ A measurement that needs its own firmware is a measurement nobody takes.
   answering a button.
 - `panel` — milliseconds the refresh call itself took.
 - `split` — on an async refresh, the part that returned before the panel had finished.
+- `ink` — this frame's score out of 1000, then the ink debt outstanding. A text page turn
+  scores around 300, a menu row move around 10, a whole-screen inversion 1000.
 - `prom` — how many FAST requests the anti-ghost policy has promoted to something slower
   since boot.
 - `pll` — the X3 frame-clock byte in force (see below). Meaningless on X4, printed anyway
@@ -83,6 +85,8 @@ one row per refresh:
 | `total_us` | Request to return, in microseconds: the number a finger feels |
 | `async_start_us` | On an async refresh, the part that returned before the panel finished. 0 on a blocking refresh |
 | `think_ms` | Milliseconds from the button press that caused this paint. Empty when no press was outstanding |
+| `ink` | What this frame was scored at, 0-1000 (see `lib/hal/FrameInkMetrics.h`). 0 on paths with no framebuffer to measure |
+| `debt` | The anti-ghost ink debt after this pass. Crossing a threshold is what forces a clean |
 
 `req` and `run` are separate columns on purpose. Both panel drivers override the requested
 mode in places, and the size of that gap is itself one of the things being measured.

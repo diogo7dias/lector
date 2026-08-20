@@ -121,3 +121,114 @@ TEST(DisplayRefreshPolicy, ExternalPassesSaturateInsteadOfWrapping) {
   EXPECT_EQ(policy.fastSinceFull(), DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL);
   EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Full);
 }
+
+// ── Ink debt ────────────────────────────────────────────────────────────────
+//
+// The counters above treat every FAST pass as equal, which is why a session spent in
+// menus and covers ghosts while a reading session of the same length stays clean. The
+// debt charges each pass what it actually costs the panel (FrameInkMetrics' 0..1000
+// scale) and cleans earlier when the content is heavy. It can only ever escalate SOONER:
+// every test above still passes unchanged, because they pass no score and a score of zero
+// leaves the counters in sole charge.
+
+TEST(DisplayRefreshPolicy, AZeroScoreLeavesTheCountersInSoleCharge) {
+  DisplayRefreshPolicy policy;
+  for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
+    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i, 0), Mode::Fast);
+  }
+  EXPECT_EQ(policy.choose(Mode::Fast, 2000, 0), Mode::Clean);
+  EXPECT_EQ(policy.inkDebt(), 0);
+}
+
+// A page of body text scores about 300. Twelve of them is the cadence the consecutive-FAST
+// cap already gave reading, so the debt must not make ordinary reading flash more often
+// than it does today.
+TEST(DisplayRefreshPolicy, OrdinaryReadingKeepsItsExistingCadence) {
+  DisplayRefreshPolicy policy;
+  constexpr uint16_t kTextPage = 300;
+  for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
+    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i, kTextPage), Mode::Fast) << "page " << static_cast<int>(i);
+  }
+  EXPECT_EQ(policy.choose(Mode::Fast, 2000, kTextPage), Mode::Clean);
+}
+
+// Heavy content is the case the counters miss: a full-screen inversion leaves as much
+// residue in four passes as reading does in twelve.
+TEST(DisplayRefreshPolicy, HeavyContentEarnsACleanWithinAFewPasses) {
+  DisplayRefreshPolicy policy;
+  constexpr uint16_t kInversion = 1000;
+  int passes = 0;
+  while (policy.choose(Mode::Fast, 1000 + passes, kInversion) == Mode::Fast) {
+    passes++;
+    ASSERT_LT(passes, DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST) << "the debt never fired";
+  }
+  EXPECT_LE(passes, 4);
+}
+
+TEST(DisplayRefreshPolicy, ACleanLeavesSomeDebtBehind) {
+  DisplayRefreshPolicy policy;
+  constexpr uint16_t kInversion = 1000;
+  while (policy.choose(Mode::Fast, 1000, kInversion) == Mode::Fast) {
+  }
+  // Scrubbed, not discharged: what is left is why a screen that keeps demanding cleans
+  // eventually earns a real FULL.
+  EXPECT_GT(policy.inkDebt(), 0);
+}
+
+TEST(DisplayRefreshPolicy, AFullDischargesTheDebtEntirely) {
+  DisplayRefreshPolicy policy;
+  policy.choose(Mode::Fast, 1000, 900);
+  ASSERT_GT(policy.inkDebt(), 0);
+  EXPECT_EQ(policy.choose(Mode::Full, 1001, 0), Mode::Full);
+  EXPECT_EQ(policy.inkDebt(), 0);
+}
+
+TEST(DisplayRefreshPolicy, RelentlesslyHeavyContentEventuallyEarnsAFull) {
+  DisplayRefreshPolicy policy;
+  bool sawFull = false;
+  for (int i = 0; i < 200 && !sawFull; ++i) {
+    sawFull = policy.choose(Mode::Fast, 1000 + i, 1000) == Mode::Full;
+  }
+  EXPECT_TRUE(sawFull);
+}
+
+// The debt must never be able to DELAY an escalation the counters would have made, or the
+// change would be capable of making ghosting worse than it is today.
+TEST(DisplayRefreshPolicy, TheDebtCannotDelayTheCountersEscalation) {
+  DisplayRefreshPolicy policy;
+  policy.seedFastSinceFull(DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL - 1);
+  EXPECT_EQ(policy.choose(Mode::Fast, 1000, 1), Mode::Fast);
+  // Scored as nearly free, and promoted anyway: the ceiling is the ceiling.
+  EXPECT_EQ(policy.choose(Mode::Fast, 1001, 1), Mode::Full);
+}
+
+TEST(DisplayRefreshPolicy, DebtSurvivesALock) {
+  DisplayRefreshPolicy before;
+  before.choose(Mode::Fast, 1000, 900);
+  before.choose(Mode::Fast, 1001, 900);
+  ASSERT_EQ(before.inkDebt(), 1800);
+
+  DisplayRefreshPolicy after;
+  after.seedInkDebt(before.inkDebt());
+  EXPECT_EQ(after.inkDebt(), 1800);
+}
+
+TEST(DisplayRefreshPolicy, SeedingCannotExceedTheDebtCeiling) {
+  DisplayRefreshPolicy policy;
+  policy.seedInkDebt(60000);
+  EXPECT_EQ(policy.inkDebt(), DisplayRefreshPolicy::DEBT_FULL_THRESHOLD);
+}
+
+// Grayscale planes never reach choose(), so they were invisible to the debt as well as to
+// the counters. They drive the panel with one-frame phases and are charged accordingly.
+TEST(DisplayRefreshPolicy, AnExternalPassChargesDebtToo) {
+  DisplayRefreshPolicy policy;
+  policy.noteExternalFastPass();
+  EXPECT_EQ(policy.inkDebt(), DisplayRefreshPolicy::EXTERNAL_PASS_SCORE);
+}
+
+TEST(DisplayRefreshPolicy, DebtSaturatesInsteadOfWrapping) {
+  DisplayRefreshPolicy policy;
+  for (int i = 0; i < 500; ++i) policy.noteExternalFastPass(1000);
+  EXPECT_EQ(policy.inkDebt(), DisplayRefreshPolicy::DEBT_FULL_THRESHOLD);
+}

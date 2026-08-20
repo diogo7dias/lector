@@ -1691,7 +1691,7 @@ void GfxRenderer::drawTimingOverlay() const {
   // stamp would land in the middle of an image. Nothing to draw into here.
   if (_stripActive) return;
 
-  char line[80];
+  char line[96];
   PerfStats::formatLastLine(line, sizeof(line));
   if (line[0] == '\0') return;
 

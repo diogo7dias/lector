@@ -19,6 +19,8 @@ uint8_t lastActual = 0;
 uint32_t lastTotalUs = 0;
 uint32_t lastAsyncUs = 0;
 uint16_t lastThinkMs = kNoThink;
+uint16_t lastInkScore = 0;
+uint16_t lastInkDebt = 0;
 bool haveLast = false;
 
 uint32_t promoted = 0;
@@ -56,7 +58,7 @@ uint16_t takeThinkMs(const uint32_t nowMs) {
 }
 
 void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const uint32_t totalUs,
-                 const uint32_t asyncStartUs, const uint16_t thinkMs) {
+                 const uint32_t asyncStartUs, const uint16_t thinkMs, const uint16_t inkScore, const uint16_t inkDebt) {
   if (actualMode < kModeCount) {
     ModeStats& s = stats[actualMode];
     if (s.count == 0 || totalUs < s.minUs) s.minUs = totalUs;
@@ -74,6 +76,8 @@ void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const ui
   lastTotalUs = totalUs;
   lastAsyncUs = asyncStartUs;
   lastThinkMs = thinkMs;
+  lastInkScore = inkScore;
+  lastInkDebt = inkDebt;
   haveLast = true;
 }
 
@@ -92,16 +96,13 @@ void formatLastLine(char* const out, const size_t outLen) {
   // Microseconds are divided down here rather than stored that way: the overlay is read
   // at arm's length on an e-ink panel, where a digit of precision past the millisecond is
   // noise. The CSV keeps the full resolution.
-  if (lastAsyncUs > 0) {
-    snprintf(out, outLen, "%s/%s think %s panel %lu split %lu prom %lu pll %02X", modeName(lastRequested),
-             modeName(lastActual), think, static_cast<unsigned long>(lastTotalUs / 1000),
-             static_cast<unsigned long>(lastAsyncUs / 1000), static_cast<unsigned long>(promoted),
-             static_cast<unsigned>(activePll));
-  } else {
-    snprintf(out, outLen, "%s/%s think %s panel %lu prom %lu pll %02X", modeName(lastRequested), modeName(lastActual),
-             think, static_cast<unsigned long>(lastTotalUs / 1000), static_cast<unsigned long>(promoted),
-             static_cast<unsigned>(activePll));
-  }
+  char split[16] = {0};
+  if (lastAsyncUs > 0) snprintf(split, sizeof(split), " split %lu", static_cast<unsigned long>(lastAsyncUs / 1000));
+
+  snprintf(out, outLen, "%s/%s think %s panel %lu%s ink %u/%u prom %lu pll %02X", modeName(lastRequested),
+           modeName(lastActual), think, static_cast<unsigned long>(lastTotalUs / 1000), split,
+           static_cast<unsigned>(lastInkScore), static_cast<unsigned>(lastInkDebt),
+           static_cast<unsigned long>(promoted), static_cast<unsigned>(activePll));
 }
 
 size_t formatSummary(char (*const lines)[64], const size_t maxLines) {

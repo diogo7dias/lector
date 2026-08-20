@@ -203,6 +203,7 @@ static bool deepSleepInProgress = false;
 // hands the next session a budget of zero and delays the panel's next discharge.
 static void persistAntiGhostBudget() {
   APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
+  APP_STATE.inkDebt = display.inkDebt();
   APP_STATE.saveToFile();
 }
 
@@ -521,6 +522,7 @@ void setup() {
   // at zero on every wake — and since waking is a chip reset, that is every lock — so a
   // device used in short sessions never reaches the full discharge and ghosts forever.
   display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
+  display.seedInkDebt(APP_STATE.inkDebt);
   RECENT_BOOKS.loadFromFile();
   // One-time upgrade: books read before the reading badges existed have a percentage in
   // the recents list and no marker beside their cache. Seeding costs at most thirteen

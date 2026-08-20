@@ -58,7 +58,8 @@ void setScreen(const char* screenName);
 // One completed refresh. Times are microseconds. asyncStartUs is the part that returned
 // before the panel finished (0 on a blocking refresh). thinkMs is the gap from the input
 // that caused this paint, or PerfStats::kNoThink when no press was outstanding.
-void record(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t asyncStartUs, uint16_t thinkMs);
+void record(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t asyncStartUs, uint16_t thinkMs,
+            uint16_t inkScore, uint16_t inkDebt);
 
 // A free-form annotation line, written verbatim as a CSV comment. Used for the wake-stage
 // breakdown and the end-of-session summary, so one copied file answers page turn, menu
