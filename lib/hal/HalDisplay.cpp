@@ -81,8 +81,12 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
   // promoted pass runs its own absolute waveform and ignores the request anyway.
   // The driver is told every pass, not only when the answer changes: it holds the
   // setting, and the periodic reload depends on it going back to Standard on cue.
+  // Gated on the panel honouring it, not merely on the request: on a driver that ignores
+  // FastQuality the request reaches nothing, and recording it would put a 1 in the perf
+  // log's turbo column for a pass that ran the ordinary waveform.
+  const bool turboPossible = turboWanted && einkDisplay.supportsFastTurbo();
   lastPassWasTurbo =
-      allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboWanted);
+      allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboPossible);
   einkDisplay.setFastQuality(lastPassWasTurbo ? EInkDisplay::FAST_TURBO : EInkDisplay::FAST_STANDARD);
 
   switch (refreshPolicy.choose(policyMode, millis(), inkScore, lastPassWasTurbo)) {
