@@ -24,10 +24,27 @@ enum class Stage : uint8_t {
   ConfigReady = 2,   // settings, state, recents, OPDS and presets loaded
   InputSettled = 3,  // power-button verify plus the recovery-mode button settle window
   DisplayReady = 4,  // setupDisplayAndFonts() returned
-  BannersUp = 5,     // the unlock banners are on the panel
-  ActivityUp = 6,    // the routed activity has run onEnter and painted
-  Count = 7,
+  // The three below split what used to be one "ban" stage. On an X3 that stage measured
+  // 3675 ms of a 4740 ms wake, which named the wake's whole cost and explained none of
+  // it: four different things happen in there — a 52 KB frame read off the card, a full
+  // plane write to rebuild the panel's differential baseline, the banner drawing itself,
+  // and the panel refresh. Only one of them can be worth attacking, and the split is what
+  // says which.
+  FrameLoaded = 5,       // the saved sleep frame is in the framebuffer (or was absent)
+  BaselineRestored = 6,  // the X3 differential baseline has been written back
+  BannersDrawn = 7,      // the banners are in the framebuffer, not yet on the panel
+  BannersUp = 8,         // the refresh that puts them on the panel has returned
+  ActivityUp = 9,        // the routed activity has run onEnter and painted
+  Count = 10,
 };
+
+// Switches the card read and write on. Off (the default) means loadPrevious() and
+// persist() do nothing, so a stable build pays no SD write per wake for numbers nobody
+// is going to look at. mark() is always live: it is two stores into a small array, and
+// making it conditional would only add a branch.
+//
+// Call before loadPrevious(), i.e. after the settings have been read.
+void setEnabled(bool enabled);
 
 // Stamp `stage` with the current millis(). Safe to call before begin(); calls that arrive
 // out of order are kept as-is, since the reader of these numbers wants the raw stamps.

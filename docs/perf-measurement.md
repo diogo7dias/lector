@@ -7,19 +7,61 @@ that replaces the reading with numbers.
 Nothing here is filled in by hand. The device records everything, including the settings
 each run was taken under.
 
-## Building it
+## Switching it on
 
-```
-pio run -e gh_release_perf
-```
+There is no measurement build any more. Any build can be measured: turn on
+**Settings > System > Performance Timings**.
 
-Identical to `gh_release` plus `-DPERF_LOG=1`. A separate environment rather than a flag
-added to the release build, because PlatformIO's dependency finder preprocesses the
-sources: with the flag undefined it cannot see the includes behind the `#if`, and the
-recorder's dependencies never get linked.
+That single switch turns on three things at once:
 
-Cost: about 4 KB of RAM for the record buffer. In `gh_release` every recorder call
-compiles to an empty inline body, so the stable line carries none of it.
+- one CSV row per panel refresh, written to `/perf` on the SD card (below),
+- a one-line overlay in the top-left corner of every frame, showing the previous
+  refresh's cost while the device is in use,
+- the wake-stage breakdown, which replaces the unlock banner footer and is also written
+  into the CSV.
+
+Off, it costs nothing at all: no file is opened, `WakeTiming` performs no SD write per
+wake, and every refresh's `record()` call returns on its first line. On, the cost is about
+4 KB of RAM for the record buffer plus a card write per sixteen refreshes.
+
+The reason it is a setting rather than a build flag: numbers are only worth having if the
+device that has the problem can produce them, and that device is running a release build.
+A measurement that needs its own firmware is a measurement nobody takes.
+
+## The overlay
+
+`FAST/HALF think 41 panel 623 split 96 prom 3 pll 09`
+
+- `req/run` — mode asked for, and mode the driver actually ran.
+- `think` — milliseconds from the button press to the refresh call. This is the firmware
+  deciding what to draw. A dash means no press was outstanding, i.e. this paint was not
+  answering a button.
+- `panel` — milliseconds the refresh call itself took.
+- `split` — on an async refresh, the part that returned before the panel had finished.
+- `prom` — how many FAST requests the anti-ghost policy has promoted to something slower
+  since boot.
+- `pll` — the X3 frame-clock byte in force (see below). Meaningless on X4, printed anyway
+  so one format serves both devices.
+
+`think` against `panel` is the point of the overlay. A menu that feels slow is either the
+firmware being slow to decide or the ink being slow to move, and those are unrelated
+problems with unrelated fixes.
+
+The line describes the PREVIOUS refresh, necessarily: a refresh's cost is not known until
+the panel has finished, and by then the frame that would report it is already ink.
+
+## Trying an X3 PLL byte
+
+Write the value into `/perf/pll.txt` on the card and power-cycle — `0x19`, `19` and `25`
+are all read as the same byte. No rebuild and no flash per candidate. The value in force
+is printed in the overlay and in the CSV header, so a run cannot be attributed to the
+wrong candidate. With no such file the driver's stock `0x09` is used.
+
+Before landing a value as the default, all four must hold: FAST panel time falls at least
+15%; body text is clean after 30 consecutive FAST passes; grayscale still shows four
+distinct levels (check on a cover sleep screen, not on text — one PLL register scales
+every waveform bank, including the one-frame grayscale phases); and HALF and FULL still
+fully clear.
 
 ## Output
 
@@ -27,8 +69,9 @@ compiles to an empty inline body, so the stable line carries none of it.
 a lock-and-wake cycle produces several files rather than overwriting one.
 
 Three comment lines of context first, written by the device: firmware version, battery,
-orientation, font family and size, sleep image quality, Wake Straight to Book, and the
-open book. Then one row per refresh:
+X3 PLL byte, orientation, font family and size, sleep image quality, Wake Straight to
+Book, refresh frequency, and the open book. Then the previous wake's stage breakdown, then
+one row per refresh:
 
 | Column | Meaning |
 |---|---|
@@ -39,6 +82,7 @@ open book. Then one row per refresh:
 | `run` | Mode actually used, after the refresh policy and the driver's own overrides |
 | `total_us` | Request to return, in microseconds: the number a finger feels |
 | `async_start_us` | On an async refresh, the part that returned before the panel finished. 0 on a blocking refresh |
+| `think_ms` | Milliseconds from the button press that caused this paint. Empty when no press was outstanding |
 
 `req` and `run` are separate columns on purpose. Both panel drivers override the requested
 mode in places, and the size of that gap is itself one of the things being measured.
@@ -74,7 +118,9 @@ number being measured.
    what the panel really does at unlock.
 5. **Cold boot.** Once. The fixed startup cost no page-turn work can improve.
 
-Then copy everything under `/perf` off both cards.
+Then copy everything under `/perf` off both cards. That directory is the whole hand-off:
+it carries the wake breakdown, every refresh, and a per-mode summary written on the way
+into sleep. Nothing has to be photographed off the screen.
 
 ## Known before measuring
 

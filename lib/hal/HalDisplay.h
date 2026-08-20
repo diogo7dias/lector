@@ -128,6 +128,9 @@ class HalDisplay {
   // True only when the caller asked for HALF itself, never when the anti-ghost cap
   // promoted a FAST into one. See the definition for why the difference matters.
   bool needsX3HalfResync(RefreshMode requested, RefreshMode actual) const;
+  // Feeds both the in-RAM stats the overlay draws and the CSV on the card.
+  static void noteRefreshTiming(RefreshMode requested, RefreshMode actual, uint32_t totalUs, uint32_t asyncStartUs,
+                                uint16_t thinkMs);
 
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
@@ -137,6 +140,7 @@ class HalDisplay {
   // 14 bytes on one long-lived object is not worth an #if in a header everything sees.
   uint32_t pendingAsyncStartUs = 0;
   uint32_t pendingAsyncSplitUs = 0;
+  uint16_t pendingAsyncThinkMs = 0;
   RefreshMode pendingAsyncRequested = RefreshMode::FAST_REFRESH;
   RefreshMode pendingAsyncActual = RefreshMode::FAST_REFRESH;
   bool pendingAsync = false;

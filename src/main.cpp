@@ -13,6 +13,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <PerfLog.h>
+#include <PerfStats.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
@@ -352,6 +353,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   // and written with the state the next boot reads back.
   persistAntiGhostBudget();
 
+  // The per-mode totals for the session, written last so the file ends with the summary
+  // of everything above it.
+  logPerfSummary();
   PerfLog::flush();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -490,10 +494,10 @@ void setup() {
   }
 
   WakeTiming::mark(WakeTiming::Stage::SdReady);
-  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
-  // The card is up, so the previous wake's numbers can be read. Must happen before the
-  // unlock banners are drawn, since that is what displays them.
-  WakeTiming::loadPrevious();
+  // Neither the perf sink nor the wake-timing card read can run here any more: both are
+  // switched by a setting, and settings have not been loaded yet. Both start immediately
+  // after they are (Stage::ConfigReady), which is still well before the unlock banners
+  // that display the numbers.
 
   HalSystem::checkPanic();
 
@@ -536,6 +540,15 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   WakeTiming::mark(WakeTiming::Stage::ConfigReady);
+
+  // Settings are up, so the timings setting can be honoured. Started before the panel is
+  // constructed, so the very first refresh of the session is recorded rather than missed,
+  // and the previous wake's stage breakdown is appended straight after the header so one
+  // copied file carries both the wake cost and the refresh costs that follow it.
+  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
+  WakeTiming::setEnabled(SETTINGS.showTimings != 0);
+  WakeTiming::loadPrevious();
+  logWakeTimingToPerfLog();
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
@@ -661,7 +674,7 @@ void setup() {
       // Splash skipped: the routing block below picks the target activity; the
       // panel keeps showing the pre-reboot popup until that first paint lands.
       break;
-    case BootResume::SplashlessWake:
+    case BootResume::SplashlessWake: {
       // One-shot flag: re-arm the splash for the next ordinary boot. Save
       // before any painting so a hang in the blocking paint path can't strand
       // us in a splashless-with-no-frame loop on the next boot.
@@ -669,7 +682,12 @@ void setup() {
       APP_STATE.saveToFile();
       // exists() first: a missing frame file is the ordinary case for a sleep mode that
       // never saved one, and the check costs less than an open that is going to fail.
-      if (Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer()) {
+      const bool sleepFrameRestored = Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer();
+      // Stamped whichever way it went: "the frame was missing" is itself an answer to
+      // where the wake's time went, and a stage that is only stamped on success reads as
+      // a fast wake when it never ran at all.
+      WakeTiming::mark(WakeTiming::Stage::FrameLoaded);
+      if (sleepFrameRestored) {
         // Frame restored: draw the wake/unlock banners over the retained wallpaper
         // (version + resuming book on top, custom footer on the bottom), matching old
         // lector. The banners are the loading face; input stays gated until the reader
@@ -684,8 +702,10 @@ void setup() {
           // the baseline before drawing the banners over it.
           renderer.cleanupGrayscaleWithFrameBuffer();
         }
+        WakeTiming::mark(WakeTiming::Stage::BaselineRestored);
         const bool bannersDrawn = !quickResumeWake;
         if (bannersDrawn) drawUnlockBanners(renderer);
+        WakeTiming::mark(WakeTiming::Stage::BannersDrawn);
         if (useDifferentialRefresh) {
           renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
           // The panel already holds the page; the reader's first paint can go over it.
@@ -705,6 +725,7 @@ void setup() {
         needsWakeRefresh = true;
       }
       break;
+    }
     case BootResume::Splash:
       // Waking from a wallpaper sleep face never redraws the wallpaper. The sleep screen
       // itself is untouched — the wallpaper is still what the panel shows all night — but
@@ -967,6 +988,9 @@ void loop() {
   mappedInputManager.setPowerReleaseOverride(false, false);
 
   renderer.setFadingFix(SETTINGS.fadingFix);
+  // Read every pass, like the fading fix above, so toggling the setting takes effect on
+  // the next paint instead of on the next boot.
+  renderer.setTimingOverlay(SETTINGS.showTimings != 0, UI_10_FONT_ID);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
@@ -997,6 +1021,10 @@ void loop() {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
+  // The press, not the release, and not "any activity": this is the instant the reader's
+  // thumb acted, and the refresh that answers it closes the measurement. A release-driven
+  // action (a short power click) still lands within the same press-to-paint window.
+  if (gpio.wasAnyPressed()) PerfStats::noteInput(millis());
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it

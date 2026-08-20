@@ -5,6 +5,7 @@
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+#include <PerfStats.h>
 #include <SdCardFont.h>
 #include <Utf8.h>
 
@@ -1681,13 +1682,34 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+// The overlay reports the refresh BEFORE this one. It cannot report this one: the cost
+// is not known until the panel has finished, and by then the frame describing it is
+// already ink. One frame behind is the honest form of the measurement, not a shortcut.
+void GfxRenderer::drawTimingOverlay() const {
+  if (!timingOverlayEnabled) return;
+  // Strip mode retargets drawing at a grayscale band's scratch buffer, where a corner
+  // stamp would land in the middle of an image. Nothing to draw into here.
+  if (_stripActive) return;
+
+  char line[80];
+  PerfStats::formatLastLine(line, sizeof(line));
+  if (line[0] == '\0') return;
+
+  const int lh = getLineHeight(timingOverlayFontId);
+  const int w = getTextWidth(timingOverlayFontId, line) + 6;
+  fillRect(0, 0, w, lh + 2, false);  // white plate, so the line stays readable over a page
+  drawText(timingOverlayFontId, 3, 1, line, true);
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
+  drawTimingOverlay();
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
+  drawTimingOverlay();
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
