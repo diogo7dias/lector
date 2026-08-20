@@ -26,6 +26,7 @@
 #include "util/BookProgressFile.h"
 #include "util/BusyTick.h"
 #include "util/FavoriteImageNames.h"
+#include "util/TaskWatchdog.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -33,6 +34,20 @@ constexpr size_t NAME_BUFFER_SIZE = 500;
 // Cache sentinel: this entry's badge has not been looked up yet. A real answer is -1
 // (never opened) or 0-100, so it cannot collide with one.
 constexpr int16_t PERCENT_NOT_LOOKED_UP = -2;
+}  // namespace
+
+namespace {
+
+// A file's FAT modification stamp packed into one comparable number: the date in the high
+// half and the time in the low half, which is exactly the order FAT stores them in, so a
+// plain integer compare is a chronological compare. Zero when the file carries no stamp,
+// which sorts it to the bottom of a newest-first listing.
+uint32_t modifiedStamp(HalFile& file) {
+  uint16_t fdate = 0, ftime = 0;
+  if (!file.getModifyDateTime(&fdate, &ftime)) return 0;
+  return (static_cast<uint32_t>(fdate) << 16) | ftime;
+}
+
 }  // namespace
 
 // Defined below, next to the other list-label helpers.
@@ -47,6 +62,7 @@ void FileBrowserActivity::loadFiles() {
 
   files.clear();
   readingPercents.clear();
+  sortKeys.clear();
   // A new listing invalidates the scroll window. render() re-derives it from the selection,
   // so starting at the top is safe even when the caller then selects a row further down.
   scrollOffset = 0;
@@ -66,6 +82,10 @@ void FileBrowserActivity::loadFiles() {
     return;
   }
 
+  // Gathering stops the moment a key cannot be stored: applyBrowserOrder() then leaves the
+  // listing alphabetical rather than sorting it against a half-built key table.
+  bool gatherKeys = needsSortKeys();
+
   uint32_t scanned = 0;
   for (auto file = root.openNextFile(); file; file = root.openNextFile()) {
     // A wallpaper or library folder can hold thousands of entries, and this scan
@@ -82,6 +102,9 @@ void FileBrowserActivity::loadFiles() {
       std::string dirName(fileNameBuffer.get());
       dirName += '/';
       if (!files.push(dirName)) break;
+      // Folders take the top key, so a date order leaves them where the alphabetical sort
+      // put them instead of scattering them through the books.
+      if (gatherKeys && !pushSortKey(UINT32_MAX)) gatherKeys = false;
     } else {
       std::string_view filename{fileNameBuffer.get()};
       if (mode == Mode::PickFirmware) {
@@ -97,6 +120,15 @@ void FileBrowserActivity::loadFiles() {
         // the device; selecting one opens PxcViewerActivity. .png joins it so a
         // transparent sleep overlay can be previewed the same way.
         if (!files.push(filename)) break;
+        // Recently Added reads the stamp off the handle the scan already holds — reopening
+        // the file for it would double the SD work of listing a folder. Last Read cannot:
+        // its key lives in the book's cache directory, so it is gathered in a second pass
+        // once the listing is known.
+        if (gatherKeys) {
+          const uint32_t key =
+              SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED ? modifiedStamp(file) : 0;
+          if (!pushSortKey(key)) gatherKeys = false;
+        }
       }
     }
   }
@@ -105,8 +137,8 @@ void FileBrowserActivity::loadFiles() {
     LOG_ERR("FileBrowser", "Folder too large to list in full; showing first %u entries",
             static_cast<unsigned>(files.size()));
   }
-  files.sortByC([](const char* a, const char* b) { return FsHelpers::fileListLessC(a, b); });
-  shuffleFilesIfRandomOrder();
+  if (!gatherKeys || sortKeys.size() != files.size()) sortKeys.clear();
+  applyBrowserOrder();
 
   // A new folder is a new search scope, so any running search ends here rather than
   // silently filtering a listing the user never searched.
@@ -240,11 +272,74 @@ void FileBrowserActivity::openSearchEntry() {
       });
 }
 
-void FileBrowserActivity::shuffleFilesIfRandomOrder() {
-  // Books only. The firmware picker wants a predictable list, and shuffling folders
-  // would make navigating a deep card a lottery — sortFileList puts them first, so
-  // the shuffle starts after the last one.
-  if (!SETTINGS.bookBrowserRandomOrder || mode != Mode::Books) return;
+bool FileBrowserActivity::needsSortKeys() const {
+  if (mode != Mode::Books) return false;  // the firmware picker wants a predictable list
+  return SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED ||
+         SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_LAST_READ;
+}
+
+bool FileBrowserActivity::pushSortKey(const uint32_t key) {
+  if (sortKeys.size() == sortKeys.capacity()) {
+    // std::vector's growth throws, and a throwing allocation aborts this build. Probe the
+    // next capacity through the nothrow path first, the way NameList does for its own
+    // offset table, so a folder too big to key drops back to alphabetical instead.
+    const size_t next = sortKeys.capacity() ? sortKeys.capacity() * 2 : 64;
+    auto probe = makeUniqueNoThrow<uint32_t[]>(next);
+    if (!probe) {
+      LOG_ERR("FileBrowser", "No room to sort %u entries by date; keeping alphabetical order",
+              static_cast<unsigned>(sortKeys.size()));
+      return false;
+    }
+    probe.reset();
+    sortKeys.reserve(next);
+  }
+  sortKeys.push_back(key);
+  return true;
+}
+
+void FileBrowserActivity::fillLastReadKeys() {
+  const std::string folder = basepath == "/" ? std::string() : basepath;
+  for (size_t i = 0; i < files.size(); i++) {
+    if (sortKeys[i] == UINT32_MAX) continue;  // a folder, already keyed to the top
+
+    // One SD open per book, so a folder of hundreds of them is a long blocking stretch on
+    // the loop task: let the busy banner appear and keep the watchdog fed.
+    if ((i & 0x07) == 0) {
+      busy::tick();
+      resetTaskWatchdogIfSubscribed();
+    }
+
+    book_progress::Marker marker;
+    const std::string name(files[i]);
+    sortKeys[i] = book_progress::readForBook(folder + "/" + name, marker) ? marker.readOrder : 0;
+  }
+}
+
+void FileBrowserActivity::applyBrowserOrder() {
+  // A date order sorts by its keys directly, with the name comparator breaking ties, so
+  // folders (keyed to the top) stay alphabetical above the books and books read in the same
+  // session stay alphabetical among themselves. Every other order starts alphabetical.
+  const bool dateOrder = needsSortKeys() && sortKeys.size() == files.size();
+  if (dateOrder) {
+    if (SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_LAST_READ) {
+      busy::tickNow();  // always slow, so the banner is worth showing up front
+      fillLastReadKeys();
+    }
+    if (files.sortByKeyDesc(sortKeys.data(),
+                            [](const char* a, const char* b) { return FsHelpers::fileListLessC(a, b); })) {
+      sortKeys.clear();
+      return;
+    }
+    LOG_ERR("FileBrowser", "No room to reorder %u entries; keeping alphabetical order",
+            static_cast<unsigned>(files.size()));
+  }
+  sortKeys.clear();
+
+  files.sortByC([](const char* a, const char* b) { return FsHelpers::fileListLessC(a, b); });
+
+  // Books only, and only for Random: the firmware picker keeps its predictable list, and
+  // shuffling folders would make navigating a deep card a lottery.
+  if (mode != Mode::Books || SETTINGS.bookBrowserOrder != CrossPointSettings::BOOK_ORDER_RANDOM) return;
 
   size_t first = 0;
   while (first < files.size() && !files[first].empty() && files[first].back() == '/') first++;

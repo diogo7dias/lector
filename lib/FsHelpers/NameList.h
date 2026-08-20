@@ -84,6 +84,36 @@ class NameList {
               [&](const uint32_t a, const uint32_t b) { return less(blob_.get() + a, blob_.get() + b); });
   }
 
+  // Reorders every entry by a caller-supplied key, largest key first, with `less` breaking
+  // ties so equal keys keep a stable, meaningful order (the file browser passes its name
+  // comparator, which keeps same-key books alphabetical). `keys` holds one key per entry in
+  // the CURRENT order, so it must be built against this list and used before anything else
+  // moves the offsets.
+  //
+  // Sorts an index permutation rather than the offsets themselves: the key has to travel
+  // with its entry, and re-deriving it inside the comparator would mean an SD read per
+  // comparison. The scratch is one uint32_t per entry and is nothrow, so a folder too big
+  // to allocate for keeps the order it already had instead of aborting the firmware.
+  template <typename Less>
+  bool sortByKeyDesc(const uint32_t* keys, Less less) {
+    const size_t count = offsets_.size();
+    if (count < 2) return true;
+
+    auto order = makeUniqueNoThrow<uint32_t[]>(count);
+    auto sorted = makeUniqueNoThrow<uint32_t[]>(count);
+    if (!order || !sorted) return false;
+    for (size_t i = 0; i < count; i++) order[i] = static_cast<uint32_t>(i);
+
+    std::sort(order.get(), order.get() + count, [&](const uint32_t a, const uint32_t b) {
+      if (keys[a] != keys[b]) return keys[a] > keys[b];
+      return less(blob_.get() + offsets_[a], blob_.get() + offsets_[b]);
+    });
+
+    for (size_t i = 0; i < count; i++) sorted[i] = offsets_[order[i]];
+    for (size_t i = 0; i < count; i++) offsets_[i] = sorted[i];
+    return true;
+  }
+
   // Fisher-Yates over [first, size), with the caller's random source so the firmware can
   // pass the hardware RNG and the host tests can pass a deterministic one.
   template <typename Rand>

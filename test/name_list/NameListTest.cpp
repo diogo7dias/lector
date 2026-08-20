@@ -112,4 +112,64 @@ TEST(NameList, ClearResetsTruncationAndReuses) {
   EXPECT_EQ(list[0], "fresh.pxc");
 }
 
+TEST(NameList, SortByKeyDescOrdersByKeyThenComparator) {
+  NameList list;
+  ASSERT_TRUE(list.push("old.epub"));
+  ASSERT_TRUE(list.push("newest.epub"));
+  ASSERT_TRUE(list.push("middle.epub"));
+  const uint32_t keys[] = {10, 30, 20};
+
+  ASSERT_TRUE(list.sortByKeyDesc(keys, [](const char* a, const char* b) { return std::string(a) < std::string(b); }));
+
+  EXPECT_EQ(list[0], "newest.epub");
+  EXPECT_EQ(list[1], "middle.epub");
+  EXPECT_EQ(list[2], "old.epub");
+}
+
+TEST(NameList, SortByKeyDescBreaksTiesWithTheComparator) {
+  NameList list;
+  ASSERT_TRUE(list.push("folder/"));
+  ASSERT_TRUE(list.push("b.epub"));
+  ASSERT_TRUE(list.push("a.epub"));
+  // Folders carry the maximum key so they stay at the top; the two unread books share a
+  // key of 0 and fall back to name order.
+  const uint32_t keys[] = {0xFFFFFFFFu, 0, 0};
+
+  ASSERT_TRUE(list.sortByKeyDesc(keys, [](const char* a, const char* b) { return std::string(a) < std::string(b); }));
+
+  EXPECT_EQ(list[0], "folder/");
+  EXPECT_EQ(list[1], "a.epub");
+  EXPECT_EQ(list[2], "b.epub");
+}
+
+TEST(NameList, SortByKeyDescReadsKeysAgainstTheCurrentOrder) {
+  // The contract a caller can get wrong: keys are indexed against the order the list is in
+  // when the call is made, not the order the names were pushed in.
+  NameList list;
+  ASSERT_TRUE(list.push("c.epub"));
+  ASSERT_TRUE(list.push("a.epub"));
+  ASSERT_TRUE(list.push("b.epub"));
+  list.sortByC([](const char* a, const char* b) { return std::string(a) < std::string(b); });
+  ASSERT_EQ(list[0], "a.epub");
+
+  // a.epub is newest, then b.epub, then c.epub — stated in the SORTED order.
+  const uint32_t keys[] = {30, 20, 10};
+  ASSERT_TRUE(list.sortByKeyDesc(keys, [](const char* a, const char* b) { return std::string(a) < std::string(b); }));
+
+  EXPECT_EQ(list[0], "a.epub");
+  EXPECT_EQ(list[1], "b.epub");
+  EXPECT_EQ(list[2], "c.epub");
+}
+
+TEST(NameList, SortByKeyDescIsSafeOnShortLists) {
+  NameList list;
+  const uint32_t none[] = {0};
+  EXPECT_TRUE(list.sortByKeyDesc(none, [](const char*, const char*) { return false; }));
+
+  ASSERT_TRUE(list.push("only.epub"));
+  const uint32_t one[] = {5};
+  EXPECT_TRUE(list.sortByKeyDesc(one, [](const char*, const char*) { return false; }));
+  EXPECT_EQ(list[0], "only.epub");
+}
+
 }  // namespace
