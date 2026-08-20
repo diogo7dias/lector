@@ -124,9 +124,6 @@ class EpubReaderMenuActivity final : public Activity {
   std::vector<TabPage> tabs;
 
   int activeTabIndex = 0;
-  // Nav-ring position the menu opens on. 0 (the tab bar) unless the constructor found a
-  // row worth pointing straight at; onEnter applies it, so it must outlive the constructor.
-  int openingSelectedIndex = 0;
 
   ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;
