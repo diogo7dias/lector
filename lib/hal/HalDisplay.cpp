@@ -134,6 +134,9 @@ void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMod
   const uint16_t debt = refreshPolicy.inkDebt();
   // Read once, here, so every refresh path reports the split without having to remember
   // to. The counters were armed by beginRefreshAccounting() at the top of that path.
+  // Every path that reports must have armed them on entry, or it reports the PREVIOUS
+  // refresh's split alongside its own total. All five do: displayBuffer,
+  // displayBufferAsync, refreshDisplay, displayGrayscaleBase, displayGrayBuffer.
   const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
   const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
   PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
@@ -252,6 +255,7 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* m
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
   const RefreshMode requested = fallback;
+  EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   fallback = applyRefreshPolicy(fallback);
@@ -290,6 +294,7 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.
 // they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
 // or text anti-aliasing ages the panel while the budget stands still.
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+  EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   refreshPolicy.noteExternalFastPass();
