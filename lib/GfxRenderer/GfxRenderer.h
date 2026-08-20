@@ -80,6 +80,17 @@ class GfxRenderer {
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
 
+  // Out-of-range drawPixel reporting, rate-limited. drawPixel() is the per-pixel hot path,
+  // so an overflowing string logs once per pixel: an X4 crash report arrived with the
+  // whole ring buffer consumed by identical "Outside range" lines, each one a blocking
+  // serial write. A few lines name the offender; the remainder are counted and summarised
+  // once per buffer push. Mutable because the whole render path is const.
+  static constexpr uint32_t kOutOfRangeLogLimit = 4;
+  mutable uint32_t outOfRangeLogged = 0;
+  mutable uint32_t outOfRangeSuppressed = 0;
+  // Emits the summary (if any) and rearms the limiter for the next frame.
+  void reportOutOfRangePixels() const;
+
   // "Paperback Look": when set, drawn glyph pixels are smeared +1px right and
   // +1px down (BW pass only) to fake heavier paperback ink. Plain bool owned by
   // the renderer (lib/ must not depend on src/); callers bracket it per region.
