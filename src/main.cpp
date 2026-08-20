@@ -1018,6 +1018,7 @@ void loop() {
   // Read every pass, like the fading fix above, so toggling the setting takes effect on
   // the next paint instead of on the next boot.
   renderer.setTimingOverlay(SETTINGS.showTimings != 0, UI_10_FONT_ID);
+  display.setFastPageTurns(SETTINGS.fastPageTurns != 0);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),

@@ -28,6 +28,7 @@ struct Record {
   uint16_t inkDebt;
   uint8_t requested;
   uint8_t actual;
+  bool turbo;  // this pass ran the panel's cheap partial path
 };
 
 Record records[kBatchSize];
@@ -59,7 +60,7 @@ void begin(const LineSink sink, const CommitSink commit) {
   lineSink = sink;
   commitSink = commit;
   if (lineSink != nullptr)
-    lineSink("seq,ms,screen,req,run,total_us,wire_us,wave_us,async_start_us,think_ms,ink,debt\n");
+    lineSink("seq,ms,screen,req,run,total_us,wire_us,wave_us,async_start_us,think_ms,ink,debt,turbo\n");
   if (commitSink != nullptr) commitSink();
 }
 
@@ -72,7 +73,7 @@ void setScreen(const char* screenName) {
 
 void record(const uint8_t requestedMode, const uint8_t actualMode, const uint32_t totalUs, const uint32_t asyncStartUs,
             const uint16_t thinkMs, const uint16_t inkScore, const uint16_t inkDebt, const uint32_t wireUs,
-            const uint32_t waveUs) {
+            const uint32_t waveUs, const bool turbo) {
   // The whole cost of a build with the setting off, on every refresh it ever performs.
   if (lineSink == nullptr) return;
 
@@ -91,6 +92,7 @@ void record(const uint8_t requestedMode, const uint8_t actualMode, const uint32_
   r.asyncStartUs = asyncStartUs;
   r.wireUs = wireUs;
   r.waveUs = waveUs;
+  r.turbo = turbo;
   snprintf(r.screen, sizeof(r.screen), "%s", currentScreen);
   r.seq = sequence++;
   r.thinkMs = thinkMs;
@@ -126,11 +128,12 @@ void flush() {
     // spreadsheet averaging the column must not be handed a 65535 to average in.
     char think[8] = {0};
     if (r.thinkMs != PerfStats::kNoThink) snprintf(think, sizeof(think), "%u", static_cast<unsigned>(r.thinkMs));
-    snprintf(line, sizeof(line), "%u,%lu,%s,%s,%s,%lu,%lu,%lu,%lu,%s,%u,%u\n", static_cast<unsigned>(r.seq),
+    snprintf(line, sizeof(line), "%u,%lu,%s,%s,%s,%lu,%lu,%lu,%lu,%s,%u,%u,%u\n", static_cast<unsigned>(r.seq),
              static_cast<unsigned long>(r.ms), r.screen, modeName(r.requested), modeName(r.actual),
              static_cast<unsigned long>(r.totalUs), static_cast<unsigned long>(r.wireUs),
              static_cast<unsigned long>(r.waveUs), static_cast<unsigned long>(r.asyncStartUs), think,
-             static_cast<unsigned>(r.inkScore), static_cast<unsigned>(r.inkDebt));
+             static_cast<unsigned>(r.inkScore), static_cast<unsigned>(r.inkDebt),
+             static_cast<unsigned>(r.turbo ? 1 : 0));
     if (!lineSink(line)) droppedRecords++;
   }
   // Made durable here rather than per line: the records are worthless if a deep sleep

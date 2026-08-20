@@ -67,7 +67,8 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 // a session ghosts, with the lock's wipe visibly running either way — i.e. the wipe
 // was never the missing piece; the cap was. Promoting every 13th FAST to a clean pass
 // costs one flash per 13 page turns and keeps the panel from ever getting that deep.
-HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested, const uint16_t inkScore) {
+HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested, const uint16_t inkScore,
+                                                       const bool allowTurbo) {
   DisplayRefreshPolicy::Mode policyMode = DisplayRefreshPolicy::Mode::Fast;
   if (requested == RefreshMode::HALF_REFRESH) {
     policyMode = DisplayRefreshPolicy::Mode::Clean;
@@ -75,7 +76,16 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
     policyMode = DisplayRefreshPolicy::Mode::Full;
   }
 
-  switch (refreshPolicy.choose(policyMode, millis(), inkScore)) {
+  // Decide the fast path before the mode, because the choice changes what this pass
+  // costs the panel and so can pull a clean forward. Only a FAST can be Turbo; a
+  // promoted pass runs its own absolute waveform and ignores the request anyway.
+  // The driver is told every pass, not only when the answer changes: it holds the
+  // setting, and the periodic reload depends on it going back to Standard on cue.
+  lastPassWasTurbo =
+      allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboWanted);
+  einkDisplay.setFastQuality(lastPassWasTurbo ? EInkDisplay::FAST_TURBO : EInkDisplay::FAST_STANDARD);
+
+  switch (refreshPolicy.choose(policyMode, millis(), inkScore, lastPassWasTurbo)) {
     case DisplayRefreshPolicy::Mode::Clean:
       return RefreshMode::HALF_REFRESH;
     case DisplayRefreshPolicy::Mode::Full:
@@ -140,7 +150,7 @@ void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMod
   const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
   const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
   PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
-  PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
+  PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs, lastPassWasTurbo);
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
@@ -258,7 +268,9 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
-  fallback = applyRefreshPolicy(fallback);
+  // Never the cheap path: this frame is the base a grayscale overlay is about to be
+  // driven onto, so it has to land exactly where the planes expect it.
+  fallback = applyRefreshPolicy(fallback, 0, /*allowTurbo=*/false);
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior

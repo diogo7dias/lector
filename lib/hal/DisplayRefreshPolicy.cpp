@@ -1,8 +1,15 @@
 #include "DisplayRefreshPolicy.h"
 
 DisplayRefreshPolicy::Mode DisplayRefreshPolicy::choose(const Mode requested, uint32_t /*nowMs*/,
-                                                        const uint16_t inkScore) {
+                                                        const uint16_t rawInkScore, const bool turboPass) {
   Mode chosen = requested;
+
+  // A Turbo pass buys its own cleans: it drives with a shorter waveform, so the same
+  // ink leaves more behind. Charged before any comparison below, so it can bring a
+  // clean forward but never push one back. Clamped to the per-pass ceiling so a
+  // multiplied score still means "one very heavy pass" rather than several.
+  const uint32_t scaled = turboPass ? static_cast<uint32_t>(rawInkScore) * TURBO_DEBT_MULTIPLIER : rawInkScore;
+  const uint16_t inkScore = scaled > 1000 ? 1000 : static_cast<uint16_t>(scaled);
 
   // Cap consecutive FAST refreshes so panel ghosting is still periodically
   // cleaned. We deliberately do NOT promote on idle time: on an e-reader "idle"
@@ -63,4 +70,5 @@ void DisplayRefreshPolicy::reset() {
   consecutiveFast_ = 0;
   fastSinceFull_ = 0;
   inkDebt_ = 0;
+  turboSinceReload_ = 0;
 }

@@ -52,7 +52,10 @@ class DisplayRefreshPolicy {
   //
   // inkScore is this frame's cost from FrameInkMetrics. It defaults to 0, which is the
   // "no metrics available" case and reproduces the counter-only behaviour exactly.
-  Mode choose(Mode requested, uint32_t nowMs, uint16_t inkScore = 0);
+  // turboPass says this pass is running the cheap partial path, which charges
+  // TURBO_DEBT_MULTIPLIER times the ink. Defaulted so every existing caller and test
+  // keeps its exact behaviour.
+  Mode choose(Mode requested, uint32_t nowMs, uint16_t inkScore = 0, bool turboPass = false);
   void reset();
 
   // Ink debt outstanding, carried across a lock alongside fastSinceFull(). Same reason:
@@ -73,6 +76,41 @@ class DisplayRefreshPolicy {
   // Charged to a pass the policy never got to choose. Half of a whole-frame inversion:
   // heavier than a page of text, lighter than driving every pixel from black to white.
   static constexpr uint16_t EXTERNAL_PASS_SCORE = 500;
+
+  // ── Fast Turbo ───────────────────────────────────────────────────────────────
+  // The X4's cheap partial path (see Ssd1677Config::allowFastTurbo). It skips the
+  // vendor sequence's per-refresh temperature reload, so every TURBO_RELOAD_EVERY-th
+  // eligible pass is handed back to the standard sequence and the panel gets to
+  // re-read its own temperature. Seven cheap passes and one full-price one still
+  // average far below the standard path.
+  static constexpr uint8_t TURBO_RELOAD_EVERY = 8;
+
+  // A Turbo pass drives the ink with a shorter waveform, so it leaves more residue
+  // behind than the vendor partial does for the same ink moved. FrameInkMetrics cannot
+  // see that -- it measures the frame, not the drive -- so a Turbo pass is charged this
+  // multiple of its score.
+  //
+  // The number is a trade, and the measured costs decide it. A page turn is 578 ms
+  // standard against roughly 150 ms turbo, and the Clean it eventually earns is
+  // 1812 ms. At 1x the average page costs about 278 ms, at 2x about 388 ms, at 3x
+  // about 482 ms, against 673 ms today. So the multiplier buys margin against
+  // ghosting and spends most of the speed doing it. 2 is the middle: still a clear
+  // win, still cleaning roughly twice as often as the ink alone would ask for. Drop
+  // it to 1 if the panel stays clean under raking light, raise it if it does not.
+  static constexpr uint8_t TURBO_DEBT_MULTIPLIER = 2;
+
+  // Whether THIS fast pass may use the cheap path. Advances the reload cadence, so
+  // call it once per pass and use what it returns. Returns false whenever the caller
+  // did not want Turbo, which also keeps the cadence from drifting on screens that
+  // never ask.
+  bool useTurbo(bool wanted) {
+    if (!wanted) return false;
+    if (++turboSinceReload_ >= TURBO_RELOAD_EVERY) {
+      turboSinceReload_ = 0;
+      return false;
+    }
+    return true;
+  }
 
   // A pass that drove the panel without going through choose(): the grayscale planes,
   // which are pushed straight to the driver. They leave charge like any other pass, so
@@ -96,4 +134,5 @@ class DisplayRefreshPolicy {
   uint8_t consecutiveFast_ = 0;
   uint8_t fastSinceFull_ = 0;
   uint16_t inkDebt_ = 0;
+  uint8_t turboSinceReload_ = 0;
 };

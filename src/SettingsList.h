@@ -540,6 +540,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
                                     StrId::STR_CAT_SYSTEM));
 
+    // The panel's cheapest partial waveform on page turns and menu moves. On by default
+    // on the one board validated for it; the row is here so a panel that turns out to
+    // ghost can be put back on the vendor sequence without a reflash. See
+    // CrossPointSettings::fastPageTurns.
+    v.push_back(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "fastPageTurns",
+                                    StrId::STR_CAT_SYSTEM));
+
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
     v.push_back(SettingInfo::DynamicString(
         StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },

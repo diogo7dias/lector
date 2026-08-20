@@ -232,3 +232,68 @@ TEST(DisplayRefreshPolicy, DebtSaturatesInsteadOfWrapping) {
   for (int i = 0; i < 500; ++i) policy.noteExternalFastPass(1000);
   EXPECT_EQ(policy.inkDebt(), DisplayRefreshPolicy::DEBT_FULL_THRESHOLD);
 }
+
+// ── Fast Turbo ───────────────────────────────────────────────────────────────
+// The cheap partial path skips the vendor sequence's temperature reload, so the panel
+// is handed back to the standard sequence periodically to re-read its own temperature.
+
+TEST(DisplayRefreshPolicy, TurboIsRefusedWhenNobodyAsksForIt) {
+  DisplayRefreshPolicy policy;
+  for (int i = 0; i < 50; ++i) EXPECT_FALSE(policy.useTurbo(false));
+}
+
+TEST(DisplayRefreshPolicy, EveryNthTurboPassRunsTheStandardSequence) {
+  DisplayRefreshPolicy policy;
+  int standard = 0;
+  for (int i = 0; i < DisplayRefreshPolicy::TURBO_RELOAD_EVERY * 4; ++i) {
+    if (!policy.useTurbo(true)) ++standard;
+  }
+  EXPECT_EQ(standard, 4);
+}
+
+// A screen that never asks must not advance the cadence, or the reload would land on an
+// arbitrary pass instead of every Nth cheap one.
+TEST(DisplayRefreshPolicy, RefusedPassesDoNotAdvanceTheReloadCadence) {
+  DisplayRefreshPolicy policy;
+  for (int i = 0; i < DisplayRefreshPolicy::TURBO_RELOAD_EVERY - 1; ++i) ASSERT_TRUE(policy.useTurbo(true));
+  for (int i = 0; i < 20; ++i) ASSERT_FALSE(policy.useTurbo(false));
+  EXPECT_FALSE(policy.useTurbo(true));  // still the Nth cheap pass, not the 20th call
+}
+
+TEST(DisplayRefreshPolicy, ATurboPassChargesMoreDebtThanTheSamePassWouldOtherwise) {
+  DisplayRefreshPolicy standard;
+  standard.choose(Mode::Fast, 1000, 300, /*turboPass=*/false);
+
+  DisplayRefreshPolicy turbo;
+  turbo.choose(Mode::Fast, 1000, 300, /*turboPass=*/true);
+
+  EXPECT_EQ(turbo.inkDebt(), standard.inkDebt() * DisplayRefreshPolicy::TURBO_DEBT_MULTIPLIER);
+}
+
+// Charging more must bring the clean FORWARD, which is the whole point of charging more.
+TEST(DisplayRefreshPolicy, TurboReachesACleanSoonerThanStandardDoes) {
+  auto passesUntilClean = [](const bool turbo) {
+    DisplayRefreshPolicy policy;
+    for (int i = 0; i < 100; ++i) {
+      if (policy.choose(Mode::Fast, 1000 + i, 300, turbo) != Mode::Fast) return i;
+    }
+    return 100;
+  };
+  EXPECT_LT(passesUntilClean(true), passesUntilClean(false));
+}
+
+// The multiplied score is still one pass, so it cannot exceed what the heaviest possible
+// single frame costs. Otherwise a turbo pass could outrun the whole-frame-inversion case
+// the thresholds were set against.
+TEST(DisplayRefreshPolicy, AMultipliedScoreStillCannotExceedOneWholeFrame) {
+  DisplayRefreshPolicy policy;
+  policy.choose(Mode::Fast, 1000, 1000, /*turboPass=*/true);
+  EXPECT_EQ(policy.inkDebt(), 1000);
+}
+
+TEST(DisplayRefreshPolicy, ResetClearsTheReloadCadence) {
+  DisplayRefreshPolicy policy;
+  for (int i = 0; i < DisplayRefreshPolicy::TURBO_RELOAD_EVERY - 1; ++i) ASSERT_TRUE(policy.useTurbo(true));
+  policy.reset();
+  EXPECT_TRUE(policy.useTurbo(true));
+}

@@ -75,6 +75,31 @@ distinct levels (check on a cover sleep screen, not on text — one PLL register
 every waveform bank, including the one-frame grayscale phases); and HALF and FULL still
 fully clear.
 
+## Judging Fast Page Turns (X4)
+
+Settings > System > Fast Page Turns picks the panel's cheap partial waveform for FAST
+refreshes. On by default, and only on the X4: the X3's UC8253 has no second fast path,
+and the Seeed Sticky and the X4 Pro keep their own configs, where `0x22 = 0x1C` does not
+select the partial waveform at all and would run the full one on every page.
+
+The trade is ghosting for speed, so it needs eyes rather than numbers. Before trusting it:
+
+1. Read 200 or more consecutive pages of a text-heavy book, then inspect the page in
+   raking light for residue of earlier pages.
+2. Browse a cover-heavy folder, then open a book and check the text page underneath.
+3. Repeat both with the setting off, for comparison on the same panel and the same book.
+
+Residue that the next anti-ghost clean does not remove means the setting is wrong for that
+panel. Two levers, in order: raise `DisplayRefreshPolicy::TURBO_DEBT_MULTIPLIER` so cheap
+passes buy cleans faster, or lower `TURBO_RELOAD_EVERY` so the panel re-reads its
+temperature more often. Both are in `lib/hal/DisplayRefreshPolicy.h`, with the arithmetic
+for each choice written out beside them. Shipping the setting off by default is the
+fallback if neither is enough.
+
+The `turbo` column says what each pass actually ran, which is not the same as what was
+asked for: a promoted pass, an inverted-content pass, and every eighth pass all run the
+standard sequence regardless of the setting.
+
 ## Output
 
 `/perf/x3-000.csv` or `/perf/x4-000.csv` on the SD card, a new numbered file per boot, so
@@ -99,14 +124,33 @@ one row per refresh:
 | `think_ms` | Milliseconds from the button press that caused this paint. Empty when no press was outstanding |
 | `ink` | What this frame was scored at, 0-1000 (see `lib/hal/FrameInkMetrics.h`). 0 on paths with no framebuffer to measure |
 | `debt` | The anti-ghost ink debt after this pass. Crossing a threshold is what forces a clean |
+| `turbo` | 1 when this pass ran the panel's cheap partial waveform (Fast Page Turns), 0 otherwise |
 
 `req` and `run` are separate columns on purpose. Both panel drivers override the requested
 mode in places, and the size of that gap is itself one of the things being measured.
 
 `total_us - wire_us - wave_us` is host work: policy, ink scoring, and the driver's own
 per-refresh bookkeeping. Each of the three has a different fix, and a single elapsed total
-cannot tell them apart — a measured X4 FAST was 773 ms flat while the same panel's sleep
-FAST was 367 ms, and nothing in the totals said where the other 406 ms went.
+cannot tell them apart.
+
+What the split found, measured on exp.31 over 508 refreshes:
+
+| | total | wire | waveform | host |
+|---|---|---|---|---|
+| X4 page turn (n=340) | 578 ms | 67 ms | 505 ms | 5 ms |
+| X3 page turn (n=65) | 623 ms | 51 ms | 567 ms | 5 ms |
+
+The waveform is 87 to 91 percent of a refresh on both panels, so bus-side work is not
+worth optimising: X4's 67 ms is exactly the three 48000-byte plane writes at 20 MHz, and
+removing the two post-refresh ones would win about 38 ms of 578. The X4's 505 ms is the
+vendor's absolute partial sequence (`0x22 = 0xFC`), which reloads panel temperature every
+refresh; the incremental `0x22 = 0x1C` path costs about 77 ms and is what the Fast Page
+Turns setting selects.
+
+The sleep screen's 227 ms X4 "FAST" is not a faster page turn and should not be read as
+one. Its `wire_us` is 1.5 ms and its `ink` is 500, which together identify it as the
+grayscale base activation running the custom LUT — a different operation that never
+drives a black-and-white page.
 
 The end of each file carries the same split summed over the whole session, on a
 `# split wire N ms wave N ms host N ms of N ms` line.
