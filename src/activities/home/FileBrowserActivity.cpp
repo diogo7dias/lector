@@ -592,7 +592,8 @@ void FileBrowserActivity::loop() {
   // wait to learn which one was meant. The hold half no longer waits for the release
   // though — it fires the moment the threshold passes, and the delete it opens asks
   // for confirmation anyway.
-  switch (confirmHold.update(mappedInput.isPressed(MappedInputManager::Button::Confirm),
+  switch (confirmHold.update(mappedInput.wasPressed(MappedInputManager::Button::Confirm),
+                             mappedInput.isPressed(MappedInputManager::Button::Confirm),
                              mappedInput.wasReleased(MappedInputManager::Button::Confirm), mappedInput.getHeldTime(),
                              GO_HOME_MS)) {
     case hold_button::Fired::Hold:
@@ -610,7 +611,8 @@ void FileBrowserActivity::loop() {
   // the press like any single-action button.
   const bool backHasHold = mode == Mode::Books && basepath != "/";
   const auto backFired = backHasHold
-                             ? backHold.update(mappedInput.isPressed(MappedInputManager::Button::Back),
+                             ? backHold.update(mappedInput.wasPressed(MappedInputManager::Button::Back),
+                                               mappedInput.isPressed(MappedInputManager::Button::Back),
                                                mappedInput.wasReleased(MappedInputManager::Button::Back),
                                                mappedInput.getHeldTime(), GO_HOME_MS)
                              : backHold.updatePressOnly(mappedInput.wasPressed(MappedInputManager::Button::Back));
