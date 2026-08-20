@@ -20,14 +20,19 @@
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BookBadgeLabel.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
+#include "util/BookProgressFile.h"
 #include "util/BusyTick.h"
 #include "util/FavoriteImageNames.h"
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
 constexpr size_t NAME_BUFFER_SIZE = 500;
+// Cache sentinel: this entry's badge has not been looked up yet. A real answer is -1
+// (never opened) or 0-100, so it cannot collide with one.
+constexpr int16_t PERCENT_NOT_LOOKED_UP = -2;
 }  // namespace
 
 // Defined below, next to the other list-label helpers.
@@ -41,6 +46,7 @@ void FileBrowserActivity::loadFiles() {
   BusyBanner banner(renderer, tr(STR_BUSY_READING_FOLDER));
 
   files.clear();
+  readingPercents.clear();
   // A new listing invalidates the scroll window. render() re-derives it from the selection,
   // so starting at the top is safe even when the caller then selects a row further down.
   scrollOffset = 0;
@@ -166,10 +172,42 @@ std::string FileBrowserActivity::rowTitle(const int row) const {
   return index < 0 ? std::string() : getFileName(std::string(files[static_cast<size_t>(index)]));
 }
 
+int FileBrowserActivity::readingPercentAt(const int index) const {
+  if (index < 0 || static_cast<size_t>(index) >= files.size()) return -1;
+
+  if (readingPercents.size() != files.size()) {
+    // std::vector's growth throws, and a throwing allocation aborts this build. Probe the
+    // size through the nothrow path first: a folder too big to memoise draws no badge
+    // rather than taking the device down mid-render.
+    auto probe = makeUniqueNoThrow<int16_t[]>(files.size());
+    if (!probe) return -1;
+    probe.reset();
+    readingPercents.assign(files.size(), PERCENT_NOT_LOOKED_UP);
+  }
+
+  int16_t& cached = readingPercents[static_cast<size_t>(index)];
+  if (cached != PERCENT_NOT_LOOKED_UP) return cached;
+
+  cached = -1;
+  const std::string_view name = files[static_cast<size_t>(index)];
+  if (!name.empty() && name.back() == '/') return cached;  // a folder reads nothing
+  // Comics carry no progress badge anywhere in the firmware (the home list leaves them out
+  // too), so they are rejected here rather than costing an SD open that finds nothing.
+  if (FsHelpers::hasXtcExtension(name)) return cached;
+
+  const std::string folder = basepath == "/" ? std::string() : basepath;
+  book_progress::Marker marker;
+  if (book_progress::readForBook(folder + "/" + std::string(name), marker)) cached = marker.percent;
+  return cached;
+}
+
 std::string FileBrowserActivity::rowValue(const int row) const {
   if (rowKindAt(row) != RowKind::Entry) return {};
   const int index = fileIndexAt(row);
-  return index < 0 ? std::string() : getFileExtension(std::string(files[static_cast<size_t>(index)]));
+  if (index < 0) return {};
+
+  return book_badge::label(readingPercentAt(index), getFileExtension(std::string(files[static_cast<size_t>(index)])),
+                           tr(STR_READ_BADGE));
 }
 
 void FileBrowserActivity::applySearch(const std::string& query) {

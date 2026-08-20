@@ -26,6 +26,14 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // discharge. Waking is a chip reset, so without this the count restarts every session
   // and a device that is locked often never reaches the discharge threshold at all.
   uint8_t fastRefreshesSinceFull = 0;
+  // Hands out the "read order" stamp the library screens sort by: one number per reading
+  // session, only ever compared with another. A counter rather than a clock because this
+  // firmware sets no FAT timestamps and most boards have no RTC, so the card itself cannot
+  // say which book was read last.
+  uint32_t readOrderCounter = 0;
+  // Set once the reading badges have been seeded from the recents list, which is a
+  // one-time upgrade step for books read before the markers existed.
+  bool readingBadgesSeeded = false;
   // True once the low-battery warning has been shown for this drain. Persisted because
   // sleep is a chip reset: a RAM-only flag would re-warn on every wake below the
   // threshold. Cleared again once the charge climbs back over LOW_BATTERY_CLEAR_PERCENT.

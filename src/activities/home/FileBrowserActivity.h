@@ -75,6 +75,11 @@ class FileBrowserActivity final : public Activity {
   int fileIndexAt(int row) const;
   std::string rowTitle(int row) const;
   std::string rowValue(int row) const;
+  // Reading badge for one listing entry: the stored percent, or -1 for a book that was
+  // never opened (and for anything that is not a book). Memoised per listing because the
+  // value costs an SD read and every render pass asks the visible rows again.
+  int readingPercentAt(int index) const;
+  mutable std::vector<int16_t> readingPercents;
   // Holds the row label the batch prewarm getter is handing back: rowTitle()
   // returns a temporary, and the getter must return a pointer that stays valid
   // until the batch reads it (see prewarmRowGlyphs()).

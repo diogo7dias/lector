@@ -22,6 +22,7 @@
 #include "reading_stats/ReadingStatsClock.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
+#include "util/BookProgressFile.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -86,6 +87,13 @@ void TxtReaderActivity::onExit() {
     int pct = static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f);
     if (pct > 100) pct = 100;
     RECENT_BOOKS.setProgress(txt->getPath(), pct);
+    // Same number again, beside the book's cache, for the file browser's row badge and its
+    // last-read order. The enclosing condition already excludes a book being deleted.
+    book_progress::Marker marker;
+    marker.percent = static_cast<uint8_t>(pct);
+    marker.readOrder = ++APP_STATE.readOrderCounter;
+    book_progress::write(txt->getCachePath(), marker);
+    APP_STATE.saveToFile();
   }
 
   pageOffsets.clear();

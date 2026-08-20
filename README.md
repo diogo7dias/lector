@@ -30,6 +30,7 @@ E-reader firmware for the Xteink X3 and X4.
 - Home shows your in-progress books with a progress badge, full wrapped titles, and author.
 - Finished books are filed away automatically.
 - Search the current folder from the file browser.
+- File browser rows carry a reading badge: the saved percentage, or Read once the book is finished.
 - Random file browser order, and Open Book on Boot (last book or a random one).
 - Book Info screen with the book description.
 - In-book Delete Book, and remove from Recents from inside the book.

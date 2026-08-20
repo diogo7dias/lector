@@ -59,6 +59,7 @@
 #include "sleep/SleepPauseToggle.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
+#include "util/BookProgressFile.h"
 #include "util/BookmarkUtil.h"
 #include "util/BoundMenuLabels.h"
 #include "util/DeferredFavorite.h"
@@ -255,6 +256,10 @@ void EpubReaderActivity::onExit() {
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
   APP_STATE.readerActivityLoadCount = 0;
+  // Claim this session's read-order stamp in the same write that clears the crash counter,
+  // so marking the book below costs no extra save. Claimed even when the book is about to
+  // be deleted: the numbers only have to be ordered, never contiguous.
+  const uint32_t readOrder = ++APP_STATE.readOrderCounter;
   APP_STATE.saveToFile();
 
   // Persist whole-book paragraph counts gathered this session (epub still valid here).
@@ -268,6 +273,18 @@ void EpubReaderActivity::onExit() {
     const int pct =
         clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
     RECENT_BOOKS.setProgress(epub->getPath(), pct);
+    // The same number, kept beside the book's own cache so the file browser can badge a
+    // book the recents list no longer holds, and stamped with this session's read order so
+    // the browser can also sort by it.
+    // A book on its way to /read is finished by definition, so it is marked read outright
+    // rather than at whatever the last page rounded to. A book about to be erased is
+    // skipped: its cache directory goes with it.
+    if (!pendingDeleteBook) {
+      book_progress::Marker marker;
+      marker.percent = pendingReadFolderMove ? 100 : static_cast<uint8_t>(pct);
+      marker.readOrder = readOrder;
+      book_progress::write(epub->getCachePath(), marker);
+    }
   }
 
   // Leaving mid-footnote loses the in-RAM return stack on deep sleep; persist the
