@@ -21,6 +21,7 @@
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookFilingNames.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -591,7 +592,10 @@ void TxtReaderActivity::runPowerDoubleClick() {
 void TxtReaderActivity::askDeleteBook() {
   if (!txt) return;
   const std::string path = txt->getPath();
-  const std::string name = path.substr(path.rfind('/') + 1);
+  // The file name, deliberately, where the EPUB prompt uses the book's title: a TXT
+  // "title" is only the file name with its extension removed, so naming the file is both
+  // the same information and the more precise answer to "which file is about to go".
+  const std::string name = std::string(bookfiling::fileNameOf(path));
   // Deleting a book file is not undoable, so it asks first, the same as deleting a
   // sleep wallpaper does.
   startActivityForResult(

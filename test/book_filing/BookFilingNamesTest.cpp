@@ -69,3 +69,18 @@ TEST(CacheDirFor, MovingABookChangesItsCacheDir) {
   // This is why a move must re-key the cache: same name, different folder, different key.
   EXPECT_NE(cacheDirFor("/recents/My Book.epub"), cacheDirFor("/My Book.epub"));
 }
+
+TEST(DisplayNameFor, PrefersTheTitle) { EXPECT_EQ(displayNameFor("Moby Dick", "/recents/moby.epub"), "Moby Dick"); }
+
+TEST(DisplayNameFor, TrimsThePrettyPrintedWhitespaceAroundATitle) {
+  EXPECT_EQ(displayNameFor("\n    Moby Dick\n  ", "/moby.epub"), "Moby Dick");
+}
+
+TEST(DisplayNameFor, FallsBackToTheFileNameWhenTheTitleIsEmptyOrBlank) {
+  EXPECT_EQ(displayNameFor("", "/recents/moby.epub"), "moby.epub");
+  EXPECT_EQ(displayNameFor("   \n\t ", "/recents/moby.epub"), "moby.epub");
+}
+
+TEST(DisplayNameFor, FallsBackToTheWholePathWhenThereIsNoSlash) {
+  EXPECT_EQ(displayNameFor("", "moby.epub"), "moby.epub");
+}

@@ -22,6 +22,13 @@ bool isInFolder(std::string_view path, std::string_view folder);
 // "/recents/My Book.epub" -> "My Book.epub". The whole string when there is no slash.
 std::string_view fileNameOf(std::string_view path);
 
+// What to call a book on screen: its own title when it has a usable one, its file name
+// otherwise. A title straight out of an OPF file can be surrounded by the newlines and
+// indentation of a pretty-printed document, so it is trimmed before it is judged empty —
+// otherwise a whitespace-only title names the book with a blank line, which on a delete
+// confirmation means the prompt identifies nothing.
+std::string displayNameFor(std::string_view title, std::string_view path);
+
 // Candidate destinations inside `folder`, in the order they should be tried:
 // index 1 is "<folder>/name.epub", index 2 "<folder>/name (2).epub", and so on.
 // Splitting this out of the collision loop is what makes the naming testable.
