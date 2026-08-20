@@ -24,6 +24,7 @@
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
@@ -1227,6 +1228,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::DICTIONARY: {
       openDictionaryWordSelect();
+      break;
+    }
+    case EpubReaderMenuActivity::MenuAction::DICTIONARY_HISTORY: {
+      // Same guard Look Up uses: with no dictionary set, every row in the list would open
+      // only to report that, so say it once here instead.
+      if (SETTINGS.dictionaryName[0] == '\0') {
+        showDictionaryMessage = true;
+        dictionaryMessageTime = millis();
+        requestUpdate();
+        break;
+      }
+      startActivityForResult(std::make_unique<DictionaryHistoryActivity>(renderer, mappedInput),
+                             [this](const ActivityResult&) { requestUpdate(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::GRAB_QUOTE: {
