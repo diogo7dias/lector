@@ -1186,8 +1186,10 @@ bool SleepActivity::renderSleepOverlayFile(HalFile& file, const char* pathForLog
   if (alphaResult == AlphaOverlayResult::Error) return false;
 
   // Not a usable alpha image (8/24-bit, or 32-bit but fully opaque). Draw it as an
-  // ordinary bitmap over the retained page instead of rejecting it.
-  Bitmap bitmap(file, true);
+  // ordinary bitmap over the retained page instead of rejecting it. Dithering is
+  // off here: the overlay sits on top of retained page content, and an ordered
+  // dither over it reads as noise rather than tone (upstream #3119).
+  Bitmap bitmap(file);
   const auto parseResult = bitmap.parseHeaders();
   if (parseResult != BmpReaderError::Ok) {
     LOG_ERR("SLP", "Invalid sleep overlay BMP %s: %s", pathForLog, Bitmap::errorToString(parseResult));
