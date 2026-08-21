@@ -146,7 +146,8 @@ Renaming and moving files is done from the web interface rather than on the devi
 [section 9](#9-getting-books-onto-the-device).
 
 Each row shows its file type on the right, and a book you have opened before also shows how
-far in you are: a percentage while you are reading it, or **Read** once it is finished. The
+far in you are on the left, in front of the title: a percentage while you are reading it, or
+**Read** once it is finished, in the same style the home screen uses. The
 badge stays even after the book leaves the Recents list or is filed into `/read`. Books you
 have never opened show no badge, and comics (XTC) never carry one.
 
@@ -807,6 +808,12 @@ Session**. Alongside them:
 - **Move Opened Books to Recents Folder**.
 
 **Stats** — **Track Reading Stats** and **Reading Idle Limit**.
+
+**Fast Page Turns** — on by default on the X4, where it is validated. Page turns and menu
+moves use the panel's cheapest waveform, which is several times quicker than the standard
+one. Every eighth pass runs the standard waveform anyway, so the panel never works from a
+stale temperature reading, and the first paint after a wake never uses it. Turn it off if
+you ever see ink left behind that a full refresh does not clear.
 
 **Performance Timings** — off by default, and free while it is off. On, Lector times every
 screen refresh and reports the numbers three ways: a small line in the top-left corner of
