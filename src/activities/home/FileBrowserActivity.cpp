@@ -247,8 +247,17 @@ std::string FileBrowserActivity::rowValue(const int row) const {
   const int index = fileIndexAt(row);
   if (index < 0) return {};
 
-  return book_badge::label(readingPercentAt(index), getFileExtension(std::string(files[static_cast<size_t>(index)])),
-                           tr(STR_READ_BADGE));
+  // File type only. The reading badge used to ride along here, right-aligned at the far
+  // end of the row; it now leads the row as a chip, which is where the eye scanning a
+  // library looks for it and how the home screen has always shown it.
+  return getFileExtension(std::string(files[static_cast<size_t>(index)]));
+}
+
+std::string FileBrowserActivity::rowBadge(const int row) const {
+  if (rowKindAt(row) != RowKind::Entry) return {};
+  const int index = fileIndexAt(row);
+  if (index < 0) return {};
+  return book_badge::chipLabel(readingPercentAt(index), tr(STR_READ_BADGE));
 }
 
 void FileBrowserActivity::applySearch(const std::string& query) {
@@ -770,7 +779,8 @@ void FileBrowserActivity::render(RenderLock&&) {
     // the draw and feeds the scroll offset.
     const ListVisibility vis = GUI.drawWrappedList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalRowCount(), static_cast<int>(selectorIndex),
-        scrollOffset, [this](int row) { return rowTitle(row); }, [this](int row) { return rowValue(row); });
+        scrollOffset, [this](int row) { return rowTitle(row); }, [this](int row) { return rowValue(row); },
+        [this](int row) { return rowBadge(row); });
     firstVisibleIdx = vis.firstVisible;
     lastVisibleIdx = vis.lastVisible;
     scrollOffset = vis.firstVisible;

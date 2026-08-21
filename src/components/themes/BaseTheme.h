@@ -244,7 +244,14 @@ class BaseTheme {
   // back the returned visible range (see FileBrowserActivity).
   virtual ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                                          int scrollOffset, const std::function<std::string(int index)>& rowTitle,
-                                         const std::function<std::string(int index)>& rowValue = nullptr) const;
+                                         const std::function<std::string(int index)>& rowValue = nullptr,
+                                         // Drawn as a filled chip before the title on the row's first line, in
+                                         // the same style drawRecentBookList uses on the home screen: black on
+                                         // an unselected row, white on the inverted one. Return an empty
+                                         // string for a row that has no badge. The title wraps to the right of
+                                         // the chip and its continuation lines stay under the first line, not
+                                         // back at the left margin, so the text block keeps a straight edge.
+                                         const std::function<std::string(int index)>& rowBadge = nullptr) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
