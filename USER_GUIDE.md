@@ -844,7 +844,10 @@ when you are done; it writes to the card while it is on.
 
 Three routes:
 
-- **Over Wi-Fi:** **Settings > System > Check for updates**.
+- **Over Wi-Fi:** **Settings > System > Check for updates**. Only stable releases are
+  offered, never experimental ones. A device already running an experimental build is
+  offered the next stable release, which is how it gets back onto a stable line without a
+  cable.
 - **From the SD card:** put a firmware `.bin` on the card and use **Settings > System > SD
   Card Firmware Update**, or open the `.bin` from the file browser.
 - **Over USB:** the [Lector flasher](https://diogo7dias.github.io/lector-xteink-firmware/)

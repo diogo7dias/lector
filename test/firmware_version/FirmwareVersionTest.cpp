@@ -55,11 +55,22 @@ TEST(FirmwareVersionIsNewer, TreatsAReleaseCandidateAsOlderThanItsRelease) {
   EXPECT_FALSE(firmware_version::isNewer("lector-0.24.1", "lector 0.24.1"));
 }
 
-TEST(FirmwareVersionIsNewer, SaysNoWhenEitherSideCannotBeRead) {
-  // An experimental build carries no three-part number. Offering an install against a
-  // version the device cannot even name would be a guess.
-  EXPECT_FALSE(firmware_version::isNewer("lector-0.24.2", "lector.exp.7"));
+TEST(FirmwareVersionIsNewer, SaysNoWhenTheReleaseCannotBeRead) {
+  // An update the device cannot even name is not one it should install.
   EXPECT_FALSE(firmware_version::isNewer("lector.exp.8", "lector 0.24.1"));
+  EXPECT_FALSE(firmware_version::isNewer("nonsense", "lector 0.24.1"));
+}
+
+TEST(FirmwareVersionIsNewer, AStableReleaseCanReplaceAnExperimentalBuild) {
+  // An experimental build carries no three-part number, and refusing on that basis made
+  // it a dead end: Check for Updates could never move it back to a stable release. The
+  // check only ever sees a non-prerelease, so the offer cannot be a downgrade.
+  EXPECT_TRUE(firmware_version::isNewer("lector-0.24.2", "lector.exp.7"));
+  EXPECT_TRUE(firmware_version::isNewer("lector-0.26.1", "lector.exp.53"));
+}
+
+TEST(FirmwareVersionIsNewer, NeitherSideReadableIsStillNo) {
+  EXPECT_FALSE(firmware_version::isNewer("lector.exp.9", "lector.exp.7"));
 }
 
 }  // namespace

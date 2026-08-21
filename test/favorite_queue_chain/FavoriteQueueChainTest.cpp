@@ -5,9 +5,7 @@
 using favorite_chain::Job;
 using favorite_chain::resolve;
 
-TEST(FavoriteQueueChain, EmptyQueueLeavesTheNameAlone) {
-  EXPECT_EQ(resolve({}, "/sleep/a.pxc"), "");
-}
+TEST(FavoriteQueueChain, EmptyQueueLeavesTheNameAlone) { EXPECT_EQ(resolve({}, "/sleep/a.pxc"), ""); }
 
 TEST(FavoriteQueueChain, AQueuedRenameReportsItsTarget) {
   EXPECT_EQ(resolve({{"/sleep/a.pxc", "/sleep/a_F.pxc"}}, "/sleep/a.pxc"), "/sleep/a_F.pxc");
