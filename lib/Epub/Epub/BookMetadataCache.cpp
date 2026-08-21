@@ -13,8 +13,9 @@
 
 namespace {
 // v11 = TOC targets resolve by file name when the exact path is not in the spine; caches
-// built before it hold the -1 that made those chapter rows do nothing.
-constexpr uint8_t BOOK_CACHE_VERSION = 11;
+// built before it hold the -1 that made those chapter rows do nothing. v12 = a TOC entry
+// that still resolves to nothing is left out of the cache entirely.
+constexpr uint8_t BOOK_CACHE_VERSION = 12;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -461,9 +462,15 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
       matcher.consider(static_cast<int16_t>(i), spineEntry.href);
     }
     spineIndex = matcher.result();
-    if (spineIndex == -1) {
-      LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
-    }
+  }
+
+  if (spineIndex == -1) {
+    // The book names a document its spine does not carry: a cover page listed in the TOC
+    // but never in the reading order, or a converted book whose hrefs are mobi filepos
+    // junk. There is nothing to open, so the row is dropped rather than listed as a
+    // chapter that closes the picker and leaves the reader where it was.
+    LOG_DBG("BMC", "createTocEntry: dropping TOC entry with no spine item, href %s", href.c_str());
+    return;
   }
 
   // Compose the title to NFC at index time so the cache stores precomposed glyphs;
