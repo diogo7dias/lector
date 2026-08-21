@@ -140,8 +140,8 @@ sleep frame shows `frame`, `base` and `draw` where a wallpaper wake shows none o
 | `hal` | Power manager and clock |
 | `sd` | `Storage.begin()` |
 | `cfg` | Settings, state, recents, OPDS servers and presets |
-| `in` | Power-button hold verify plus the recovery-combo settle window |
 | `disp` | `setupDisplayAndFonts()` |
+| `in` | Power-button hold verify plus whatever is left of the recovery-combo settle window |
 | `frame` | Reading the 52 KB saved sleep frame off the card |
 | `base` | Writing the X3 differential baseline back into controller RAM |
 | `draw` | Drawing the unlock banners into the framebuffer |
@@ -158,8 +158,10 @@ Straight to Book on:
 
 Two things to read off that. `gpio` through `in` is one fixed 500 ms window and not four
 independent stages: the recovery-combo settle runs to a deadline measured from
-`gpio.begin()`, so `sd` and `cfg` are already inside it and `in` is only whatever is left.
-Making `sd` or `cfg` faster buys nothing on a wake; it just lengthens `in`.
+`gpio.begin()`, so everything before it is already inside the window and `in` is only
+whatever is left. Making `sd` or `cfg` faster buys nothing on a wake; it just lengthens
+`in`. That is also why `disp` sits inside the window as of exp.51 — the display bring-up
+is free there, and the numbers above are the last ones taken with it outside.
 
 And `push` is a single panel pass that blanks the sleep wallpaper, which cannot be skipped
 without the wallpaper surviving into the page. On the X4 it is 1809 ms, 65% of the wake,

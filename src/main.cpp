@@ -595,40 +595,6 @@ void setup() {
       break;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
-  bool recoveryFirmwareMode = false;
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
-    // Refresh the cached button state until the ADC button ladder has settled — isPressed()
-    // needs ~half a second after the ladder comes up, per the HalGPIO contract.
-    //
-    // The deadline runs from gpio.begin(), not from here. It used to be a flat 500 ms
-    // measured from this point, which meant the settle window began only after the card
-    // mount and the settings load had already given the ladder a few hundred milliseconds
-    // of their own. Every wake therefore paid the full half second twice over, once
-    // implicitly and once on the clock, and a measured X3 wake spent 550 ms of ~2400 ms
-    // inside this loop. Anchoring to when the ladder actually started keeps the settle
-    // window the same length in absolute terms and stops charging for it a second time.
-    //
-    // The loop also stops the moment UP reads pressed: once the answer is yes, waiting
-    // longer cannot change it. A held combo is therefore detected at least as reliably as
-    // before, never less.
-    constexpr unsigned long kInputSettleMs = 500;
-    while (millis() - inputStartedMs < kInputSettleMs) {
-      gpio.update();
-      if (gpio.isPressed(HalGPIO::BTN_UP)) break;
-      delay(10);
-    }
-    gpio.update();
-    if (gpio.isPressed(HalGPIO::BTN_UP)) {
-      recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
-    }
-  }
-
-  WakeTiming::mark(WakeTiming::Stage::InputSettled);
-
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
 
@@ -665,17 +631,6 @@ void setup() {
   const bool quickResumeTargetIsReader = APP_STATE.quickResumeTargetIsReader;
   const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
 
-  std::string bootBookPath;
-  if (!quickResumeWake && !pendingWakeBookPath.empty()) {
-    bootBookPath = pendingWakeBookPath;
-    setUnlockBannerBookPath(bootBookPath);
-  } else if (!quickResumeWake && SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
-             !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
-             !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
-    bootBookPath = pickBootBookPath();
-    if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
-  }
-
   // Waking from a wallpaper sleep face: a normal (non-quick-resume) deep-sleep wake whose
   // sleep screen was a custom wallpaper. The unlock path below blanks the panel and goes
   // to the book instead of showing the boot splash. Needs the seamless begin() so the
@@ -694,6 +649,93 @@ void setup() {
 
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
   WakeTiming::mark(WakeTiming::Stage::DisplayReady);
+
+  // Start the wallpaper blank NOW, before the button-ladder settle below, and let the
+  // panel drive its waveform while the settle waits. The blank is a full pass — 710 ms on
+  // an X3, 1809 ms on an X4 — and for most of it the chip has nothing to do but poll a
+  // BUSY pin, so it is the one part of the wake that genuinely overlaps something else.
+  //
+  // Only when no banners are wanted. The banner names the book this wake is about to
+  // open, and that pick reads recoveryFirmwareMode, which the settle below is what
+  // decides. With banners on, the blank stays where it was, in the block further down.
+  //
+  // Async is safe here and nowhere near the reader: the contract is that the framebuffer
+  // stays untouched until the refresh completes, and the settle loop only reads buttons.
+  // waitRefreshComplete() runs before anything draws again.
+  bool asyncBlankInFlight = false;
+  if (wallpaperWake && SETTINGS.wakeStraightToBook) {
+    renderer.clearScreen();
+    renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
+    asyncBlankInFlight = true;
+  }
+
+  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
+  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
+  // flashing has been locked down (e.g. recent X3 firmware).
+  //
+  // This runs AFTER the panel is up, not before. The check waits out a fixed window
+  // measured from gpio.begin(), and everything that happens inside that window is free:
+  // the card mount and the settings load already ran there, and the display bring-up now
+  // does too. Before the move it ran after the window and cost its 138 ms (X3) or 50 ms
+  // (X4) on top; now the window absorbs it and what is left to wait for shrinks by the
+  // same amount.
+  bool recoveryFirmwareMode = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    // Refresh the cached button state until the ADC button ladder has settled — isPressed()
+    // needs ~half a second after the ladder comes up, per the HalGPIO contract.
+    //
+    // The deadline runs from gpio.begin(), not from here. It used to be a flat 500 ms
+    // measured from this point, which meant the settle window began only after the card
+    // mount and the settings load had already given the ladder a few hundred milliseconds
+    // of their own. Every wake therefore paid the full half second twice over, once
+    // implicitly and once on the clock, and a measured X3 wake spent 550 ms of ~2400 ms
+    // inside this loop. Anchoring to when the ladder actually started keeps the settle
+    // window the same length in absolute terms and stops charging for it a second time.
+    //
+    // TWO AGREEING SAMPLES, not one. The buttons are a resistor ladder read as a voltage
+    // on a single analog input, and the panel rails now come up before this point, which
+    // puts extra load on the same supply. A single nudged sample must not be able to
+    // strand a wake in the recovery picker: that screen deliberately has no way back to
+    // the reader, so a false positive costs a power cycle. Two samples at least 5 ms
+    // apart is what HalGPIO's own debounce requires to commit a press, so this asks the
+    // ladder for exactly the confidence it is specified to give.
+    //
+    // The loop still stops the moment UP is confirmed: once the answer is yes, waiting
+    // longer cannot change it.
+    constexpr unsigned long kInputSettleMs = 500;
+    const auto upConfirmed = [] {
+      gpio.update();
+      if (!gpio.isPressed(HalGPIO::BTN_UP)) return false;
+      delay(6);
+      gpio.update();
+      return gpio.isPressed(HalGPIO::BTN_UP);
+    };
+    while (millis() - inputStartedMs < kInputSettleMs) {
+      if (upConfirmed()) {
+        recoveryFirmwareMode = true;
+        break;
+      }
+      delay(10);
+    }
+    if (!recoveryFirmwareMode && upConfirmed()) recoveryFirmwareMode = true;
+    if (recoveryFirmwareMode) LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+  }
+
+  WakeTiming::mark(WakeTiming::Stage::InputSettled);
+
+  // Picked here rather than before the display bring-up because it reads
+  // recoveryFirmwareMode, which is only known once the check above has run. Still ahead
+  // of every use: the banners that name the book are drawn below.
+  std::string bootBookPath;
+  if (!quickResumeWake && !pendingWakeBookPath.empty()) {
+    bootBookPath = pendingWakeBookPath;
+    setUnlockBannerBookPath(bootBookPath);
+  } else if (!quickResumeWake && SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
+             !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
+             !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+    bootBookPath = pickBootBookPath();
+    if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
+  }
 
   // The wake/unlock banners are the first thing seen on waking, and the activity that
   // follows repaints straight over them. They are the loading face: they exist to show the
@@ -786,6 +828,14 @@ void setup() {
       // goes blank the moment the wake starts, while the button is still held, so there IS
       // a visible answer to the press before the page arrives.
       if (wallpaperWake) {
+        if (asyncBlankInFlight) {
+          // Already issued before the settle window and running on the panel since. All
+          // that is left is to let it finish; whatever the settle cost has come off it.
+          renderer.waitRefreshComplete();
+          asyncBlankInFlight = false;
+          allowFastInitialReaderRefresh = true;
+          break;
+        }
         bool bannersDrawn = false;
         renderer.clearScreen();
         if (!SETTINGS.wakeStraightToBook) {

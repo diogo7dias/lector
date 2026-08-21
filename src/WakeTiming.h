@@ -26,14 +26,18 @@ enum class Stage : uint8_t {
   // sitting before the first stamp, so the baseline moved earlier again: "the framework's
   // own startup" and "our Serial.begin" are different answers and only one of them is
   // ours to fix.
-  SerialUp = 0,      // Serial.begin() returned; everything before it is the framework's
-  SysReady = 1,      // HalSystem::begin() returned
-  GpioReady = 2,     // gpio.begin() returned, so the ADC button ladder is powered
-  HalReady = 3,      // power manager and clock up, before the SD card
-  SdReady = 4,       // Storage.begin() returned
-  ConfigReady = 5,   // settings, state, recents, OPDS and presets loaded
-  InputSettled = 6,  // power-button verify plus the recovery-mode button settle window
-  DisplayReady = 7,  // setupDisplayAndFonts() returned
+  SerialUp = 0,     // Serial.begin() returned; everything before it is the framework's
+  SysReady = 1,     // HalSystem::begin() returned
+  GpioReady = 2,    // gpio.begin() returned, so the ADC button ladder is powered
+  HalReady = 3,     // power manager and clock up, before the SD card
+  SdReady = 4,      // Storage.begin() returned
+  ConfigReady = 5,  // settings, state, recents, OPDS and presets loaded
+  // DisplayReady before InputSettled, because that is the order they now run in: the
+  // display comes up INSIDE the button-ladder settle window rather than after it. These
+  // must stay in chronological order — each stage is printed as a delta from the one
+  // before, so a stamp out of order reports as zero and folds its cost into its neighbour.
+  DisplayReady = 6,  // setupDisplayAndFonts() returned
+  InputSettled = 7,  // power-button verify plus the recovery-mode button settle window
   // The three below split what used to be one "ban" stage. On an X3 that stage measured
   // 3675 ms of a 4740 ms wake, which named the wake's whole cost and explained none of
   // it: four different things happen in there — a 52 KB frame read off the card, a full

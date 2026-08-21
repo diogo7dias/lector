@@ -32,8 +32,8 @@ constexpr uint16_t kUnset = 0xFFFF;
 // WAK2 file has fewer stamps than this build expects and must be rejected, not
 // misread as a fast wake. "WAK4" for the same reason: the pre-SD stage was split three
 // ways, so a WAK3 record is shorter again, and "WAK5" once the framework's own startup
-// was separated from Serial.begin.
-constexpr uint32_t kMagic = 0x57414B35;
+// was separated from Serial.begin, and "WAK6" once disp and in swapped places.
+constexpr uint32_t kMagic = 0x57414B36;
 
 // magic (4) + one stamp per stage + wake count (4). Sized off kCount so adding a stage
 // cannot leave the reader and the writer disagreeing. Fixed and written whole, so a
@@ -55,8 +55,8 @@ bool enabled = false;
 
 // Short labels, in Stage order. "pre" is the prologue before the first stamp, which is
 // printed as a stage in its own right rather than being silently rolled into the total.
-constexpr const char* kStageNames[kCount] = {"pre",  "sys",   "gpio", "hal",  "sd",   "cfg", "in",
-                                             "disp", "frame", "base", "draw", "push", "act"};
+constexpr const char* kStageNames[kCount] = {"pre", "sys",   "gpio", "hal",  "sd",   "cfg", "disp",
+                                             "in",  "frame", "base", "draw", "push", "act"};
 
 // millis() is 32-bit; a wake that reaches 65 seconds is already broken, and clamping
 // keeps the display honest rather than wrapping to a small, believable-looking number.
