@@ -1,0 +1,151 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Text Settings — tabs vs long list</title>
+<style>
+:root{--w:480px}
+body{background:#3a3a3a;color:#ddd;font:14px/1.4 -apple-system,Segoe UI,Roboto,sans-serif;margin:0;padding:28px}
+h1{font-size:18px;font-weight:600;margin:0 0 4px}
+p.note{color:#aaa;max-width:1100px;margin:0 0 24px}
+.row{display:flex;gap:26px;flex-wrap:wrap;align-items:flex-start}
+figure{margin:0}
+figcaption{width:var(--w);margin:8px 0 0;font-size:13px;color:#ccc}
+figcaption b{color:#fff}
+.screen{width:480px;height:800px;background:#fff;color:#000;position:relative;
+  font-family:"Helvetica Neue",Arial,sans-serif;overflow:hidden;box-shadow:0 0 0 1px #000,0 8px 24px rgba(0,0,0,.5)}
+.abs{position:absolute;left:0;right:0}
+.hdr{top:14px;height:45px;text-align:center;font-size:19px;line-height:24px}
+.batt{position:absolute;right:12px;top:19px;font-size:13px}
+.batt i{display:inline-block;width:15px;height:12px;border:1px solid #000;vertical-align:-1px;margin-left:4px;position:relative}
+.batt i::after{content:"";position:absolute;left:1px;top:1px;bottom:1px;width:8px;background:#000}
+.preview{overflow:hidden;padding:0 12px;box-sizing:border-box}
+.preview .meta{font-size:13px;display:flex;justify-content:space-between;margin-bottom:6px}
+.preview .body{font-family:Georgia,"Times New Roman",serif;font-size:17px;line-height:1.5;text-align:justify}
+.rule{position:absolute;left:0;right:0;border-top:1px solid #000;opacity:.25}
+.tabbar{height:50px;padding:0 20px;box-sizing:border-box;font-size:19px}
+.tabbar span{display:inline-block;padding:0 0 6px;margin-right:10px;position:relative;line-height:24px}
+.tabbar span.sel-focus{background:#000;color:#fff;padding:0 3px 6px;margin-right:7px}
+.tabbar span.sel{border-bottom:2px solid #000}
+.list{position:absolute;left:0;right:0}
+.item{height:30px;line-height:30px;box-sizing:border-box;padding:0 20px;font-size:17px;
+  display:flex;justify-content:space-between;align-items:center;white-space:nowrap}
+.item .v{font-size:15px}
+.item.sel{background:#000;color:#fff}
+.item.head{background:#000;color:#fff;justify-content:center;font-size:15px;letter-spacing:.14em}
+.arrow{position:absolute;right:15px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent}
+.arrow.up{border-bottom:8px solid #000}
+.arrow.down{border-top:8px solid #000}
+.caption{position:absolute;left:12px;font-size:13px}
+.hints{position:absolute;left:0;right:0;bottom:0;height:40px;border-top:1px solid #000;
+  display:flex;font-size:14px;align-items:center}
+.hints div{flex:1;text-align:center}
+</style></head><body>
+<h1>Lector — Text Settings: current tabs vs long list</h1>
+<p class="note">1:1 at the panel size (480 &times; 800). Geometry taken from BaseMetrics: topPadding 14, header 45, spacing 10, preview 30% of usable height, tab bar 50, list row 30, hints 40. Filled black bar = focused row, exactly how <code>drawList</code> paints selection today.</p>
+<div class="row" id="root"></div>
+<script>
+const H=800;
+const top_=14,hdrH=45,sp=10,hintsH=40;
+const afterHeader=top_+hdrH+sp;            // 69
+const bottomReserved=hintsH+sp;            // 50
+const usable=H-afterHeader-bottomReserved; // 681
+
+const PREVIEW_TEXT="The lamp burned low and the house was quiet. She turned the page without hurry, as if the night had agreed to wait for her, and let the sentence settle before moving on to the next one.";
+
+function chrome(title){
+  return `<div class="abs hdr">${title}<div class="batt">72%<i></i></div></div>`;
+}
+function preview(topY,h){
+  return `<div class="abs preview" style="top:${topY}px;height:${h}px">
+    <div class="meta"><span>Vollkorn</span><span>14 pt</span></div>
+    <div class="body">${PREVIEW_TEXT}</div></div>
+    <div class="rule" style="top:${topY+h-1}px"></div>`;
+}
+function tabbar(topY,tabs,active,focused){
+  const t=tabs.map((l,i)=>{
+    const cls=i===active?(focused?"sel-focus":"sel"):"";
+    return `<span class="${cls}">${l}</span>`;}).join("");
+  return `<div class="abs tabbar" style="top:${topY+10}px">${t}</div>`;
+}
+function list(topY,h,rows,sel,arrows){
+  const n=Math.floor(h/30);
+  let out=`<div class="list" style="top:${topY}px;height:${h}px;overflow:hidden">`;
+  rows.slice(0,n).forEach((r,i)=>{
+    if(r.head) out+=`<div class="item head">${r.t}</div>`;
+    else out+=`<div class="item ${i===sel?"sel":""}"><span>${r.t}</span><span class="v">${r.v||""}</span></div>`;
+  });
+  out+="</div>";
+  if(arrows){
+    out+=`<div class="arrow up" style="top:${topY+2}px"></div>`;
+    out+=`<div class="arrow down" style="top:${topY+h-12}px"></div>`;
+  }
+  return out;
+}
+function hints(a,b,c,d){
+  return `<div class="hints"><div>${a}</div><div>${b}</div><div>${c}</div><div>${d}</div></div>`;
+}
+function fig(html,cap){
+  return `<figure><div class="screen">${html}</div><figcaption>${cap}</figcaption></figure>`;
+}
+
+/* ---------- CURRENT: tabs ---------- */
+const previewH=Math.floor(usable*30/100);       // 204
+const tabTop=afterHeader+previewH;              // 273
+const listTop=tabTop+50+sp;                     // 333
+const captionH=26;
+const listH=usable-previewH-50-sp-captionH;     // 391
+
+const fontRows=[{t:"Vollkorn",v:"Selected"},{t:"Bookerly"},{t:"ChareInk"},{t:"Literata"},
+ {t:"Atkinson Hyperlegible"},{t:"Crimson Pro"},{t:"EB Garamond"},{t:"Inter"},{t:"iA Writer Duo"},
+ {t:"JetBrains Mono"},{t:"Libre Baskerville"},{t:"Lora"},{t:"Merriweather"}];
+const layoutRows=[{t:"Line spacing",v:"120 %"},{t:"Extra spacing",v:"On"},{t:"Alignment",v:"Justify"},
+ {t:"Uniform margins",v:"On"},{t:"Screen margin",v:"14"},{t:"Dynamic margins",v:"Off"},
+ {t:"First line indent",v:"Book"},{t:"Debug borders",v:"Off"}];
+const styleRows=[{t:"Focus reading",v:"Off"},{t:"Guide dots",v:"On"},{t:"Hidden dots",v:"Off"},
+ {t:"Hyphenation",v:"On"},{t:"Embedded style",v:"On"},{t:"Anti-aliasing",v:"On"}];
+const sizeRows=[{t:"10 pt"},{t:"12 pt"},{t:"14 pt",v:"Selected"},{t:"16 pt"},{t:"18 pt"},{t:"20 pt"},{t:"24 pt"}];
+
+const cur1=chrome("Text Settings")+preview(afterHeader,previewH)
+  +tabbar(tabTop,["Font","Size","Layout","Style"],0,true)
+  +list(listTop,listH,fontRows,-1,true)
+  +hints("Back","Size","Up","Down");
+
+const cur2=chrome("Text Settings")+preview(afterHeader,previewH)
+  +tabbar(tabTop,["Font","Size","Layout","Style"],2,false)
+  +list(listTop,listH,layoutRows,2,true)
+  +`<div class="caption" style="top:${listTop+listH+sp}px">Not shown in preview</div>`
+  +hints("Back","Select","Up","Down");
+
+/* ---------- NEW A: preview kept, one long list with section headings ---------- */
+const aListTop=afterHeader+previewH+sp;             // 283
+const aListH=usable-previewH-sp-captionH;           // 441
+const longRows=[
+ {t:"FONT",head:1},
+ {t:"Font",v:"Vollkorn"},{t:"Size",v:"14 pt"},
+ {t:"LAYOUT",head:1},
+ ...layoutRows,
+ {t:"STYLE",head:1},
+ ...styleRows];
+const newA=chrome("Text Settings")+preview(afterHeader,previewH)
+  +list(aListTop,aListH,longRows,2,true)
+  +hints("Back","Select","Up","Down");
+
+/* ---------- NEW B: no preview, full-height list ---------- */
+const bListTop=afterHeader;
+const bListH=usable;                                 // 681 -> 22 rows
+const newB=chrome("Text Settings")
+  +list(bListTop,bListH,longRows,2,true)
+  +hints("Back","Select","Up","Down");
+
+/* ---------- NEW C: long list, second page (scrolled) ---------- */
+const scrolled=longRows.slice(11);
+const newC=chrome("Text Settings")+preview(afterHeader,previewH)
+  +list(aListTop,aListH,scrolled,3,true)
+  +hints("Back","Toggle","Up","Down");
+
+document.getElementById("root").innerHTML=
+  fig(cur1,"<b>Current 1 — tabs, focus on the tab bar.</b> Up/Down ring position 0 is the bar itself; Confirm walks to the next tab (hint reads &ldquo;Size&rdquo;). Font list under it.")
+ +fig(cur2,"<b>Current 2 — Layout tab, focus on a row.</b> Same screen, tab bar underlined instead of filled. 8 visible rows out of a 391 px list, paged.")
+ +fig(newA,"<b>New A — preview kept, one long list.</b> Tab bar removed, its 60 px go to the list (13 rows instead of 8). Sections are the black heading bars <code>drawList</code> already supports via <code>rowIsHeader</code>; navigation steps past them. Font and Size collapse to value rows that open a picker.")
+ +fig(newC,"<b>New A, scrolled.</b> Continuous scroll (<code>scrollOffset</code>), so Style rows follow Layout with no mode switch. Heading bar scrolls with the content.")
+ +fig(newB,"<b>New B — no preview, full-height list.</b> 22 rows, the whole tree fits on roughly one screen. Cost: no live sample, so line spacing and margins are judged blind, back in the book.");
+</script>
+</body></html>

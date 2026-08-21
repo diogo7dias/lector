@@ -788,6 +788,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // global setting. Same guarantee the reader-edit overlay gives, same mechanism.
   void setStatusBarOverride(const ReaderPrefs& prefs);
   void clearStatusBarOverride();
+  // The global reader settings with every live overlay unwound. ReaderPrefs::fromGlobal()
+  // reads the live fields, and while a book is open its own status bar block sits on those
+  // fields (and, inside the Reader Settings screen, its font and margins too), so a book
+  // asking "what is global?" through fromGlobal() gets its own values handed back. Anything
+  // that means the user's global settings -- Reset Reader Settings above all -- must ask here.
+  ReaderPrefs trueGlobalReaderPrefs() const;
   bool statusBarOverrideActive() const { return sbOverrideActive_; }
   bool statusBarEnabled() const { return sbEnabled != 0; }
 
@@ -829,6 +835,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Reads the live sb* fields into a block, and writes one back over them.
   StatusBarBlock captureStatusBarBlock() const;
   void applyStatusBarBlock(const StatusBarBlock& b);
+  // Writes a status bar block into the matching ReaderPrefs fields.
+  static void applyStatusBarBlockTo(const StatusBarBlock& b, ReaderPrefs& p);
   ReaderPrefs readerEditBackup_;
   ReaderEditSink readerEditSink_ = nullptr;
   void* readerEditSinkCtx_ = nullptr;
