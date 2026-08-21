@@ -8,9 +8,11 @@
 
 #include <deque>
 #include <mutex>
+#include <vector>
 
 #include "CrossPointState.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "util/FavoriteQueueChain.h"
 
 namespace DeferredFavorite {
 namespace {
@@ -117,6 +119,10 @@ bool request(const std::string& fromPath, const std::string& toPath) {
   // Toggling straight back cancels the queued toggle instead of stacking a
   // second rename: the two jobs are a net no-op on the card, and cancelling
   // keeps indecisive tapping from ever filling the queue.
+  //
+  // Only the LAST job may be cancelled, even though an earlier one may also be this job's
+  // inverse. Removing a job from the middle would break the chain of every job queued
+  // after it that depends on this rename having happened.
   if (!pending().empty() && pending().back().fromPath == toPath && pending().back().toPath == fromPath) {
     pending().pop_back();
     return true;
@@ -185,11 +191,20 @@ void reconcile() {
 
 std::string pendingTargetFor(const std::string& fromPath) {
   std::lock_guard<std::mutex> lock(stateMutex());
-  // Back to front: a later job supersedes an earlier one for the same file.
-  for (auto it = pending().rbegin(); it != pending().rend(); ++it) {
-    if (it->fromPath == fromPath) return it->toPath;
-  }
-  return std::string();
+  // Follow the CHAIN, oldest job first. A file can be renamed more than once before the
+  // queue drains -- favorite it, favorite something else, unfavorite it -- and the queue
+  // then holds A->B and later B->A with an unrelated job between them. Reading only the
+  // newest job whose source is A answers B, when the name the file will actually end up
+  // with is A. That wrong answer is not just a display problem: the next toggle derives
+  // its direction from it, enqueues a second B->A, and the worker fails that one because
+  // B is already gone. reconcile() then puts APP_STATE back to B, a name no file has, and
+  // the next sleep has no wallpaper to draw.
+  // The walk itself lives in FavoriteQueueChain.h so it can be host-tested; keeping a
+  // second copy of it here is how the two would drift.
+  std::vector<favorite_chain::Job> jobs;
+  jobs.reserve(pending().size());
+  for (const Job& job : pending()) jobs.push_back({job.fromPath, job.toPath});
+  return favorite_chain::resolve(jobs, fromPath);
 }
 
 bool isIdle() {

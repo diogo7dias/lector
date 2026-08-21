@@ -208,7 +208,11 @@ std::string FileBrowserActivity::rowTitle(const int row) const {
   // listing still holds the old name. Draw the name the queue is going to give it, or the
   // row reads as not favorited and the press looks lost. Empty when nothing is queued,
   // which is the normal case and costs one scan of a short queue.
-  const std::string folder = basepath == "/" ? std::string() : basepath;
+  // basepath is left with a trailing slash by the open path when a file fails to open, and
+  // that state survives. Without trimming it the key becomes "/sleep//name.pxc", which
+  // matches nothing, and the row silently stops showing queued favorites.
+  std::string folder = basepath == "/" ? std::string() : basepath;
+  while (!folder.empty() && folder.back() == '/') folder.pop_back();
   const std::string queued = DeferredFavorite::pendingTargetFor(folder + "/" + name);
   return queued.empty() ? name : getFileName(queued);
 }
