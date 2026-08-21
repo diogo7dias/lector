@@ -480,11 +480,14 @@ void setup() {
 
   WakeTiming::beginWake();
 
+  WakeTiming::mark(WakeTiming::Stage::SysReady);
+
   gpio.begin();
   // When the ADC button ladder came up. The recovery-combo check below needs the ladder to
   // have settled, and "settled" is time since this call, not time since that check is
   // reached — see the deadline there.
   const unsigned long inputStartedMs = millis();
+  WakeTiming::mark(WakeTiming::Stage::GpioReady);
   powerManager.begin();
   halClock.begin();
   WakeTiming::mark(WakeTiming::Stage::HalReady);

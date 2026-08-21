@@ -121,7 +121,31 @@ a lock-and-wake cycle produces several files rather than overwriting one.
 Three comment lines of context first, written by the device: firmware version, battery,
 X3 PLL byte, orientation, font family and size, sleep image quality, Wake Straight to
 Book, refresh frequency, and the open book. Then the previous wake's stage breakdown, then
-one row per refresh:
+one row per refresh.
+
+### Reading the wake line
+
+`# wake w91 pre 190 gpio 82 hal 4 sd 61 cfg 129 in 310 disp 138 push 710 act 232 = 2010`
+
+`w91` is the wake counter; a climbing number proves the record is being read back. Every
+stage after it is a delta from the one before, and `= 2010` is the total. Stages that did
+not run on this wake's path are absent rather than zero, so a wake that restored a saved
+sleep frame shows `frame`, `base` and `draw` where a wallpaper wake shows none of them.
+
+| Stage | What it covers |
+|---|---|
+| `pre` | Framework startup and `Serial.begin()`, before any stamp of our own |
+| `gpio` | `gpio.begin()`, which powers the ADC button ladder |
+| `hal` | Power manager and clock |
+| `sd` | `Storage.begin()` |
+| `cfg` | Settings, state, recents, OPDS servers and presets |
+| `in` | Power-button hold verify plus the recovery-combo settle window |
+| `disp` | `setupDisplayAndFonts()` |
+| `frame` | Reading the 52 KB saved sleep frame off the card |
+| `base` | Writing the X3 differential baseline back into controller RAM |
+| `draw` | Drawing the unlock banners into the framebuffer |
+| `push` | The panel refresh that puts that frame on the glass |
+| `act` | The routed activity opening its book and painting |
 
 | Column | Meaning |
 |---|---|

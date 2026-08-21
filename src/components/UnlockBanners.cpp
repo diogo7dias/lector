@@ -118,7 +118,7 @@ void drawBanners(GfxRenderer& renderer, const bool withFooter) {
   // formatDiagnostic, not formatPrevious: an empty result used to fall through to the
   // normal footer, which reads exactly like a device with the setting off. The diagnostic
   // always prints something, so "no numbers" becomes a readable cause.
-  char timings[128];
+  char timings[176];
   if (SETTINGS.showTimings) {
     WakeTiming::formatDiagnostic(timings, sizeof(timings));
     if (timings[0] != '\0') footer = timings;
