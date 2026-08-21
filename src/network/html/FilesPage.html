@@ -1707,6 +1707,7 @@
       <p class="file-info">The reader downloads the file itself into <strong id="fetchPathDisplay"></strong></p>
       <input type="text" id="fetchUrl" class="folder-input" placeholder="https://example.com/book.epub" oninput="document.getElementById('fetchBtn').disabled = !this.value.trim();">
       <button class="folder-btn" id="fetchBtn" onclick="startFetch()" disabled>Fetch</button>
+      <button class="delete-btn-cancel" id="fetchCancelBtn" onclick="cancelFetch()" style="display:none;">Stop Download</button>
       <button class="delete-btn-cancel" onclick="closeFetchModal()">Close</button>
       <p class="file-info" id="fetchStatusText"></p>
     </div>
@@ -2976,8 +2977,9 @@
   const ZIP_SIZE_WARNING_BYTES = 100 * 1024 * 1024;
 
   async function downloadSelectedAsZip() {
-    const items = getSelectedItems().filter(it => !it.isFolder);
-    const folders = getSelectedItems().filter(it => it.isFolder);
+    const selected = getSelectedItems();
+    const items = selected.filter(it => !it.isFolder);
+    const folders = selected.filter(it => it.isFolder);
     if (items.length === 0) {
       alert('Please select at least one file to download. Folders cannot be zipped.');
       return;
@@ -3017,7 +3019,8 @@
       link.href = URL.createObjectURL(blob);
       link.download = 'crosspoint-files.zip';
       link.click();
-      URL.revokeObjectURL(link.href);
+      // Revoking in the same tick cancels the save in Firefox and Safari.
+      setTimeout(() => URL.revokeObjectURL(link.href), 0);
     } catch (error) {
       alert('Zip download failed: ' + error.message);
     } finally {
@@ -3028,12 +3031,38 @@
 
   let fetchPollTimer = null;
 
-  function openFetchModal() {
+  async function openFetchModal() {
     document.getElementById('fetchPathDisplay').textContent = currentPath;
     document.getElementById('fetchUrl').value = '';
     document.getElementById('fetchBtn').disabled = true;
     document.getElementById('fetchStatusText').textContent = '';
+    document.getElementById('fetchCancelBtn').style.display = 'none';
     document.getElementById('fetchModal').classList.add('open');
+
+    // A transfer started before this dialog was closed (or from another browser)
+    // is still running on the device; pick its progress back up.
+    try {
+      const response = await fetch('/api/fetch/status');
+      if (!response.ok) return;
+      const status = await response.json();
+      if (status.state === 'running') {
+        document.getElementById('fetchBtn').disabled = true;
+        document.getElementById('fetchCancelBtn').style.display = 'block';
+        document.getElementById('fetchStatusText').textContent = 'Downloading ' + status.filename + '...';
+        pollFetchStatus();
+      }
+    } catch (error) {
+      console.error('Could not read fetch status:', error);
+    }
+  }
+
+  async function cancelFetch() {
+    try {
+      await fetch('/api/fetch/cancel', { method: 'POST' });
+      document.getElementById('fetchStatusText').textContent = 'Stopping...';
+    } catch (error) {
+      document.getElementById('fetchStatusText').textContent = 'Could not reach the reader: ' + error.message;
+    }
   }
 
   function closeFetchModal() {
@@ -3067,6 +3096,7 @@
       }
       const queued = await response.json();
       statusText.textContent = 'Downloading ' + queued.filename + '...';
+      document.getElementById('fetchCancelBtn').style.display = 'block';
       pollFetchStatus();
     } catch (error) {
       statusText.textContent = 'Could not reach the reader: ' + error.message;
@@ -3087,13 +3117,14 @@
           statusText.textContent = status.total
             ? 'Downloading ' + status.filename + ': ' + formatFileSize(status.received) +
               ' of ' + formatFileSize(status.total)
-            : 'Downloading ' + status.filename + ': ' + formatFileSize(status.received);
+            : 'Downloading ' + status.filename + ': ' + formatFileSize(status.received) + ' (size unknown)';
           return;
         }
 
         clearInterval(fetchPollTimer);
         fetchPollTimer = null;
         document.getElementById('fetchBtn').disabled = false;
+        document.getElementById('fetchCancelBtn').style.display = 'none';
         if (status.state === 'done') {
           statusText.textContent = 'Saved ' + status.filename + ' (' + formatFileSize(status.received) + ')';
           // Same refresh the other write actions use; delayed so the result is readable first.

@@ -253,9 +253,13 @@ Form parameters:
 | `path` | No | Destination folder; defaults to `/` |
 
 The filename is taken from the last path segment of the URL, percent-decoded and
-sanitized; a URL with no usable segment saves as `download`. If the response
-carries a `Content-Disposition` header with a filename, the finished file is
-renamed to it, unless a file of that name already exists.
+sanitized; a URL with no usable segment saves as `download`. Only in that case is
+the response's `Content-Disposition` filename used instead, once the transfer has
+finished, and never over a file that already exists. A URL that names the file
+keeps its own name.
+
+While a fetch runs, `POST /delete`, `POST /rename`, and `POST /move` refuse the
+file being written (and any folder containing it) with `409`.
 
 Responses:
 
@@ -297,6 +301,22 @@ Response:
 | `received` | number | Bytes written so far |
 | `total` | number | Total bytes; `0` when the server sends no `Content-Length` |
 | `error` | string | Failure reason when `state` is `"failed"`; empty otherwise |
+
+### `POST /api/fetch/cancel`
+
+Stops the running fetch. The partial file is removed and the job ends as
+`"failed"` with `"The download was stopped before it finished"`.
+
+```bash
+curl -X POST http://crosspoint.local/api/fetch/cancel
+```
+
+| Status | Meaning |
+|--------|---------|
+| `200` | Cancellation requested |
+| `409` | No fetch is queued or running |
+
+Pressing **Back** on the device cancels a running fetch too.
 
 ## Settings API
 

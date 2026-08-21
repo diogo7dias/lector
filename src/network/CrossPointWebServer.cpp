@@ -154,6 +154,7 @@ void CrossPointWebServer::begin() {
   server->on("/api/reading", HTTP_GET, [this] { handleReadingList(); });
   server->on("/api/fetch", HTTP_POST, [this] { handlePostFetch(); });
   server->on("/api/fetch/status", HTTP_GET, [this] { handleFetchStatus(); });
+  server->on("/api/fetch/cancel", HTTP_POST, [this] { handleCancelFetch(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
@@ -270,6 +271,11 @@ void CrossPointWebServer::stop() {
     wsInstance = nullptr;
     LOG_DBG("WEB", "WebSocket server stopped");
   }
+
+  // A job queued but not yet started would otherwise run against a server that
+  // is gone, into a directory that may no longer be the one the user meant.
+  fetchQueued = false;
+  fetchCancelRequested = fetchRunning;
 
   if (udpActive) {
     udp.stop();
@@ -509,8 +515,26 @@ void CrossPointWebServer::pumpDuringFetch() {
   lastFetchPumpAt = now;
 
   resetTaskWatchdogIfSubscribed();
+  if (cancelPoll && cancelPoll()) fetchCancelRequested = true;
   if (server) server->handleClient();
   if (wsServer) wsServer->loop();
+}
+
+bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
+  if (!fetchQueued && !fetchRunning) return false;
+  const std::string target(path.c_str());
+  if (fetch.destPath == target) return true;
+  // A parent folder counts: removing or moving it takes the open file with it.
+  return fetch.destPath.rfind(target + "/", 0) == 0;
+}
+
+void CrossPointWebServer::handleCancelFetch() {
+  if (!fetchQueued && !fetchRunning) {
+    server->send(409, "text/plain", "No download is in progress");
+    return;
+  }
+  fetchCancelRequested = true;
+  server->send(200, "text/plain", "Cancelling");
 }
 
 // Rename a finished download to the name the server offered in its
@@ -519,6 +543,11 @@ void CrossPointWebServer::pumpDuringFetch() {
 // the URL-derived name in place rather than losing the download.
 void CrossPointWebServer::applyServerFilename(const std::string& contentDisposition) {
   if (contentDisposition.empty()) return;
+
+  // Only when the URL itself named nothing. A link that ends in "Dune.epub"
+  // already carries the better name; servers routinely answer those with an
+  // internal one ("tmp1234"), which would cost the extension.
+  if (fetch.filename != fetch_url::DEFAULT_FILENAME) return;
 
   const std::string offered = fetch_url::filenameFromContentDisposition(contentDisposition);
   if (offered.empty() || offered == fetch.filename) return;
@@ -539,6 +568,7 @@ void CrossPointWebServer::applyServerFilename(const std::string& contentDisposit
 void CrossPointWebServer::runQueuedFetch() {
   fetchQueued = false;
   fetchRunning = true;
+  fetchCancelRequested = false;
   fetch.state = FetchStatus::State::Running;
   lastFetchPumpAt = millis();
 
@@ -552,10 +582,13 @@ void CrossPointWebServer::runQueuedFetch() {
         fetch.total = total;
         pumpDuringFetch();
       },
-      nullptr, "", "", false, &contentDisposition);
+      &fetchCancelRequested, "", "", false, &contentDisposition);
 
   if (result == HttpDownloader::OK) {
     applyServerFilename(contentDisposition);
+    // Same as every other write path here: a stale cache entry for this path
+    // would render the new book from the old book's data.
+    clearBookCache(fetch.destPath.c_str());
     fetch.state = FetchStatus::State::Done;
     LOG_DBG("WEB", "Fetch complete: %s (%u bytes)", fetch.destPath.c_str(), static_cast<unsigned>(fetch.received));
   } else {
@@ -575,6 +608,9 @@ void CrossPointWebServer::handleReadingList() const {
 
   for (const auto& book : RECENT_BOOKS.getBooks()) {
     if (book.progressPercent < 0) continue;
+    // A book whose file was removed from the card would render as a dead
+    // download link.
+    if (RecentBooksStore::isMissing(book)) continue;
     const JsonObject entry = books.add<JsonObject>();
     entry["path"] = book.path;
     entry["title"] = book.title;
@@ -601,9 +637,9 @@ void CrossPointWebServer::handleStatus() const {
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
   doc["battery"] = powerManager.getBatteryPercentage();
 
-  // Card figures are what the pages use to warn before an upload that will not
-  // fit. sdUsedBytes() is served from SDCardManager's cache, so polling status
-  // does not walk the FAT.
+  // Card figures for the home page and the file manager header, so remaining
+  // space is visible before sending a large file. sdUsedBytes() is served from
+  // SDCardManager's cache, so polling status does not walk the FAT.
   const uint64_t sdTotal = Storage.sdTotalBytes();
   doc["sdTotal"] = sdTotal;
   doc["sdFree"] = sdTotal > 0 ? sdTotal - Storage.sdUsedBytes() : 0;
@@ -1133,6 +1169,10 @@ void CrossPointWebServer::handleRename() const {
     server->send(403, "text/plain", "Cannot rename protected item");
     return;
   }
+  if (conflictsWithActiveFetch(itemPath)) {
+    server->send(409, "text/plain", "That file is being downloaded right now");
+    return;
+  }
   if (newName == itemName) {
     server->send(200, "text/plain", "Name unchanged");
     return;
@@ -1205,6 +1245,10 @@ void CrossPointWebServer::handleMove() const {
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
   if (isProtectedItemName(itemName)) {
     server->send(403, "text/plain", "Cannot move protected item");
+    return;
+  }
+  if (conflictsWithActiveFetch(itemPath)) {
+    server->send(409, "text/plain", "That file is being downloaded right now");
     return;
   }
   if (destPath != "/") {
@@ -1359,6 +1403,14 @@ void CrossPointWebServer::handleDelete() const {
     }
     if (isProtected) {
       failedItems += itemPath + " (protected file); ";
+      allSuccess = false;
+      continue;
+    }
+
+    // The fetch holds this file open and is still writing into its clusters;
+    // freeing them underneath it corrupts the card, not just the download.
+    if (conflictsWithActiveFetch(itemPath)) {
+      failedItems += itemPath + " (being downloaded right now); ";
       allSuccess = false;
       continue;
     }

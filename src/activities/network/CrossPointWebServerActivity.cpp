@@ -276,6 +276,13 @@ void CrossPointWebServerActivity::startWebServer() {
 
   // Create the web server instance
   webServer.reset(new CrossPointWebServer());
+  // A URL fetch holds this loop for the length of the transfer, so the server
+  // polls Back through here instead: without it the button is dead until the
+  // download ends.
+  webServer->setFetchCancelPoll([this] {
+    mappedInput.update();
+    return mappedInput.wasPressed(MappedInputManager::Button::Back);
+  });
   webServer->begin();
 
   if (webServer->isRunning()) {

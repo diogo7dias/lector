@@ -51,6 +51,20 @@ TEST(FetchUrlPolicy, ReturnsEmptyForUnusableContentDisposition) {
   EXPECT_EQ(fetch_url::filenameFromContentDisposition("attachment; filename=\"..\""), "");
 }
 
+TEST(FetchUrlPolicy, KeepsSemicolonsInsideAQuotedFilename) {
+  // RFC 6266 allows ';' inside a quoted-string; splitting on it blindly truncates
+  // the name and loses the extension.
+  EXPECT_EQ(fetch_url::filenameFromContentDisposition("attachment; filename=\"a;b.epub\""), "a;b.epub");
+  EXPECT_EQ(fetch_url::filenameFromContentDisposition("attachment; filename=\"a;b.epub\"; x=1"), "a;b.epub");
+}
+
+TEST(FetchUrlPolicy, RejectsNamesMadeOnlyOfControlCharacters) {
+  // sanitizeFilename drops control characters and then substitutes "book" for an
+  // empty result, which would bypass the caller's own fallback.
+  EXPECT_EQ(fetch_url::filenameFromUrl("http://example.com/%01%02"), "download");
+  EXPECT_EQ(fetch_url::filenameFromContentDisposition("attachment; filename=\"\x01\""), "");
+}
+
 TEST(FetchUrlPolicy, SanitizesContentDispositionFilename) {
   EXPECT_EQ(fetch_url::filenameFromContentDisposition("attachment; filename=\"/etc/passwd\""), "_etc_passwd");
 }

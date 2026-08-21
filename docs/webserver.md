@@ -118,9 +118,16 @@ shown past 100 MB.
 downloads the file itself. The browser only sends the address and then polls for
 progress, so the phone or laptop is free while the transfer runs. One fetch runs
 at a time and an existing file of the same name is never overwritten. The
-filename comes from the URL, or from the server's `Content-Disposition` header
-when the URL carries no name of its own, as with links like
-`.../download?id=8123`. A failed transfer leaves no partial file behind.
+filename comes from the URL; only when the URL carries no name of its own, as
+with links like `.../download?id=8123`, is the server's `Content-Disposition`
+header used instead.
+
+A transfer can be stopped from the dialog, or by pressing **Back** on the device.
+A stopped or failed transfer leaves no partial file. While a fetch runs, the file
+being written cannot be deleted, renamed, or moved through the web server.
+
+The reader's screen does not repaint while a fetch runs; the Back button is
+polled throughout, so the device still responds to it. A failed transfer leaves no partial file behind.
 
 Existing files with the same name are overwritten by uploads. When EPUB files
 are overwritten, moved, renamed, or deleted through the web server, the matching

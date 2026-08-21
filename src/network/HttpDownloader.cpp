@@ -124,7 +124,11 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
           }
           if (!sink.write(data, len)) return false;
           sink.downloaded += len;
-          if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+          // Unconditional: a chunked response has no Content-Length, so gating on
+          // total would leave a caller that drives the UI (or pumps a server)
+          // from this callback with nothing to run for the whole transfer.
+          // Callers read total == 0 as "size unknown".
+          if (sink.progress) sink.progress(sink.downloaded, sink.total);
           return true;
         },
         [&sink]() { return sink.cancelFlag && *sink.cancelFlag; });
@@ -242,12 +246,11 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     return HttpDownloader::HTTP_ERROR;
   }
 
-  if (sink.contentDisposition) {
-    char* value = nullptr;
-    if (esp_http_client_get_header(client, "Content-Disposition", &value) == ESP_OK && value != nullptr) {
-      *sink.contentDisposition = value;
-    }
-  }
+  // sink.contentDisposition is deliberately left untouched here. This transport
+  // has no way to read a *response* header without an HTTP_EVENT_ON_HEADER event
+  // handler (esp_http_client_get_header reads back request headers), and every
+  // current build uses the wolfSSL path, which does report it. Callers already
+  // treat an empty result as "the server offered no name".
 
   // fetch_headers returns 0 for a chunked response (no Content-Length); leave
   // total at 0 so progress stays silent and the size check is skipped.
@@ -280,7 +283,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
       return HttpDownloader::FILE_ERROR;
     }
     sink.downloaded += read;
-    if (sink.progress && sink.total > 0) sink.progress(sink.downloaded, sink.total);
+    if (sink.progress) sink.progress(sink.downloaded, sink.total);  // see runGetWolf: total == 0 means unknown
   }
 
   const bool complete = esp_http_client_is_complete_data_received(client);

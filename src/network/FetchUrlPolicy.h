@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cctype>
 #include <string>
 #include <string_view>
@@ -70,11 +71,31 @@ inline std::string_view unquote(std::string_view text) {
 }
 
 // sanitizeFilename never returns an empty string (it substitutes "book"), so a
-// name that is only spaces and dots has to be rejected before it gets there:
-// here an empty result is the signal that the source offered no usable name.
+// name with nothing usable in it has to be rejected before it gets there: here
+// an empty result is the signal that the source offered no usable name.
+// Spaces, dots and control characters are exactly what sanitizeFilename itself
+// discards, so a name made only of those would come back as the substitute.
 inline std::string sanitizedOrEmpty(const std::string_view decoded) {
-  if (decoded.find_first_not_of(" .") == std::string_view::npos) return "";
+  const bool hasUsableCharacter = std::any_of(decoded.begin(), decoded.end(), [](const char c) {
+    const auto byte = static_cast<unsigned char>(c);
+    return byte >= 128 || (byte > ' ' && byte < 127 && c != '.');
+  });
+  if (!hasUsableCharacter) return "";
   return StringUtils::sanitizeFilename(std::string(decoded));
+}
+
+// End of the parameter starting at `pos`, honouring quoted strings so a ';'
+// inside `filename="a;b.epub"` does not end it early (RFC 6266 allows it).
+inline size_t parameterEnd(const std::string_view header, size_t pos) {
+  bool inQuotes = false;
+  for (; pos < header.size(); pos++) {
+    if (header[pos] == '"') {
+      inQuotes = !inQuotes;
+    } else if (header[pos] == ';' && !inQuotes) {
+      return pos;
+    }
+  }
+  return header.size();
 }
 
 }  // namespace detail
@@ -123,7 +144,7 @@ inline std::string filenameFromContentDisposition(const std::string_view header)
 
   size_t pos = 0;
   while (pos <= header.size()) {
-    const size_t end = std::min(header.find(';', pos), header.size());
+    const size_t end = detail::parameterEnd(header, pos);
     const std::string_view param = detail::trim(header.substr(pos, end - pos));
     pos = end + 1;
 
