@@ -1,4 +1,4 @@
-<!-- lector-version: 0.25.0 -->
+<!-- lector-version: 0.26.2 -->
 
 # Lector User Guide
 
@@ -177,6 +177,13 @@ books copied from a computer carry a real date, while books the device downloade
 | `.bin`          | Offered as a firmware file, see [section 13](#13-updating-the-firmware) |
 
 From the image viewers you can set the picture as your sleep wallpaper.
+
+Opening a wallpaper from `/sleep` gives you the triage buttons: **Favorite**, **Pause** and
+**Delete**. Favoriting closes the viewer straight away and takes you back to the folder, so
+you can work through a folder at button speed. The rename itself happens later, when you
+open a book, reach the home screen, or lock the device, because renaming a file in a folder
+of thousands is slow enough to be worth keeping off the press. The list shows the new name
+immediately either way.
 
 ### Filing books automatically
 
