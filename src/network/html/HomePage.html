@@ -84,6 +84,49 @@
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
+      .reading-item {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--ink);
+      }
+      .reading-item:last-child {
+        border-bottom: none;
+      }
+      /* The page is monochrome, so a link carries no hue: it reads as a link
+         from the underline alone. */
+      .reading-title {
+        font-weight: 600;
+        word-break: break-word;
+        color: var(--ink);
+        text-decoration: underline;
+      }
+      .reading-author {
+        color: var(--muted);
+        font-size: 0.9em;
+        word-break: break-word;
+      }
+      .reading-bar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 6px;
+      }
+      /* The track is outlined and the fill solid, so progress reads without
+         colour on an e-ink-style monochrome page. */
+      .reading-track {
+        flex: 1;
+        height: 10px;
+        border: 2px solid var(--ink);
+      }
+      .reading-fill {
+        height: 100%;
+        background: var(--ink);
+      }
+      .reading-percent {
+        font-weight: 600;
+        font-size: 0.85em;
+        min-width: 3.2em;
+        text-align: right;
+      }
       .nav-links {
         margin: 15px 0;
         display: flex;
@@ -163,9 +206,22 @@
         <span class="value" id="ip-address"></span>
       </div>
       <div class="info-row">
+        <span class="label">Battery</span>
+        <span class="value" id="battery"></span>
+      </div>
+      <div class="info-row">
+        <span class="label">Card Space</span>
+        <span class="value" id="card-space"></span>
+      </div>
+      <div class="info-row">
         <span class="label">Free Memory</span>
         <span class="value" id="free-heap"></span>
       </div>
+    </div>
+
+    <div class="card" id="reading-card" hidden>
+      <h2>Currently Reading</h2>
+      <div id="reading-list"></div>
     </div>
 
     <div class="card">
@@ -174,6 +230,18 @@
       </p>
     </div>
   <script>
+    function formatBytes(bytes) {
+      if (!bytes) return '0 B';
+      const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+      let value = bytes;
+      let unit = 0;
+      while (value >= 1024 && unit < units.length - 1) {
+        value /= 1024;
+        unit++;
+      }
+      return (unit === 0 ? value : value.toFixed(1)) + ' ' + units[unit];
+    }
+
     async function fetchStatus() {
       try {
         const response = await fetch('/api/status');
@@ -184,6 +252,11 @@
         document.getElementById('version').textContent = data.version || 'N/A';
         document.getElementById('serial').textContent = data.serial;
         document.getElementById('ip-address').textContent = data.ip || 'N/A';
+        document.getElementById('battery').textContent =
+          typeof data.battery === 'number' ? data.battery + '%' : 'N/A';
+        document.getElementById('card-space').textContent = data.sdTotal
+          ? formatBytes(data.sdFree) + ' free of ' + formatBytes(data.sdTotal)
+          : 'No card';
         document.getElementById('free-heap').textContent = data.freeHeap
           ? data.freeHeap.toLocaleString() + ' bytes'
           : 'N/A';
@@ -192,8 +265,60 @@
       }
     }
 
-    // Fetch status on page load
-    window.onload = fetchStatus;
+    async function fetchReading() {
+      try {
+        const response = await fetch('/api/reading');
+        if (!response.ok) return;
+        const data = await response.json();
+        const books = data.books || [];
+        if (books.length === 0) return;
+
+        const list = document.getElementById('reading-list');
+        list.textContent = '';
+        for (const book of books) {
+          const item = document.createElement('div');
+          item.className = 'reading-item';
+
+          const title = document.createElement('a');
+          title.className = 'reading-title';
+          title.href = '/download?path=' + encodeURIComponent(book.path);
+          title.textContent = book.title || book.path;
+          item.appendChild(title);
+
+          if (book.author) {
+            const author = document.createElement('div');
+            author.className = 'reading-author';
+            author.textContent = book.author;
+            item.appendChild(author);
+          }
+
+          const bar = document.createElement('div');
+          bar.className = 'reading-bar';
+          const track = document.createElement('div');
+          track.className = 'reading-track';
+          const fill = document.createElement('div');
+          fill.className = 'reading-fill';
+          fill.style.width = book.progress + '%';
+          track.appendChild(fill);
+          const percent = document.createElement('span');
+          percent.className = 'reading-percent';
+          percent.textContent = book.progress + '%';
+          bar.appendChild(track);
+          bar.appendChild(percent);
+          item.appendChild(bar);
+
+          list.appendChild(item);
+        }
+        document.getElementById('reading-card').hidden = false;
+      } catch (error) {
+        console.error('Error fetching reading list:', error);
+      }
+    }
+
+    window.onload = function () {
+      fetchStatus();
+      fetchReading();
+    };
   </script>
   </body>
 </html>

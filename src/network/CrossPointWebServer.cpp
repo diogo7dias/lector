@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <FsHelpers.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -15,8 +16,11 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "FetchUrlPolicy.h"
 #include "FontInstaller.h"
+#include "HttpDownloader.h"
 #include "OpdsServerStore.h"
+#include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
@@ -147,6 +151,10 @@ void CrossPointWebServer::begin() {
   server->on("/js/jszip.min.js", HTTP_GET, [this] { handleJszip(); });
 
   server->on("/api/status", HTTP_GET, [this] { handleStatus(); });
+  server->on("/api/reading", HTTP_GET, [this] { handleReadingList(); });
+  server->on("/api/fetch", HTTP_POST, [this] { handlePostFetch(); });
+  server->on("/api/fetch/status", HTTP_GET, [this] { handleFetchStatus(); });
+  server->on("/api/fetch/cancel", HTTP_POST, [this] { handleCancelFetch(); });
   server->on("/api/files", HTTP_GET, [this] { handleFileListData(); });
   server->on("/download", HTTP_GET, [this] { handleDownload(); });
 
@@ -264,6 +272,11 @@ void CrossPointWebServer::stop() {
     LOG_DBG("WEB", "WebSocket server stopped");
   }
 
+  // A job queued but not yet started would otherwise run against a server that
+  // is gone, into a directory that may no longer be the one the user meant.
+  fetchQueued = false;
+  fetchCancelRequested = fetchRunning;
+
   if (udpActive) {
     udp.stop();
     udpActive = false;
@@ -335,6 +348,12 @@ void CrossPointWebServer::handleClient() {
       }
     }
   }
+
+  // Last, so the transfer starts from a serviced server rather than from the
+  // middle of a request: runQueuedFetch() pumps the server itself while it runs.
+  if (fetchQueued) {
+    runQueuedFetch();
+  }
 }
 
 CrossPointWebServer::WsUploadStatus CrossPointWebServer::getWsUploadStatus() const {
@@ -387,6 +406,223 @@ void CrossPointWebServer::handleNotFound() const {
   server->send(404, "text/plain", message);
 }
 
+// Books the reader has open, newest first. Read-only: the web pages show what
+// is in progress and link to the file, they never write reading state back.
+// Entries without a progress figure (added but never opened) are left out.
+namespace {
+const char* describeDownloadError(const HttpDownloader::DownloadError error) {
+  switch (error) {
+    case HttpDownloader::HTTP_ERROR:
+      return "The server could not be reached, or refused the request";
+    case HttpDownloader::FILE_ERROR:
+      return "The file could not be written to the SD card";
+    case HttpDownloader::ABORTED:
+      return "The download was stopped before it finished";
+    default:
+      return "The download failed";
+  }
+}
+}  // namespace
+
+// Queue a download. The request returns as soon as the job is accepted; the
+// browser follows it through /api/fetch/status.
+void CrossPointWebServer::handlePostFetch() {
+  if (fetchQueued || fetchRunning) {
+    server->send(409, "text/plain", "A download is already in progress");
+    return;
+  }
+  if (wsUploadInProgress) {
+    server->send(409, "text/plain", "An upload is already in progress");
+    return;
+  }
+  if (!server->hasArg("url")) {
+    server->send(400, "text/plain", "Missing url");
+    return;
+  }
+
+  String url = server->arg("url");
+  url.trim();
+  if (!fetch_url::isSupportedUrl(url.c_str())) {
+    server->send(400, "text/plain", "Only http:// and https:// addresses can be fetched");
+    return;
+  }
+
+  const String directory = normalizeWebPath(server->hasArg("path") ? server->arg("path") : String("/"));
+  const std::string filename = fetch_url::filenameFromUrl(url.c_str());
+  if (isProtectedItemName(String(filename.c_str()))) {
+    server->send(403, "text/plain", "Cannot write to a protected name");
+    return;
+  }
+
+  const std::string destPath = fetch_url::destinationPath(directory.c_str(), filename);
+  if (Storage.exists(destPath.c_str())) {
+    server->send(409, "text/plain", "A file called " + String(filename.c_str()) + " is already there");
+    return;
+  }
+
+  fetch = FetchStatus{};
+  fetch.url = url.c_str();
+  fetch.filename = filename;
+  fetch.destPath = destPath;
+  fetchQueued = true;
+
+  LOG_DBG("WEB", "Fetch queued: %s -> %s", fetch.url.c_str(), destPath.c_str());
+
+  JsonDocument doc;
+  doc["filename"] = filename;
+  doc["path"] = destPath;
+  String response;
+  serializeJson(doc, response);
+  server->send(202, "application/json", response);
+}
+
+void CrossPointWebServer::handleFetchStatus() const {
+  JsonDocument doc;
+  switch (fetch.state) {
+    case FetchStatus::State::Idle:
+      doc["state"] = "idle";
+      break;
+    case FetchStatus::State::Running:
+      doc["state"] = "running";
+      break;
+    case FetchStatus::State::Done:
+      doc["state"] = "done";
+      break;
+    case FetchStatus::State::Failed:
+      doc["state"] = "failed";
+      break;
+  }
+  doc["filename"] = fetch.filename;
+  doc["path"] = fetch.destPath;
+  doc["received"] = fetch.received;
+  doc["total"] = fetch.total;
+  doc["error"] = fetch.error;
+
+  String response;
+  serializeJson(doc, response);
+  server->send(200, "application/json", response);
+}
+
+// Called from the download's progress callback. The transfer runs on the same
+// task as the server, so without this the pages would freeze for the length of
+// the download; with it, status polling and the file list keep answering.
+// A fetch started here is refused by handlePostFetch (fetchRunning is set), so
+// this cannot recurse into another download.
+void CrossPointWebServer::pumpDuringFetch() {
+  constexpr unsigned long PUMP_INTERVAL_MS = 150;
+  const unsigned long now = millis();
+  if (now - lastFetchPumpAt < PUMP_INTERVAL_MS) return;
+  lastFetchPumpAt = now;
+
+  resetTaskWatchdogIfSubscribed();
+  if (cancelPoll && cancelPoll()) fetchCancelRequested = true;
+  if (server) server->handleClient();
+  if (wsServer) wsServer->loop();
+}
+
+bool CrossPointWebServer::conflictsWithActiveFetch(const String& path) const {
+  if (!fetchQueued && !fetchRunning) return false;
+  const std::string target(path.c_str());
+  if (fetch.destPath == target) return true;
+  // A parent folder counts: removing or moving it takes the open file with it.
+  return fetch.destPath.rfind(target + "/", 0) == 0;
+}
+
+void CrossPointWebServer::handleCancelFetch() {
+  if (!fetchQueued && !fetchRunning) {
+    server->send(409, "text/plain", "No download is in progress");
+    return;
+  }
+  fetchCancelRequested = true;
+  server->send(200, "text/plain", "Cancelling");
+}
+
+// Rename a finished download to the name the server offered in its
+// Content-Disposition header. Only a name the URL could not supply is worth the
+// rename, and never over a file that is already there, so a failure here leaves
+// the URL-derived name in place rather than losing the download.
+void CrossPointWebServer::applyServerFilename(const std::string& contentDisposition) {
+  if (contentDisposition.empty()) return;
+
+  // Only when the URL itself named nothing. A link that ends in "Dune.epub"
+  // already carries the better name; servers routinely answer those with an
+  // internal one ("tmp1234"), which would cost the extension.
+  if (fetch.filename != fetch_url::DEFAULT_FILENAME) return;
+
+  const std::string offered = fetch_url::filenameFromContentDisposition(contentDisposition);
+  if (offered.empty() || offered == fetch.filename) return;
+  if (isProtectedItemName(String(offered.c_str()))) return;
+
+  const std::string directory = fetch.destPath.substr(0, fetch.destPath.find_last_of('/'));
+  const std::string offeredPath = fetch_url::destinationPath(directory, offered);
+  if (Storage.exists(offeredPath.c_str())) return;
+
+  if (!Storage.rename(fetch.destPath.c_str(), offeredPath.c_str())) {
+    LOG_ERR("WEB", "Could not rename %s to %s", fetch.destPath.c_str(), offeredPath.c_str());
+    return;
+  }
+  fetch.filename = offered;
+  fetch.destPath = offeredPath;
+}
+
+void CrossPointWebServer::runQueuedFetch() {
+  fetchQueued = false;
+  fetchRunning = true;
+  fetchCancelRequested = false;
+  fetch.state = FetchStatus::State::Running;
+  lastFetchPumpAt = millis();
+
+  // A link like ".../download?id=8123" names nothing, so ask for the header the
+  // server may send instead and use it once the bytes are safely on the card.
+  std::string contentDisposition;
+  const auto result = HttpDownloader::downloadToFile(
+      fetch.url, fetch.destPath,
+      [this](const size_t downloaded, const size_t total) {
+        fetch.received = downloaded;
+        fetch.total = total;
+        pumpDuringFetch();
+      },
+      &fetchCancelRequested, "", "", false, &contentDisposition);
+
+  if (result == HttpDownloader::OK) {
+    applyServerFilename(contentDisposition);
+    // Same as every other write path here: a stale cache entry for this path
+    // would render the new book from the old book's data.
+    clearBookCache(fetch.destPath.c_str());
+    fetch.state = FetchStatus::State::Done;
+    LOG_DBG("WEB", "Fetch complete: %s (%u bytes)", fetch.destPath.c_str(), static_cast<unsigned>(fetch.received));
+  } else {
+    fetch.state = FetchStatus::State::Failed;
+    fetch.error = describeDownloadError(result);
+    // Leave no half-written book in the file list.
+    Storage.remove(fetch.destPath.c_str());
+    LOG_ERR("WEB", "Fetch failed: %s (%s)", fetch.url.c_str(), fetch.error.c_str());
+  }
+
+  fetchRunning = false;
+}
+
+void CrossPointWebServer::handleReadingList() const {
+  JsonDocument doc;
+  const JsonArray books = doc["books"].to<JsonArray>();
+
+  for (const auto& book : RECENT_BOOKS.getBooks()) {
+    if (book.progressPercent < 0) continue;
+    // A book whose file was removed from the card would render as a dead
+    // download link.
+    if (RecentBooksStore::isMissing(book)) continue;
+    const JsonObject entry = books.add<JsonObject>();
+    entry["path"] = book.path;
+    entry["title"] = book.title;
+    entry["author"] = book.author;
+    entry["progress"] = book.progressPercent;
+  }
+
+  String response;
+  serializeJson(doc, response);
+  server->send(200, "application/json", response);
+}
+
 void CrossPointWebServer::handleStatus() const {
   // Get correct IP based on AP vs STA mode
   const String ipAddr = apMode ? WiFi.softAPIP().toString() : WiFi.localIP().toString();
@@ -399,6 +635,14 @@ void CrossPointWebServer::handleStatus() const {
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
+  doc["battery"] = powerManager.getBatteryPercentage();
+
+  // Card figures for the home page and the file manager header, so remaining
+  // space is visible before sending a large file. sdUsedBytes() is served from
+  // SDCardManager's cache, so polling status does not walk the FAT.
+  const uint64_t sdTotal = Storage.sdTotalBytes();
+  doc["sdTotal"] = sdTotal;
+  doc["sdFree"] = sdTotal > 0 ? sdTotal - Storage.sdUsedBytes() : 0;
 
   char snBuf[33] = {0};
   bool valid = false;
@@ -925,6 +1169,10 @@ void CrossPointWebServer::handleRename() const {
     server->send(403, "text/plain", "Cannot rename protected item");
     return;
   }
+  if (conflictsWithActiveFetch(itemPath)) {
+    server->send(409, "text/plain", "That file is being downloaded right now");
+    return;
+  }
   if (newName == itemName) {
     server->send(200, "text/plain", "Name unchanged");
     return;
@@ -997,6 +1245,10 @@ void CrossPointWebServer::handleMove() const {
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
   if (isProtectedItemName(itemName)) {
     server->send(403, "text/plain", "Cannot move protected item");
+    return;
+  }
+  if (conflictsWithActiveFetch(itemPath)) {
+    server->send(409, "text/plain", "That file is being downloaded right now");
     return;
   }
   if (destPath != "/") {
@@ -1151,6 +1403,14 @@ void CrossPointWebServer::handleDelete() const {
     }
     if (isProtected) {
       failedItems += itemPath + " (protected file); ";
+      allSuccess = false;
+      continue;
+    }
+
+    // The fetch holds this file open and is still writing into its clusters;
+    // freeing them underneath it corrupts the card, not just the download.
+    if (conflictsWithActiveFetch(itemPath)) {
+      failedItems += itemPath + " (being downloaded right now); ";
       allSuccess = false;
       continue;
     }

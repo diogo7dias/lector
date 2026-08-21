@@ -4,6 +4,7 @@
 #include <common/FsApiConstants.h>  // for oflag_t
 #include <freertos/semphr.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -36,6 +37,12 @@ class HalStorage {
   bool remove(const char* path);
   bool rename(const char* oldPath, const char* newPath);
   bool rmdir(const char* path);
+
+  // Card capacity and used space in bytes, 0 when no card is mounted. The used
+  // figure walks the FAT, so SDCardManager caches it with a short TTL; callers
+  // may poll it per request without paying for a scan each time.
+  uint64_t sdTotalBytes();
+  uint64_t sdUsedBytes();
 
   bool openFileForRead(const char* moduleName, const char* path, HalFile& file);
   bool openFileForRead(const char* moduleName, const std::string& path, HalFile& file);

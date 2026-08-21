@@ -9,7 +9,10 @@ The web server is available while the device is in **File Transfer** or
 **Calibre Wireless** mode. It can:
 
 - Upload, download, rename, move, and delete files on the SD card
+- Download several files at once as a single zip
+- Fetch a file straight from a URL, without sending it through the browser
 - Create folders
+- Show battery charge, SD-card space, and the books currently in progress
 - Edit many device settings from a browser
 - Manage saved Wi-Fi networks and OPDS servers
 - Upload and delete `.cpfont` SD-card font families
@@ -82,7 +85,13 @@ The browser UI has four primary pages.
 ### Home
 
 The Home page shows firmware status, network mode, IP address, device type,
-uptime, and free heap.
+uptime, free heap, battery charge, and how much space is left on the card.
+
+Below that, a **Currently Reading** card lists the books with reading progress,
+newest first, each with its position as a percentage. The card is hidden when no
+book has been opened yet. Titles link to the file, so a book can be downloaded
+straight from the list. The card is read-only: reading position is never changed
+from the browser.
 
 ### File Manager
 
@@ -95,6 +104,30 @@ The File Manager page can:
 - Rename files
 - Move files into existing folders
 - Delete one or more selected files or empty folders
+- Download the selected files together as `crosspoint-files.zip`
+- Fetch a file from a URL into the folder being browsed
+
+The free space on the card is shown next to the folder summary.
+
+**Download Selected** builds the zip inside the browser, requesting one file at
+a time from the reader. Selected folders are skipped. Very large selections are
+limited by the memory of the browser tab, not of the reader, so a warning is
+shown past 100 MB.
+
+**Fetch from URL** hands the reader an `http://` or `https://` address and it
+downloads the file itself. The browser only sends the address and then polls for
+progress, so the phone or laptop is free while the transfer runs. One fetch runs
+at a time and an existing file of the same name is never overwritten. The
+filename comes from the URL; only when the URL carries no name of its own, as
+with links like `.../download?id=8123`, is the server's `Content-Disposition`
+header used instead.
+
+A transfer can be stopped from the dialog, or by pressing **Back** on the device.
+A stopped or failed transfer leaves no partial file. While a fetch runs, the file
+being written cannot be deleted, renamed, or moved through the web server.
+
+The reader's screen does not repaint while a fetch runs; the Back button is
+polled throughout, so the device still responds to it. A failed transfer leaves no partial file behind.
 
 Existing files with the same name are overwritten by uploads. When EPUB files
 are overwritten, moved, renamed, or deleted through the web server, the matching

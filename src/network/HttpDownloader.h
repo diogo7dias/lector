@@ -52,8 +52,14 @@ class HttpDownloader {
    * so a resumed file is only as trustworthy as the caller's own verification:
    * use allowResume for content with a checksum to test afterwards.
    */
+  /**
+   * `contentDisposition`, when given, receives the raw Content-Disposition header
+   * of the final response, or stays untouched when the server sends none. Callers
+   * that want a filename out of it parse it themselves (see FetchUrlPolicy.h);
+   * the download itself always writes to `destPath`.
+   */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      bool allowResume = false);
+                                      bool allowResume = false, std::string* contentDisposition = nullptr);
 };

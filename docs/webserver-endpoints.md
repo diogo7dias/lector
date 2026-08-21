@@ -39,7 +39,11 @@ Response:
   "rssi": -45,
   "freeHeap": 123456,
   "uptime": 3600,
-  "device": "X4"
+  "device": "X4",
+  "serial": "CP0123456789",
+  "battery": 76,
+  "sdTotal": 15900000000,
+  "sdFree": 9200000000
 }
 ```
 
@@ -52,6 +56,41 @@ Response:
 | `freeHeap` | number | Free heap in bytes |
 | `uptime` | number | Seconds since boot |
 | `device` | string | `"X3"` or `"X4"` hardware detection |
+| `serial` | string | Device serial number, or `"Not found"` |
+| `battery` | number | Battery charge, 0-100 |
+| `sdTotal` | number | SD card capacity in bytes; `0` when no card is mounted |
+| `sdFree` | number | Free space on the card in bytes |
+
+### `GET /api/reading`
+
+Books currently in progress, newest first. Read-only; books that have never been
+opened are left out.
+
+```bash
+curl http://crosspoint.local/api/reading
+```
+
+Response:
+
+```json
+{
+  "books": [
+    {
+      "path": "/Books/Dune.epub",
+      "title": "Dune",
+      "author": "Frank Herbert",
+      "progress": 42
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `path` | string | Absolute path of the book on the card |
+| `title` | string | Book title as the reader recorded it |
+| `author` | string | Book author; may be empty |
+| `progress` | number | Last-read position, 0-100 |
 
 ## File Management
 
@@ -194,6 +233,90 @@ Form parameters:
 
 Protected items cannot be deleted. Non-empty folders are rejected. EPUB cache
 data for deleted files is cleared.
+
+### `POST /api/fetch`
+
+Asks the device to download a file itself, so the bytes never pass through the
+browser. The request returns as soon as the job is accepted; the transfer runs
+from the web server's own loop, which keeps answering requests while it is in
+flight.
+
+```bash
+curl -X POST -d "url=https://example.com/book.epub&path=/Books" http://crosspoint.local/api/fetch
+```
+
+Form parameters:
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `url` | Yes | `http://` or `https://` address to download; other schemes are rejected |
+| `path` | No | Destination folder; defaults to `/` |
+
+The filename is taken from the last path segment of the URL, percent-decoded and
+sanitized; a URL with no usable segment saves as `download`. Only in that case is
+the response's `Content-Disposition` filename used instead, once the transfer has
+finished, and never over a file that already exists. A URL that names the file
+keeps its own name.
+
+While a fetch runs, `POST /delete`, `POST /rename`, and `POST /move` refuse the
+file being written (and any folder containing it) with `409`.
+
+Responses:
+
+| Status | Meaning |
+|--------|---------|
+| `202` | Accepted; body is `{"filename": "...", "path": "..."}` |
+| `400` | Missing `url`, or a scheme other than `http`/`https` |
+| `403` | The resulting name is protected |
+| `409` | A fetch or upload is already running, or the file already exists |
+
+Only one fetch runs at a time. A failed transfer deletes its partial file.
+
+### `GET /api/fetch/status`
+
+Progress of the current or last fetch.
+
+```bash
+curl http://crosspoint.local/api/fetch/status
+```
+
+Response:
+
+```json
+{
+  "state": "running",
+  "filename": "book.epub",
+  "path": "/Books/book.epub",
+  "received": 524288,
+  "total": 1200000,
+  "error": ""
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `state` | string | `"idle"`, `"running"`, `"done"`, or `"failed"` |
+| `filename` | string | Name being written |
+| `path` | string | Absolute destination path |
+| `received` | number | Bytes written so far |
+| `total` | number | Total bytes; `0` when the server sends no `Content-Length` |
+| `error` | string | Failure reason when `state` is `"failed"`; empty otherwise |
+
+### `POST /api/fetch/cancel`
+
+Stops the running fetch. The partial file is removed and the job ends as
+`"failed"` with `"The download was stopped before it finished"`.
+
+```bash
+curl -X POST http://crosspoint.local/api/fetch/cancel
+```
+
+| Status | Meaning |
+|--------|---------|
+| `200` | Cancellation requested |
+| `409` | No fetch is queued or running |
+
+Pressing **Back** on the device cancels a running fetch too.
 
 ## Settings API
 

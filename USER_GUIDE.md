@@ -432,6 +432,10 @@ or `http://crosspoint.local`. The web interface uploads and downloads files, man
 and edits Wi-Fi networks and OPDS servers at `http://<device-ip>/settings`. It also speaks
 **WebDAV**, so the card can be mounted as a network drive.
 
+The home page shows battery charge, free card space, and the books you have in progress.
+The file manager can zip several selected files into one download, and **Fetch from URL**
+hands the reader a link so it downloads the file itself instead of you uploading it.
+
 While joined to a network, the screen shows the Wi-Fi signal strength in dBm.
 
 See [docs/webserver.md](./docs/webserver.md) for the full web server documentation, including
