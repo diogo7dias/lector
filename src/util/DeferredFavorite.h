@@ -57,6 +57,14 @@ void reconcile();
 // True when nothing is queued and no worker is running.
 bool isIdle();
 
+// The name a queued rename will give `fromPath`, or an empty string when nothing is
+// queued for it. Callers that draw a file name need this: between the press and the
+// flush the card still holds the OLD name, so a listing that reads the card alone shows
+// a file the user has just favorited as not favorited, which looks like the press was
+// lost. The queue is a handful of entries, so this is a linear scan and is cheap enough
+// to call once per drawn row.
+std::string pendingTargetFor(const std::string& fromPath);
+
 // flush() + block until the queue drains, or until `timeoutMs` elapses. Returns
 // true if it drained. Call this before anything that resets the chip (deep
 // sleep), so a queued rename is never lost while the name that assumes it

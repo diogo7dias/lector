@@ -25,6 +25,7 @@
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
 #include "util/BusyTick.h"
+#include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
 #include "util/TaskWatchdog.h"
 
@@ -201,7 +202,15 @@ std::string FileBrowserActivity::rowTitle(const int row) const {
       break;
   }
   const int index = fileIndexAt(row);
-  return index < 0 ? std::string() : getFileName(std::string(files[static_cast<size_t>(index)]));
+  if (index < 0) return std::string();
+  const std::string name = getFileName(std::string(files[static_cast<size_t>(index)]));
+  // A favorite queued from the image viewer has not been renamed on the card yet, so the
+  // listing still holds the old name. Draw the name the queue is going to give it, or the
+  // row reads as not favorited and the press looks lost. Empty when nothing is queued,
+  // which is the normal case and costs one scan of a short queue.
+  const std::string folder = basepath == "/" ? std::string() : basepath;
+  const std::string queued = DeferredFavorite::pendingTargetFor(folder + "/" + name);
+  return queued.empty() ? name : getFileName(queued);
 }
 
 int FileBrowserActivity::readingPercentAt(const int index) const {
@@ -383,6 +392,10 @@ void FileBrowserActivity::onEnter() {
 
 void FileBrowserActivity::onExit() {
   Activity::onExit();
+  // Deliberately NO DeferredFavorite::flush() here. This runs when the browser opens an
+  // image viewer too, which would rename the file the viewer is about to show and put the
+  // card work back on exactly the press this defers it off. The queue drains when a book
+  // is opened or closed, at home, and at the lock. See DeferredFavorite.h.
   files.clear();
   fileNameBuffer.reset();
 }

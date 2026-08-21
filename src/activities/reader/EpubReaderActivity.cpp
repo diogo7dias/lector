@@ -134,6 +134,10 @@ bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
+  // Opening a book is seconds of card work already, so it is a good moment to let any
+  // queued favorite renames run alongside it rather than have them wait for the lock.
+  // The other drains are this activity's onExit, home, and sleep entry.
+  DeferredFavorite::flush();
 
   if (!epub) {
     return;

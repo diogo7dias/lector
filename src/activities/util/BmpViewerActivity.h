@@ -24,6 +24,11 @@ class BmpViewerActivity final : public Activity {
   void doSetSleepCover();
   // Sleep-folder triage, mirroring PxcViewerActivity so the two viewers agree.
   void doToggleFavorite();
+  // The path this file WILL have once the favorite queue drains, or filePath itself when
+  // nothing is queued for it. The hint strip reads through here so a wallpaper the user
+  // has just favorited does not still offer "Favorite" while the rename waits.
+  std::string effectivePath() const;
+  bool effectiveFavorite() const;
   void doTogglePause();
   void promptDelete();
   // A PNG can only become the sleep image while the Transparent face is selected;
