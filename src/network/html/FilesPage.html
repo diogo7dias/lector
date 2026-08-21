@@ -1434,6 +1434,8 @@
   <div class="action-buttons">
     <button class="action-btn upload-action-btn" onclick="openUploadModal()">📤 Upload</button>
     <button class="action-btn folder-action-btn" onclick="openFolderModal()">📁 New Folder</button>
+    <button class="action-btn" onclick="openFetchModal()">🔗 Fetch from URL</button>
+    <button class="action-btn" id="zipBtn" onclick="downloadSelectedAsZip()">🗜️ Download Selected</button>
     <button class="action-btn delete-action-btn" onclick="openDeleteSelectedModal()">🗑️ Delete Selected</button>
   </div>
 </div>
@@ -1452,6 +1454,7 @@
   <div class="contents-header">
     <div class="breadcrumb-inline" id="directory-breadcrumbs"></div>
     <span class="summary-inline" id="folder-summary"></span>
+    <span class="summary-inline" id="card-space"></span>
   </div>
 
   <div id="file-table">
@@ -1695,6 +1698,21 @@
   </div>
 </div>
 
+<!-- Fetch from URL Modal -->
+<div class="modal-overlay" id="fetchModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeFetchModal()">&times;</button>
+    <h3>🔗 Fetch from URL</h3>
+    <div class="folder-form">
+      <p class="file-info">The reader downloads the file itself into <strong id="fetchPathDisplay"></strong></p>
+      <input type="text" id="fetchUrl" class="folder-input" placeholder="https://example.com/book.epub" oninput="document.getElementById('fetchBtn').disabled = !this.value.trim();">
+      <button class="folder-btn" id="fetchBtn" onclick="startFetch()" disabled>Fetch</button>
+      <button class="delete-btn-cancel" onclick="closeFetchModal()">Close</button>
+      <p class="file-info" id="fetchStatusText"></p>
+    </div>
+  </div>
+</div>
+
 <!-- Delete Confirmation Modal -->
 <div class="modal-overlay" id="deleteModal">
   <div class="modal">
@@ -1861,6 +1879,7 @@
           // Call the appropriate close function for each modal to ensure cleanup
           if (overlay.id === 'uploadModal') return closeUploadModal();
           if (overlay.id === 'folderModal') return closeFolderModal();
+          if (overlay.id === 'fetchModal') return closeFetchModal();
           if (overlay.id === 'deleteModal') return closeDeleteModal();
           if (overlay.id === 'renameModal') return closeRenameModal();
           if (overlay.id === 'moveModal') return closeMoveModal();
@@ -1976,7 +1995,7 @@
 
           // Checkbox cell + file row
           fileTableContent += `<tr class="${file.isEpub ? 'epub-file' : ''}">`;
-          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file"></td>`;
+          fileTableContent += `<td><input type="checkbox" class="select-item" data-path="${encodeURIComponent(filePath)}" data-name="${escapeHtml(file.name)}" data-type="file" data-size="${file.size}"></td>`;
           const fileIsImage = isImageFile(file.name);
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : (fileIsImage ? '🖼️' : '📄')}</span>`;
           if (fileIsImage) {
@@ -2952,6 +2971,142 @@
   }
 
   // Toggle select-all checkbox
+  // Zipping happens in the browser: the reader only ever serves the files it
+  // already serves one at a time, so a bulk download costs it no extra memory.
+  const ZIP_SIZE_WARNING_BYTES = 100 * 1024 * 1024;
+
+  async function downloadSelectedAsZip() {
+    const items = getSelectedItems().filter(it => !it.isFolder);
+    const folders = getSelectedItems().filter(it => it.isFolder);
+    if (items.length === 0) {
+      alert('Please select at least one file to download. Folders cannot be zipped.');
+      return;
+    }
+    if (typeof JSZip === 'undefined') {
+      alert('The zip library did not load, so files can only be downloaded one at a time.');
+      return;
+    }
+
+    const totalBytes = items.reduce((sum, it) => sum + (it.size || 0), 0);
+    let message = 'Download ' + items.length + ' file(s) as a zip?';
+    if (folders.length > 0) {
+      message += '\n\n' + folders.length + ' selected folder(s) will be skipped.';
+    }
+    if (totalBytes > ZIP_SIZE_WARNING_BYTES) {
+      message += '\n\nThat is ' + formatFileSize(totalBytes) +
+        ', which is built in this browser tab and may run it out of memory.';
+    }
+    if (!confirm(message)) return;
+
+    const zipBtn = document.getElementById('zipBtn');
+    const originalLabel = zipBtn.textContent;
+    zipBtn.disabled = true;
+
+    try {
+      const zip = new JSZip();
+      for (let i = 0; i < items.length; i++) {
+        zipBtn.textContent = 'Zipping ' + (i + 1) + '/' + items.length;
+        // Sequential on purpose: the device serves one request at a time.
+        const response = await fetch('/download?path=' + encodeURIComponent(items[i].path));
+        if (!response.ok) throw new Error('Could not download ' + items[i].name);
+        zip.file(items[i].name, await response.blob());
+      }
+      zipBtn.textContent = 'Building zip...';
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'crosspoint-files.zip';
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (error) {
+      alert('Zip download failed: ' + error.message);
+    } finally {
+      zipBtn.textContent = originalLabel;
+      zipBtn.disabled = false;
+    }
+  }
+
+  let fetchPollTimer = null;
+
+  function openFetchModal() {
+    document.getElementById('fetchPathDisplay').textContent = currentPath;
+    document.getElementById('fetchUrl').value = '';
+    document.getElementById('fetchBtn').disabled = true;
+    document.getElementById('fetchStatusText').textContent = '';
+    document.getElementById('fetchModal').classList.add('open');
+  }
+
+  function closeFetchModal() {
+    // The transfer runs on the device, so closing the dialog only stops the polling.
+    if (fetchPollTimer) {
+      clearInterval(fetchPollTimer);
+      fetchPollTimer = null;
+    }
+    document.getElementById('fetchModal').classList.remove('open');
+  }
+
+  async function startFetch() {
+    const url = document.getElementById('fetchUrl').value.trim();
+    if (!url) return;
+
+    const statusText = document.getElementById('fetchStatusText');
+    const fetchBtn = document.getElementById('fetchBtn');
+    fetchBtn.disabled = true;
+    statusText.textContent = 'Asking the reader to download...';
+
+    try {
+      const response = await fetch('/api/fetch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'url=' + encodeURIComponent(url) + '&path=' + encodeURIComponent(currentPath)
+      });
+      if (!response.ok) {
+        statusText.textContent = await response.text();
+        fetchBtn.disabled = false;
+        return;
+      }
+      const queued = await response.json();
+      statusText.textContent = 'Downloading ' + queued.filename + '...';
+      pollFetchStatus();
+    } catch (error) {
+      statusText.textContent = 'Could not reach the reader: ' + error.message;
+      fetchBtn.disabled = false;
+    }
+  }
+
+  function pollFetchStatus() {
+    if (fetchPollTimer) clearInterval(fetchPollTimer);
+    fetchPollTimer = setInterval(async () => {
+      try {
+        const response = await fetch('/api/fetch/status');
+        if (!response.ok) return;
+        const status = await response.json();
+        const statusText = document.getElementById('fetchStatusText');
+
+        if (status.state === 'running') {
+          statusText.textContent = status.total
+            ? 'Downloading ' + status.filename + ': ' + formatFileSize(status.received) +
+              ' of ' + formatFileSize(status.total)
+            : 'Downloading ' + status.filename + ': ' + formatFileSize(status.received);
+          return;
+        }
+
+        clearInterval(fetchPollTimer);
+        fetchPollTimer = null;
+        document.getElementById('fetchBtn').disabled = false;
+        if (status.state === 'done') {
+          statusText.textContent = 'Saved ' + status.filename + ' (' + formatFileSize(status.received) + ')';
+          // Same refresh the other write actions use; delayed so the result is readable first.
+          setTimeout(() => window.location.reload(), 1500);
+        } else if (status.state === 'failed') {
+          statusText.textContent = status.error || 'The download failed';
+        }
+      } catch (error) {
+        console.error('Fetch status poll failed:', error);
+      }
+    }, 1000);
+  }
+
   function toggleSelectAll(master) {
     const checked = master.checked;
     document.querySelectorAll('.select-item').forEach(cb => {
@@ -2965,6 +3120,7 @@
       items.push({
         name: cb.dataset.name || decodeURIComponent(cb.dataset.path).split('/').pop(),
         path: decodeURIComponent(cb.dataset.path),
+        size: parseInt(cb.dataset.size || '0', 10),
         isFolder: cb.dataset.type === 'folder'
       });
     });
@@ -3335,6 +3491,12 @@ async function fetchVersion() {
     if (response.ok) {
       const data = await response.json();
       crosspointVersion = data.version || 'Unknown';
+      const cardSpace = document.getElementById('card-space');
+      if (cardSpace) {
+        cardSpace.textContent = data.sdTotal
+          ? formatFileSize(data.sdFree) + ' free on card'
+          : '';
+      }
       if (data.device === 'X3' || data.device === 'X4') {
         DETECTED_DEVICE = data.device;
         applyDeviceTarget();

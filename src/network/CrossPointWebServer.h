@@ -65,6 +65,20 @@ class CrossPointWebServer {
 
   WsUploadStatus getWsUploadStatus() const;
 
+  // A single "fetch this URL onto the card" job. The POST handler only queues
+  // one; the transfer itself runs from handleClient(), outside any request, so
+  // the server keeps answering while it is in flight.
+  struct FetchStatus {
+    enum class State : uint8_t { Idle, Running, Done, Failed };
+    State state = State::Idle;
+    std::string url;
+    std::string filename;
+    std::string destPath;
+    size_t received = 0;
+    size_t total = 0;  // 0 when the server sends no Content-Length
+    std::string error;
+  };
+
   // Get the port number
   uint16_t getPort() const { return port; }
 
@@ -93,6 +107,9 @@ class CrossPointWebServer {
   void handleJszip() const;
   void handleNotFound() const;
   void handleStatus() const;
+  void handleReadingList() const;
+  void handlePostFetch();
+  void handleFetchStatus() const;
   void handleFileList() const;
   void handleFileListData() const;
   void handleDownload() const;
@@ -102,6 +119,16 @@ class CrossPointWebServer {
   void handleRename() const;
   void handleMove() const;
   void handleDelete() const;
+
+  // URL fetch state. Only one job exists at a time: a second POST while one is
+  // queued or running is refused rather than replacing it.
+  FetchStatus fetch;
+  bool fetchQueued = false;
+  bool fetchRunning = false;
+  unsigned long lastFetchPumpAt = 0;
+  void runQueuedFetch();
+  void applyServerFilename(const std::string& contentDisposition);
+  void pumpDuringFetch();
 
   // Settings handlers
   void handleSettingsPage() const;

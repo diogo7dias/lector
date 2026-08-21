@@ -44,6 +44,10 @@ struct Sink {
   // Byte offset a resumed transfer asks for with a Range header, and the bytes
   // already on disk that `downloaded` therefore starts at. 0 for a plain fetch.
   size_t rangeStart = 0;
+  // When set, receives the final response's Content-Disposition header, so a
+  // caller can name a file the URL did not name. Left untouched when the server
+  // sends no such header.
+  std::string* contentDisposition = nullptr;
   // Called when a ranged request came back 200 (whole body) rather than 206:
   // the partial the range was based on is worthless and must be thrown away
   // before the first chunk lands. Cleared rangeStart follows.
@@ -77,6 +81,13 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     freeink::SecureHttpClient http;
     http.setTimeout(HTTP_TIMEOUT_MS);
     http.setInsecure();
+    if (sink.contentDisposition) {
+      // The default retained set is deliberately small (holding every header of a
+      // CDN response has exhausted the heap before), so ask for this one by name
+      // alongside the ones the client itself needs.
+      http.setRetainedHeaders({"location", "content-length", "transfer-encoding", "connection", "www-authenticate",
+                               "retry-after", "content-disposition"});
+    }
     if (!http.begin(url)) {
       LOG_ERR("HTTP", "wolfSSL bad URL: %s", url.c_str());
       return HttpDownloader::HTTP_ERROR;
@@ -146,6 +157,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
       LOG_ERR("HTTP", "wolfSSL incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);
       return HttpDownloader::HTTP_ERROR;
     }
+    if (sink.contentDisposition) *sink.contentDisposition = http.getHeader("content-disposition");
     return HttpDownloader::OK;
   }
   LOG_ERR("HTTP", "too many redirects");
@@ -228,6 +240,13 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     LOG_ERR("HTTP", "unexpected status: %d", status);
     esp_http_client_cleanup(client);
     return HttpDownloader::HTTP_ERROR;
+  }
+
+  if (sink.contentDisposition) {
+    char* value = nullptr;
+    if (esp_http_client_get_header(client, "Content-Disposition", &value) == ESP_OK && value != nullptr) {
+      *sink.contentDisposition = value;
+    }
   }
 
   // fetch_headers returns 0 for a chunked response (no Content-Length); leave
@@ -319,7 +338,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData
 HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& url, const std::string& destPath,
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
-                                                             const bool allowResume) {
+                                                             const bool allowResume, std::string* contentDisposition) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   // Bytes from an earlier attempt that this one can carry on from. Without
@@ -353,6 +372,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.cancelFlag = cancelFlag;
   sink.rangeStart = resumeFrom;
   sink.downloaded = resumeFrom;
+  sink.contentDisposition = contentDisposition;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
   // The server answered a ranged request with the whole body, so the partial on
   // the card is about to be overwritten from byte 0 rather than appended to.
