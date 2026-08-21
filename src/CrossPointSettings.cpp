@@ -549,6 +549,42 @@ void CrossPointSettings::applyStatusBarBlock(const StatusBarBlock& b) {
   sbOffBar = b.offBar;
 }
 
+void CrossPointSettings::applyStatusBarBlockTo(const StatusBarBlock& b, ReaderPrefs& p) {
+  p.statusBarEnabled = b.enabled;
+  p.sbBatteryPos = b.batteryPos;
+  p.sbClockPos = b.clockPos;
+  p.sbTitlePos = b.titlePos;
+  p.sbTitleSource = b.titleSource;
+  p.sbTitleTruncate = b.titleTruncate;
+  p.sbPagePos = b.pagePos;
+  p.sbPageFormat = b.pageFormat;
+  p.sbBookPctPos = b.bookPctPos;
+  p.sbChapterPctPos = b.chapterPctPos;
+  p.sbChapterNumPos = b.chapterNumPos;
+  p.sbSessionPagesPos = b.sessionPagesPos;
+  p.sbBookBar = b.bookBar;
+  p.sbChapterBar = b.chapterBar;
+  p.sbBarThickness = b.barThickness;
+  p.sbFloatingBar = b.floatingBar;
+  p.sbBarOutline = b.barOutline;
+  p.sbOffBar = b.offBar;
+}
+
+ReaderPrefs CrossPointSettings::trueGlobalReaderPrefs() const {
+  // Reader fields: the live ones, unless the Reader Settings screen is open on a book,
+  // in which case the live fields are that book's and the backup holds the global ones.
+  ReaderPrefs p = readerEditOverlayActive_ ? readerEditBackup_ : ReaderPrefs::fromGlobal();
+  // The status bar block is resolved separately because applyReaderPrefs() never touches
+  // the sb* fields: readerEditBackup_ carries whichever bar was live when the editor
+  // opened, which is the book's own whenever a book is open.
+  if (sbOverrideActive_) {
+    applyStatusBarBlockTo(sbGlobalBackup_, p);
+  } else if (readerEditOverlayActive_) {
+    applyStatusBarBlockTo(captureStatusBarBlock(), p);
+  }
+  return p;
+}
+
 void CrossPointSettings::setStatusBarOverride(const ReaderPrefs& prefs) {
   // Back up the true global block once: reopening the menu re-publishes the book's
   // values, and a second capture would back up the book's own layout as "global".

@@ -1728,7 +1728,7 @@ void EpubReaderActivity::loadReaderPrefs() {
       // configured. Seed them from the global settings, which is the bar every other
       // book already shows. Applied straight away, unlike the reading defaults below:
       // it is what stops an old book silently rearranging its status bar on first open.
-      if (migrated) prefs_.adoptStatusBarFrom(ReaderPrefs::fromGlobal());
+      if (migrated) prefs_.adoptStatusBarFrom(SETTINGS.trueGlobalReaderPrefs());
       prefsCustom_ = true;
       // An upgraded sidecar is not applied here. The saved page number was produced by
       // the OLD layout, so the chapter is laid out that way first, the reading position
@@ -1741,7 +1741,7 @@ void EpubReaderActivity::loadReaderPrefs() {
     }
     LOG_ERR("ERS", "reader_override.bin present but unreadable; using global settings");
   }
-  prefs_ = ReaderPrefs::fromGlobal();
+  prefs_ = SETTINGS.trueGlobalReaderPrefs();
 }
 
 bool EpubReaderActivity::writeReaderOverride(const ReaderPrefs& p) const {
@@ -1870,8 +1870,15 @@ void EpubReaderActivity::applyStatusBarEdit() {
 
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
   Storage.remove(readerOverridePath().c_str());
-  prefs_ = ReaderPrefs::fromGlobal();
+  // Not ReaderPrefs::fromGlobal(): this book's own status bar block is overlaid on the
+  // live sb* fields for as long as the book is open, so that snapshot would hand the book
+  // its own bar straight back and the reset would leave the bar exactly where it was.
+  prefs_ = SETTINGS.trueGlobalReaderPrefs();
   prefsCustom_ = false;
+  // An SD family keeps exactly one size resident and the id resolver returns whichever that
+  // is, whatever size is asked for, so the global size has to be made resident before the
+  // relayout below -- otherwise the page keeps rendering at the size the override asked for.
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
   reloadForReaderPrefsChange();
   requestUpdate();
 }
