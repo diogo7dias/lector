@@ -125,7 +125,7 @@ one row per refresh.
 
 ### Reading the wake line
 
-`# wake w91 pre 190 gpio 82 hal 4 sd 61 cfg 129 in 310 disp 138 push 710 act 232 = 2010`
+`# wake w5 pre 272 sys 0 gpio 156 hal 2 sd 67 cfg 129 in 303 disp 138 push 710 act 229 = 2006`
 
 `w91` is the wake counter; a climbing number proves the record is being read back. Every
 stage after it is a delta from the one before, and `= 2010` is the total. Stages that did
@@ -134,7 +134,8 @@ sleep frame shows `frame`, `base` and `draw` where a wallpaper wake shows none o
 
 | Stage | What it covers |
 |---|---|
-| `pre` | Framework startup and `Serial.begin()`, before any stamp of our own |
+| `pre` | Framework startup and, when it is compiled in, `Serial.begin()`. Not ours to shorten |
+| `sys` | `HalSystem::begin()` |
 | `gpio` | `gpio.begin()`, which powers the ADC button ladder |
 | `hal` | Power manager and clock |
 | `sd` | `Storage.begin()` |
@@ -146,6 +147,23 @@ sleep frame shows `frame`, `base` and `draw` where a wallpaper wake shows none o
 | `draw` | Drawing the unlock banners into the framebuffer |
 | `push` | The panel refresh that puts that frame on the glass |
 | `act` | The routed activity opening its book and painting |
+
+Measured at lector.exp.49, both devices on a custom wallpaper sleep face with Wake
+Straight to Book on:
+
+| | pre | sys | gpio | hal | sd | cfg | in | disp | push | act | total |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| X3 | 272 | 0 | 156 | 2 | 67 | 129 | 303 | 138 | 710 | 229 | 2006 |
+| X4 | 264 | 0 | 70 | 0 | 36 | 97 | 373 | 50 | 1809 | 87 | 2788 |
+
+Two things to read off that. `gpio` through `in` is one fixed 500 ms window and not four
+independent stages: the recovery-combo settle runs to a deadline measured from
+`gpio.begin()`, so `sd` and `cfg` are already inside it and `in` is only whatever is left.
+Making `sd` or `cfg` faster buys nothing on a wake; it just lengthens `in`.
+
+And `push` is a single panel pass that blanks the sleep wallpaper, which cannot be skipped
+without the wallpaper surviving into the page. On the X4 it is 1809 ms, 65% of the wake,
+and HALF measures 1803 ms on that panel, so there is no cheaper full clear to switch to.
 
 | Column | Meaning |
 |---|---|

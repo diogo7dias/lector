@@ -438,6 +438,9 @@ static std::string pickRandomRecentBookPath() {
 }
 
 void setup() {
+  // First thing of all: the earliest stamp has to be able to land, and this only zeroes
+  // two small arrays.
+  WakeTiming::beginWake();
   BoardConfig::holdPowerRails();
 
   t1 = millis();
@@ -463,7 +466,15 @@ void setup() {
 #endif
 #endif
 
+  // First stamp of the wake, and deliberately outside the serial block above: a build
+  // without ENABLE_SERIAL_LOG must still land stamp 0, because every other stage is a
+  // delta from it and the readout prints nothing at all without it. Everything before
+  // this point is the framework's own startup plus, when it is compiled in, serial
+  // bring-up. Neither is ours to shorten.
+  WakeTiming::mark(WakeTiming::Stage::SerialUp);
+
   HalSystem::begin();
+  WakeTiming::mark(WakeTiming::Stage::SysReady);
   // checkPanic() clears the watchdog capture marker after a successful SD dump,
   // so isRebootFromPanic() stops answering true partway through setup(). Latch
   // the boot classification here, before that happens, and use it everywhere
@@ -477,10 +488,6 @@ void setup() {
       (isSilentReboot && silentRebootTarget <= SILENT_REBOOT_TARGET_READER) ? silentRebootTarget : 0;
   silentRebootMagic = 0;
   silentRebootTarget = 0;
-
-  WakeTiming::beginWake();
-
-  WakeTiming::mark(WakeTiming::Stage::SysReady);
 
   gpio.begin();
   // When the ADC button ladder came up. The recovery-combo check below needs the ladder to

@@ -19,31 +19,33 @@ namespace WakeTiming {
 // Ordered milestones. Each is stamped as milliseconds since boot, so a stage's cost is
 // the difference between neighbours. Keep in sync with kStageNames in the .cpp.
 enum class Stage : uint8_t {
-  // The three below split what used to be one "HalReady" stage. On an X3 it measured
+  // The four below split what used to be one "HalReady" stage. On an X3 it measured
   // 430 ms of a 2010 ms wake and was not even printed: it is the FIRST stamp, so every
   // later stage is a delta from it and its own cost never appeared in the readout. That
-  // made the second largest item in the wake invisible. Three different things happen in
-  // there — the framework's own startup plus Serial, the panic check and system bring-up,
-  // and the ADC button ladder coming up — and only the split says which one to attack.
-  SysReady = 0,      // HalSystem::begin() returned; everything before it is the prologue
-  GpioReady = 1,     // gpio.begin() returned, so the ADC button ladder is powered
-  HalReady = 2,      // power manager and clock up, before the SD card
-  SdReady = 3,       // Storage.begin() returned
-  ConfigReady = 4,   // settings, state, recents, OPDS and presets loaded
-  InputSettled = 5,  // power-button verify plus the recovery-mode button settle window
-  DisplayReady = 6,  // setupDisplayAndFonts() returned
+  // made the second largest item in the wake invisible. Splitting it showed 272 ms still
+  // sitting before the first stamp, so the baseline moved earlier again: "the framework's
+  // own startup" and "our Serial.begin" are different answers and only one of them is
+  // ours to fix.
+  SerialUp = 0,      // Serial.begin() returned; everything before it is the framework's
+  SysReady = 1,      // HalSystem::begin() returned
+  GpioReady = 2,     // gpio.begin() returned, so the ADC button ladder is powered
+  HalReady = 3,      // power manager and clock up, before the SD card
+  SdReady = 4,       // Storage.begin() returned
+  ConfigReady = 5,   // settings, state, recents, OPDS and presets loaded
+  InputSettled = 6,  // power-button verify plus the recovery-mode button settle window
+  DisplayReady = 7,  // setupDisplayAndFonts() returned
   // The three below split what used to be one "ban" stage. On an X3 that stage measured
   // 3675 ms of a 4740 ms wake, which named the wake's whole cost and explained none of
   // it: four different things happen in there — a 52 KB frame read off the card, a full
   // plane write to rebuild the panel's differential baseline, the banner drawing itself,
   // and the panel refresh. Only one of them can be worth attacking, and the split is what
   // says which.
-  FrameLoaded = 7,       // the saved sleep frame is in the framebuffer (or was absent)
-  BaselineRestored = 8,  // the X3 differential baseline has been written back
-  BannersDrawn = 9,      // the banners are in the framebuffer, not yet on the panel
-  BannersUp = 10,        // the refresh that puts them on the panel has returned
-  ActivityUp = 11,       // the routed activity has run onEnter and painted
-  Count = 12,
+  FrameLoaded = 8,       // the saved sleep frame is in the framebuffer (or was absent)
+  BaselineRestored = 9,  // the X3 differential baseline has been written back
+  BannersDrawn = 10,     // the banners are in the framebuffer, not yet on the panel
+  BannersUp = 11,        // the refresh that puts them on the panel has returned
+  ActivityUp = 12,       // the routed activity has run onEnter and painted
+  Count = 13,
 };
 
 // Switches the card read and write on. Off (the default) means loadPrevious() and
@@ -58,8 +60,9 @@ void setEnabled(bool enabled);
 // out of order are kept as-is, since the reader of these numbers wants the raw stamps.
 void mark(Stage stage);
 
-// Clear the slate for the wake starting now. Call once, early in setup(), before the
-// first mark().
+// Clear the slate for the wake starting now. Call as the FIRST statement of setup(),
+// before the first mark(). It only zeroes two small arrays, so it is safe that early, and
+// the first stamp has to be able to land before anything else has run.
 void beginWake();
 
 // Read the previous wake's stamps from the SD card. Call once, right after the card is
@@ -74,7 +77,7 @@ void loadPrevious();
 // end of the wake, after the last mark(). One 22-byte record, one write per wake.
 void persist();
 
-// Human-readable breakdown of the PREVIOUS wake, e.g. "pre 190 gpio 82 hal 4 sd 61
+// Human-readable breakdown of the PREVIOUS wake, e.g. "pre 190 sys 8 gpio 82 hal 4 sd 61
 // cfg 129 in 310 disp 138 push 710 act 232 = 2010". The leading "pre" is everything
 // before the first stamp — the framework's own startup and Serial — which has no stage of
 // its own to be a delta from and would otherwise only show up as the gap between the sum
