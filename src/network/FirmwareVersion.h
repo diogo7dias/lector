@@ -46,13 +46,29 @@ inline bool parse(const char* text, Semver* out) {
   return false;
 }
 
-// True when `latest` names a strictly higher version than `current`. Unknown on either
-// side is false: an update the device cannot even name is not one it should install.
+// True when `latest` names a strictly higher version than `current`.
+//
+// An unreadable LATEST is always false: an update the device cannot even name is not one
+// it should install.
+//
+// An unreadable CURRENT against a readable latest is TRUE, and that asymmetry is the
+// point. The only builds without a three-part number are the experimental ones, and they
+// are exactly the builds that most need a stable release to replace them. Refusing here
+// made every experimental build a dead end for Check for Updates: the only way back to a
+// stable build was the web flasher, over USB, which is precisely what a device with
+// locked-down USB flashing cannot do.
+//
+// It cannot cause a downgrade. The check reads /releases/latest, which returns the newest
+// non-prerelease, and every experimental and release-candidate tag is published as a
+// prerelease. So the only thing an experimental build can be offered is a stable release
+// that is by definition newer than the branch it was cut from.
+//
 // A current build marked "-rc" is treated as older than the same numbers released, which
 // is how a release candidate is meant to be superseded by its stable build.
 inline bool isNewer(const char* latest, const char* current) {
   Semver l, c;
-  if (!parse(latest, &l) || !parse(current, &c)) return false;
+  if (!parse(latest, &l)) return false;
+  if (!parse(current, &c)) return true;
   if (l.major != c.major) return l.major > c.major;
   if (l.minor != c.minor) return l.minor > c.minor;
   if (l.patch != c.patch) return l.patch > c.patch;
