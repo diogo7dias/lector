@@ -46,27 +46,6 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       break;
     }
   }
-
-  // The wallpaper tab wins over that preference when it exists: this menu is normally
-  // reached by waking the device, and the wallpaper rows act on the image the lock
-  // screen just showed — the one thing here that is about the moment rather than the
-  // book, and gone again on the next sleep.
-  for (int i = 0; i < static_cast<int>(tabs.size()); i++) {
-    if (tabs[i].tab == Tab::Sleep) {
-      activeTabIndex = i;
-      // Land the cursor on the favourite row rather than the tab bar, so favouriting
-      // the wallpaper just shown is a single Confirm press. selectedIndex is a nav-ring
-      // position: 0 is the tab bar, so row r sits at r + 1. Held in a member because
-      // onEnter runs after this and sets the opening position itself.
-      for (int r = 0; r < static_cast<int>(tabs[i].items.size()); r++) {
-        if (tabs[i].items[r].action == MenuAction::WALLPAPER_FAVORITE) {
-          openingSelectedIndex = r + 1;
-          break;
-        }
-      }
-      break;
-    }
-  }
 }
 
 EpubReaderMenuActivity::Tab EpubReaderMenuActivity::tabForSetting(const uint8_t setting) {
@@ -300,12 +279,10 @@ void EpubReaderMenuActivity::switchTab(const int direction) {
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
-  // Nav-ring position 0 is the tab bar, and that is normally where the menu opens: the
-  // tab it opens ON carries the intent (see the constructor), so the first thing offered
-  // is the choice of tab rather than whichever row happens to be first. The exception is
-  // the Sleep tab's favourite row, which the constructor points at so that favouriting
-  // the wallpaper just shown is a single Confirm press.
-  activeTab().selectedIndex = openingSelectedIndex;
+  // Nav-ring position 0 is the tab bar, and that is where the menu opens: the tab it
+  // opens ON carries the intent (see the constructor), so the first thing offered is
+  // the choice of tab rather than whichever row happens to be first.
+  activeTab().selectedIndex = 0;
   requestUpdate();
 }
 

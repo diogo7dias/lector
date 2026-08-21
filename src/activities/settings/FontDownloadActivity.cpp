@@ -53,6 +53,12 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   requestUpdateAndWait();
 
   if (!fetchAndParseManifest()) {
+    // Back pressed while waiting for the link is an answer, not a failure to
+    // report: leave the screen rather than accuse the server of anything.
+    if (cancelRequested_) {
+      finish();
+      return;
+    }
     {
       RenderLock lock(*this);
       state_ = ERROR;
@@ -78,6 +84,11 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // handshake that fails while the connection settles used to end the trip here.
   auto result = HttpDownloader::OK;
   for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (!waitForWifi()) {
+      result = HttpDownloader::HTTP_ERROR;
+      break;
+    }
+
     result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
     if (result == HttpDownloader::OK) break;
     LOG_ERR("FONT", "Manifest fetch attempt %d of %d failed (%d)", attempt, MAX_ATTEMPTS, result);
@@ -293,7 +304,63 @@ bool FontDownloadActivity::waitBeforeRetry(const uint32_t ms) {
   return true;
 }
 
+bool FontDownloadActivity::waitForWifi() {
+  if (WiFi.status() == WL_CONNECTED) return true;
+  LOG_DBG("FONT", "Waiting for WiFi to come back");
+  WiFi.reconnect();
+  const uint32_t until = millis() + WIFI_WAIT_MS;
+  uint32_t nextReconnect = millis() + RECONNECT_EVERY_MS;
+  while (static_cast<int32_t>(until - millis()) > 0) {
+    if (WiFi.status() == WL_CONNECTED) return true;
+    // One reconnect() at the top is not enough: the first can be issued while
+    // the radio is still tearing the old association down, and is then dropped.
+    if (static_cast<int32_t>(nextReconnect - millis()) <= 0) {
+      WiFi.reconnect();
+      nextReconnect = millis() + RECONNECT_EVERY_MS;
+    }
+    mappedInput.update();
+    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested_ = true;
+      return false;
+    }
+    delay(100);
+  }
+  LOG_ERR("FONT", "WiFi did not come back within %u ms", WIFI_WAIT_MS);
+  return false;
+}
+
+bool FontDownloadActivity::fileAlreadyInstalled(const ManifestFile& file, const char* destPath) {
+  HalFile f;
+  if (!Storage.openFileForRead("FONT", destPath, f)) return false;
+  const size_t actual = f.fileSize();
+  f.close();
+  if (actual != file.size) return false;
+  uint32_t crc = 0;
+  if (!computeFileCrc32(destPath, crc)) return false;
+  return crc == file.crc32;
+}
+
 bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, const char* destPath) {
+  // A file that survived an earlier run is not fetched again, so retrying a
+  // batch that died halfway picks up where it stopped instead of paying for
+  // every megabyte a second time.
+  if (fileAlreadyInstalled(file, destPath)) {
+    LOG_DBG("FONT", "Already installed, skipping %s", file.name.c_str());
+    return true;
+  }
+
+  // Everything lands in a staging file and only takes the real name once it has
+  // passed its checksum. Two things follow: the copy already on the card
+  // survives a failed update untouched, and a partial can never be discovered as
+  // a font, because the registry only accepts names ending in ".cpfont".
+  char partPath[192];
+  snprintf(partPath, sizeof(partPath), "%s.part", destPath);
+  // Bytes left by an older run belong to an older release of this file, so they
+  // are not the head of the body about to arrive: only partials this loop
+  // creates are ever resumed.
+  Storage.remove(partPath);
+
   for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     {
       RenderLock lock(*this);
@@ -304,9 +371,25 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     }
     requestUpdateAndWait();
 
+    // A link that has not come back yet costs an attempt rather than the file:
+    // the bytes already staged stay, and the next attempt resumes from them.
+    if (!waitForWifi()) {
+      if (cancelRequested_) {
+        Storage.remove(partPath);
+        return false;
+      }
+      LOG_ERR("FONT", "No WiFi for attempt %d of %d for %s", attempt, MAX_ATTEMPTS, file.name.c_str());
+      errorMessage_ = "Lost WiFi connection";
+      if (attempt < MAX_ATTEMPTS && !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) {
+        Storage.remove(partPath);
+        return false;
+      }
+      continue;
+    }
+
     const std::string url = baseUrl_ + file.name;
     const auto result = HttpDownloader::downloadToFile(
-        url, destPath,
+        url, partPath,
         [this](size_t downloaded, size_t total) {
           fileProgress_ = downloaded;
           fileTotal_ = total;
@@ -322,9 +405,12 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
           lastDrawnProgressStep_ = step;
           requestUpdate(true);
         },
-        &cancelRequested_);
+        &cancelRequested_, "", "", /*allowResume=*/true);
 
     if (result == HttpDownloader::ABORTED || cancelRequested_) {
+      // A cancel is an answer, not an interruption to be picked up later: leave
+      // no staging file behind for the next visit to puzzle over.
+      Storage.remove(partPath);
       cancelRequested_ = true;
       return false;
     }
@@ -334,8 +420,8 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       errorMessage_ = "Download failed: " + file.name;
     } else {
       uint32_t actualCrc = 0;
-      if (!computeFileCrc32(destPath, actualCrc)) {
-        LOG_ERR("FONT", "Failed to open file for CRC check: %s", destPath);
+      if (!computeFileCrc32(partPath, actualCrc)) {
+        LOG_ERR("FONT", "Failed to open file for CRC check: %s", partPath);
         errorMessage_ = "Failed to compute checksum: " + file.name;
       } else if (actualCrc != file.crc32) {
         // A body that arrived corrupted is worth fetching again: the manifest
@@ -343,9 +429,11 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
         // the renderer would later choke on.
         LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name.c_str(), actualCrc, file.crc32);
         errorMessage_ = "Checksum mismatch: " + file.name;
-      } else if (!fontInstaller_.validateCpfontFile(destPath)) {
-        LOG_ERR("FONT", "Invalid .cpfont: %s", destPath);
+      } else if (!fontInstaller_.validateCpfontFile(partPath)) {
+        LOG_ERR("FONT", "Invalid .cpfont: %s", partPath);
         errorMessage_ = "Invalid font file: " + file.name;
+      } else if (!promoteStagedFile(partPath, destPath)) {
+        errorMessage_ = "Failed to install: " + file.name;
       } else {
         LOG_DBG("FONT", "Downloaded %s (size=%zu crc32=%08x)", file.name.c_str(), file.size, actualCrc);
         RenderLock lock(*this);
@@ -354,16 +442,33 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       }
     }
 
-    // Whatever landed on the card is not usable, and leaving it behind would be
-    // read as an installed style on the next visit.
-    Storage.remove(destPath);
-    if (attempt < MAX_ATTEMPTS && !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) return false;
+    // A transfer that stopped early leaves bytes the next attempt resumes from,
+    // so only a body that arrived whole and wrong is swept away here.
+    if (result == HttpDownloader::OK) Storage.remove(partPath);
+    if (attempt < MAX_ATTEMPTS && !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) {
+      Storage.remove(partPath);
+      return false;
+    }
   }
 
+  Storage.remove(partPath);
   LOG_ERR("FONT", "Giving up on %s after %d attempts", file.name.c_str(), MAX_ATTEMPTS);
   RenderLock lock(*this);
   retryAttempt_ = 0;
   return false;
+}
+
+bool FontDownloadActivity::promoteStagedFile(const char* partPath, const char* destPath) {
+  // The old copy goes only now, with a verified replacement in hand.
+  if (Storage.exists(destPath) && !Storage.remove(destPath)) {
+    LOG_ERR("FONT", "Failed to remove the previous file: %s", destPath);
+    return false;
+  }
+  if (!Storage.rename(partPath, destPath)) {
+    LOG_ERR("FONT", "Failed to rename %s to %s", partPath, destPath);
+    return false;
+  }
+  return true;
 }
 
 bool FontDownloadActivity::downloadFamily(ManifestFamily& family) {
@@ -391,12 +496,15 @@ bool FontDownloadActivity::downloadFamily(ManifestFamily& family) {
     FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), destPath, sizeof(destPath));
 
     if (!downloadFileWithRetries(file, destPath)) {
-      if (!wasInstalled) {
-        fontInstaller_.deleteFamily(family.name.c_str());
-        family.installed = false;
-      }
+      // The files that did land stay: a reader on a poor link gets the family a
+      // few styles at a time across runs, and the size check in the manifest
+      // marks what is still missing as an update. Only a family that arrived
+      // with nothing at all is cleared, so no empty directory is left behind.
       fontInstaller_.refreshRegistry();
       family.installed = fontInstaller_.isFamilyInstalled(family.name.c_str());
+      if (!wasInstalled && !family.installed) {
+        fontInstaller_.deleteFamily(family.name.c_str());
+      }
       family.hasUpdate = family.installed;
       if (cancelRequested_) {
         RenderLock lock(*this);

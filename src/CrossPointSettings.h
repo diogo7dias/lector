@@ -86,7 +86,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Which tab the in-book menu opens on. Index-aligned with the picker labels in
   // SettingsList.h, and mapped onto EpubReaderMenuActivity::Tab at open time. The
   // Sleep tab is deliberately not offered: it only exists while the lock screen has
-  // a wallpaper to act on, and it keeps taking priority when it does.
+  // a wallpaper to act on, so it would be an empty choice most of the time.
   enum BOOK_MENU_TAB {
     BOOK_MENU_TAB_NAVIGATE = 0,
     BOOK_MENU_TAB_THIS_BOOK = 1,

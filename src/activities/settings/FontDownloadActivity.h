@@ -104,10 +104,18 @@ class FontDownloadActivity : public Activity {
   // Which PROGRESS_STEP_PERCENT bucket the drawn bar sits in, -1 before the first paint.
   int lastDrawnProgressStep_ = -1;
 
-  /** Attempts per file and per manifest fetch, first try included. */
-  static constexpr int MAX_ATTEMPTS = 3;
-  /** Pause before a retry; the second retry waits twice this. */
+  /**
+   * Attempts per file and per manifest fetch, first try included. A partial file
+   * is resumed rather than refetched, so a later attempt costs only the bytes
+   * still missing and being generous here is cheap.
+   */
+  static constexpr int MAX_ATTEMPTS = 5;
+  /** Pause before a retry; each further retry waits a multiple of this. */
   static constexpr uint32_t RETRY_DELAY_MS = 1500;
+  /** Longest wait for the access point to come back before an attempt. */
+  static constexpr uint32_t WIFI_WAIT_MS = 20000;
+  /** How often a reconnect is asked for again while waiting for the link. */
+  static constexpr uint32_t RECONNECT_EVERY_MS = 5000;
   /**
    * How far the progress bar must move before the panel is redrawn. The download
    * callback fires once per network chunk, which is hundreds of times per file, and
@@ -137,6 +145,24 @@ class FontDownloadActivity : public Activity {
   bool downloadFileWithRetries(const ManifestFile& file, const char* destPath);
   /** Waits `ms`, staying responsive to a cancel press. Returns false if cancelled. */
   bool waitBeforeRetry(uint32_t ms);
+  /**
+   * Waits for the station to be associated again, asking for a reconnect first.
+   * A download run is minutes long over a link the reader is often at the edge
+   * of, and every attempt after a drop fails instantly unless it waits here.
+   * Returns false when the link did not come back or the reader cancelled.
+   */
+  bool waitForWifi();
+  /**
+   * True when `destPath` already holds this exact file: right size, right CRC32.
+   * A rerun after a failure then costs nothing for the files already on the card.
+   */
+  static bool fileAlreadyInstalled(const ManifestFile& file, const char* destPath);
+  /**
+   * Moves a verified staging file onto the name the renderer reads, replacing
+   * the previous copy. Called only once the download passed every check, so the
+   * font on the card is never the one being replaced mid-flight.
+   */
+  static bool promoteStagedFile(const char* partPath, const char* destPath);
   void downloadAll();
   void updateAll();
   /** Downloads every family `wanted` selects, carrying on past any that fail. */
