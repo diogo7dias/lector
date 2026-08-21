@@ -104,7 +104,7 @@ The File Manager page can:
 - Rename files
 - Move files into existing folders
 - Delete one or more selected files or empty folders
-- Download the selected files together as `crosspoint-files.zip`
+- Download the selected files together as `lector-files.zip`
 - Fetch a file from a URL into the folder being browsed
 
 The free space on the card is shown next to the folder summary.

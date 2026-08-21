@@ -3017,7 +3017,7 @@
       const blob = await zip.generateAsync({ type: 'blob' });
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
-      link.download = 'crosspoint-files.zip';
+      link.download = 'lector-files.zip';
       link.click();
       // Revoking in the same tick cancels the save in Firefox and Safari.
       setTimeout(() => URL.revokeObjectURL(link.href), 0);
