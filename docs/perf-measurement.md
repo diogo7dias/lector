@@ -125,6 +125,24 @@ one row per refresh:
 | `ink` | What this frame was scored at, 0-1000 (see `lib/hal/FrameInkMetrics.h`). 0 on paths with no framebuffer to measure |
 | `debt` | The anti-ghost ink debt after this pass. Crossing a threshold is what forces a clean |
 | `turbo` | 1 when this pass ran the panel's cheap partial waveform (Fast Page Turns), 0 otherwise |
+| `diag` | BUSY handshake bit set, X3 only. 0 means the handshake behaved as designed |
+| `settle_ms` | Milliseconds spent waiting out a panel still driving after its completion wait returned |
+
+The `diag` bits, from `PanelDriver::RefreshDiagnostic`. They are evidence, not control:
+nothing in the driver branches on them.
+
+| Bit | Value | Meaning |
+| --- | --- | --- |
+| 0 | 1 | BUSY was low when this refresh was triggered, so the panel was still driving |
+| 1 | 2 | BUSY never went low after the trigger, so the waveform starting was never confirmed |
+| 2 | 4 | BUSY was low before this refresh wrote anything, so a previous pass leaked |
+| 3 | 8 | The completion wait returned with the panel still driving |
+| 4 | 16 | The settle loop after that wait had to wait more than 2 ms |
+| 5 | 32 | BUSY was still low once this refresh's post-work finished |
+
+Bit 2 is the one that separates the two explanations for bit 0: a previous pass that was
+never waited out (bit 2 set) against this pass's own LUT and plane writes pulling BUSY low
+(bit 2 clear).
 
 `req` and `run` are separate columns on purpose. Both panel drivers override the requested
 mode in places, and the size of that gap is itself one of the things being measured.

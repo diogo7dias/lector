@@ -61,7 +61,8 @@ void setScreen(const char* screenName);
 // wireUs and waveUs split the total into bus time and waveform time; see
 // PerfStats::noteRefresh for why the split is the number that decides what to change.
 void record(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t asyncStartUs, uint16_t thinkMs,
-            uint16_t inkScore, uint16_t inkDebt, uint32_t wireUs, uint32_t waveUs, bool turbo, uint8_t diag);
+            uint16_t inkScore, uint16_t inkDebt, uint32_t wireUs, uint32_t waveUs, bool turbo, uint8_t diag,
+            uint16_t settleMs);
 
 // A free-form annotation line, written verbatim as a CSV comment. Used for the wake-stage
 // breakdown and the end-of-session summary, so one copied file answers page turn, menu

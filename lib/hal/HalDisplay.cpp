@@ -155,7 +155,7 @@ void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMod
   const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
   PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
   PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs, lastPassWasTurbo,
-                  einkDisplay.lastRefreshDiagnostic());
+                  einkDisplay.lastRefreshDiagnostic(), einkDisplay.lastSettleWaitMs());
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
