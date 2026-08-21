@@ -67,7 +67,12 @@ the panel has finished, and by then the frame that would report it is already in
 Write the value into `/perf/pll.txt` on the card and power-cycle — `0x19`, `19` and `25`
 are all read as the same byte. No rebuild and no flash per candidate. The value in force
 is printed in the overlay and in the CSV header, so a run cannot be attributed to the
-wrong candidate. With no such file the driver's stock `0x09` is used.
+wrong candidate. With no such file the landed default `0x3D` is used.
+
+The sweep is done. Walking the high field (`0x09` versus `0x19`) changes nothing on this
+panel; the low three bits are the lever. `0x3D` is the fastest byte that still prints
+clean (FAST waveform 428 ms against the stock 566 ms, 24% off) and is what ships. `0x3F`
+is faster still, 352 ms, but leaves a grey haze on body text, so it is not shipped.
 
 Before landing a value as the default, all four must hold: FAST panel time falls at least
 15%; body text is clean after 30 consecutive FAST passes; grayscale still shows four

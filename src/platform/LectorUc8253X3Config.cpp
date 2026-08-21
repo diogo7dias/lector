@@ -10,27 +10,35 @@
 // 0x09. Every frame of every waveform lasts one period of that clock, so it scales the
 // duration of every refresh on the device.
 //
-// WHY THE VALUE IS SWEPT RATHER THAN CHOSEN
-// -----------------------------------------
+// WHAT THE SWEEP FOUND
+// --------------------
 // The UC8253 datasheet is not public. The sibling UC8157c datasheet documents R30h as
 // [-, -, M[2:0], N[2:0]] with a frame-rate table in which 0x09 is M=1, N=1 = 20 Hz. That
 // cannot be right for this panel: 19 frames at 20 Hz is 950 ms, and the device measures
-// 626 ms. So the UC8253's table differs from its sibling's, and reading a value off the
-// UC8157 table would be a guess dressed up as a citation.
+// 626 ms. So the UC8253's table differs from its sibling's.
 //
-// What does carry across is the structure: the byte is two 3-bit fields, and within the
-// UC8157 table, holding N and raising M raises the frame rate monotonically. So the sweep
-// holds N=1 and walks M upward from the value in use. If the measured refresh time falls
-// as M rises, the structure holds and the fastest value that still prints clean wins. If
-// it does not fall, the assumption was wrong and the idea is dead.
+// It differs in which field matters, too. Walking M with N held (0x09, 0x19) was measured
+// on the device and produced a bit-identical 566 ms FAST waveform: the high field does
+// nothing here. The low 3 bits are the lever. Measured on X3, lector.exp.43:
+//
+//   pll    FAST waveform   FAST page turn   FULL     HALF      text
+//   0x09      566 ms          638 ms        856 ms   2320 ms   clean (driver stock)
+//   0x19      566 ms          638 ms        856 ms   2320 ms   clean (no change at all)
+//   0x3B      490 ms          563 ms       1022 ms   1985 ms   clean
+//   0x3D      428 ms          500 ms        861 ms   2380 ms   clean  <- landed
+//   0x3F      352 ms          425 ms        629 ms   1305 ms   grey haze on body text
+//
+// 0x3F is the first rung that outruns the panel: text leaves a grey haze that the next
+// refresh does not clear. 0x3D is the fastest value that still prints clean, 24% off the
+// stock waveform, and is what ships. Anything faster needs LUT work, which is out of
+// scope. Ghost-free beats fast, so the last clean rung wins, never the fastest one.
 //
 // HOW A CANDIDATE IS TRIED
 // ------------------------
-// Write the byte into /perf/pll.txt on the card ("0x19", "19" and "25" are all read as
+// Write the byte into /perf/pll.txt on the card ("0x3D", "3D" and "61" are all read as
 // the same value) and power-cycle. No rebuild, no flash. The value in force is printed
 // in the timings overlay and in the CSV header, so a run can never be attributed to the
-// wrong candidate. With no such file the driver's stock 0x09 is used, which is what every
-// device that has never been measured on runs.
+// wrong candidate. With no such file the landed default below is used.
 //
 // BEFORE LANDING A VALUE AS THE DEFAULT, all four must hold:
 //   1. FAST panel time falls by at least 15% against 0x09.
@@ -50,8 +58,10 @@
 
 namespace {
 
-// The driver's own value, and the baseline every candidate is measured against.
-constexpr unsigned char kStockPll = 0x09;
+// The fastest PLL byte that still prints clean on the X3, and the value in force on any
+// device without a /perf/pll.txt. The driver's own stock 0x09 stays the baseline every
+// candidate was measured against; see the table above.
+constexpr unsigned char kLandedPll = 0x3D;
 constexpr const char* kPllPath = "/perf/pll.txt";
 
 }  // namespace
@@ -62,7 +72,7 @@ unsigned char lectorX3PllByte() {
   // if the card were pulled in between, and a log that disagrees with the panel is worse
   // than no log at all.
   static bool chosen = false;
-  static unsigned char active = kStockPll;
+  static unsigned char active = kLandedPll;
   if (chosen) return active;
   chosen = true;
 
