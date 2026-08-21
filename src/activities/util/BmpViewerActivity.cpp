@@ -342,7 +342,7 @@ void BmpViewerActivity::doToggleFavorite() {
   if (!target.empty() && target != effectivePath()) {
     if (DeferredFavorite::request(effectivePath(), target)) {
       FavoriteImage::replacePathReferences(effectivePath(), target);
-    } else if (FavoriteImage::setFavorite(filePath, makeFavorite, nullptr) !=
+    } else if (FavoriteImage::setFavorite(effectivePath(), makeFavorite, nullptr) !=
                FavoriteImage::SetFavoriteResult::Success) {
       // Queue jammed and the foreground attempt failed too. Report it rather than
       // closing as though the press had worked.
@@ -395,12 +395,18 @@ void BmpViewerActivity::promptDelete() {
         // A queued favorite rename would move this file out from under the delete, so
         // let it land first. Card work is expected here anyway, and the user has already
         // confirmed.
+        //
+        // Draining is what performs the rename, so the name captured before it is exactly
+        // the one that stops existing. Adopt the post-drain name, or the confirmed delete
+        // fails against a file that is no longer there.
+        const std::string queued = DeferredFavorite::pendingTargetFor(doomed);
         DeferredFavorite::waitForIdle(15000);
         DeferredFavorite::reconcile();
+        const std::string live = (!queued.empty() && Storage.exists(queued.c_str())) ? queued : doomed;
         // Measured while the file still exists: an on-device delete then costs
         // the index one dead slot instead of a folder walk at the next unlock.
-        const auto pendingDelete = crosspoint::sleep::windex::planDeletion(doomed);
-        if (!Storage.remove(doomed.c_str())) {
+        const auto pendingDelete = crosspoint::sleep::windex::planDeletion(live);
+        if (!Storage.remove(live.c_str())) {
           GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
           delay(1000);
           onEnter();
@@ -409,7 +415,7 @@ void BmpViewerActivity::promptDelete() {
         crosspoint::sleep::windex::commitDeletion(pendingDelete);
         // The wake path re-renders the last wallpaper; a dead path
         // there sends the next wake to the boot logo for no reason.
-        FavoriteImage::removePathReferences(doomed);
-        activityManager.goToFileBrowser(FsHelpers::extractFolderPath(doomed));
+        FavoriteImage::removePathReferences(live);
+        activityManager.goToFileBrowser(FsHelpers::extractFolderPath(live));
       });
 }

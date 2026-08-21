@@ -192,8 +192,15 @@ void PxcViewerActivity::loop() {
                              // A queued favorite rename would move this file out from under
                              // the delete, so let it land first. Card work is expected here
                              // anyway, and the user has already confirmed.
+                             //
+                             // The name is captured BEFORE the drain and adopted after it.
+                             // Draining is what performs the rename, so filePath is exactly
+                             // the name that stops existing; deleting it afterwards fails and
+                             // the user's confirmed delete is silently refused.
+                             const std::string doomed = effectivePath();
                              DeferredFavorite::waitForIdle(15000);
                              DeferredFavorite::reconcile();
+                             filePath = Storage.exists(doomed.c_str()) ? doomed : filePath;
                              // Measured while the file still exists: an on-device delete then
                              // costs the index one dead slot instead of a folder walk.
                              const auto pendingDelete = crosspoint::sleep::windex::planDeletion(filePath);
@@ -218,9 +225,12 @@ void PxcViewerActivity::loop() {
     if (!crosspoint::sleep::isUnderSleepDirs(filePath)) return;
 
     // Same reason as the delete above: the move and a queued rename are both name-based
-    // operations on this one file, so the queue drains before the move is worked out.
+    // operations on this one file, so the queue drains before the move is worked out, and
+    // the post-drain name is adopted before anything is worked out from it.
+    const std::string queuedName = effectivePath();
     DeferredFavorite::waitForIdle(15000);
     DeferredFavorite::reconcile();
+    if (Storage.exists(queuedName.c_str())) filePath = queuedName;
 
     // Work out where to go next BEFORE the move, while the file is still in place
     // to anchor the neighbour lookup. Falling back to the previous entry keeps the
