@@ -9,6 +9,7 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["showBootScreen"] = showBootScreen;
   doc["quickResumeWake"] = quickResumeWake;
   doc["fastRefreshesSinceFull"] = fastRefreshesSinceFull;
+  doc["inkDebt"] = inkDebt;
   doc["readOrderCounter"] = readOrderCounter;
   doc["readingBadgesSeeded"] = readingBadgesSeeded;
   doc["lowBatteryWarned"] = lowBatteryWarned;
@@ -39,6 +40,7 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   showBootScreen = doc["showBootScreen"] | true;
   quickResumeWake = doc["quickResumeWake"] | false;
   fastRefreshesSinceFull = doc["fastRefreshesSinceFull"] | static_cast<uint8_t>(0);
+  inkDebt = doc["inkDebt"] | static_cast<uint16_t>(0);
   readOrderCounter = doc["readOrderCounter"] | static_cast<uint32_t>(0);
   readingBadgesSeeded = doc["readingBadgesSeeded"] | false;
   lowBatteryWarned = doc["lowBatteryWarned"] | false;

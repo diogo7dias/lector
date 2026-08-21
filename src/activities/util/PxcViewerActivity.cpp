@@ -18,6 +18,7 @@
 #include "sleep/SleepPauseToggle.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperNeighbour.h"
+#include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
 
 namespace {
@@ -47,10 +48,17 @@ std::string baseNameOf(const std::string& path) {
 PxcViewerActivity::PxcViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string filePath)
     : Activity("PxcViewer", renderer, mappedInput), filePath(std::move(filePath)) {}
 
+std::string PxcViewerActivity::effectivePath() const {
+  const std::string queued = DeferredFavorite::pendingTargetFor(filePath);
+  return queued.empty() ? filePath : queued;
+}
+
+bool PxcViewerActivity::effectiveFavorite() const { return FavoriteImage::isFavoritePath(effectivePath()); }
+
 void PxcViewerActivity::drawHintsForOverlay() const { drawHints(); }
 
 void PxcViewerActivity::drawHints() const {
-  const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
+  const char* favLabel = effectiveFavorite() ? tr(STR_UNFAV) : tr(STR_FAV);
   // "Pause" only means something for a wallpaper inside a rotation folder. For
   // anything else the slot stays blank rather than offering a hidden no-op.
   const char* pauseLabel = "";
@@ -138,19 +146,36 @@ void PxcViewerActivity::loop() {
 
   // Confirm favourites, because it is the action this screen exists for and the
   // one that gets used most while triaging a folder.
+  //
+  // The rename does NOT happen here. On a FAT card every name-based operation is a
+  // linear scan of the directory, and /sleep holds thousands of wallpapers, so doing it
+  // on the press left the user watching the viewer for seconds before it would move. The
+  // job is queued in RAM and the viewer closes straight back to the browser, so triaging
+  // a folder is press, back, next, at button speed. DeferredFavorite drains the queue
+  // when the browser is left or the device is locked, moments that already do card work.
+  //
+  // The browser is handed the CURRENT path, not the favorited one: the card still holds
+  // the old name until the queue drains, and that is the row the browser has to find. It
+  // draws the queued name through DeferredFavorite::pendingTargetFor, so the row reads as
+  // favorited even though the rename has not run yet.
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
-    std::string updated;
-    const auto result = FavoriteImage::setFavorite(filePath, makeFavorite, &updated);
-    if (result == FavoriteImage::SetFavoriteResult::Success) {
-      filePath = updated;
-      refreshHintsOnly();
-    } else {
-      GUI.drawPopup(renderer, result == FavoriteImage::SetFavoriteResult::RenameConflict ? tr(STR_FAVORITE_NAME_EXISTS)
-                                                                                         : tr(STR_FAVORITE_FAILED));
-      delay(1000);
-      render();
+    const bool makeFavorite = !effectiveFavorite();
+    const std::string target = FavoriteImage::favoritePathFor(effectivePath(), makeFavorite);
+    if (!target.empty() && target != effectivePath()) {
+      if (DeferredFavorite::request(effectivePath(), target)) {
+        FavoriteImage::replacePathReferences(effectivePath(), target);
+      } else {
+        // Queue jammed. Do it in the foreground rather than drop the press, the way this
+        // screen always did.
+        if (FavoriteImage::setFavorite(filePath, makeFavorite, nullptr) != FavoriteImage::SetFavoriteResult::Success) {
+          GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
+          delay(1000);
+          render();
+          return;
+        }
+      }
     }
+    activityManager.goToFileBrowser(filePath);
     return;
   }
 
@@ -164,6 +189,11 @@ void PxcViewerActivity::loop() {
                                render();
                                return;
                              }
+                             // A queued favorite rename would move this file out from under
+                             // the delete, so let it land first. Card work is expected here
+                             // anyway, and the user has already confirmed.
+                             DeferredFavorite::waitForIdle(15000);
+                             DeferredFavorite::reconcile();
                              // Measured while the file still exists: an on-device delete then
                              // costs the index one dead slot instead of a folder walk.
                              const auto pendingDelete = crosspoint::sleep::windex::planDeletion(filePath);
@@ -186,6 +216,11 @@ void PxcViewerActivity::loop() {
   // Right moves the wallpaper between /sleep and "/sleep pause".
   if (mappedInput.wasPressed(MappedInputManager::Button::Right)) {
     if (!crosspoint::sleep::isUnderSleepDirs(filePath)) return;
+
+    // Same reason as the delete above: the move and a queued rename are both name-based
+    // operations on this one file, so the queue drains before the move is worked out.
+    DeferredFavorite::waitForIdle(15000);
+    DeferredFavorite::reconcile();
 
     // Work out where to go next BEFORE the move, while the file is still in place
     // to anchor the neighbour lookup. Falling back to the previous entry keeps the

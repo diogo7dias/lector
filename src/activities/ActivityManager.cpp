@@ -3,6 +3,8 @@
 #include <FontCacheManager.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
+#include <PerfLog.h>
+#include <PerfStats.h>
 
 #include <algorithm>
 
@@ -45,7 +47,12 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 
 void ActivityManager::renderTaskLoop() {
   while (true) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    // Takes the whole pending count, not one notification: every update request that
+    // arrived while the previous refresh was on the panel is served by this single pass,
+    // which is what keeps a held-down button from costing one refresh per press. The
+    // count is recorded so a log can say how much actually collapsed.
+    const uint32_t requestsServed = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    PerfStats::noteRenderPass(requestsServed);
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
@@ -102,6 +109,12 @@ void ActivityManager::loop() {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
+        // Re-tag the perf log. onEnter() is what normally sets this, and a resumed
+        // activity is never re-entered — it was pushed under, not exited — so without
+        // this every refresh after a child screen closes is still filed under the child.
+        // That is how a reader page turn came back labelled "TextSettings".
+        PerfLog::flush();
+        PerfLog::setScreen(currentActivity->name.c_str());
         // Handle result if necessary
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");

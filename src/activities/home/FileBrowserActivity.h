@@ -75,6 +75,9 @@ class FileBrowserActivity final : public Activity {
   int fileIndexAt(int row) const;
   std::string rowTitle(int row) const;
   std::string rowValue(int row) const;
+  // The reading-progress chip drawn before the title. Empty for a row that is not a book
+  // or for a book that has never been opened.
+  std::string rowBadge(int row) const;
   // Reading badge for one listing entry: the stored percent, or -1 for a book that was
   // never opened (and for anything that is not a book). Memoised per listing because the
   // value costs an SD read and every render pass asks the visible rows again.

@@ -15,6 +15,7 @@
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
 
 namespace {
@@ -78,7 +79,7 @@ void BmpViewerActivity::drawHints() {
   // viewer, so the two image viewers do not want different fingers. Siblings move
   // to Up/Down there; outside those folders nothing has changed.
   const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
-  const char* favLabel = FavoriteImage::isFavoritePath(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
+  const char* favLabel = effectiveFavorite() ? tr(STR_UNFAV) : tr(STR_FAV);
   const char* pauseLabel =
       filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
   // Blank rather than "Set sleep cover" when the file cannot become one: a .png is
@@ -320,34 +321,38 @@ void BmpViewerActivity::loop() {
   }
 }
 
+std::string BmpViewerActivity::effectivePath() const {
+  const std::string queued = DeferredFavorite::pendingTargetFor(filePath);
+  return queued.empty() ? filePath : queued;
+}
+
+bool BmpViewerActivity::effectiveFavorite() const { return FavoriteImage::isFavoritePath(effectivePath()); }
+
 void BmpViewerActivity::doToggleFavorite() {
-  const bool makeFavorite = !FavoriteImage::isFavoritePath(filePath);
-  std::string newPath;
-  switch (FavoriteImage::setFavorite(filePath, makeFavorite, &newPath)) {
-    case FavoriteImage::SetFavoriteResult::Success:
-      // The file was renamed, so the viewer follows it and the sibling list is stale.
-      // Only the name moved: the image on screen is identical, and the one thing that
-      // has to change is the Fav/Unfav word. Re-entering would re-open, re-parse and
-      // re-decode the whole BMP behind a Loading popup to repaint the same pixels, so
-      // repaint the hint strip over the framebuffer that is already holding the image
-      // and refresh differentially instead.
-      //
-      // The sibling list is rebuilt rather than dropped: openSibling() does not reload
-      // an empty list, it just stops working.
-      filePath = newPath;
-      loadSiblingImages();
-      drawHints();
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-      return;
-    case FavoriteImage::SetFavoriteResult::RenameConflict:
-      GUI.drawPopup(renderer, tr(STR_FAVORITE_NAME_EXISTS));
-      break;
-    default:
+  // Queued, not renamed here. On a FAT card a rename is a linear scan of the directory,
+  // and a wallpaper folder holds thousands of files, so doing it on the press pinned the
+  // viewer for seconds. The queue drains when the browser is left or the device is locked.
+  // See PxcViewerActivity for the same flow, and DeferredFavorite.h for why.
+  //
+  // The browser is handed the CURRENT path: the card still holds the old name until the
+  // queue drains, so that is the row to reopen on. The browser reads the queued name for
+  // display, so the row still shows as favorited.
+  const bool makeFavorite = !effectiveFavorite();
+  const std::string target = FavoriteImage::favoritePathFor(effectivePath(), makeFavorite);
+  if (!target.empty() && target != effectivePath()) {
+    if (DeferredFavorite::request(effectivePath(), target)) {
+      FavoriteImage::replacePathReferences(effectivePath(), target);
+    } else if (FavoriteImage::setFavorite(filePath, makeFavorite, nullptr) !=
+               FavoriteImage::SetFavoriteResult::Success) {
+      // Queue jammed and the foreground attempt failed too. Report it rather than
+      // closing as though the press had worked.
       GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
-      break;
+      delay(1000);
+      onEnter();
+      return;
+    }
   }
-  delay(1000);
-  onEnter();
+  activityManager.goToFileBrowser(filePath);
 }
 
 void BmpViewerActivity::doTogglePause() {
@@ -387,6 +392,11 @@ void BmpViewerActivity::promptDelete() {
           onEnter();
           return;
         }
+        // A queued favorite rename would move this file out from under the delete, so
+        // let it land first. Card work is expected here anyway, and the user has already
+        // confirmed.
+        DeferredFavorite::waitForIdle(15000);
+        DeferredFavorite::reconcile();
         // Measured while the file still exists: an on-device delete then costs
         // the index one dead slot instead of a folder walk at the next unlock.
         const auto pendingDelete = crosspoint::sleep::windex::planDeletion(doomed);

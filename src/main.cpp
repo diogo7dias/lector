@@ -13,6 +13,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <PerfLog.h>
+#include <PerfStats.h>
 #include <SPI.h>
 #include <WiFi.h>
 #include <builtinFonts/all.h>
@@ -202,6 +203,7 @@ static bool deepSleepInProgress = false;
 // hands the next session a budget of zero and delays the panel's next discharge.
 static void persistAntiGhostBudget() {
   APP_STATE.fastRefreshesSinceFull = display.fastRefreshesSinceFull();
+  APP_STATE.inkDebt = display.inkDebt();
   APP_STATE.saveToFile();
 }
 
@@ -352,6 +354,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   // and written with the state the next boot reads back.
   persistAntiGhostBudget();
 
+  // The per-mode totals for the session, written last so the file ends with the summary
+  // of everything above it.
+  logPerfSummary();
   PerfLog::flush();
   display.deepSleep();
   LOG_DBG("MAIN", "Entering deep sleep");
@@ -433,6 +438,9 @@ static std::string pickRandomRecentBookPath() {
 }
 
 void setup() {
+  // First thing of all: the earliest stamp has to be able to land, and this only zeroes
+  // two small arrays.
+  WakeTiming::beginWake();
   BoardConfig::holdPowerRails();
 
   t1 = millis();
@@ -443,14 +451,30 @@ void setup() {
   // enumeration before we touch the CDC state — otherwise cold boot races
   // and the host has to be physically replugged for logs to flow. Warm reboot
   // worked without the delay because USB was already enumerated.
-  delay(250);
+  //
+  // Not paid on a deep-sleep wake. That is the path a reader takes every time it is
+  // unlocked, several times an hour, and it was 250 ms of a measured ~2400 ms wake spent
+  // waiting for a host that is usually not there: the device is on battery in someone's
+  // hands. Every case where a developer IS attached still pays it — a fresh flash, a
+  // power-on with the cable in, a panic reboot — because none of those are deep-sleep
+  // wakes. The cost of being wrong is log lines missing from an unlock nobody is
+  // watching, and replugging brings them back.
+  if (esp_reset_reason() != ESP_RST_DEEPSLEEP) delay(250);
   Serial.begin(115200);
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
 #endif
 #endif
 
+  // First stamp of the wake, and deliberately outside the serial block above: a build
+  // without ENABLE_SERIAL_LOG must still land stamp 0, because every other stage is a
+  // delta from it and the readout prints nothing at all without it. Everything before
+  // this point is the framework's own startup plus, when it is compiled in, serial
+  // bring-up. Neither is ours to shorten.
+  WakeTiming::mark(WakeTiming::Stage::SerialUp);
+
   HalSystem::begin();
+  WakeTiming::mark(WakeTiming::Stage::SysReady);
   // checkPanic() clears the watchdog capture marker after a successful SD dump,
   // so isRebootFromPanic() stops answering true partway through setup(). Latch
   // the boot classification here, before that happens, and use it everywhere
@@ -465,9 +489,12 @@ void setup() {
   silentRebootMagic = 0;
   silentRebootTarget = 0;
 
-  WakeTiming::beginWake();
-
   gpio.begin();
+  // When the ADC button ladder came up. The recovery-combo check below needs the ladder to
+  // have settled, and "settled" is time since this call, not time since that check is
+  // reached — see the deadline there.
+  const unsigned long inputStartedMs = millis();
+  WakeTiming::mark(WakeTiming::Stage::GpioReady);
   powerManager.begin();
   halClock.begin();
   WakeTiming::mark(WakeTiming::Stage::HalReady);
@@ -490,10 +517,10 @@ void setup() {
   }
 
   WakeTiming::mark(WakeTiming::Stage::SdReady);
-  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
-  // The card is up, so the previous wake's numbers can be read. Must happen before the
-  // unlock banners are drawn, since that is what displays them.
-  WakeTiming::loadPrevious();
+  // Neither the perf sink nor the wake-timing card read can run here any more: both are
+  // switched by a setting, and settings have not been loaded yet. Both start immediately
+  // after they are (Stage::ConfigReady), which is still well before the unlock banners
+  // that display the numbers.
 
   HalSystem::checkPanic();
 
@@ -517,6 +544,7 @@ void setup() {
   // at zero on every wake — and since waking is a chip reset, that is every lock — so a
   // device used in short sessions never reaches the full discharge and ghosts forever.
   display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
+  display.seedInkDebt(APP_STATE.inkDebt);
   RECENT_BOOKS.loadFromFile();
   // One-time upgrade: books read before the reading badges existed have a percentage in
   // the recents list and no marker beside their cache. Seeding costs at most thirteen
@@ -536,6 +564,15 @@ void setup() {
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   WakeTiming::mark(WakeTiming::Stage::ConfigReady);
+
+  // Settings are up, so the timings setting can be honoured. Started before the panel is
+  // constructed, so the very first refresh of the session is recorded rather than missed,
+  // and the previous wake's stage breakdown is appended straight after the header so one
+  // copied file carries both the wake cost and the refresh costs that follow it.
+  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
+  WakeTiming::setEnabled(SETTINGS.showTimings != 0);
+  WakeTiming::loadPrevious();
+  logWakeTimingToPerfLog();
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
@@ -557,27 +594,6 @@ void setup() {
     default:
       break;
   }
-
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
-  bool recoveryFirmwareMode = false;
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
-    // Refresh the cached button state a few times — isPressed() needs ~half a second to settle
-    // after boot per the HalGPIO contract. Use a millis-based deadline so we always wait the full
-    // settle window even if the loop body takes longer than expected on slow boots.
-    const unsigned long settleStart = millis();
-    while (millis() - settleStart < 500) {
-      gpio.update();
-      delay(10);
-    }
-    if (gpio.isPressed(HalGPIO::BTN_UP)) {
-      recoveryFirmwareMode = true;
-      LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
-    }
-  }
-
-  WakeTiming::mark(WakeTiming::Stage::InputSettled);
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
@@ -615,17 +631,6 @@ void setup() {
   const bool quickResumeTargetIsReader = APP_STATE.quickResumeTargetIsReader;
   const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
 
-  std::string bootBookPath;
-  if (!quickResumeWake && !pendingWakeBookPath.empty()) {
-    bootBookPath = pendingWakeBookPath;
-    setUnlockBannerBookPath(bootBookPath);
-  } else if (!quickResumeWake && SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
-             !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
-             !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
-    bootBookPath = pickBootBookPath();
-    if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
-  }
-
   // Waking from a wallpaper sleep face: a normal (non-quick-resume) deep-sleep wake whose
   // sleep screen was a custom wallpaper. The unlock path below blanks the panel and goes
   // to the book instead of showing the boot splash. Needs the seamless begin() so the
@@ -645,6 +650,93 @@ void setup() {
   setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
   WakeTiming::mark(WakeTiming::Stage::DisplayReady);
 
+  // Start the wallpaper blank NOW, before the button-ladder settle below, and let the
+  // panel drive its waveform while the settle waits. The blank is a full pass — 710 ms on
+  // an X3, 1809 ms on an X4 — and for most of it the chip has nothing to do but poll a
+  // BUSY pin, so it is the one part of the wake that genuinely overlaps something else.
+  //
+  // Only when no banners are wanted. The banner names the book this wake is about to
+  // open, and that pick reads recoveryFirmwareMode, which the settle below is what
+  // decides. With banners on, the blank stays where it was, in the block further down.
+  //
+  // Async is safe here and nowhere near the reader: the contract is that the framebuffer
+  // stays untouched until the refresh completes, and the settle loop only reads buttons.
+  // waitRefreshComplete() runs before anything draws again.
+  bool asyncBlankInFlight = false;
+  if (wallpaperWake && SETTINGS.wakeStraightToBook) {
+    renderer.clearScreen();
+    renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
+    asyncBlankInFlight = true;
+  }
+
+  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
+  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
+  // flashing has been locked down (e.g. recent X3 firmware).
+  //
+  // This runs AFTER the panel is up, not before. The check waits out a fixed window
+  // measured from gpio.begin(), and everything that happens inside that window is free:
+  // the card mount and the settings load already ran there, and the display bring-up now
+  // does too. Before the move it ran after the window and cost its 138 ms (X3) or 50 ms
+  // (X4) on top; now the window absorbs it and what is left to wait for shrinks by the
+  // same amount.
+  bool recoveryFirmwareMode = false;
+  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    // Refresh the cached button state until the ADC button ladder has settled — isPressed()
+    // needs ~half a second after the ladder comes up, per the HalGPIO contract.
+    //
+    // The deadline runs from gpio.begin(), not from here. It used to be a flat 500 ms
+    // measured from this point, which meant the settle window began only after the card
+    // mount and the settings load had already given the ladder a few hundred milliseconds
+    // of their own. Every wake therefore paid the full half second twice over, once
+    // implicitly and once on the clock, and a measured X3 wake spent 550 ms of ~2400 ms
+    // inside this loop. Anchoring to when the ladder actually started keeps the settle
+    // window the same length in absolute terms and stops charging for it a second time.
+    //
+    // TWO AGREEING SAMPLES, not one. The buttons are a resistor ladder read as a voltage
+    // on a single analog input, and the panel rails now come up before this point, which
+    // puts extra load on the same supply. A single nudged sample must not be able to
+    // strand a wake in the recovery picker: that screen deliberately has no way back to
+    // the reader, so a false positive costs a power cycle. Two samples at least 5 ms
+    // apart is what HalGPIO's own debounce requires to commit a press, so this asks the
+    // ladder for exactly the confidence it is specified to give.
+    //
+    // The loop still stops the moment UP is confirmed: once the answer is yes, waiting
+    // longer cannot change it.
+    constexpr unsigned long kInputSettleMs = 500;
+    const auto upConfirmed = [] {
+      gpio.update();
+      if (!gpio.isPressed(HalGPIO::BTN_UP)) return false;
+      delay(6);
+      gpio.update();
+      return gpio.isPressed(HalGPIO::BTN_UP);
+    };
+    while (millis() - inputStartedMs < kInputSettleMs) {
+      if (upConfirmed()) {
+        recoveryFirmwareMode = true;
+        break;
+      }
+      delay(10);
+    }
+    if (!recoveryFirmwareMode && upConfirmed()) recoveryFirmwareMode = true;
+    if (recoveryFirmwareMode) LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+  }
+
+  WakeTiming::mark(WakeTiming::Stage::InputSettled);
+
+  // Picked here rather than before the display bring-up because it reads
+  // recoveryFirmwareMode, which is only known once the check above has run. Still ahead
+  // of every use: the banners that name the book are drawn below.
+  std::string bootBookPath;
+  if (!quickResumeWake && !pendingWakeBookPath.empty()) {
+    bootBookPath = pendingWakeBookPath;
+    setUnlockBannerBookPath(bootBookPath);
+  } else if (!quickResumeWake && SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
+             !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
+             !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+    bootBookPath = pickBootBookPath();
+    if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
+  }
+
   // The wake/unlock banners are the first thing seen on waking, and the activity that
   // follows repaints straight over them. They are the loading face: they exist to show the
   // reader is busy while input is still gated, not to be read.
@@ -661,7 +753,7 @@ void setup() {
       // Splash skipped: the routing block below picks the target activity; the
       // panel keeps showing the pre-reboot popup until that first paint lands.
       break;
-    case BootResume::SplashlessWake:
+    case BootResume::SplashlessWake: {
       // One-shot flag: re-arm the splash for the next ordinary boot. Save
       // before any painting so a hang in the blocking paint path can't strand
       // us in a splashless-with-no-frame loop on the next boot.
@@ -669,7 +761,12 @@ void setup() {
       APP_STATE.saveToFile();
       // exists() first: a missing frame file is the ordinary case for a sleep mode that
       // never saved one, and the check costs less than an open that is going to fail.
-      if (Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer()) {
+      const bool sleepFrameRestored = Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer();
+      // Stamped whichever way it went: "the frame was missing" is itself an answer to
+      // where the wake's time went, and a stage that is only stamped on success reads as
+      // a fast wake when it never ran at all.
+      WakeTiming::mark(WakeTiming::Stage::FrameLoaded);
+      if (sleepFrameRestored) {
         // Frame restored: draw the wake/unlock banners over the retained wallpaper
         // (version + resuming book on top, custom footer on the bottom), matching old
         // lector. The banners are the loading face; input stays gated until the reader
@@ -684,8 +781,10 @@ void setup() {
           // the baseline before drawing the banners over it.
           renderer.cleanupGrayscaleWithFrameBuffer();
         }
+        WakeTiming::mark(WakeTiming::Stage::BaselineRestored);
         const bool bannersDrawn = !quickResumeWake;
         if (bannersDrawn) drawUnlockBanners(renderer);
+        WakeTiming::mark(WakeTiming::Stage::BannersDrawn);
         if (useDifferentialRefresh) {
           renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
           // The panel already holds the page; the reader's first paint can go over it.
@@ -705,6 +804,7 @@ void setup() {
         needsWakeRefresh = true;
       }
       break;
+    }
     case BootResume::Splash:
       // Waking from a wallpaper sleep face never redraws the wallpaper. The sleep screen
       // itself is untouched — the wallpaper is still what the panel shows all night — but
@@ -728,6 +828,14 @@ void setup() {
       // goes blank the moment the wake starts, while the button is still held, so there IS
       // a visible answer to the press before the page arrives.
       if (wallpaperWake) {
+        if (asyncBlankInFlight) {
+          // Already issued before the settle window and running on the panel since. All
+          // that is left is to let it finish; whatever the settle cost has come off it.
+          renderer.waitRefreshComplete();
+          asyncBlankInFlight = false;
+          allowFastInitialReaderRefresh = true;
+          break;
+        }
         bool bannersDrawn = false;
         renderer.clearScreen();
         if (!SETTINGS.wakeStraightToBook) {
@@ -967,6 +1075,10 @@ void loop() {
   mappedInputManager.setPowerReleaseOverride(false, false);
 
   renderer.setFadingFix(SETTINGS.fadingFix);
+  // Read every pass, like the fading fix above, so toggling the setting takes effect on
+  // the next paint instead of on the next boot.
+  renderer.setTimingOverlay(SETTINGS.showTimings != 0, UI_10_FONT_ID);
+  display.setFastPageTurns(SETTINGS.fastPageTurns != 0);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
     LOG_INF("MEM", "Free: %d bytes, Total: %d bytes, Min Free: %d bytes, MaxAlloc: %d bytes", ESP.getFreeHeap(),
@@ -997,6 +1109,10 @@ void loop() {
     lastActivityTime = millis();         // Reset inactivity timer
     powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
   }
+  // The press, not the release, and not "any activity": this is the instant the reader's
+  // thumb acted, and the refresh that answers it closes the measurement. A release-driven
+  // action (a short power click) still lands within the same press-to-paint window.
+  if (gpio.wasAnyPressed()) PerfStats::noteInput(millis());
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it

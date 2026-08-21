@@ -45,6 +45,10 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
+  // Timings overlay state (see setTimingOverlay). Two words on a single long-lived
+  // object; no allocation and nothing drawn while disabled.
+  bool timingOverlayEnabled = false;
+  int timingOverlayFontId = 0;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -75,6 +79,17 @@ class GfxRenderer {
   mutable int _stripY0 = 0;
   mutable int _stripRows = 0;
   mutable bool _stripActive = false;
+
+  // Out-of-range drawPixel reporting, rate-limited. drawPixel() is the per-pixel hot path,
+  // so an overflowing string logs once per pixel: an X4 crash report arrived with the
+  // whole ring buffer consumed by identical "Outside range" lines, each one a blocking
+  // serial write. A few lines name the offender; the remainder are counted and summarised
+  // once per buffer push. Mutable because the whole render path is const.
+  static constexpr uint32_t kOutOfRangeLogLimit = 4;
+  mutable uint32_t outOfRangeLogged = 0;
+  mutable uint32_t outOfRangeSuppressed = 0;
+  // Emits the summary (if any) and rearms the limiter for the next frame.
+  void reportOutOfRangePixels() const;
 
   // "Paperback Look": when set, drawn glyph pixels are smeared +1px right and
   // +1px down (BW pass only) to fake heavier paperback ink. Plain bool owned by
@@ -119,6 +134,10 @@ class GfxRenderer {
   // per-pixel rotation, no per-pixel RMW.
   template <Color color>
   void fillRectImpl(int x, int y, int width, int height) const;
+  // Stamps the previous refresh's timing line into the framebuffer's top-left corner.
+  // Called from the display paths, so every push carries it without each activity having
+  // to remember to draw it.
+  void drawTimingOverlay() const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
@@ -191,6 +210,16 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+
+  // Timings overlay: draws the PREVIOUS refresh's cost into the top-left corner of every
+  // frame this renderer pushes. The font id is passed in rather than looked up because
+  // the UI font ids live in src/ and this library must not reach into it. Pass
+  // enabled=false (the default) and nothing is drawn and nothing is measured on the
+  // draw path. See PerfStats.
+  void setTimingOverlay(bool enabled, int fontId) {
+    timingOverlayEnabled = enabled;
+    timingOverlayFontId = fontId;
+  }
 
   // Screen ops
   int getScreenWidth() const;

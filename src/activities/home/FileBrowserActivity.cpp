@@ -25,6 +25,7 @@
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
 #include "util/BusyTick.h"
+#include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
 #include "util/TaskWatchdog.h"
 
@@ -201,7 +202,15 @@ std::string FileBrowserActivity::rowTitle(const int row) const {
       break;
   }
   const int index = fileIndexAt(row);
-  return index < 0 ? std::string() : getFileName(std::string(files[static_cast<size_t>(index)]));
+  if (index < 0) return std::string();
+  const std::string name = getFileName(std::string(files[static_cast<size_t>(index)]));
+  // A favorite queued from the image viewer has not been renamed on the card yet, so the
+  // listing still holds the old name. Draw the name the queue is going to give it, or the
+  // row reads as not favorited and the press looks lost. Empty when nothing is queued,
+  // which is the normal case and costs one scan of a short queue.
+  const std::string folder = basepath == "/" ? std::string() : basepath;
+  const std::string queued = DeferredFavorite::pendingTargetFor(folder + "/" + name);
+  return queued.empty() ? name : getFileName(queued);
 }
 
 int FileBrowserActivity::readingPercentAt(const int index) const {
@@ -238,8 +247,17 @@ std::string FileBrowserActivity::rowValue(const int row) const {
   const int index = fileIndexAt(row);
   if (index < 0) return {};
 
-  return book_badge::label(readingPercentAt(index), getFileExtension(std::string(files[static_cast<size_t>(index)])),
-                           tr(STR_READ_BADGE));
+  // File type only. The reading badge used to ride along here, right-aligned at the far
+  // end of the row; it now leads the row as a chip, which is where the eye scanning a
+  // library looks for it and how the home screen has always shown it.
+  return getFileExtension(std::string(files[static_cast<size_t>(index)]));
+}
+
+std::string FileBrowserActivity::rowBadge(const int row) const {
+  if (rowKindAt(row) != RowKind::Entry) return {};
+  const int index = fileIndexAt(row);
+  if (index < 0) return {};
+  return book_badge::chipLabel(readingPercentAt(index), tr(STR_READ_BADGE));
 }
 
 void FileBrowserActivity::applySearch(const std::string& query) {
@@ -383,6 +401,10 @@ void FileBrowserActivity::onEnter() {
 
 void FileBrowserActivity::onExit() {
   Activity::onExit();
+  // Deliberately NO DeferredFavorite::flush() here. This runs when the browser opens an
+  // image viewer too, which would rename the file the viewer is about to show and put the
+  // card work back on exactly the press this defers it off. The queue drains when a book
+  // is opened or closed, at home, and at the lock. See DeferredFavorite.h.
   files.clear();
   fileNameBuffer.reset();
 }
@@ -592,7 +614,8 @@ void FileBrowserActivity::loop() {
   // wait to learn which one was meant. The hold half no longer waits for the release
   // though — it fires the moment the threshold passes, and the delete it opens asks
   // for confirmation anyway.
-  switch (confirmHold.update(mappedInput.isPressed(MappedInputManager::Button::Confirm),
+  switch (confirmHold.update(mappedInput.wasPressed(MappedInputManager::Button::Confirm),
+                             mappedInput.isPressed(MappedInputManager::Button::Confirm),
                              mappedInput.wasReleased(MappedInputManager::Button::Confirm), mappedInput.getHeldTime(),
                              GO_HOME_MS)) {
     case hold_button::Fired::Hold:
@@ -610,7 +633,8 @@ void FileBrowserActivity::loop() {
   // the press like any single-action button.
   const bool backHasHold = mode == Mode::Books && basepath != "/";
   const auto backFired = backHasHold
-                             ? backHold.update(mappedInput.isPressed(MappedInputManager::Button::Back),
+                             ? backHold.update(mappedInput.wasPressed(MappedInputManager::Button::Back),
+                                               mappedInput.isPressed(MappedInputManager::Button::Back),
                                                mappedInput.wasReleased(MappedInputManager::Button::Back),
                                                mappedInput.getHeldTime(), GO_HOME_MS)
                              : backHold.updatePressOnly(mappedInput.wasPressed(MappedInputManager::Button::Back));
@@ -755,7 +779,8 @@ void FileBrowserActivity::render(RenderLock&&) {
     // the draw and feeds the scroll offset.
     const ListVisibility vis = GUI.drawWrappedList(
         renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalRowCount(), static_cast<int>(selectorIndex),
-        scrollOffset, [this](int row) { return rowTitle(row); }, [this](int row) { return rowValue(row); });
+        scrollOffset, [this](int row) { return rowTitle(row); }, [this](int row) { return rowValue(row); },
+        [this](int row) { return rowBadge(row); });
     firstVisibleIdx = vis.firstVisible;
     lastVisibleIdx = vis.lastVisible;
     scrollOffset = vis.firstVisible;

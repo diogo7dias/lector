@@ -134,6 +134,10 @@ bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex
 
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
+  // Opening a book is seconds of card work already, so it is a good moment to let any
+  // queued favorite renames run alongside it rather than have them wait for the lock.
+  // The other drains are this activity's onExit, home, and sleep entry.
+  DeferredFavorite::flush();
 
   if (!epub) {
     return;
@@ -1525,7 +1529,20 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::RESET_READER_SETTINGS: {
-      resetReaderPrefsToGlobal();
+      // Throwing away this book's own font, margins and spacing cannot be undone -- the
+      // override file is deleted, not remembered -- so it asks first, the same as
+      // deleting the book does. The book is named in the prompt because the menu row
+      // itself does not say whose look is about to go.
+      const std::string name = epub ? bookfiling::displayNameFor(epub->getTitle(), epub->getPath()) : std::string{};
+      startActivityForResult(std::make_unique<ConfirmationActivity>(
+                                 renderer, mappedInput, tr(STR_RESET_READER_SETTINGS) + std::string("?"), name),
+                             [this](const ActivityResult& res) {
+                               if (res.isCancelled) {
+                                 requestUpdate();
+                                 return;
+                               }
+                               resetReaderPrefsToGlobal();
+                             });
       break;
     }
   }

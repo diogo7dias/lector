@@ -1,6 +1,7 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <PerfLog.h>
+#include <PerfStats.h>
 
 // Global HalDisplay instance
 HalDisplay display;
@@ -66,7 +67,8 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 // a session ghosts, with the lock's wipe visibly running either way — i.e. the wipe
 // was never the missing piece; the cap was. Promoting every 13th FAST to a clean pass
 // costs one flash per 13 page turns and keeps the panel from ever getting that deep.
-HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested) {
+HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode requested, const uint16_t inkScore,
+                                                       const bool allowTurbo) {
   DisplayRefreshPolicy::Mode policyMode = DisplayRefreshPolicy::Mode::Fast;
   if (requested == RefreshMode::HALF_REFRESH) {
     policyMode = DisplayRefreshPolicy::Mode::Clean;
@@ -74,7 +76,20 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
     policyMode = DisplayRefreshPolicy::Mode::Full;
   }
 
-  switch (refreshPolicy.choose(policyMode, millis())) {
+  // Decide the fast path before the mode, because the choice changes what this pass
+  // costs the panel and so can pull a clean forward. Only a FAST can be Turbo; a
+  // promoted pass runs its own absolute waveform and ignores the request anyway.
+  // The driver is told every pass, not only when the answer changes: it holds the
+  // setting, and the periodic reload depends on it going back to Standard on cue.
+  // Gated on the panel honouring it, not merely on the request: on a driver that ignores
+  // FastQuality the request reaches nothing, and recording it would put a 1 in the perf
+  // log's turbo column for a pass that ran the ordinary waveform.
+  const bool turboPossible = turboWanted && einkDisplay.supportsFastTurbo();
+  lastPassWasTurbo =
+      allowTurbo && policyMode == DisplayRefreshPolicy::Mode::Fast && refreshPolicy.useTurbo(turboPossible);
+  einkDisplay.setFastQuality(lastPassWasTurbo ? EInkDisplay::FAST_TURBO : EInkDisplay::FAST_STANDARD);
+
+  switch (refreshPolicy.choose(policyMode, millis(), inkScore, lastPassWasTurbo)) {
     case DisplayRefreshPolicy::Mode::Clean:
       return RefreshMode::HALF_REFRESH;
     case DisplayRefreshPolicy::Mode::Full:
@@ -104,24 +119,71 @@ bool HalDisplay::needsX3HalfResync(const RefreshMode requested, const RefreshMod
   return gpio.deviceIsX3() && actual == RefreshMode::HALF_REFRESH && requested == RefreshMode::HALF_REFRESH;
 }
 
+// The frame is only worth measuring when the answer can change what happens. Only a FAST
+// request can be promoted by the ink debt; a caller that already asked for HALF or FULL is
+// getting a clean pass regardless, and the ~2 ms pass over the framebuffer would buy
+// nothing. The metrics state is still updated on those paths — through the driver-side
+// reset below — so the next FAST is scored against what is really on the glass.
+uint16_t HalDisplay::scoreFrame(const RefreshMode requested) {
+  const uint8_t* const fb = einkDisplay.getFrameBuffer();
+  const FrameInkMetrics::Result result =
+      inkMetrics.update(fb, einkDisplay.getDisplayWidthBytes(), einkDisplay.getDisplayHeight());
+  if (requested != RefreshMode::FAST_REFRESH) return 0;
+
+  // Inverted output (night mode) is applied by the driver on its way to the panel, so the
+  // framebuffer this scored is in normal polarity and the score understates what the panel
+  // will actually be asked to do: a dark page drives nearly every pixel. Charge it double,
+  // capped at the scale's own maximum.
+  uint32_t score = result.score;
+  if (einkDisplay.isInverted()) score *= 2;
+  return static_cast<uint16_t>(score > FrameInkMetrics::MAX_SCORE ? FrameInkMetrics::MAX_SCORE : score);
+}
+
+// One place both instrumentation sinks are fed from, so a refresh path can never end up
+// in the card log but missing from the on-panel overlay (or the reverse). PerfStats is
+// unconditional and costs a handful of integer updates; PerfLog returns immediately
+// unless the timings setting opened a file for it.
+void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMode actual, const uint32_t totalUs,
+                                   const uint32_t asyncStartUs, const uint16_t thinkMs, const uint16_t inkScore) const {
+  const uint16_t debt = refreshPolicy.inkDebt();
+  // Read once, here, so every refresh path reports the split without having to remember
+  // to. The counters were armed by beginRefreshAccounting() at the top of that path.
+  // Every path that reports must have armed them on entry, or it reports the PREVIOUS
+  // refresh's split alongside its own total. All five do: displayBuffer,
+  // displayBufferAsync, refreshDisplay, displayGrayscaleBase, displayGrayBuffer.
+  const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
+  const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
+  PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
+  PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs, lastPassWasTurbo,
+                  einkDisplay.lastRefreshDiagnostic(), einkDisplay.lastSettleWaitMs());
+}
+
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   const RefreshMode requested = mode;
+  EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
-  mode = applyRefreshPolicy(mode);
+  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
+  const uint16_t inkScore = scoreFrame(requested);
+  mode = applyRefreshPolicy(mode, inkScore);
   if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
   }
 
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
   // Blocking path: the whole cost is in one call, so there is no async split to report.
-  PerfLog::record(requested, mode, micros() - startUs, 0);
+  noteRefreshTiming(requested, mode, micros() - startUs, 0, thinkMs, inkScore);
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
   const RefreshMode requested = mode;
+  EInkDisplay::resetRefreshAccounting();
   pendingAsyncStartUs = micros();
+  // Taken at the start, not at completion: the press this paint answers is outstanding
+  // now, and waitRefreshComplete() may be called long after a later press has landed.
+  pendingAsyncThinkMs = PerfStats::takeThinkMs(millis());
   pendingAsyncRequested = mode;
-  mode = applyRefreshPolicy(mode);
+  pendingAsyncInkScore = scoreFrame(requested);
+  mode = applyRefreshPolicy(mode, pendingAsyncInkScore);
   pendingAsyncActual = mode;
   pendingAsync = true;
   if (needsX3HalfResync(requested, mode)) {
@@ -134,7 +196,7 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
     einkDisplay.displayBuffer(convertRefreshMode(mode), false);
     // Ran blocking despite the async request, so it has no split to report and no wait
     // for waitRefreshComplete() to time.
-    PerfLog::record(requested, mode, micros() - pendingAsyncStartUs, 0);
+    noteRefreshTiming(requested, mode, micros() - pendingAsyncStartUs, 0, pendingAsyncThinkMs, pendingAsyncInkScore);
     pendingAsync = false;
     return;
   }
@@ -148,7 +210,8 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
 void HalDisplay::waitRefreshComplete() {
   einkDisplay.waitRefreshComplete();
   if (pendingAsync) {
-    PerfLog::record(pendingAsyncRequested, pendingAsyncActual, micros() - pendingAsyncStartUs, pendingAsyncSplitUs);
+    noteRefreshTiming(pendingAsyncRequested, pendingAsyncActual, micros() - pendingAsyncStartUs, pendingAsyncSplitUs,
+                      pendingAsyncThinkMs, pendingAsyncInkScore);
     pendingAsync = false;
   }
 }
@@ -157,14 +220,16 @@ bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsync
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   const RefreshMode requested = mode;
+  EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
+  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   mode = applyRefreshPolicy(mode);
   if (needsX3HalfResync(requested, mode)) {
     einkDisplay.requestResync(1);
   }
 
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
-  PerfLog::record(requested, mode, micros() - startUs, 0);
+  noteRefreshTiming(requested, mode, micros() - startUs, 0, thinkMs, 0);
 }
 
 void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted); }
@@ -174,6 +239,10 @@ bool HalDisplay::toggleInverted() { return einkDisplay.toggleInverted(); }
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
 void HalDisplay::deepSleep() {
+  // The panel is about to hold whatever the sleep screen left on it, and the next boot
+  // starts with an empty framebuffer. Nothing measured in this session describes what the
+  // next one will find on the glass.
+  inkMetrics.reset();
   // The budget the caller wants to carry across the lock has already been read out by
   // then (see enterDeepSleep); this reset only clears the in-RAM copy the reset would
   // have wiped anyway.
@@ -200,7 +269,13 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* m
 }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
-  fallback = applyRefreshPolicy(fallback);
+  const RefreshMode requested = fallback;
+  EInkDisplay::resetRefreshAccounting();
+  const uint32_t startUs = micros();
+  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
+  // Never the cheap path: this frame is the base a grayscale overlay is about to be
+  // driven onto, so it has to land exactly where the planes expect it.
+  fallback = applyRefreshPolicy(fallback, 0, /*allowTurbo=*/false);
   // X3: a HALF fallback means the caller wants a clean base (e.g. the sleep
   // cover, a full-screen swap from arbitrary prior content). Without this, the
   // X3 grayscale base takes its gentle differential happy path and the prior
@@ -213,6 +288,10 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   }
 
   einkDisplay.displayGrayscaleBase(convertRefreshMode(fallback), turnOffScreen);
+  // Timed like any other refresh: on the X3 wake path and the reader's image pages this
+  // IS the paint the reader waits for, and leaving it out of the log made those screens
+  // look free.
+  noteRefreshTiming(requested, fallback, micros() - startUs, 0, thinkMs, 0);
 }
 
 void HalDisplay::preconditionGrayscale() { einkDisplay.preconditionGrayscale(); }
@@ -232,8 +311,15 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.
 // they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
 // or text anti-aliasing ages the panel while the budget stands still.
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+  EInkDisplay::resetRefreshAccounting();
+  const uint32_t startUs = micros();
+  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   refreshPolicy.noteExternalFastPass();
   einkDisplay.displayGrayBuffer(turnOffScreen);
+  // Recorded as FAST/FAST: there is no mode to choose here, and charging it to the same
+  // bucket keeps the per-mode totals comparable with a text page turn.
+  noteRefreshTiming(RefreshMode::FAST_REFRESH, RefreshMode::FAST_REFRESH, micros() - startUs, 0, thinkMs,
+                    DisplayRefreshPolicy::EXTERNAL_PASS_SCORE);
 }
 
 void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows) {

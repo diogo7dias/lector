@@ -34,6 +34,17 @@ namespace {
 Ssd1677Config buildLectorX4Config() {
   Ssd1677Config cfg = ssd1677DefaultConfig();
   cfg.grayPowerUpFirst = true;
+  // Let the firmware ask for the cheap partial path (see Ssd1677Config::allowFastTurbo).
+  // Opting in here only makes the request legal; the default is still the vendor's
+  // 0xFC sequence, and HalDisplay decides per screen whether to ask for anything else.
+  // Measured on this panel: 0xFC spends 505 ms of every 578 ms page turn driving the
+  // waveform, against ~77 ms for the incremental path.
+  //
+  // Scoped to this config on purpose. The Seeed Sticky is a different SSD1677 board
+  // and keeps the SDK's own config, where 0x1C does NOT select the partial waveform
+  // and would run the full one on every page. Boards that reach the SDK defaults,
+  // including the X4 Pro, are likewise untouched.
+  cfg.allowFastTurbo = true;
   return cfg;
 }
 

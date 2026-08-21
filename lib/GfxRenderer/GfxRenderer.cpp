@@ -5,6 +5,7 @@
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
 #include <Logging.h>
+#include <PerfStats.h>
 #include <SdCardFont.h>
 #include <Utf8.h>
 
@@ -574,7 +575,17 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
 
   // Bounds checking against runtime panel dimensions
   if (phyX < 0 || phyX >= panelWidth || phyY < 0 || phyY >= panelHeight) {
-    LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
+    // Rate-limited, because this fires PER PIXEL. A single string laid out past the edge
+    // of the panel produces thousands of these, each one a blocking serial write of a few
+    // milliseconds, which turns a cosmetic overflow into a multi-second stall and buries
+    // whatever came before it in the panic log. A handful of lines identifies the offender
+    // just as well; the rest are counted and reported once, at the next buffer push.
+    if (outOfRangeLogged < kOutOfRangeLogLimit) {
+      ++outOfRangeLogged;
+      LOG_ERR("GFX", "!! Outside range (%d, %d) -> (%d, %d)", x, y, phyX, phyY);
+    } else {
+      ++outOfRangeSuppressed;
+    }
     return;
   }
 
@@ -1681,13 +1692,48 @@ void GfxRenderer::invertScreen() const {
   }
 }
 
+// The overlay reports the refresh BEFORE this one. It cannot report this one: the cost
+// is not known until the panel has finished, and by then the frame describing it is
+// already ink. One frame behind is the honest form of the measurement, not a shortcut.
+void GfxRenderer::drawTimingOverlay() const {
+  if (!timingOverlayEnabled) return;
+  // Strip mode retargets drawing at a grayscale band's scratch buffer, where a corner
+  // stamp would land in the middle of an image. Nothing to draw into here.
+  if (_stripActive) return;
+
+  char line[96];
+  PerfStats::formatLastLine(line, sizeof(line));
+  if (line[0] == '\0') return;
+
+  const int lh = getLineHeight(timingOverlayFontId);
+  const int w = getTextWidth(timingOverlayFontId, line) + 6;
+  fillRect(0, 0, w, lh + 2, false);  // white plate, so the line stays readable over a page
+  drawText(timingOverlayFontId, 3, 1, line, true);
+}
+
+// Once per pushed frame: say how much was clipped beyond the lines already logged, then
+// rearm. Reported at the push rather than at the overflow so one message covers a whole
+// frame's worth of clipping instead of interleaving with the drawing that caused it.
+void GfxRenderer::reportOutOfRangePixels() const {
+  if (outOfRangeSuppressed > 0) {
+    LOG_ERR("GFX", "!! Outside range: %lu more pixels clipped this frame",
+            static_cast<unsigned long>(outOfRangeSuppressed));
+  }
+  outOfRangeSuppressed = 0;
+  outOfRangeLogged = 0;
+}
+
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
+  reportOutOfRangePixels();
+  drawTimingOverlay();
   display.displayBuffer(refreshMode, fadingFix);
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
+  reportOutOfRangePixels();
+  drawTimingOverlay();
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {

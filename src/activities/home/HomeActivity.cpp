@@ -28,6 +28,7 @@
 #include "reading_stats/ReadingStatsStore.h"
 #include "reading_stats/SdStatsFiles.h"
 #include "util/BookCacheUtils.h"
+#include "util/DeferredFavorite.h"
 
 int HomeActivity::menuRowCount() const {
   int count = 3;  // File Browser, File transfer, Settings
@@ -75,6 +76,12 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 
 void HomeActivity::onEnter() {
   Activity::onEnter();
+  // Reaching home means the user has finished triaging wallpapers, so this is one of the
+  // moments queued favorite renames run. Fire-and-forget, and a no-op when the queue is
+  // empty, which is almost always. See DeferredFavorite.h for why they are not done on
+  // the press.
+  DeferredFavorite::flush();
+  DeferredFavorite::reconcile();
 
   hasOpdsServers = OPDS_STORE.hasServers();
 
