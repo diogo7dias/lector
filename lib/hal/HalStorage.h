@@ -54,7 +54,18 @@ class HalStorage {
 
   static HalStorage& getInstance() { return instance; }
 
-  class StorageLock;  // private class, used internally
+  // Serialises every SD operation. Public so a caller can hold one across a
+  // multi-step read: the per-call locking inside HalFile keeps one seek or one
+  // read atomic, but a seek-then-read pair on a shared handle can still be split
+  // by another task seeking the same handle, which returns the wrong record.
+  // Recursive, so nesting it inside HalStorage's own calls is safe.
+  class StorageLock {
+   public:
+    StorageLock() { xSemaphoreTakeRecursive(HalStorage::getInstance().storageMutex, portMAX_DELAY); }
+    ~StorageLock() { xSemaphoreGiveRecursive(HalStorage::getInstance().storageMutex); }
+    StorageLock(const StorageLock&) = delete;
+    StorageLock& operator=(const StorageLock&) = delete;
+  };
 
  private:
   static HalStorage instance;

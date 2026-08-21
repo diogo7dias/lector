@@ -9,10 +9,12 @@
 #include <deque>
 
 #include "FsHelpers.h"
+#include "TocHrefMatch.h"
 
 namespace {
-// v10 = upstream's ambiguous-guide fix; this fork's v9 added the Book Info description.
-constexpr uint8_t BOOK_CACHE_VERSION = 10;
+// v11 = TOC targets resolve by file name when the exact path is not in the spine; caches
+// built before it hold the -1 that made those chapter rows do nothing.
+constexpr uint8_t BOOK_CACHE_VERSION = 11;
 constexpr char bookBinFile[] = "/book.bin";
 constexpr char tmpSpineBinFile[] = "/spine.bin.tmp";
 constexpr char tmpTocBinFile[] = "/toc.bin.tmp";
@@ -444,19 +446,21 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
       spineIndex = it->spineIndex;
       break;
     }
+  }
 
-    if (spineIndex == -1) {
-      LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
-    }
-  } else {
+  if (spineIndex == -1) {
+    // No exact path in the spine. Scan it once and let TocHrefMatch decide, which also
+    // accepts a unique file-name match: a TOC document in another folder builds the same
+    // file's path through a different prefix, and a chapter row that resolves to nothing
+    // is a row that silently does nothing when the reader picks it. The fast index above
+    // answers exact hits without this scan, so only an unresolved entry pays for it.
+    TocHrefMatch matcher(href);
     spineFile.seek(0);
     for (int i = 0; i < spineCount; i++) {
-      auto spineEntry = readSpineEntry(spineFile);
-      if (spineEntry.href == href) {
-        spineIndex = static_cast<int16_t>(i);
-        break;
-      }
+      const auto spineEntry = readSpineEntry(spineFile);
+      matcher.consider(static_cast<int16_t>(i), spineEntry.href);
     }
+    spineIndex = matcher.result();
     if (spineIndex == -1) {
       LOG_DBG("BMC", "createTocEntry: Could not find spine item for TOC href %s", href.c_str());
     }
@@ -546,6 +550,10 @@ BookMetadataCache::SpineEntry BookMetadataCache::getSpineEntry(const int index) 
     return {};
   }
 
+  // One lock for the whole seek-read-seek-read: the render task and the main task both
+  // read entries through this one shared handle, and an interleaved seek from the other
+  // task returns a different record, or lands mid-record and reads a damaged one.
+  HalStorage::StorageLock lock;
   // Seek to spine LUT item, read from LUT and get out data
   bookFile.seek(lutOffset + sizeof(uint32_t) * index);
   uint32_t spineEntryPos;
@@ -565,6 +573,10 @@ BookMetadataCache::TocEntry BookMetadataCache::getTocEntry(const int index) {
     return {};
   }
 
+  // Held across the whole sequence for the same reason as getSpineEntry(): a TOC entry
+  // read that another task's seek splits comes back damaged, and a damaged entry reads
+  // as spineIndex -1, which is what made a chapter pick occasionally do nothing at all.
+  HalStorage::StorageLock lock;
   // Seek to TOC LUT item, read from LUT and get out data
   bookFile.seek(lutOffset + sizeof(uint32_t) * spineCount + sizeof(uint32_t) * index);
   uint32_t tocEntryPos;
