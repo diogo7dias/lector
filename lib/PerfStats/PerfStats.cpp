@@ -32,6 +32,8 @@ uint64_t sumWaveUs = 0;
 uint64_t sumTotalUs = 0;
 
 uint32_t promoted = 0;
+uint32_t renderPasses = 0;
+uint32_t updateRequests = 0;
 uint8_t activePll = 0;
 
 const char* modeName(const uint8_t mode) {
@@ -148,6 +150,17 @@ size_t formatSummary(char (*const lines)[64], const size_t maxLines) {
 const ModeStats& modeStats(const uint8_t mode) { return stats[mode < kModeCount ? mode : 0]; }
 
 uint32_t promotedCount() { return promoted; }
+
+void noteRenderPass(const uint32_t requestsServed) {
+  renderPasses++;
+  // A pass can be woken with a count of 0 only if the notification was already consumed,
+  // which cannot happen here; guard anyway so the ratio can never read below 1.
+  updateRequests += requestsServed > 0 ? requestsServed : 1;
+}
+
+uint32_t renderPassCount() { return renderPasses; }
+
+uint32_t updateRequestCount() { return updateRequests; }
 
 void setPllByte(const uint8_t pll) { activePll = pll; }
 

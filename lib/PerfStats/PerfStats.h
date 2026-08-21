@@ -85,6 +85,18 @@ const ModeStats& modeStats(uint8_t mode);
 // seeing it climb is how a policy change is judged.
 uint32_t promotedCount();
 
+// Whether holding a button down still costs one panel refresh per press.
+//
+// The render task is notified per update request and takes the whole pending count in one
+// go, so a burst that lands while a refresh is in flight is meant to collapse into a
+// single repaint of the final state. noteRenderPass() is called once per repaint with the
+// number of requests that repaint served; renderPassCount() and updateRequestCount() then
+// say how well that worked over a session. Equal numbers mean nothing ever coalesced and
+// the input path is serialising on the panel after all.
+void noteRenderPass(uint32_t requestsServed);
+uint32_t renderPassCount();
+uint32_t updateRequestCount();
+
 // The X3 frame-clock byte in force this session, for the overlay and the CSV header.
 // Meaningless on X4, where the panel runs its own OTP waveform; reported anyway rather
 // than hidden, so one overlay format serves both devices.

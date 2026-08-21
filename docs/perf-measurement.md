@@ -80,6 +80,14 @@ distinct levels (check on a cover sleep screen, not on text — one PLL register
 every waveform bank, including the one-frame grayscale phases); and HALF and FULL still
 fully clear.
 
+## Reading the coalescing line
+
+`# renders N of M update requests` closes the session summary. Every repaint is one render
+pass, and each pass serves whatever update requests piled up while the previous refresh was
+still on the panel, so `M` above `N` is a burst that collapsed into a single paint. `N`
+equal to `M` over a run that included holding a button down through a long list means
+nothing collapsed and the input path is serialising on the panel, one refresh per press.
+
 ## Judging Fast Page Turns (X4)
 
 Settings > System > Fast Page Turns picks the panel's cheap partial waveform for FAST

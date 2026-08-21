@@ -113,6 +113,15 @@ void logPerfSummary() {
     PerfLog::note(splitLine);
   }
 
+  // How many repaints the session actually painted against how many were asked for. The
+  // two being equal means no burst ever collapsed, i.e. holding a button really does cost
+  // one refresh per press and the input path needs coalescing of its own.
+  char coalesceLine[80];
+  snprintf(coalesceLine, sizeof(coalesceLine), "renders %lu of %lu update requests",
+           static_cast<unsigned long>(PerfStats::renderPassCount()),
+           static_cast<unsigned long>(PerfStats::updateRequestCount()));
+  PerfLog::note(coalesceLine);
+
   // Should read 0. Anything else is a refresh that was handed back while the panel was
   // still driving it -- see EpdBus::waitRefreshComplete. Written unconditionally so a
   // clean run says so explicitly rather than by the line being absent.

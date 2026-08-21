@@ -4,6 +4,7 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <PerfLog.h>
+#include <PerfStats.h>
 
 #include <algorithm>
 
@@ -46,7 +47,12 @@ void ActivityManager::renderTaskTrampoline(void* param) {
 
 void ActivityManager::renderTaskLoop() {
   while (true) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    // Takes the whole pending count, not one notification: every update request that
+    // arrived while the previous refresh was on the panel is served by this single pass,
+    // which is what keeps a held-down button from costing one refresh per press. The
+    // count is recorded so a log can say how much actually collapsed.
+    const uint32_t requestsServed = ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    PerfStats::noteRenderPass(requestsServed);
     // Acquire the lock before reading currentActivity to avoid a TOCTOU race
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
