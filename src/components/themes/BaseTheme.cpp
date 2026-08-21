@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "I18n.h"
@@ -19,6 +20,7 @@
 #include "components/ListScrollPolicy.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/UITheme.h"
+#include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
@@ -947,8 +949,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rect rect, const int itemCount,
                                           const int selectedIndex, const int scrollOffset,
                                           const std::function<std::string(int index)>& rowTitle,
-                                          const std::function<std::string(int index)>& rowValue,
-                                          const int maxVisibleRows) const {
+                                          const std::function<std::string(int index)>& rowValue) const {
   if (itemCount <= 0 || !rowTitle) {
     return {0, 0, itemCount > 0 ? itemCount : 0};
   }
@@ -996,38 +997,28 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
     return row;
   };
 
-  auto build = [&](const int start) {
-    std::vector<Row> rows;
-    int used = 0;
-    for (int i = start; i < itemCount && static_cast<int>(rows.size()) < maxVisibleRows; i++) {
-      Row row = measure(i);
-      const int step = row.height + (rows.empty() ? 0 : rowGap);
-      if (used + step > listHeight && !rows.empty()) break;
-      used += step;
-      rows.push_back(std::move(row));
+  // Measuring wraps a title, so the same row is asked for its height more than once as the
+  // window is worked out. Cache the last few: the window walk only ever touches rows near
+  // the window, and re-wrapping each of them two or three times is the one cost here that
+  // is pure waste.
+  std::vector<std::pair<int, int>> heightCache;
+  auto heightOf = [&](const int index) {
+    for (const auto& entry : heightCache) {
+      if (entry.first == index) return entry.second;
     }
-    return rows;
+    const int h = measure(index).height;
+    if (heightCache.size() >= 32) heightCache.erase(heightCache.begin());
+    heightCache.emplace_back(index, h);
+    return h;
   };
 
-  int start = std::clamp(scrollOffset, 0, itemCount - 1);
-  if (selectedIndex >= 0 && selectedIndex < start) start = selectedIndex;
-  std::vector<Row> rows = build(start);
+  const wrapped_list::Window win =
+      wrapped_list::window(itemCount, selectedIndex, scrollOffset, listHeight, rowGap, heightOf);
 
-  // Selection past the last drawn row: walk the window back from the selection while the
-  // rows above still fit, which lands the selected row at the bottom.
-  if (selectedIndex >= 0 && !rows.empty() && selectedIndex > rows.back().index) {
-    int newStart = selectedIndex;
-    int used = measure(selectedIndex).height;
-    while (newStart > 0) {
-      const int step = measure(newStart - 1).height + rowGap;
-      if (used + step > listHeight) break;
-      used += step;
-      newStart--;
-    }
-    start = newStart;
-    rows = build(start);
-  }
-  if (rows.empty()) rows.push_back(measure(start));
+  std::vector<Row> rows;
+  rows.reserve(static_cast<size_t>(win.count));
+  for (int i = win.first; i < win.first + win.count && i < itemCount; i++) rows.push_back(measure(i));
+  if (rows.empty()) rows.push_back(measure(std::clamp(win.first, 0, itemCount - 1)));
 
   const int firstVisible = rows.front().index;
   const int lastVisible = rows.back().index;

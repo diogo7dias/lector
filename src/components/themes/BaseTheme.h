@@ -244,8 +244,7 @@ class BaseTheme {
   // back the returned visible range (see FileBrowserActivity).
   virtual ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
                                          int scrollOffset, const std::function<std::string(int index)>& rowTitle,
-                                         const std::function<std::string(int index)>& rowValue = nullptr,
-                                         int maxVisibleRows = 14) const;
+                                         const std::function<std::string(int index)>& rowValue = nullptr) const;
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
                               const std::function<UIIcon(int index)>& rowIcon) const;
