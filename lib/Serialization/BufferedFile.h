@@ -6,6 +6,9 @@
 #include <cstring>
 #include <string>
 
+// The length cap and the plausibility test, shared with the HalFile and stream readers.
+#include "SerializationLimits.h"
+
 namespace serialization {
 
 // Sequential buffered wrappers over HalFile.
@@ -110,6 +113,9 @@ class BufferedFileReader {
   // Logical read position.
   size_t position() const { return bufStart + off; }
 
+  // Total size of the file being buffered, for bounding a length prefix read out of it.
+  size_t size() { return file.size(); }
+
   bool seek(const size_t target) {
     // Within the buffered window: just move the cursor.
     if (cap != 0 && target >= bufStart && target < bufStart + fill) {
@@ -138,9 +144,16 @@ void writePod(BufferedFileWriter& out, const T& value) {
   out.write(&value, sizeof(T));
 }
 
+// Returns false on a short read, with the value zeroed rather than left holding stack
+// garbage. Same contract as the HalFile overload in Serialization.h; see
+// SerializationLimits.h for why an unchecked read here was a device crash.
 template <typename T>
-void readPod(BufferedFileReader& in, T& value) {
-  in.read(&value, sizeof(T));
+bool readPod(BufferedFileReader& in, T& value) {
+  if (in.read(&value, sizeof(T)) != sizeof(T)) {
+    memset(&value, 0, sizeof(T));
+    return false;
+  }
+  return true;
 }
 
 inline void writeString(BufferedFileWriter& out, const std::string& s) {
@@ -149,13 +162,24 @@ inline void writeString(BufferedFileWriter& out, const std::string& s) {
   out.write(s.data(), len);
 }
 
-inline void readString(BufferedFileReader& in, std::string& s) {
-  uint32_t len;
-  readPod(in, len);
+inline bool readString(BufferedFileReader& in, std::string& s) {
+  s.clear();
+
+  uint32_t len = 0;
+  if (!readPod(in, len)) return false;
+
+  const size_t here = in.position();
+  const size_t total = in.size();
+  if (total < here) return false;
+  if (!stringLengthIsPlausible(len, static_cast<uint64_t>(total - here))) return false;
+  if (len == 0) return true;
+
   s.resize(len);
-  if (len > 0) {
-    in.read(&s[0], len);
+  if (in.read(&s[0], len) != len) {
+    s.clear();
+    return false;
   }
+  return true;
 }
 
 }  // namespace serialization

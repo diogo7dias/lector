@@ -28,11 +28,16 @@ constexpr uint8_t kCount = static_cast<uint8_t>(Stage::Count);
 constexpr uint16_t kUnset = 0xFFFF;
 
 // Guards the record: a short read or a file from an older format must not print as
-// timings. "WAK2" — the record gained a wake counter when it moved off RTC memory.
-constexpr uint32_t kMagic = 0x57414B32;
+// timings. "WAK3" — the record gained three stages when the banner stage was split, so a
+// WAK2 file has fewer stamps than this build expects and must be rejected, not
+// misread as a fast wake. "WAK4" for the same reason: the pre-SD stage was split three
+// ways, so a WAK3 record is shorter again, and "WAK5" once the framework's own startup
+// was separated from Serial.begin, and "WAK6" once disp and in swapped places.
+constexpr uint32_t kMagic = 0x57414B36;
 
-// magic (4) + seven stamps (14) + wake count (4). Fixed and written whole, so a partial
-// write from a card pulled mid-flush fails the size check on the next read.
+// magic (4) + one stamp per stage + wake count (4). Sized off kCount so adding a stage
+// cannot leave the reader and the writer disagreeing. Fixed and written whole, so a
+// partial write from a card pulled mid-flush fails the size check on the next read.
 constexpr size_t kRecordBytes = 4 + kCount * sizeof(uint16_t) + 4;
 
 // Plain RAM now. Nothing here has to outlive the boot: the card carries the numbers
@@ -46,10 +51,12 @@ uint32_t wakeCount = 0;
 // found nothing" is a normal first run after a flash. The banner must not conflate them.
 bool loadAttempted = false;
 bool loadedOk = false;
+bool enabled = false;
 
-// Short labels, in Stage order. The first entry has no label of its own: it is the
-// baseline every later stage is measured from.
-constexpr const char* kStageNames[kCount] = {"", "sd", "cfg", "in", "disp", "ban", "act"};
+// Short labels, in Stage order. "pre" is the prologue before the first stamp, which is
+// printed as a stage in its own right rather than being silently rolled into the total.
+constexpr const char* kStageNames[kCount] = {"pre", "sys",   "gpio", "hal",  "sd",   "cfg", "disp",
+                                             "in",  "frame", "base", "draw", "push", "act"};
 
 // millis() is 32-bit; a wake that reaches 65 seconds is already broken, and clamping
 // keeps the display honest rather than wrapping to a small, believable-looking number.
@@ -80,8 +87,17 @@ void formatPrevious(char* const out, const size_t outLen) {
   out[0] = '\0';
   if (!loadedOk || previous[0] == kUnset) return;
 
+  // The first stamp is printed as a stage of its own rather than used only as the
+  // baseline. Everything before it is real wake time — the framework's startup and
+  // Serial — and leaving it out of the line made it findable only by subtracting the
+  // printed stages from the total, which nobody does.
   size_t used = 0;
   uint16_t last = previous[0];
+  {
+    const int n = snprintf(out, outLen, "%s %u", kStageNames[0], static_cast<unsigned>(previous[0]));
+    if (n <= 0 || static_cast<size_t>(n) >= outLen) return;
+    used = static_cast<size_t>(n);
+  }
   for (uint8_t i = 1; i < kCount; i++) {
     if (previous[i] == kUnset) continue;
     // Stamps are monotonic in practice; guard anyway so a missed stage cannot underflow.
@@ -95,16 +111,12 @@ void formatPrevious(char* const out, const size_t outLen) {
   snprintf(out + used, outLen - used, " = %u", static_cast<unsigned>(last));
 }
 
-// The card work exists to feed the banner overlay, so it is compiled out with it. A
-// stable build must not pay an SD write on every single wake for a number nobody sees.
-#if !defined(WAKE_TIMING_OVERLAY) || !WAKE_TIMING_OVERLAY
+void setEnabled(const bool value) { enabled = value; }
 
-void loadPrevious() {}
-void persist() {}
-
-#else
-
+// The card work exists to feed the timings readouts, so it is switched with them. A
+// device that is not being measured must not pay an SD write on every single wake.
 void loadPrevious() {
+  if (!enabled) return;
   // Called after the card is up (Stage::SdReady), not from beginWake(): at beginWake()
   // time Storage has not been started yet, and the banner that reads these numbers is
   // painted well after the card is mounted.
@@ -126,6 +138,7 @@ void loadPrevious() {
 }
 
 void persist() {
+  if (!enabled) return;
   // Written at the end of the wake, once every stage has been stamped. The count is the
   // one loaded plus this wake, so a climbing number proves the file is being read back.
   uint8_t buf[kRecordBytes];
@@ -145,8 +158,6 @@ void persist() {
   file.flush();
 }
 
-#endif  // WAKE_TIMING_OVERLAY
-
 void formatDiagnostic(char* const out, const size_t outLen) {
   if (outLen == 0) return;
   out[0] = '\0';
@@ -165,7 +176,7 @@ void formatDiagnostic(char* const out, const size_t outLen) {
     return;
   }
 
-  char timings[80];
+  char timings[160];
   formatPrevious(timings, sizeof(timings));
   if (timings[0] == '\0') {
     snprintf(out, outLen, "w%lu no stamps", static_cast<unsigned long>(wakeCount));

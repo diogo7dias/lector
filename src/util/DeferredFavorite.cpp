@@ -26,9 +26,12 @@ struct Outcome {
   bool ok;
 };
 
-// A press has to travel through a page repaint to reach this queue again, so the depth is
-// only here to bound a stuck worker, never to hold a realistic burst.
-constexpr size_t kMaxPending = 8;
+// Deep enough to hold a triage run. Favoriting from the image viewer closes straight back
+// to the browser, so a user can queue one per press for as long as they keep browsing, and
+// the queue only drains when they leave the browser or lock the device. A job is two short
+// paths, so the cap costs a few kilobytes at worst and the old depth of 8 was reached in
+// ordinary use, which pushed every press after it back into the foreground.
+constexpr size_t kMaxPending = 64;
 // The worker opens no files and builds no documents; it walks directory entries through
 // SdFat and renames. 4096 is the project's "does real card I/O" tier and leaves headroom
 // for SdFat's own frames. It is transient: the task exits when the queue drains.
@@ -178,6 +181,15 @@ void reconcile() {
   if (anySucceeded) {
     APP_STATE.saveToFile();
   }
+}
+
+std::string pendingTargetFor(const std::string& fromPath) {
+  std::lock_guard<std::mutex> lock(stateMutex());
+  // Back to front: a later job supersedes an earlier one for the same file.
+  for (auto it = pending().rbegin(); it != pending().rend(); ++it) {
+    if (it->fromPath == fromPath) return it->toPath;
+  }
+  return std::string();
 }
 
 bool isIdle() {

@@ -512,6 +512,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Performance timings (1 = on). Switches on the refresh/wake instrumentation: the
+  // on-panel overlay line, and the CSV written to /perf on the card. Off costs nothing —
+  // no file is opened and every record() call returns on its first line. Deliberately not
+  // persisted-by-default-on: a reader who never measures anything should never pay a card
+  // write for it.
+  uint8_t showTimings = 0;
+  // Fast page turns (1 = on). Asks the panel for its cheapest partial waveform on FAST
+  // refreshes. Measured on the X4: 578 ms a page becomes roughly 150 ms. The trade is
+  // ghosting -- a shorter drive leaves more behind -- so the anti-ghost budget charges
+  // these passes double and cleans more often, and every eighth pass runs the standard
+  // sequence so the panel re-reads its own temperature. Inert on panels without a
+  // second fast path (the X3, the Seeed Sticky, the X4 Pro). Off restores the vendor
+  // sequence exactly, with no reflash.
+  uint8_t fastPageTurns = 1;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)

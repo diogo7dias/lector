@@ -1,30 +1,18 @@
-#include <BookBadgeLabel.h>
 #include <gtest/gtest.h>
 
-namespace {
+#include "BookBadgeLabel.h"
 
-TEST(BookBadgeLabel, ShowsOnlyTheFileTypeForABookNeverOpened) {
-  EXPECT_EQ(book_badge::label(-1, "EPUB", "Read"), "EPUB");
+TEST(BookBadgeLabel, NeverOpenedDrawsNoChip) { EXPECT_EQ(book_badge::chipLabel(-1, "Read"), ""); }
+
+TEST(BookBadgeLabel, PartlyReadIsABracketedPercentage) {
+  EXPECT_EQ(book_badge::chipLabel(42, "Read"), "[42%]");
+  EXPECT_EQ(book_badge::chipLabel(0, "Read"), "[0%]");
+  EXPECT_EQ(book_badge::chipLabel(99, "Read"), "[99%]");
 }
 
-TEST(BookBadgeLabel, LeadsWithThePercentage) {
-  EXPECT_EQ(book_badge::label(42, "EPUB", "Read"), "42%  EPUB");
-  EXPECT_EQ(book_badge::label(0, "EPUB", "Read"), "0%  EPUB");
-  EXPECT_EQ(book_badge::label(99, "EPUB", "Read"), "99%  EPUB");
-}
+TEST(BookBadgeLabel, FinishedReadsAsAWord) { EXPECT_EQ(book_badge::chipLabel(100, "Read"), "Read"); }
 
-TEST(BookBadgeLabel, SaysReadInsteadOfAHundredPercent) {
-  EXPECT_EQ(book_badge::label(100, "EPUB", "Read"), "Read  EPUB");
-}
+// A book reported past the end still reads as finished rather than as a number above 100.
+TEST(BookBadgeLabel, PastTheEndStillReadsAsFinished) { EXPECT_EQ(book_badge::chipLabel(120, "Read"), "Read"); }
 
-TEST(BookBadgeLabel, EmitsNoSeparatorWhenThereIsNoFileType) {
-  EXPECT_EQ(book_badge::label(42, "", "Read"), "42%");
-  EXPECT_EQ(book_badge::label(100, "", "Read"), "Read");
-  EXPECT_EQ(book_badge::label(-1, "", "Read"), "");
-}
-
-TEST(BookBadgeLabel, CarriesTheTranslatedWordThrough) {
-  EXPECT_EQ(book_badge::label(100, "EPUB", "Lido"), "Lido  EPUB");
-}
-
-}  // namespace
+TEST(BookBadgeLabel, TheFinishedWordIsTranslated) { EXPECT_EQ(book_badge::chipLabel(100, "Lido"), "Lido"); }

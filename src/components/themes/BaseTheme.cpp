@@ -11,6 +11,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "I18n.h"
@@ -19,6 +20,7 @@
 #include "components/ListScrollPolicy.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/UITheme.h"
+#include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
@@ -944,11 +946,14 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
   }
 }
 
+// Defined below, next to the home list it was written for.
+void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx);
+
 ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rect rect, const int itemCount,
                                           const int selectedIndex, const int scrollOffset,
                                           const std::function<std::string(int index)>& rowTitle,
                                           const std::function<std::string(int index)>& rowValue,
-                                          const int maxVisibleRows) const {
+                                          const std::function<std::string(int index)>& rowBadge) const {
   if (itemCount <= 0 || !rowTitle) {
     return {0, 0, itemCount > 0 ? itemCount : 0};
   }
@@ -969,65 +974,71 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
     return {0, 0, itemCount};
   }
 
+  constexpr int badgeGap = 6;  // blank between the chip and the first character of the title
+
   struct Row {
     int index;
     std::vector<std::string> lines;
     std::string value;
     int valueW;
     int height;
+    std::string badge;
+    int badgeW;       // 0 = no badge on this row
+    int badgeTextDx;  // where the text sits inside the chip (see badgeChipMetrics)
   };
 
   // Measuring wraps the title, so it is only ever done for rows near the window — never
   // for a whole directory, which can hold thousands of entries.
   auto measure = [&](const int index) {
-    Row row{index, {}, {}, 0, 0};
+    Row row{index, {}, {}, 0, 0, {}, 0, 0};
     if (rowValue) {
       row.value = rowValue(index);
       if (!row.value.empty()) {
         row.valueW = renderer.getTextWidth(UI_10_FONT_ID, row.value.c_str()) + valueGap;
       }
     }
+    if (rowBadge) {
+      row.badge = rowBadge(index);
+      if (!row.badge.empty()) {
+        badgeChipMetrics(renderer, row.badge.c_str(), &row.badgeW, &row.badgeTextDx);
+        row.badgeW += badgeGap;
+      }
+    }
+    // The chip eats width from every line, because every line is drawn at the first
+    // line's x. Letting the continuation lines run back to the left margin, under the
+    // chip, leaves the text block with a ragged left edge.
+    const int textW = std::max(1, contentW - row.badgeW);
     // Never let the value squeeze the first line to nothing: below a third of the width the
     // title wraps under the value instead.
-    const int firstLineW = std::max(contentW / 3, contentW - row.valueW);
-    row.lines = wrapText(renderer, rowTitle(index), firstLineW, contentW);
+    const int firstLineW = std::max(textW / 3, textW - row.valueW);
+    row.lines = wrapText(renderer, rowTitle(index), firstLineW, textW);
     if (row.lines.empty()) row.lines.emplace_back("");
     row.height = static_cast<int>(row.lines.size()) * lineHeight + rowPadY;
     return row;
   };
 
-  auto build = [&](const int start) {
-    std::vector<Row> rows;
-    int used = 0;
-    for (int i = start; i < itemCount && static_cast<int>(rows.size()) < maxVisibleRows; i++) {
-      Row row = measure(i);
-      const int step = row.height + (rows.empty() ? 0 : rowGap);
-      if (used + step > listHeight && !rows.empty()) break;
-      used += step;
-      rows.push_back(std::move(row));
+  // Measuring wraps a title, so the same row is asked for its height more than once as the
+  // window is worked out. Cache the last few: the window walk only ever touches rows near
+  // the window, and re-wrapping each of them two or three times is the one cost here that
+  // is pure waste.
+  std::vector<std::pair<int, int>> heightCache;
+  auto heightOf = [&](const int index) {
+    for (const auto& entry : heightCache) {
+      if (entry.first == index) return entry.second;
     }
-    return rows;
+    const int h = measure(index).height;
+    if (heightCache.size() >= 32) heightCache.erase(heightCache.begin());
+    heightCache.emplace_back(index, h);
+    return h;
   };
 
-  int start = std::clamp(scrollOffset, 0, itemCount - 1);
-  if (selectedIndex >= 0 && selectedIndex < start) start = selectedIndex;
-  std::vector<Row> rows = build(start);
+  const wrapped_list::Window win =
+      wrapped_list::window(itemCount, selectedIndex, scrollOffset, listHeight, rowGap, heightOf);
 
-  // Selection past the last drawn row: walk the window back from the selection while the
-  // rows above still fit, which lands the selected row at the bottom.
-  if (selectedIndex >= 0 && !rows.empty() && selectedIndex > rows.back().index) {
-    int newStart = selectedIndex;
-    int used = measure(selectedIndex).height;
-    while (newStart > 0) {
-      const int step = measure(newStart - 1).height + rowGap;
-      if (used + step > listHeight) break;
-      used += step;
-      newStart--;
-    }
-    start = newStart;
-    rows = build(start);
-  }
-  if (rows.empty()) rows.push_back(measure(start));
+  std::vector<Row> rows;
+  rows.reserve(static_cast<size_t>(win.count));
+  for (int i = win.first; i < win.first + win.count && i < itemCount; i++) rows.push_back(measure(i));
+  if (rows.empty()) rows.push_back(measure(std::clamp(win.first, 0, itemCount - 1)));
 
   const int firstVisible = rows.front().index;
   const int lastVisible = rows.back().index;
@@ -1052,9 +1063,21 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
       const int valueX = contentX + contentW - (row.valueW - valueGap);
       renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !selected);
     }
+    int textX = contentX;
+    if (row.badgeW > 0) {
+      // The chip flips with the row so it stays legible on both grounds: black chip with
+      // white text on an unselected row, white chip with black text on the inverted one.
+      const int chipW = row.badgeW - badgeGap;
+      const int chipH = lineHeight + 2;
+      const int chipY = rowY + 3 + (lineHeight - chipH) / 2;
+      renderer.fillRect(contentX, chipY, chipW, chipH, !selected);
+      renderer.drawText(UI_10_FONT_ID, contentX + row.badgeTextDx, chipY + (chipH - lineHeight) / 2, row.badge.c_str(),
+                        selected);
+      textX = contentX + row.badgeW;
+    }
     int baselineY = rowY + 3;
     for (const std::string& line : row.lines) {
-      renderer.drawText(UI_10_FONT_ID, contentX, baselineY, line.c_str(), !selected);
+      renderer.drawText(UI_10_FONT_ID, textX, baselineY, line.c_str(), !selected);
       baselineY += lineHeight;
     }
     rowY += row.height + rowGap;

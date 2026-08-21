@@ -47,23 +47,29 @@ uint32_t writeTocEntryTo(F& file, const BookMetadataCache::TocEntry& entry) {
   return pos;
 }
 
+// A cache file damaged by a truncated write, a pulled card, or a seek that landed off the
+// entry boundary yields fields that are individually readable but collectively nonsense —
+// a title of random bytes wide enough to draw off the panel, an spineIndex pointing
+// nowhere. Every read is checked and the first failure abandons the whole entry, so a
+// damaged record surfaces as an empty one (spineIndex -1, which callers already treat as
+// "no chapter here") instead of as garbage that gets rendered and navigated to.
 template <typename F>
 BookMetadataCache::SpineEntry readSpineEntryFrom(F& file) {
   BookMetadataCache::SpineEntry entry;
-  serialization::readString(file, entry.href);
-  serialization::readPod(file, entry.cumulativeSize);
-  serialization::readPod(file, entry.tocIndex);
+  if (!serialization::readString(file, entry.href)) return {};
+  if (!serialization::readPod(file, entry.cumulativeSize)) return {};
+  if (!serialization::readPod(file, entry.tocIndex)) return {};
   return entry;
 }
 
 template <typename F>
 BookMetadataCache::TocEntry readTocEntryFrom(F& file) {
   BookMetadataCache::TocEntry entry;
-  serialization::readString(file, entry.title);
-  serialization::readString(file, entry.href);
-  serialization::readString(file, entry.anchor);
-  serialization::readPod(file, entry.level);
-  serialization::readPod(file, entry.spineIndex);
+  if (!serialization::readString(file, entry.title)) return {};
+  if (!serialization::readString(file, entry.href)) return {};
+  if (!serialization::readString(file, entry.anchor)) return {};
+  if (!serialization::readPod(file, entry.level)) return {};
+  if (!serialization::readPod(file, entry.spineIndex)) return {};
   return entry;
 }
 }  // namespace

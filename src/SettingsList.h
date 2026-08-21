@@ -532,6 +532,21 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         {CrossPointSettings::MIN_READING_STATS_IDLE_UNITS, CrossPointSettings::MAX_READING_STATS_IDLE_UNITS, 1},
         "readingStatsIdleUnits", StrId::STR_CAT_SYSTEM));
 
+    // Measurement, off by default and free while it is off. On, the device times every
+    // refresh, draws the previous one's cost in a corner of the screen, and writes a CSV
+    // to /perf on the card for reading on a computer. It exists because the device has no
+    // serial console in a reader's hands, so the only honest way to judge a speed change
+    // is to have the device report its own numbers. See docs/perf-measurement.md.
+    v.push_back(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
+                                    StrId::STR_CAT_SYSTEM));
+
+    // The panel's cheapest partial waveform on page turns and menu moves. On by default
+    // on the one board validated for it; the row is here so a panel that turns out to
+    // ghost can be put back on the vendor sequence without a reflash. See
+    // CrossPointSettings::fastPageTurns.
+    v.push_back(SettingInfo::Toggle(StrId::STR_FAST_PAGE_TURNS, &CrossPointSettings::fastPageTurns, "fastPageTurns",
+                                    StrId::STR_CAT_SYSTEM));
+
     // --- KOReader Sync (web-only, uses KOReaderCredentialStore) ---
     v.push_back(SettingInfo::DynamicString(
         StrId::STR_KOREADER_USERNAME, [] { return KOREADER_STORE.getUsername(); },

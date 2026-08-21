@@ -804,6 +804,13 @@ Session**. Alongside them:
 
 **Stats** — **Track Reading Stats** and **Reading Idle Limit**.
 
+**Performance Timings** — off by default, and free while it is off. On, Lector times every
+screen refresh and reports the numbers three ways: a small line in the top-left corner of
+the screen showing what the previous refresh cost, a breakdown of the last wake in place of
+the unlock screen footer, and a `.csv` file per session in the `/perf` folder on the card.
+It is there so a slow page turn can be measured rather than guessed at. Turn it off again
+when you are done; it writes to the card while it is on.
+
 **Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**.
 
 **Device**

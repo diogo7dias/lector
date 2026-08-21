@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <DisplayRefreshPolicy.h>
 #include <EInkDisplay.h>
+#include <FrameInkMetrics.h>
 
 class HalDisplay {
  public:
@@ -68,6 +69,17 @@ class HalDisplay {
   uint8_t fastRefreshesSinceFull() const { return refreshPolicy.fastSinceFull(); }
   void seedFastRefreshesSinceFull(uint8_t value) { refreshPolicy.seedFastSinceFull(value); }
 
+  // The ink half of the same budget, carried across a lock the same way. See
+  // DisplayRefreshPolicy's debt thresholds and FrameInkMetrics.
+  // Ask for the panel's cheap partial path on FAST refreshes. Sticky, and only a
+  // request: boards without one, and every promoted pass, ignore it. Off restores the
+  // vendor sequence exactly, with no reflash.
+  void setFastPageTurns(const bool enabled) { turboWanted = enabled; }
+  bool fastPageTurns() const { return turboWanted; }
+
+  uint16_t inkDebt() const { return refreshPolicy.inkDebt(); }
+  void seedInkDebt(uint16_t value) { refreshPolicy.seedInkDebt(value); }
+
   // Drop the panel's high-voltage rails while leaving the image on the glass. The next
   // paint powers them back up on its own, so this is free to call whenever the device is
   // about to sit idle. Costs no flash and nothing visible. See PanelDriver::powerOff.
@@ -124,19 +136,35 @@ class HalDisplay {
   // Anti-ghosting cap, ported verbatim from the pre-rebase fork. Every refresh this
   // class performs is routed through it, so no run of FAST passes can grow long
   // enough to trap charge in the panel.
-  RefreshMode applyRefreshPolicy(RefreshMode requested);
+  // `inkScore` is what FrameInkMetrics made of the frame about to be pushed, or 0 on a
+  // path that has no framebuffer to measure (a bare refreshDisplay, a grayscale plane).
+  RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0, bool allowTurbo = true);
+  // Scores the framebuffer that is about to go to the panel. Returns 0 when the timings
+  // are of no use to the policy (a mode the policy will not promote anyway), so the pass
+  // over 48-52 KB is not paid for nothing.
+  uint16_t scoreFrame(RefreshMode requested);
   // True only when the caller asked for HALF itself, never when the anti-ghost cap
   // promoted a FAST into one. See the definition for why the difference matters.
   bool needsX3HalfResync(RefreshMode requested, RefreshMode actual) const;
+  // Feeds both the in-RAM stats the overlay draws and the CSV on the card.
+  void noteRefreshTiming(RefreshMode requested, RefreshMode actual, uint32_t totalUs, uint32_t asyncStartUs,
+                         uint16_t thinkMs, uint16_t inkScore) const;
 
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
+  bool turboWanted = false;
+  // What the last pass actually ran, for the perf log: what was asked for and what the
+  // reload cadence allowed are not the same thing.
+  bool lastPassWasTurbo = false;
+  FrameInkMetrics inkMetrics;
 
   // In-flight async refresh, so waitRefreshComplete() can close the PerfLog record the
   // async start opened. Carried unconditionally rather than behind the PERF_LOG flag:
   // 14 bytes on one long-lived object is not worth an #if in a header everything sees.
   uint32_t pendingAsyncStartUs = 0;
   uint32_t pendingAsyncSplitUs = 0;
+  uint16_t pendingAsyncThinkMs = 0;
+  uint16_t pendingAsyncInkScore = 0;
   RefreshMode pendingAsyncRequested = RefreshMode::FAST_REFRESH;
   RefreshMode pendingAsyncActual = RefreshMode::FAST_REFRESH;
   bool pendingAsync = false;
