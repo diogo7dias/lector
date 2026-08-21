@@ -60,8 +60,9 @@ void startPerfLogSink(const char* device) {
   // things wrong. Panel temperature is deliberately absent: neither driver can read one
   // back — the temperature values in the driver are constants written TO the panel.
   char header[192];
-  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%% pll=0x%02X\n", device, CROSSPOINT_VERSION,
-           static_cast<unsigned>(powerManager.getBatteryPercentage()), static_cast<unsigned>(lectorX3PllByte()));
+  snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%% pll=0x%02X settle=%ums\n", device,
+           CROSSPOINT_VERSION, static_cast<unsigned>(powerManager.getBatteryPercentage()),
+           static_cast<unsigned>(lectorX3PllByte()), static_cast<unsigned>(lectorX3SettleMs()));
   writeLine(header);
   snprintf(header, sizeof(header),
            "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u refreshFreq=%u\n",

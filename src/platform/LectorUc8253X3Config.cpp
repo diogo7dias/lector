@@ -47,6 +47,21 @@
 //      including _gc, whose phases are one frame long — a faster clock can collapse the
 //      mid-greys. Check this on a cover sleep screen, not on text, or it will not show.
 //   4. HALF and FULL still fully clear. They are what the anti-ghost policy relies on.
+//
+// THE POST-WAVEFORM SETTLE
+// ------------------------
+// Same shape of unknown, same way of answering it. The driver delays 200 ms after every
+// non-differential waveform that does not power the panel down, and that number has never
+// been checked against this panel — it is simply what the driver has always sent. It is
+// paid on every HALF and every FULL, so it recurs on every clean the anti-ghost policy
+// forces, and on the X3 a HALF measures about 2380 ms in total.
+//
+// Write a millisecond count into /perf/settle.txt to try one; 0 is a legitimate candidate
+// and is the end of the sweep worth reaching. Suggested rungs: 200, 100, 50, 0. A value
+// lands only if HALF and FULL still fully clear and body text stays clean over 30
+// consecutive FAST passes afterwards — the settle exists to leave the panel in a state
+// the next differential can build on, so a too-short value shows up as ghosting on the
+// passes AFTER the clean, not on the clean itself.
 
 #include <HalStorage.h>
 #include <PerfStats.h>
@@ -63,6 +78,14 @@ namespace {
 // candidate was measured against; see the table above.
 constexpr unsigned char kLandedPll = 0x3D;
 constexpr const char* kPllPath = "/perf/pll.txt";
+
+// The driver's own settle, and the baseline every candidate is measured against. Never
+// verified against this panel: it is simply what the driver has always sent.
+constexpr unsigned short kStockSettleMs = 200;
+constexpr const char* kSettlePath = "/perf/settle.txt";
+// A settle longer than this is a stuck file or a typo, not a candidate. The whole FULL
+// waveform is 710 ms, so nothing above it can be a settle.
+constexpr unsigned short kMaxSettleMs = 1000;
 
 }  // namespace
 
@@ -88,11 +111,31 @@ unsigned char lectorX3PllByte() {
   return active;
 }
 
+unsigned short lectorX3SettleMs() {
+  // Cached for the same reason the PLL byte is: the panel config asks for this once, and
+  // a value that changed under a running device would make a log disagree with the panel.
+  static bool chosen = false;
+  static unsigned short active = kStockSettleMs;
+  if (chosen) return active;
+  chosen = true;
+
+  char buf[16] = {0};
+  if (Storage.readFileToBuffer(kSettlePath, buf, sizeof(buf)) > 0) {
+    char* end = nullptr;
+    const long parsed = strtol(buf, &end, 10);
+    // 0 is a legitimate candidate here, unlike the PLL byte: "no settle at all" is exactly
+    // the end of the sweep worth reaching.
+    if (end != buf && parsed >= 0 && parsed <= kMaxSettleMs) active = static_cast<unsigned short>(parsed);
+  }
+  return active;
+}
+
 namespace freeink {
 
 const Uc8253X3Config& lectorUc8253X3Config() {
   static Uc8253X3Config cfg = uc8253X3DefaultConfig();
   cfg.pll = lectorX3PllByte();
+  cfg.postWaveformSettleMs = lectorX3SettleMs();
   return cfg;
 }
 

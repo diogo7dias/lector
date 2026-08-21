@@ -69,6 +69,24 @@ are all read as the same byte. No rebuild and no flash per candidate. The value 
 is printed in the overlay and in the CSV header, so a run cannot be attributed to the
 wrong candidate. With no such file the landed default `0x3D` is used.
 
+## Trying an X3 post-waveform settle
+
+Same shape of unknown as the PLL byte, answered the same way. The driver delays 200 ms
+after every non-differential waveform that does not power the panel down, and that number
+has never been checked against this panel. It is paid on every HALF and every FULL, so it
+recurs on every clean the anti-ghost policy forces, and a HALF measures about 2380 ms.
+
+Write a millisecond count into `/perf/settle.txt` and power-cycle. `0` is a legitimate
+candidate and is the end of the sweep worth reaching. Suggested rungs: 200, 100, 50, 0.
+The value in force is printed in the CSV header next to the PLL byte.
+
+A value lands only if HALF and FULL still fully clear AND body text stays clean over 30
+consecutive FAST passes afterwards. The settle exists to leave the panel in a state the
+next differential can build on, so a value that is too short shows as ghosting on the
+passes AFTER the clean, not on the clean itself.
+
+## Trying an X3 PLL byte, continued
+
 The sweep is done. Walking the high field (`0x09` versus `0x19`) changes nothing on this
 panel; the low three bits are the lever. `0x3D` is the fastest byte that still prints
 clean (FAST waveform 428 ms against the stock 566 ms, 24% off) and is what ships. `0x3F`
