@@ -523,3 +523,34 @@ TEST(NearbyFileSession, ReportsProgressWhileItRuns) {
   session.onEvent(ackFor(0), now);
   EXPECT_EQ(session.progressPercent(), 25);
 }
+
+// A third reader in range keeps offering while this one is already prompting about a
+// file from someone else. The session drops that offer, and everything it reports keeps
+// describing the real sender — the screen relies on exactly this to decide whether an
+// offer it just passed in is the one it should now act on.
+TEST(NearbyFileSession, AStrayOfferWhilePromptingLeavesTheRealSenderInPlace) {
+  TransferSession session;
+  const uint32_t now = 1000;
+  session.beginReceive(now);
+  session.onEvent(event(TransferEventKind::DISCOVER), now);
+  drain(session, now);
+
+  TransferEvent offer = event(TransferEventKind::OFFER);
+  offer.fileName = "Book.epub";
+  offer.fileSize = 4096;
+  offer.deviceName = "Lector-4B2C";
+  session.onEvent(offer, now);
+  ASSERT_EQ(session.state(), TransferState::OFFER_PROMPT);
+  ASSERT_EQ(session.peerMacAddress(), PEER_MAC);
+
+  TransferEvent stray = event(TransferEventKind::OFFER, OTHER_MAC);
+  stray.fileName = "Stranger.ttf";
+  stray.fileSize = 999;
+  stray.deviceName = "Lector-9F9F";
+  session.onEvent(stray, now + 1);
+
+  EXPECT_EQ(session.state(), TransferState::OFFER_PROMPT);
+  EXPECT_EQ(session.peerMacAddress(), PEER_MAC);
+  EXPECT_EQ(session.offeredName(), "Book.epub");
+  EXPECT_EQ(session.offeredSize(), 4096u);
+}

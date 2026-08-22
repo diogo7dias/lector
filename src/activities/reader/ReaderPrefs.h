@@ -56,7 +56,7 @@ struct ReaderPrefs {
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 11;  // v11: per-book status bar layout
+  static constexpr uint8_t VERSION = 12;  // v12: Embedded Style split into text + layout
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -83,18 +83,17 @@ struct ReaderPrefs {
   uint8_t paragraphAlignment = 0;    // CrossPointSettings::JUSTIFIED
   uint8_t extraParagraphSpacing = 1;
   uint8_t paragraphSpacing = 0;  // % of line height (block gap; restored granular)
-  uint8_t screenMargin = 5;  // horizontal (left/right), shared by both sides
+  uint8_t screenMargin = 5;      // horizontal (left/right), shared by both sides
   uint8_t screenMarginTop = 5;
   uint8_t screenMarginBottom = 5;
   uint8_t verticalMarginsLinked = 1;  // 1 = top and bottom move together; 0 = independent
-  uint8_t dynamicMargins = 0;  // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
+  uint8_t dynamicMargins = 0;         // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
   // Style tab
   uint8_t focusReadingEnabled = 0;
   uint8_t guideDotsEnabled = 0;  // middle dot between words (restored)
   uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
   uint8_t hyphenationEnabled = 0;
   uint8_t embeddedTextStyle = 1;
-  uint8_t embeddedLayoutStyle = 1;
   uint8_t textAntiAliasing = 0;  // see CrossPointSettings: the grey fade per page is not worth it
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
   uint8_t imageRendering = 0;  // CrossPointSettings::IMAGES_DISPLAY
@@ -152,6 +151,14 @@ struct ReaderPrefs {
   uint8_t sbBarOutline = 0;
   uint8_t sbOffBar = 0;  // SB_OFFBAR_OFF
 
+  // The layout half of the old single "Embedded Style" switch: the book's own margins,
+  // indents and block spacing, separate from its fonts and emphasis.
+  //
+  // APPENDED LAST. See the note above paragraphNumberSize. It belongs beside
+  // embeddedTextStyle, but putting it there would shift every field below it and make
+  // this firmware misread every v11 sidecar on the card.
+  uint8_t embeddedLayoutStyle = 1;
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -190,15 +197,54 @@ struct ReaderPrefs {
 inline constexpr size_t READER_PREFS_V8_SIZE = offsetof(ReaderPrefs, paragraphNumberSize);
 inline constexpr size_t READER_PREFS_V9_SIZE = offsetof(ReaderPrefs, statusBarEnabled);
 inline constexpr size_t READER_PREFS_V10_SIZE = offsetof(ReaderPrefs, sbBatteryPos);
+inline constexpr size_t READER_PREFS_V11_SIZE = offsetof(ReaderPrefs, embeddedLayoutStyle);
+
+// A record older than v12 carries one "Embedded Style" choice, in what is now the text
+// switch. Someone who turned it off wanted the book's own styling gone, so the layout
+// switch follows it rather than quietly handing back the book's margins and indents.
+inline constexpr uint8_t FIRST_VERSION_WITH_SPLIT_EMBEDDED_STYLE = 12;
+// A record older than v10 has no status bar on/off byte, and one older than v11 has no
+// status bar layout block. Only those are seeded from the global settings on migration:
+// doing it for any upgraded record would replace a per-book bar the reader configured.
+inline constexpr uint8_t FIRST_VERSION_WITH_STATUS_BAR_SWITCH = 10;
+inline constexpr uint8_t FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR = 11;
+// `layoutStyleAlreadyRead` is set only for the interim v11 layout, whose record really
+// does carry its own layout switch: seeding it from the text switch there would throw
+// away a choice the reader made.
+inline void migrateReaderPrefsFields(const uint8_t version, ReaderPrefs& p, const bool layoutStyleAlreadyRead = false) {
+  if (version == 5) p.fontPointSize = foldLegacyReaderFontSize(p.fontPointSize);
+  if (!layoutStyleAlreadyRead && version < FIRST_VERSION_WITH_SPLIT_EMBEDDED_STYLE) {
+    p.embeddedLayoutStyle = p.embeddedTextStyle;
+  }
+  if (version < ReaderPrefs::FIRST_VERSION_WITH_CURRENT_DEFAULTS) p.adoptCurrentReadingDefaults();
+}
 
 // Bytes to read for a record written by `version`, or 0 when that version cannot be
 // read at all. One rule, shared by the stream and HalFile overloads, so the host tests
 // pin the exact behaviour the device gets. Reading sizeof() for an older record would
 // run off the end of it and drop every per-book setting the user ever chose.
+// Between the Embedded Style split and the version bump that should have come with it,
+// main wrote records STAMPED 11 that carry embeddedLayoutStyle in the middle of the
+// struct instead of at its end. Such a record is one byte longer than a real v11 one,
+// and length is the only thing that tells the two apart: read at the stable v11 length
+// it succeeds, having shifted every field after embeddedTextStyle by one byte.
+//
+// Move the stray byte back to the end so the record reads as what it meant.
+inline constexpr size_t READER_PREFS_INTERIM_V11_SIZE = READER_PREFS_V11_SIZE + 1;
+inline void unshiftInterimV11(const uint8_t* record, ReaderPrefs& out) {
+  // The byte sat where textAntiAliasing now begins, directly after embeddedTextStyle.
+  constexpr size_t split = offsetof(ReaderPrefs, textAntiAliasing);
+  auto* raw = reinterpret_cast<uint8_t*>(&out);
+  std::memcpy(raw, record, split);
+  std::memcpy(raw + split, record + split + 1, READER_PREFS_V11_SIZE - split);
+  out.embeddedLayoutStyle = record[split];
+}
+
 inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version >= 5 && version <= 8) return READER_PREFS_V8_SIZE;
   if (version == 9) return READER_PREFS_V9_SIZE;
   if (version == 10) return READER_PREFS_V10_SIZE;
+  if (version == 11) return READER_PREFS_V11_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -211,8 +257,11 @@ static_assert(READER_PREFS_V9_SIZE == READER_PREFS_V8_SIZE + 1,
               "paragraphNumberSize must sit between the v8 and v9 record ends, with no padding");
 static_assert(READER_PREFS_V10_SIZE == READER_PREFS_V9_SIZE + 1,
               "statusBarEnabled must sit between the v9 and v10 record ends, with no padding");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V10_SIZE + 17,
-              "the v11 status bar block must be the last 17 bytes, with no padding before it");
+static_assert(READER_PREFS_V11_SIZE == READER_PREFS_V10_SIZE + 17,
+              "the v11 status bar block must be 17 bytes, with no padding before it");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V11_SIZE + 1,
+              "embeddedLayoutStyle must be the last byte: every new field goes last, or "
+              "this firmware misreads every sidecar written by the version before it");
 
 // ── Mid-edit override decision ────────────────────────────────────────────────
 // While the in-book Reader Settings screen is open, the edited values live on the
@@ -269,10 +318,12 @@ inline void writeReaderPrefs(std::ostream& out, const ReaderPrefs& p) {
 
 // `migrated`, when given, reports whether the sidecar was upgraded on the way in, so
 // the caller can rewrite it and re-anchor the reading position against the new layout.
-inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = nullptr) {
+inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = nullptr,
+                            uint8_t* fromVersion = nullptr) {
   if (migrated) *migrated = false;
   uint8_t ver = 0;
   if (!in.read(reinterpret_cast<char*>(&ver), 1)) return false;
+  if (fromVersion) *fromVersion = ver;
   // Keep this accept-and-fold rule identical to the HalFile overload in
   // ReaderPrefs.cpp — they read the same on-card format.
   const size_t want = readerPrefsRecordSize(ver);
@@ -280,9 +331,25 @@ inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = n
   // An older record is shorter, so read only what it actually holds and leave every
   // field appended since at its constructed default.
   ReaderPrefs tmp;
-  if (!in.read(reinterpret_cast<char*>(&tmp), want)) return false;
-  if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
-  if (ver < ReaderPrefs::FIRST_VERSION_WITH_CURRENT_DEFAULTS) tmp.adoptCurrentReadingDefaults();
+  bool interimV11 = false;
+  if (ver == 11) {
+    // Read one byte past the stable v11 record: getting it means this is the interim
+    // layout, which is exactly one byte longer.
+    uint8_t record[READER_PREFS_INTERIM_V11_SIZE] = {};
+    in.read(reinterpret_cast<char*>(record), READER_PREFS_INTERIM_V11_SIZE);
+    const auto got = static_cast<size_t>(in.gcount());
+    in.clear();  // reading past a stable v11 record sets eofbit, which is not a failure
+    if (got < READER_PREFS_V11_SIZE) return false;
+    interimV11 = got == READER_PREFS_INTERIM_V11_SIZE;
+    if (interimV11) {
+      unshiftInterimV11(record, tmp);
+    } else {
+      std::memcpy(&tmp, record, READER_PREFS_V11_SIZE);
+    }
+  } else if (!in.read(reinterpret_cast<char*>(&tmp), want)) {
+    return false;
+  }
+  migrateReaderPrefsFields(ver, tmp, interimV11);
   if (ver < ReaderPrefs::VERSION && migrated) *migrated = true;
   p = tmp;
   return true;
@@ -292,4 +359,4 @@ inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = n
 // here so this header never pulls HalStorage/Arduino into the host test build.
 class HalFile;
 bool writeReaderPrefs(HalFile& out, const ReaderPrefs& p);
-bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated = nullptr);
+bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated = nullptr, uint8_t* fromVersion = nullptr);

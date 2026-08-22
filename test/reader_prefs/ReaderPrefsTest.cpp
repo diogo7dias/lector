@@ -488,3 +488,150 @@ TEST(ReaderPrefs, AdoptStatusBarFromCopiesTheWholeBlockAndNothingElse) {
   EXPECT_EQ(keptFontSize, book.fontPointSize);
   EXPECT_EQ(keptMargin, book.screenMargin);
 }
+
+// Embedded Style split into a text switch and a layout switch in v12. A v11 sidecar
+// stops before the layout switch, so it must be read at its own length: reading
+// sizeof() instead would run off the end of the record and drop every per-book
+// setting the user ever chose the first time this firmware opens the book.
+TEST(ReaderPrefs, Version11SidecarKeepsEveryFieldItActuallyHeld) {
+  ReaderPrefs legacy = makeSample();
+  legacy.embeddedTextStyle = 1;  // the single v11 "Embedded Style" choice
+  legacy.sbOffBar = 3;           // the last field a v11 record really carried
+  std::stringstream ss;
+  const uint8_t v11 = 11;
+  ss.write(reinterpret_cast<const char*>(&v11), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V11_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(legacy.fontPointSize, loaded.fontPointSize);
+  EXPECT_EQ(legacy.screenMargin, loaded.screenMargin);
+  EXPECT_EQ(legacy.screenMarginTop, loaded.screenMarginTop);
+  EXPECT_EQ(legacy.paragraphNumberSize, loaded.paragraphNumberSize);
+  EXPECT_EQ(legacy.statusBarEnabled, loaded.statusBarEnabled);
+  EXPECT_EQ(legacy.sbOffBar, loaded.sbOffBar);
+  EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
+}
+
+// The split's rule: a reader who had Embedded Style off wanted the book's own styling
+// gone, so both switches start off rather than quietly handing back the book's
+// margins and indents.
+TEST(ReaderPrefs, Version11SidecarSeedsTheLayoutSwitchFromTheOldSingleChoice) {
+  for (const uint8_t choice : {uint8_t{0}, uint8_t{1}}) {
+    ReaderPrefs legacy = makeSample();
+    legacy.embeddedTextStyle = choice;
+    std::stringstream ss;
+    const uint8_t v11 = 11;
+    ss.write(reinterpret_cast<const char*>(&v11), 1);
+    ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V11_SIZE);
+
+    ReaderPrefs loaded;
+    ASSERT_TRUE(readReaderPrefs(ss, loaded));
+    EXPECT_EQ(choice, loaded.embeddedTextStyle);
+    EXPECT_EQ(choice, loaded.embeddedLayoutStyle);
+  }
+}
+
+// The layout switch is the newest field, so it must sit last: every field above it
+// keeps the offset a v11 record wrote it at.
+TEST(ReaderPrefs, TheLayoutSwitchIsTheLastFieldAndV11StopsBeforeIt) {
+  EXPECT_EQ(offsetof(ReaderPrefs, embeddedLayoutStyle), READER_PREFS_V11_SIZE);
+  EXPECT_EQ(READER_PREFS_V11_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
+  EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
+  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
+  EXPECT_EQ(12, ReaderPrefs::VERSION);
+}
+
+// ── The interim v11 layout ────────────────────────────────────────────────────
+// Between the Embedded Style split and the version bump that should have come with
+// it, main wrote records STAMPED 11 that carry embeddedLayoutStyle in the middle of
+// the struct, one byte longer than a real v11 record. Reading one at the stable v11
+// length shifts every field after embeddedTextStyle by one — the font name loses its
+// first character and the whole status bar block slides — and the read still reports
+// success. The two formats differ only in length, so length is what tells them apart.
+std::string interimV11Record(const ReaderPrefs& p) {
+  const auto* raw = reinterpret_cast<const uint8_t*>(&p);
+  constexpr size_t split = offsetof(ReaderPrefs, textAntiAliasing);
+  std::string out;
+  out.append(reinterpret_cast<const char*>(raw), split);
+  out.push_back(static_cast<char>(p.embeddedLayoutStyle));  // sat here in the interim build
+  out.append(reinterpret_cast<const char*>(raw + split), READER_PREFS_V11_SIZE - split);
+  return out;  // READER_PREFS_V11_SIZE + 1 bytes
+}
+
+TEST(ReaderPrefs, TheInterimV11LayoutIsUnshiftedRatherThanMisread) {
+  ReaderPrefs written = makeSample();
+  written.embeddedTextStyle = 1;
+  written.embeddedLayoutStyle = 0;
+  written.textAntiAliasing = 1;
+  written.imageRendering = 2;
+  std::strncpy(written.sdFontFamilyName, "Bookerly", sizeof(written.sdFontFamilyName) - 1);
+  written.sbOffBar = 3;
+
+  const std::string record = interimV11Record(written);
+  ASSERT_EQ(READER_PREFS_V11_SIZE + 1, record.size());
+
+  std::stringstream ss;
+  const uint8_t v11 = 11;
+  ss.write(reinterpret_cast<const char*>(&v11), 1);
+  ss.write(record.data(), static_cast<std::streamsize>(record.size()));
+
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded));
+  EXPECT_EQ(1, loaded.embeddedTextStyle);
+  EXPECT_EQ(0, loaded.embeddedLayoutStyle);
+  EXPECT_EQ(1, loaded.textAntiAliasing);
+  EXPECT_EQ(2, loaded.imageRendering);
+  EXPECT_STREQ("Bookerly", loaded.sdFontFamilyName);
+  EXPECT_EQ(3, loaded.sbOffBar);
+  EXPECT_EQ(written.statusBarEnabled, loaded.statusBarEnabled);
+  EXPECT_EQ(written.paragraphNumberSize, loaded.paragraphNumberSize);
+}
+
+// A stable v11 record is the shorter of the two and must still read as itself.
+TEST(ReaderPrefs, AStableV11RecordIsNotMistakenForTheInterimOne) {
+  ReaderPrefs written = makeSample();
+  written.embeddedTextStyle = 0;
+  written.textAntiAliasing = 1;
+  written.sbOffBar = 3;
+
+  std::stringstream ss;
+  const uint8_t v11 = 11;
+  ss.write(reinterpret_cast<const char*>(&v11), 1);
+  ss.write(reinterpret_cast<const char*>(&written), READER_PREFS_V11_SIZE);
+
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded));
+  EXPECT_EQ(0, loaded.embeddedTextStyle);
+  EXPECT_EQ(0, loaded.embeddedLayoutStyle);  // seeded from the single old choice
+  EXPECT_EQ(1, loaded.textAntiAliasing);
+  EXPECT_EQ(3, loaded.sbOffBar);
+}
+
+// The status bar block is only missing from a record older than v11, and the on/off
+// byte only from one older than v10. Seeding either on any migrated record would let a
+// version bump silently replace a per-book bar the user configured.
+TEST(ReaderPrefs, ReadReportsTheVersionTheRecordWasWrittenAt) {
+  ReaderPrefs written = makeSample();
+  std::stringstream ss;
+  const uint8_t v11 = 11;
+  ss.write(reinterpret_cast<const char*>(&v11), 1);
+  ss.write(reinterpret_cast<const char*>(&written), READER_PREFS_V11_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  uint8_t fromVersion = 0;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated, &fromVersion));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(11, fromVersion);
+
+  std::stringstream current;
+  writeReaderPrefs(current, written);
+  ReaderPrefs back;
+  ASSERT_TRUE(readReaderPrefs(current, back, &migrated, &fromVersion));
+  EXPECT_FALSE(migrated);
+  EXPECT_EQ(ReaderPrefs::VERSION, fromVersion);
+}

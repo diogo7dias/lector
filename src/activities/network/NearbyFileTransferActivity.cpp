@@ -270,6 +270,13 @@ void NearbyFileTransferActivity::handleOffer(const OfferPayload& offer, const st
   incomingEvent.fileSize = offer.fileSize;
   session.onEvent(incomingEvent, millis());
 
+  // The session drops an offer from anyone other than the sender it is already paired
+  // with, so a third reader in range can offer without disturbing the transfer in
+  // progress. Taking that offer here anyway would leave the prompt naming a stranger's
+  // file while the accept applies ITS folder and type to the real sender's transfer,
+  // which then fails the type check and refuses a book the reader did want.
+  if (session.peerMacAddress() != sourceMac) return;
+
   pendingOffer = offer;
   if (decision == GroupDecision::AUTO_ACCEPT) acceptIncomingOffer();
 }

@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 
+#include "ReaderPresetMigration.h"
 #include "ReaderPresetNames.h"
 
 namespace {
@@ -60,6 +61,14 @@ ReaderPrefs readPrefs(JsonObjectConst obj) {
   }
   // Presets saved before the point-size switch hold the old 0..3 slot.
   p.fontPointSize = foldLegacyReaderFontSize(p.fontPointSize);
+  // A preset written before the margin or Embedded Style splits carries the old keys;
+  // which keys are missing is the only record of its vintage, so read that first.
+  reader_preset_migration::LegacyKeys legacy;
+  legacy.hasUniformMargins = obj["uniformMargins"].is<uint8_t>();
+  if (legacy.hasUniformMargins) legacy.uniformMargins = obj["uniformMargins"].as<uint8_t>();
+  legacy.hasVerticalMarginsLinked = obj["verticalMarginsLinked"].is<uint8_t>();
+  legacy.hasEmbeddedLayoutStyle = obj["embeddedLayoutStyle"].is<uint8_t>();
+  reader_preset_migration::apply(legacy, p);
   const char* sdName = obj["sdFontFamilyName"] | "";
   // strncpy into the fixed field, then zero the tail: ReaderPrefs is compared whole
   // with memcmp, so trailing bytes must be canonical or an identical preset reads as
