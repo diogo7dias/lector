@@ -194,6 +194,12 @@ class SettingsActivity final : public Activity {
   // Every setting, in one flat list: the four categories concatenated in display
   // order, each already carrying its section headings.
   std::vector<SettingInfo> settings;
+  // Per-category scratch, kept as members so a rebuild reuses their capacity rather
+  // than allocating four vectors of SettingInfo on every toggle.
+  std::vector<SettingInfo> displaySettings;
+  std::vector<SettingInfo> readerSettings;
+  std::vector<SettingInfo> controlsSettings;
+  std::vector<SettingInfo> systemSettings;
   // isHeader per row, kept alongside the list for settings_nav.
   std::vector<bool> headerFlags;
 
@@ -211,6 +217,9 @@ class SettingsActivity final : public Activity {
   int listScrollOffset = 0;
 
   void toggleCurrentSetting();
+  // Puts the cursor back on a landable row after a rebuild that may have added or
+  // removed rows under it.
+  void restoreCursorAfterRebuild();
   void openSleepTimeoutPicker();
   void rebuildSettingsList();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);

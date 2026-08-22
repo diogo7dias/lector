@@ -712,10 +712,18 @@ are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ## 12. Settings reference
 
-Settings are one scrolling list, in four runs of sections: **Display**, **Reader**,
-**Controls** and **System**. Step through it a row at a time; hold the same button to jump
-to the first row of the next or previous section. Paths below, such as
-**Settings > Reader > Dictionary**, name the run a row sits in.
+Settings are one scrolling list. Rows are grouped under section headings such as **Text**,
+**Page** or **Library**, and the sections run in four blocks, in this order: Display,
+Reader, Controls, System. Those four names order the list; they are not printed on screen,
+and a row is found by scrolling to its section heading.
+
+Step through the list a row at a time; hold the same button to jump a whole section. Held
+forward lands on the next section's first row; held backward goes to the first row of the
+section you are in, then to the section above it. Either way the heading is shown above the
+row you land on.
+
+Paths in this reference, such as **Settings > Reader > Dictionary**, name the block a row
+belongs to, so the rows here appear in the same order as on the device.
 
 ### 12.1 Display
 

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 
 #include "ButtonRemapActivity.h"
 #include "CleanStorageActivity.h"
@@ -85,10 +86,10 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 void SettingsActivity::rebuildSettingsList() {
   // Built per category so each keeps its own grouping map, then concatenated: the
   // four categories are the top-level order of one flat list, not four screens.
-  std::vector<SettingInfo> displaySettings;
-  std::vector<SettingInfo> readerSettings;
-  std::vector<SettingInfo> controlsSettings;
-  std::vector<SettingInfo> systemSettings;
+  displaySettings.clear();
+  readerSettings.clear();
+  controlsSettings.clear();
+  systemSettings.clear();
 
   // Pick up any fonts uploaded/deleted over the web server since the last
   // reader activity ran — otherwise the font-family picker shows stale list.
@@ -272,15 +273,20 @@ void SettingsActivity::loop() {
 
   // Held, the same buttons jump a whole section. One flat list is long, and this is
   // the fast travel the tab bar used to provide.
-  buttonNavigator.onNextContinuous([this] {
-    selectedSettingIndex = settings_nav::nextSection(selectedSettingIndex, headerFlags, true);
+  //
+  // The jump also parks the window on the section's heading. Left to slide by the least
+  // it can, the list would show the arrived-at row against the top or bottom edge with
+  // the heading and the rest of the section off-screen, which is the opposite of what
+  // jumping to a section is for.
+  const auto jumpSection = [this](const bool forward) {
+    selectedSettingIndex = settings_nav::nextSection(selectedSettingIndex, headerFlags, forward);
+    listScrollOffset = std::max(0, selectedSettingIndex - 1);
     requestUpdate();
-  });
+  };
 
-  buttonNavigator.onPreviousContinuous([this] {
-    selectedSettingIndex = settings_nav::nextSection(selectedSettingIndex, headerFlags, false);
-    requestUpdate();
-  });
+  buttonNavigator.onNextContinuous([jumpSection] { jumpSection(true); });
+
+  buttonNavigator.onPreviousContinuous([jumpSection] { jumpSection(false); });
 }
 
 void SettingsActivity::toggleCurrentSetting() {
@@ -330,6 +336,7 @@ void SettingsActivity::toggleCurrentSetting() {
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
                          rebuildSettingsList();
+                         restoreCursorAfterRebuild();
                        });
       requestUpdate();
       return;
@@ -356,6 +363,7 @@ void SettingsActivity::toggleCurrentSetting() {
         syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
         SETTINGS.saveToFile();
         rebuildSettingsList();
+        restoreCursorAfterRebuild();
       };
       if (!setting.enumStringValues.empty()) {
         optionPopup.show(setting.nameId, setting.enumStringValues, cur, std::move(onSelect));
@@ -378,6 +386,7 @@ void SettingsActivity::toggleCurrentSetting() {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
                     SETTINGS.saveToFile();
                     rebuildSettingsList();
+                    restoreCursorAfterRebuild();
                   });
     requestUpdate();
     return;
@@ -409,6 +418,7 @@ void SettingsActivity::toggleCurrentSetting() {
             }
             SETTINGS.saveToFile();
             rebuildSettingsList();
+            restoreCursorAfterRebuild();
           }
         });
     return;
@@ -459,6 +469,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::InstalledFonts:
@@ -466,6 +477,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::TextSettings:
@@ -473,6 +485,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                [this](const ActivityResult&) {
                                  // TextSettingsActivity saves on each change; no save needed here.
                                  rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::Language:
@@ -483,6 +496,7 @@ void SettingsActivity::toggleCurrentSetting() {
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
                                  rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::None:
@@ -497,9 +511,13 @@ void SettingsActivity::toggleCurrentSetting() {
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
   rebuildSettingsList();
-  selectedSettingIndex = std::min(selectedSettingIndex, std::max(0, settingsCount - 1));
-  // A toggle can add or remove rows (Quick-return from footnotes, Pop-up Items), which
+  restoreCursorAfterRebuild();
+}
+
+void SettingsActivity::restoreCursorAfterRebuild() {
+  // A change can add or remove rows (Quick-return from footnotes, Pop-up Items), which
   // shifts everything below it and can slide a heading under the cursor.
+  selectedSettingIndex = std::clamp(selectedSettingIndex, 0, std::max(0, settingsCount - 1));
   if (selectedSettingIndex < settingsCount && settings[selectedSettingIndex].isHeader) {
     selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, true);
   }
@@ -557,7 +575,7 @@ void SettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
                  CROSSPOINT_VERSION);
 
-  const auto& rows = settings;
+  const auto& rows = settings;  // named for the lambdas below, which cannot capture a member
   GUI.drawList(
       renderer,
       Rect{0, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, pageWidth,

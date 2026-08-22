@@ -6,8 +6,8 @@ using list_scroll::nextScrollOffset;
 
 namespace {
 
-// A settings-sized list: 22 rows against a 20-row window, as the System tab
-// looks once section headings are inserted.
+// A settings-sized list: 22 rows against a 20-row window, as a stretch of the
+// settings list looks once section headings are inserted.
 constexpr int kPageItems = 20;
 constexpr int kItemCount = 22;
 

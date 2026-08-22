@@ -7,6 +7,7 @@
 using settings_nav::firstLandableRow;
 using settings_nav::nextRow;
 using settings_nav::nextSection;
+using settings_nav::sectionStarts;
 
 namespace {
 
@@ -74,10 +75,38 @@ TEST(SettingsListNav, SectionBackwardFromASectionStartGoesToThePreviousSection) 
 
 TEST(SettingsListNav, SectionBackwardWrapsToTheLastSection) { EXPECT_EQ(nextSection(1, kList, false), 6); }
 
-TEST(SettingsListNav, SectionJumpsFallBackToPlainStepsWithoutHeadings) {
+TEST(SettingsListNav, SectionJumpsHoldAtTheOnlySectionWithoutHeadings) {
+  // No headings means one section that starts at row 0, so a jump either way lands
+  // there and a jump from there has nowhere else to go.
   const std::vector<bool> flat = {false, false, false};
   EXPECT_EQ(nextSection(0, flat, true), 0);
   EXPECT_EQ(nextSection(1, flat, false), 0);
+}
+
+TEST(SettingsListNav, SectionStartsAreTheFirstRowUnderEachHeading) {
+  EXPECT_EQ(sectionStarts(kList), (std::vector<int>{1, 4, 6}));
+  // Leading rows with no heading above them still open a section.
+  EXPECT_EQ(sectionStarts({false, false, true, false}), (std::vector<int>{0, 3}));
+}
+
+TEST(SettingsListNav, HeadingsWithNoRowUnderThemAreNotSectionStarts) {
+  // A list ending on a heading, and two headings in a row: neither opens a section.
+  EXPECT_EQ(sectionStarts({true, false, true}), (std::vector<int>{1}));
+  EXPECT_EQ(sectionStarts({true, true, false}), (std::vector<int>{2}));
+  EXPECT_EQ(sectionStarts({true, true}), (std::vector<int>{}));
+}
+
+TEST(SettingsListNav, SectionForwardFromBeforeTheFirstSectionStartLandsOnIt) {
+  // Index 0 is the opening heading; the cursor never rests there, but a stale index
+  // must still resolve forward rather than wrap past the first section.
+  EXPECT_EQ(nextSection(0, kList, true), 1);
+}
+
+TEST(SettingsListNav, SectionJumpsIgnoreATrailingHeading) {
+  // 0:H 1:. 2:H — the trailing heading is not a section, so both jumps stay put.
+  const std::vector<bool> trailing = {true, false, true};
+  EXPECT_EQ(nextSection(1, trailing, true), 1);
+  EXPECT_EQ(nextSection(1, trailing, false), 1);
 }
 
 TEST(SettingsListNav, SectionJumpsHoldStillWhenNoRowIsLandable) {

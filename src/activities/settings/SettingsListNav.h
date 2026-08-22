@@ -18,13 +18,10 @@ inline std::vector<int> sectionStarts(const std::vector<bool>& isHeader) {
   const int count = static_cast<int>(isHeader.size());
   if (count > 0 && !isHeader[0]) starts.push_back(0);
   for (int i = 0; i < count; ++i) {
-    if (!isHeader[i]) continue;
-    for (int j = i + 1; j < count; ++j) {
-      if (isHeader[j]) break;
-      // Consecutive headings resolve to the same row; keep it once.
-      if (starts.empty() || starts.back() != j) starts.push_back(j);
-      break;
-    }
+    // A heading with no row under it (list ends on one, or two headings in a row)
+    // opens no section, so it is not a jump target.
+    if (isHeader[i] || i == 0) continue;
+    if (isHeader[i - 1]) starts.push_back(i);
   }
   return starts;
 }
