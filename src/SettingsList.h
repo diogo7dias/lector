@@ -245,6 +245,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "sleepScreen", StrId::STR_CAT_DISPLAY)
             .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::BLANK, CrossPointSettings::FREEZE}));
 
+    v.push_back(
+        SettingInfo::Enum(StrId::STR_SELECTION_STYLE, &CrossPointSettings::selectionStyle,
+                          {StrId::STR_SELECTION_SOLID, StrId::STR_SELECTION_BRACKETS, StrId::STR_SELECTION_CARET},
+                          "selectionStyle", StrId::STR_CAT_DISPLAY));
+
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                                   {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));
 

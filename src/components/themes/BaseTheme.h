@@ -198,6 +198,13 @@ class BaseTheme {
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight, int singleLineYOffset);
   virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  // Paints the focused-row highlight in the style the user picked and returns true
+  // when the row's own text has to be drawn white to stay legible. Every list, menu,
+  // popup and tab goes through this rather than filling a rectangle itself, so one
+  // setting reaches all of them. Section heading bands are NOT selections: they keep
+  // their own solid fill in every style.
+  bool drawSelection(const GfxRenderer& renderer, Rect rect) const;
+
   virtual int getListRowStep(bool hasSubtitle) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
   virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,

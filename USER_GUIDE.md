@@ -712,6 +712,15 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 
 ### 12.1 Display
 
+**Selection Style**
+
+- **Selection Style** — how the highlighted row is marked in every menu, list and popup.
+  **Solid** fills the row black and turns its text white (the original look). **Brackets**
+  draws a corner mark at each of the row's four corners and leaves the text black.
+  **Caret** puts an arrow at the left of the row and a rule underneath it, text also left
+  black. Brackets and Caret redraw faster and ghost less on e-ink, because they leave most
+  of the row untouched.
+
 **Sleep screen**
 
 - **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Quick Resume, Stats
