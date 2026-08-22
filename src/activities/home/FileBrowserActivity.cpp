@@ -24,6 +24,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/BrowserRowFile.h"
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
@@ -203,18 +204,17 @@ std::string FileBrowserActivity::rowTitle(const int row) const {
   }
   const int index = fileIndexAt(row);
   if (index < 0) return std::string();
-  const std::string name = getFileName(std::string(files[static_cast<size_t>(index)]));
+  const std::string rawName(files[static_cast<size_t>(index)]);
   // A favorite queued from the image viewer has not been renamed on the card yet, so the
   // listing still holds the old name. Draw the name the queue is going to give it, or the
   // row reads as not favorited and the press looks lost. Empty when nothing is queued,
   // which is the normal case and costs one scan of a short queue.
-  // basepath is left with a trailing slash by the open path when a file fails to open, and
-  // that state survives. Without trimming it the key becomes "/sleep//name.pxc", which
-  // matches nothing, and the row silently stops showing queued favorites.
-  std::string folder = basepath == "/" ? std::string() : basepath;
-  while (!folder.empty() && folder.back() == '/') folder.pop_back();
-  const std::string queued = DeferredFavorite::pendingTargetFor(folder + "/" + name);
-  return queued.empty() ? name : getFileName(queued);
+  //
+  // The queue is keyed by the path on the card, so the lookup runs on the RAW name and the
+  // display formatting runs afterwards. Keying it on the label instead (getFileName has
+  // already dropped the extension and prefixed "[F] ") matched no queued job at all, and
+  // favoriting from the viewer came back to a row that looked untouched.
+  return getFileName(browser_row::rowFile(basepath, rawName, DeferredFavorite::pendingTargetFor));
 }
 
 int FileBrowserActivity::readingPercentAt(const int index) const {
@@ -240,9 +240,8 @@ int FileBrowserActivity::readingPercentAt(const int index) const {
   // too), so they are rejected here rather than costing an SD open that finds nothing.
   if (FsHelpers::hasXtcExtension(name)) return cached;
 
-  const std::string folder = basepath == "/" ? std::string() : basepath;
   book_progress::Marker marker;
-  if (book_progress::readForBook(folder + "/" + std::string(name), marker)) cached = marker.percent;
+  if (book_progress::readForBook(browser_row::cardPath(basepath, name), marker)) cached = marker.percent;
   return cached;
 }
 
@@ -320,7 +319,6 @@ bool FileBrowserActivity::pushSortKey(const uint32_t key) {
 }
 
 void FileBrowserActivity::fillLastReadKeys() {
-  const std::string folder = basepath == "/" ? std::string() : basepath;
   for (size_t i = 0; i < files.size(); i++) {
     if (sortKeys[i] == UINT32_MAX) continue;  // a folder, already keyed to the top
 
@@ -333,7 +331,7 @@ void FileBrowserActivity::fillLastReadKeys() {
 
     book_progress::Marker marker;
     const std::string name(files[i]);
-    sortKeys[i] = book_progress::readForBook(folder + "/" + name, marker) ? marker.readOrder : 0;
+    sortKeys[i] = book_progress::readForBook(browser_row::cardPath(basepath, name), marker) ? marker.readOrder : 0;
   }
 }
 
