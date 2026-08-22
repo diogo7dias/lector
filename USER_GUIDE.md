@@ -267,9 +267,9 @@ tab, and the tab strip runs across the top. Rows that do not apply to the open b
 shown at all.
 
 The menu opens on **Navigate**. **Settings > Reader > Book Menu Opens On** changes that to
-**Book**, **Look** or **Device** instead, and that choice always wins. The **Sleep Screen**
-tab appears alongside the others while the lock screen has a wallpaper to act on; step to it
-with the tab strip.
+**Book**, **Look**, **Device** or **Sleep Screen** instead, and that choice always wins. The
+**Sleep Screen** tab appears alongside the others while the lock screen has a wallpaper to act
+on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 ### Navigate
 
