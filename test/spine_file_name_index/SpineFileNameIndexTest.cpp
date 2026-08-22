@@ -63,3 +63,25 @@ TEST(SpineFileNameIndex, ClearMakesItReusable) {
 }
 
 }  // namespace
+
+// Guards the constant itself: a wrong FNV offset basis still hashes consistently, so
+// every test above would pass while the value silently stopped matching the exact-href
+// index this is meant to sit beside.
+TEST(SpineFileNameIndex, UsesTheStandardFnv1a64Constants) {
+  // FNV-1a 64 of "a" with basis 14695981039346656037 and prime 1099511628211.
+  EXPECT_EQ(SpineFileNameIndex::hashOf("a"), 12638187200555641996ULL);
+  EXPECT_EQ(SpineFileNameIndex::hashOf(""), 14695981039346656037ULL);
+}
+
+// The index answers by file name only; the caller resolves the exact path first. A TOC
+// href that IS the exact spine path still resolves here, because its file name is unique
+// — that is what keeps the fallback safe to reach for an entry the exact lookup missed.
+TEST(SpineFileNameIndex, AnExactPathResolvesWhenItsFileNameIsUnique) {
+  EXPECT_EQ(resolve("OEBPS/Text/ch2.xhtml", {"OEBPS/Text/ch1.xhtml", "OEBPS/Text/ch2.xhtml"}), 1);
+}
+
+// ...but it refuses when the name is shared, even though one of the two IS the exact
+// path. Exact-path precedence is the caller's job, so the fallback must not guess here.
+TEST(SpineFileNameIndex, RefusesASharedNameEvenWhenOneCarrierIsTheExactPath) {
+  EXPECT_EQ(resolve("OEBPS/Text/ch1.xhtml", {"OEBPS/other/ch1.xhtml", "OEBPS/Text/ch1.xhtml"}), -1);
+}

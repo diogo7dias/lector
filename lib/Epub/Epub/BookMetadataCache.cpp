@@ -464,7 +464,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     }
   }
 
-  if (spineIndex == -1 && !useSpineHrefIndex) {
+  if (spineIndex == -1 && !useSpineHrefIndex && !href.empty()) {
     // No fast index for this book, so the exact path is looked up by walking the spine.
     // Stops at the hit, unlike the file-name pass below.
     spineFile.seek(0);

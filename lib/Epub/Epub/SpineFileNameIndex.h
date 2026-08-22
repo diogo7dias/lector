@@ -23,6 +23,15 @@
 // Names are kept as a hash plus a length rather than as strings: the spine is read one
 // entry at a time from the card precisely because holding every href in RAM is what this
 // device does not have. That is the same trade the exact-href index already makes.
+//
+// Cost is 16 bytes per spine item, live only between the first entry that needs it and
+// endTocPass, and only for a book that needs it at all. On a large book that is the same
+// order as the exact-href index this sits beside (6.4 KB each at the 400-item threshold).
+// The alternative it replaces was a full pass over the spine PER TOC row, which on the
+// books this exists for meant hundreds of thousands of SD reads.
+//
+// This resolves by FILE NAME only. Exact-path precedence lives in the caller, which tries
+// the exact lookup first and only reaches here when the spine has no such path.
 class SpineFileNameIndex {
  public:
   static std::string_view fileNameOf(const std::string_view path) {
@@ -30,9 +39,10 @@ class SpineFileNameIndex {
     return slash == std::string_view::npos ? path : path.substr(slash + 1);
   }
 
-  // FNV-1a 64-bit, matching the exact-href index.
+  // FNV-1a 64-bit. Same offset basis and prime as BookMetadataCache::fnvHash64, so the
+  // two indexes stay comparable if they are ever merged.
   static uint64_t hashOf(const std::string_view text) {
-    uint64_t hash = 1469598103934665603ULL;
+    uint64_t hash = 14695981039346656037ULL;
     for (const char c : text) {
       hash ^= static_cast<uint8_t>(c);
       hash *= 1099511628211ULL;
