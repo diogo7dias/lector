@@ -23,7 +23,8 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.guideDotsEnabled = SETTINGS.guideDotsEnabled;
   p.guideDotsHidden = SETTINGS.guideDotsHidden;
   p.hyphenationEnabled = SETTINGS.hyphenationEnabled;
-  p.embeddedStyle = SETTINGS.embeddedStyle;
+  p.embeddedTextStyle = SETTINGS.embeddedTextStyle;
+  p.embeddedLayoutStyle = SETTINGS.embeddedLayoutStyle;
   p.textAntiAliasing = SETTINGS.textAntiAliasing;
   p.imageRendering = SETTINGS.imageRendering;
   p.paperbackLookBody = SETTINGS.paperbackLookBody;

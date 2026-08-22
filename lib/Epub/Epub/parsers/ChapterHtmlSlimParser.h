@@ -87,7 +87,8 @@ class ChapterHtmlSlimParser {
   uint8_t firstLineIndentMode;
   uint8_t firstLineIndentPercent;
   const CssParser* cssParser;
-  bool embeddedStyle;
+  bool embeddedTextStyle;
+  bool embeddedLayoutStyle;
   uint8_t imageRendering;
   std::string contentBase;
   std::string imageBasePath;
@@ -210,7 +211,8 @@ class ChapterHtmlSlimParser {
       const bool hyphenationEnabled, const bool focusReadingEnabled, const uint8_t guideDotsMode,
       const uint8_t firstLineIndentMode, const uint8_t firstLineIndentPercent,
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
-      const bool embeddedStyle, const std::string& contentBase, const std::string& imageBasePath,
+      const bool embeddedTextStyle, const bool embeddedLayoutStyle, const std::string& contentBase,
+      const std::string& imageBasePath,
       const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
       const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
 
@@ -232,7 +234,8 @@ class ChapterHtmlSlimParser {
         completePageFn(completePageFn),
         popupFn(popupFn),
         cssParser(cssParser),
-        embeddedStyle(embeddedStyle),
+        embeddedTextStyle(embeddedTextStyle),
+        embeddedLayoutStyle(embeddedLayoutStyle),
         imageRendering(imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),

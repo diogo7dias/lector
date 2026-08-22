@@ -245,6 +245,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
+  // Embedded Style split into Embedded Text Style and Embedded Layout Style. The old key
+  // is reused for the text switch, so only the layout switch needs seeding: a file written
+  // before the split has no "embeddedLayoutStyle" key, and its single stored choice covers
+  // both halves. Anyone who had it off wanted the book's own styling gone, so both switches
+  // start off rather than quietly handing back the book's margins and indents.
+  if (!doc["embeddedLayoutStyle"].is<uint8_t>() && doc["embeddedStyle"].is<uint8_t>()) {
+    embeddedLayoutStyle = doc["embeddedStyle"].as<uint8_t>() != 0 ? 1 : 0;
+    needsResave = true;
+  }
+
   // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, FREEZE has no
   // behaviour left at all (so a settings file still naming one would sleep into nothing),
   // and DARK is gone too — the crest face is light only. Fold all three to the default
@@ -365,7 +375,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = hyphenationEnabled != 0;
-  spec.embeddedStyle = embeddedStyle != 0;
+  spec.embeddedTextStyle = embeddedTextStyle != 0;
+  spec.embeddedLayoutStyle = embeddedLayoutStyle != 0;
   // Hard-set, not read: see the note on IMAGE_RENDERING. This is the choke point that
   // makes a stored placeholder or suppress value in a per-book override or a reader preset
   // irrelevant without touching the section file format.
@@ -488,7 +499,8 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
   spec.hyphenationEnabled = prefs.hyphenationEnabled != 0;
-  spec.embeddedStyle = prefs.embeddedStyle != 0;
+  spec.embeddedTextStyle = prefs.embeddedTextStyle != 0;
+  spec.embeddedLayoutStyle = prefs.embeddedLayoutStyle != 0;
   spec.imageRendering = IMAGES_DISPLAY;  // see the matching note in the global builder above
   spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
   spec.guideDotsMode = ::resolveGuideDotsMode(prefs.guideDotsEnabled, prefs.guideDotsHidden);
@@ -515,7 +527,8 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   guideDotsEnabled = p.guideDotsEnabled;
   guideDotsHidden = p.guideDotsHidden;
   hyphenationEnabled = p.hyphenationEnabled;
-  embeddedStyle = p.embeddedStyle;
+  embeddedTextStyle = p.embeddedTextStyle;
+  embeddedLayoutStyle = p.embeddedLayoutStyle;
   textAntiAliasing = p.textAntiAliasing;
   imageRendering = p.imageRendering;
   std::memset(sdFontFamilyName, 0, sizeof(sdFontFamilyName));

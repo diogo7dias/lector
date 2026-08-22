@@ -55,7 +55,8 @@ class TextSettingsActivity final : public Activity {
     GuideDots,
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
     Hyphenation,
-    EmbeddedStyle,
+    EmbeddedTextStyle,
+    EmbeddedLayoutStyle,
     AntiAliasing,
     DebugBorders,
   };

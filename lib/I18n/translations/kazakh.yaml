@@ -263,7 +263,6 @@ STR_SAVE_PROGRESS_FAILED: "Прогресті сақтау мүмкін болм
 STR_SECTION_PREFIX: "Бөлім "
 STR_UPLOAD: "Жүктеп салу"
 STR_BOOK_S_STYLE: "Кітап стилі"
-STR_EMBEDDED_STYLE: "Кірістірілген стиль"
 STR_FOCUS_READING: "Зейінді оқу"
 STR_OPDS_SERVER_URL: "OPDS сервері URL"
 STR_NO_FILES_FOUND: "Файлдар табылмады"

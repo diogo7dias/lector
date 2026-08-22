@@ -357,8 +357,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "paragraphAlignment", StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_STYLE, &CrossPointSettings::embeddedStyle, "embeddedStyle",
-                                    StrId::STR_CAT_READER)
+    v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_TEXT_STYLE, &CrossPointSettings::embeddedTextStyle,
+                                    "embeddedStyle", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_LAYOUT_STYLE, &CrossPointSettings::embeddedLayoutStyle,
+                                    "embeddedLayoutStyle", StrId::STR_CAT_READER)
                     .withTextSettings());
 
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,

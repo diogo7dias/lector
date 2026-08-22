@@ -29,7 +29,8 @@ ReaderPrefs makeSample() {
   p.guideDotsEnabled = 1;
   p.guideDotsHidden = 1;
   p.hyphenationEnabled = 1;
-  p.embeddedStyle = 0;
+  p.embeddedTextStyle = 0;
+  p.embeddedLayoutStyle = 0;
   p.textAntiAliasing = 0;
   p.imageRendering = 2;
   p.paragraphNumbering = 2;  // whole book
@@ -59,7 +60,8 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);
   EXPECT_EQ(a.guideDotsHidden, b.guideDotsHidden);
   EXPECT_EQ(a.hyphenationEnabled, b.hyphenationEnabled);
-  EXPECT_EQ(a.embeddedStyle, b.embeddedStyle);
+  EXPECT_EQ(a.embeddedTextStyle, b.embeddedTextStyle);
+  EXPECT_EQ(a.embeddedLayoutStyle, b.embeddedLayoutStyle);
   EXPECT_EQ(a.textAntiAliasing, b.textAntiAliasing);
   EXPECT_EQ(a.imageRendering, b.imageRendering);
   EXPECT_EQ(a.paragraphNumbering, b.paragraphNumbering);

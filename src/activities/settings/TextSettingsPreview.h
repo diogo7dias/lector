@@ -23,7 +23,10 @@ struct PreviewKey {
   bool extraParagraphSpacing = false;
   bool focusReading = false;
   bool hyphenation = false;
-  bool embeddedStyle = false;
+  // Only the layout switch changes the sample: its stylesheet sets a first-line indent
+  // and puts a centred heading on the page. The sample has no CSS-driven bold or italic,
+  // so Embedded Text Style leaves the preview untouched.
+  bool embeddedLayoutStyle = false;
   uint8_t paragraphSpacing = 0xFF;
   uint8_t guideDotsMode = 0xFF;
   uint8_t firstLineIndentMode = 0xFF;

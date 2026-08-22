@@ -36,7 +36,11 @@ struct ReaderRenderSpec {
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;
   bool hyphenationEnabled = false;
-  bool embeddedStyle = true;
+  // Two independent switches. Text = weight, slant, decoration, super/sub, direction and
+  // display:none. Layout = alignment, indent, margins, padding and book-set image sizes.
+  // Both off means the stylesheet is never even parsed.
+  bool embeddedTextStyle = true;
+  bool embeddedLayoutStyle = true;
   uint8_t imageRendering = 0;
   bool focusReadingEnabled = false;
   // Guide dots: widen the gap between words as a reading aid, with a middle dot

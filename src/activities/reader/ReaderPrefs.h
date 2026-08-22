@@ -93,7 +93,8 @@ struct ReaderPrefs {
   uint8_t guideDotsEnabled = 0;  // middle dot between words (restored)
   uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
   uint8_t hyphenationEnabled = 0;
-  uint8_t embeddedStyle = 1;
+  uint8_t embeddedTextStyle = 1;
+  uint8_t embeddedLayoutStyle = 1;
   uint8_t textAntiAliasing = 0;  // see CrossPointSettings: the grey fade per page is not worth it
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
   uint8_t imageRendering = 0;  // CrossPointSettings::IMAGES_DISPLAY

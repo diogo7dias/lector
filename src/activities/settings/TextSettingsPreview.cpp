@@ -150,7 +150,7 @@ BlockStyle bodyStyle(int fontId, const GfxRenderer& renderer) {
   BlockStyle style;
   style.alignment = toCssAlign(SETTINGS.paragraphAlignment);
   style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
-  if (SETTINGS.embeddedStyle) {
+  if (SETTINGS.embeddedLayoutStyle) {
     // The sample's own stylesheet. First Line Indent: Book defers to exactly this, so
     // without it that mode would look identical to a 0% custom indent.
     const int em = std::max(1, renderer.getTextHeight(fontId));
@@ -179,15 +179,15 @@ void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fon
                                });
 }
 
-// Lay the whole sample page out: pretend chapter heading (only while Embedded Style is on,
-// since it is the sample's CSS that puts it there), then two body paragraphs so the
+// Lay the whole sample page out: pretend chapter heading (only while Embedded Layout Style
+// is on, since it is the sample's CSS that puts it there), then two body paragraphs so the
 // paragraph gap is visible and the bottom of the page holds different text from the top.
 void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, int lineAdvance,
               int paragraphGap) {
   layout.lines.clear();
 
   const BlockStyle body = bodyStyle(fontId, renderer);
-  if (SETTINGS.embeddedStyle) {
+  if (SETTINGS.embeddedLayoutStyle) {
     BlockStyle heading;
     heading.alignment = CssTextAlign::Center;
     heading.textAlignDefined = true;
@@ -240,7 +240,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
                        .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
                        .focusReading = SETTINGS.focusReadingEnabled != 0,
                        .hyphenation = SETTINGS.hyphenationEnabled != 0,
-                       .embeddedStyle = SETTINGS.embeddedStyle != 0,
+                       .embeddedLayoutStyle = SETTINGS.embeddedLayoutStyle != 0,
                        .paragraphSpacing = SETTINGS.paragraphSpacing,
                        .guideDotsMode = resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden),
                        .firstLineIndentMode = SETTINGS.firstLineIndentMode,
@@ -255,7 +255,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
       if (SETTINGS.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
       // Bit 1 is the bold mask the heading needs; bit 0 the regular body.
       uint8_t styleMask = SETTINGS.focusReadingEnabled ? 0x03 : 0x01;
-      if (SETTINGS.embeddedStyle) styleMask |= 0x02;
+      if (SETTINGS.embeddedLayoutStyle) styleMask |= 0x02;
       fcm->prewarmCache(fontId, prewarmText.c_str(), styleMask);
     }
     relayout(layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);

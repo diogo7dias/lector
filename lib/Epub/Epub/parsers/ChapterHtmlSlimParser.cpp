@@ -681,6 +681,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       CssStyle inlineStyle = CssParser::parseInlineStyle(styleAttr);
       cssStyle.applyOver(inlineStyle);
     }
+    // Drop whatever the reader is no longer honouring before anything reads it, so the
+    // rest of the parser only ever sees properties both switches allow.
+    cssStyle.keepBuckets(self->embeddedTextStyle, self->embeddedLayoutStyle);
   }
 
   // HTML dir attribute overrides CSS direction (case-insensitive per HTML spec)
@@ -1226,7 +1229,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
 
   if (strcmp(name, "hr") == 0) {
     auto hrBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Left, self->viewportWidth);
-    if (!self->embeddedStyle) {
+    if (!self->embeddedLayoutStyle) {
       hrBlockStyle.marginLeft = 0;
       hrBlockStyle.marginRight = 0;
       hrBlockStyle.marginTop = 0;
@@ -1247,7 +1250,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->currentCssStyle = cssStyle;
     auto headerBlockStyle = BlockStyle::fromCssStyle(cssStyle, emSize, CssTextAlign::Center, self->viewportWidth);
     headerBlockStyle.textAlignDefined = true;
-    if (self->embeddedStyle && cssStyle.hasTextAlign()) {
+    if (cssStyle.hasTextAlign()) {
       headerBlockStyle.alignment = cssStyle.textAlign;
     }
     const auto accumulated =
@@ -1626,7 +1629,8 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   // "exclude last line" behavior to preserve paragraph flow across chunks.
   const size_t blockWordCount = self->currentTextBlock->size();
   const size_t softFlushThreshold =
-      self->embeddedStyle ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS : TEXT_BLOCK_SOFT_FLUSH_WORDS;
+      (self->embeddedTextStyle || self->embeddedLayoutStyle) ? TEXT_BLOCK_SOFT_FLUSH_WORDS_WITH_CSS
+                                                             : TEXT_BLOCK_SOFT_FLUSH_WORDS;
   if (blockWordCount > softFlushThreshold && !self->inRuby) {
     LOG_DBG("EHP", "Text block soft flush (%u words)", static_cast<unsigned>(blockWordCount));
     const int horizontalInset = self->currentTextBlock->getBlockStyle().totalHorizontalInset();

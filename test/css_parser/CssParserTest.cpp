@@ -333,3 +333,114 @@ TEST_F(CssParserTest, InlineStyleParsingUnchanged) {
 }
 
 }  // namespace
+
+// --- Embedded style buckets -------------------------------------------------
+// Embedded Text Style and Embedded Layout Style are two independent switches, so a
+// resolved style has to be filterable down to just the bucket(s) the reader still
+// honours. Filtering clears the "defined" flag, which is what every consumer tests.
+
+namespace {
+CssStyle fullyDefinedStyle() {
+  CssStyle s;
+  s.fontStyle = CssFontStyle::Italic;
+  s.defined.fontStyle = 1;
+  s.fontWeight = CssFontWeight::Bold;
+  s.defined.fontWeight = 1;
+  s.textDecoration = CssTextDecoration::Underline;
+  s.defined.textDecoration = 1;
+  s.verticalAlign = CssVerticalAlign::Super;
+  s.defined.verticalAlign = 1;
+  s.direction = CssTextDirection::Rtl;
+  s.defined.direction = 1;
+  s.display = CssDisplay::None;
+  s.defined.display = 1;
+
+  s.textAlign = CssTextAlign::Center;
+  s.defined.textAlign = 1;
+  s.textIndent = CssLength(12.0f);
+  s.defined.textIndent = 1;
+  s.marginTop = CssLength(1.0f);
+  s.defined.marginTop = 1;
+  s.marginBottom = CssLength(2.0f);
+  s.defined.marginBottom = 1;
+  s.marginLeft = CssLength(3.0f);
+  s.defined.marginLeft = 1;
+  s.marginRight = CssLength(4.0f);
+  s.defined.marginRight = 1;
+  s.paddingTop = CssLength(5.0f);
+  s.defined.paddingTop = 1;
+  s.paddingBottom = CssLength(6.0f);
+  s.defined.paddingBottom = 1;
+  s.paddingLeft = CssLength(7.0f);
+  s.defined.paddingLeft = 1;
+  s.paddingRight = CssLength(8.0f);
+  s.defined.paddingRight = 1;
+  s.imageWidth = CssLength(9.0f);
+  s.defined.imageWidth = 1;
+  s.imageHeight = CssLength(10.0f);
+  s.defined.imageHeight = 1;
+  return s;
+}
+}  // namespace
+
+TEST(CssStyleBuckets, TextOnlyKeepsGlyphPropertiesAndDropsGeometry) {
+  CssStyle s = fullyDefinedStyle();
+  s.keepBuckets(true, false);
+
+  EXPECT_TRUE(s.hasFontStyle());
+  EXPECT_TRUE(s.hasFontWeight());
+  EXPECT_TRUE(s.hasTextDecoration());
+  EXPECT_TRUE(s.hasVerticalAlign());
+  EXPECT_TRUE(s.hasDirection());
+  EXPECT_TRUE(s.hasDisplay());
+
+  EXPECT_FALSE(s.hasTextAlign());
+  EXPECT_FALSE(s.hasTextIndent());
+  EXPECT_FALSE(s.hasMarginTop());
+  EXPECT_FALSE(s.hasMarginBottom());
+  EXPECT_FALSE(s.hasMarginLeft());
+  EXPECT_FALSE(s.hasMarginRight());
+  EXPECT_FALSE(s.hasPaddingTop());
+  EXPECT_FALSE(s.hasPaddingBottom());
+  EXPECT_FALSE(s.hasPaddingLeft());
+  EXPECT_FALSE(s.hasPaddingRight());
+  EXPECT_FALSE(s.hasImageWidth());
+  EXPECT_FALSE(s.hasImageHeight());
+}
+
+TEST(CssStyleBuckets, LayoutOnlyKeepsGeometryAndDropsGlyphProperties) {
+  CssStyle s = fullyDefinedStyle();
+  s.keepBuckets(false, true);
+
+  EXPECT_TRUE(s.hasTextAlign());
+  EXPECT_TRUE(s.hasTextIndent());
+  EXPECT_TRUE(s.hasMarginTop());
+  EXPECT_TRUE(s.hasMarginBottom());
+  EXPECT_TRUE(s.hasMarginLeft());
+  EXPECT_TRUE(s.hasMarginRight());
+  EXPECT_TRUE(s.hasPaddingTop());
+  EXPECT_TRUE(s.hasPaddingBottom());
+  EXPECT_TRUE(s.hasPaddingLeft());
+  EXPECT_TRUE(s.hasPaddingRight());
+  EXPECT_TRUE(s.hasImageWidth());
+  EXPECT_TRUE(s.hasImageHeight());
+
+  EXPECT_FALSE(s.hasFontStyle());
+  EXPECT_FALSE(s.hasFontWeight());
+  EXPECT_FALSE(s.hasTextDecoration());
+  EXPECT_FALSE(s.hasVerticalAlign());
+  EXPECT_FALSE(s.hasDirection());
+  EXPECT_FALSE(s.hasDisplay());
+}
+
+TEST(CssStyleBuckets, BothOnKeepsEverythingAndBothOffKeepsNothing) {
+  CssStyle both = fullyDefinedStyle();
+  both.keepBuckets(true, true);
+  EXPECT_TRUE(both.defined.anySet());
+  EXPECT_TRUE(both.hasFontWeight());
+  EXPECT_TRUE(both.hasMarginTop());
+
+  CssStyle neither = fullyDefinedStyle();
+  neither.keepBuckets(false, false);
+  EXPECT_FALSE(neither.defined.anySet());
+}

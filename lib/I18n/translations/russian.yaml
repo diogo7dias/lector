@@ -320,7 +320,6 @@ STR_SAVE_PROGRESS_FAILED: "Не удалось сохранить прогрес
 STR_SECTION_PREFIX: "Раздел "
 STR_UPLOAD: "Отправить"
 STR_BOOK_S_STYLE: "Стиль книги"
-STR_EMBEDDED_STYLE: "Встроенный стиль"
 STR_FOCUS_READING: "Фокусное чтение"
 STR_OPDS_SERVER_URL: "URL OPDS сервера"
 STR_SET_SLEEP_COVER: "Обложкой"

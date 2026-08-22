@@ -88,7 +88,7 @@ namespace {
 // Not a version: the Hidden Dots sub-option (keep the widened guide-dot gap, draw no
 // dot) reuses the v37 guide-dots header byte as a three-state mode, so the header keeps
 // its size and only books whose guide-dot state actually changed are rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 51;
+constexpr uint8_t SECTION_FILE_VERSION = 52;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -108,7 +108,8 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
                                  sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) +
-                                 sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) + sizeof(bool) +
+                                 sizeof(bool) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
+                                 sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }  // namespace
@@ -172,7 +173,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
       HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
                          sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) +
                          sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
-                         sizeof(pageCount) + sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedStyle) +
+                         sizeof(pageCount) + sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedTextStyle) +
+                         sizeof(spec.embeddedLayoutStyle) +
                          sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
                          sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) +
                          sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
@@ -188,7 +190,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.viewportWidth);
   serialization::writePod(file, spec.viewportHeight);
   serialization::writePod(file, spec.hyphenationEnabled);
-  serialization::writePod(file, spec.embeddedStyle);
+  serialization::writePod(file, spec.embeddedTextStyle);
+  serialization::writePod(file, spec.embeddedLayoutStyle);
   serialization::writePod(file, spec.imageRendering);
   serialization::writePod(file, spec.focusReadingEnabled);
   serialization::writePod(file, spec.guideDotsMode);
@@ -228,7 +231,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     uint8_t fileParagraphSpacing;
     uint8_t fileParagraphAlignment;
     bool fileHyphenationEnabled;
-    bool fileEmbeddedStyle;
+    bool fileEmbeddedTextStyle;
+    bool fileEmbeddedLayoutStyle;
     uint8_t fileImageRendering;
     bool fileFocusReadingEnabled;
     uint8_t fileGuideDotsMode;
@@ -242,7 +246,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, fileViewportWidth);
     serialization::readPod(file, fileViewportHeight);
     serialization::readPod(file, fileHyphenationEnabled);
-    serialization::readPod(file, fileEmbeddedStyle);
+    serialization::readPod(file, fileEmbeddedTextStyle);
+    serialization::readPod(file, fileEmbeddedLayoutStyle);
     serialization::readPod(file, fileImageRendering);
     serialization::readPod(file, fileFocusReadingEnabled);
     serialization::readPod(file, fileGuideDotsMode);
@@ -253,7 +258,8 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
         spec.extraParagraphSpacing != fileExtraParagraphSpacing || spec.paragraphSpacing != fileParagraphSpacing ||
         spec.paragraphAlignment != fileParagraphAlignment || spec.viewportWidth != fileViewportWidth ||
         spec.viewportHeight != fileViewportHeight || spec.hyphenationEnabled != fileHyphenationEnabled ||
-        spec.embeddedStyle != fileEmbeddedStyle || spec.imageRendering != fileImageRendering ||
+        spec.embeddedTextStyle != fileEmbeddedTextStyle ||
+        spec.embeddedLayoutStyle != fileEmbeddedLayoutStyle || spec.imageRendering != fileImageRendering ||
         spec.focusReadingEnabled != fileFocusReadingEnabled || spec.guideDotsMode != fileGuideDotsMode ||
         spec.firstLineIndentMode != fileFirstLineIndentMode ||
         spec.firstLineIndentPercent != fileFirstLineIndentPercent) {
@@ -454,7 +460,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   ctx->contentBase = (lastSlash != std::string::npos) ? localPath.substr(0, lastSlash + 1) : "";
   ctx->imageBasePath = epub->getCachePath() + "/img_" + std::to_string(spineIndex) + "_";
 
-  if (spec.embeddedStyle) {
+  if (spec.embeddedTextStyle || spec.embeddedLayoutStyle) {
     ctx->cssParser = epub->getCssParser();
     if (ctx->cssParser && !ctx->cssParser->loadFromCache()) {
       LOG_ERR("SCT", "Failed to load CSS from cache");
@@ -489,7 +495,7 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
         ctxPtr->lut.push_back(
             {this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
       },
-      spec.embeddedStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors),
+      spec.embeddedTextStyle, spec.embeddedLayoutStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors),
       popupFn, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");

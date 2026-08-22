@@ -73,7 +73,10 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     // activity follows redraws the full screen anyway.
     std::optional<GfxRenderer::FrameBufferLoan> loan;
     if (uncached) loan.emplace(renderer);
-    loaded = epub->load(true, SETTINGS.embeddedStyle == 0);
+    // The stylesheet is only worth parsing if at least one of the two switches still
+    // honours something from it.
+    const bool skipCss = SETTINGS.embeddedTextStyle == 0 && SETTINGS.embeddedLayoutStyle == 0;
+    loaded = epub->load(true, skipCss);
   }
   if (loaded) {
     return epub;

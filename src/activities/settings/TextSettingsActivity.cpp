@@ -26,6 +26,15 @@ constexpr StrId DYNAMIC_MARGINS_IDS[] = {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::
                                          StrId::STR_DYNAMIC_MARGINS_20};
 constexpr StrId INDENT_MODE_IDS[] = {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT};
 
+// The two options that defer to the book's own CSS, and so go inert when Embedded Layout
+// Style is off.
+constexpr uint8_t ALIGNMENT_BOOK_INDEX = 4;   // STR_BOOK_S_STYLE
+constexpr uint8_t INDENT_MODE_BOOK_INDEX = 0;  // STR_INDENT_BOOK
+
+std::string needsLayoutLabel(const std::string& label) {
+  return label + " (" + I18N.get(StrId::STR_NEEDS_EMBEDDED_LAYOUT) + ")";
+}
+
 // The preview is the whole point of the screen, so it takes a fixed slice of the height
 // rather than a share that moves with the row under focus: a pane that resized as
 // navigation walked the list would repaint the entire panel on every step. 320px fits both
@@ -180,7 +189,8 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // Hidden Dots only says anything about a page that is already drawing guide dots.
   if (SETTINGS.guideDotsEnabled) rows.push_back(Row::HiddenDots);
   rows.push_back(Row::Hyphenation);
-  rows.push_back(Row::EmbeddedStyle);
+  rows.push_back(Row::EmbeddedTextStyle);
+  rows.push_back(Row::EmbeddedLayoutStyle);
   rows.push_back(Row::AntiAliasing);
   rows.push_back(Row::DebugBorders);
   return rows;
@@ -232,8 +242,10 @@ StrId TextSettingsActivity::rowNameId(const Row row) const {
       return StrId::STR_HIDDEN_DOTS;
     case Row::Hyphenation:
       return StrId::STR_HYPHENATION;
-    case Row::EmbeddedStyle:
-      return StrId::STR_EMBEDDED_STYLE;
+    case Row::EmbeddedTextStyle:
+      return StrId::STR_EMBEDDED_TEXT_STYLE;
+    case Row::EmbeddedLayoutStyle:
+      return StrId::STR_EMBEDDED_LAYOUT_STYLE;
     case Row::AntiAliasing:
       return StrId::STR_TEXT_AA;
     default:
@@ -326,11 +338,17 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
       return onOff(SETTINGS.extraParagraphSpacing);
     case Row::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
-      return v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
+      const std::string label = v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
+      // "Book's Style" reads the alignment out of the book's own CSS, which is exactly what
+      // Embedded Layout Style switches off. Saying so on the row beats a setting that looks
+      // chosen and does nothing.
+      return (v == ALIGNMENT_BOOK_INDEX && !SETTINGS.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
     }
     case Row::IndentMode: {
       const uint8_t v = SETTINGS.firstLineIndentMode;
-      return v < std::size(INDENT_MODE_IDS) ? I18N.get(INDENT_MODE_IDS[v]) : I18N.get(StrId::STR_INDENT_BOOK);
+      const std::string label =
+          v < std::size(INDENT_MODE_IDS) ? I18N.get(INDENT_MODE_IDS[v]) : I18N.get(StrId::STR_INDENT_BOOK);
+      return (v == INDENT_MODE_BOOK_INDEX && !SETTINGS.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
     }
     case Row::LinkTopBottom:
       return onOff(SETTINGS.verticalMarginsLinked);
@@ -347,8 +365,10 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
       return onOff(SETTINGS.guideDotsHidden);
     case Row::Hyphenation:
       return onOff(SETTINGS.hyphenationEnabled);
-    case Row::EmbeddedStyle:
-      return onOff(SETTINGS.embeddedStyle);
+    case Row::EmbeddedTextStyle:
+      return onOff(SETTINGS.embeddedTextStyle);
+    case Row::EmbeddedLayoutStyle:
+      return onOff(SETTINGS.embeddedLayoutStyle);
     case Row::AntiAliasing:
       return onOff(SETTINGS.textAntiAliasing);
     case Row::DebugBorders:
@@ -465,8 +485,11 @@ void TextSettingsActivity::activateRow(const Row row) {
     case Row::Hyphenation:
       SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled;
       break;
-    case Row::EmbeddedStyle:
-      SETTINGS.embeddedStyle = !SETTINGS.embeddedStyle;
+    case Row::EmbeddedTextStyle:
+      SETTINGS.embeddedTextStyle = !SETTINGS.embeddedTextStyle;
+      break;
+    case Row::EmbeddedLayoutStyle:
+      SETTINGS.embeddedLayoutStyle = !SETTINGS.embeddedLayoutStyle;
       break;
     case Row::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;

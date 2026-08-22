@@ -533,8 +533,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fastPageTurns = 1;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
   uint8_t pwrBtnFootnoteBack = 1;
-  // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
-  uint8_t embeddedStyle = 1;
+  // The book's own CSS, split into two switches the reader honours independently.
+  // Text: font weight, slant, decoration, super/sub, writing direction, display:none.
+  // Keeps the old "embeddedStyle" key so a settings file written before the split
+  // carries straight over (1 = enabled, 0 = disabled).
+  uint8_t embeddedTextStyle = 1;
+  // Layout: text alignment, first-line indent, margins, padding, book-set image sizes.
+  // Paragraph Alignment "Book's Style" and First Line Indent "Book" both need this on.
+  uint8_t embeddedLayoutStyle = 1;
   // Which tab the in-book menu opens on (see BOOK_MENU_TAB). Navigate by default,
   // which is where chapters, bookmarks and the percent jump live.
   uint8_t bookMenuTab = BOOK_MENU_TAB_NAVIGATE;
