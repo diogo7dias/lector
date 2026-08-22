@@ -569,6 +569,7 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     // one, so they answer "not available" rather than falling into the default below.
     case CrossPointSettings::LP_MENU_SELECT_CHAPTER:
     case CrossPointSettings::LP_MENU_GO_TO_PERCENT:
+    case CrossPointSettings::LP_MENU_TEXT_SETTINGS:
       return false;
     case CrossPointSettings::LP_MENU_POPUP:
       // An empty pop-up is a dead press; Pop-up Items has not been filled in yet.
@@ -578,7 +579,6 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
     case CrossPointSettings::LP_MENU_BOOKMARK:
-    case CrossPointSettings::LP_MENU_TEXT_SETTINGS:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
       return true;
@@ -628,9 +628,6 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::FOOTNOTES);
-      return true;
-    case CrossPointSettings::LP_MENU_TEXT_SETTINGS:
-      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS);
       return true;
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::READER_SETTINGS);
@@ -1151,11 +1148,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
       // Release the section while the chapter list is up (mirrors the
-      // TEXT_SETTINGS path): picking a chapter resets it anyway, and its
+      // READER_SETTINGS path): picking a chapter resets it anyway, and its
       // tens-of-KB footprint is the difference between the chapter list
       // holding its CJK glyph arena (RAM-only repaints) and re-reading
       // glyphs from SD on every row step. Cancel restores via the same
-      // cached-position rebuild TEXT_SETTINGS uses.
+      // cached-position rebuild a settings edit uses.
       {
         RenderLock lock(*this);
         if (section) {
@@ -1195,22 +1192,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
                                  navigateToHref(footnoteResult.href, true);
                                }
                                requestUpdate();
-                             });
-      break;
-    }
-    case EpubReaderMenuActivity::MenuAction::TEXT_SETTINGS: {
-      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
-                                                                    TextSettingsActivity::Tab::Family),
-                             [this](const ActivityResult&) {
-                               // TextSettingsActivity saves on each change; no save needed here.
-                               // Font/size/spacing/margin changes invalidate the current
-                               // layout: preserve position and force a re-layout, mirroring
-                               // applyOrientation()'s reflow.
-                               RenderLock lock(*this);
-                               // Same relayout as a per-book prefs change, so it takes the
-                               // same path: the paragraph anchor is what puts the reader
-                               // back, and the quote underline memo has to go with it.
-                               dropSectionForRelayout();
                              });
       break;
     }

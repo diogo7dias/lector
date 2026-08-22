@@ -17,7 +17,6 @@ class EpubReaderMenuActivity final : public Activity {
     SECTION_HEADER,  // not an action: the marker a section heading row carries
     SELECT_CHAPTER,
     FOOTNOTES,
-    TEXT_SETTINGS,
     GO_TO_PERCENT,
     ROTATE_SCREEN,
     BOOKMARKS,

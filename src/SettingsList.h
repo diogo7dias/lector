@@ -26,7 +26,8 @@
 // Binding values that keep their slot but are no longer offered. Shared by all three
 // binding rows so one of them cannot quietly go on offering a retired action.
 inline std::vector<uint8_t> retiredBoundFunctions() {
-  return {CrossPointSettings::LP_MENU_SELECT_CHAPTER, CrossPointSettings::LP_MENU_GO_TO_PERCENT};
+  return {CrossPointSettings::LP_MENU_SELECT_CHAPTER, CrossPointSettings::LP_MENU_GO_TO_PERCENT,
+          CrossPointSettings::LP_MENU_TEXT_SETTINGS};
 }
 
 inline std::vector<StrId> boundFunctionLabels() {
