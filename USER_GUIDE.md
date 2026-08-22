@@ -712,7 +712,10 @@ are covered in [docs/dictionary.md](./docs/dictionary.md).
 
 ## 12. Settings reference
 
-Settings are split into four categories: **Display**, **Reader**, **Controls** and **System**.
+Settings are one scrolling list, in four runs of sections: **Display**, **Reader**,
+**Controls** and **System**. Step through it a row at a time; hold the same button to jump
+to the first row of the next or previous section. Paths below, such as
+**Settings > Reader > Dictionary**, name the run a row sits in.
 
 ### 12.1 Display
 
