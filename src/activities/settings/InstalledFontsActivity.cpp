@@ -3,6 +3,8 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <NearbyFileGroup.h>
+#include <NearbyFileRules.h>
 
 #include <cstdio>
 #include <memory>
@@ -20,11 +22,6 @@ namespace {
 
 constexpr const char* LOG_TAG = "FONTS";
 
-/** Rows of the actions view, in the order they are drawn. */
-constexpr int ACTION_SEND = 0;
-constexpr int ACTION_DELETE = 1;
-constexpr int ACTION_COUNT = 2;
-
 }  // namespace
 
 InstalledFontsActivity::InstalledFontsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -41,12 +38,20 @@ void InstalledFontsActivity::loadFamilies() {
 
   sdFontSystem.refreshIfDirty();
   const std::string activeFamily = SETTINGS.sdFontFamilyName;
+  const auto& installed = sdFontSystem.registry().getFamilies();
+  families.reserve(installed.size());
 
-  for (const auto& info : sdFontSystem.registry().getFamilies()) {
+  for (const auto& info : installed) {
     Family family;
     family.name = info.name;
     family.sizeCount = static_cast<uint8_t>(info.files.size());
     family.inUse = !activeFamily.empty() && activeFamily == info.name;
+    family.facePaths.reserve(info.files.size());
+    // A family whose folder name the offer format cannot carry stays listed and
+    // deletable; it simply cannot be sent.
+    family.sendable =
+        !nearby_file::sanitizeFontFolder(std::string(nearby_file::FONT_FOLDER_ROOT) + "/" + info.name).empty() &&
+        info.files.size() <= nearby_file::MAX_GROUP_FILES;
 
     // The registry knows the faces but never their size on the card, so each one
     // is opened here. It is a handful of files per family and the screen is
@@ -54,10 +59,9 @@ void InstalledFontsActivity::loadFamilies() {
     for (const auto& face : info.files) {
       family.facePaths.push_back(face.path);
       HalFile file;
-      if (Storage.openFileForRead(LOG_TAG, face.path, file) && file.isOpen()) {
-        family.totalBytes += file.fileSize64();
-        file.close();
-      }
+      // No file.close(): DESTRUCTOR_CLOSES_FILE=1 closes it at the end of the
+      // iteration.
+      if (Storage.openFileForRead(LOG_TAG, face.path, file) && file.isOpen()) family.totalBytes += file.fileSize64();
     }
     families.push_back(std::move(family));
   }
@@ -116,9 +120,18 @@ void InstalledFontsActivity::sendSelectedFamily() {
   if (family == nullptr || family->facePaths.empty()) return;
 
   view = View::Families;
-  startActivityForResult(
-      NearbyFileTransferActivity::sendFontFamily(renderer, mappedInput, family->name, family->facePaths),
-      [this](const ActivityResult&) { requestUpdate(true); });
+  // Refused here rather than at the other end: a family the offer cannot name
+  // would be turned away only after the reader had picked a device to send to.
+  if (!family->sendable) {
+    errorMessage = tr(STR_FONT_CANNOT_SEND);
+    requestUpdate();
+    return;
+  }
+
+  errorMessage.clear();
+  startActivityForResult(NearbyFileTransferActivity::sendFontFamily(renderer, mappedInput, family->name,
+                                                                    family->facePaths, family->totalBytes),
+                         [this](const ActivityResult&) { requestUpdate(true); });
 }
 
 void InstalledFontsActivity::loopFamilies() {
@@ -130,7 +143,7 @@ void InstalledFontsActivity::loopFamilies() {
   if (families.empty()) return;
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    selectedAction = ACTION_SEND;
+    selectedAction = Action::Send;
     view = View::Actions;
     requestUpdate();
     return;
@@ -165,7 +178,7 @@ void InstalledFontsActivity::loopActions() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedAction == ACTION_DELETE) {
+    if (selectedAction == Action::Delete) {
       promptDelete();
     } else {
       sendSelectedFamily();
@@ -173,12 +186,13 @@ void InstalledFontsActivity::loopActions() {
     return;
   }
 
+  constexpr int actionCount = static_cast<int>(Action::Count);
   buttonNavigator.onNextStep([this] {
-    selectedAction = ButtonNavigator::nextIndex(selectedAction, ACTION_COUNT);
+    selectedAction = static_cast<Action>(ButtonNavigator::nextIndex(static_cast<int>(selectedAction), actionCount));
     requestUpdate();
   });
   buttonNavigator.onPreviousStep([this] {
-    selectedAction = ButtonNavigator::previousIndex(selectedAction, ACTION_COUNT);
+    selectedAction = static_cast<Action>(ButtonNavigator::previousIndex(static_cast<int>(selectedAction), actionCount));
     requestUpdate();
   });
 }
@@ -217,9 +231,11 @@ void InstalledFontsActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, contentTop, title.c_str(), true, EpdFontFamily::REGULAR);
 
     GUI.drawList(
-        renderer, Rect{0, contentTop + lineHeight * 2, pageWidth, contentHeight - lineHeight * 2}, ACTION_COUNT,
-        selectedAction,
-        [](const int index) -> std::string { return index == ACTION_DELETE ? tr(STR_DELETE) : tr(STR_SEND_FONT); },
+        renderer, Rect{0, contentTop + lineHeight * 2, pageWidth, contentHeight - lineHeight * 2},
+        static_cast<int>(Action::Count), static_cast<int>(selectedAction),
+        [](const int index) -> std::string {
+          return static_cast<Action>(index) == Action::Delete ? tr(STR_DELETE) : tr(STR_SEND_FONT);
+        },
         nullptr, nullptr, nullptr, true);
 
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));

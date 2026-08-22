@@ -49,11 +49,17 @@ class NearbyFileTransferActivity final : public Activity {
   /**
    * Sends a whole font family: every face in `facePaths` into ".fonts/<family>"
    * on the other reader, asked about once rather than face by face.
+   *
+   * `totalBytes` is what the family costs on the card, so the question put at
+   * the other end names the whole family rather than its first face. The caller
+   * has already read those sizes to list the family, so they are passed in
+   * rather than read off the card a second time.
    */
   static std::unique_ptr<NearbyFileTransferActivity> sendFontFamily(GfxRenderer& renderer,
                                                                     MappedInputManager& mappedInput,
                                                                     const std::string& familyName,
-                                                                    std::vector<std::string> facePaths);
+                                                                    std::vector<std::string> facePaths,
+                                                                    uint64_t totalBytes);
 
   void onEnter() override;
   void onExit() override;
@@ -139,7 +145,6 @@ class NearbyFileTransferActivity final : public Activity {
   // Sending: the reader chosen for the first file, reused for the rest of a
   // batch so each face does not start another round of discovery.
   std::array<uint8_t, 6> chosenPeerMac = {};
-  std::string chosenPeerName;
   bool hasChosenPeer = false;
 
   ButtonNavigator buttonNavigator;

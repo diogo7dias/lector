@@ -39,10 +39,15 @@ class InstalledFontsActivity final : public Activity {
     uint64_t totalBytes = 0;
     /** True while the reader is set to read in this font. */
     bool inUse = false;
+    /** False when the family cannot travel: the offer format cannot name it. */
+    bool sendable = true;
   };
 
   /** The row list, or the two things that can be done to the row picked. */
   enum class View : uint8_t { Families, Actions };
+
+  /** Actions offered for the family picked, in the order they are drawn. */
+  enum class Action : uint8_t { Send, Delete, Count };
 
   void loadFamilies();
   void loopFamilies();
@@ -59,7 +64,6 @@ class InstalledFontsActivity final : public Activity {
   View view = View::Families;
   ButtonNavigator buttonNavigator;
   int selectedIndex = 0;
-  /** Actions view: 0 sends the family, 1 deletes it. */
-  int selectedAction = 0;
+  Action selectedAction = Action::Send;
   std::string errorMessage;
 };

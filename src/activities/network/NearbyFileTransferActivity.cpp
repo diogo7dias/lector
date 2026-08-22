@@ -43,13 +43,11 @@ NearbyFileTransferActivity::NearbyFileTransferActivity(GfxRenderer& renderer, Ma
 
 std::unique_ptr<NearbyFileTransferActivity> NearbyFileTransferActivity::sendFontFamily(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& familyName,
-    std::vector<std::string> facePaths) {
+    std::vector<std::string> facePaths, const uint64_t totalBytes) {
   auto activity = std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, Mode::Send);
-  // The batch position travels as one byte, and a family is a handful of faces,
-  // so a list longer than that is a card fault rather than a font.
-  if (facePaths.size() > MAX_GROUP_FILES) facePaths.resize(MAX_GROUP_FILES);
   activity->sourcePaths = std::move(facePaths);
   activity->sendFolder = std::string(nearby_file::FONT_FOLDER_ROOT) + "/" + familyName;
+  activity->sendTotalBytes = totalBytes;
   return activity;
 }
 
@@ -85,16 +83,6 @@ void NearbyFileTransferActivity::onEnter() {
       errorMessage = tr(STR_NEARBY_CANNOT_READ_FILE);
       requestUpdate(true);
       return;
-    }
-    // The whole batch is measured once, so the reader on the other end is told
-    // what the family costs rather than what its first face costs.
-    sendTotalBytes = 0;
-    for (const std::string& path : sourcePaths) {
-      HalFile face;
-      if (Storage.openFileForRead(LOG_TAG, path, face) && face.isOpen()) {
-        sendTotalBytes += face.fileSize64();
-        face.close();
-      }
     }
   }
 
@@ -255,13 +243,24 @@ void NearbyFileTransferActivity::finishWithError(const char* message) {
 
 void NearbyFileTransferActivity::handleOffer(const OfferPayload& offer, const std::array<uint8_t, 6>& sourceMac) {
   // A sender repeats its offer until the accept reaches it, so the same offer
-  // arrives again while the file it announced is already being written. Acting
-  // on the repeat would reopen the destination and truncate what has landed so
-  // far, so only a session that is still waiting for an offer takes one.
+  // arrives again while the file it announced is already being written. The
+  // session ignores an offer once it is transferring, but this screen would
+  // still act on it and reopen the destination, truncating what has landed so
+  // far, so only a session still waiting for an offer takes one.
   const TransferState state = session.state();
   if (state != TransferState::LISTENING && state != TransferState::OFFER_PROMPT) return;
 
   const GroupDecision decision = group.decide(offer, sourceMac, millis());
+
+  if (decision == GroupDecision::REJECT) {
+    // Refused before the session hears about it. Between the faces of a family
+    // this screen is listening again, and letting a stranger's offer through
+    // only to reject it would end the shared session and take the half-received
+    // family with it. The other device is told directly instead, so it stops
+    // retrying while the family in progress carries on.
+    sendPacket(PacketType::Reject, sourceMac, 0, nullptr, 0);
+    return;
+  }
 
   TransferEvent incomingEvent;
   incomingEvent.kind = TransferEventKind::OFFER;
@@ -270,15 +269,6 @@ void NearbyFileTransferActivity::handleOffer(const OfferPayload& offer, const st
   incomingEvent.fileName = offer.fileName;
   incomingEvent.fileSize = offer.fileSize;
   session.onEvent(incomingEvent, millis());
-
-  if (decision == GroupDecision::REJECT) {
-    // Told rather than ignored, so the other reader stops instead of retrying
-    // an offer this one is never going to take.
-    session.rejectOffer(millis());
-    runSessionActions();
-    requestUpdate(true);
-    return;
-  }
 
   pendingOffer = offer;
   if (decision == GroupDecision::AUTO_ACCEPT) acceptIncomingOffer();
@@ -326,6 +316,7 @@ void NearbyFileTransferActivity::discardPartialFamily() {
 void NearbyFileTransferActivity::acceptIncomingOffer() {
   // The offered name is checked before anything is opened: it decides both
   // whether the file is allowed at all and what it may be called on the card.
+  errorMessage.clear();
   const OfferCheck check = checkOffer(session.offeredName(), session.offeredSize(), UINT64_MAX, pendingOffer.folder);
   if (!check.accepted) {
     errorMessage =
@@ -533,7 +524,6 @@ void NearbyFileTransferActivity::loop() {
         requestUpdate();
       } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
         chosenPeerMac = session.peerAt(selectedPeer).mac;
-        chosenPeerName = session.peerAt(selectedPeer).name;
         hasChosenPeer = true;
         session.choosePeer(chosenPeerMac, millis());
         requestUpdate(true);

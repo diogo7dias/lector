@@ -1,3 +1,4 @@
+#include <NearbyTransfer.h>
 #include <gtest/gtest.h>
 
 #include <array>
@@ -195,4 +196,25 @@ TEST(NearbyFilePayloads, OfferTruncatesAnOverlongFolder) {
   OfferPayload got;
   ASSERT_TRUE(decodeOfferPayload(packet.data(), packet.size(), got));
   EXPECT_EQ(got.folder.size(), MAX_FOLDER_BYTES);
+}
+
+TEST(NearbyFilePayloads, TheLargestOfferStillFitsOnePacket) {
+  // Every field at its cap has to leave room for the packet header, or the offer
+  // encodes here and then fails to go out, and the sender waits for an answer to
+  // something it never sent.
+  OfferPayload sent;
+  sent.deviceName = std::string(MAX_NAME_BYTES, 'n');
+  sent.fileName = std::string(MAX_OFFER_NAME_BYTES - 7, 'f') + ".cpfont";
+  sent.fileSize = UINT64_MAX;
+  sent.folder = std::string(MAX_FOLDER_BYTES, 'd');
+  sent.groupIndex = 254;
+  sent.groupCount = 255;
+  sent.groupTotalBytes = UINT64_MAX;
+
+  // Encoded into a packet-sized buffer, which is what the radio path hands it,
+  // rather than the small one the other cases use.
+  std::array<uint8_t, freeink::nearby::MAX_PACKET_BYTES> buffer = {};
+  size_t length = 0;
+  ASSERT_TRUE(encodeOfferPayload(sent, buffer.data(), buffer.size(), length));
+  EXPECT_LE(length + freeink::nearby::PACKET_HEADER_BYTES, freeink::nearby::MAX_PACKET_BYTES);
 }
