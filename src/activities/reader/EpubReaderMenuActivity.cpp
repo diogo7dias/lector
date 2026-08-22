@@ -56,6 +56,8 @@ EpubReaderMenuActivity::Tab EpubReaderMenuActivity::tabForSetting(const uint8_t 
       return Tab::Look;
     case CrossPointSettings::BOOK_MENU_TAB_DEVICE:
       return Tab::Device;
+    case CrossPointSettings::BOOK_MENU_TAB_SLEEP:
+      return Tab::Sleep;
     default:
       return Tab::Navigate;
   }
