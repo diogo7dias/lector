@@ -55,6 +55,9 @@ class EpubReaderActivity final : public Activity {
   // upgrade is deferred until the chapter has been laid out under the old settings, so
   // the reading position can be carried across as a paragraph rather than a page.
   bool pendingPrefsMigration_ = false;
+  // Which version the loaded sidecar was written at, so a migration only seeds fields
+  // that version genuinely lacked.
+  uint8_t prefsFromVersion_ = ReaderPrefs::VERSION;
   // Set when navigating to a footnote href with a fragment (e.g. #note1).
   // Cleared on the next render after the new section loads and resolves it to a page.
   std::string pendingAnchor;

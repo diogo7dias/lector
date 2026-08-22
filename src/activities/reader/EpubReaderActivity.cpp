@@ -1696,7 +1696,12 @@ void EpubReaderActivity::loadReaderPrefs() {
   if (Storage.openFileForRead("ERS", readerOverridePath(), f)) {
     ReaderPrefs loaded;
     bool migrated = false;
-    if (readReaderPrefs(f, loaded, &migrated)) {
+    // The version the record was written at, not just "was it upgraded": which fields a
+    // sidecar actually carried is what decides whether seeding them is a repair or the
+    // silent loss of a choice the reader made.
+    uint8_t fromVersion = ReaderPrefs::VERSION;
+    if (readReaderPrefs(f, loaded, &migrated, &fromVersion)) {
+      prefsFromVersion_ = fromVersion;
       prefs_ = loaded;
       // A sidecar written before whole-book numbering was removed still says 2. The
       // Settings row and the menu cycle can no longer produce it, so this is the only
@@ -1709,7 +1714,9 @@ void EpubReaderActivity::loadReaderPrefs() {
       // configured. Seed them from the global settings, which is the bar every other
       // book already shows. Applied straight away, unlike the reading defaults below:
       // it is what stops an old book silently rearranging its status bar on first open.
-      if (migrated) prefs_.adoptStatusBarFrom(SETTINGS.trueGlobalReaderPrefs());
+      if (fromVersion < FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR) {
+        prefs_.adoptStatusBarFrom(SETTINGS.trueGlobalReaderPrefs());
+      }
       prefsCustom_ = true;
       // An upgraded sidecar is not applied here. The saved page number was produced by
       // the OLD layout, so the chapter is laid out that way first, the reading position
@@ -2676,7 +2683,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // A pre-v10 sidecar has no status bar byte, so the struct default (on) stood in
       // while this chapter was laid out. Seed the book from the global setting now, with
       // the position already anchored, because the switch changes the viewport.
-      upgraded.statusBarEnabled = SETTINGS.sbEnabled;
+      if (prefsFromVersion_ < FIRST_VERSION_WITH_STATUS_BAR_SWITCH) upgraded.statusBarEnabled = SETTINGS.sbEnabled;
       if (std::memcmp(&upgraded, &prefs_, sizeof(ReaderPrefs)) != 0) {
         prefs_ = upgraded;
         writeReaderOverride(prefs_);
