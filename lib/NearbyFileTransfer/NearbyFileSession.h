@@ -144,6 +144,8 @@ class TransferSession {
   size_t peerCount() const { return peers_.size(); }
   const DiscoveredPeer& peerAt(const size_t index) const { return peers_[index]; }
   const std::string& peerName() const { return peerName_; }
+  /** The reader this one is talking to. All zeroes until there is one. */
+  const std::array<uint8_t, freeink::nearby::MAC_BYTES>& peerMacAddress() const { return peerMac_; }
   const std::string& offeredName() const { return offeredName_; }
   uint64_t offeredSize() const { return session_.totalBytes(); }
   const std::string& destinationPath() const { return destinationPath_; }

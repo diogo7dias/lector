@@ -79,6 +79,11 @@ bool encodeOfferPayload(const OfferPayload& offer, uint8_t* output, const size_t
   writeU64(cursor, offer.fileSize);
   if (!writeString(cursor, end, offer.deviceName, MAX_NAME_BYTES)) return false;
   if (!writeString(cursor, end, offer.fileName, MAX_OFFER_NAME_BYTES)) return false;
+  if (!writeString(cursor, end, offer.folder, MAX_FOLDER_BYTES)) return false;
+  if (static_cast<size_t>(end - cursor) < 10) return false;
+  *cursor++ = offer.groupIndex;
+  *cursor++ = offer.groupCount == 0 ? 1 : offer.groupCount;
+  writeU64(cursor, offer.groupTotalBytes == 0 ? offer.fileSize : offer.groupTotalBytes);
 
   outputLength = static_cast<size_t>(cursor - output);
   return true;
@@ -89,7 +94,26 @@ bool decodeOfferPayload(const uint8_t* data, const size_t length, OfferPayload& 
   size_t remaining = length;
   if (!readU64(data, remaining, offer.fileSize)) return false;
   if (!readString(data, remaining, MAX_NAME_BYTES, offer.deviceName)) return false;
-  return readString(data, remaining, MAX_OFFER_NAME_BYTES, offer.fileName);
+  if (!readString(data, remaining, MAX_OFFER_NAME_BYTES, offer.fileName)) return false;
+
+  // An offer that stops here came from firmware without group transfers: one
+  // file, no folder. Anything past that point must be the whole tail, so a
+  // packet cut in the middle of it is refused rather than half-read.
+  offer.folder.clear();
+  offer.groupIndex = 0;
+  offer.groupCount = 1;
+  offer.groupTotalBytes = offer.fileSize;
+  if (remaining == 0) return true;
+
+  if (!readString(data, remaining, MAX_FOLDER_BYTES, offer.folder)) return false;
+  if (remaining < 10) return false;
+  offer.groupIndex = *data++;
+  offer.groupCount = *data++;
+  remaining -= 2;
+  if (!readU64(data, remaining, offer.groupTotalBytes)) return false;
+  if (offer.groupCount == 0) offer.groupCount = 1;
+  if (offer.groupTotalBytes == 0) offer.groupTotalBytes = offer.fileSize;
+  return true;
 }
 
 bool encodeCompletePayload(const CompletePayload& complete, uint8_t* output, const size_t capacity,

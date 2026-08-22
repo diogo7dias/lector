@@ -5,7 +5,7 @@ with extended Unicode coverage (CJK, Cyrillic, Greek, etc.).
 
 ## Installing Fonts
 
-There are three ways to install fonts:
+There are four ways to install fonts:
 
 ### Option 1: Download from device (recommended)
 
@@ -51,6 +51,30 @@ There are three ways to install fonts:
                └── ...
 
 3. Insert the SD card and power on your CrossPoint reader
+
+### Option 4: From another reader over Nearby
+
+1. On the receiving reader, open **File Transfer > Nearby Reader**
+2. On the sending reader, open **Settings > Reader > Installed Fonts**, pick the family and
+   choose **Send font**
+3. The receiving reader asks once, naming the family, the number of sizes and the total size,
+   then takes every face of the family into `/.fonts/<Family>/`
+
+No Wi-Fi is involved, and the family is ready to select as soon as it lands. A family that is
+already installed on the receiving reader is refused rather than merged or overwritten: delete
+it there first if you mean to replace it. A send interrupted part way removes what it had
+written, so a half-installed family is never left behind.
+
+## Removing Fonts
+
+**Settings > Reader > Installed Fonts** lists every family on the card, with the number of
+sizes and the space it uses, and works with the radio off. Picking a family offers **Delete**,
+which removes the family folder from both roots after a confirmation. Deleting the family the
+reader is set to use clears that setting, so the reader falls back to a built-in font rather
+than pointing at a folder that is no longer there.
+
+A family can also be deleted from the **Fonts** page of the web interface, or from
+**Manage Fonts** when the family is one the font server publishes.
 
 ## CJK in the User Interface
 

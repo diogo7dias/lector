@@ -491,6 +491,13 @@ Two Lector devices can pass a file directly, with no network in between.
    or use the same row in the in-book menu's Device tab to send the open book.
 3. The receiving device asks before accepting, and reports the name and size.
 
+A font family goes over the same way, from **Settings > Reader > Installed Fonts > Send font**.
+The faces of the family are sent one after another and the receiving device asks once, naming
+the family, how many sizes it holds and the total size. The family installs into `/.fonts/` and
+is ready to pick in Text Settings straight away. A family already installed on the receiving
+device is refused rather than merged or overwritten; delete it there first to replace it. A
+send that stops part way leaves nothing half-installed.
+
 Turn Wi-Fi and File Transfer off first: the radio cannot do both at once, and the device says
 so if it is busy.
 
@@ -673,6 +680,15 @@ Three ways to install one:
 Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
 details are in [docs/sd-card-fonts.md](./docs/sd-card-fonts.md).
 
+**Settings > Reader > Installed Fonts** lists what is actually on the card, whichever way it
+got there, and needs no Wi-Fi. Each row shows the family, how many sizes it holds and how much
+space it takes, and the family the reader is currently set to is marked. Pick a family for two
+choices:
+
+- **Send font** — pass the whole family to another Lector nearby, described below.
+- **Delete** — remove it from the card, after a confirmation. Deleting the family in use puts
+  the reader back on a built-in font.
+
 ### Dictionaries
 
 Lector reads StarDict dictionaries from `/dictionaries/<name>/` on the card. Pick one in
@@ -719,7 +735,7 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 
 ### 12.2 Reader
 
-**Text** — **Text Settings** (below), **Manage Fonts**, **Dictionary**.
+**Text** — **Text Settings** (below), **Manage Fonts**, **Installed Fonts**, **Dictionary**.
 
 **Text Settings** holds everything about the text itself:
 

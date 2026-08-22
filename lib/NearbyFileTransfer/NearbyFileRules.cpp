@@ -47,12 +47,53 @@ std::string extensionOf(std::string_view name) {
   return toLower(name.substr(dot));
 }
 
+constexpr std::string_view FONT_EXTENSION = ".cpfont";
+
+/** The character set a family name and a face stem are allowed to use. */
+bool isPlainNameCharacter(const unsigned char ch) { return std::isalnum(ch) != 0 || ch == '-' || ch == '_'; }
+
+bool isPlainName(const std::string_view text, const size_t maxBytes) {
+  if (text.empty() || text.size() > maxBytes) return false;
+  for (const char ch : text) {
+    if (!isPlainNameCharacter(static_cast<unsigned char>(ch))) return false;
+  }
+  return true;
+}
+
 }  // namespace
 
 bool isAcceptedFilename(const std::string_view name) {
   const std::string extension = extensionOf(name);
   if (extension.empty()) return false;
   return std::find(ACCEPTED_EXTENSIONS.begin(), ACCEPTED_EXTENSIONS.end(), extension) != ACCEPTED_EXTENSIONS.end();
+}
+
+bool isFontFaceFilename(const std::string_view name) {
+  if (name.size() <= FONT_EXTENSION.size()) return false;
+  if (toLower(name.substr(name.size() - FONT_EXTENSION.size())) != FONT_EXTENSION) return false;
+  return isPlainName(name.substr(0, name.size() - FONT_EXTENSION.size()), MAX_FILENAME_BYTES);
+}
+
+std::string sanitizeFontFolder(const std::string_view folder) {
+  std::string_view remainder = folder;
+  if (!remainder.empty() && remainder.front() == '/') remainder.remove_prefix(1);
+
+  if (remainder.size() <= FONT_FOLDER_ROOT.size() + 1) return {};
+  if (remainder.substr(0, FONT_FOLDER_ROOT.size()) != FONT_FOLDER_ROOT) return {};
+  if (remainder[FONT_FOLDER_ROOT.size()] != '/') return {};
+
+  const std::string_view family = remainder.substr(FONT_FOLDER_ROOT.size() + 1);
+  // isPlainName is what stops "..", a second slash, and a dotted or spaced name:
+  // none of those characters are in the set it allows.
+  if (!isPlainName(family, MAX_FAMILY_NAME_BYTES)) return {};
+
+  return std::string(FONT_FOLDER_ROOT) + "/" + std::string(family);
+}
+
+std::string familyNameFromFolder(const std::string_view safeFolder) {
+  const std::string sanitized = sanitizeFontFolder(safeFolder);
+  if (sanitized.empty()) return {};
+  return sanitized.substr(FONT_FOLDER_ROOT.size() + 1);
 }
 
 std::string sanitizeFilename(const std::string_view name) {
@@ -101,6 +142,33 @@ std::string resolveDestination(const std::string_view folder, const std::string&
     if (!exists(path)) return path;
   }
   return {};
+}
+
+OfferCheck checkOffer(const std::string_view offeredName, const uint64_t sizeBytes, const uint64_t freeBytes,
+                      const std::string_view offeredFolder) {
+  if (offeredFolder.empty() && !isFontFaceFilename(sanitizeFilename(offeredName))) {
+    return checkOffer(offeredName, sizeBytes, freeBytes);
+  }
+
+  OfferCheck check;
+  check.safeFolder = sanitizeFontFolder(offeredFolder);
+  check.safeName = sanitizeFilename(offeredName);
+
+  // The face and the font folder only travel together: a face with no folder has
+  // nowhere it is allowed to land, and a folder with anything but a face in it is
+  // an attempt to put an ordinary file among the fonts.
+  if (check.safeFolder.empty() || !isFontFaceFilename(check.safeName)) {
+    check.safeFolder.clear();
+    check.rejection = RejectReason::UNSUPPORTED_TYPE;
+    return check;
+  }
+  if (!fitsOnCard(sizeBytes, freeBytes)) {
+    check.rejection = RejectReason::TOO_LARGE;
+    return check;
+  }
+
+  check.accepted = true;
+  return check;
 }
 
 OfferCheck checkOffer(const std::string_view offeredName, const uint64_t sizeBytes, const uint64_t freeBytes) {

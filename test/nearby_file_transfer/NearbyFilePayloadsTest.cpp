@@ -40,8 +40,16 @@ TEST(NearbyFilePayloads, OfferRejectsTruncatedInput) {
   sent.fileSize = 1024;
   const std::vector<uint8_t> packet = encodeOffer(sent);
 
+  // Everything up to the end of the filename is required. The group fields after
+  // it are optional, since an offer from firmware that predates them stops right
+  // there, so a cut at that exact boundary is a valid older offer rather than a
+  // truncation.
+  const size_t requiredLength = 8 + 1 + sent.deviceName.size() + 1 + sent.fileName.size();
   OfferPayload got;
-  for (size_t length = 0; length < packet.size(); length++) {
+  for (size_t length = 0; length < requiredLength; length++) {
+    EXPECT_FALSE(decodeOfferPayload(packet.data(), length, got)) << "accepted an offer truncated to " << length;
+  }
+  for (size_t length = requiredLength + 1; length < packet.size(); length++) {
     EXPECT_FALSE(decodeOfferPayload(packet.data(), length, got)) << "accepted an offer truncated to " << length;
   }
 }
@@ -134,4 +142,57 @@ TEST(NearbyFilePayloads, RefusesToEncodeIntoTooSmallABuffer) {
   CompletePayload complete;
   EXPECT_FALSE(encodeCompletePayload(complete, tiny.data(), tiny.size(), length));
   EXPECT_FALSE(encodeNamePayload("a name longer than four", tiny.data(), tiny.size(), length));
+}
+
+TEST(NearbyFilePayloads, OfferCarriesTheGroupAndTheFolder) {
+  OfferPayload sent;
+  sent.deviceName = "Lector-4B2C";
+  sent.fileName = "Literata_14.cpfont";
+  sent.fileSize = 51200;
+  sent.folder = ".fonts/Literata";
+  sent.groupIndex = 2;
+  sent.groupCount = 6;
+  sent.groupTotalBytes = 307200;
+
+  const std::vector<uint8_t> packet = encodeOffer(sent);
+  OfferPayload got;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), packet.size(), got));
+  EXPECT_EQ(got.folder, sent.folder);
+  EXPECT_EQ(got.groupIndex, sent.groupIndex);
+  EXPECT_EQ(got.groupCount, sent.groupCount);
+  EXPECT_EQ(got.groupTotalBytes, sent.groupTotalBytes);
+}
+
+TEST(NearbyFilePayloads, OfferFromAnOlderSenderDecodesAsOneLooseFile) {
+  // Firmware that predates group transfers stops after the filename. Those bytes
+  // still have to decode, as a single file bound for the card root.
+  OfferPayload sent;
+  sent.deviceName = "Lector";
+  sent.fileName = "Book.epub";
+  sent.fileSize = 2048;
+  const std::vector<uint8_t> packet = encodeOffer(sent);
+
+  const size_t legacyLength = 8 + 1 + sent.deviceName.size() + 1 + sent.fileName.size();
+  ASSERT_LE(legacyLength, packet.size());
+
+  OfferPayload got;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), legacyLength, got));
+  EXPECT_EQ(got.fileName, sent.fileName);
+  EXPECT_TRUE(got.folder.empty());
+  EXPECT_EQ(got.groupIndex, 0);
+  EXPECT_EQ(got.groupCount, 1);
+  EXPECT_EQ(got.groupTotalBytes, sent.fileSize);
+}
+
+TEST(NearbyFilePayloads, OfferTruncatesAnOverlongFolder) {
+  OfferPayload sent;
+  sent.deviceName = "Lector";
+  sent.fileName = "Face.cpfont";
+  sent.fileSize = 10;
+  sent.folder = std::string(MAX_FOLDER_BYTES + 40, 'd');
+
+  const std::vector<uint8_t> packet = encodeOffer(sent);
+  OfferPayload got;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), packet.size(), got));
+  EXPECT_EQ(got.folder.size(), MAX_FOLDER_BYTES);
 }
