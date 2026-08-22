@@ -833,14 +833,22 @@ void GfxRenderer::drawRect(const int x, const int y, const int width, const int 
   drawLine(x, y, x, y + height - 1, state);
 }
 
-// Border is inside the rectangle
+// Border is inside the rectangle. The far edges are inclusive coordinates
+// (x + width - 1, y + height - 1); using x + width here would push the frame one
+// pixel outside the rectangle the caller reserved, leaving a hairline gap between
+// a frame and any fill drawn inside it (the status bar progress outline).
 void GfxRenderer::drawRect(const int x, const int y, const int width, const int height, const int lineWidth,
                            const bool state) const {
   for (int i = 0; i < lineWidth; i++) {
-    drawLine(x + i, y + i, x + width - i, y + i, state);
-    drawLine(x + width - i, y + i, x + width - i, y + height - i, state);
-    drawLine(x + width - i, y + height - i, x + i, y + height - i, state);
-    drawLine(x + i, y + height - i, x + i, y + i, state);
+    const int left = x + i;
+    const int top = y + i;
+    const int right = x + width - 1 - i;
+    const int bottom = y + height - 1 - i;
+    if (left > right || top > bottom) return;
+    drawLine(left, top, right, top, state);
+    drawLine(right, top, right, bottom, state);
+    drawLine(right, bottom, left, bottom, state);
+    drawLine(left, bottom, left, top, state);
   }
 }
 
