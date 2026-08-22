@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 #include <expat.h>
 
+#include <array>
 #include <climits>
 #include <cstdint>
 #include <functional>
@@ -103,6 +104,8 @@ class ChapterHtmlSlimParser {
     CssTextDecoration textDecoration = CssTextDecoration::None;
     bool hasDirection = false;
     CssTextDirection direction = CssTextDirection::Ltr;
+    bool hasTextAlign = false;
+    CssTextAlign textAlign = CssTextAlign::Left;
     bool hasSup = false, sup = false;
     bool hasSub = false, sub = false;
   };
@@ -114,6 +117,8 @@ class ChapterHtmlSlimParser {
   CssTextDecoration effectiveTextDecoration = CssTextDecoration::None;
   bool effectiveDirectionDefined = false;
   CssTextDirection effectiveDirection = CssTextDirection::Ltr;
+  bool effectiveTextAlignDefined = false;
+  CssTextAlign effectiveTextAlign = CssTextAlign::Left;
   bool effectiveSup = false;
   bool effectiveSub = false;
   static constexpr size_t MAX_GRID_TABLE_COLUMNS = 4;
@@ -122,8 +127,16 @@ class ChapterHtmlSlimParser {
   int tableDepth = 0;
   bool insideTableCell = false;
   bool tableRowStacked = false;
+  // A cell that spans rows cannot be drawn in a grid, and the span keeps applying to the
+  // rows below it, so the whole run of affected rows falls back to stacked. UINT16_MAX
+  // means "to the end of the table" (rowspan=0 in HTML).
+  uint16_t tableRowsSpannedRemaining = 0;
   size_t tableCellTextBytes = 0;
   std::vector<std::unique_ptr<ParsedText>> tableRowCells;
+  // Per-row scratch reused across rows: clear() keeps the capacity, so a long table
+  // allocates these once instead of once per row.
+  std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> tableCellLines;
+  std::vector<uint32_t> tableLineVisibleOffsets;
   bool listItemBulletOnly = false;  // true when currentTextBlock has only the <li> bullet
 
   // Anchor-to-page mapping: tracks which page each HTML id attribute lands on. Keys are
@@ -196,6 +209,7 @@ class ChapterHtmlSlimParser {
   static EpdFontFamily::Style fontStyleForTextDecoration(CssTextDecoration decoration);
   static void applyDirectionToEntry(StyleStackEntry& entry, const CssStyle& css);
   static void applyTextDecorationToEntry(StyleStackEntry& entry, const CssStyle& css);
+  void pushTableTextStyleEntry(const CssStyle& cssStyle);
   void pushDecorationStyleEntry(CssTextDecoration defaultDecoration, const CssStyle& cssStyle);
   void emitHorizontalRule(const BlockStyle& blockStyle);
   // XML callbacks

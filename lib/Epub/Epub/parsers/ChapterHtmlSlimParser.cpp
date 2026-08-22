@@ -107,6 +107,21 @@ const char* getAttribute(const XML_Char** atts, const char* attrName) {
   return nullptr;
 }
 
+// Parses an HTML colspan/rowspan attribute. A missing or malformed value means 1 (no span),
+// and rowspan="0" means "to the end of the table group", represented here as UINT16_MAX.
+uint16_t parseTableSpan(const char* value) {
+  if (!value || value[0] == '\0') return 1;
+
+  uint32_t span = 0;
+  for (const char* current = value; *current != '\0'; ++current) {
+    if (*current < '0' || *current > '9') return 1;
+    const uint32_t digit = static_cast<uint32_t>(*current - '0');
+    if (span > (UINT16_MAX - digit) / 10) return UINT16_MAX;
+    span = span * 10 + digit;
+  }
+  return span == 0 ? UINT16_MAX : static_cast<uint16_t>(span);
+}
+
 // Returns true if the HTML element is a purely inline, non-navigable wrapper.
 // IDs on these elements are never meaningful navigation targets in epub content.
 // Reading-system converters (Kobo KePub, Calibre, etc.) frequently inject thousands
@@ -158,6 +173,35 @@ void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, c
   }
 }
 
+// <table>, <tr> and <td> carry styles that their cell text must inherit, but none of them
+// opens a text block of its own, so the styles go on the inline stack and pop with the
+// element's depth like any other wrapper.
+void ChapterHtmlSlimParser::pushTableTextStyleEntry(const CssStyle& cssStyle) {
+  if (!cssStyle.hasFontWeight() && !cssStyle.hasFontStyle() && !cssStyle.hasTextDecoration() &&
+      !cssStyle.hasDirection() && !cssStyle.hasTextAlign()) {
+    return;
+  }
+
+  StyleStackEntry entry;
+  entry.depth = depth;
+  if (cssStyle.hasFontWeight()) {
+    entry.hasBold = true;
+    entry.bold = cssStyle.fontWeight == CssFontWeight::Bold;
+  }
+  if (cssStyle.hasFontStyle()) {
+    entry.hasItalic = true;
+    entry.italic = cssStyle.fontStyle == CssFontStyle::Italic;
+  }
+  applyTextDecorationToEntry(entry, cssStyle);
+  applyDirectionToEntry(entry, cssStyle);
+  if (cssStyle.hasTextAlign()) {
+    entry.hasTextAlign = true;
+    entry.textAlign = cssStyle.textAlign;
+  }
+  inlineStyleStack.push_back(entry);
+  updateEffectiveInlineStyle();
+}
+
 void ChapterHtmlSlimParser::pushDecorationStyleEntry(const CssTextDecoration defaultDecoration,
                                                      const CssStyle& cssStyle) {
   StyleStackEntry entry;
@@ -186,6 +230,8 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
       currentCssStyle.hasTextDecoration() ? currentCssStyle.textDecoration : CssTextDecoration::None;
   effectiveDirectionDefined = currentCssStyle.hasDirection();
   effectiveDirection = currentCssStyle.direction;
+  effectiveTextAlignDefined = currentCssStyle.hasTextAlign();
+  effectiveTextAlign = currentCssStyle.textAlign;
   effectiveSup = false;
   effectiveSub = false;
 
@@ -205,6 +251,10 @@ void ChapterHtmlSlimParser::updateEffectiveInlineStyle() {
     if (entry.hasDirection) {
       effectiveDirectionDefined = true;
       effectiveDirection = entry.direction;
+    }
+    if (entry.hasTextAlign) {
+      effectiveTextAlignDefined = true;
+      effectiveTextAlign = entry.textAlign;
     }
     if (entry.hasSup) {
       effectiveSup = entry.sup;
@@ -518,8 +568,12 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   const uint16_t textWidth = static_cast<uint16_t>(cellWidth - TABLE_CELL_HORIZONTAL_PADDING * 2);
-  std::array<std::vector<std::shared_ptr<TextBlock>>, MAX_GRID_TABLE_COLUMNS> cellLines;
-  std::vector<uint32_t> lineVisibleOffsets;
+  auto& cellLines = tableCellLines;
+  auto& lineVisibleOffsets = tableLineVisibleOffsets;
+  for (auto& lines : cellLines) {
+    lines.clear();
+  }
+  lineVisibleOffsets.clear();
   lineVisibleOffsets.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
   size_t maxLineCount = 0;
   bool rowRtl = tableRowCells.front()->getBlockStyle().isRtl;
@@ -600,6 +654,12 @@ void ChapterHtmlSlimParser::finishTableRow() {
     }
     currentPageNextY = static_cast<int16_t>(rowY + rowLineHeight);
   }
+
+  // Drop the row's line references now; the vectors keep their capacity for the next row.
+  for (auto& lines : cellLines) {
+    lines.clear();
+  }
+  lineVisibleOffsets.clear();
 
   addTableRowSeparator();
   tableRowStacked = false;
@@ -730,9 +790,11 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->makePages();
     }
     self->flushPendingAnchor();
+    self->pushTableTextStyleEntry(cssStyle);
     self->tableDepth = 1;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
     self->tableRowCells.reserve(MAX_GRID_TABLE_COLUMNS);
@@ -747,7 +809,13 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->makePages();
     }
     self->currentTextBlock.reset();
-    self->tableRowStacked = false;
+    // A rowspan from an earlier row still covers this one, so it cannot be laid out as a
+    // standalone grid row: stack it, and count the span down.
+    self->tableRowStacked = self->tableRowsSpannedRemaining > 0;
+    if (self->tableRowsSpannedRemaining != UINT16_MAX && self->tableRowsSpannedRemaining > 0) {
+      self->tableRowsSpannedRemaining--;
+    }
+    self->pushTableTextStyleEntry(cssStyle);
     self->depth += 1;
     return;
   }
@@ -762,13 +830,27 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->currentTextBlock.reset();
 
+    // A merged cell has no single column to sit in, so the row (and every row the merge
+    // reaches into) drops out of the grid and flows stacked instead.
+    const uint16_t columnSpan = parseTableSpan(getAttribute(atts, "colspan"));
+    const uint16_t rowSpan = parseTableSpan(getAttribute(atts, "rowspan"));
+    if (columnSpan > 1 || rowSpan > 1) {
+      self->fallbackTableRowToStacked();
+    }
+    if (rowSpan > 1) {
+      const uint16_t remaining = rowSpan == UINT16_MAX ? UINT16_MAX : static_cast<uint16_t>(rowSpan - 1);
+      self->tableRowsSpannedRemaining = std::max(self->tableRowsSpannedRemaining, remaining);
+    }
+
     auto tableCellBlockStyle = BlockStyle();
     tableCellBlockStyle.textAlignDefined = true;
     tableCellBlockStyle.alignment =
         cssStyle.hasTextAlign()
             ? cssStyle.textAlign
-            : (cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl ? CssTextAlign::Right
-                                                                                      : CssTextAlign::Left);
+            : (self->effectiveTextAlignDefined
+                   ? self->effectiveTextAlign
+                   : (cssStyle.hasDirection() && cssStyle.direction == CssTextDirection::Rtl ? CssTextAlign::Right
+                                                                                             : CssTextAlign::Left));
     if (cssStyle.hasDirection()) {
       tableCellBlockStyle.directionDefined = true;
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
@@ -787,6 +869,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     self->tableCellTextBytes = 0;
     self->wordsExtractedInBlock = 0;
     self->flushPendingAnchor();
+    self->pushTableTextStyleEntry(cssStyle);
 
     if (strcmp(name, "th") == 0) {
       self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
@@ -1805,6 +1888,7 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->tableDepth = 0;
     self->insideTableCell = false;
     self->tableRowStacked = false;
+    self->tableRowsSpannedRemaining = 0;
     self->tableCellTextBytes = 0;
     self->tableRowCells.clear();
     self->nextWordContinues = false;
@@ -1895,8 +1979,13 @@ bool ChapterHtmlSlimParser::beginParse() {
   tableDepth = 0;
   insideTableCell = false;
   tableRowStacked = false;
+  tableRowsSpannedRemaining = 0;
   tableCellTextBytes = 0;
   tableRowCells.clear();
+  for (auto& lines : tableCellLines) {
+    lines.clear();
+  }
+  tableLineVisibleOffsets.clear();
 
   auto paragraphAlignmentBlockStyle = BlockStyle();
   paragraphAlignmentBlockStyle.textAlignDefined = true;
