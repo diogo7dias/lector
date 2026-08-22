@@ -16,15 +16,23 @@
 // support a new manifest schema.
 #define FONTS_MANIFEST_VERSION 1
 
+// Repository that hosts the font releases. A build can point the reader at a
+// different library by defining FONT_MANIFEST_REPO; the tag composition below
+// stays intact, so the device still asks for the release matching its own
+// manifest and .cpfont versions.
+#ifndef FONT_MANIFEST_REPO
+#define FONT_MANIFEST_REPO "crosspoint-reader/crosspoint-fonts"
+#endif
+
 #ifndef FONT_MANIFEST_URL
 // Manifest + .cpfont assets are published by .github/workflows/release-fonts.yml
-// to the crosspoint-fonts repo under the "sd-fonts-m<META>-b<BIN>" tag. The tag
+// to the fonts repo under the "sd-fonts-m<META>-b<BIN>" tag. The tag
 // pattern must stay in sync with the workflow; it derives its version numbers
 // from lib/EpdFont/scripts/cpfont_version.py.
 #define FONT_MANIFEST_URL_STRINGIFY_INNER(x) #x
 #define FONT_MANIFEST_URL_STRINGIFY(x) FONT_MANIFEST_URL_STRINGIFY_INNER(x)
-#define FONT_MANIFEST_URL                                                                                           \
-  "https://github.com/crosspoint-reader/crosspoint-fonts/releases/download/sd-fonts-m" FONT_MANIFEST_URL_STRINGIFY( \
+#define FONT_MANIFEST_URL                                                                       \
+  "https://github.com/" FONT_MANIFEST_REPO "/releases/download/sd-fonts-m" FONT_MANIFEST_URL_STRINGIFY( \
       FONTS_MANIFEST_VERSION) "-b" FONT_MANIFEST_URL_STRINGIFY(CPFONT_VERSION) "/fonts.json"
 #endif
 

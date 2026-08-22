@@ -24,7 +24,7 @@ There are four ways to install fonts:
 ### Option 3: Manual SD card copy
 
 1. Download font files from the
-   [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts)
+   [lector-fonts repository](https://github.com/diogo7dias/lector-fonts)
 2. Copy font family folders to one of two locations on your SD card:
 
    - `/.fonts/` — hidden directory (preferred; keeps the SD root tidy
@@ -131,7 +131,15 @@ What this means in practice:
 ## Available Pre-Built Fonts
 
 The current list of pre-built fonts is maintained in the
-[crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
+[lector-fonts repository](https://github.com/diogo7dias/lector-fonts).
+
+Every family is built at point sizes 10 through 18, so the reader offers nine
+steps rather than the four the built-in font has. OpenDyslexic is the exception:
+its glyphs run larger per point, so it ships 8 through 16 instead.
+
+Fonts whose licence forbids redistribution are not published there. Build those
+locally from your own copy of the TrueType files and install them over the web
+interface. See `lib/EpdFont/scripts/sd-fonts.local.yaml` for the pattern.
 
 ## Converting Custom Fonts
 

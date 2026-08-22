@@ -680,7 +680,7 @@ Three ways to install one:
 2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
    `.cpfont` files.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.
-   Files come from the [crosspoint-fonts repository](https://github.com/crosspoint-reader/crosspoint-fonts).
+   Files come from the [lector-fonts repository](https://github.com/diogo7dias/lector-fonts).
 
 Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
 details are in [docs/sd-card-fonts.md](./docs/sd-card-fonts.md).
