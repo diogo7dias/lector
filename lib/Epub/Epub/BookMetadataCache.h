@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "SpineFileNameIndex.h"
+
 class BookMetadataCache {
  public:
   struct BookMetadata {
@@ -79,6 +81,13 @@ class BookMetadataCache {
   };
   std::deque<SpineHrefIndexEntry> spineHrefIndex;
   bool useSpineHrefIndex = false;
+
+  // File-name fallback for a TOC entry whose exact path the spine does not carry. Built
+  // on the first entry that needs it and reused by every entry after, so a book whose
+  // whole TOC uses a different directory prefix costs ONE pass over the spine rather
+  // than one per chapter row. Most books never need it and never pay for it.
+  SpineFileNameIndex spineFileNameIndex;
+  void buildSpineFileNameIndex();
 
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 

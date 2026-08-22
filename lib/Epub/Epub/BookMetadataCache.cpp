@@ -9,7 +9,6 @@
 #include <deque>
 
 #include "FsHelpers.h"
-#include "TocHrefMatch.h"
 
 namespace {
 // v11 = TOC targets resolve by file name when the exact path is not in the spine; caches
@@ -168,6 +167,7 @@ bool BookMetadataCache::endTocPass() {
   spineHrefIndex.clear();
   spineHrefIndex.shrink_to_fit();
   useSpineHrefIndex = false;
+  spineFileNameIndex.clear();
 
   return flushed;
 }
@@ -424,6 +424,21 @@ void BookMetadataCache::createSpineEntry(const std::string& href) {
   spineCount++;
 }
 
+// One pass over the spine, on the first TOC entry whose exact path is not there. The
+// file position is restored so the caller's own walk is unaffected.
+void BookMetadataCache::buildSpineFileNameIndex() {
+  spineFileNameIndex.clear();
+  spineFileNameIndex.reserve(spineCount);
+  spineFile.seek(0);
+  for (int i = 0; i < spineCount; i++) {
+    const auto entry = readSpineEntry(spineFile);
+    spineFileNameIndex.add(static_cast<int16_t>(i), entry.href);
+  }
+  spineFileNameIndex.seal();
+  spineFile.seek(0);
+  LOG_DBG("BMC", "Built file-name index for %d spine items", spineCount);
+}
+
 void BookMetadataCache::createTocEntry(const std::string& title, const std::string& href, const std::string& anchor,
                                        const uint8_t level) {
   if (!buildMode || !tocFile || !spineFile) {
@@ -449,19 +464,27 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
     }
   }
 
-  if (spineIndex == -1) {
-    // No exact path in the spine. Scan it once and let TocHrefMatch decide, which also
-    // accepts a unique file-name match: a TOC document in another folder builds the same
-    // file's path through a different prefix, and a chapter row that resolves to nothing
-    // is a row that silently does nothing when the reader picks it. The fast index above
-    // answers exact hits without this scan, so only an unresolved entry pays for it.
-    TocHrefMatch matcher(href);
+  if (spineIndex == -1 && !useSpineHrefIndex) {
+    // No fast index for this book, so the exact path is looked up by walking the spine.
+    // Stops at the hit, unlike the file-name pass below.
     spineFile.seek(0);
     for (int i = 0; i < spineCount; i++) {
       const auto spineEntry = readSpineEntry(spineFile);
-      matcher.consider(static_cast<int16_t>(i), spineEntry.href);
+      if (spineEntry.href == href) {
+        spineIndex = static_cast<int16_t>(i);
+        break;
+      }
     }
-    spineIndex = matcher.result();
+  }
+
+  if (spineIndex == -1) {
+    // The spine does not carry this exact path. A TOC document in another folder builds
+    // the same file's path through a different prefix, and a chapter row that resolves to
+    // nothing is a row that silently does nothing when the reader picks it, so the file
+    // name decides — when exactly one spine item carries it. Built on the first entry
+    // that gets here and reused by all the rest.
+    if (!spineFileNameIndex.sealed()) buildSpineFileNameIndex();
+    spineIndex = spineFileNameIndex.resolve(href);
   }
 
   if (spineIndex == -1) {

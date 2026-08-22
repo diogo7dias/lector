@@ -777,6 +777,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // settings screen: every saveToFile() during the overlay hands the live overlaid
   // values to it, so the owner can write the book's sidecar there and then. Plain
   // function pointer + context, not std::function — no closure allocation.
+  //
+  // The sink fires when saveToFile() does, which is not on every keypress: a numeric
+  // row being held is written once the value stops moving, so a hard power cut inside
+  // TextSettingsActivity's EDIT_SAVE_DEBOUNCE_MS window loses that last step. Writing
+  // per press instead would rewrite the whole settings file dozens of times for one
+  // margin sweep, against Resource Protocol 8. Every graceful exit — Back, Confirm,
+  // Home, sleep — commits first, so only a battery pull or a crash can land in it.
   using ReaderEditSink = void (*)(void* ctx, const ReaderPrefs& live);
   void applyReaderPrefs(const ReaderPrefs& p);
   void beginReaderEditOverlay(const ReaderPrefs& startValues, ReaderEditSink sink = nullptr, void* sinkCtx = nullptr);
