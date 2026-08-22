@@ -762,11 +762,17 @@ ever covers the page you are judging.
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
 - **Size**.
 - **Line Spacing**.
-- **Horizontal Margin** — left and right, one shared value.
-- **Link Top/Bottom** — ON gives a single **Vertical Margin**; OFF splits it into **Top
-  Margin** and **Bottom Margin**. (This replaces the old **Uniform Margins** switch. Devices
-  updating from an older build keep the margins they had.)
-- **Dynamic Margins** — Off, Auto (min 10px) or Auto (min 20px).
+- **Horizontal Margin** — left and right, one shared value. Listed as **Margin** in All
+  Sides, where it is every side.
+- **Link Margins** — **Off**, **Top+Bottom** or **All Sides**. Off lists **Top Margin** and
+  **Bottom Margin** separately; Top+Bottom replaces them with a single **Vertical Margin**;
+  All Sides puts one number on all four sides and leaves **Margin** as the only margin row.
+  All Sides also turns **Dynamic Margins** off and stops offering it, because Dynamic
+  Margins works out a left and right margin of its own that the other two sides cannot
+  match. Switching back does not turn it on again. New devices start at All Sides with 20
+  on every side; devices updating from an older build keep the margins and the link they
+  had, and anyone still on the old **Uniform Margins** switch comes back to All Sides.
+- **Dynamic Margins** — Off, Auto (min 10px) or Auto (min 20px). Not listed in All Sides.
 - **First Line Indent** — Book or Custom %, with **First-Line Indent %** underneath.
 - **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
 - **Embedded Text Style** — honour the book's own CSS for how the words look: bold, italic,

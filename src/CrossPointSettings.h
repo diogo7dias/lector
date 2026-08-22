@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "activities/reader/ReaderPrefs.h"
+#include "util/MarginLink.h"
 
 // The whole status bar configuration as one value, so it can be swapped in and out
 // atomically while a book with its own bar is open.
@@ -456,18 +457,41 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;
-  // verticalMarginsLinked only says whether editing one writes the other, so every reader
-  // can read the two fields directly without asking which mode is on. Restored granular
-  // range (old lector). Margins feed the viewport, so a change rebuilds the section cache
+  // marginLinkMode only says how editing one writes the others, so every reader can read
+  // the three fields directly without asking which mode is on. Restored granular range
+  // (old lector). Margins feed the viewport, so a change rebuilds the section cache
   // through the viewport dimensions (no cache-format bump needed).
   static constexpr uint8_t SCREEN_MARGIN_MIN = 0;
   static constexpr uint8_t SCREEN_MARGIN_MAX = 100;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
-  uint8_t screenMargin = 5;
-  uint8_t screenMarginTop = 5;
-  uint8_t screenMarginBottom = 5;
-  // 1 = top and bottom move together (both hold the same value); 0 = edited independently.
-  uint8_t verticalMarginsLinked = 1;
+  uint8_t screenMargin = 20;
+  uint8_t screenMarginTop = 20;
+  uint8_t screenMarginBottom = 20;
+  // margin_link::Mode as a number: 0 = Separate, 1 = top and bottom move together,
+  // 2 = All Sides (every side holds the horizontal value). See util/MarginLink.h.
+  static constexpr uint8_t MARGIN_LINK_MODE_COUNT = margin_link::MODE_COUNT;
+  uint8_t marginLinkMode = margin_link::toStored(margin_link::DEFAULT_MODE);
+
+  // The margin fields as the one value the link rule operates on, and back again. Both
+  // editors (Reader Settings and the global settings list) go through these, so neither
+  // can write a mode without the mode's own consequences — see util/MarginLink.h.
+  margin_link::State marginState() const {
+    return {{screenMargin, screenMarginTop, screenMarginBottom}, dynamicMargins, margin_link::toMode(marginLinkMode)};
+  }
+  void applyMarginState(const margin_link::State& state) {
+    screenMargin = state.margins.horizontal;
+    screenMarginTop = state.margins.top;
+    screenMarginBottom = state.margins.bottom;
+    dynamicMargins = state.dynamicMargins;
+    marginLinkMode = margin_link::toStored(state.mode);
+  }
+  void setMarginLinkMode(const margin_link::Mode mode) {
+    applyMarginState(margin_link::applyMode(marginState(), mode));
+  }
+  // Re-assert the current mode over the margin fields. Called on every load and every
+  // save, so an editor that writes the raw fields (the web settings API) cannot leave a
+  // page whose sides disagree with the mode it says it is in.
+  void normalizeMargins() { setMarginLinkMode(margin_link::toMode(marginLinkMode)); }
   // Auto-widen horizontal margins toward ~62 chars/line (0 = off, 1 = auto min 10px,
   // 2 = auto min 20px). Overrides the fixed horizontal margin when on. Feeds the
   // viewport width, so a change re-paginates.

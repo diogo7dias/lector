@@ -17,11 +17,13 @@
 #include "TextSettingsPreview.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/VerticalMargins.h"
+#include "util/MarginLink.h"
 
 namespace {
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
                                    StrId::STR_BOOK_S_STYLE};
+constexpr StrId MARGIN_LINK_IDS[] = {StrId::STR_MARGIN_LINK_OFF, StrId::STR_MARGIN_LINK_TOP_BOTTOM,
+                                     StrId::STR_MARGIN_LINK_ALL};
 constexpr StrId DYNAMIC_MARGINS_IDS[] = {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10,
                                          StrId::STR_DYNAMIC_MARGINS_20};
 constexpr StrId INDENT_MODE_IDS[] = {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT};
@@ -146,6 +148,7 @@ TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
     case Row::Size:
     case Row::Alignment:
     case Row::IndentMode:
+    case Row::MarginLink:
     case Row::DynamicMargins:
       return RowKind::Picker;
     case Row::LineSpacing:
@@ -180,16 +183,24 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   }
 
   rows.push_back(Row::SectionMargins);
+  // All Sides: the horizontal row is every side, so it is the only margin row, and
+  // Dynamic Margins is not offered at all — it would compute a horizontal margin of its
+  // own and leave left/right disagreeing with top/bottom.
   rows.push_back(Row::HorizontalMargin);
-  rows.push_back(Row::LinkTopBottom);
-  // Linked: one value standing for both sides. Split: the two sides listed separately.
-  if (SETTINGS.verticalMarginsLinked) {
-    rows.push_back(Row::VerticalMargin);
-  } else {
-    rows.push_back(Row::TopMargin);
-    rows.push_back(Row::BottomMargin);
+  rows.push_back(Row::MarginLink);
+  switch (margin_link::toMode(SETTINGS.marginLinkMode)) {
+    case margin_link::Mode::AllSides:
+      break;
+    case margin_link::Mode::TopBottom:
+      rows.push_back(Row::VerticalMargin);
+      rows.push_back(Row::DynamicMargins);
+      break;
+    case margin_link::Mode::Separate:
+      rows.push_back(Row::TopMargin);
+      rows.push_back(Row::BottomMargin);
+      rows.push_back(Row::DynamicMargins);
+      break;
   }
-  rows.push_back(Row::DynamicMargins);
 
   rows.push_back(Row::SectionReadingAids);
   rows.push_back(Row::FocusReading);
@@ -231,9 +242,12 @@ StrId TextSettingsActivity::rowNameId(const Row row) const {
     case Row::IndentPercent:
       return StrId::STR_FIRST_LINE_INDENT_PERCENT;
     case Row::HorizontalMargin:
-      return StrId::STR_HORIZONTAL_MARGIN;
-    case Row::LinkTopBottom:
-      return StrId::STR_LINK_TOP_BOTTOM;
+      // In All Sides this row is the only margin there is, so naming it "Horizontal"
+      // would be describing a side rather than what it does.
+      return margin_link::toMode(SETTINGS.marginLinkMode) == margin_link::Mode::AllSides ? StrId::STR_MARGIN
+                                                                                         : StrId::STR_HORIZONTAL_MARGIN;
+    case Row::MarginLink:
+      return StrId::STR_LINK_MARGINS;
     case Row::VerticalMargin:
       return StrId::STR_VERTICAL_MARGIN;
     case Row::TopMargin:
@@ -307,23 +321,26 @@ void TextSettingsActivity::numberRange(const Row row, int& minValue, int& maxVal
 void TextSettingsActivity::applyNumber(const Row row, const int value) {
   uint8_t* field = numberField(row);
   if (!field) return;
-  const vertical_margins::Margins current{SETTINGS.screenMarginTop, SETTINGS.screenMarginBottom};
+  const margin_link::Margins current{SETTINGS.screenMargin, SETTINGS.screenMarginTop, SETTINGS.screenMarginBottom};
+  const margin_link::Mode mode = margin_link::toMode(SETTINGS.marginLinkMode);
+  const auto write = [](const margin_link::Margins next) {
+    SETTINGS.screenMargin = next.horizontal;
+    SETTINGS.screenMarginTop = next.top;
+    SETTINGS.screenMarginBottom = next.bottom;
+  };
   switch (row) {
-    // The linked row stands for both sides, so it writes through the same rule the
-    // migration and the link toggle use.
+    // Every margin row writes through the same rule the migration and the mode picker
+    // use, so a row that stands for more than one side carries all of them.
+    case Row::HorizontalMargin:
+      write(margin_link::setHorizontal(current, static_cast<uint8_t>(value), mode));
+      break;
     case Row::VerticalMargin:
-    case Row::TopMargin: {
-      const auto next = vertical_margins::setTop(current, static_cast<uint8_t>(value), row == Row::VerticalMargin);
-      SETTINGS.screenMarginTop = next.top;
-      SETTINGS.screenMarginBottom = next.bottom;
+    case Row::TopMargin:
+      write(margin_link::setTop(current, static_cast<uint8_t>(value), mode));
       break;
-    }
-    case Row::BottomMargin: {
-      const auto next = vertical_margins::setBottom(current, static_cast<uint8_t>(value), false);
-      SETTINGS.screenMarginTop = next.top;
-      SETTINGS.screenMarginBottom = next.bottom;
+    case Row::BottomMargin:
+      write(margin_link::setBottom(current, static_cast<uint8_t>(value), mode));
       break;
-    }
     default:
       *field = static_cast<uint8_t>(value);
       break;
@@ -370,8 +387,10 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
           v < std::size(INDENT_MODE_IDS) ? I18N.get(INDENT_MODE_IDS[v]) : I18N.get(StrId::STR_INDENT_BOOK);
       return (v == INDENT_MODE_BOOK_INDEX && !SETTINGS.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
     }
-    case Row::LinkTopBottom:
-      return onOff(SETTINGS.verticalMarginsLinked);
+    case Row::MarginLink: {
+      const uint8_t v = SETTINGS.marginLinkMode;
+      return v < std::size(MARGIN_LINK_IDS) ? I18N.get(MARGIN_LINK_IDS[v]) : I18N.get(StrId::STR_MARGIN_LINK_OFF);
+    }
     case Row::DynamicMargins: {
       const uint8_t v = SETTINGS.dynamicMargins;
       return v < std::size(DYNAMIC_MARGINS_IDS) ? I18N.get(DYNAMIC_MARGINS_IDS[v])
@@ -468,6 +487,17 @@ void TextSettingsActivity::activateRow(const Row row) {
                               SETTINGS.saveToFile();
                             });
           break;
+        case Row::MarginLink:
+          optionPopup_.show(StrId::STR_LINK_MARGINS, MARGIN_LINK_IDS, static_cast<int>(std::size(MARGIN_LINK_IDS)),
+                            SETTINGS.marginLinkMode, [](int idx) {
+                              const auto next = static_cast<uint8_t>(idx);
+                              if (next == SETTINGS.marginLinkMode) return;  // re-picking costs no erase cycle
+                              // The mode carries its own consequences: All Sides adopts the
+                              // horizontal margin everywhere and turns Dynamic Margins off.
+                              SETTINGS.setMarginLinkMode(margin_link::toMode(next));
+                              SETTINGS.saveToFile();
+                            });
+          break;
         default:
           optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
                             static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins, [](int idx) {
@@ -487,14 +517,6 @@ void TextSettingsActivity::activateRow(const Row row) {
   switch (row) {
     case Row::ExtraSpacing:
       SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
-      break;
-    case Row::LinkTopBottom:
-      SETTINGS.verticalMarginsLinked = !SETTINGS.verticalMarginsLinked;
-      if (SETTINGS.verticalMarginsLinked) {
-        const auto linked = vertical_margins::relink({SETTINGS.screenMarginTop, SETTINGS.screenMarginBottom});
-        SETTINGS.screenMarginTop = linked.top;
-        SETTINGS.screenMarginBottom = linked.bottom;
-      }
       break;
     case Row::FocusReading:
       SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;

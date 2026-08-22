@@ -44,8 +44,8 @@ class TextSettingsActivity final : public Activity {
     IndentMode,
     IndentPercent,  // only in Custom % mode
     SectionMargins,
-    HorizontalMargin,
-    LinkTopBottom,
+    HorizontalMargin,  // labelled "Margin" in All Sides, where it stands for every side
+    MarginLink,
     VerticalMargin,  // shown while top and bottom are linked
     TopMargin,       // replaces VerticalMargin when they are not
     BottomMargin,
