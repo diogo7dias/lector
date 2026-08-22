@@ -144,10 +144,10 @@ class GfxRenderer {
       : display(halDisplay), renderMode(BW), orientation(Portrait), fadingFix(false) {}
   ~GfxRenderer() { freeBwBufferChunks(); }
 
-  static constexpr int VIEWABLE_MARGIN_TOP = 9;
-  static constexpr int VIEWABLE_MARGIN_RIGHT = 3;
-  static constexpr int VIEWABLE_MARGIN_BOTTOM = 3;
-  static constexpr int VIEWABLE_MARGIN_LEFT = 3;
+  // Bezel-covered edge insets come from the running board profile
+  // (BoardConfig::ACTIVE.viewableInsets), so a board whose bezel covers less than
+  // the X4's keeps its chrome flush with the screen edge. See
+  // getOrientedViewableTRBL().
 
   // Setup
   void begin();  // must be called right after display.begin()

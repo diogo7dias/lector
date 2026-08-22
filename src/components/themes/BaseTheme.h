@@ -116,7 +116,7 @@ namespace BaseMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .batteryHeight = 12,
                                  // 5 px of chrome padding plus the X4's ~9 px physical top crop
-                                 // (GfxRenderer::VIEWABLE_MARGIN_TOP). Menu screens do not consult
+                                 // (its BoardProfile::viewableInsets.top). Menu screens do not consult
                                  // getOrientedViewableTRBL, so without this the header sits right on
                                  // the panel edge. Every header y, content top and the per-page item
                                  // reserve are expressed against topPadding, so they all shift together.

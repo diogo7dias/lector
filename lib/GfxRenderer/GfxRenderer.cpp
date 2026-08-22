@@ -1,6 +1,7 @@
 #include "GfxRenderer.h"
 
 #include <BidiUtils.h>
+#include <BoardConfig.h>
 #include <BuildScratch.h>
 #include <FontDecompressor.h>
 #include <HalGPIO.h>
@@ -12,6 +13,7 @@
 #include <algorithm>
 
 #include "FontCacheManager.h"
+#include "ViewableInsets.h"
 
 namespace {
 
@@ -2388,30 +2390,19 @@ void GfxRenderer::cleanupGrayscaleWithFrameBuffer() const {
 }
 
 void GfxRenderer::getOrientedViewableTRBL(int* outTop, int* outRight, int* outBottom, int* outLeft) const {
-  switch (orientation) {
-    case Portrait:
-      *outTop = VIEWABLE_MARGIN_TOP;
-      *outRight = VIEWABLE_MARGIN_RIGHT;
-      *outBottom = VIEWABLE_MARGIN_BOTTOM;
-      *outLeft = VIEWABLE_MARGIN_LEFT;
-      break;
-    case LandscapeClockwise:
-      *outTop = VIEWABLE_MARGIN_LEFT;
-      *outRight = VIEWABLE_MARGIN_TOP;
-      *outBottom = VIEWABLE_MARGIN_RIGHT;
-      *outLeft = VIEWABLE_MARGIN_BOTTOM;
-      break;
-    case PortraitInverted:
-      *outTop = VIEWABLE_MARGIN_BOTTOM;
-      *outRight = VIEWABLE_MARGIN_LEFT;
-      *outBottom = VIEWABLE_MARGIN_TOP;
-      *outLeft = VIEWABLE_MARGIN_RIGHT;
-      break;
-    case LandscapeCounterClockwise:
-      *outTop = VIEWABLE_MARGIN_RIGHT;
-      *outRight = VIEWABLE_MARGIN_BOTTOM;
-      *outBottom = VIEWABLE_MARGIN_LEFT;
-      *outLeft = VIEWABLE_MARGIN_TOP;
-      break;
-  }
+  // The board profile measures the bezel in the renderer's Portrait frame; the pure
+  // helper rotates it into whatever orientation is on screen. The cast is only safe
+  // while the two enums agree, hence the guards.
+  static_assert(static_cast<int>(Portrait) == static_cast<int>(gfx::InsetOrientation::Portrait));
+  static_assert(static_cast<int>(LandscapeClockwise) == static_cast<int>(gfx::InsetOrientation::LandscapeClockwise));
+  static_assert(static_cast<int>(PortraitInverted) == static_cast<int>(gfx::InsetOrientation::PortraitInverted));
+  static_assert(static_cast<int>(LandscapeCounterClockwise) ==
+                static_cast<int>(gfx::InsetOrientation::LandscapeCounterClockwise));
+  const auto& insets = BoardConfig::ACTIVE.viewableInsets;
+  const gfx::ViewableInsets oriented = gfx::orientInsets({insets.top, insets.right, insets.bottom, insets.left},
+                                                         static_cast<gfx::InsetOrientation>(orientation));
+  *outTop = oriented.top;
+  *outRight = oriented.right;
+  *outBottom = oriented.bottom;
+  *outLeft = oriented.left;
 }
