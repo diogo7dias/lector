@@ -238,13 +238,14 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Bindings still set to a retired action (Select Chapter, Go to Percent) fall back to
-  // Disabled. The pickers can no longer produce those values, but a settings file written
+  // Bindings still set to a retired action (Select Chapter, Go to Percent, Text Settings)
+  // fall back to Disabled. The pickers can no longer produce those values, but a settings file written
   // by 0.20.0 can still name one, and it would go on working invisibly.
   for (uint8_t CrossPointSettings::* binding :
        {&CrossPointSettings::longPressMenuFunction, &CrossPointSettings::menuHoldFunction,
         &CrossPointSettings::doubleClickPowerFunction}) {
-    if (s.*binding == LP_MENU_SELECT_CHAPTER || s.*binding == LP_MENU_GO_TO_PERCENT) {
+    if (s.*binding == LP_MENU_SELECT_CHAPTER || s.*binding == LP_MENU_GO_TO_PERCENT ||
+        s.*binding == LP_MENU_TEXT_SETTINGS) {
       s.*binding = LP_MENU_DISABLED;
       needsResave = true;
     }

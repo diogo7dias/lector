@@ -231,6 +231,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // RETIRED 2026-08-11 (Diogo): both left the offered list. The values stay so every
     // binding value after them keeps its meaning, they are listed in withHiddenEnumValues()
     // in SettingsList.h, and fromJson folds a binding still set to one of them to Disabled.
+    // LP_MENU_TEXT_SETTINGS below was retired the same way on 2026-08-22: the global text
+    // settings belong in Settings > Reader, and having them a button press from the page
+    // made it easy to edit every book while meaning to edit this one (Reader Settings).
     LP_MENU_SELECT_CHAPTER = 5,
     LP_MENU_GO_TO_PERCENT = 6,
     LP_MENU_GO_TO_PARAGRAPH = 7,
@@ -263,9 +266,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // and Menu Pop-up itself. Used by the tick screen and by the pop-up builder, so
   // both agree on the row order without either owning a second list.
   static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
-      LP_MENU_KOSYNC,        LP_MENU_BOOKMARK,        LP_MENU_BOOKMARKS,         LP_MENU_DICTIONARY,
-      LP_MENU_GRAB_QUOTE,    LP_MENU_VIEW_QUOTES,     LP_MENU_GO_TO_PARAGRAPH,   LP_MENU_FOOTNOTES,
-      LP_MENU_TEXT_SETTINGS, LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
+      LP_MENU_KOSYNC,          LP_MENU_BOOKMARK,          LP_MENU_BOOKMARKS,       LP_MENU_DICTIONARY,
+      LP_MENU_GRAB_QUOTE,      LP_MENU_VIEW_QUOTES,       LP_MENU_GO_TO_PARAGRAPH, LP_MENU_FOOTNOTES,
+      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
 
   // Cap on ticked pop-up rows. Every action can be ticked at once; the ceiling only exists
   // because popupItems is a 16-bit mask, so 16 is as many bits as there are to set. The
