@@ -18,7 +18,7 @@ add_executable(SelectionAuditTest
 )
 
 target_compile_definitions(SelectionAuditTest PRIVATE
-  BASE_THEME_SOURCE="${REPO_ROOT}/src/components/themes/BaseTheme.cpp"
+  SELECTION_SOURCES="${REPO_ROOT}/src/components/themes/BaseTheme.cpp|${REPO_ROOT}/src/activities/network/NearbyFileTransferActivity.cpp|${REPO_ROOT}/src/activities/browser/OpdsBookBrowserActivity.cpp|${REPO_ROOT}/src/activities/reader/XtcReaderChapterSelectionActivity.cpp"
 )
 
 target_link_libraries(SelectionAuditTest PRIVATE

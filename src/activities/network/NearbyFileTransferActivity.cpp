@@ -664,9 +664,14 @@ void NearbyFileTransferActivity::renderPeerList(const Rect& screen, const int to
   for (size_t index = 0; index < session.peerCount(); index++) {
     const int rowY = top + 40 + static_cast<int>(index) * rowHeight;
     const bool selected = static_cast<int>(index) == selectedPeer;
-    if (selected) renderer.fillRect(screen.x, rowY - 2, screen.width - 1, rowHeight);
     const std::string& name = session.peerAt(index).name;
-    renderer.drawText(UI_10_FONT_ID, left, rowY, name.empty() ? "Lector" : name.c_str(), !selected);
+    const char* label = name.empty() ? "Lector" : name.c_str();
+    bool inverted = false;
+    if (selected) {
+      const Rect span(left, rowY, renderer.getTextWidth(UI_10_FONT_ID, label), renderer.getLineHeight(UI_10_FONT_ID));
+      inverted = GUI.drawSelection(renderer, Rect(screen.x, rowY - 2, screen.width - 1, rowHeight), &span, 1);
+    }
+    renderer.drawText(UI_10_FONT_ID, left, rowY, label, !inverted);
   }
 }
 

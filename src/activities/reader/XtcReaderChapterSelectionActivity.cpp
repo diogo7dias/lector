@@ -130,12 +130,20 @@ void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
   }
 
   const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  // Highlight only the content area, not the hint gutters.
-  renderer.fillRect(contentX, 60 + contentY + (selectorIndex % pageItems) * 30 - 2, contentWidth - 1, 30);
+  // The highlight is painted with the selected row, not ahead of the loop, because the
+  // bracket style has to know how wide that row's title came out.
+  bool inverted = true;
   for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
     const auto& chapter = chapters[i];
     const char* title = chapter.name.empty() ? tr(STR_UNNAMED) : chapter.name.c_str();
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, 60 + contentY + (i % pageItems) * 30, title, i != selectorIndex);
+    const int rowY = 60 + contentY + (i % pageItems) * 30;
+    if (i == selectorIndex) {
+      const Rect span(contentX + 20, rowY, renderer.getTextWidth(UI_10_FONT_ID, title),
+                      renderer.getLineHeight(UI_10_FONT_ID));
+      // Highlight only the content area, not the hint gutters.
+      inverted = GUI.drawSelection(renderer, Rect(contentX, rowY - 2, contentWidth - 1, 30), &span, 1);
+    }
+    renderer.drawText(UI_10_FONT_ID, contentX + 20, rowY, title, i != selectorIndex || !inverted);
   }
 
   // Skip button hints in landscape CW mode (they overlap content)

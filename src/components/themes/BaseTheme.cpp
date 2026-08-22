@@ -868,14 +868,12 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           coverRendered = coverBufferStored;  // Only consider it rendered if we successfully stored the buffer
 
           // First render: if selected, draw selection indicators now
-          if (bookSelected) {
+          // Solid keeps the nested border it always drew. The other styles mark the
+          // card once, further down, where the title box has been measured.
+          if (cardInverted) {
             LOG_DBG("THEME", "Drawing selection");
-            if (cardInverted) {
-              renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
-              renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
-            } else {
-              drawSelection(renderer, Rect(bookX, bookY, bookWidth, bookHeight));
-            }
+            renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
+            renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
           }
         }
       }
@@ -916,7 +914,7 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
     }
 
     // If buffer was restored, draw selection indicators if needed
-    if (bufferRestored && bookSelected && coverRendered) {
+    if (bufferRestored && cardInverted && coverRendered) {
       // Draw selection border (no bookmark inversion needed since cover has no bookmark)
       renderer.drawRect(bookX + 1, bookY + 1, bookWidth - 2, bookHeight - 2);
       renderer.drawRect(bookX + 2, bookY + 2, bookWidth - 4, bookHeight - 4);
@@ -975,9 +973,10 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.fillRect(boxX, boxY, boxWidth, boxHeight, cardInverted);
       // Draw border around the box (inverted when selected: white border instead of black)
       renderer.drawRect(boxX, boxY, boxWidth, boxHeight, !cardInverted);
-      // The restored buffer is a clean cover, so a non-solid style has to re-mark the
-      // card. The title box is the span brackets hug; the caret still uses the card.
-      if (!cardInverted) {
+      // The one place a non-solid style marks the card, so a restored cover buffer and
+      // a freshly rendered one behave alike and neither gets marked twice. Guarded on
+      // the selection itself: without it, Solid would fill every unselected card black.
+      if (bookSelected && !cardInverted) {
         const Rect titleBox(boxX, boxY, boxWidth, boxHeight);
         drawSelection(renderer, Rect(bookX, bookY, bookWidth, bookHeight), &titleBox, 1);
       }
@@ -1598,9 +1597,11 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const bool paintedOver = selectionStyle == selection_style::SOLID;
     if (metrics.optionPopupDrawAllRows || (selected && paintedOver)) {
       Color rowColor;
-      if (selected) {
+      if (selected && paintedOver) {
         rowColor = metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black;
       } else {
+        // Including the selected row under a non-solid style: it keeps the popup's own
+        // background and takes its brackets or caret on top.
         rowColor = Color::White;
       }
       if (selectionRadius > 0) {
