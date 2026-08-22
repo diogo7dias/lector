@@ -141,3 +141,37 @@ TEST(SelectionStyle, CaretIsWideEnoughToReadOnEInk) {
   // A one-pixel-per-column arrow all but vanishes at e-ink pitch.
   EXPECT_GE(rightmost - leftmost, 7);
 }
+
+TEST(SelectionStyle, ASpanIsGrownSoBracketsSitOutsideTheGlyphs) {
+  // Brackets drawn straight onto the text box touch the glyphs. The span is padded
+  // out first, so the marks read as hugging the word rather than crossing it.
+  const Bar row{0, 0, 300, 30};
+  const Bar grown = inflatedSpan(Bar{100, 10, 40, 12}, row);
+  EXPECT_LT(grown.x, 100);
+  EXPECT_LT(grown.y, 10);
+  EXPECT_GT(grown.width, 40);
+  EXPECT_GT(grown.height, 12);
+}
+
+TEST(SelectionStyle, AGrownSpanNeverEscapesItsRow) {
+  // A label starting hard against the row's left edge, and a value ending hard
+  // against its right, must not push brackets into the neighbouring rows.
+  const Bar row{20, 40, 300, 20};
+  for (const Bar span : {Bar{20, 40, 30, 20}, Bar{290, 44, 30, 12}, Bar{20, 40, 300, 20}}) {
+    const Bar grown = inflatedSpan(span, row);
+    EXPECT_GE(grown.x, row.x);
+    EXPECT_GE(grown.y, row.y);
+    EXPECT_LE(grown.x + grown.width, row.x + row.width);
+    EXPECT_LE(grown.y + grown.height, row.y + row.height);
+    EXPECT_GT(grown.width, 0);
+    EXPECT_GT(grown.height, 0);
+  }
+}
+
+TEST(SelectionStyle, AnEmptySpanStaysEmpty) {
+  // Rows with no value text hand over a zero-width span; it must not turn into a
+  // stray pair of brackets floating on the row.
+  const Bar row{0, 0, 300, 30};
+  const Bar grown = inflatedSpan(Bar{100, 10, 0, 12}, row);
+  EXPECT_EQ(0, grown.width);
+}

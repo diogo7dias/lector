@@ -33,6 +33,11 @@ constexpr Style fromSetting(const uint8_t value) { return value < STYLE_COUNT ? 
 // drawn white to stay legible. The other styles leave the paper alone.
 constexpr bool invertsText(const Style style) { return style == SOLID; }
 
+// Grows a text span so bracket marks sit just outside the glyphs rather than on
+// them, clamped so they can never reach into the rows above or below. A span with
+// no width is left alone: a row with no value text must not sprout stray brackets.
+Bar inflatedSpan(Bar span, Bar row);
+
 namespace detail {
 
 constexpr int clampInt(const int value, const int low, const int high) {
@@ -46,6 +51,18 @@ constexpr int strokeFor(const int width, const int height) {
 }
 
 }  // namespace detail
+
+inline Bar inflatedSpan(const Bar span, const Bar row) {
+  if (span.width <= 0 || span.height <= 0) return span;
+
+  constexpr int padX = 5;
+  constexpr int padY = 3;
+  const int left = detail::clampInt(span.x - padX, row.x, row.x + row.width);
+  const int top = detail::clampInt(span.y - padY, row.y, row.y + row.height);
+  const int right = detail::clampInt(span.x + span.width + padX, row.x, row.x + row.width);
+  const int bottom = detail::clampInt(span.y + span.height + padY, row.y, row.y + row.height);
+  return Bar{left, top, right - left, bottom - top};
+}
 
 // Writes the bars painting `style` over the given row and returns how many were
 // written. A row with no area paints nothing.

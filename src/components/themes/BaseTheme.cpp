@@ -403,13 +403,34 @@ int BaseTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
   return std::max(1, contentHeight / rowStep);
 }
 
-bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect) const {
+bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans,
+                              const int spanCount) const {
   const selection_style::Style style = selection_style::fromSetting(SETTINGS.selectionStyle);
-  selection_style::Bar painted[selection_style::MAX_BARS];
-  const int count = selection_style::bars(style, rect.x, rect.y, rect.width, rect.height, painted);
-  for (int i = 0; i < count; ++i) {
-    renderer.fillRect(painted[i].x, painted[i].y, painted[i].width, painted[i].height);
+  const selection_style::Bar row{rect.x, rect.y, rect.width, rect.height};
+
+  const auto paint = [&renderer](const selection_style::Style s, const selection_style::Bar& area) {
+    selection_style::Bar painted[selection_style::MAX_BARS];
+    const int count = selection_style::bars(s, area.x, area.y, area.width, area.height, painted);
+    for (int i = 0; i < count; ++i) {
+      renderer.fillRect(painted[i].x, painted[i].y, painted[i].width, painted[i].height);
+    }
+  };
+
+  if (style == selection_style::BRACKETS && spans != nullptr && spanCount > 0) {
+    bool bracketed = false;
+    for (int i = 0; i < spanCount; ++i) {
+      const selection_style::Bar grown =
+          selection_style::inflatedSpan({spans[i].x, spans[i].y, spans[i].width, spans[i].height}, row);
+      if (grown.width <= 0 || grown.height <= 0) continue;  // e.g. a row with no value text
+      paint(style, grown);
+      bracketed = true;
+    }
+    // A caller that measured nothing usable still needs its row marked.
+    if (!bracketed) paint(style, row);
+    return false;
   }
+
+  paint(style, row);
   return selection_style::invertsText(style);
 }
 
@@ -470,14 +491,11 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
   }
 
-  // Draw selection. Only the solid style paints over the row, so only then does the
-  // row's own text have to come out white.
   int contentWidth = rect.width - 5;
+  // Only the solid style paints over the row, so only then does the row's own text
+  // have to come out white. Resolved when the selected row is reached, because the
+  // bracket style needs that row's label and value measured first.
   bool selectionInvertsText = true;
-  if (selectedIndex >= 0) {
-    selectionInvertsText = drawSelection(
-        renderer, Rect(rect.x, rect.y + (selectedIndex - windowStart) * rowHeight - 2, rect.width, rowHeight));
-  }
   // Rows drawn against untouched paper, including the selected one under a
   // non-solid style.
   const auto drawnOnPaper = [&](const int index) { return index != selectedIndex || !selectionInvertsText; };
@@ -516,6 +534,24 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     auto itemName = rowTitle(i);
     auto font = itemFontId;
     auto item = renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
+
+    // Where the value will land, needed here so the selection can bracket it before
+    // any of the row's text is drawn over.
+    const int valueTextWidth = valueText.empty() ? 0 : renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
+    const int valueX = rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth;
+    const int valueY = (rowSubtitle != nullptr) ? itemY + 10 : itemY;
+
+    if (i == selectedIndex) {
+      const int titleX = rect.x + BaseMetrics::values.contentSidePadding;
+      const Rect spans[2] = {
+          Rect(titleX, itemY, renderer.getTextWidth(font, item.c_str()), renderer.getLineHeight(font)),
+          Rect(valueX, valueY, valueTextWidth, renderer.getLineHeight(UI_10_FONT_ID)),
+      };
+      selectionInvertsText =
+          drawSelection(renderer, Rect(rect.x, rect.y + (i - windowStart) * rowHeight - 2, rect.width, rowHeight),
+                        spans, valueText.empty() ? 1 : 2);
+    }
+
     renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), drawnOnPaper(i));
 
     // Apply checkerboard dither to create gray text effect for dimmed items
@@ -538,13 +574,7 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     }
 
     if (!valueText.empty()) {
-      const auto valueTextWidth = renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
-      int valueY = itemY;
-      if (rowSubtitle != nullptr) {
-        valueY = itemY + 10;
-      }
-      renderer.drawText(UI_10_FONT_ID, rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth,
-                        valueY, valueText.c_str(), drawnOnPaper(i));
+      renderer.drawText(UI_10_FONT_ID, valueX, valueY, valueText.c_str(), drawnOnPaper(i));
     }
   }
 }
@@ -945,8 +975,12 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       renderer.fillRect(boxX, boxY, boxWidth, boxHeight, cardInverted);
       // Draw border around the box (inverted when selected: white border instead of black)
       renderer.drawRect(boxX, boxY, boxWidth, boxHeight, !cardInverted);
-      // The restored buffer is a clean cover, so a non-solid style has to re-mark the card.
-      if (!cardInverted) drawSelection(renderer, Rect(bookX, bookY, bookWidth, bookHeight));
+      // The restored buffer is a clean cover, so a non-solid style has to re-mark the
+      // card. The title box is the span brackets hug; the caret still uses the card.
+      if (!cardInverted) {
+        const Rect titleBox(boxX, boxY, boxWidth, boxHeight);
+        drawSelection(renderer, Rect(bookX, bookY, bookWidth, bookHeight), &titleBox, 1);
+      }
     }
 
     for (const auto& line : lines) {
@@ -1093,15 +1127,22 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
   int rowY = listTop;
   for (const Row& row : rows) {
     const bool selected = row.index == selectedIndex;
+    const int valueX = contentX + contentW - (row.valueW - valueGap);
     // One highlight over the whole measured height, so a row spanning several lines is
     // marked as a single block. `inverted` is true only under the solid style, which is
-    // the only one that paints over the row's own text and its badge chip.
+    // the only one that paints over the row's own text and its badge chip. The bracket
+    // style hugs the wrapped title block and the value separately.
     bool inverted = false;
     if (selected) {
-      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height));
+      const int titleX = contentX + row.badgeW;
+      const Rect spans[2] = {
+          Rect(titleX, rowY + 3, contentX + contentW - titleX - (row.valueW > 0 ? row.valueW : 0),
+               static_cast<int>(row.lines.size()) * lineHeight),
+          Rect(valueX, rowY + 3, row.valueW - valueGap, lineHeight),
+      };
+      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), spans, row.valueW > 0 ? 2 : 1);
     }
     if (row.valueW > 0) {
-      const int valueX = contentX + contentW - (row.valueW - valueGap);
       renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !inverted);
     }
     int textX = contentX;
@@ -1136,23 +1177,6 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
     const bool selected = selectedIndex == i;
 
-    // Unselected tiles already carry an outline, so the highlight has to read against
-    // one. Brackets sit inside it and the caret rule doubles its bottom edge; both stay
-    // legible without the tile inverting.
-    bool inverted = false;
-    if (selected) {
-      inverted = drawSelection(
-          renderer, Rect(rect.x + BaseMetrics::values.contentSidePadding, tileY,
-                         rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight));
-      if (!inverted) {
-        renderer.drawRect(rect.x + BaseMetrics::values.contentSidePadding, tileY,
-                          rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight);
-      }
-    } else {
-      renderer.drawRect(rect.x + BaseMetrics::values.contentSidePadding, tileY,
-                        rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight);
-    }
-
     std::string labelStr = buttonLabel(i);
     const char* label = labelStr.c_str();
     const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
@@ -1160,6 +1184,20 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const int textY =
         tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
+
+    // Unselected tiles already carry an outline, so the highlight has to read against
+    // one. Brackets hug the tile's own label and the caret rule doubles the tile's
+    // bottom edge; both stay legible without the tile inverting.
+    const Rect tile(rect.x + BaseMetrics::values.contentSidePadding, tileY,
+                    rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight);
+    bool inverted = false;
+    if (selected) {
+      const Rect labelSpan(textX, textY, textWidth, lineHeight);
+      inverted = drawSelection(renderer, tile, &labelSpan, 1);
+      if (!inverted) renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
+    } else {
+      renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
+    }
     // Invert text when the tile is selected, to contrast with the filled background
     renderer.drawText(UI_10_FONT_ID, textX, textY, label, !inverted);
   }
@@ -1571,13 +1609,14 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
         renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
       }
     }
-    if (selected && !paintedOver) {
-      drawSelection(renderer, Rect(itemRectX, itemY, itemRectW, rowHeight));
-    }
-
     const int textW = renderer.getTextWidth(optionFontId, labelText, optionStyle);
     const int textY = itemY + (rowHeight - optionLineHeight) / 2;
     const int textX = leftAlign ? itemRectX + selectionHPadding : itemRectX + (itemRectW - textW) / 2;
+
+    if (selected && !paintedOver) {
+      const Rect label(textX, textY, textW, optionLineHeight);
+      drawSelection(renderer, Rect(itemRectX, itemY, itemRectW, rowHeight), &label, 1);
+    }
     // Unselected items: text is dark (invert=true means draw on white bg).
     // Selected on dark bg: text must be white (invert=false).
     // Selected on light bg: text stays dark (invert=true).
@@ -1752,10 +1791,14 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
   for (const auto& entry : visibleEntries) {
     const bool selected = (selectorIndex == entry.bookIdx);
     // Solid paints the whole row and forces white text; the other styles mark it and
-    // leave the text and the badge chip on their normal ground.
+    // leave the text and the badge chip on their normal ground. Brackets hug the
+    // title block, which starts after the [NN%] chip when the row carries one.
     bool inverted = false;
     if (selected) {
-      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height));
+      const int titleX = contentX + (entry.badgeW > 0 ? entry.badgeW + 6 : 0);
+      const Rect titleSpan(titleX, rowY + 3, rowX + rowW - titleX,
+                           static_cast<int>(entry.lines.size()) * rowLineHeight);
+      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), &titleSpan, 1);
     }
 
     // [NN%] badge on line 0: an inverted chip that flips with row selection so it

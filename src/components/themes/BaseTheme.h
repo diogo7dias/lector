@@ -203,7 +203,13 @@ class BaseTheme {
   // popup and tab goes through this rather than filling a rectangle itself, so one
   // setting reaches all of them. Section heading bands are NOT selections: they keep
   // their own solid fill in every style.
-  bool drawSelection(const GfxRenderer& renderer, Rect rect) const;
+  //
+  // `spans` are the text runs inside the row, in drawing order: a settings row hands
+  // over its label and its value. The bracket style hugs each span on its own rather
+  // than the whole row, which is what makes a value like ON read as picked. Surfaces
+  // with nothing to measure -- a book cover, a tab -- pass none and get the row
+  // bracketed instead. The solid and caret styles ignore spans entirely.
+  bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0) const;
 
   virtual int getListRowStep(bool hasSubtitle) const;
   virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
