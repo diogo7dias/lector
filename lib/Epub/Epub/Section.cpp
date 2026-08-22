@@ -85,10 +85,15 @@ namespace {
 //      separate suffix token, and a visible hyphen or dash inside a word is now a break
 //      opportunity (upstream #2892; upstream numbered it v38). Both change where lines
 //      break, so pages cached by older versions no longer match.
+// v53: a table row holding a colspan or rowspan cell now flows stacked at full width
+//      instead of as grid columns, and cell text inherits text-align, weight, style and
+//      decoration from the enclosing <table>/<tr>/<tbody> (upstream #2654 as merged;
+//      upstream numbered it v41). Cells land in different places, so cached pages built by
+//      older versions no longer match.
 // Not a version: the Hidden Dots sub-option (keep the widened guide-dot gap, draw no
 // dot) reuses the v37 guide-dots header byte as a three-state mode, so the header keeps
 // its size and only books whose guide-dot state actually changed are rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 52;
+constexpr uint8_t SECTION_FILE_VERSION = 53;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
