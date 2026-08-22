@@ -1,4 +1,4 @@
-<!-- lector-version: 0.26.3 -->
+<!-- lector-version: 0.26.4 -->
 
 # Lector User Guide
 
@@ -681,6 +681,10 @@ Three ways to install one:
    `.cpfont` files.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.
    Files come from the [lector-fonts repository](https://github.com/diogo7dias/lector-fonts).
+
+Downloadable families are built at point sizes 10 through 18, so a family gives you nine
+reading sizes. OpenDyslexic is the exception, at 8 through 16, because its glyphs run larger
+for the same point size.
 
 Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
 details are in [docs/sd-card-fonts.md](./docs/sd-card-fonts.md).
