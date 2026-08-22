@@ -488,3 +488,59 @@ TEST(ReaderPrefs, AdoptStatusBarFromCopiesTheWholeBlockAndNothingElse) {
   EXPECT_EQ(keptFontSize, book.fontPointSize);
   EXPECT_EQ(keptMargin, book.screenMargin);
 }
+
+// Embedded Style split into a text switch and a layout switch in v12. A v11 sidecar
+// stops before the layout switch, so it must be read at its own length: reading
+// sizeof() instead would run off the end of the record and drop every per-book
+// setting the user ever chose the first time this firmware opens the book.
+TEST(ReaderPrefs, Version11SidecarKeepsEveryFieldItActuallyHeld) {
+  ReaderPrefs legacy = makeSample();
+  legacy.embeddedTextStyle = 1;  // the single v11 "Embedded Style" choice
+  legacy.sbOffBar = 3;           // the last field a v11 record really carried
+  std::stringstream ss;
+  const uint8_t v11 = 11;
+  ss.write(reinterpret_cast<const char*>(&v11), 1);
+  ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V11_SIZE);
+
+  ReaderPrefs loaded;
+  bool migrated = false;
+  ASSERT_TRUE(readReaderPrefs(ss, loaded, &migrated));
+  EXPECT_TRUE(migrated);
+  EXPECT_EQ(legacy.fontPointSize, loaded.fontPointSize);
+  EXPECT_EQ(legacy.screenMargin, loaded.screenMargin);
+  EXPECT_EQ(legacy.screenMarginTop, loaded.screenMarginTop);
+  EXPECT_EQ(legacy.paragraphNumberSize, loaded.paragraphNumberSize);
+  EXPECT_EQ(legacy.statusBarEnabled, loaded.statusBarEnabled);
+  EXPECT_EQ(legacy.sbOffBar, loaded.sbOffBar);
+  EXPECT_STREQ(legacy.sdFontFamilyName, loaded.sdFontFamilyName);
+}
+
+// The split's rule: a reader who had Embedded Style off wanted the book's own styling
+// gone, so both switches start off rather than quietly handing back the book's
+// margins and indents.
+TEST(ReaderPrefs, Version11SidecarSeedsTheLayoutSwitchFromTheOldSingleChoice) {
+  for (const uint8_t choice : {uint8_t{0}, uint8_t{1}}) {
+    ReaderPrefs legacy = makeSample();
+    legacy.embeddedTextStyle = choice;
+    std::stringstream ss;
+    const uint8_t v11 = 11;
+    ss.write(reinterpret_cast<const char*>(&v11), 1);
+    ss.write(reinterpret_cast<const char*>(&legacy), READER_PREFS_V11_SIZE);
+
+    ReaderPrefs loaded;
+    ASSERT_TRUE(readReaderPrefs(ss, loaded));
+    EXPECT_EQ(choice, loaded.embeddedTextStyle);
+    EXPECT_EQ(choice, loaded.embeddedLayoutStyle);
+  }
+}
+
+// The layout switch is the newest field, so it must sit last: every field above it
+// keeps the offset a v11 record wrote it at.
+TEST(ReaderPrefs, TheLayoutSwitchIsTheLastFieldAndV11StopsBeforeIt) {
+  EXPECT_EQ(offsetof(ReaderPrefs, embeddedLayoutStyle), READER_PREFS_V11_SIZE);
+  EXPECT_EQ(READER_PREFS_V11_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
+  EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
+  EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
+  EXPECT_EQ(12, ReaderPrefs::VERSION);
+}

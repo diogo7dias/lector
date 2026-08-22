@@ -16,8 +16,8 @@
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
 #include "components/UITheme.h"
-#include "util/VerticalMargins.h"
 #include "fontIds.h"
+#include "util/VerticalMargins.h"
 
 namespace {
 constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
@@ -28,7 +28,7 @@ constexpr StrId INDENT_MODE_IDS[] = {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_P
 
 // The two options that defer to the book's own CSS, and so go inert when Embedded Layout
 // Style is off.
-constexpr uint8_t ALIGNMENT_BOOK_INDEX = 4;   // STR_BOOK_S_STYLE
+constexpr uint8_t ALIGNMENT_BOOK_INDEX = 4;    // STR_BOOK_S_STYLE
 constexpr uint8_t INDENT_MODE_BOOK_INDEX = 0;  // STR_INDENT_BOOK
 
 std::string needsLayoutLabel(const std::string& label) {
@@ -46,6 +46,11 @@ constexpr int PREVIEW_MAX_PERCENT = 55;
 // Holding Up on an armed number steps it far faster than e-ink can follow. Redraw once the
 // value has been still this long; the value itself moves at full speed in the row.
 constexpr uint32_t EDIT_REDRAW_DEBOUNCE_MS = 200;
+// Holding Up or Down on a numeric row steps the value once per repeat. Writing the
+// settings file on each of those steps would rewrite the whole file dozens of times for
+// one margin sweep, and SPIFFS sectors have a finite erase cycle limit (CLAUDE.md,
+// Resource Protocol 8). The value is written once it stops moving instead.
+constexpr uint32_t EDIT_SAVE_DEBOUNCE_MS = 1200;
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -91,7 +96,10 @@ void TextSettingsActivity::onEnter() {
   requestUpdate();
 }
 
-void TextSettingsActivity::onExit() { Activity::onExit(); }
+void TextSettingsActivity::onExit() {
+  commitSettings();
+  Activity::onExit();
+}
 
 // The selectable sizes belong to the active family, so this runs on entry and again after
 // every family change. A family change goes through ensureLoaded(), which snaps
@@ -320,6 +328,17 @@ void TextSettingsActivity::applyNumber(const Row row, const int value) {
       *field = static_cast<uint8_t>(value);
       break;
   }
+  settingsDirty_ = true;
+}
+
+// Write the settings file if an edited value is still waiting to be persisted. Called
+// when the value stops moving, when the row is left, and on the way out of the screen,
+// so powering off or sleeping from inside Text Settings cannot lose the change
+// (the same failure applySize() guards against, upstream #2806).
+void TextSettingsActivity::commitSettings() {
+  pendingSaveAt_ = 0;
+  if (!settingsDirty_) return;
+  settingsDirty_ = false;
   SETTINGS.saveToFile();
 }
 
@@ -338,7 +357,8 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
       return onOff(SETTINGS.extraParagraphSpacing);
     case Row::Alignment: {
       const uint8_t v = SETTINGS.paragraphAlignment;
-      const std::string label = v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
+      const std::string label =
+          v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
       // "Book's Style" reads the alignment out of the book's own CSS, which is exactly what
       // Embedded Layout Style switches off. Saying so on the row beats a setting that looks
       // chosen and does nothing.
@@ -408,10 +428,7 @@ void TextSettingsActivity::openSizePicker() {
   options.reserve(sizes_.size());
   for (const auto& size : sizes_) options.push_back(size.name);
   optionPopup_.show(StrId::STR_SIZE, options, currentSizeIndex_, [this](int index) {
-    if (index != currentSizeIndex_) {
-      applySize(index);
-      SETTINGS.saveToFile();
-    }
+    if (index != currentSizeIndex_) applySize(index);  // applySize() persists
   });
 }
 
@@ -436,21 +453,27 @@ void TextSettingsActivity::activateRow(const Row row) {
         case Row::Alignment:
           optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
                             SETTINGS.paragraphAlignment, [](int idx) {
-                              SETTINGS.paragraphAlignment = static_cast<uint8_t>(idx);
+                              const auto next = static_cast<uint8_t>(idx);
+                              if (next == SETTINGS.paragraphAlignment) return;  // re-picking costs no erase cycle
+                              SETTINGS.paragraphAlignment = next;
                               SETTINGS.saveToFile();
                             });
           break;
         case Row::IndentMode:
           optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, INDENT_MODE_IDS, static_cast<int>(std::size(INDENT_MODE_IDS)),
                             SETTINGS.firstLineIndentMode, [](int idx) {
-                              SETTINGS.firstLineIndentMode = static_cast<uint8_t>(idx);
+                              const auto next = static_cast<uint8_t>(idx);
+                              if (next == SETTINGS.firstLineIndentMode) return;  // re-picking costs no erase cycle
+                              SETTINGS.firstLineIndentMode = next;
                               SETTINGS.saveToFile();
                             });
           break;
         default:
           optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
                             static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins, [](int idx) {
-                              SETTINGS.dynamicMargins = static_cast<uint8_t>(idx);
+                              const auto next = static_cast<uint8_t>(idx);
+                              if (next == SETTINGS.dynamicMargins) return;  // re-picking costs no erase cycle
+                              SETTINGS.dynamicMargins = next;
                               SETTINGS.saveToFile();
                             });
           break;
@@ -518,13 +541,16 @@ void TextSettingsActivity::stepEditedValue(const int delta) {
   applyNumber(row, next);
   // The row itself must follow the button immediately; the preview catches up once the
   // value stops moving.
-  pendingRedrawAt_ = millis() + EDIT_REDRAW_DEBOUNCE_MS;
+  const uint32_t now = millis();
+  pendingRedrawAt_ = now + EDIT_REDRAW_DEBOUNCE_MS;
+  pendingSaveAt_ = now + EDIT_SAVE_DEBOUNCE_MS;
   requestUpdate();
 }
 
 void TextSettingsActivity::leaveEdit() {
   editing_ = false;
   pendingRedrawAt_ = 0;
+  commitSettings();
   requestUpdate();
 }
 
@@ -538,13 +564,10 @@ void TextSettingsActivity::loop() {
       return;
     }
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (fontPickerIndex_ != currentFamilyIndex_) {
-        applyFamily(fontPickerIndex_);
-        // Persist immediately (like SettingsActivity's per-change saves): the parent's
-        // result callback only runs on a normal finish(), so relying on it loses the
-        // change when this screen is left via the home gesture/key or a sleep.
-        if (currentFamilyIndex_ == fontPickerIndex_) SETTINGS.saveToFile();
-      }
+      // applyFamily() persists on every path out of itself: the parent's result callback
+      // only runs on a normal finish(), so relying on it loses the change when this
+      // screen is left via the home gesture/key or a sleep.
+      if (fontPickerIndex_ != currentFamilyIndex_) applyFamily(fontPickerIndex_);
       mode_ = Mode::List;
       requestUpdate();
       return;
@@ -566,6 +589,9 @@ void TextSettingsActivity::loop() {
     pendingRedrawAt_ = 0;
     requestUpdate();
   }
+
+  // The value has stopped moving: write it once.
+  if (pendingSaveAt_ != 0 && millis() >= pendingSaveAt_) commitSettings();
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (editing_) {

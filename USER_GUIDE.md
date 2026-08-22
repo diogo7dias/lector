@@ -249,6 +249,10 @@ of them can be pointed at any action.
 **Pop-up Items** decides which rows the quick pop-up those bindings can open actually
 contains.
 
+Text Settings is no longer one of the actions on offer, and is no longer a pop-up row.
+It is reached from Settings, or from the in-book menu. A binding that pointed at it
+reads as Disabled after the update; pick another action for that gesture.
+
 ### Reading in landscape
 
 **Settings > Reader > Reading Orientation** offers Portrait, Landscape CW, Portrait 180° and
@@ -269,7 +273,8 @@ with the tab strip.
 
 ### Navigate
 
-- **Select Chapter** — the table of contents.
+- **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
+  open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
 - **Bookmarks** — the list, shown once the book has one.

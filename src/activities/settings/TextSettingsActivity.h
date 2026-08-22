@@ -133,6 +133,11 @@ class TextSettingsActivity final : public Activity {
   // not queue one full e-ink pass per step.
   bool editing_ = false;
   uint32_t pendingRedrawAt_ = 0;
+  // An edited number is written once the value stops moving, not on every button press.
+  // See commitSettings() in the .cpp for why.
+  bool settingsDirty_ = false;
+  uint32_t pendingSaveAt_ = 0;
+  void commitSettings();
 
   int currentFamilyIndex_ = 0;
   int currentSizeIndex_ = 0;

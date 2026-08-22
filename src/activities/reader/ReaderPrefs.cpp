@@ -81,8 +81,7 @@ bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated) {
   if (in.read(reinterpret_cast<uint8_t*>(&tmp), want) != static_cast<int>(want)) {
     return false;
   }
-  if (ver == 5) tmp.fontPointSize = foldLegacyReaderFontSize(tmp.fontPointSize);
-  if (ver < ReaderPrefs::FIRST_VERSION_WITH_CURRENT_DEFAULTS) tmp.adoptCurrentReadingDefaults();
+  migrateReaderPrefsFields(ver, tmp);
   if (ver < ReaderPrefs::VERSION && migrated) *migrated = true;
   p = tmp;
   return true;
