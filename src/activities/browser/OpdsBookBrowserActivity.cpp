@@ -203,15 +203,23 @@ void OpdsBookBrowserActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
   } else {
     const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-    renderer.fillRect(0, 60 + (selectorIndex % PAGE_ITEMS) * 30 - 2, pageWidth - 1, 30);
+    // The highlight is painted with the selected row, not ahead of the loop, because
+    // the bracket style has to know how wide that row's text came out.
+    bool inverted = true;
 
     for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
       const auto& entry = entries[i];
       std::string displayText = (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : entry.title;
       if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) displayText += " - " + entry.author;
       auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
-      renderer.drawText(UI_10_FONT_ID, 20, 60 + (i % PAGE_ITEMS) * 30, item.c_str(),
-                        i != static_cast<size_t>(selectorIndex));
+      const int rowY = 60 + static_cast<int>(i % PAGE_ITEMS) * 30;
+      const bool selected = i == static_cast<size_t>(selectorIndex);
+      if (selected) {
+        const Rect span(20, rowY, renderer.getTextWidth(UI_10_FONT_ID, item.c_str()),
+                        renderer.getLineHeight(UI_10_FONT_ID));
+        inverted = GUI.drawSelection(renderer, Rect(0, rowY - 2, pageWidth - 1, 30), &span, 1);
+      }
+      renderer.drawText(UI_10_FONT_ID, 20, rowY, item.c_str(), !selected || !inverted);
     }
   }
   presentFrame();

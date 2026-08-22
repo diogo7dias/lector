@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lector — selection highlight styles</title>
+<style>
+  :root {
+    --paper: #eae8e1;   /* e-ink white */
+    --ink:   #17181a;   /* e-ink black */
+    --screen-w: 480px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 64px;
+    background: #2a2b2e; color: #e8e6df;
+    font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+  .sub { opacity: .6; margin: 0 0 28px; font-size: 13px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 28px; justify-content: center; }
+  .card { width: var(--screen-w); }
+  .cap { margin: 0 0 8px; font-size: 13px; }
+  .cap b { font-size: 15px; display: block; margin-bottom: 2px; }
+  .cap span { opacity: .55; }
+  .cap .tag { display:inline-block; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+              background:#4a4c52; padding:1px 7px; border-radius:3px; margin-left:6px; opacity:.9; }
+
+  /* ---- the simulated e-ink screen ---- */
+  .screen {
+    width: var(--screen-w); background: var(--paper); color: var(--ink);
+    padding: 14px 0 18px; border-radius: 2px;
+    box-shadow: 0 0 0 1px #000, 0 6px 20px rgba(0,0,0,.45);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: none;
+  }
+  .hdr { padding: 0 20px 10px; display:flex; justify-content:space-between; align-items:baseline; }
+  .hdr .title { font-size: 17px; font-weight: 700; }
+  .hdr .batt  { font-size: 12px; }
+  .rule { height: 2px; background: var(--ink); margin: 0 0 8px; }
+
+  /* section heading band — solid fill, same as today. Never selectable. */
+  .head {
+    background: var(--ink); color: var(--paper);
+    font-size: 13px; font-weight: 700; letter-spacing: .06em;
+    text-align: center; padding: 5px 0; margin: 6px 0;
+  }
+
+  .row {
+    position: relative; height: 40px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 20px; font-size: 16px;
+  }
+  .row .val { font-size: 14px; }
+  .row.dim { opacity: .45; }
+
+  /* ---------- 0. CURRENT: solid invert ---------- */
+  .s-solid .row.sel { background: var(--ink); color: var(--paper); }
+
+  /* corner-bracket painter: 8 bars, 4 L-shaped corners */
+  .brk {
+    background-repeat: no-repeat;
+    background-image:
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink));
+    background-position:
+      0 0, 0 0,                 /* top-left    h, v */
+      100% 0, 100% 0,           /* top-right   h, v */
+      0 100%, 0 100%,           /* bottom-left h, v */
+      100% 100%, 100% 100%;     /* bottom-right h, v */
+  }
+
+  /* ---------- 1. corner brackets around label + value (Diogo's sketch) ---------- */
+  .s-brk .row.sel .lbl, .s-brk .row.sel .val { position: relative; }
+  .s-brk .row.sel .lbl::before, .s-brk .row.sel .val::before {
+    content: ""; position: absolute; inset: -7px -10px; pointer-events: none;
+    background-repeat: no-repeat;
+    background-image:
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink));
+    background-position: 0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%, 100% 100%;
+    background-size: 10px 3px, 3px 10px, 10px 3px, 3px 10px, 10px 3px, 3px 10px, 10px 3px, 3px 10px;
+  }
+
+  /* ---------- 2. corner brackets around the whole row ---------- */
+  .s-brkrow .row.sel::before {
+    content: ""; position: absolute; left: 8px; right: 8px; top: 3px; bottom: 3px; pointer-events: none;
+    background-repeat: no-repeat;
+    background-image:
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink)),
+      linear-gradient(var(--ink),var(--ink)), linear-gradient(var(--ink),var(--ink));
+    background-position: 0 0, 0 0, 100% 0, 100% 0, 0 100%, 0 100%, 100% 100%, 100% 100%;
+    background-size: 18px 3px, 3px 12px, 18px 3px, 3px 12px, 18px 3px, 3px 12px, 18px 3px, 3px 12px;
+  }
+
+  /* ---------- 3. outline box ---------- */
+  .s-box .row.sel { outline: 3px solid var(--ink); outline-offset: -4px; font-weight: 600; }
+
+  /* ---------- 4. dither fill, ink text ---------- */
+  .s-dither .row.sel {
+    background-image: radial-gradient(var(--ink) 45%, transparent 47%);
+    background-size: 3px 3px;
+    font-weight: 600;
+  }
+
+  /* ---------- 5. left marker bar + light dither ---------- */
+  .s-bar .row.sel {
+    background-image: radial-gradient(var(--ink) 30%, transparent 32%);
+    background-size: 6px 6px;
+    font-weight: 600; padding-left: 30px;
+  }
+  .s-bar .row.sel::before {
+    content: ""; position: absolute; left: 0; top: 2px; bottom: 2px; width: 9px; background: var(--ink);
+  }
+
+  /* ---------- 6. caret + underline ---------- */
+  .s-caret .row.sel { font-weight: 700; padding-left: 34px; }
+  .s-caret .row.sel::before {
+    content: "\25B6"; position: absolute; left: 14px; font-size: 13px; line-height: 40px;
+  }
+  .s-caret .row.sel::after {
+    content: ""; position: absolute; left: 20px; right: 20px; bottom: 2px; height: 3px; background: var(--ink);
+  }
+
+  .note { max-width: 1000px; margin: 40px auto 0; font-size: 13px; opacity: .75; line-height: 1.65; }
+  .note h2 { font-size: 15px; opacity: 1; margin-bottom: 6px; }
+  .note li { margin-bottom: 5px; }
+  code { background:#3a3c41; padding:1px 5px; border-radius:3px; font-size:12px; }
+</style>
+</head>
+<body>
+
+<h1>lector — selection highlight styles</h1>
+<p class="sub">The three shipped Selection Style options, on the same Settings screen. Simulated e-ink paper, 480 px wide, real metrics (30 px rows widened to 40 px for legibility on screen).</p>
+
+<div class="grid" id="grid"></div>
+
+<div class="note">
+  <h2>Notes</h2>
+  <ul>
+    <li>Section heading bands stay a solid fill in every style. Today the heading and the selected row look identical on purpose; any non-solid selection style makes them tell apart, which is a bonus.</li>
+    <li>Styles that keep the text black (Brackets, Caret) survive e-ink partial refresh with less ghosting than a full row invert, and redraw faster.</li>
+    <li>All three are painted as plain <code>fillRect</code> bars from <code>src/components/themes/SelectionStyle.h</code>, routed through <code>BaseTheme::drawSelection</code>. No new <code>GfxRenderer</code> primitive.</li>
+  </ul>
+</div>
+
+<script>
+const ROWS = [
+  {head: "Display"},
+  {lbl: "Font",            val: "Bookerly"},
+  {lbl: "Font size",       val: "10"},
+  {lbl: "Line spacing",    val: "Normal"},
+  {head: "Interface"},
+  {lbl: "Status bar",      val: "On", sel: true},
+  {lbl: "Progress bars",   val: "On"},
+  {lbl: "Night mode",      val: "Off"},
+  {lbl: "Sleep screen",    val: "Crest"},
+];
+
+const STYLES = [
+  {cls: "s-solid",  name: "Solid",    tag: "default", desc: "Black row, white text. The original look, kept as the default."},
+  {cls: "s-brk",    name: "Brackets", tag: "",        desc: "Corner marks hug the label and the value separately. Text stays black."},
+  {cls: "s-caret",  name: "Caret",    tag: "",        desc: "Arrow at the left of the row plus a rule underneath. Text stays black."},
+];
+
+const grid = document.getElementById("grid");
+for (const s of STYLES) {
+  const rows = ROWS.map(r => r.head
+    ? `<div class="head">${r.head}</div>`
+    : `<div class="row${r.sel ? " sel" : ""}"><span class="lbl">${r.lbl}</span><span class="val">${r.val}</span></div>`
+  ).join("");
+  grid.insertAdjacentHTML("beforeend", `
+    <div class="card">
+      <p class="cap"><b>${s.name}${s.tag ? `<span class="tag">${s.tag}</span>` : ""}</b><span>${s.desc}</span></p>
+      <div class="screen ${s.cls}">
+        <div class="hdr"><span class="title">Settings</span><span class="batt">78%</span></div>
+        <div class="rule"></div>
+        ${rows}
+      </div>
+    </div>`);
+}
+</script>
+</body>
+</html>
