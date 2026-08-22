@@ -9,6 +9,7 @@
 #include <string>
 
 #include "HttpRangePolicy.h"
+#include "WifiFullPower.h"
 
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
@@ -313,6 +314,7 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
                               const std::string& password) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
+  const WifiFullPower fullPower;
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
   return runGetSecure(url, username, password, sink) == OK;
@@ -322,6 +324,7 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
                               const std::string& password) {
   LOG_DBG("HTTP", "Fetching: %s", url.c_str());
   outContent.clear();  // start clean; the sink appends, so don't carry prior content
+  const WifiFullPower fullPower;
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) {
     outContent.append(reinterpret_cast<const char*>(data), len);
@@ -331,10 +334,22 @@ bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, c
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username,
-                              const std::string& password) {
-  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
+                              const std::string& password, const size_t rangeStart, bool* resumedFromStart) {
+  LOG_DBG("HTTP", "Fetching: %s (from %zu)", url.c_str(), rangeStart);
+  const WifiFullPower fullPower;
   Sink sink;
   sink.write = onData;
+  sink.rangeStart = rangeStart;
+  // A server that answers a Range with the whole body replays bytes the caller
+  // already has. There is no file to throw away here, so the caller is told and
+  // starts over; a caller that passed no flag cannot, and the transfer aborts.
+  if (rangeStart > 0) {
+    sink.restart = [resumedFromStart]() {
+      if (!resumedFromStart) return false;
+      *resumedFromStart = true;
+      return true;
+    };
+  }
   return runGetSecure(url, username, password, sink) == OK;
 }
 
@@ -343,6 +358,8 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              const std::string& username, const std::string& password,
                                                              const bool allowResume, std::string* contentDisposition) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
+
+  const WifiFullPower fullPower;
 
   // Bytes from an earlier attempt that this one can carry on from. Without
   // allowResume any leftover is stale by definition and goes.

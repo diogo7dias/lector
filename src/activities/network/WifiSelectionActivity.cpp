@@ -16,8 +16,47 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace {
+// The reader used to fail a connection with nothing on record but a timeout.
+// The SDK knows why it failed -- wrong password, AP out of range, the AP
+// dropping us -- and names the reason, so log it. Diagnosis only; the reason
+// never steers a decision here.
+void logWifiStationEvent(const arduino_event_id_t event, const arduino_event_info_t info) {
+  switch (event) {
+    case ARDUINO_EVENT_WIFI_STA_CONNECTED:
+      LOG_INF("WIFI", "Station connected, channel %d", static_cast<int>(info.wifi_sta_connected.channel));
+      break;
+    case ARDUINO_EVENT_WIFI_STA_GOT_IP:
+      LOG_INF("WIFI", "Station got IP, rssi %d dBm", static_cast<int>(WiFi.RSSI()));
+      break;
+    case ARDUINO_EVENT_WIFI_STA_DISCONNECTED: {
+      const auto reason = static_cast<wifi_err_reason_t>(info.wifi_sta_disconnected.reason);
+      LOG_INF("WIFI", "Station disconnected: %s (%d)", WiFi.disconnectReasonName(reason),
+              static_cast<int>(info.wifi_sta_disconnected.reason));
+      break;
+    }
+    case ARDUINO_EVENT_WIFI_STA_LOST_IP:
+      LOG_INF("WIFI", "Station lost IP");
+      break;
+    default:
+      break;
+  }
+}
+}  // namespace
+
 void WifiSelectionActivity::onEnter() {
   Activity::onEnter();
+
+  // Registered once for the life of the process; WiFi.onEvent keeps its own list
+  // and re-entering this activity would otherwise log each event twice over.
+  static bool wifiEventsRegistered = false;
+  if (!wifiEventsRegistered) {
+    WiFi.onEvent(logWifiStationEvent, ARDUINO_EVENT_WIFI_STA_CONNECTED);
+    WiFi.onEvent(logWifiStationEvent, ARDUINO_EVENT_WIFI_STA_GOT_IP);
+    WiFi.onEvent(logWifiStationEvent, ARDUINO_EVENT_WIFI_STA_DISCONNECTED);
+    WiFi.onEvent(logWifiStationEvent, ARDUINO_EVENT_WIFI_STA_LOST_IP);
+    wifiEventsRegistered = true;
+  }
 
   // Load saved WiFi credentials - SD card operations need lock as we use SPI
   // for both
@@ -360,7 +399,13 @@ void WifiSelectionActivity::attemptConnection() {
 
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
   WiFi.mode(WIFI_STA);
-  WiFi.disconnect(true, true);  // Abort any in-progress SDK auto-connect and clear NVS-saved SSID
+  // Abort any in-progress SDK auto-connect, but leave the stored AP config alone
+  // and keep the radio up: erasing the config and power-cycling the radio makes
+  // some routers fail the WPA handshake that follows, which showed as a reader
+  // that would not join a network it had joined the day before.
+  if (!WiFi.disconnect(false, false, 1000)) {
+    LOG_DBG("WIFI", "Disconnect before begin timed out; continuing with explicit begin");
+  }
   delay(100);
 
   // Scan all channels so networks with multiple APs use the strongest matching
@@ -606,16 +651,14 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::CONNECTION_FAILED) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      // If we were auto-connecting or using a saved credential, offer to forget
-      // the network
-      if (autoConnecting || usedSavedPassword) {
-        autoConnecting = false;
-        state = WifiSelectionState::FORGET_PROMPT;
-        forgetPromptSelection = 0;  // Default to "Cancel"
-      } else {
-        // Go back to network list on failure for non-saved credentials
-        state = WifiSelectionState::NETWORK_LIST;
-      }
+      // Back to the list, whatever failed. A connection drops for reasons that
+      // have nothing to do with the password -- the AP out of range, a busy
+      // channel, a handshake the router did not finish -- and offering to
+      // delete the credential every time trains the user to throw away a
+      // working password over a passing failure. Forget is still there on
+      // purpose, on Left in the network list.
+      autoConnecting = false;
+      state = WifiSelectionState::NETWORK_LIST;
       requestUpdate();
       return;
     }
