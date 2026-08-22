@@ -30,7 +30,7 @@ A measurement that needs its own firmware is a measurement nobody takes.
 
 ## The overlay
 
-`FAST/HALF t41 p623 w96 v500 s96 ink302/3800 pr3 pll09`
+`FAST/HALF t41 p623 w96 v500 s96 ink302/3800 pr3`
 
 Abbreviated because it is one line across the top of the panel and the narrow axis is
 480 px on X4. A line that does not fit is drawn off the edge, which is its own bug. The
@@ -51,8 +51,6 @@ glance.
   scores around 300, a menu row move around 10, a whole-screen inversion 1000.
 - `pr` — how many FAST requests the anti-ghost policy has promoted to something slower
   since boot.
-- `pll` — the X3 frame-clock byte in force (see below). Meaningless on X4, printed anyway
-  so one format serves both devices.
 
 Two comparisons are the point of the overlay. `t` against `p` says whether a slow
 interaction is the firmware deciding or the ink moving; those are unrelated problems with
@@ -62,41 +60,44 @@ unrelated fixes. `w` against `v` then says which half of the panel time is worth
 The line describes the PREVIOUS refresh, necessarily: a refresh's cost is not known until
 the panel has finished, and by then the frame that would report it is already ink.
 
-## Trying an X3 PLL byte
+## X3 panel timing: reverted to stock
 
-Write the value into `/perf/pll.txt` on the card and power-cycle — `0x19`, `19` and `25`
-are all read as the same byte. No rebuild and no flash per candidate. The value in force
-is printed in the overlay and in the CSV header, so a run cannot be attributed to the
-wrong candidate. With no such file the landed default `0x3D` is used.
+The X3 panel runs the SDK's stock driver, its stock `0x09` PLL frame clock and its stock
+200 ms post-waveform settle, exactly as every sibling CrossPoint fork does. There is no
+`/perf/pll.txt` and no `/perf/settle.txt` any more, and the CSV header no longer carries
+either value.
 
-## Trying an X3 post-waveform settle
+The measurements below are kept because they are real and were paid for, not because
+anything reads them today.
 
-Same shape of unknown as the PLL byte, answered the same way. The driver delays 200 ms
-after every non-differential waveform that does not power the panel down, and that number
-has never been checked against this panel. It is paid on every HALF and every FULL, so it
-recurs on every clean the anti-ghost policy forces, and a HALF measures about 2380 ms.
+**PLL byte (R30h), measured on X3, lector.exp.43.** Walking the high field (`0x09` against
+`0x19`) changes nothing on this panel; the low three bits are the lever.
 
-Write a millisecond count into `/perf/settle.txt` and power-cycle. `0` is a legitimate
-candidate and is the end of the sweep worth reaching. Suggested rungs: 200, 100, 50, 0.
-The value in force is printed in the CSV header next to the PLL byte.
+```
+pll    FAST waveform   FAST page turn   FULL      HALF      text
+0x09      566 ms          638 ms         856 ms   2320 ms   clean (stock, in force)
+0x19      566 ms          638 ms         856 ms   2320 ms   clean (no change at all)
+0x3B      490 ms          563 ms        1022 ms   1985 ms   clean
+0x3D      428 ms          500 ms         861 ms   2380 ms   clean (shipped for a while)
+0x3F      352 ms          425 ms         629 ms   1305 ms   grey haze on body text
+```
 
-A value lands only if HALF and FULL still fully clear AND body text stays clean over 30
-consecutive FAST passes afterwards. The settle exists to leave the panel in a state the
-next differential can build on, so a value that is too short shows as ghosting on the
-passes AFTER the clean, not on the clean itself.
+`0x3D` was 24% off the stock waveform and printed clean over the acceptance checks. It was
+reverted on 2026-08-21 anyway: no other firmware for this device tunes the frame clock, and
+matching the four widely-used forks was preferred to holding a local optimum alone.
 
-## Trying an X3 PLL byte, continued
+**Post-waveform settle.** The driver delays 200 ms after every non-differential waveform
+that does not power the panel down. It is paid on every HALF and every FULL, so it recurs
+on every clean the anti-ghost policy forces, and a HALF measures about 2380 ms. The value
+was never checked against this panel; the sweep (200, 100, 50, 0) was made possible but
+never run to a landing.
 
-The sweep is done. Walking the high field (`0x09` versus `0x19`) changes nothing on this
-panel; the low three bits are the lever. `0x3D` is the fastest byte that still prints
-clean (FAST waveform 428 ms against the stock 566 ms, 24% off) and is what ships. `0x3F`
-is faster still, 352 ms, but leaves a grey haze on body text, so it is not shipped.
-
-Before landing a value as the default, all four must hold: FAST panel time falls at least
-15%; body text is clean after 30 consecutive FAST passes; grayscale still shows four
-distinct levels (check on a cover sleep screen, not on text — one PLL register scales
-every waveform bank, including the one-frame grayscale phases); and HALF and FULL still
-fully clear.
+**If either question is ever reopened**, four things must hold before a value lands: FAST
+panel time falls at least 15%; body text is clean after 30 consecutive FAST passes;
+grayscale still shows four distinct levels (check on a cover sleep screen, not on text —
+one PLL register scales every waveform bank, including the one-frame grayscale phases);
+and HALF and FULL still fully clear. For the settle specifically, a too-short value shows
+as ghosting on the passes AFTER the clean, not on the clean itself.
 
 ## Reading the coalescing line
 
@@ -137,8 +138,8 @@ standard sequence regardless of the setting.
 a lock-and-wake cycle produces several files rather than overwriting one.
 
 Three comment lines of context first, written by the device: firmware version, battery,
-X3 PLL byte, orientation, font family and size, sleep image quality, Wake Straight to
-Book, refresh frequency, and the open book. Then the previous wake's stage breakdown, then
+orientation, font family and size, sleep image quality, Wake Straight to Book, refresh
+frequency, and the open book. Then the previous wake's stage breakdown, then
 one row per refresh.
 
 ### Reading the wake line

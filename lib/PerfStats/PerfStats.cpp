@@ -34,7 +34,6 @@ uint64_t sumTotalUs = 0;
 uint32_t promoted = 0;
 uint32_t renderPasses = 0;
 uint32_t updateRequests = 0;
-uint8_t activePll = 0;
 
 const char* modeName(const uint8_t mode) {
   switch (mode) {
@@ -120,11 +119,11 @@ void formatLastLine(char* const out, const size_t outLen) {
   // that does not fit is drawn off the edge, which is its own bug. The CSV on the card
   // carries the same fields with full names in its header — that is the record; this is
   // the glance. Fields: t think, p panel total, w wire, v waveform, s async split.
-  snprintf(out, outLen, "%s/%s t%s p%lu w%lu v%lu%s ink%u/%u pr%lu pll%02X", modeName(lastRequested),
+  snprintf(out, outLen, "%s/%s t%s p%lu w%lu v%lu%s ink%u/%u pr%lu", modeName(lastRequested),
            modeName(lastActual), think, static_cast<unsigned long>(lastTotalUs / 1000),
            static_cast<unsigned long>(lastWireUs / 1000), static_cast<unsigned long>(lastWaveUs / 1000), split,
            static_cast<unsigned>(lastInkScore), static_cast<unsigned>(lastInkDebt),
-           static_cast<unsigned long>(promoted), static_cast<unsigned>(activePll));
+           static_cast<unsigned long>(promoted));
 }
 
 void splitTotals(uint64_t& wireUs, uint64_t& waveUs, uint64_t& totalUs) {
@@ -161,9 +160,5 @@ void noteRenderPass(const uint32_t requestsServed) {
 uint32_t renderPassCount() { return renderPasses; }
 
 uint32_t updateRequestCount() { return updateRequests; }
-
-void setPllByte(const uint8_t pll) { activePll = pll; }
-
-uint8_t pllByte() { return activePll; }
 
 }  // namespace PerfStats
