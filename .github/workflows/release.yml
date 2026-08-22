@@ -118,7 +118,16 @@ jobs:
             ASSETS+=("$BUILD_DIR/boot_app0.bin")
           fi
           NOTES_FILE="$(mktemp)"
-          cat > "$NOTES_FILE" <<'EOF'
+          # A hand-written changelog for this tag leads the notes when there is one. It is
+          # the same list the flasher site shows, so the two cannot tell different stories.
+          # Without it the notes are the install block alone: an auto-generated commit dump
+          # says nothing a reader of a release page wants.
+          HAND_NOTES="docs/release-notes/${TAG}.md"
+          if [ -f "$HAND_NOTES" ]; then
+            cat "$HAND_NOTES" >> "$NOTES_FILE"
+            printf '\n---\n\n' >> "$NOTES_FILE"
+          fi
+          cat >> "$NOTES_FILE" <<'EOF'
           **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-xteink-firmware/#flash) (Chrome/Edge, USB cable). One build serves both Xteink X3 and X4.
 
           **Update from the SD card:** download `firmware.bin`, copy it to the SD card, then on the device open Settings and choose SD Card Firmware Update.
@@ -144,7 +153,6 @@ jobs:
             gh release create "$TAG" "${ASSETS[@]}" \
               --title "Lector $TAG" \
               --notes-file "$NOTES_FILE" \
-              --generate-notes \
               $PRERELEASE_FLAG
           fi
 
