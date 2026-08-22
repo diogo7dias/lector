@@ -8,7 +8,6 @@
 #include <Logging.h>
 #include <ReleaseJsonParser.h>
 #include <esp_ota_ops.h>
-#include <esp_wifi.h>
 // clang-format on
 
 #include <algorithm>
@@ -17,6 +16,7 @@
 
 #include "FirmwareFlasher.h"
 #include "FirmwareVersion.h"
+#include "OtaRetryPolicy.h"
 
 namespace {
 // This fork's own releases, NOT upstream's. Pointed at crosspoint-reader until 0.24.1,
@@ -104,65 +104,110 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     return INTERNAL_UPDATE_ERROR;
   }
 
-  /* For better timing and connectivity, we disable power saving for WiFi */
-  esp_wifi_set_ps(WIFI_PS_NONE);
-
   processedSize = 0;
   int lastReportedPct = -1;
-  bool flashOk = true;
+  ota_retry::Failure failure = ota_retry::Failure::DOWNLOAD;
+  bool installed = false;
+
   // The image streams in chunks; only the first bytes carry the header. Buffer
-  // the first 14 bytes so we can read chip_id (esp_image_header_t offset 12)
-  // and reject a wrong-MCU image before it overwrites the OTA partition.
+  // the first 14 bytes so we can read chip_id (esp_image_header_t offset 12) and
+  // reject a wrong-MCU image before it overwrites the OTA partition. Held across
+  // attempts because a resumed transfer picks up exactly where the last one
+  // stopped: a drop inside the first 14 bytes would otherwise leave the check
+  // half-fed and never made.
   uint8_t hdr[14];
   size_t hdrLen = 0;
-  bool wrongChip = false;
-  const bool fetchOk = HttpDownloader::fetchUrl(otaUrl, [&](const uint8_t* data, size_t len) {
-    if (hdrLen < sizeof(hdr)) {
-      const size_t take = std::min(len, sizeof(hdr) - hdrLen);
-      std::memcpy(hdr + hdrLen, data, take);
-      hdrLen += take;
-      if (hdrLen == sizeof(hdr)) {
-        uint16_t imageChip;
-        std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
-        const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
-        if (deviceChip != 0xFFFF && imageChip != deviceChip) {
-          LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
-          wrongChip = true;
-          return false;  // abort the transfer
-        }
-      }
-    }
-    if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
-      flashOk = false;
-      return false;  // abort the transfer
-    }
-    processedSize += len;
-    // Fire the callback only on whole-percent change. Per-chunk updates wake the
-    // render task, whose framebuffer work contends with TLS on the internal arena,
-    // and e-ink can't repaint faster than a percent tick anyway.
-    if (onProgress && totalSize > 0) {
-      const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
-      if (pct != lastReportedPct) {
-        lastReportedPct = pct;
-        onProgress(ctx);
-      }
-    }
-    return true;
-  });
 
-  /* Return back to default power saving for WiFi in case of failing */
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+  // A 5 MB image over a marginal link drops often enough that one attempt is not
+  // a fair test. esp_ota_write appends, so an attempt that stopped at 80% keeps
+  // its 80% and the next one asks the server for the rest; only a link failure
+  // is worth another go (see OtaRetryPolicy.h).
+  for (int attempt = 1; attempt <= ota_retry::MAX_ATTEMPTS; ++attempt) {
+    bool wrongChip = false;
+    bool flashOk = true;
+    bool replayedFromStart = false;
+    const size_t resumeFrom = ota_retry::resumeOffset(processedSize);
 
-  if (wrongChip) {
-    LOG_ERR("OTA", "Firmware install aborted: wrong device");
-    esp_ota_abort(otaHandle);
-    return WRONG_DEVICE_ERROR;
+    const bool fetchOk = HttpDownloader::fetchUrl(
+        otaUrl,
+        [&](const uint8_t* data, size_t len) {
+          if (hdrLen < sizeof(hdr)) {
+            const size_t take = std::min(len, sizeof(hdr) - hdrLen);
+            std::memcpy(hdr + hdrLen, data, take);
+            hdrLen += take;
+            if (hdrLen == sizeof(hdr)) {
+              uint16_t imageChip;
+              std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
+              const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
+              if (ota_retry::isWrongChip(imageChip, deviceChip)) {
+                LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+                wrongChip = true;
+                return false;  // abort the transfer
+              }
+            }
+          }
+          if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
+            flashOk = false;
+            return false;  // abort the transfer
+          }
+          processedSize += len;
+          // Fire the callback only on whole-percent change. Per-chunk updates wake the
+          // render task, whose framebuffer work contends with TLS on the internal arena,
+          // and e-ink can't repaint faster than a percent tick anyway.
+          if (onProgress && totalSize > 0) {
+            const int pct = static_cast<int>(static_cast<uint64_t>(processedSize) * 100 / totalSize);
+            if (pct != lastReportedPct) {
+              lastReportedPct = pct;
+              onProgress(ctx);
+            }
+          }
+          return true;
+        },
+        "", "", resumeFrom, &replayedFromStart);
+
+    if (wrongChip) {
+      failure = ota_retry::Failure::WRONG_CHIP;
+    } else if (!flashOk) {
+      failure = ota_retry::Failure::FLASH_WRITE;
+    } else if (fetchOk) {
+      installed = true;
+      break;
+    } else {
+      failure = ota_retry::Failure::DOWNLOAD;
+    }
+
+    if (!ota_retry::shouldRetry(failure, attempt)) break;
+
+    // A server that ignored the Range replayed the whole body, so the partition
+    // holds the image twice over from here on. Start it again rather than write
+    // a second copy onto the first.
+    if (replayedFromStart) {
+      esp_ota_abort(otaHandle);
+      otaHandle = 0;
+      esp_err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle);
+      if (esp_err != ESP_OK) {
+        LOG_ERR("OTA", "esp_ota_begin failed on restart: %s", esp_err_to_name(esp_err));
+        return INTERNAL_UPDATE_ERROR;
+      }
+      processedSize = 0;
+      lastReportedPct = -1;
+      hdrLen = 0;
+    }
+
+    LOG_ERR("OTA", "Attempt %d stopped at %zu bytes; retrying", attempt, processedSize);
+    delay(ota_retry::backoffMs(attempt));
   }
 
-  if (!fetchOk || !flashOk) {
-    LOG_ERR("OTA", "Firmware install failed (%s)", flashOk ? "download" : "flash write");
+  if (!installed) {
+    if (failure == ota_retry::Failure::WRONG_CHIP) {
+      LOG_ERR("OTA", "Firmware install aborted: wrong device");
+      esp_ota_abort(otaHandle);
+      return WRONG_DEVICE_ERROR;
+    }
+    LOG_ERR("OTA", "Firmware install failed (%s)",
+            failure == ota_retry::Failure::FLASH_WRITE ? "flash write" : "download");
     esp_ota_abort(otaHandle);
-    return flashOk ? HTTP_ERROR : INTERNAL_UPDATE_ERROR;
+    return failure == ota_retry::Failure::FLASH_WRITE ? INTERNAL_UPDATE_ERROR : HTTP_ERROR;
   }
 
   esp_err = esp_ota_end(otaHandle);  // verifies the written image

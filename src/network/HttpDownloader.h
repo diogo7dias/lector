@@ -34,9 +34,14 @@ class HttpDownloader {
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
+   *
+   * rangeStart resumes a transfer that stopped early: the request carries a
+   * Range header and onData is handed only the bytes from that offset on. A
+   * server that ignores the Range and answers 200 replays the whole body from
+   * the start, which the caller must be able to take (see resumedFromStart).
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", size_t rangeStart = 0, bool* resumedFromStart = nullptr);
 
   /**
    * Download a file to the SD card with optional credentials.
