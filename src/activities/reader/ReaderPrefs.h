@@ -83,11 +83,12 @@ struct ReaderPrefs {
   uint8_t paragraphAlignment = 0;    // CrossPointSettings::JUSTIFIED
   uint8_t extraParagraphSpacing = 1;
   uint8_t paragraphSpacing = 0;  // % of line height (block gap; restored granular)
-  uint8_t screenMargin = 5;      // horizontal (left/right), shared by both sides
-  uint8_t screenMarginTop = 5;
-  uint8_t screenMarginBottom = 5;
-  uint8_t verticalMarginsLinked = 1;  // 1 = top and bottom move together; 0 = independent
-  uint8_t dynamicMargins = 0;         // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
+  uint8_t screenMargin = 20;     // horizontal (left/right), shared by both sides
+  uint8_t screenMarginTop = 20;
+  uint8_t screenMarginBottom = 20;
+  // margin_link::Mode as a number: 0 = Separate, 1 = TopBottom, 2 = All Sides.
+  uint8_t marginLinkMode = 2;
+  uint8_t dynamicMargins = 0;  // 0 = off, 1 = auto (min 10px), 2 = auto (min 20px)
   // Style tab
   uint8_t focusReadingEnabled = 0;
   uint8_t guideDotsEnabled = 0;  // middle dot between words (restored)

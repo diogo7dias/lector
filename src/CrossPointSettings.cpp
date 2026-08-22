@@ -14,8 +14,8 @@
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
-#include "util/VerticalMargins.h"
 #include "fontIds.h"
+#include "util/MarginLink.h"
 
 namespace {
 
@@ -230,19 +230,28 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Margins model change: "Uniform Margins" is gone. It meant "every side uses
-  // screenMargin", so a file written with it on has no vertical values of its own —
-  // copy the horizontal margin into both vertical fields, which is what the reader
-  // was already drawing. With it off the two vertical fields were already authoritative.
-  // Written once; the resave drops the old key.
-  if (doc["uniformMargins"].is<uint8_t>()) {
-    const bool uniform = doc["uniformMargins"].as<uint8_t>() != 0;
-    const auto migrated =
-        vertical_margins::migrateFromUniform(uniform, screenMargin, {screenMarginTop, screenMarginBottom});
-    screenMarginTop = migrated.top;
-    screenMarginBottom = migrated.bottom;
-    verticalMarginsLinked = uniform ? 1 : 0;
-    needsResave = true;
+  // Margins model, two changes deep. "verticalMarginsLinked" was an on/off switch over
+  // the two vertical sides; it is now one of three link modes, so a file holding only the
+  // old key keeps how its sides were edited. Older still is "uniformMargins", which meant
+  // "every side uses screenMargin" — that is exactly All Sides today, and such a file has
+  // no vertical values of its own, so both sides take the horizontal margin, which is what
+  // the reader was already drawing. Written once; the resave drops the old keys.
+  if (!doc["marginLinkMode"].is<uint8_t>()) {
+    if (doc["verticalMarginsLinked"].is<uint8_t>()) {
+      marginLinkMode = margin_link::toStored(
+          doc["verticalMarginsLinked"].as<uint8_t>() != 0 ? margin_link::Mode::TopBottom : margin_link::Mode::Separate);
+      needsResave = true;
+    } else if (doc["uniformMargins"].is<uint8_t>()) {
+      const margin_link::State migrated =
+          margin_link::migrateFromUniform(doc["uniformMargins"].as<uint8_t>() != 0,
+                                          {screenMargin, screenMarginTop, screenMarginBottom}, dynamicMargins);
+      screenMargin = migrated.margins.horizontal;
+      screenMarginTop = migrated.margins.top;
+      screenMarginBottom = migrated.margins.bottom;
+      dynamicMargins = migrated.dynamicMargins;
+      marginLinkMode = margin_link::toStored(migrated.mode);
+      needsResave = true;
+    }
   }
 
   // Embedded Style split into Embedded Text Style and Embedded Layout Style. The old key
@@ -353,6 +362,10 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   if (doc["language"].is<const char*>()) {
     language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
   }
+
+  // A hand-edited or partly-migrated file can hold sides that disagree with its link
+  // mode; the mode is the statement of record, so it wins.
+  normalizeMargins();
 
   if (needsResave) {
     LOG_DBG("CPS", "Resaving settings to update format");
@@ -519,7 +532,7 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   screenMargin = p.screenMargin;
   screenMarginTop = p.screenMarginTop;
   screenMarginBottom = p.screenMarginBottom;
-  verticalMarginsLinked = p.verticalMarginsLinked;
+  marginLinkMode = p.marginLinkMode;
   dynamicMargins = p.dynamicMargins;
   firstLineIndentMode = p.firstLineIndentMode;
   firstLineIndentPercent = p.firstLineIndentPercent;
@@ -675,6 +688,12 @@ ReaderPrefs CrossPointSettings::endReaderEditOverlay() {
 }
 
 bool CrossPointSettings::saveToFile() const {
+  // Re-assert the margin link mode before anything is written. The web settings API can
+  // write screenMargin or a vertical margin straight into its field, so this is where a
+  // page whose sides disagree with its mode is brought back in line. const_cast is safe
+  // for the same reason it is below: the singleton is a non-const object.
+  const_cast<CrossPointSettings*>(this)->normalizeMargins();
+
   // A book's own status bar layout is overlaid on the live sb* fields. Swap the true
   // global block back for the write, exactly as the reader-edit overlay below does for
   // the reader fields, so a book's bar can never become the global one.

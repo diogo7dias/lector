@@ -31,7 +31,7 @@ constexpr PresetField FIELDS[] = {
     {"screenMargin", &ReaderPrefs::screenMargin},
     {"screenMarginTop", &ReaderPrefs::screenMarginTop},
     {"screenMarginBottom", &ReaderPrefs::screenMarginBottom},
-    {"verticalMarginsLinked", &ReaderPrefs::verticalMarginsLinked},
+    {"marginLinkMode", &ReaderPrefs::marginLinkMode},
     {"dynamicMargins", &ReaderPrefs::dynamicMargins},
     {"focusReadingEnabled", &ReaderPrefs::focusReadingEnabled},
     {"guideDotsEnabled", &ReaderPrefs::guideDotsEnabled},
@@ -67,6 +67,8 @@ ReaderPrefs readPrefs(JsonObjectConst obj) {
   legacy.hasUniformMargins = obj["uniformMargins"].is<uint8_t>();
   if (legacy.hasUniformMargins) legacy.uniformMargins = obj["uniformMargins"].as<uint8_t>();
   legacy.hasVerticalMarginsLinked = obj["verticalMarginsLinked"].is<uint8_t>();
+  if (legacy.hasVerticalMarginsLinked) legacy.verticalMarginsLinked = obj["verticalMarginsLinked"].as<uint8_t>();
+  legacy.hasMarginLinkMode = obj["marginLinkMode"].is<uint8_t>();
   legacy.hasEmbeddedLayoutStyle = obj["embeddedLayoutStyle"].is<uint8_t>();
   reader_preset_migration::apply(legacy, p);
   const char* sdName = obj["sdFontFamilyName"] | "";

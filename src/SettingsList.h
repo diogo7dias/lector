@@ -319,10 +319,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                     "lineSpacingPercent", StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    v.push_back(SettingInfo::Enum(StrId::STR_LINK_TOP_BOTTOM, &CrossPointSettings::verticalMarginsLinked,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "verticalMarginsLinked",
-                                  StrId::STR_CAT_READER)
-                    .withTextSettings());
+    // The web settings API can write this key straight into the field, so the mode's own
+    // consequences (All Sides carries the horizontal margin onto every side and turns
+    // Dynamic Margins off) are re-applied by CrossPointSettings::normalizeMargins().
+    v.push_back(
+        SettingInfo::Enum(StrId::STR_LINK_MARGINS, &CrossPointSettings::marginLinkMode,
+                          {StrId::STR_MARGIN_LINK_OFF, StrId::STR_MARGIN_LINK_TOP_BOTTOM, StrId::STR_MARGIN_LINK_ALL},
+                          "marginLinkMode", StrId::STR_CAT_READER)
+            .withTextSettings());
 
     v.push_back(SettingInfo::Value(StrId::STR_HORIZONTAL_MARGIN, &CrossPointSettings::screenMargin,
                                    {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
