@@ -90,8 +90,8 @@ void ScreenshotUtil::takeScreenshot(GfxRenderer& renderer) {
   if (renderer.storeBwBuffer()) {
     int marginTop, marginRight, marginBottom, marginLeft;
     renderer.getOrientedViewableTRBL(&marginTop, &marginRight, &marginBottom, &marginLeft);
-    int width = renderer.getScreenWidth() - marginLeft - marginRight - 1;
-    int height = renderer.getScreenHeight() - marginTop - marginBottom - 1;
+    int width = renderer.getScreenWidth() - marginLeft - marginRight;
+    int height = renderer.getScreenHeight() - marginTop - marginBottom;
     // Add extra margin to the border to make it more visible
     renderer.drawRect(marginLeft + 1, marginTop + 1, width - 2, height - 2, 2, true);
     renderer.displayBuffer();
