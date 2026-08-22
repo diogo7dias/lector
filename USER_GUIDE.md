@@ -1,4 +1,4 @@
-<!-- lector-version: 0.26.4 -->
+<!-- lector-version: 0.26.5 -->
 
 # Lector User Guide
 
@@ -435,7 +435,10 @@ wireless alternative.
 
 **Home > File Transfer** offers four modes:
 
-- **Join a Network** — connect to an existing Wi-Fi network.
+- **Join a Network** — connect to an existing Wi-Fi network. A failed connection returns to
+  the network list; it never offers to forget the network, since a connection drops for
+  reasons that have nothing to do with the password. To forget one deliberately, press
+  Left on a saved network in that list.
 - **Create Hotspot** — the device makes a network for your computer or phone to join.
 - **Calibre Wireless** — Calibre device transfers, below.
 - **Nearby Reader** — receive a file straight from another Lector, below.
