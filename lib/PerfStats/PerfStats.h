@@ -63,7 +63,6 @@ void splitTotals(uint64_t& wireUs, uint64_t& waveUs, uint64_t& totalUs);
 //   s96        async split: the part that returned before the panel finished (omitted if 0)
 //   ink302/3800  this frame's ink score, and the anti-ghost debt after it
 //   pr3        refreshes promoted out of FAST so far this session
-//   pll09      the X3 frame-clock byte in force (meaningless on X4, shown anyway)
 void formatLastLine(char* out, size_t outLen);
 
 // The accumulated table, one line per mode that has run, for the diagnostics screen.
@@ -96,11 +95,5 @@ uint32_t promotedCount();
 void noteRenderPass(uint32_t requestsServed);
 uint32_t renderPassCount();
 uint32_t updateRequestCount();
-
-// The X3 frame-clock byte in force this session, for the overlay and the CSV header.
-// Meaningless on X4, where the panel runs its own OTP waveform; reported anyway rather
-// than hidden, so one overlay format serves both devices.
-void setPllByte(uint8_t pll);
-uint8_t pllByte();
 
 }  // namespace PerfStats
