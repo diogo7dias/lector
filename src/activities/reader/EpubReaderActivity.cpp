@@ -444,10 +444,10 @@ void EpubReaderActivity::showBuildPopup() {
 
 void EpubReaderActivity::computeReaderMargins(int& top, int& right, int& bottom, int& left) const {
   renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
-  // Uniform margins use screenMargin on every side; otherwise top/bottom are
-  // independent while screenMargin stays the horizontal (left/right) margin.
-  const uint8_t topMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginTop;
-  const uint8_t bottomMargin = prefs_.uniformMargins ? prefs_.screenMargin : prefs_.screenMarginBottom;
+  // screenMargin is the horizontal margin; the vertical ones are always the two stored
+  // fields, kept equal by the settings screen while Link Top/Bottom is on.
+  const uint8_t topMargin = prefs_.screenMarginTop;
+  const uint8_t bottomMargin = prefs_.screenMarginBottom;
   top += topMargin;
   bottom += bottomMargin;
   if (prefs_.dynamicMargins) {

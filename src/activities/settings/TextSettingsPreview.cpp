@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "CrossPointSettings.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
 namespace textsettings {
@@ -29,11 +30,93 @@ CssTextAlign toCssAlign(uint8_t align) {
 // The middle dot the guide-dot aid draws between words (U+00B7, UTF-8).
 constexpr char GUIDE_DOT_UTF8[] = "\xc2\xb7";
 
+// The sample's pretend publisher stylesheet: a centred chapter heading and a first-line
+// indent on the body. Without it the Embedded Style toggle and First Line Indent: Book
+// would have nothing to act on, because the sample carries no CSS of its own.
+constexpr int SAMPLE_CSS_INDENT_EM_TENTHS = 15;  // 1.5em, a common publisher indent
+
+// Placeholder values for the status bar. The pane shows a made-up page, so the bar shows
+// made-up readings; only the anchors are real, and those decide how much of each vertical
+// margin the bar eats.
+constexpr char SAMPLE_BATTERY[] = "72%";
+constexpr char SAMPLE_CLOCK[] = "12:34";
+constexpr char SAMPLE_PAGE[] = "12/318";
+constexpr char SAMPLE_PERCENT[] = "37%";
+
+bool anchorIsTop(uint8_t anchor) {
+  return anchor >= CrossPointSettings::SB_ANCHOR_TL && anchor <= CrossPointSettings::SB_ANCHOR_TR;
+}
+
+// 0 = left, 1 = centre, 2 = right, for both the top and the bottom row of anchors.
+int anchorSlot(uint8_t anchor) { return (anchor - CrossPointSettings::SB_ANCHOR_TL) % 3; }
+
+// Fills slots[3] with the sample text of every status bar item anchored to the requested
+// edge, in the same left/centre/right slots the reader uses. Items sharing a slot are
+// joined with a space, exactly as the bar itself packs them.
+void collectStatusBarSlots(bool top, std::string slots[3]) {
+  const struct {
+    uint8_t anchor;
+    const char* text;
+  } items[] = {
+      {SETTINGS.sbBatteryPos, SAMPLE_BATTERY},   {SETTINGS.sbClockPos, SAMPLE_CLOCK},
+      {SETTINGS.sbPagePos, SAMPLE_PAGE},         {SETTINGS.sbBookPctPos, SAMPLE_PERCENT},
+      {SETTINGS.sbChapterPctPos, SAMPLE_PERCENT}, {SETTINGS.sbChapterNumPos, "Ch 2/14"},
+      {SETTINGS.sbSessionPagesPos, "+8"},
+  };
+  for (const auto& item : items) {
+    if (item.anchor == CrossPointSettings::SB_ANCHOR_OFF) continue;
+    if (anchorIsTop(item.anchor) != top) continue;
+    std::string& slot = slots[anchorSlot(item.anchor)];
+    if (!slot.empty()) slot += " ";
+    slot += item.text;
+  }
+  // The title is the one item with its own text, and it is the only one worth truncating.
+  if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && anchorIsTop(SETTINGS.sbTitlePos) == top) {
+    std::string& slot = slots[anchorSlot(SETTINGS.sbTitlePos)];
+    if (!slot.empty()) slot += " ";
+    slot += I18N.get(StrId::STR_PREVIEW_HEADING);
+  }
+}
+
+// Draws one edge of the status bar and returns the height it occupied, which is the part
+// of the vertical margin the page does not get to use.
+int drawStatusBarEdge(const GfxRenderer& renderer, bool top, int edgeY, int paneLeft, int paneWidth) {
+  if (!SETTINGS.statusBarEnabled()) return 0;
+
+  std::string slots[3];
+  collectStatusBarSlots(top, slots);
+  if (slots[0].empty() && slots[1].empty() && slots[2].empty()) return 0;
+
+  const int lineH = renderer.getTextHeight(SMALL_FONT_ID);
+  const int sideMargin = UITheme::getInstance().getMetrics().statusBarHorizontalMargin;
+  const int y = top ? edgeY : edgeY - lineH;
+
+  if (!slots[0].empty()) renderer.drawText(SMALL_FONT_ID, paneLeft + sideMargin, y, slots[0].c_str());
+  if (!slots[1].empty()) {
+    const int w = renderer.getTextWidth(SMALL_FONT_ID, slots[1].c_str());
+    renderer.drawText(SMALL_FONT_ID, paneLeft + (paneWidth - w) / 2, y, slots[1].c_str());
+  }
+  if (!slots[2].empty()) {
+    const int w = renderer.getTextWidth(SMALL_FONT_ID, slots[2].c_str());
+    renderer.drawText(SMALL_FONT_ID, paneLeft + paneWidth - sideMargin - w, y, slots[2].c_str());
+  }
+  return lineH;
+}
+
+// The cut between the two page ends. Dashed so it can never be mistaken for a rule the
+// book itself drew.
+void drawCut(const GfxRenderer& renderer, int y, int left, int width) {
+  constexpr int dash = 6;
+  constexpr int gap = 5;
+  for (int x = left; x < left + width; x += dash + gap) {
+    renderer.drawLine(x, y, std::min(x + dash - 1, left + width - 1), y);
+  }
+}
+
 // Horizontal reading margin, resolved exactly like EpubReaderActivity::computeReaderMargins
 // does for the page: Dynamic Margins replaces the fixed margin with a width aimed at ~62
-// characters per line. Measured against the FULL screen, not the preview pane, because the
-// screen is the viewport the reader will lay the real page out in — so the pane shows the
-// same margin the page will get.
+// characters per line. Measured against the FULL screen, which is also the pane's width,
+// so the margin drawn here is the margin the page will get.
 int resolveHorizontalMargin(const GfxRenderer& renderer, int fontId) {
   if (!SETTINGS.dynamicMargins) return SETTINGS.screenMargin;
 
@@ -47,26 +130,13 @@ int resolveHorizontalMargin(const GfxRenderer& renderer, int fontId) {
   return std::max(minDynamicMargin, std::min(55, (availableWidth - targetTextWidth) / 2));
 }
 
-// Lay the sample text out through the reader engine into layout.lines
-void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth) {
-  layout.lines.clear();
-
-  BlockStyle style;
-  style.alignment = toCssAlign(SETTINGS.paragraphAlignment);
-  style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
-
-  ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
-                    SETTINGS.focusReadingEnabled != 0,
-                    resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden), style,
-                    SETTINGS.firstLineIndentMode, SETTINGS.firstLineIndentPercent);
-
-  // Feed one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting
-  const char* text = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
+// Feeds one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting.
+void addWords(ParsedText& parsed, const char* text, EpdFontFamily::Style style) {
   std::string word;
   for (const char* p = text;; p++) {
     if (*p == ' ' || *p == '\0') {
       if (!word.empty()) {
-        parsed.addWord(word, EpdFontFamily::REGULAR);
+        parsed.addWord(word, style);
         word.clear();
       }
       if (*p == '\0') break;
@@ -74,37 +144,77 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
       word.push_back(*p);
     }
   }
+}
 
-  parsed.layoutAndExtractLines(
-      renderer, fontId, static_cast<uint16_t>(textWidth),
-      [&layout](std::shared_ptr<TextBlock> line, uint32_t) { layout.lines.push_back(std::move(line)); });
+BlockStyle bodyStyle(int fontId, const GfxRenderer& renderer) {
+  BlockStyle style;
+  style.alignment = toCssAlign(SETTINGS.paragraphAlignment);
+  style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
+  if (SETTINGS.embeddedStyle) {
+    // The sample's own stylesheet. First Line Indent: Book defers to exactly this, so
+    // without it that mode would look identical to a 0% custom indent.
+    const int em = std::max(1, renderer.getTextHeight(fontId));
+    style.textIndent = static_cast<int16_t>(em * SAMPLE_CSS_INDENT_EM_TENTHS / 10);
+    style.textIndentDefined = true;
+  }
+  return style;
+}
+
+// Lays one paragraph out and appends its lines, the first of them carrying the gap that
+// separates it from the paragraph above.
+void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, const char* text,
+                     const BlockStyle& style, bool heading, int gapBefore) {
+  ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
+                    SETTINGS.focusReadingEnabled != 0,
+                    resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden), style,
+                    SETTINGS.firstLineIndentMode, SETTINGS.firstLineIndentPercent);
+  parsed.setHeading(heading);
+  addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
+
+  bool first = true;
+  parsed.layoutAndExtractLines(renderer, fontId, static_cast<uint16_t>(textWidth),
+                               [&layout, &first, gapBefore](std::shared_ptr<TextBlock> line, uint32_t) {
+                                 layout.lines.push_back({std::move(line), first ? gapBefore : 0});
+                                 first = false;
+                               });
+}
+
+// Lay the whole sample page out: pretend chapter heading (only while Embedded Style is on,
+// since it is the sample's CSS that puts it there), then two body paragraphs so the
+// paragraph gap is visible and the bottom of the page holds different text from the top.
+void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, int lineAdvance,
+              int paragraphGap) {
+  layout.lines.clear();
+
+  const BlockStyle body = bodyStyle(fontId, renderer);
+  if (SETTINGS.embeddedStyle) {
+    BlockStyle heading;
+    heading.alignment = CssTextAlign::Center;
+    heading.textAlignDefined = true;
+    appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), heading, true, 0);
+    appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false,
+                    lineAdvance / 2);
+  } else {
+    appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
+  }
+  appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_TEXT_2), body, false, paragraphGap);
 }
 
 }  // namespace
 
-void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previewPadding, int labelGap, int top,
-                   int height, const char* familyName, const char* sizeName) {
-  const int left = previewPadding;
-  const int width = renderer.getScreenWidth() - (previewPadding * 2);
-  if (width <= 0 || height <= 0) return;
-
-  const int labelH = renderer.getTextHeight(UI_10_FONT_ID);
-  const int labelReserved = labelH + labelGap + previewPadding;
-
-  char labelBuf[128];
-  snprintf(labelBuf, sizeof(labelBuf), "%s \"%s, %s\"", tr(STR_PREVIEW), familyName, sizeName);
-  const int labelY = top + height - previewPadding - labelH;
-  renderer.drawText(UI_10_FONT_ID, left, labelY, labelBuf);
+void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int top, const int height) {
+  const int paneLeft = 0;
+  const int paneWidth = renderer.getScreenWidth();
+  if (paneWidth <= 0 || height <= 0) return;
 
   const int fontId = SETTINGS.getReaderFontId();
   if (fontId == 0) return;
-
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
 
   const int marginH = resolveHorizontalMargin(renderer, fontId);
-  const int textLeft = left + marginH;
-  const int textWidth = width - 2 * marginH;
+  const int textLeft = paneLeft + marginH;
+  const int textWidth = paneWidth - 2 * marginH;
   if (textWidth <= 0) return;
 
   const float compression = SETTINGS.getReaderLineCompression();
@@ -130,6 +240,8 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
                        .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
                        .focusReading = SETTINGS.focusReadingEnabled != 0,
                        .hyphenation = SETTINGS.hyphenationEnabled != 0,
+                       .embeddedStyle = SETTINGS.embeddedStyle != 0,
+                       .paragraphSpacing = SETTINGS.paragraphSpacing,
                        .guideDotsMode = resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden),
                        .firstLineIndentMode = SETTINGS.firstLineIndentMode,
                        .firstLineIndentPercent = SETTINGS.firstLineIndentPercent};
@@ -138,51 +250,73 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int previ
       // The guide dot is not in the sample sentence, so it has to be prewarmed
       // explicitly or an SD font would miss the glyph on the first draw.
       std::string prewarmText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
+      prewarmText += I18N.get(StrId::STR_PREVIEW_TEXT_2);
+      prewarmText += I18N.get(StrId::STR_PREVIEW_HEADING);
       if (SETTINGS.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
-      fcm->prewarmCache(fontId, prewarmText.c_str(), SETTINGS.focusReadingEnabled ? 0x03 : 0x01);
+      // Bit 1 is the bold mask the heading needs; bit 0 the regular body.
+      uint8_t styleMask = SETTINGS.focusReadingEnabled ? 0x03 : 0x01;
+      if (SETTINGS.embeddedStyle) styleMask |= 0x02;
+      fcm->prewarmCache(fontId, prewarmText.c_str(), styleMask);
     }
-    relayout(layout, renderer, fontId, textWidth);
+    relayout(layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);
     layout.key = key;
   }
+  if (layout.lines.empty()) return;
 
-  // Vertical reading margins, from the same source the page uses (uniform margins put
-  // screenMargin on every side). The pane is only a slice of the page height, so a
-  // full-size margin would push the sample out of view entirely: each side is capped at
-  // a third of the pane's text area, which still shows the setting moving.
-  const int paneTextHeight = height - labelReserved - previewPadding;
-  if (paneTextHeight <= 0) return;
-  const int verticalCap = paneTextHeight / 3;
-  const int topMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginTop;
-  const int bottomMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginBottom;
-  const int insetTop = std::min(topMargin, verticalCap);
-  const int insetBottom = std::min(bottomMargin, verticalCap);
+  // The two page ends. The split is fixed rather than proportional to the margins so the
+  // cut does not walk up and down the pane while a margin is being tuned.
+  const int topStripHeight = height * 47 / 100;
+  const int cutY = top + topStripHeight;
 
-  int y = top + previewPadding + insetTop;
-  const int textBottomLimit = top + height - labelReserved - insetBottom;
+  const int topBarHeight = drawStatusBarEdge(renderer, /*top=*/true, top, paneLeft, paneWidth);
+  const int bottomBarHeight = drawStatusBarEdge(renderer, /*top=*/false, top + height, paneLeft, paneWidth);
+  drawCut(renderer, cutY, paneLeft, paneWidth);
 
-  if (SETTINGS.debugBorders) {
-    // Same diagnostic outline the reader draws around its text viewport.
-    renderer.drawRect(textLeft, y, textWidth, textBottomLimit - y);
-  }
+  const int marginTop = SETTINGS.screenMarginTop;
+  const int marginBottom = SETTINGS.screenMarginBottom;
 
   // The smear is renderer state, so it must be cleared on every exit path below —
-  // otherwise the tab bar, the row list and the button hints would render thickened too.
+  // otherwise the row list and the button hints would render thickened too.
   struct PaperbackScope {
     const GfxRenderer& renderer;
     ~PaperbackScope() { renderer.setPaperbackLook(false); }
   } paperbackScope{renderer};
+  renderer.setPaperbackLook(SETTINGS.paperbackLookBody != 0);
 
-  // Draw the sample twice so the paragraph gap is visible. The first copy is always plain
-  // regular weight and the second carries the Paperback Look ink smear when it is on, so
-  // the two renders sit one above the other for comparison.
-  for (int paragraph = 0; paragraph < 2; paragraph++) {
-    renderer.setPaperbackLook(paragraph == 1 && SETTINGS.paperbackLookBody != 0);
-    for (const auto& line : layout.lines) {
-      if (y + lineH > textBottomLimit) return;
-      line->render(renderer, fontId, textLeft, y);
+  // --- top of the page: first lines, drawn down from the top margin ---
+  const int topTextTop = top + topBarHeight + marginTop;
+  int topLineCount = 0;
+  {
+    int y = topTextTop;
+    for (const auto& entry : layout.lines) {
+      y += entry.gapBefore;
+      if (y + lineH > cutY) break;
+      entry.line->render(renderer, fontId, textLeft, y);
       y += lineAdvance;
+      topLineCount++;
     }
-    y += paragraphGap;
+    if (SETTINGS.debugBorders && y > topTextTop) renderer.drawRect(textLeft, topTextTop, textWidth, cutY - topTextTop);
+  }
+
+  // --- bottom of the page: last lines, sitting on the bottom margin ---
+  const int bottomTextLimit = top + height - bottomBarHeight - marginBottom;
+  const int bottomSpace = bottomTextLimit - (cutY + 1);
+  if (bottomSpace >= lineH) {
+    const int fits = bottomSpace / lineAdvance;
+    // Never redraw a line the top strip already showed: with a short sample the two ends
+    // would otherwise overlap and the page would read as if it repeated itself.
+    const int available = static_cast<int>(layout.lines.size()) - topLineCount;
+    const int count = std::min(fits, available);
+    if (count > 0) {
+      const int firstIndex = static_cast<int>(layout.lines.size()) - count;
+      int y = bottomTextLimit - count * lineAdvance;
+      const int bottomTextTop = y;
+      for (int i = firstIndex; i < static_cast<int>(layout.lines.size()); i++) {
+        layout.lines[i].line->render(renderer, fontId, textLeft, y);
+        y += lineAdvance;
+      }
+      if (SETTINGS.debugBorders) renderer.drawRect(textLeft, bottomTextTop, textWidth, bottomTextLimit - bottomTextTop);
+    }
   }
 }
 

@@ -17,7 +17,7 @@ ReaderPrefs ReaderPrefs::fromGlobal() {
   p.screenMargin = SETTINGS.screenMargin;
   p.screenMarginTop = SETTINGS.screenMarginTop;
   p.screenMarginBottom = SETTINGS.screenMarginBottom;
-  p.uniformMargins = SETTINGS.uniformMargins;
+  p.verticalMarginsLinked = SETTINGS.verticalMarginsLinked;
   p.dynamicMargins = SETTINGS.dynamicMargins;
   p.focusReadingEnabled = SETTINGS.focusReadingEnabled;
   p.guideDotsEnabled = SETTINGS.guideDotsEnabled;

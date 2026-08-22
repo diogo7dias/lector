@@ -264,7 +264,6 @@ void EpubReaderMenuActivity::switchTab(const int direction) {
   // mid-hold, the Confirm hint reverts from the next tab's name to "Select", and a
   // Confirm meant as "next tab" fires that row instead — which in the Sleep tab can be
   // Delete Wallpaper, the row deliberately placed last so a stray press misses it.
-  // TextSettingsActivity::switchTab does the same for the same reason.
   const bool onTabBar = activeTab().selectedIndex == 0;
   activeTabIndex = (activeTabIndex + direction + count) % count;
   if (onTabBar) {
@@ -436,7 +435,7 @@ void EpubReaderMenuActivity::loop() {
 
   // Handle navigation. The ring is the tab bar at 0 followed by this tab's rows, so
   // walking off either end of the list lands back on the tab bar. Same gesture split the
-  // other tabbed screens use (TextSettingsActivity, SettingsActivity): a tap moves one
+  // other tabbed screen uses (SettingsActivity): a tap moves one
   // step along the ring, and holding switches tab instead of repeating. The hold has to
   // carry tabs because NavNext/NavPrevious already carry Left/Right on the same axis as
   // Down/Up, so there is no spare direction to spend. Moving on release (not press) is

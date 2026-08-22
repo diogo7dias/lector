@@ -187,8 +187,8 @@ void TxtReaderActivity::initializeReader() {
   // independent while screenMargin stays the horizontal margin. Changing any of
   // these alters the viewport (and linesPerPage), which self-invalidates the page
   // cache, so no extra cache-key field is needed beyond cachedScreenMargin.
-  const uint8_t topMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginTop;
-  const uint8_t bottomMargin = SETTINGS.uniformMargins ? SETTINGS.screenMargin : SETTINGS.screenMarginBottom;
+  const uint8_t topMargin = SETTINGS.screenMarginTop;
+  const uint8_t bottomMargin = SETTINGS.screenMarginBottom;
 
   // Calculate viewport dimensions
   renderer.getOrientedViewableTRBL(&cachedOrientedMarginTop, &cachedOrientedMarginRight, &cachedOrientedMarginBottom,

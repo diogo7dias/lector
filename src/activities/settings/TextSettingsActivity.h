@@ -9,21 +9,20 @@
 #include "TextSettingsPreview.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
-#include "components/ValueBarPopup.h"
 #include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
-// Reader text settings with a shared live preview pane: tab bar
-// (Font | Size | Layout | Style) is position 0 of the Up/Down nav ring, same
-// idiom as SettingsActivity. Family/Size rows apply on Confirm; Layout/Style
-// rows toggle or open an OptionPopup picker. (Tab::Family/Style are the enum
-// names for the Font/Style tabs.)
+// Reader text settings: a live page preview over ONE scrolling list of every setting,
+// banded into sections (Type / Spacing / Margins / Reading aids). The tab bar this screen
+// used to carry is gone — the sections are drawList's own heading rows, which navigation
+// steps past, so Up/Down walks the whole tree without a mode switch.
+//
+// Numeric rows are edited IN PLACE (Confirm arms the row, Up/Down move the value) rather
+// than through a popup, because a popup would cover the very preview the number is being
+// judged against.
 class TextSettingsActivity final : public Activity {
  public:
-  enum class Tab : uint8_t { Family, Size, Layout, Style, Count };
-
-  TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
-                       Tab initialTab = Tab::Family);
+  TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry);
 
   void onEnter() override;
   void onExit() override;
@@ -31,74 +30,79 @@ class TextSettingsActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  // Row indices per tab. enum class (not plain enum) so a LayoutRow can't be
-  // silently confused with a StyleRow of equal value. The Layout tab does NOT map
-  // 1:1 to the drawn list — visibleLayoutRows() hides rows that don't apply, so
-  // the drawn index is resolved through that list, never cast straight to LayoutRow.
-  enum class LayoutRow {
+  // Every row the screen can show, in list order. Section markers are rows too: they draw
+  // as heading bands and are skipped by navigation, so one enum drives the whole list.
+  enum class Row : uint8_t {
+    SectionType,
+    Font,
+    Size,
+    SectionSpacing,
     LineSpacing,
-    ParaSpacing,     // extraParagraphSpacing toggle (half-line block gap)
-    ParaSpacingPct,  // paragraphSpacing 0..150 % bar (stacks on top of ParaSpacing)
+    ExtraSpacing,
+    ParagraphSpacing,
     Alignment,
-    UniformMargins,      // toggle: all sides use screenMargin vs independent top/bottom
-    ScreenMargin,        // horizontal margin (also vertical when uniform)
-    ScreenMarginTop,     // only shown when uniform is off
-    ScreenMarginBottom,  // only shown when uniform is off
+    IndentMode,
+    IndentPercent,  // only in Custom % mode
+    SectionMargins,
+    HorizontalMargin,
+    LinkTopBottom,
+    VerticalMargin,  // shown while top and bottom are linked
+    TopMargin,       // replaces VerticalMargin when they are not
+    BottomMargin,
     DynamicMargins,
-    IndentMode,     // Book vs Custom %
-    IndentPercent,  // only shown in Custom % mode
-    DebugBorders,
-    Count
-  };
-  enum class StyleRow {
+    SectionReadingAids,
     FocusReading,
     GuideDots,
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
     Hyphenation,
     EmbeddedStyle,
     AntiAliasing,
-    Count
+    DebugBorders,
   };
+
+  // What Confirm does on a row, and therefore what the button hint says.
+  enum class RowKind : uint8_t { Section, Toggle, Picker, Number, FontList };
+
+  // The screen is either walking the list or showing the font picker full screen. The
+  // picker is a mode rather than its own activity so it can hand focus straight back to
+  // the Font row without a result round-trip.
+  enum class Mode : uint8_t { List, FontPicker };
+
+  static RowKind kindOf(Row row);
+  // The rows that apply right now, in draw order. Rebuilt from the live settings because
+  // three rows come and go (indent %, the linked/split vertical margins, hidden dots).
+  std::vector<Row> visibleRows() const;
+  StrId rowNameId(Row row) const;
+  std::string rowValueText(Row row) const;
+  // Numeric rows share one editing path; these give it the field and its range.
+  uint8_t* numberField(Row row) const;
+  void numberRange(Row row, int& minValue, int& maxValue) const;
+  void applyNumber(Row row, int value);
+
+  void activateRow(Row row);
+  void stepEditedValue(int delta);
+  void leaveEdit();
 
   void applyFamily(int listIndex);
   void applySize(int listIndex);
-  // The Layout tab hides rows that don't apply (top/bottom margins only when
-  // uniform is off; indent % only in Custom% mode), so the visible list is built
-  // from the live settings instead of being a fixed 1:1 with the enum.
-  std::vector<LayoutRow> visibleLayoutRows() const;
-  // Same idea on the Style tab: Hidden Dots is a sub-option of Guide Dots and is
-  // only listed while Guide Dots is on.
-  std::vector<StyleRow> visibleStyleRows() const;
-  StrId styleRowNameId(StyleRow row) const;
-  std::string layoutRowName(LayoutRow row) const;
-  bool isLayoutToggleRow(LayoutRow row) const;
-  void confirmLayoutRow(LayoutRow row);
-
-  // Repopulates sizes_ (and currentSizeIndex_) from the active family's
-  // installed point sizes. Call after any family change.
+  // Repopulates sizes_ (and currentSizeIndex_) from the active family's installed point
+  // sizes. Call after any family change.
   void rebuildSizeList();
-  void confirmStyleRow(StyleRow row);
-  // Applies the row at the given list index for the active tab (Confirm and tap share this).
-  void activateRow(int row);
+  void openSizePicker();
 
-  // Vertical layout of the preview/tab-bar/list panes.
-  // Shared by render() (to draw) and loop() (to hit-test touch) to avoid drift
+  // Vertical layout of the preview and list panes. Shared by render() (to draw) and
+  // loop() (to hit-test touch) so the two cannot drift.
   struct PaneGeometry {
     int previewTop;
-    int tabTop;
+    int previewHeight;
     int listTop;
     int listHeight;
   };
   PaneGeometry paneGeometry() const;
-  std::string layoutValueText(LayoutRow row) const;
-  std::string styleValueText(StyleRow row) const;
-  // True when the focused list row is a setting the preview cannot reflect.
-  bool focusedRowHasNoPreview() const;
-  void switchTab(int direction = 1);
-  int currentListSize() const;
-  // Navigation ring position for the active tab: 0 = tab bar, 1..N = list item N-1.
-  int& selectedIndex();
-  int selectedIndex() const;
+
+  // Navigation moves between selectable rows only; section bands are stepped over.
+  void moveSelection(int direction);
+  int firstSelectableRow() const;
 
   struct FontEntry {
     std::string name;
@@ -114,14 +118,21 @@ class TextSettingsActivity final : public Activity {
   const SdCardFontRegistry* registry_;
   ButtonNavigator buttonNavigator_;
   OptionPopup optionPopup_;
-  ValueBarPopup valueBar_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;
   textsettings::PreviewLayout previewLayout_;  // cached preview line layout; relaid only on setting/geometry change
 
-  Tab tab_;
-  int selectedIndex_[static_cast<int>(Tab::Count)] =
-      {};  // per-Tab nav position (0 = tab bar, 1..N = row); set in onEnter
+  Mode mode_ = Mode::List;
+  int selectedIndex_ = 0;  // index into visibleRows()
+  int scrollOffset_ = 0;
+  int fontPickerIndex_ = 0;
+  int fontPickerScroll_ = 0;
+
+  // Set while a numeric row is armed. The preview redraw is debounced so holding Up does
+  // not queue one full e-ink pass per step.
+  bool editing_ = false;
+  uint32_t pendingRedrawAt_ = 0;
+
   int currentFamilyIndex_ = 0;
   int currentSizeIndex_ = 0;
 
@@ -129,5 +140,4 @@ class TextSettingsActivity final : public Activity {
   int afterHeader = 0;
   int bottomReserved = 0;
   int usableHeight = 0;
-  int previewHeight = 0;
 };

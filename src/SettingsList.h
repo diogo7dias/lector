@@ -314,11 +314,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                     "lineSpacingPercent", StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    v.push_back(SettingInfo::Enum(StrId::STR_UNIFORM_MARGINS, &CrossPointSettings::uniformMargins,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "uniformMargins", StrId::STR_CAT_READER)
+    v.push_back(SettingInfo::Enum(StrId::STR_LINK_TOP_BOTTOM, &CrossPointSettings::verticalMarginsLinked,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "verticalMarginsLinked",
+                                  StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    v.push_back(SettingInfo::Value(StrId::STR_SCREEN_MARGIN, &CrossPointSettings::screenMargin,
+    v.push_back(SettingInfo::Value(StrId::STR_HORIZONTAL_MARGIN, &CrossPointSettings::screenMargin,
                                    {CrossPointSettings::SCREEN_MARGIN_MIN, CrossPointSettings::SCREEN_MARGIN_MAX, 5},
                                    "screenMargin", StrId::STR_CAT_READER)
                     .withTextSettings());

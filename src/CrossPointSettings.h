@@ -451,18 +451,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t refreshFrequency = REFRESH_15;
   uint8_t hyphenationEnabled = 0;
 
-  // Reader screen margins. screenMargin is the horizontal (left/right) margin and,
-  // when uniformMargins is on, also drives top/bottom. With uniformMargins off,
-  // screenMarginTop/Bottom take over the vertical margins independently. Restored
-  // granular range (old lector). Margins feed the viewport, so a change rebuilds
-  // the section cache through the viewport dimensions (no cache-format bump needed).
+  // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
+  // both sides. The vertical margins always live in screenMarginTop/Bottom;
+  // verticalMarginsLinked only says whether editing one writes the other, so every reader
+  // can read the two fields directly without asking which mode is on. Restored granular
+  // range (old lector). Margins feed the viewport, so a change rebuilds the section cache
+  // through the viewport dimensions (no cache-format bump needed).
   static constexpr uint8_t SCREEN_MARGIN_MIN = 0;
   static constexpr uint8_t SCREEN_MARGIN_MAX = 100;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
   uint8_t screenMargin = 5;
   uint8_t screenMarginTop = 5;
   uint8_t screenMarginBottom = 5;
-  uint8_t uniformMargins = 1;  // 1 = all sides use screenMargin; 0 = separate H / Top / Bottom
+  // 1 = top and bottom move together (both hold the same value); 0 = edited independently.
+  uint8_t verticalMarginsLinked = 1;
   // Auto-widen horizontal margins toward ~62 chars/line (0 = off, 1 = auto min 10px,
   // 2 = auto min 20px). Overrides the fixed horizontal margin when on. Feeds the
   // viewport width, so a change re-paginates.

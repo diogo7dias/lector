@@ -23,7 +23,7 @@ ReaderPrefs makeSample() {
   p.screenMargin = 35;
   p.screenMarginTop = 12;
   p.screenMarginBottom = 18;
-  p.uniformMargins = 0;
+  p.verticalMarginsLinked = 0;
   p.dynamicMargins = 2;
   p.focusReadingEnabled = 1;
   p.guideDotsEnabled = 1;
@@ -53,7 +53,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
-  EXPECT_EQ(a.uniformMargins, b.uniformMargins);
+  EXPECT_EQ(a.verticalMarginsLinked, b.verticalMarginsLinked);
   EXPECT_EQ(a.dynamicMargins, b.dynamicMargins);
   EXPECT_EQ(a.focusReadingEnabled, b.focusReadingEnabled);
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);

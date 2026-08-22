@@ -30,7 +30,7 @@ constexpr PresetField FIELDS[] = {
     {"screenMargin", &ReaderPrefs::screenMargin},
     {"screenMarginTop", &ReaderPrefs::screenMarginTop},
     {"screenMarginBottom", &ReaderPrefs::screenMarginBottom},
-    {"uniformMargins", &ReaderPrefs::uniformMargins},
+    {"verticalMarginsLinked", &ReaderPrefs::verticalMarginsLinked},
     {"dynamicMargins", &ReaderPrefs::dynamicMargins},
     {"focusReadingEnabled", &ReaderPrefs::focusReadingEnabled},
     {"guideDotsEnabled", &ReaderPrefs::guideDotsEnabled},

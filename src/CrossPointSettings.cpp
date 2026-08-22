@@ -14,6 +14,7 @@
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
+#include "util/VerticalMargins.h"
 #include "fontIds.h"
 
 namespace {
@@ -226,6 +227,21 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // than silently making their wake slower; every other file keeps the Normal default.
   if (!doc["wakeHold"].is<uint8_t>() && shortPwrBtn == SHORT_PWRBTN::SLEEP) {
     wakeHold = WAKE_HOLD_FAST;
+    needsResave = true;
+  }
+
+  // Margins model change: "Uniform Margins" is gone. It meant "every side uses
+  // screenMargin", so a file written with it on has no vertical values of its own —
+  // copy the horizontal margin into both vertical fields, which is what the reader
+  // was already drawing. With it off the two vertical fields were already authoritative.
+  // Written once; the resave drops the old key.
+  if (doc["uniformMargins"].is<uint8_t>()) {
+    const bool uniform = doc["uniformMargins"].as<uint8_t>() != 0;
+    const auto migrated =
+        vertical_margins::migrateFromUniform(uniform, screenMargin, {screenMarginTop, screenMarginBottom});
+    screenMarginTop = migrated.top;
+    screenMarginBottom = migrated.bottom;
+    verticalMarginsLinked = uniform ? 1 : 0;
     needsResave = true;
   }
 
@@ -491,7 +507,7 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   screenMargin = p.screenMargin;
   screenMarginTop = p.screenMarginTop;
   screenMarginBottom = p.screenMarginBottom;
-  uniformMargins = p.uniformMargins;
+  verticalMarginsLinked = p.verticalMarginsLinked;
   dynamicMargins = p.dynamicMargins;
   firstLineIndentMode = p.firstLineIndentMode;
   firstLineIndentPercent = p.firstLineIndentPercent;

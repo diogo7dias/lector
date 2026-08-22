@@ -737,13 +737,20 @@ Settings are split into four categories: **Display**, **Reader**, **Controls** a
 
 **Text** — **Text Settings** (below), **Manage Fonts**, **Installed Fonts**, **Dictionary**.
 
-**Text Settings** holds everything about the text itself:
+**Text Settings** is one scrolling list, banded into **Type**, **Spacing**, **Margins** and
+**Reading Aids**, under a live preview. The preview is a split slice of a real page: the top
+of the page, a dashed cut, then the bottom of the page, so both vertical margins and the
+status bar are on screen at their true size while you tune them. Numeric rows are edited in
+place — Select arms the row, Up and Down move the value, and the preview follows — so nothing
+ever covers the page you are judging.
 
-- **Reader Font Family** — Noto Serif, Noto Sans, plus any SD card families.
-- **Reader Font Size**.
+- **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
+- **Size**.
 - **Line Spacing**.
-- **Uniform Margins** — ON applies one margin all round.
-- **Screen Margin**, **Top Margin**, **Bottom Margin**.
+- **Horizontal Margin** — left and right, one shared value.
+- **Link Top/Bottom** — ON gives a single **Vertical Margin**; OFF splits it into **Top
+  Margin** and **Bottom Margin**. (This replaces the old **Uniform Margins** switch. Devices
+  updating from an older build keep the margins they had.)
 - **Dynamic Margins** — Off, Auto (min 10px) or Auto (min 20px).
 - **First Line Indent** — Book or Custom %, with **First-Line Indent %** underneath.
 - **Paragraph Alignment** — Justify, Left, Center, Right or Book's Style.
