@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <iterator>
 
 #include "ButtonRemapActivity.h"
 #include "CleanStorageActivity.h"
@@ -26,6 +27,7 @@
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "activities/settings/SettingsListNav.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
@@ -33,18 +35,15 @@
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 
-const StrId SettingsActivity::categoryNames[categoryCount] = {StrId::STR_CAT_DISPLAY, StrId::STR_CAT_READER,
-                                                              StrId::STR_CAT_CONTROLS, StrId::STR_CAT_SYSTEM};
-
 namespace {
 
-// One section of a tab: the heading, then the rows under it in display order.
+// One section of the list: the heading, then the rows under it in display order.
 struct SettingsGroup {
   StrId heading;
   std::vector<StrId> members;
 };
 
-// Reorders a tab's rows into the given sections and inserts a heading above each.
+// Reorders a category's rows into the given sections and inserts a heading above each.
 // The group map, not SettingsList.h's declaration order, decides what the user sees.
 //
 // A group whose rows are all absent contributes no heading, which is what keeps the
@@ -84,7 +83,9 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 
 }  // namespace
 
-void SettingsActivity::rebuildSettingsLists() {
+void SettingsActivity::rebuildSettingsList() {
+  // Built per category so each keeps its own grouping map, then concatenated: the
+  // four categories are the top-level order of one flat list, not four screens.
   displaySettings.clear();
   readerSettings.clear();
   controlsSettings.clear();
@@ -201,22 +202,17 @@ void SettingsActivity::rebuildSettingsLists() {
             StrId::STR_SD_FIRMWARE_UPDATE}},
       });
 
-  // Update currentSettings pointer and count for the active category
-  switch (selectedCategoryIndex) {
-    case 0:
-      currentSettings = &displaySettings;
-      break;
-    case 1:
-      currentSettings = &readerSettings;
-      break;
-    case 2:
-      currentSettings = &controlsSettings;
-      break;
-    case 3:
-      currentSettings = &systemSettings;
-      break;
+  settings.clear();
+  settings.reserve(displaySettings.size() + readerSettings.size() + controlsSettings.size() + systemSettings.size());
+  for (auto* category : {&displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
+    settings.insert(settings.end(), std::make_move_iterator(category->begin()),
+                    std::make_move_iterator(category->end()));
   }
-  settingsCount = static_cast<int>(currentSettings->size());
+
+  settingsCount = static_cast<int>(settings.size());
+  headerFlags.clear();
+  headerFlags.reserve(settings.size());
+  for (const auto& setting : settings) headerFlags.push_back(setting.isHeader);
 }
 
 void SettingsActivity::onEnter() {
@@ -228,15 +224,16 @@ void SettingsActivity::onEnter() {
   // instant, and flashing a banner on every toggle would be worse than nothing.
   BusyBanner banner(renderer, tr(STR_BUSY_LOADING_SETTINGS));
 
-  // Reset selection to first category
-  selectedCategoryIndex = 0;
   selectedSettingIndex = 0;
+  listScrollOffset = 0;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
   syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
 
-  rebuildSettingsLists();
+  rebuildSettingsList();
+  // The list opens on a heading, so the cursor starts on the first row under it.
+  selectedSettingIndex = settings_nav::firstLandableRow(headerFlags);
 
   // Trigger first update
   requestUpdate();
@@ -252,109 +249,57 @@ void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  bool hasChangedCategory = false;
-
-  auto applyCategorySelection = [this] {
-    switch (selectedCategoryIndex) {
-      case 0:
-        currentSettings = &displaySettings;
-        break;
-      case 1:
-        currentSettings = &readerSettings;
-        break;
-      case 2:
-        currentSettings = &controlsSettings;
-        break;
-      case 3:
-        currentSettings = &systemSettings;
-        break;
-    }
-    settingsCount = static_cast<int>(currentSettings->size());
-  };
-
-  // Handle actions with early return
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedSettingIndex == 0) {
-      selectedCategoryIndex = (selectedCategoryIndex < categoryCount - 1) ? (selectedCategoryIndex + 1) : 0;
-      hasChangedCategory = true;
-      requestUpdate();
-    } else {
-      toggleCurrentSetting();
-      requestUpdate();
-      return;
-    }
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    if (selectedSettingIndex > 0) {
-      selectedSettingIndex = 0;
-      requestUpdate();
-    } else {
-      SETTINGS.saveToFile();
-      onGoHome();
-    }
+    SETTINGS.saveToFile();
+    onGoHome();
     return;
   }
 
   buttonNavigator.onNextStep([this] {
-    selectedSettingIndex = skipHeaders(ButtonNavigator::nextIndex(selectedSettingIndex, settingsCount + 1), true);
+    selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, true);
     requestUpdate();
   });
 
   buttonNavigator.onPreviousStep([this] {
-    selectedSettingIndex = skipHeaders(ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1), false);
+    selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, false);
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::nextIndex(selectedCategoryIndex, categoryCount);
+  // Held, the same buttons jump a whole section. One flat list is long, and this is
+  // the fast travel the tab bar used to provide.
+  //
+  // The jump also parks the window on the section's heading. Left to slide by the least
+  // it can, the list would show the arrived-at row against the top or bottom edge with
+  // the heading and the rest of the section off-screen, which is the opposite of what
+  // jumping to a section is for.
+  const auto jumpSection = [this](const bool forward) {
+    selectedSettingIndex = settings_nav::nextSection(selectedSettingIndex, headerFlags, forward);
+    listScrollOffset = std::max(0, selectedSettingIndex - 1);
     requestUpdate();
-  });
+  };
 
-  buttonNavigator.onPreviousContinuous([this, &hasChangedCategory] {
-    hasChangedCategory = true;
-    selectedCategoryIndex = ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount);
-    requestUpdate();
-  });
+  buttonNavigator.onNextContinuous([jumpSection] { jumpSection(true); });
 
-  if (hasChangedCategory) {
-    selectedSettingIndex = (selectedSettingIndex == 0) ? 0 : 1;
-    applyCategorySelection();
-    // Every tab now opens on a heading, so the first row has to be stepped past.
-    // The old tab's scroll position means nothing in the new one.
-    selectedSettingIndex = skipHeaders(selectedSettingIndex, true);
-    listScrollOffset = 0;
-  }
-}
-
-bool SettingsActivity::isHeaderRow(const int navIndex) const {
-  const int row = navIndex - 1;
-  if (currentSettings == nullptr || row < 0 || row >= settingsCount) return false;
-  return (*currentSettings)[row].isHeader;
-}
-
-int SettingsActivity::skipHeaders(int navIndex, const bool forward) const {
-  const int ring = settingsCount + 1;
-  // Bounded by the ring length: a list that somehow held nothing but headings would
-  // otherwise spin here forever.
-  for (int guard = 0; guard < ring && isHeaderRow(navIndex); ++guard) {
-    navIndex = forward ? ButtonNavigator::nextIndex(navIndex, ring) : ButtonNavigator::previousIndex(navIndex, ring);
-  }
-  return navIndex;
+  buttonNavigator.onPreviousContinuous([jumpSection] { jumpSection(false); });
 }
 
 void SettingsActivity::toggleCurrentSetting() {
-  int selectedSetting = selectedSettingIndex - 1;
+  const int selectedSetting = selectedSettingIndex;
   if (selectedSetting < 0 || selectedSetting >= settingsCount) {
     return;
   }
   // Confirm on a heading does nothing; it is a divider, not an option.
-  if ((*currentSettings)[selectedSetting].isHeader) {
+  if (settings[selectedSetting].isHeader) {
     return;
   }
 
-  const auto& setting = (*currentSettings)[selectedSetting];
+  const auto& setting = settings[selectedSetting];
   const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
   const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
 
@@ -390,7 +335,8 @@ void SettingsActivity::toggleCurrentSetting() {
                          SETTINGS.*valuePtr = offeredValues[idx];
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
-                         rebuildSettingsLists();
+                         rebuildSettingsList();
+                         restoreCursorAfterRebuild();
                        });
       requestUpdate();
       return;
@@ -416,7 +362,8 @@ void SettingsActivity::toggleCurrentSetting() {
         valueSetter(idx);
         syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
         SETTINGS.saveToFile();
-        rebuildSettingsLists();
+        rebuildSettingsList();
+        restoreCursorAfterRebuild();
       };
       if (!setting.enumStringValues.empty()) {
         optionPopup.show(setting.nameId, setting.enumStringValues, cur, std::move(onSelect));
@@ -438,7 +385,8 @@ void SettingsActivity::toggleCurrentSetting() {
                   [this, valuePtr](const int chosen) {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
                     SETTINGS.saveToFile();
-                    rebuildSettingsLists();
+                    rebuildSettingsList();
+                    restoreCursorAfterRebuild();
                   });
     requestUpdate();
     return;
@@ -469,7 +417,8 @@ void SettingsActivity::toggleCurrentSetting() {
               dst[maxLen - 1] = '\0';
             }
             SETTINGS.saveToFile();
-            rebuildSettingsLists();
+            rebuildSettingsList();
+            restoreCursorAfterRebuild();
           }
         });
     return;
@@ -519,21 +468,24 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
-                                 rebuildSettingsLists();
+                                 rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::InstalledFonts:
         startActivityForResult(std::make_unique<InstalledFontsActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
-                                 rebuildSettingsLists();
+                                 rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::TextSettings:
         startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
                                [this](const ActivityResult&) {
                                  // TextSettingsActivity saves on each change; no save needed here.
-                                 rebuildSettingsLists();
+                                 rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::Language:
@@ -543,7 +495,8 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<LanguageSelectActivity>(renderer, mappedInput),
                                [this](const ActivityResult&) {
                                  SETTINGS.saveToFile();
-                                 rebuildSettingsLists();
+                                 rebuildSettingsList();
+                                 restoreCursorAfterRebuild();
                                });
         break;
       case SettingAction::None:
@@ -557,11 +510,17 @@ void SettingsActivity::toggleCurrentSetting() {
 
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
-  rebuildSettingsLists();
-  selectedSettingIndex = std::min(selectedSettingIndex, settingsCount);
-  // A toggle can add or remove rows (Quick-return from footnotes, Pop-up Items), which
+  rebuildSettingsList();
+  restoreCursorAfterRebuild();
+}
+
+void SettingsActivity::restoreCursorAfterRebuild() {
+  // A change can add or remove rows (Quick-return from footnotes, Pop-up Items), which
   // shifts everything below it and can slide a heading under the cursor.
-  selectedSettingIndex = skipHeaders(selectedSettingIndex, true);
+  selectedSettingIndex = std::clamp(selectedSettingIndex, 0, std::max(0, settingsCount - 1));
+  if (selectedSettingIndex < settingsCount && settings[selectedSettingIndex].isHeader) {
+    selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, true);
+  }
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
@@ -616,24 +575,16 @@ void SettingsActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
                  CROSSPOINT_VERSION);
 
-  std::vector<TabInfo> tabs;
-  tabs.reserve(categoryCount);
-  for (int i = 0; i < categoryCount; i++) {
-    tabs.push_back({I18N.get(categoryNames[i]), selectedCategoryIndex == i});
-  }
-  GUI.drawTabBar(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight}, tabs,
-                 selectedSettingIndex == 0);
-
-  const auto& settings = *currentSettings;
+  const auto& rows = settings;  // named for the lambdas below, which cannot capture a member
   GUI.drawList(
       renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight - (metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.buttonHintsHeight +
-                         metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex - 1,
-      [&settings](int index) { return std::string(I18N.get(settings[index].nameId)); }, nullptr, nullptr,
-      [&settings](int i) {
-        const auto& setting = settings[i];
+      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, pageWidth,
+           pageHeight -
+               (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
+      settingsCount, selectedSettingIndex, [&rows](int index) { return std::string(I18N.get(rows[index].nameId)); },
+      nullptr, nullptr,
+      [&rows](int i) {
+        const auto& setting = rows[i];
         std::string valueText = "";
         if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
           const bool value = SETTINGS.*(setting.valuePtr);
@@ -682,15 +633,12 @@ void SettingsActivity::render(RenderLock&&) {
         }
         return valueText;
       },
-      true, nullptr, UI_10_FONT_ID, [&settings](int i) { return settings[i].isHeader; }, &listScrollOffset);
+      true, nullptr, UI_10_FONT_ID, [&rows](int i) { return rows[i].isHeader; }, &listScrollOffset);
 
   // Draw help text
-  const auto confirmLabel =
-      (selectedSettingIndex == 0)
-          ? I18N.get(categoryNames[(selectedCategoryIndex + 1) % categoryCount])
-          : (selectedSettingIndex > 0 && (*currentSettings)[selectedSettingIndex - 1].nameId == StrId::STR_TIME_TO_SLEEP
-                 ? tr(STR_SELECT)
-                 : tr(STR_TOGGLE));
+  const bool onSleepTimeout = selectedSettingIndex >= 0 && selectedSettingIndex < settingsCount &&
+                              rows[selectedSettingIndex].nameId == StrId::STR_TIME_TO_SLEEP;
+  const auto confirmLabel = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

@@ -51,7 +51,7 @@ struct SettingInfo {
   const char* key = nullptr;             // JSON API key (nullptr for ACTION types)
   StrId category = StrId::STR_NONE_OPT;  // Category for web UI grouping
   // Section heading rather than a setting: drawn as a label with a rule, never
-  // selectable. Built only by SettingsActivity::rebuildSettingsLists, never by
+  // selectable. Built only by SettingsActivity::rebuildSettingsList, never by
   // getSettingsList, so headings stay out of JSON persistence and the web API.
   bool isHeader = false;
   bool obfuscated = false;      // Save/load via base64 obfuscation (passwords)
@@ -188,16 +188,20 @@ struct SettingInfo {
 class SettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
-  int selectedCategoryIndex = 0;  // Currently selected category
   int selectedSettingIndex = 0;
   int settingsCount = 0;
 
-  // Per-category settings derived from shared list + device-only actions
+  // Every setting, in one flat list: the four categories concatenated in display
+  // order, each already carrying its section headings.
+  std::vector<SettingInfo> settings;
+  // Per-category scratch, kept as members so a rebuild reuses their capacity rather
+  // than allocating four vectors of SettingInfo on every toggle.
   std::vector<SettingInfo> displaySettings;
   std::vector<SettingInfo> readerSettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
-  const std::vector<SettingInfo>* currentSettings = nullptr;
+  // isHeader per row, kept alongside the list for settings_nav.
+  std::vector<bool> headerFlags;
 
   bool preserveQuickResumeTimeoutOn = false;
   bool quickResumeTimeoutAutoEnabled = false;
@@ -208,22 +212,16 @@ class SettingsActivity final : public Activity {
   // back. Same component TextSettingsActivity already uses for the margin rows.
   ValueBarPopup valueBar;
 
-  static constexpr int categoryCount = 4;
-  static const StrId categoryNames[categoryCount];
-
   // Window start for the settings list, owned here so it survives between frames.
-  // Reset whenever the list underneath it changes identity (tab change, re-entry).
+  // Reset whenever the list underneath it changes identity (re-entry).
   int listScrollOffset = 0;
 
-  bool isHeaderRow(int navIndex) const;
-  // Walks past section headings to the next landable position, so the cursor never
-  // rests on one. navIndex is a position on the nav ring (0 = tab bar).
-  int skipHeaders(int navIndex, bool forward) const;
-
-  void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
+  // Puts the cursor back on a landable row after a rebuild that may have added or
+  // removed rows under it.
+  void restoreCursorAfterRebuild();
   void openSleepTimeoutPicker();
-  void rebuildSettingsLists();
+  void rebuildSettingsList();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
