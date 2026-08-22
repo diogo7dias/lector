@@ -40,6 +40,12 @@ constexpr uint64_t MAX_TRANSFER_BYTES = 512ULL * 1024ULL * 1024ULL;
 /** How many "name (N).ext" variants to try before giving up on a folder. */
 constexpr int MAX_COLLISION_ATTEMPTS = 99;
 
+/** The only folder outside the card root an offer may name, and its separator. */
+constexpr std::string_view FONT_FOLDER_ROOT = ".fonts";
+
+/** Longest font family name accepted from an offer, matching the card layout. */
+constexpr size_t MAX_FAMILY_NAME_BYTES = 64;
+
 enum class RejectReason : uint8_t {
   NONE,
   UNSUPPORTED_TYPE,
@@ -49,6 +55,8 @@ enum class RejectReason : uint8_t {
 struct OfferCheck {
   bool accepted = false;
   std::string safeName;
+  /** Where the file goes, relative to the card root. Empty means the root. */
+  std::string safeFolder;
   RejectReason rejection = RejectReason::NONE;
 };
 
@@ -58,6 +66,32 @@ struct OfferCheck {
  * Anything else is refused by name, before any bytes are accepted.
  */
 bool isAcceptedFilename(std::string_view name);
+
+/**
+ * True when the name is a font face file: a bare ".cpfont" with nothing but
+ * letters, digits, hyphens and underscores in front of it.
+ *
+ * A face is deliberately absent from isAcceptedFilename. It is not a file the
+ * reader opens, and it is only ever taken as part of a family install, so it is
+ * accepted through checkOffer with a font folder and nowhere else.
+ */
+bool isFontFaceFilename(std::string_view name);
+
+/**
+ * The folder an offer may write into, or empty when the offer may not leave the
+ * card root.
+ *
+ * Exactly one shape is allowed: ".fonts/<Family>", one level deep, where the
+ * family name holds only letters, digits, hyphens and underscores. A leading
+ * slash is tolerated and dropped. Everything else, including "..", a deeper
+ * path, a different root, or a name with a dot or a space in it, comes back
+ * empty, so an offered folder can never point at the settings folder, a book
+ * folder, or anywhere above the card root.
+ */
+std::string sanitizeFontFolder(std::string_view folder);
+
+/** The family a sanitised font folder installs into. Empty when it is not one. */
+std::string familyNameFromFolder(std::string_view safeFolder);
 
 /**
  * Reduces an offered name to a bare, safe filename.
@@ -92,5 +126,15 @@ std::string resolveDestination(std::string_view folder, const std::string& safeN
 
 /** Runs the whole offer through the checks above in one call. */
 OfferCheck checkOffer(std::string_view offeredName, uint64_t sizeBytes, uint64_t freeBytes);
+
+/**
+ * The same checks for an offer that names a destination folder.
+ *
+ * A font face is accepted only alongside a valid ".fonts/<Family>" folder, and
+ * a book or an image only without one, so neither can be used to put the other
+ * kind of file where it does not belong.
+ */
+OfferCheck checkOffer(std::string_view offeredName, uint64_t sizeBytes, uint64_t freeBytes,
+                      std::string_view offeredFolder);
 
 }  // namespace nearby_file

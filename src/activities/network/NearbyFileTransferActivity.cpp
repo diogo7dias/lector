@@ -9,8 +9,10 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "FontInstaller.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
+#include "SdCardFontSystem.h"
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -35,8 +37,25 @@ NearbyFileTransferActivity::NearbyFileTransferActivity(GfxRenderer& renderer, Ma
                                                        std::string returnToReaderPath)
     : Activity("NearbyFileTransfer", renderer, mappedInput),
       mode(mode),
-      sourcePath(std::move(sourcePath)),
-      returnToReaderPath(std::move(returnToReaderPath)) {}
+      returnToReaderPath(std::move(returnToReaderPath)) {
+  if (!sourcePath.empty()) sourcePaths.push_back(std::move(sourcePath));
+}
+
+std::unique_ptr<NearbyFileTransferActivity> NearbyFileTransferActivity::sendFontFamily(
+    GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& familyName,
+    std::vector<std::string> facePaths, const uint64_t totalBytes) {
+  auto activity = std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, Mode::Send);
+  activity->sourcePaths = std::move(facePaths);
+  activity->sendFolder = std::string(nearby_file::FONT_FOLDER_ROOT) + "/" + familyName;
+  activity->sendTotalBytes = totalBytes;
+  return activity;
+}
+
+std::string NearbyFileTransferActivity::sendLabel() const {
+  if (sendFolder.empty()) return sourceName;
+  const std::string family = nearby_file::familyNameFromFolder(sendFolder);
+  return family.empty() ? sourceName : family;
+}
 
 void NearbyFileTransferActivity::leave() {
   if (!returnToReaderPath.empty()) {
@@ -58,15 +77,7 @@ void NearbyFileTransferActivity::onEnter() {
   }
 
   if (mode == Mode::Send) {
-    sourceName = std::string(bookfiling::fileNameOf(sourcePath));
-    if (!Storage.openFileForRead(LOG_TAG, sourcePath, outgoing) || !outgoing.isOpen()) {
-      sourceUnreadable = true;
-      errorMessage = tr(STR_NEARBY_CANNOT_READ_FILE);
-      requestUpdate(true);
-      return;
-    }
-    sourceSize = outgoing.fileSize64();
-    if (sourceSize == 0 || sourceSize > MAX_TRANSFER_BYTES) {
+    if (sourcePaths.empty() || !openCurrentSource()) {
       closeFiles();
       sourceUnreadable = true;
       errorMessage = tr(STR_NEARBY_CANNOT_READ_FILE);
@@ -94,6 +105,52 @@ void NearbyFileTransferActivity::onEnter() {
   requestUpdate(true);
 }
 
+bool NearbyFileTransferActivity::openCurrentSource() {
+  if (sourceIndex >= sourcePaths.size()) return false;
+  const std::string& path = sourcePaths[sourceIndex];
+  sourceName = std::string(bookfiling::fileNameOf(path));
+  if (outgoing.isOpen()) outgoing.close();
+  if (!Storage.openFileForRead(LOG_TAG, path, outgoing) || !outgoing.isOpen()) return false;
+  sourceSize = outgoing.fileSize64();
+  if (sourceSize == 0 || sourceSize > MAX_TRANSFER_BYTES) {
+    outgoing.close();
+    return false;
+  }
+  return true;
+}
+
+void NearbyFileTransferActivity::advanceToNextSource() {
+  sourceIndex++;
+  if (!openCurrentSource()) {
+    // The packet goes out directly rather than through the session: the file
+    // just sent finished cleanly, so the session is done and has no cancel left
+    // to raise. Without it the other reader would sit on a half-installed family
+    // until its own timeout cleared it.
+    if (hasChosenPeer) sendPacket(PacketType::Cancel, chosenPeerMac, 0, nullptr, 0);
+    closeFiles();
+    sourceUnreadable = true;
+    errorMessage = tr(STR_NEARBY_CANNOT_READ_FILE);
+    requestUpdate(true);
+    return;
+  }
+
+  // A fresh session per file, sent straight to the reader already chosen: the
+  // batch was agreed once, so repeating discovery would only ask again.
+  session = TransferSession{};
+  session.beginSend(sourceName, sourceSize, millis());
+  session.choosePeer(chosenPeerMac, millis());
+  lastDrawnPercent = -1;
+  requestUpdate(true);
+}
+
+void NearbyFileTransferActivity::awaitNextGroupFile() {
+  session = TransferSession{};
+  session.beginReceive(millis());
+  destinationPath.clear();
+  lastDrawnPercent = -1;
+  requestUpdate();
+}
+
 void NearbyFileTransferActivity::onExit() {
   // Order matters: stop the radio before touching the card, so no chunk can
   // arrive for a file that is already closed.
@@ -102,6 +159,7 @@ void NearbyFileTransferActivity::onExit() {
   WiFi.mode(WIFI_OFF);
 
   if (session.shouldDiscardPartialFile()) discardPartialFile();
+  if (group.expectsMore()) discardPartialFamily();
   closeFiles();
   Activity::onExit();
 }
@@ -184,6 +242,26 @@ void NearbyFileTransferActivity::finishWithError(const char* message) {
 }
 
 void NearbyFileTransferActivity::handleOffer(const OfferPayload& offer, const std::array<uint8_t, 6>& sourceMac) {
+  // A sender repeats its offer until the accept reaches it, so the same offer
+  // arrives again while the file it announced is already being written. The
+  // session ignores an offer once it is transferring, but this screen would
+  // still act on it and reopen the destination, truncating what has landed so
+  // far, so only a session still waiting for an offer takes one.
+  const TransferState state = session.state();
+  if (state != TransferState::LISTENING && state != TransferState::OFFER_PROMPT) return;
+
+  const GroupDecision decision = group.decide(offer, sourceMac, millis());
+
+  if (decision == GroupDecision::REJECT) {
+    // Refused before the session hears about it. Between the faces of a family
+    // this screen is listening again, and letting a stranger's offer through
+    // only to reject it would end the shared session and take the half-received
+    // family with it. The other device is told directly instead, so it stops
+    // retrying while the family in progress carries on.
+    sendPacket(PacketType::Reject, sourceMac, 0, nullptr, 0);
+    return;
+  }
+
   TransferEvent incomingEvent;
   incomingEvent.kind = TransferEventKind::OFFER;
   incomingEvent.sourceMac = sourceMac;
@@ -191,12 +269,55 @@ void NearbyFileTransferActivity::handleOffer(const OfferPayload& offer, const st
   incomingEvent.fileName = offer.fileName;
   incomingEvent.fileSize = offer.fileSize;
   session.onEvent(incomingEvent, millis());
+
+  pendingOffer = offer;
+  if (decision == GroupDecision::AUTO_ACCEPT) acceptIncomingOffer();
+}
+
+std::string NearbyFileTransferActivity::prepareFontFolder(const std::string& familyName) {
+  // An install never writes over a family that is already there. Merging two
+  // versions of a font would leave a family made of faces from both, and
+  // replacing one silently would throw away what the reader chose to keep, so
+  // the answer is to say it is installed and let them delete it first.
+  if (SdCardFontRegistry::findFamilyRoot(familyName.c_str()) != nullptr) {
+    errorMessage = tr(STR_NEARBY_FONT_ALREADY_INSTALLED);
+    return {};
+  }
+
+  const char* root = SdCardFontRegistry::defaultWriteRoot();
+  if (!Storage.exists(root) && !Storage.mkdir(root)) {
+    errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
+    return {};
+  }
+
+  const std::string folder = std::string(root) + "/" + familyName;
+  if (!Storage.exists(folder.c_str()) && !Storage.mkdir(folder.c_str())) {
+    errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
+    return {};
+  }
+
+  createdFamilyPath = folder;
+  return folder;
+}
+
+void NearbyFileTransferActivity::discardPartialFamily() {
+  if (createdFamilyPath.empty()) return;
+  // Half a family is a font with sizes missing, which the reader would offer and
+  // then fail to render at. It goes with the transfer that did not finish.
+  if (incoming.isOpen()) incoming.close();
+  destinationOpen = false;
+  Storage.removeDir(createdFamilyPath.c_str());
+  LOG_DBG(LOG_TAG, "Removed the half-installed font family %s", createdFamilyPath.c_str());
+  createdFamilyPath.clear();
+  destinationPath.clear();
+  sdFontSystem.markRegistryDirty();
 }
 
 void NearbyFileTransferActivity::acceptIncomingOffer() {
   // The offered name is checked before anything is opened: it decides both
   // whether the file is allowed at all and what it may be called on the card.
-  const OfferCheck check = checkOffer(session.offeredName(), session.offeredSize(), UINT64_MAX);
+  errorMessage.clear();
+  const OfferCheck check = checkOffer(session.offeredName(), session.offeredSize(), UINT64_MAX, pendingOffer.folder);
   if (!check.accepted) {
     errorMessage =
         check.rejection == RejectReason::TOO_LARGE ? tr(STR_NEARBY_NO_ROOM) : tr(STR_NEARBY_UNSUPPORTED_FILE);
@@ -206,13 +327,23 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
     return;
   }
 
-  const std::string resolved = resolveDestination(
-      DESTINATION_FOLDER, check.safeName, [](const std::string& path) { return Storage.exists(path.c_str()); },
-      [](const std::string_view name, const std::string_view folder, const int index) {
-        return bookfiling::destinationCandidate(name, folder, index);
-      });
+  std::string resolved;
+  if (check.safeFolder.empty()) {
+    resolved = resolveDestination(
+        DESTINATION_FOLDER, check.safeName, [](const std::string& path) { return Storage.exists(path.c_str()); },
+        [](const std::string_view name, const std::string_view folder, const int index) {
+          return bookfiling::destinationCandidate(name, folder, index);
+        });
+  } else {
+    // A font face goes in beside the rest of its family under its own name: a
+    // "Literata_14 (2).cpfont" would be a size the registry cannot read back.
+    const std::string familyName = familyNameFromFolder(check.safeFolder);
+    const std::string folder = createdFamilyPath.empty() ? prepareFontFolder(familyName) : createdFamilyPath;
+    if (!folder.empty()) resolved = folder + "/" + check.safeName;
+  }
+
   if (resolved.empty() || !Storage.openFileForWrite(LOG_TAG, resolved, incoming) || !incoming.isOpen()) {
-    errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
+    if (errorMessage.empty()) errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
     session.rejectOffer(millis());
     runSessionActions();
     requestUpdate(true);
@@ -221,6 +352,7 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
 
   destinationPath = resolved;
   destinationOpen = true;
+  group.onAccepted(pendingOffer, session.peerMacAddress(), millis());
   session.acceptOffer(resolved, millis());
   requestUpdate(true);
 }
@@ -325,6 +457,10 @@ void NearbyFileTransferActivity::runSessionActions() {
         offer.deviceName = deviceName;
         offer.fileName = sourceName;
         offer.fileSize = sourceSize;
+        offer.folder = sendFolder;
+        offer.groupIndex = static_cast<uint8_t>(sourceIndex);
+        offer.groupCount = static_cast<uint8_t>(sourcePaths.size());
+        offer.groupTotalBytes = sendTotalBytes;
         if (encodeOfferPayload(offer, payload.data(), payload.size(), payloadLength)) {
           sendPacket(PacketType::Offer, action.peerMac, 0, payload.data(), payloadLength);
         }
@@ -387,7 +523,9 @@ void NearbyFileTransferActivity::loop() {
         selectedPeer = (selectedPeer + 1) % peerCount;
         requestUpdate();
       } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-        session.choosePeer(session.peerAt(selectedPeer).mac, millis());
+        chosenPeerMac = session.peerAt(selectedPeer).mac;
+        hasChosenPeer = true;
+        session.choosePeer(chosenPeerMac, millis());
         requestUpdate(true);
         return;
       }
@@ -436,6 +574,35 @@ void NearbyFileTransferActivity::loop() {
   }
   if (session.shouldDiscardPartialFile() && !destinationPath.empty()) discardPartialFile();
 
+  if (state == TransferState::DONE && mode == Mode::Receive && group.expectsMore()) {
+    group.onFileDone(millis());
+    if (group.expectsMore()) {
+      awaitNextGroupFile();
+      return;
+    }
+    if (!createdFamilyPath.empty()) {
+      // The family is whole: let the font list pick it up without a reboot.
+      createdFamilyPath.clear();
+      sdFontSystem.markRegistryDirty();
+    }
+  }
+
+  if (state == TransferState::DONE && mode == Mode::Send && sourceIndex + 1 < sourcePaths.size()) {
+    advanceToNextSource();
+    return;
+  }
+
+  if (state == TransferState::REJECTED || state == TransferState::CANCELLED || state == TransferState::FAILED) {
+    discardPartialFamily();
+  }
+
+  // A sender that walked out of range mid-family leaves nothing half-installed
+  // and nothing waiting to be taken without a prompt.
+  if (mode == Mode::Receive && group.isStale(millis())) {
+    discardPartialFamily();
+    group.reset();
+  }
+
   if ((state == TransferState::DONE || state == TransferState::REJECTED || state == TransferState::CANCELLED ||
        state == TransferState::FAILED) &&
       autoReturnAt == 0) {
@@ -474,7 +641,7 @@ void NearbyFileTransferActivity::renderSearching(const Rect& screen, const int t
   const char* primary = mode == Mode::Send ? tr(STR_NEARBY_LOOKING_FOR_READERS) : tr(STR_NEARBY_WAITING_TO_RECEIVE);
   UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, primary, true, EpdFontFamily::REGULAR);
   if (mode == Mode::Send) {
-    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, sourceName.c_str(),
+    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, sendLabel().c_str(),
                                      DETAIL_MAX_LINES, true, EpdFontFamily::REGULAR,
                                      UITheme::TextVerticalAlignment::TOP);
   }
@@ -504,8 +671,15 @@ void NearbyFileTransferActivity::renderOfferPrompt(const Rect& screen, const int
   renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEARBY_OFFER_QUESTION), true, EpdFontFamily::REGULAR);
 
   char buffer[220];
-  std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SIZE_FORMAT), session.offeredName().c_str(),
-                static_cast<unsigned>((session.offeredSize() + 1023) / 1024));
+  const std::string family = nearby_file::familyNameFromFolder(pendingOffer.folder);
+  if (!family.empty()) {
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_OFFER_FORMAT), family.c_str(),
+                  static_cast<unsigned>(pendingOffer.groupCount),
+                  static_cast<unsigned>((pendingOffer.groupTotalBytes + 1023) / 1024));
+  } else {
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SIZE_FORMAT), session.offeredName().c_str(),
+                  static_cast<unsigned>((session.offeredSize() + 1023) / 1024));
+  }
   renderer.drawText(UI_10_FONT_ID, left, top + 45, buffer);
 
   if (!session.peerName().empty()) {
@@ -529,8 +703,16 @@ void NearbyFileTransferActivity::renderProgress(const Rect& screen, const int to
                                                                                        : tr(STR_NEARBY_RECEIVING_FILE);
   renderer.drawCenteredText(UI_10_FONT_ID, top, title, true, EpdFontFamily::REGULAR);
 
-  const std::string& name = mode == Mode::Send ? sourceName : session.offeredName();
+  const std::string name = mode == Mode::Send ? sendLabel() : session.offeredName();
   renderer.drawText(UI_10_FONT_ID, left, top + 45, name.c_str());
+
+  const unsigned batchCount = mode == Mode::Send ? sourcePaths.size() : group.fileCount();
+  const unsigned batchIndex = mode == Mode::Send ? sourceIndex + 1 : group.filesDone() + 1u;
+  if (batchCount > 1) {
+    char batch[48];
+    std::snprintf(batch, sizeof(batch), tr(STR_NEARBY_FILE_OF_FORMAT), batchIndex, batchCount);
+    renderer.drawText(UI_10_FONT_ID, left, top + 70, batch);
+  }
 
   const int percent = session.progressPercent();
   char buffer[32];
@@ -588,7 +770,11 @@ void NearbyFileTransferActivity::render(RenderLock&&) {
         break;
       case TransferState::DONE: {
         char buffer[220];
-        if (mode == Mode::Receive && !destinationPath.empty()) {
+        const std::string installedFamily =
+            mode == Mode::Receive ? nearby_file::familyNameFromFolder(pendingOffer.folder) : std::string();
+        if (!installedFamily.empty()) {
+          std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_INSTALLED_FORMAT), installedFamily.c_str());
+        } else if (mode == Mode::Receive && !destinationPath.empty()) {
           std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SAVED_AS_FORMAT),
                         std::string(bookfiling::fileNameOf(destinationPath)).c_str());
         } else {

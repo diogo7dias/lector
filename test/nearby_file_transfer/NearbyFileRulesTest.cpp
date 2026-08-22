@@ -114,3 +114,53 @@ TEST(NearbyFileRules, ValidatesAWholeOfferInOneCall) {
   EXPECT_TRUE(check.accepted);
   EXPECT_EQ(check.safeName, "Book.epub");
 }
+
+TEST(NearbyFileRules, AcceptsAFontFolderOnlyInTheFontsRoot) {
+  EXPECT_EQ(sanitizeFontFolder(".fonts/Literata"), ".fonts/Literata");
+  EXPECT_EQ(sanitizeFontFolder("/.fonts/Literata"), ".fonts/Literata");
+  EXPECT_EQ(sanitizeFontFolder(".fonts/Noto_Sans-2"), ".fonts/Noto_Sans-2");
+
+  // The sender picks this string, so every way of pointing it somewhere else has
+  // to come back empty rather than be repaired into something writable.
+  for (const char* folder :
+       {"", ".fonts", ".fonts/", "fonts/Literata", ".fonts/../books", ".fonts/..", ".fonts/Sub/Deeper", "books",
+        ".crosspoint", ".fonts/Lite rata", ".fonts/Lit.rata", ".fonts/.hidden", "..", "/"}) {
+    EXPECT_TRUE(sanitizeFontFolder(folder).empty()) << folder;
+  }
+}
+
+TEST(NearbyFileRules, NamesTheFamilyAFontFolderBelongsTo) {
+  EXPECT_EQ(familyNameFromFolder(".fonts/Literata"), "Literata");
+  EXPECT_TRUE(familyNameFromFolder("books").empty());
+}
+
+TEST(NearbyFileRules, TakesAFontFaceOnlyWhenItIsBoundForAFontFolder) {
+  // A .cpfont is not a file the reader opens, so it is refused on its own. It is
+  // allowed only as part of a family install, which is what the folder says.
+  EXPECT_FALSE(isAcceptedFilename("Literata_14.cpfont"));
+
+  OfferCheck check = checkOffer("Literata_14.cpfont", 51200, 10000000, ".fonts/Literata");
+  EXPECT_TRUE(check.accepted);
+  EXPECT_EQ(check.safeName, "Literata_14.cpfont");
+  EXPECT_EQ(check.safeFolder, ".fonts/Literata");
+
+  // A face with no folder, and a book with a font folder, are both refused: the
+  // two only travel together.
+  EXPECT_FALSE(checkOffer("Literata_14.cpfont", 51200, 10000000, "").accepted);
+  EXPECT_FALSE(checkOffer("Book.epub", 51200, 10000000, ".fonts/Literata").accepted);
+  EXPECT_FALSE(checkOffer("Literata_14.cpfont", 51200, 10000000, ".fonts/../books").accepted);
+  EXPECT_FALSE(checkOffer("Literata.14.cpfont", 51200, 10000000, ".fonts/Literata").accepted);
+  EXPECT_EQ(checkOffer("Literata_14.cpfont", 51200, 10000000, "").rejection, RejectReason::UNSUPPORTED_TYPE);
+}
+
+TEST(NearbyFileRules, StillChecksTheSizeOfAFontFace) {
+  const OfferCheck check = checkOffer("Literata_14.cpfont", 900000000, 10000000, ".fonts/Literata");
+  EXPECT_FALSE(check.accepted);
+  EXPECT_EQ(check.rejection, RejectReason::TOO_LARGE);
+}
+
+TEST(NearbyFileRules, LeavesABookOfferUnchangedWhenNoFolderIsNamed) {
+  const OfferCheck check = checkOffer("Book.epub", 5000, 10000000, "");
+  EXPECT_TRUE(check.accepted);
+  EXPECT_TRUE(check.safeFolder.empty());
+}
