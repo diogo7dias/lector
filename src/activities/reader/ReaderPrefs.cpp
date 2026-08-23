@@ -8,49 +8,14 @@
 
 ReaderPrefs ReaderPrefs::fromGlobal() {
   ReaderPrefs p;
-  p.fontFamily = SETTINGS.fontFamily;
-  p.fontPointSize = SETTINGS.fontPointSize;
-  p.lineSpacingPercent = SETTINGS.lineSpacingPercent;
-  p.paragraphAlignment = SETTINGS.paragraphAlignment;
-  p.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
-  p.paragraphSpacing = SETTINGS.paragraphSpacing;
-  p.screenMargin = SETTINGS.screenMargin;
-  p.screenMarginTop = SETTINGS.screenMarginTop;
-  p.screenMarginBottom = SETTINGS.screenMarginBottom;
-  p.marginLinkMode = SETTINGS.marginLinkMode;
-  p.dynamicMargins = SETTINGS.dynamicMargins;
-  p.focusReadingEnabled = SETTINGS.focusReadingEnabled;
-  p.guideDotsEnabled = SETTINGS.guideDotsEnabled;
-  p.guideDotsHidden = SETTINGS.guideDotsHidden;
-  p.hyphenationEnabled = SETTINGS.hyphenationEnabled;
-  p.embeddedTextStyle = SETTINGS.embeddedTextStyle;
-  p.embeddedLayoutStyle = SETTINGS.embeddedLayoutStyle;
-  p.textAntiAliasing = SETTINGS.textAntiAliasing;
-  p.imageRendering = SETTINGS.imageRendering;
-  p.paperbackLookBody = SETTINGS.paperbackLookBody;
-  p.paperbackLookStatus = SETTINGS.paperbackLookStatus;
-  p.firstLineIndentMode = SETTINGS.firstLineIndentMode;
-  p.firstLineIndentPercent = SETTINGS.firstLineIndentPercent;
-  p.paragraphNumbering = SETTINGS.paragraphNumbering;
-  p.paragraphNumberSize = SETTINGS.paragraphNumberSize;
-  p.statusBarEnabled = SETTINGS.sbEnabled;
-  p.sbBatteryPos = SETTINGS.sbBatteryPos;
-  p.sbClockPos = SETTINGS.sbClockPos;
-  p.sbTitlePos = SETTINGS.sbTitlePos;
-  p.sbTitleSource = SETTINGS.sbTitleSource;
-  p.sbTitleTruncate = SETTINGS.sbTitleTruncate;
-  p.sbPagePos = SETTINGS.sbPagePos;
-  p.sbPageFormat = SETTINGS.sbPageFormat;
-  p.sbBookPctPos = SETTINGS.sbBookPctPos;
-  p.sbChapterPctPos = SETTINGS.sbChapterPctPos;
-  p.sbChapterNumPos = SETTINGS.sbChapterNumPos;
-  p.sbSessionPagesPos = SETTINGS.sbSessionPagesPos;
-  p.sbBookBar = SETTINGS.sbBookBar;
-  p.sbChapterBar = SETTINGS.sbChapterBar;
-  p.sbBarThickness = SETTINGS.sbBarThickness;
-  p.sbFloatingBar = SETTINGS.sbFloatingBar;
-  p.sbBarOutline = SETTINGS.sbBarOutline;
-  p.sbOffBar = SETTINGS.sbOffBar;
+  // Every uint8_t field, straight off the three lists in ReaderLookFields.h.
+#define CP_FROM_GLOBAL(name) p.name = SETTINGS.name;
+  READER_LOOK_SCREEN_FIELDS(CP_FROM_GLOBAL)
+  READER_LOOK_BOOK_FIELDS(CP_FROM_GLOBAL)
+#undef CP_FROM_GLOBAL
+#define CP_FROM_GLOBAL_SB(prefsName, settingsName, blockName) p.prefsName = SETTINGS.settingsName;
+  READER_STATUS_BAR_FIELDS(CP_FROM_GLOBAL_SB)
+#undef CP_FROM_GLOBAL_SB
   // Zero-pad then copy so the trailing bytes are canonical for whole-blob memcmp.
   std::memset(p.sdFontFamilyName, 0, sizeof(p.sdFontFamilyName));
   std::strncpy(p.sdFontFamilyName, SETTINGS.sdFontFamilyName, sizeof(p.sdFontFamilyName) - 1);

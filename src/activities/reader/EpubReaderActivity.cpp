@@ -1801,13 +1801,10 @@ void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) cons
 
 void EpubReaderActivity::applyReaderSettingsEdit() {
   ReaderPrefs edited = SETTINGS.endReaderEditOverlay();
-  // paragraphNumbering and paperbackLook* are per-book in-menu toggles, not part of
-  // the Reader Settings screen, so they are not in the overlay round-trip; carry the
-  // book's values across so editing font/margins never resets them.
-  edited.paragraphNumbering = prefs_.paragraphNumbering;
-  edited.paragraphNumberSize = prefs_.paragraphNumberSize;
-  edited.paperbackLookBody = prefs_.paperbackLookBody;
-  edited.paperbackLookStatus = prefs_.paperbackLookStatus;
+  // The in-book toggles are not part of the Reader Settings screen, so they are not in
+  // the overlay round-trip; carry the book's values across so editing font or margins
+  // never resets them.
+  restoreBookOnlyFields(edited, prefs_);
   if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
     // Opened the settings screen but changed nothing — leave the book as it was.
     requestUpdate();
@@ -1825,24 +1822,9 @@ void EpubReaderActivity::applyStatusBarEdit() {
   // whole ReaderPrefs::fromGlobal() here would overwrite this book's font and margins
   // with the global ones.
   ReaderPrefs edited = prefs_;
-  edited.statusBarEnabled = SETTINGS.sbEnabled;
-  edited.sbBatteryPos = SETTINGS.sbBatteryPos;
-  edited.sbClockPos = SETTINGS.sbClockPos;
-  edited.sbTitlePos = SETTINGS.sbTitlePos;
-  edited.sbTitleSource = SETTINGS.sbTitleSource;
-  edited.sbTitleTruncate = SETTINGS.sbTitleTruncate;
-  edited.sbPagePos = SETTINGS.sbPagePos;
-  edited.sbPageFormat = SETTINGS.sbPageFormat;
-  edited.sbBookPctPos = SETTINGS.sbBookPctPos;
-  edited.sbChapterPctPos = SETTINGS.sbChapterPctPos;
-  edited.sbChapterNumPos = SETTINGS.sbChapterNumPos;
-  edited.sbSessionPagesPos = SETTINGS.sbSessionPagesPos;
-  edited.sbBookBar = SETTINGS.sbBookBar;
-  edited.sbChapterBar = SETTINGS.sbChapterBar;
-  edited.sbBarThickness = SETTINGS.sbBarThickness;
-  edited.sbFloatingBar = SETTINGS.sbFloatingBar;
-  edited.sbBarOutline = SETTINGS.sbBarOutline;
-  edited.sbOffBar = SETTINGS.sbOffBar;
+#define CP_READ_BACK_SB(prefsName, settingsName, blockName) edited.prefsName = SETTINGS.settingsName;
+  READER_STATUS_BAR_FIELDS(CP_READ_BACK_SB)
+#undef CP_READ_BACK_SB
   if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
     requestUpdate();
     return;

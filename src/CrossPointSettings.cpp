@@ -523,94 +523,33 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
 }
 
 void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
-  fontFamily = p.fontFamily;
-  fontPointSize = p.fontPointSize;
-  lineSpacingPercent = p.lineSpacingPercent;
-  paragraphAlignment = p.paragraphAlignment;
-  extraParagraphSpacing = p.extraParagraphSpacing;
-  paragraphSpacing = p.paragraphSpacing;
-  screenMargin = p.screenMargin;
-  screenMarginTop = p.screenMarginTop;
-  screenMarginBottom = p.screenMarginBottom;
-  marginLinkMode = p.marginLinkMode;
-  dynamicMargins = p.dynamicMargins;
-  firstLineIndentMode = p.firstLineIndentMode;
-  firstLineIndentPercent = p.firstLineIndentPercent;
-  focusReadingEnabled = p.focusReadingEnabled;
-  guideDotsEnabled = p.guideDotsEnabled;
-  guideDotsHidden = p.guideDotsHidden;
-  hyphenationEnabled = p.hyphenationEnabled;
-  embeddedTextStyle = p.embeddedTextStyle;
-  embeddedLayoutStyle = p.embeddedLayoutStyle;
-  textAntiAliasing = p.textAntiAliasing;
-  imageRendering = p.imageRendering;
+  // Only the Reader Settings screen rows: the in-book toggles and the status bar block
+  // are per-book and must never be pushed onto the global fields from here.
+#define CP_APPLY_READER_FIELD(name) name = p.name;
+  READER_LOOK_SCREEN_FIELDS(CP_APPLY_READER_FIELD)
+#undef CP_APPLY_READER_FIELD
   std::memset(sdFontFamilyName, 0, sizeof(sdFontFamilyName));
   std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
 }
 
 StatusBarBlock CrossPointSettings::captureStatusBarBlock() const {
   StatusBarBlock b;
-  b.enabled = sbEnabled;
-  b.batteryPos = sbBatteryPos;
-  b.clockPos = sbClockPos;
-  b.titlePos = sbTitlePos;
-  b.titleSource = sbTitleSource;
-  b.titleTruncate = sbTitleTruncate;
-  b.pagePos = sbPagePos;
-  b.pageFormat = sbPageFormat;
-  b.bookPctPos = sbBookPctPos;
-  b.chapterPctPos = sbChapterPctPos;
-  b.chapterNumPos = sbChapterNumPos;
-  b.sessionPagesPos = sbSessionPagesPos;
-  b.bookBar = sbBookBar;
-  b.chapterBar = sbChapterBar;
-  b.barThickness = sbBarThickness;
-  b.floatingBar = sbFloatingBar;
-  b.barOutline = sbBarOutline;
-  b.offBar = sbOffBar;
+#define CP_CAPTURE_SB(prefsName, settingsName, blockName) b.blockName = settingsName;
+  READER_STATUS_BAR_FIELDS(CP_CAPTURE_SB)
+#undef CP_CAPTURE_SB
   return b;
 }
 
 void CrossPointSettings::applyStatusBarBlock(const StatusBarBlock& b) {
-  sbEnabled = b.enabled;
-  sbBatteryPos = b.batteryPos;
-  sbClockPos = b.clockPos;
-  sbTitlePos = b.titlePos;
-  sbTitleSource = b.titleSource;
-  sbTitleTruncate = b.titleTruncate;
-  sbPagePos = b.pagePos;
-  sbPageFormat = b.pageFormat;
-  sbBookPctPos = b.bookPctPos;
-  sbChapterPctPos = b.chapterPctPos;
-  sbChapterNumPos = b.chapterNumPos;
-  sbSessionPagesPos = b.sessionPagesPos;
-  sbBookBar = b.bookBar;
-  sbChapterBar = b.chapterBar;
-  sbBarThickness = b.barThickness;
-  sbFloatingBar = b.floatingBar;
-  sbBarOutline = b.barOutline;
-  sbOffBar = b.offBar;
+#define CP_APPLY_SB(prefsName, settingsName, blockName) settingsName = b.blockName;
+  READER_STATUS_BAR_FIELDS(CP_APPLY_SB)
+#undef CP_APPLY_SB
 }
 
 void CrossPointSettings::applyStatusBarBlockTo(const StatusBarBlock& b, ReaderPrefs& p) {
-  p.statusBarEnabled = b.enabled;
-  p.sbBatteryPos = b.batteryPos;
-  p.sbClockPos = b.clockPos;
-  p.sbTitlePos = b.titlePos;
-  p.sbTitleSource = b.titleSource;
-  p.sbTitleTruncate = b.titleTruncate;
-  p.sbPagePos = b.pagePos;
-  p.sbPageFormat = b.pageFormat;
-  p.sbBookPctPos = b.bookPctPos;
-  p.sbChapterPctPos = b.chapterPctPos;
-  p.sbChapterNumPos = b.chapterNumPos;
-  p.sbSessionPagesPos = b.sessionPagesPos;
-  p.sbBookBar = b.bookBar;
-  p.sbChapterBar = b.chapterBar;
-  p.sbBarThickness = b.barThickness;
-  p.sbFloatingBar = b.floatingBar;
-  p.sbBarOutline = b.barOutline;
-  p.sbOffBar = b.offBar;
+#define CP_APPLY_SB_TO_PREFS(prefsName, settingsName, blockName) p.prefsName = b.blockName;
+  READER_STATUS_BAR_FIELDS(CP_APPLY_SB_TO_PREFS)
+#undef CP_APPLY_SB_TO_PREFS
 }
 
 ReaderPrefs CrossPointSettings::trueGlobalReaderPrefs() const {
@@ -636,24 +575,9 @@ void CrossPointSettings::setStatusBarOverride(const ReaderPrefs& prefs) {
     sbOverrideActive_ = true;
   }
   StatusBarBlock b;
-  b.enabled = prefs.statusBarEnabled;
-  b.batteryPos = prefs.sbBatteryPos;
-  b.clockPos = prefs.sbClockPos;
-  b.titlePos = prefs.sbTitlePos;
-  b.titleSource = prefs.sbTitleSource;
-  b.titleTruncate = prefs.sbTitleTruncate;
-  b.pagePos = prefs.sbPagePos;
-  b.pageFormat = prefs.sbPageFormat;
-  b.bookPctPos = prefs.sbBookPctPos;
-  b.chapterPctPos = prefs.sbChapterPctPos;
-  b.chapterNumPos = prefs.sbChapterNumPos;
-  b.sessionPagesPos = prefs.sbSessionPagesPos;
-  b.bookBar = prefs.sbBookBar;
-  b.chapterBar = prefs.sbChapterBar;
-  b.barThickness = prefs.sbBarThickness;
-  b.floatingBar = prefs.sbFloatingBar;
-  b.barOutline = prefs.sbBarOutline;
-  b.offBar = prefs.sbOffBar;
+#define CP_CAPTURE_SB_FROM_PREFS(prefsName, settingsName, blockName) b.blockName = prefs.prefsName;
+  READER_STATUS_BAR_FIELDS(CP_CAPTURE_SB_FROM_PREFS)
+#undef CP_CAPTURE_SB_FROM_PREFS
   applyStatusBarBlock(b);
 }
 

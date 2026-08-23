@@ -49,6 +49,12 @@ constexpr PresetField FIELDS[] = {
     {"firstLineIndentPercent", &ReaderPrefs::firstLineIndentPercent},
 };
 
+// A preset carries the reader look, not the status bar: the bar block and its on/off
+// switch are deliberately absent. Everything else is the screen rows plus the in-book
+// toggles, so adding a field to either list without deciding about presets fails here.
+static_assert(sizeof(FIELDS) / sizeof(FIELDS[0]) == reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT,
+              "a reader-look field was added without deciding whether presets carry it");
+
 void writePrefs(JsonObject obj, const ReaderPrefs& p) {
   for (const PresetField& f : FIELDS) obj[f.key] = p.*(f.member);
   obj["sdFontFamilyName"] = p.sdFontFamilyName;

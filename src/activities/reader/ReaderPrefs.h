@@ -5,6 +5,8 @@
 #include <istream>
 #include <ostream>
 
+#include "ReaderLookFields.h"
+
 // Per-book snapshot of the reader "look" settings that the in-book Reader
 // Settings screen can change.
 //
@@ -168,24 +170,9 @@ struct ReaderPrefs {
   // then silently rearrange its status bar. Migration seeds the block from the live
   // global settings instead, which is what the user already sees everywhere else.
   void adoptStatusBarFrom(const ReaderPrefs& source) {
-    statusBarEnabled = source.statusBarEnabled;
-    sbBatteryPos = source.sbBatteryPos;
-    sbClockPos = source.sbClockPos;
-    sbTitlePos = source.sbTitlePos;
-    sbTitleSource = source.sbTitleSource;
-    sbTitleTruncate = source.sbTitleTruncate;
-    sbPagePos = source.sbPagePos;
-    sbPageFormat = source.sbPageFormat;
-    sbBookPctPos = source.sbBookPctPos;
-    sbChapterPctPos = source.sbChapterPctPos;
-    sbChapterNumPos = source.sbChapterNumPos;
-    sbSessionPagesPos = source.sbSessionPagesPos;
-    sbBookBar = source.sbBookBar;
-    sbChapterBar = source.sbChapterBar;
-    sbBarThickness = source.sbBarThickness;
-    sbFloatingBar = source.sbFloatingBar;
-    sbBarOutline = source.sbBarOutline;
-    sbOffBar = source.sbOffBar;
+#define CP_ADOPT_SB(prefsName, settingsName, blockName) prefsName = source.prefsName;
+    READER_STATUS_BAR_FIELDS(CP_ADOPT_SB)
+#undef CP_ADOPT_SB
   }
 
   // Snapshot the current global reader settings. Zero-pads sdFontFamilyName so the
@@ -264,6 +251,38 @@ static_assert(sizeof(ReaderPrefs) == READER_PREFS_V11_SIZE + 1,
               "embeddedLayoutStyle must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
+// ── The field lists cover the struct ──────────────────────────────────────────
+// Every byte of ReaderPrefs is either the fixed-width font name or a uint8_t named by
+// exactly one of the three lists in ReaderLookFields.h. That is what makes a missed
+// copier impossible: a field added to the struct and to no list fails this assert, and
+// a field added to two lists fails it as well.
+namespace reader_look {
+#define CP_COUNT_FIELD(...) +1
+inline constexpr size_t SCREEN_FIELD_COUNT = 0 READER_LOOK_SCREEN_FIELDS(CP_COUNT_FIELD);
+inline constexpr size_t BOOK_FIELD_COUNT = 0 READER_LOOK_BOOK_FIELDS(CP_COUNT_FIELD);
+inline constexpr size_t STATUS_BAR_FIELD_COUNT = 0 READER_STATUS_BAR_FIELDS(CP_COUNT_FIELD);
+#undef CP_COUNT_FIELD
+}  // namespace reader_look
+
+static_assert(reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT +
+                      sizeof(ReaderPrefs::sdFontFamilyName) ==
+                  sizeof(ReaderPrefs),
+              "every ReaderPrefs field must appear in exactly one list in ReaderLookFields.h, or "
+              "some copier will silently drop it");
+
+// Restore the fields the Reader Settings screen never edits.
+//
+// While that screen is open the edited values live on the global reader fields, so a
+// snapshot taken when it closes carries the GLOBAL values for the in-book toggles and
+// the status bar switch. The book's own must survive the edit; this is the one place
+// that says which fields those are.
+inline void restoreBookOnlyFields(ReaderPrefs& target, const ReaderPrefs& book) {
+#define CP_RESTORE_BOOK_FIELD(name) target.name = book.name;
+  READER_LOOK_BOOK_FIELDS(CP_RESTORE_BOOK_FIELD)
+#undef CP_RESTORE_BOOK_FIELD
+  target.statusBarEnabled = book.statusBarEnabled;
+}
+
 // ── Mid-edit override decision ────────────────────────────────────────────────
 // While the in-book Reader Settings screen is open, the edited values live on the
 // global reader fields (see CrossPointSettings::beginReaderEditOverlay). Every row
@@ -287,15 +306,9 @@ struct ReaderOverrideDecision {
 inline ReaderOverrideDecision decideReaderOverride(const ReaderPrefs& live, const ReaderPrefs& book,
                                                    const bool bookIsCustom) {
   ReaderOverrideDecision decision{ReaderOverrideAction::Keep, live};
-  // The two paragraph-number fields, the two Paperback flags and the status bar switch
-  // are per-book in-menu toggles, not rows of the Reader Settings screen. The overlay
-  // does not carry them, so `live` holds the GLOBAL values for those five; the book's
-  // own must survive the edit.
-  decision.prefs.paragraphNumbering = book.paragraphNumbering;
-  decision.prefs.paragraphNumberSize = book.paragraphNumberSize;
-  decision.prefs.paperbackLookBody = book.paperbackLookBody;
-  decision.prefs.paperbackLookStatus = book.paperbackLookStatus;
-  decision.prefs.statusBarEnabled = book.statusBarEnabled;
+  // `live` holds the GLOBAL values for the in-book toggles and the status bar switch,
+  // because the overlay does not carry them. The book's own must survive the edit.
+  restoreBookOnlyFields(decision.prefs, book);
 
   if (std::memcmp(&decision.prefs, &book, sizeof(ReaderPrefs)) != 0) {
     decision.action = ReaderOverrideAction::Write;

@@ -31,6 +31,11 @@ struct StatusBarBlock {
   uint8_t offBar = 0;
 };
 
+// The block and the field list must agree: the three copiers below expand the list, so a
+// field added to StatusBarBlock alone would never be copied anywhere.
+static_assert(sizeof(StatusBarBlock) == reader_look::STATUS_BAR_FIELD_COUNT,
+              "every StatusBarBlock field must appear in READER_STATUS_BAR_FIELDS");
+
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   // Private constructor for singleton
