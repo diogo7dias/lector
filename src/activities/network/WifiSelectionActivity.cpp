@@ -369,14 +369,17 @@ void WifiSelectionActivity::pollRadio() {
             WiFi.RSSI());
 #endif
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
-      if (halClock.syncFromNTP()) {
-        SETTINGS.clockHasBeenSynced = 1;
-        SETTINGS.saveToFile();
-      }
+    // With an RTC, sync on the first successful WiFi connection only. The DS3231 drifts
+    // ~2 ppm so one sync is enough; users can force a re-sync from Settings > Customise
+    // Status Bar > Sync clock now.
+    //
+    // Without one, the system clock is all reading stats have to date a session by, and
+    // it is lost every time the battery latch drops. So it is re-synced on any connect
+    // that finds it unset, and clockHasBeenSynced stays untouched: nothing was retained.
+    const bool needsSync = halClock.isAvailable() ? !SETTINGS.clockHasBeenSynced : !halClock.hasDate();
+    if (needsSync && halClock.syncFromNTP() && halClock.isAvailable()) {
+      SETTINGS.clockHasBeenSynced = 1;
+      SETTINGS.saveToFile();
     }
 
     {

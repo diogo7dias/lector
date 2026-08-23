@@ -1,6 +1,7 @@
 #include "BookStatsActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <I18n.h>
 #include <Memory.h>
 
@@ -45,6 +46,18 @@ uint32_t maximum(const std::array<uint32_t, reading_stats::kTimeOfDayBucketCount
 
 uint32_t maximum(const std::array<uint32_t, reading_stats::kDayOfWeekCount>& values) {
   return *std::max_element(values.begin(), values.end());
+}
+
+// Everything below the metric grid is keyed off a calendar date. Without a clock the
+// device cannot supply one, so the rows would sit there as dashes and empty boxes with
+// no way for the reader to tell a broken screen from an unset clock.
+bool datesAreUnavailable(const ReadingStatsData& stats) {
+  return !reading_stats::hasDatedActivity(stats) && !halClock.hasDate();
+}
+
+void drawNoClockNotice(GfxRenderer& renderer, const Rect& area) {
+  const std::string notice = renderer.truncatedText(SMALL_FONT_ID, tr(STR_STATS_NO_CLOCK), area.width);
+  renderer.drawCenteredText(SMALL_FONT_ID, area.y + std::max(0, area.height / 2 - 4), notice.c_str());
 }
 
 }  // namespace
@@ -218,6 +231,11 @@ void BookStatsActivity::drawCurrentBook(const Rect& screen, const int contentTop
   drawMetricGrid(Rect{screen.x, y, screen.width, gridH}, values);
   y += gridH + 5;
 
+  if (datesAreUnavailable(bookStats_)) {
+    drawNoClockNotice(renderer, Rect{screen.x, y, screen.width, contentBottom - y});
+    return;
+  }
+
   const auto now = reading_stats::currentLocalDateTime();
   const uint32_t endDay =
       bookStats_.completed
@@ -272,6 +290,11 @@ void BookStatsActivity::drawAllBooks(const Rect& screen, const int contentTop, c
   const int gridH = std::min(150, std::max(92, (contentBottom - y) / 3));
   drawMetricGrid(Rect{screen.x, y, screen.width, gridH}, values);
   y += gridH + 4;
+
+  if (datesAreUnavailable(globalStats_)) {
+    drawNoClockNotice(renderer, Rect{screen.x, y, screen.width, contentBottom - y});
+    return;
+  }
 
   const auto now = reading_stats::currentLocalDateTime();
   const uint32_t today = now.valid ? now.dayIndex : globalStats_.readingHistoryAnchorDay;

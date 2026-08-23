@@ -38,6 +38,11 @@ int centeredTextX(int areaX, int areaWidth, int textWidth);
 int chartLabelColumnWidth(int areaWidth, int widestLabelWidth);
 HorizontalLayout insetHorizontal(int areaX, int areaWidth, int sideMargin);
 DashboardLayout dashboardLayout(int screenWidth, int screenHeight);
+// True when anything in these stats was recorded against a calendar date: a start or
+// finish day, or a single second in a time-of-day or weekday bucket. False means the
+// device has never known what day it was while this book was read, so the date row and
+// both charts have nothing to draw and never will until a clock is set.
+bool hasDatedActivity(const ReadingStatsData& stats);
 TimeOfDay dominantTimeOfDay(const std::array<uint32_t, kTimeOfDayBucketCount>& buckets);
 std::string formatShortDate(uint32_t dayIndex);
 uint32_t averagePerObservedDay(uint32_t seconds, uint32_t startDay, uint32_t endDay);
