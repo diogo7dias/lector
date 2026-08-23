@@ -6,10 +6,23 @@ All POD fields are written in the ESP32 little-endian representation used by
 
 ## `book.bin`
 
-### Version 10
+### Version 12
 
 `book.bin` stores EPUB metadata plus lookup tables for spine and TOC entries.
 The current firmware writes this version from `BookMetadataCache`.
+
+Version 12 leaves a TOC entry whose href resolves to no spine item out of the
+cache entirely, rather than storing it with `spineIndex = -1`. The serialized
+layout is unchanged; older caches hold rows that close the chapter picker
+without moving the reader.
+
+Version 11 resolves a TOC target by file name when its exact path is not in the
+spine, so a TOC document sitting in another folder still finds its chapter. The
+serialized layout is unchanged; caches built before it hold the `-1` those rows
+used to get.
+
+Version 10 was upstream's ambiguous-guide fix. This fork's version 9 added the
+`description` field to `Metadata`.
 
 ImHex pattern:
 
@@ -18,7 +31,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 10
+#define EXPECTED_VERSION 12
 #define MAX_STRING_LENGTH 65535
 
 struct String {
@@ -39,6 +52,7 @@ struct Metadata {
     String language [[comment("Book language code")]];
     String coverItemHref [[comment("Path to cover image")]];
     String textReferenceHref [[comment("Path to guided first text reference")]];
+    String description [[comment("Book description, shown on the Book Info screen")]];
 };
 
 struct SpineEntry {
@@ -90,11 +104,30 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
-### Version 49
+### Version 53
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is
 also the cache-busting key: if any layout-affecting setting differs from the
 current reader settings, the section is discarded and rebuilt.
+
+Version 53 lays a table row holding a `colspan` or `rowspan` cell out stacked at
+full width instead of as grid columns, and cell text now inherits `text-align`,
+weight, style and decoration from the enclosing `<table>`, `<tr>` or `<tbody>`
+(upstream #2654 as merged, which numbered it v41). Cells land in different
+places, so cached pages no longer match.
+
+Version 52 splits the `embeddedStyle` header byte into `embeddedTextStyle` and
+`embeddedLayoutStyle`, one byte each. This is the only header layout change
+since version 45: the header grew by one byte and every field after it moved.
+
+Version 51 makes Focus Reading emphasis a byte annotation on a whole word rather
+than a separate suffix token, and treats a visible hyphen or dash inside a word
+as a break opportunity (upstream #2892, which numbered it v38). Both change
+where lines break.
+
+Version 50 stops a flush inside a `<ruby>` group from splitting the group, so
+the annotated word keeps its ruby text (upstream #3102, which numbered it v40).
+Word positions move on ruby books.
 
 Version 49 keeps the version 48 serialized layout unchanged. It was bumped
 because an image's top margin is now clamped so a full-viewport-height image
@@ -163,7 +196,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 49
+#define EXPECTED_VERSION 53
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -318,13 +351,18 @@ struct SectionBin {
     s32 fontId;
     float lineCompression;
     bool extraParagraphSpacing;
+    u8 paragraphSpacing [[comment("Extra block gap after a paragraph, percent of line height")]];
     u8 paragraphAlignment;
     u16 viewportWidth;
     u16 viewportHeight;
     bool hyphenationEnabled;
-    bool embeddedStyle;
+    bool embeddedTextStyle [[comment("Weight, slant, decoration, super/sub, direction, display:none")]];
+    bool embeddedLayoutStyle [[comment("Alignment, indent, margins, padding, book-set image sizes")]];
     u8 imageRendering;
     bool focusReadingEnabled;
+    u8 guideDotsMode [[comment("0 = off, 1 = shown, 2 = hidden gap")]];
+    u8 firstLineIndentMode [[comment("0 = respect the CSS indent, 1 = custom percent")]];
+    u8 firstLineIndentPercent [[comment("Percent of column width, applies in mode 1")]];
 
     u16 pageCount;
     u32 pageLutOffset;
