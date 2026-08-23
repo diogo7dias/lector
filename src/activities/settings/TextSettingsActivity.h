@@ -11,6 +11,7 @@
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
+#include "util/HoldRepeat.h"
 
 // Reader text settings: a live page preview over ONE scrolling list of every setting,
 // banded into sections (Type / Spacing / Margins / Reading aids). The tab bar this screen
@@ -20,6 +21,11 @@
 // Numeric rows are edited IN PLACE (Confirm arms the row, Up/Down move the value) rather
 // than through a popup, because a popup would cover the very preview the number is being
 // judged against.
+// Auto-repeat timing for an armed numeric row. Deliberately faster than ButtonNavigator's
+// list defaults: these ranges run to 150, so a list-speed hold would never finish.
+constexpr uint16_t EDIT_REPEAT_INTERVAL_MS = 120;
+constexpr uint16_t EDIT_REPEAT_START_MS = 350;
+
 class TextSettingsActivity final : public Activity {
  public:
   TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry);
@@ -118,6 +124,9 @@ class TextSettingsActivity final : public Activity {
 
   const SdCardFontRegistry* registry_;
   ButtonNavigator buttonNavigator_;
+  // The armed row gets its own navigator: list navigation wants the slow default, while a
+  // held value has a whole range to cross. Same feel as ValueBarPopup's numeric rows.
+  ButtonNavigator editNavigator_{EDIT_REPEAT_INTERVAL_MS, EDIT_REPEAT_START_MS};
   OptionPopup optionPopup_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;
@@ -133,6 +142,9 @@ class TextSettingsActivity final : public Activity {
   // not queue one full e-ink pass per step.
   bool editing_ = false;
   uint32_t pendingRedrawAt_ = 0;
+  // Repeats fired by the current hold, feeding holdRepeatStep()'s fine-to-coarse ramp.
+  // Reset by every press and release so a new hold starts fine again.
+  unsigned editRepeatIndex_ = 0;
   // An edited number is written once the value stops moving, not on every button press.
   // See commitSettings() in the .cpp for why.
   bool settingsDirty_ = false;

@@ -462,6 +462,7 @@ void TextSettingsActivity::activateRow(const Row row) {
       return;
     case RowKind::Number:
       editing_ = true;
+      editRepeatIndex_ = 0;
       requestUpdate();
       return;
     case RowKind::Picker:
@@ -572,6 +573,7 @@ void TextSettingsActivity::stepEditedValue(const int delta) {
 void TextSettingsActivity::leaveEdit() {
   editing_ = false;
   pendingRedrawAt_ = 0;
+  editRepeatIndex_ = 0;
   commitSettings();
   requestUpdate();
 }
@@ -635,8 +637,19 @@ void TextSettingsActivity::loop() {
   }
 
   if (editing_) {
-    buttonNavigator_.onNextStep([this] { stepEditedValue(1); });
-    buttonNavigator_.onPreviousStep([this] { stepEditedValue(-1); });
+    // A press always moves exactly one, whichever way; the ramp belongs to the hold, and a
+    // tap must stay a nudge. Either press also restarts the ramp, so reversing direction
+    // mid-hold does not inherit the coarse step it built up going the other way.
+    editNavigator_.onNextStep([this] {
+      editRepeatIndex_ = 0;
+      stepEditedValue(1);
+    });
+    editNavigator_.onPreviousStep([this] {
+      editRepeatIndex_ = 0;
+      stepEditedValue(-1);
+    });
+    editNavigator_.onNextContinuous([this] { stepEditedValue(holdRepeatStep(editRepeatIndex_++)); });
+    editNavigator_.onPreviousContinuous([this] { stepEditedValue(-holdRepeatStep(editRepeatIndex_++)); });
     return;
   }
 
