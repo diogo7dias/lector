@@ -775,7 +775,9 @@ belongs to, so the rows here appear in the same order as on the device.
 of the page, a dashed cut, then the bottom of the page, so both vertical margins and the
 status bar are on screen at their true size while you tune them. Numeric rows are edited in
 place — Select arms the row, Up and Down move the value, and the preview follows — so nothing
-ever covers the page you are judging.
+ever covers the page you are judging. Holding Up or Down repeats: one per step at first,
+then five per step once the hold passes about a second, so a wide range does not cost a
+hundred presses.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
 - **Size**.
