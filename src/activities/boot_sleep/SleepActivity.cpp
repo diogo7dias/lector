@@ -676,9 +676,8 @@ void SleepActivity::renderSleepScreen() const {
   }
 
   // Transparent overlays composite onto the page the user locked from, so this path
-  // must reach the renderer with that page intact. It skips the deepCleanPanel blank
-  // below, which exists to stop a wallpaper ghosting over the old page — here the old
-  // page IS the background.
+  // must reach the renderer with that page intact, and its popup is drawn and lifted
+  // back off rather than painted over the page.
   //
   // The "Entering sleep" popup still runs, because decoding an overlay takes a moment
   // and the user needs to see the press registered. It is drawn and then lifted back
@@ -696,26 +695,17 @@ void SleepActivity::renderSleepScreen() const {
     return renderTransparentCustomSleepScreen();
   }
 
-  // The "Entering sleep" popup is a progress note for a lock that takes a moment.
-  // A wallpaper lock does not need it: deepCleanPanel is about to blank the screen
-  // anyway, so the popup is one extra differential paint the user sees for an
-  // instant and then loses. The old fork skipped it on this path for the same
-  // reason (its directWallpaperLock).
-  const bool paintsWallpaper =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
-      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader);
-  if (!paintsWallpaper) {
-    // Show popup with reader orientation only when going to sleep from reader
-    if (APP_STATE.lastSleepFromReader) {
-      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-    } else {
-      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-    }
+  // Show popup with reader orientation only when going to sleep from reader.
+  // Every face gets it, upstream's behaviour: a wallpaper lock takes longer than any
+  // other, so it is the one that most wants a progress note. It used to be skipped here
+  // because a full-screen clean was about to wipe it; that clean is gone.
+  if (APP_STATE.lastSleepFromReader) {
+    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  } else {
+    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
-
-  deepCleanPanel();
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
@@ -1066,23 +1056,6 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderDefaultSleepScreen();
 }
 
-// One blank FULL pass before painting a sleep face, exactly as the pre-rebase fork did
-// it (its RefreshIntent::DeepClean was Buffer + FULL over a white screen). Lock can
-// happen over any screen, and every sleep render below uses the calibrated differential
-// HALF/graybase waveforms, which would otherwise leave the prior content ghosting
-// through the wallpaper for the whole sleep.
-//
-// This deliberately does NOT try to be a stronger wipe. Escalating it here (black-then-
-// white, then three cycles of that) was tried and did not stop the ghost, because the
-// ghost was never a wipe problem: the pre-rebase fork ghosted nothing with this single
-// pass. What it also had, and what the rebase had dropped, is the anti-ghosting cap in
-// HalDisplay that stops a long run of FAST passes from trapping charge in the first
-// place. That cap is back; this stays as it was.
-void SleepActivity::deepCleanPanel() const {
-  renderer.clearScreen();
-  renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-}
-
 // Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
@@ -1265,13 +1238,13 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   if (!selectedPath.empty() && renderSleepOverlayPath(selectedPath)) return;
 
   // Nothing to composite. The panel still holds the page the user locked from, which
-  // reads as "sleep did nothing", so fall back to a real sleep face — and blank first,
-  // since this path skipped deepCleanPanel on the way in.
+  // reads as "sleep did nothing", so fall back to a real sleep face. renderDefaultSleepScreen
+  // clears the buffer and paints a HALF over it, which is the whole screen, so the page
+  // goes with it and no separate clean is needed.
   // The crest face is light for every mode now (Dark is retired), which is also what
   // this fallback always wanted: the mode asked for a picture over a light page, and the
   // old settings-derived polarity used to invert it into white-on-black here.
   LOG_ERR("SLP", "No valid transparent sleep overlay found");
-  deepCleanPanel();
   renderDefaultSleepScreen();
 }
 
