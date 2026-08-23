@@ -7,6 +7,17 @@
 
 namespace reading_stats {
 
+bool hasDatedActivity(const ReadingStatsData& stats) {
+  if (stats.startDay != 0 || stats.finishedDay != 0) return true;
+  for (const uint32_t seconds : stats.timeOfDaySeconds) {
+    if (seconds != 0) return true;
+  }
+  for (const uint32_t seconds : stats.dayOfWeekSeconds) {
+    if (seconds != 0) return true;
+  }
+  return false;
+}
+
 std::string formatDuration(const uint32_t seconds) {
   if (seconds == 0) return "0 min";
   if (seconds < 60) return "< 1 min";
