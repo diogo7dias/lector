@@ -85,6 +85,9 @@ namespace {
 //      separate suffix token, and a visible hyphen or dash inside a word is now a break
 //      opportunity (upstream #2892; upstream numbered it v38). Both change where lines
 //      break, so pages cached by older versions no longer match.
+// v52: the embeddedStyle header byte split into embeddedTextStyle and embeddedLayoutStyle,
+//      one byte each, so Embedded Style became two independent switches. The header grew
+//      by one byte, so older files no longer parse.
 // v53: a table row holding a colspan or rowspan cell now flows stacked at full width
 //      instead of as grid columns, and cell text inherits text-align, weight, style and
 //      decoration from the enclosing <table>/<tr>/<tbody> (upstream #2654 as merged;

@@ -914,9 +914,11 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 
 **Source**: `lib/Epub/Epub/Section.cpp`, `lib/Epub/Epub/BookMetadataCache.cpp`
 
-**Current Versions** (as of docs/file-formats.md):
-- `book.bin`: **Version 7** (metadata structure)
-- `section.bin`: **Version 25** (layout structure)
+**Current Versions**: read them from the source, never from this file. The
+constants are `BOOK_CACHE_VERSION` in `BookMetadataCache.cpp` and
+`SECTION_FILE_VERSION` in `Section.cpp`, each with a comment block above it
+recording what every bump changed. A number copied here goes stale the next time
+someone bumps one.
 
 **Version Increment Rules**:
 1. **ALWAYS increment version** BEFORE changing binary structure
@@ -926,7 +928,7 @@ rm -rf /path/to/sd/.crosspoint/epub_<hash>/sections/
 **Example** (incrementing section format version):
 ```cpp
 // lib/Epub/Epub/Section.cpp
-static constexpr uint8_t SECTION_FILE_VERSION = 26;  // Was 25, now 26
+constexpr uint8_t SECTION_FILE_VERSION = 54;  // Was 53, now 54
 
 // Add new field to structure
 struct PageLine {
