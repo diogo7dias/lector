@@ -1,6 +1,5 @@
 #include "FontDownloadActivity.h"
 
-#include <ArduinoJson.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
@@ -10,6 +9,7 @@
 #include <esp_rom_crc.h>
 
 #include "MappedInputManager.h"
+#include "Memory.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
@@ -101,7 +101,9 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     return false;
   }
 
-  // HTTP client is now closed — TLS buffers freed. Parse JSON from file.
+  // HTTP client is now closed — TLS buffers freed. The manifest is ~37 KB and a DOM
+  // of it needs upwards of 60 KB contiguous, which the heap cannot spare with WiFi up:
+  // that allocation is what threw bad_alloc and aborted the firmware. Stream it instead.
   HalFile manifestFile;
   if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
     LOG_ERR("FONT", "Failed to open temp manifest");
@@ -110,82 +112,81 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     return false;
   }
 
-  JsonDocument doc;
-  DeserializationError err = deserializeJson(doc, manifestFile);
+  families_.clear();
+  families_.shrink_to_fit();
+
+  FontManifestParser parser;
+  {
+    auto buffer = makeUniqueNoThrow<char[]>(MANIFEST_CHUNK);
+    if (!buffer) {
+      manifestFile.close();
+      Storage.remove(MANIFEST_TMP);
+      LOG_ERR("FONT", "No room for the manifest read buffer");
+      errorMessage_ = "Not enough memory for font list";
+      return false;
+    }
+    while (true) {
+      const int got = manifestFile.read(buffer.get(), MANIFEST_CHUNK);
+      if (got <= 0) break;
+      parser.feed(buffer.get(), static_cast<size_t>(got));
+      if (parser.hasError()) break;
+    }
+  }
   manifestFile.close();
   Storage.remove(MANIFEST_TMP);
+  parser.finish();
 
-  if (err) {
-    LOG_ERR("FONT", "Manifest parse error: %s", err.c_str());
-    errorMessage_ = "Invalid font manifest";
+  if (parser.hasError()) {
+    if (parser.outOfMemory()) {
+      LOG_ERR("FONT", "Out of memory while reading the font manifest");
+      errorMessage_ = "Not enough memory for font list";
+    } else if (parser.tooLarge()) {
+      LOG_ERR("FONT", "Manifest exceeds the %u family / %u file limits",
+              static_cast<unsigned>(FontManifestParser::MAX_FAMILIES),
+              static_cast<unsigned>(FontManifestParser::MAX_FILES_PER_FAMILY));
+      errorMessage_ = "Font list too large";
+    } else {
+      LOG_ERR("FONT", "Manifest parse error");
+      errorMessage_ = "Invalid font manifest";
+    }
     return false;
   }
 
-  int version = doc["version"] | 0;
-  if (version != FONTS_MANIFEST_VERSION) {
-    LOG_ERR("FONT", "Unsupported manifest version: %d", version);
+  if (parser.version() != FONTS_MANIFEST_VERSION) {
+    LOG_ERR("FONT", "Unsupported manifest version: %d", parser.version());
     errorMessage_ = "Unsupported manifest version";
     return false;
   }
 
-  baseUrl_ = doc["baseUrl"] | "";
-  families_.clear();
+  baseUrl_ = parser.baseUrl();
+  families_ = std::move(parser.families());
   fontInstaller_.refreshRegistry();
 
-  JsonArray familiesArr = doc["families"].as<JsonArray>();
-  families_.reserve(familiesArr.size());
+  // Disk state second, with the parse buffers already gone: one pass over what is
+  // installed, and a size mismatch against the manifest standing in for an update.
+  // Not a checksum, but a size mismatch reliably indicates a rebuild in practice.
+  for (auto& family : families_) {
+    family.installed = fontInstaller_.isFamilyInstalled(family.name);
+    family.hasUpdate = false;
+    if (!family.installed) continue;
 
-  for (JsonObject fObj : familiesArr) {
-    ManifestFamily family;
-    family.name = fObj["name"] | "";
-    family.description = fObj["description"] | "";
-
-    for (JsonVariant s : fObj["styles"].as<JsonArray>()) {
-      family.styles.push_back(s.as<std::string>());
-    }
-
-    family.totalSize = 0;
-    for (JsonObject fileObj : fObj["files"].as<JsonArray>()) {
-      ManifestFile file;
-      file.name = fileObj["name"] | "";
-      file.size = fileObj["size"] | 0;
-
-      if (!fileObj["crc32"].is<uint32_t>()) {
-        LOG_ERR("FONT", "Malformed manifest file entry: missing or invalid crc32 for %s", file.name.c_str());
-        errorMessage_ = "Invalid font manifest";
-        return false;
-      }
-      file.crc32 = fileObj["crc32"].as<uint32_t>();
-
-      family.totalSize += file.size;
-      family.files.push_back(std::move(file));
-    }
-
-    family.installed = fontInstaller_.isFamilyInstalled(family.name.c_str());
-
-    // Detect updates by comparing manifest file sizes with files on disk.
-    // Not a checksum, but a size mismatch reliably indicates a rebuild in practice.
-    if (family.installed) {
-      for (const auto& file : family.files) {
-        char path[128];
-        FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), path, sizeof(path));
-        HalFile f;
-        if (Storage.openFileForRead("FONT", path, f)) {
-          size_t actual = f.fileSize();
-          f.close();
-          if (actual != file.size) {
-            family.hasUpdate = true;
-            break;
-          }
-        } else {
-          // File missing on disk but family dir exists — treat as update
+    for (const auto& file : family.files) {
+      char path[128];
+      FontInstaller::buildFontPath(family.name, file.name, path, sizeof(path));
+      HalFile f;
+      if (Storage.openFileForRead("FONT", path, f)) {
+        const size_t actual = f.fileSize();
+        f.close();
+        if (actual != file.size) {
           family.hasUpdate = true;
           break;
         }
+      } else {
+        // File missing on disk but family dir exists — treat as update
+        family.hasUpdate = true;
+        break;
       }
     }
-
-    families_.push_back(std::move(family));
   }
 
   LOG_DBG("FONT", "Manifest loaded: %zu families", families_.size());
@@ -346,7 +347,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
   // batch that died halfway picks up where it stopped instead of paying for
   // every megabyte a second time.
   if (fileAlreadyInstalled(file, destPath)) {
-    LOG_DBG("FONT", "Already installed, skipping %s", file.name.c_str());
+    LOG_DBG("FONT", "Already installed, skipping %s", file.name);
     return true;
   }
 
@@ -378,7 +379,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
         Storage.remove(partPath);
         return false;
       }
-      LOG_ERR("FONT", "No WiFi for attempt %d of %d for %s", attempt, MAX_ATTEMPTS, file.name.c_str());
+      LOG_ERR("FONT", "No WiFi for attempt %d of %d for %s", attempt, MAX_ATTEMPTS, file.name);
       errorMessage_ = "Lost WiFi connection";
       if (attempt < MAX_ATTEMPTS && !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) {
         Storage.remove(partPath);
@@ -416,26 +417,26 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     }
 
     if (result != HttpDownloader::OK) {
-      LOG_ERR("FONT", "Download attempt %d of %d failed for %s (%d)", attempt, MAX_ATTEMPTS, file.name.c_str(), result);
-      errorMessage_ = "Download failed: " + file.name;
+      LOG_ERR("FONT", "Download attempt %d of %d failed for %s (%d)", attempt, MAX_ATTEMPTS, file.name, result);
+      errorMessage_ = std::string("Download failed: ") + file.name;
     } else {
       uint32_t actualCrc = 0;
       if (!computeFileCrc32(partPath, actualCrc)) {
         LOG_ERR("FONT", "Failed to open file for CRC check: %s", partPath);
-        errorMessage_ = "Failed to compute checksum: " + file.name;
+        errorMessage_ = std::string("Failed to compute checksum: ") + file.name;
       } else if (actualCrc != file.crc32) {
         // A body that arrived corrupted is worth fetching again: the manifest
         // checksum is the only thing that separates a bad transfer from a font
         // the renderer would later choke on.
-        LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name.c_str(), actualCrc, file.crc32);
-        errorMessage_ = "Checksum mismatch: " + file.name;
+        LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name, actualCrc, file.crc32);
+        errorMessage_ = std::string("Checksum mismatch: ") + file.name;
       } else if (!fontInstaller_.validateCpfontFile(partPath)) {
         LOG_ERR("FONT", "Invalid .cpfont: %s", partPath);
-        errorMessage_ = "Invalid font file: " + file.name;
+        errorMessage_ = std::string("Invalid font file: ") + file.name;
       } else if (!promoteStagedFile(partPath, destPath)) {
-        errorMessage_ = "Failed to install: " + file.name;
+        errorMessage_ = std::string("Failed to install: ") + file.name;
       } else {
-        LOG_DBG("FONT", "Downloaded %s (size=%zu crc32=%08x)", file.name.c_str(), file.size, actualCrc);
+        LOG_DBG("FONT", "Downloaded %s (size=%u crc32=%08x)", file.name, static_cast<unsigned>(file.size), actualCrc);
         RenderLock lock(*this);
         retryAttempt_ = 0;
         return true;
@@ -452,7 +453,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
   }
 
   Storage.remove(partPath);
-  LOG_ERR("FONT", "Giving up on %s after %d attempts", file.name.c_str(), MAX_ATTEMPTS);
+  LOG_ERR("FONT", "Giving up on %s after %d attempts", file.name, MAX_ATTEMPTS);
   RenderLock lock(*this);
   retryAttempt_ = 0;
   return false;
@@ -486,14 +487,14 @@ bool FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   }
   requestUpdateAndWait();
 
-  if (!fontInstaller_.ensureFamilyDir(family.name.c_str())) {
+  if (!fontInstaller_.ensureFamilyDir(family.name)) {
     errorMessage_ = "Failed to create font directory";
     return false;
   }
 
   for (const auto& file : family.files) {
     char destPath[128];
-    FontInstaller::buildFontPath(family.name.c_str(), file.name.c_str(), destPath, sizeof(destPath));
+    FontInstaller::buildFontPath(family.name, file.name, destPath, sizeof(destPath));
 
     if (!downloadFileWithRetries(file, destPath)) {
       // The files that did land stay: a reader on a poor link gets the family a
@@ -501,9 +502,9 @@ bool FontDownloadActivity::downloadFamily(ManifestFamily& family) {
       // marks what is still missing as an update. Only a family that arrived
       // with nothing at all is cleared, so no empty directory is left behind.
       fontInstaller_.refreshRegistry();
-      family.installed = fontInstaller_.isFamilyInstalled(family.name.c_str());
+      family.installed = fontInstaller_.isFamilyInstalled(family.name);
       if (!wasInstalled && !family.installed) {
-        fontInstaller_.deleteFamily(family.name.c_str());
+        fontInstaller_.deleteFamily(family.name);
       }
       family.hasUpdate = family.installed;
       if (cancelRequested_) {
@@ -554,7 +555,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
 
   auto& family = families_[familyIndexFromList(selectedIndex_)];
 
-  if (fontInstaller_.deleteFamily(family.name.c_str()) != FontInstaller::Error::OK) {
+  if (fontInstaller_.deleteFamily(family.name) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
     state_ = ERROR;
     errorMessage_ = "Failed to delete font";

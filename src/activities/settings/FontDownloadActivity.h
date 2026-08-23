@@ -1,5 +1,7 @@
 #pragma once
 
+#include <FontManifestParser.h>
+
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -31,7 +33,7 @@
 // from lib/EpdFont/scripts/cpfont_version.py.
 #define FONT_MANIFEST_URL_STRINGIFY_INNER(x) #x
 #define FONT_MANIFEST_URL_STRINGIFY(x) FONT_MANIFEST_URL_STRINGIFY_INNER(x)
-#define FONT_MANIFEST_URL                                                                       \
+#define FONT_MANIFEST_URL                                                                               \
   "https://github.com/" FONT_MANIFEST_REPO "/releases/download/sd-fonts-m" FONT_MANIFEST_URL_STRINGIFY( \
       FONTS_MANIFEST_VERSION) "-b" FONT_MANIFEST_URL_STRINGIFY(CPFONT_VERSION) "/fonts.json"
 #endif
@@ -63,21 +65,9 @@ class FontDownloadActivity : public Activity {
     ERROR,
   };
 
-  struct ManifestFile {
-    std::string name;
-    size_t size = 0;
-    uint32_t crc32 = 0;
-  };
-
-  struct ManifestFamily {
-    std::string name;
-    std::string description;
-    std::vector<std::string> styles;
-    std::vector<ManifestFile> files;
-    size_t totalSize = 0;
-    bool installed = false;
-    bool hasUpdate = false;
-  };
+  // The manifest model lives in the parser: fixed buffers, nothrow growth, no DOM.
+  using ManifestFile = FontManifestFile;
+  using ManifestFamily = FontManifestFamily;
 
   State state_ = WIFI_SELECTION;
   FontInstaller fontInstaller_;
@@ -117,6 +107,8 @@ class FontDownloadActivity : public Activity {
    * is resumed rather than refetched, so a later attempt costs only the bytes
    * still missing and being generous here is cheap.
    */
+  /** Read size for streaming the manifest off the SD card into the parser. */
+  static constexpr size_t MANIFEST_CHUNK = 1024;
   static constexpr int MAX_ATTEMPTS = 5;
   /** Pause before a retry; each further retry waits a multiple of this. */
   static constexpr uint32_t RETRY_DELAY_MS = 1500;
