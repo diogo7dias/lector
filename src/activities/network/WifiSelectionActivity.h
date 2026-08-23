@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "WifiSession.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
 
@@ -56,9 +57,8 @@ class WifiSelectionActivity final : public Activity {
   // Number of real (scanned) networks, excluding the synthetic hidden-network entry
   size_t realNetworkCount = 0;
 
-  // Selected network for connection
+  // Which network the prompts and the join are about
   std::string selectedSSID;
-  bool selectedRequiresPassword = false;
 
   // Connection result
   std::string connectedIP;
@@ -70,29 +70,21 @@ class WifiSelectionActivity final : public Activity {
   // Cached MAC address string for display
   std::string cachedMacAddress;
 
-  // Whether network was connected using a saved password (skip save prompt)
-  bool usedSavedPassword = false;
-
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
 
-  // Whether we are attempting to auto-connect or auto-scan saved networks.
-  bool autoConnecting = false;
+  // Which network to try, how long to wait, what to remember. Everything this
+  // screen decides lives here; the activity only works the radio and the panel.
+  wifi_session::WifiSession session;
 
-  // True when the user stopped auto-connect and asked to see the scan result.
-  bool manualNetworkListRequested = false;
-
-  // Saved SSIDs already attempted during the current auto-connect session.
-  std::vector<std::string> autoAttemptedSsids;
+  // A scan was started and its result has not been handed to the session yet.
+  bool scanPending = false;
+  // A join was started and its outcome has not been handed to the session yet.
+  bool joinPending = false;
 
   // Save/forget prompt selection (0 = Yes, 1 = No)
   int savePromptSelection = 0;
   int forgetPromptSelection = 0;
-
-  // Connection timeout
-  static constexpr unsigned long CONNECTION_TIMEOUT_MS = 15000;
-  static constexpr unsigned long AUTO_CONNECTION_TIMEOUT_MS = 7000;
-  unsigned long connectionStartTime = 0;
 
   void renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderPasswordEntry(const Rect* screen, const ThemeMetrics* metrics) const;
@@ -102,19 +94,21 @@ class WifiSelectionActivity final : public Activity {
   void renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const;
   void renderForgetPrompt(const Rect* screen, const ThemeMetrics* metrics) const;
 
-  void startWifiScan(bool autoScan = false);
-  void processWifiScanResults();
+  /** Hands the session everything the radio has to say, then runs what it asks for. */
+  void pumpSession();
+  void runAction(const wifi_session::Action& action);
+  void pollRadio();
+  void rebuildNetworkView();
   void appendHiddenNetworkEntry();
-  void selectNetwork(int index);
+  void syncStateFromSession();
+  /** True while a keyboard or a prompt owns the screen and the session must wait. */
+  bool promptIsOpen() const;
+
+  void startWifiScan();
+  void beginJoin(const std::string& ssid, const std::string& password);
+  void handleNetworkListInput();
   void promptHiddenSsid();
   void promptPasswordEntry();
-  void attemptConnection();
-  void checkConnectionStatus();
-  bool tryAutoConnectCredential(const WifiCredential& cred);
-  bool tryNextSavedNetworkFromScan();
-  void handleAutoConnectFailure();
-  void showNetworkListFromAutoConnect();
-  bool hasAttemptedAutoSsid(const std::string& ssid) const;
   std::string getSignalStrengthIndicator(int32_t rssi) const;
 
   void onComplete(bool connected);
