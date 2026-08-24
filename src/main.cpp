@@ -278,6 +278,15 @@ static bool loadSleepFrameBuffer() {
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+  // Lock cost, stage by stage. The wake side has had WakeTiming since the boot path was
+  // first measured; the sleep side had nothing, so "locking feels slow" could not be
+  // answered with a number. Same split idea: each stamp is taken after the step it names,
+  // and the report prints the difference between neighbours.
+  const unsigned long sleepT0 = millis();
+  unsigned long sleepTState = sleepT0;
+  unsigned long sleepTPaint = sleepT0;
+  unsigned long sleepTFrame = sleepT0;
+  unsigned long sleepTWifi = sleepT0;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -327,11 +336,13 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
   APP_STATE.saveToFile();
+  sleepTState = millis();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
+  sleepTPaint = millis();
 
   // Quick resume keeps its frame, because its wake restores that exact frame. A wallpaper
   // sleep face does not: its wake blanks the panel and goes to the book, so saving 48KB to
@@ -343,12 +354,16 @@ void enterDeepSleep(bool fromTimeout = false) {
     Storage.remove(SLEEP_FRAME_FILE);
   }
 
+  sleepTFrame = millis();
+
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
   }
+
+  sleepTWifi = millis();
 
   // Read after the sleep screen has painted, so the passes it just spent are counted,
   // and written with the state the next boot reads back.
@@ -357,8 +372,24 @@ void enterDeepSleep(bool fromTimeout = false) {
   // The per-mode totals for the session, written last so the file ends with the summary
   // of everything above it.
   logPerfSummary();
+
+  // Written before the flush, so the stages land in the same CSV as the refreshes they
+  // paid for. The panel power-down and the total are serial-only: the file is closed by
+  // then, and a kit log is where those two get read anyway.
+  const unsigned long sleepTBudget = millis();
+  char sleepNote[128];
+  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu",
+           sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint,
+           sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi);
+  PerfLog::note(sleepNote);
   PerfLog::flush();
+
   display.deepSleep();
+  const unsigned long sleepTPanel = millis();
+  // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
+  // what a lock cost.
+  LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote,
+          sleepTPanel - sleepTBudget);
   LOG_DBG("MAIN", "Entering deep sleep");
 
   powerManager.startDeepSleep(gpio);
@@ -573,6 +604,13 @@ void setup() {
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
   logWakeTimingToPerfLog();
+  // Also on serial, so a kit log answers the unlock half without the card having to be
+  // read. Empty on the first boot after a flash, when there is no previous wake to report.
+  {
+    char wakeDiag[176];
+    WakeTiming::formatDiagnostic(wakeDiag, sizeof(wakeDiag));
+    if (wakeDiag[0] != '\0') LOG_INF("SLP", "Unlock %s", wakeDiag);
+  }
 
   const auto wakeupReason = gpio.getWakeupReason();
   switch (wakeupReason) {
