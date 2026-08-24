@@ -224,6 +224,19 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
+  // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
+  // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
+  // swipe. Values match CrossPoint so a settings file moves between the two.
+  enum TOUCH_READER_CONTROLS {
+    TOUCH_READER_OFF = 0,
+    TOUCH_READER_TAP = 1,
+    TOUCH_READER_SWIPE = 2,
+    TOUCH_READER_INVERTED_TAP = 3,
+    TOUCH_READER_CONTROLS_COUNT
+  };
+  // How the reader menu opens on a touch board. Swipe Up is only offered where the
+  // Home key is capacitive, since there the bottom edge is otherwise unused.
+  enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, READER_MENU_SWIPE_UP = 2, SHOW_READER_MENU_COUNT };
 
   // How long Power must be held to wake the device from deep sleep. Normal rejects a
   // pocket brush; Fast wakes on any press, which is what Short Power Button Click = Sleep
@@ -429,6 +442,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Swipe by default: it works the same wherever the thumb lands, and it leaves the
+  // whole page free of invisible tap targets.
+  uint8_t touchReaderControls = TOUCH_READER_SWIPE;
+  // Persisted under the legacy "tapForReaderMenu" key, whose old values line up:
+  // 0 = Off, 1 = Tap.
+  uint8_t showReaderMenu = READER_MENU_TAP;
   // Wake hold. Defaults to Normal, including for a settings file that predates this
   // setting and chose Sleep — fromJson carries those forward to Fast, so nobody's wake
   // gets slower without them asking (see the migration there).

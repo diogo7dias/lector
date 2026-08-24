@@ -70,7 +70,11 @@ class MappedInputManager {
 
   SwipeDir wasSwipe() const;
   bool wasHomeGesture() const;
+  bool wasBottomEdgeUpSwipe() const;
   bool wasMenuGesture() const;
+  // Bottom-edge up-swipe, offered as a reader-menu gesture only where Home is the
+  // capacitive key: elsewhere that swipe already means Home (wasHomeGesture).
+  bool wasReaderMenuSwipeUp() const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;

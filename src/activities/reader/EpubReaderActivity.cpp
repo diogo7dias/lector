@@ -903,6 +903,15 @@ void EpubReaderActivity::loop() {
   // apart until the button comes up, so the menu waits for the release, and a hold that
   // already fired its function sets ignoreNextConfirmRelease to keep that release from
   // also opening the menu.
+  // Touch on the open page, read once per loop: a tap or swipe can turn the page or
+  // open the menu. Read before the Confirm handling below so the menu opens from
+  // either input on the same pass.
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (ReaderUtils::isTouchMenuGesture(mappedInput, touch.menu)) {
+    openReaderMenu();
+    return;
+  }
+
   const bool confirmHasHold = SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED;
   const bool confirmEdge = confirmHasHold
                                ? confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))
@@ -979,6 +988,8 @@ void EpubReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     return;
   }

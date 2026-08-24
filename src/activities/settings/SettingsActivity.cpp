@@ -132,6 +132,12 @@ void SettingsActivity::rebuildSettingsList() {
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
       }
+      // Touch reader settings only mean something on a board with a digitiser.
+      if ((setting.valuePtr == &CrossPointSettings::touchReaderControls ||
+           setting.valuePtr == &CrossPointSettings::showReaderMenu) &&
+          !gpio.hasTouch()) {
+        continue;
+      }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
@@ -209,6 +215,7 @@ void SettingsActivity::rebuildSettingsList() {
           // pop-up those bindings open actually contains.
           {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
           {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
+          {StrId::STR_GRP_TOUCH, {StrId::STR_TOUCH_READER_CONTROLS, StrId::STR_SHOW_READER_MENU}},
       });
 
   applyGroups(

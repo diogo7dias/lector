@@ -497,6 +497,17 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions()));
 
+    v.push_back(SettingInfo::Enum(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE,
+                                   StrId::STR_STATE_INVERTED_TAP},
+                                  "touchReaderControls", StrId::STR_CAT_CONTROLS));
+
+    // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
+    // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
+    v.push_back(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP},
+                                  "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
+
     v.push_back(SettingInfo::Enum(
         StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
         {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},

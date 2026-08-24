@@ -353,7 +353,7 @@ bool MappedInputManager::wasMenuGesture() const {
   return hit;
 }
 
-bool MappedInputManager::wasHomeGesture() const {
+bool MappedInputManager::wasBottomEdgeUpSwipe() const {
   int sx = 0;
   int sy = 0;
   int ex = 0;
@@ -368,6 +368,15 @@ bool MappedInputManager::wasHomeGesture() const {
   }
   return false;
 }
+
+bool MappedInputManager::wasHomeGesture() const {
+  // On a board with a capacitive Home key that key IS Home, which frees the bottom
+  // edge for the reader menu (wasReaderMenuSwipeUp).
+  if (gpio.hasHomeKey()) return gpio.wasHomeKeyTapped();
+  return wasBottomEdgeUpSwipe();
+}
+
+bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 bool MappedInputManager::wasPressed(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
