@@ -6,8 +6,7 @@
 #include <vector>
 
 #include "FontInstaller.h"
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiListActivity.h"
 
 class MappedInputManager;
 struct ActivityResult;
@@ -22,13 +21,20 @@ struct ActivityResult;
  * card instead, so it works with the radio off and shows every family that is
  * actually installed.
  */
-class InstalledFontsActivity final : public Activity {
+class InstalledFontsActivity final : public UiListActivity {
  public:
   explicit InstalledFontsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
   void onEnter() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+  void onExit() override;
+
+ protected:
+  int listCount() const override;
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onBackButton() override;
+  void drawChrome() override;
+  void drawFooter() override;
 
  private:
   /** One installed family, with the figures the list shows beside its name. */
@@ -50,20 +56,23 @@ class InstalledFontsActivity final : public Activity {
   enum class Action : uint8_t { Send, Delete, Count };
 
   void loadFamilies();
-  void loopFamilies();
-  void loopActions();
+  void showView(View next);
   void promptDelete();
   void onDeleteConfirmed(const ActivityResult& result);
   void sendSelectedFamily();
   const Family* selectedFamily() const;
   int itemCount() const;
+  // Row labels for the current view; the ListItems borrow these strings.
+  std::vector<std::string> labels;
+  std::vector<std::string> subtitles;
+  std::vector<freeink::ui::ListItem> rows;
   std::string sizeLine(const Family& family) const;
 
   std::vector<Family> families;
   FontInstaller fontInstaller;
   View view = View::Families;
-  ButtonNavigator buttonNavigator;
+  // The family the actions view is acting on; the list selection belongs to
+  // whichever view is showing.
   int selectedIndex = 0;
-  Action selectedAction = Action::Send;
   std::string errorMessage;
 };
