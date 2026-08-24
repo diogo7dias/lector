@@ -4,6 +4,7 @@
 #include <FreeInkUIIcon.h>
 #include <I18n.h>
 
+#include <algorithm>
 #include <atomic>
 
 #include "MappedInputManager.h"
@@ -136,8 +137,11 @@ inline void addDialogCancelOk(Screen& screen, const freeink::ui::ActionId cancel
                               const freeink::ui::ActionId okAction) {
   const auto& theme = screen.theme();
   const int16_t sideInset = static_cast<int16_t>(theme.spaceLg * 2);
+  // Not the plain row height: list rows are scaled below the finger-target floor
+  // (ui_row_height), and a row is forgiving where a half-width dialog button is not.
+  const int16_t bandHeight = std::max(theme.rowHeight, theme.minTouchSize);
   const freeink::ui::Rect band =
-      screen.takeBottom(theme.rowHeight, theme.spaceLg).inset(freeink::ui::Insets{0, sideInset, 0, sideInset});
+      screen.takeBottom(bandHeight, theme.spaceLg).inset(freeink::ui::Insets{0, sideInset, 0, sideInset});
   const int16_t gap = theme.spaceLg;
   const int16_t buttonWidth = static_cast<int16_t>((band.width - gap) / 2);
 

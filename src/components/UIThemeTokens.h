@@ -2,6 +2,7 @@
 #include <BoardConfig.h>
 #include <FreeInkUIGfxRenderer.h>
 
+#include "UiRowHeight.h"
 #include "UITheme.h"
 
 // Merges the active UITheme's shape (row gaps, radii, insets, selection
@@ -13,7 +14,11 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   namespace fui = freeink::ui;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
 
-  fui::ThemeTokens tokens = fui::themeTokensForLineHeight(target.lineHeight(fui::GfxRendererTarget::FONT_BODY));
+  const int16_t bodyLineHeight = target.lineHeight(fui::GfxRendererTarget::FONT_BODY);
+  fui::ThemeTokens tokens = fui::themeTokensForLineHeight(bodyLineHeight);
+  // The SDK sizes its row for a label plus a subtitle; Lector's lists are
+  // single-line almost everywhere, so the row is taken down to a share of it.
+  tokens.rowHeight = static_cast<int16_t>(ui_row_height::scaled(tokens.rowHeight, bodyLineHeight));
   tokens.listRowGap = static_cast<int16_t>(metrics.listRowGap);
   tokens.listRowRadius = static_cast<uint8_t>(metrics.listRowRadius);
   tokens.listInset = static_cast<int16_t>(metrics.listInset);
