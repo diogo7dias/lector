@@ -17,8 +17,10 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/BannerStyle.h"
+#include "components/HintBandGeometry.h"
 #include "components/ListScrollPolicy.h"
 #include "components/OptionPopupGeometry.h"
+#include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
@@ -302,29 +304,36 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  const int pageHeight = renderer.getScreenHeight();
-  constexpr int buttonWidth = 106;
-  constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
-  constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
-  constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
-  // X3 has wider screen in portrait (528 vs 480), use more spacing
-  constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
-  constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
-  const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
-  const char* labels[] = {btn1, btn2, btn3, btn4};
+  constexpr int textYOffset = 7;  // Distance from top of button to text baseline
+  const hint_band::Band band = hintBand(renderer);
+  const char* labels[hint_band::kSlotCount] = {btn1, btn2, btn3, btn4};
 
-  for (int i = 0; i < 4; i++) {
+  hint_band::Painted& painted = hint_band::lastPainted();
+  painted.band = band;
+  painted.valid = true;
+
+  for (int i = 0; i < hint_band::kSlotCount; i++) {
+    painted.labelled[i] = labels[i] != nullptr && labels[i][0] != '\0';
+  }
+
+  for (int i = 0; i < hint_band::kSlotCount; i++) {
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
-                    textYOffset);
+      const hint_band::Slot slot = hint_band::slot(band, i);
+      renderer.fillRect(slot.x, slot.y, slot.width, slot.height, false);
+      renderer.drawRect(slot.x, slot.y, slot.width, slot.height);
+      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], slot.x, slot.width, slot.y, slot.height, textYOffset);
     }
   }
 
   renderer.setOrientation(orig_orientation);
+}
+
+hint_band::Band BaseTheme::hintBand(const GfxRenderer& renderer) const {
+  // Measured in Portrait, which is the orientation drawButtonHints paints in and the one
+  // MappedInputManager hands back logical tap coordinates in.
+  return hint_band::Band{renderer.getScreenWidth(), renderer.getScreenHeight(),
+                         UITheme::getInstance().getMetrics().buttonHintsHeight, gpio.hasTouch(), gpio.deviceIsX3()};
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
@@ -393,8 +402,8 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 }
 
 int BaseTheme::getListRowStep(bool hasSubtitle) const {
-  int rowHeight = (hasSubtitle) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
-  return rowHeight;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
 }
 
 int BaseTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
@@ -448,8 +457,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowValue, bool highlightValue,
                          const std::function<bool(int index)>& rowDimmed, int itemFontId,
                          const std::function<bool(int index)>& rowIsHeader, int* scrollOffset) const {
-  int rowHeight =
-      (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
+  const auto& listMetrics = UITheme::getInstance().getMetrics();
+  int rowHeight = (rowSubtitle != nullptr) ? listMetrics.listWithSubtitleRowHeight : listMetrics.listRowHeight;
   int pageItems = rowHeight > 0 ? std::max(1, rect.height / rowHeight) : 1;
 
   // Scrolling callers own their window start; paging callers get it snapped to a
@@ -508,6 +517,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   const auto drawnOnPaper = [&](const int index) { return index != selectedIndex || !selectionInvertsText; };
   constexpr int minValueGap = 10;
 
+  row_hit::Rows& hitRows = row_hit::lastRows();
+
   // Draw all items
   for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
     const int itemY = rect.y + (i - windowStart) * rowHeight;
@@ -525,6 +536,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       renderer.drawText(itemFontId, headingX, itemY, headingText.c_str(), /*black=*/false);
       continue;
     }
+
+    hitRows.add(i, rect.x, itemY, rect.width, rowHeight);
 
     int rowTextWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
     std::string valueText;
@@ -626,7 +639,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     constexpr int subtitleGap = 6;
     int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
     renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
-    const int subtitleY = renderer.getScreenHeight() - viewBottom - BaseMetrics::values.buttonHintsHeight -
+    const int subtitleY = renderer.getScreenHeight() - viewBottom -
+                          UITheme::getInstance().getMetrics().buttonHintsHeight -
                           renderer.getLineHeight(SMALL_FONT_ID) - subtitleGap;
     renderer.drawText(SMALL_FONT_ID,
                       rect.x + rect.width - BaseMetrics::values.contentSidePadding - truncatedSubtitleWidth, subtitleY,
@@ -1131,6 +1145,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
   }
 
   int rowY = listTop;
+  row_hit::Rows& wrappedHitRows = row_hit::lastRows();
   for (const Row& row : rows) {
     const bool selected = row.index == selectedIndex;
     const int valueX = contentX + contentW - (row.valueW - valueGap);
@@ -1168,6 +1183,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
       renderer.drawText(UI_10_FONT_ID, textX, baselineY, line.c_str(), !inverted);
       baselineY += lineHeight;
     }
+    wrappedHitRows.add(row.index, rect.x, rowY, rect.width, row.height);
     rowY += row.height + rowGap;
   }
 
@@ -1176,10 +1192,12 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
 
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
-                               const std::function<UIIcon(int index)>& rowIcon) const {
+                               const std::function<UIIcon(int index)>& rowIcon, const int itemIndexBase) const {
+  const auto& menuMetrics = UITheme::getInstance().getMetrics();
+  row_hit::Rows& menuHitRows = row_hit::lastRows();
   for (int i = 0; i < buttonCount; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
-                      static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+                      static_cast<int>(i) * (menuMetrics.menuRowHeight + menuMetrics.menuSpacing);
 
     const bool selected = selectedIndex == i;
 
@@ -1189,13 +1207,16 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const int textX = rect.x + (rect.width - textWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const int textY =
-        tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
+        tileY + (menuMetrics.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
 
     // Unselected tiles already carry an outline, so the highlight has to read against
     // one. Brackets hug the tile's own label and the caret rule doubles the tile's
     // bottom edge; both stay legible without the tile inverting.
-    const Rect tile(rect.x + BaseMetrics::values.contentSidePadding, tileY,
-                    rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight);
+    menuHitRows.add(itemIndexBase + i, rect.x + menuMetrics.contentSidePadding, tileY,
+                    rect.width - menuMetrics.contentSidePadding * 2, menuMetrics.menuRowHeight);
+
+    const Rect tile(rect.x + menuMetrics.contentSidePadding, tileY, rect.width - menuMetrics.contentSidePadding * 2,
+                    menuMetrics.menuRowHeight);
     bool inverted = false;
     if (selected) {
       const Rect labelSpan(textX, textY, textWidth, lineHeight);
@@ -1813,6 +1834,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
   const int blockHeight = aboveH + totalVisibleHeight + belowH;
   const int blockTop = rowsTopMinY + std::max(0, (rowsAvailableHeight - blockHeight) / 2);
   int rowY = blockTop + aboveH;
+  row_hit::Rows& recentHitRows = row_hit::lastRows();
 
   if (hasMoreAbove) {
     drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rowX, rowW, blockTop, rowLineHeight);
@@ -1851,6 +1873,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
       baselineY += rowLineHeight;
     }
 
+    recentHitRows.add(entry.bookIdx, rowX, rowY, rowW, entry.height);
     rowY += entry.height + rowGap;
   }
 

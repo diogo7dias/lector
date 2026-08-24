@@ -128,6 +128,15 @@ void HomeActivity::loop() {
     }
   };
 
+  // A tap picks the row it landed on and acts on it in one go — the selection moving
+  // first is what the paint after the action shows, so no extra refresh is spent on it.
+  int tappedItem = 0;
+  if (mappedInput.wasRowTapped(tappedItem) && tappedItem >= 0 && tappedItem < menuCount) {
+    selectorIndex = tappedItem;
+    activateSelection();
+    return;
+  }
+
   const int bookCount = static_cast<int>(recentBooks.size());
   // Keep the selected book within the list's visible window as it moves. drawList
   // clamps and reports the true firstVisible each render, so this only nudges.
@@ -284,7 +293,9 @@ void HomeActivity::render(RenderLock&&) {
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
       menuCount, metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+      [&menuIcons](int index) { return menuIcons[index]; },
+      // The books above own indices 0..N-1 of the same selection space the menu continues.
+      metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
 
   // Back's hint must match what it actually does. An empty label draws no
   // button box at all, which is what HOME_BACK_NONE wants.

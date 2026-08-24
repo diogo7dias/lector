@@ -13,6 +13,7 @@
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/RowHitTest.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -62,6 +63,12 @@ void ActivityManager::renderTaskLoop() {
       // resolving the output polarity here, per render, means menus, popups,
       // and every other activity revert to normal automatically.
       display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
+      // A tap answers to what is on screen now, so the row table starts empty on every
+      // paint and each list draw appends the rows it actually painted. Cleared here, the
+      // one place a paint begins, rather than inside the list draws — a screen that draws
+      // two lists (the home's books and its menu) would otherwise have the second wipe the
+      // first, and a screen that draws none would leave the previous screen's rows live.
+      row_hit::lastRows().begin();
       currentActivity->render(std::move(lock));
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.

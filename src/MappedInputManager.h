@@ -42,6 +42,11 @@ class MappedInputManager {
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
+  // The front-button hardware id a tap on the hint band stands for, or -1. Non-consuming.
+  int tappedHintHardware() const;
+  // The list item a tap landed on, out of the rows the last list draw painted. False when
+  // the tap was somewhere else, when nothing tappable was drawn, or on a button-only board.
+  bool wasRowTapped(int& item) const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   bool isScreenTouchHeld(int& x, int& y) const;
@@ -120,6 +125,9 @@ class MappedInputManager {
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
                          bool hasSubtitle) const;
   void rememberTouchHeldTime() const;
+  // A tap on the hint band stands for one button press, not one per query: cleared as soon
+  // as the tap event is gone, so the next tap is heard again.
+  mutable bool hintTapUsed = false;
 
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;

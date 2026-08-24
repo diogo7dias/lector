@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "components/HintBandGeometry.h"
 #include "components/StatusBar.h"  // StatusBarData for the v2 status bar
 #include "fontIds.h"               // UI_10_FONT_ID default for drawList
 
@@ -191,6 +192,9 @@ class BaseTheme {
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
                         bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
+  // Where the four hint slots are this frame: 106 px legend boxes on a button board,
+  // four full-width columns on a touch board. Shared by the draw and the tap test.
+  hint_band::Band hintBand(const GfxRenderer& renderer) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
@@ -265,9 +269,11 @@ class BaseTheme {
                                          // the chip and its continuation lines stay under the first line, not
                                          // back at the left margin, so the text block keeps a straight edge.
                                          const std::function<std::string(int index)>& rowBadge = nullptr) const;
+  // itemIndexBase is what a tapped tile reports as its item: the home screen's menu sits
+  // below its book list in one selection space, so its first tile is item N, not item 0.
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
-                              const std::function<UIIcon(int index)>& rowIcon) const;
+                              const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.

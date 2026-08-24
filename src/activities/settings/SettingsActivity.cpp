@@ -20,10 +20,7 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
-#include "WifiCredentialStore.h"
 #include "OpdsServerStore.h"
-#include "activities/network/NearbyFileTransferActivity.h"
-#include "util/CredentialBundle.h"
 #include "OtaUpdateActivity.h"
 #include "PopupItemsActivity.h"
 #include "SdCardFontSystem.h"
@@ -31,6 +28,8 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "WifiCredentialStore.h"
+#include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/SettingsListNav.h"
 #include "activities/util/IntervalSelectionActivity.h"
@@ -39,6 +38,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "util/CredentialBundle.h"
 
 namespace {
 
@@ -186,17 +186,17 @@ void SettingsActivity::rebuildSettingsList() {
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
-  applyGroups(readerSettings,
-              {
-                  {StrId::STR_GRP_TEXT,
-                   {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS,
-                    StrId::STR_DICTIONARY}},
-                  {StrId::STR_GRP_PAGE,
-                   {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE}},
-                  {StrId::STR_GRP_LOOK,
-                   {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_NIGHT_MODE,
-                    StrId::STR_CUSTOMISE_STATUS_BAR}},
-              });
+  applyGroups(
+      readerSettings,
+      {
+          {StrId::STR_GRP_TEXT,
+           {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS, StrId::STR_DICTIONARY}},
+          {StrId::STR_GRP_PAGE,
+           {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE}},
+          {StrId::STR_GRP_LOOK,
+           {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_NIGHT_MODE,
+            StrId::STR_CUSTOMISE_STATUS_BAR}},
+      });
 
   applyGroups(
       controlsSettings,
@@ -207,8 +207,7 @@ void SettingsActivity::rebuildSettingsList() {
            {StrId::STR_SHORT_PWR_BTN, StrId::STR_PWR_BTN_FOOTNOTE_BACK, StrId::STR_DOUBLE_CLICK_POWER}},
           // Pop-up Items sits with the bindings, because it only configures what the
           // pop-up those bindings open actually contains.
-          {StrId::STR_GRP_HOLD,
-           {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
+          {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
           {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
       });
 
@@ -221,8 +220,7 @@ void SettingsActivity::rebuildSettingsList() {
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
           {StrId::STR_GRP_STATS, {StrId::STR_TRACK_READING_STATS, StrId::STR_READING_IDLE_LIMIT}},
           {StrId::STR_GRP_NETWORK,
-           {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
-            StrId::STR_SHARE_CREDENTIALS}},
+           {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS, StrId::STR_SHARE_CREDENTIALS}},
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
             StrId::STR_SD_FIRMWARE_UPDATE}},
@@ -274,6 +272,14 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < settingsCount) {
+    selectedSettingIndex = tappedRow;
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
+  }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleCurrentSetting();
