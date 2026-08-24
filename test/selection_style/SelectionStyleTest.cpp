@@ -48,153 +48,62 @@ TEST(SelectionStyle, SolidFillsTheWholeRow) {
   EXPECT_EQ(30, painted[0].height);
 }
 
-TEST(SelectionStyle, OnlySolidKnocksTheRowTextOutWhite) {
+TEST(SelectionStyle, BothStylesKnockTheRowTextOutWhite) {
+  // Both paint over the row, so the text on it has to be drawn white either way.
   EXPECT_TRUE(invertsText(SOLID));
-  EXPECT_FALSE(invertsText(BRACKETS));
-  EXPECT_FALSE(invertsText(CARET));
+  EXPECT_TRUE(invertsText(TIGHT));
 }
 
-TEST(SelectionStyle, BracketsEmitTwoArmsPerCorner) {
-  const auto painted = paint(BRACKETS, 10, 20, 300, 30);
-  EXPECT_EQ(8u, painted.size());
-  expectInsideRow(painted, 10, 20, 300, 30);
+TEST(SelectionStyle, TightLeavesPaperAtBothEndsOfTheRow) {
+  const auto painted = paint(TIGHT, 10, 20, 300, 30);
+  ASSERT_EQ(1u, painted.size());
+  EXPECT_GT(painted[0].x, 10);
+  EXPECT_LT(painted[0].x + painted[0].width, 310);
 }
 
-TEST(SelectionStyle, BracketsReachEveryCornerOfTheRow) {
-  const auto painted = paint(BRACKETS, 10, 20, 300, 30);
-  // Two arms start at the top-left corner; the other corners are reached by the
-  // arms that end there, so check the corner each arm family anchors on.
-  EXPECT_TRUE(hasBarAt(painted, 10, 20));  // top-left
-  bool topRight = false, bottomLeft = false, bottomRight = false;
-  for (const Bar& b : painted) {
-    if (b.x + b.width == 310 && b.y == 20) topRight = true;
-    if (b.x == 10 && b.y + b.height == 50) bottomLeft = true;
-    if (b.x + b.width == 310 && b.y + b.height == 50) bottomRight = true;
-  }
-  EXPECT_TRUE(topRight);
-  EXPECT_TRUE(bottomLeft);
-  EXPECT_TRUE(bottomRight);
-}
-
-TEST(SelectionStyle, BracketArmsNeverMeetInTheMiddleOfANarrowRow) {
-  // A 20px-wide row would have its four horizontal arms run into each other at
-  // the default arm length, turning the brackets into a solid outline.
-  const auto painted = paint(BRACKETS, 0, 0, 20, 10);
-  expectInsideRow(painted, 0, 0, 20, 10);
-  for (const Bar& b : painted) {
-    EXPECT_LE(b.width, 10);
-    EXPECT_LE(b.height, 5);
-  }
-}
-
-TEST(SelectionStyle, CaretDrawsNoRuleUnderTheRow) {
-  const auto painted = paint(CARET, 10, 20, 300, 30);
-  expectInsideRow(painted, 10, 20, 300, 30);
-  // A rule the full width of the row reads as a divider between rows, not as the
-  // mark on one of them.
-  for (const Bar& b : painted) {
-    EXPECT_LT(b.width, 300);
-  }
-}
-
-TEST(SelectionStyle, CaretClearsTheRowsLeftEdge) {
-  const auto painted = paint(CARET, 10, 20, 300, 30);
-  ASSERT_FALSE(painted.empty());
-  int leftmost = 1 << 20;
-  for (const Bar& b : painted) leftmost = b.x < leftmost ? b.x : leftmost;
-  EXPECT_GE(leftmost, 14);
-}
-
-TEST(SelectionStyle, CaretSitsOnTheFirstLineOfAWrappedRow) {
-  // A row two lines tall: the caret belongs beside the first line, where reading
-  // starts, not in the gap between the two.
+TEST(SelectionStyle, TightHugsTheRowsFirstLineWhenItHasOne) {
   Bar out[MAX_BARS];
-  const int count = bars(CARET, 10, 20, 300, 60, out, /*firstLineY=*/22, /*firstLineHeight=*/24);
-  ASSERT_GT(count, 0);
-  for (int i = 0; i < count; ++i) {
-    EXPECT_LT(out[i].y + out[i].height, 50) << "caret dropped past the first line";
-  }
+  // A row two lines tall whose text starts at y=22 and runs 24 px per line.
+  const int count = bars(TIGHT, 10, 20, 300, 60, out, /*firstLineY=*/22, /*firstLineHeight=*/24);
+  ASSERT_EQ(1, count);
+  EXPECT_LT(out[0].y, 22);
+  EXPECT_GT(out[0].y + out[0].height, 22 + 24);
+  EXPECT_LT(out[0].height, 60);
 }
 
-TEST(SelectionStyle, CaretPointsAtTheRowFromTheLeft) {
-  const auto painted = paint(CARET, 10, 20, 300, 30);
-  // Beyond the underline, the caret is a triangle built from columns that get
-  // shorter towards its tip, so the marker reads as an arrow and not a block.
-  std::vector<Bar> columns(painted.begin(), painted.end());
-  ASSERT_GE(columns.size(), 3u);
-  for (size_t i = 1; i < columns.size(); ++i) {
-    EXPECT_LT(columns[i].height, columns[i - 1].height);
-    EXPECT_GT(columns[i].x, columns[i - 1].x);
-  }
-}
-
-TEST(SelectionStyle, BracketArmsAreTwoPixelsThick) {
-  const auto painted = paint(BRACKETS, 10, 20, 300, 30);
-  ASSERT_FALSE(painted.empty());
-  for (const Bar& b : painted) {
-    EXPECT_TRUE(b.width == 2 || b.height == 2) << "a thicker arm reads as a box around the row";
-  }
+TEST(SelectionStyle, TightFallsBackToTheRowWithoutALine) {
+  // A cover card or a tab measures no text line; the block then covers the row's
+  // own band rather than nothing.
+  const auto painted = paint(TIGHT, 10, 20, 300, 30);
+  ASSERT_EQ(1u, painted.size());
+  EXPECT_EQ(20, painted[0].y);
+  EXPECT_EQ(30, painted[0].height);
 }
 
 TEST(SelectionStyle, EveryStyleFitsATinyRowWithoutEscapingIt) {
-  for (const Style style : {SOLID, BRACKETS, CARET}) {
-    const auto painted = paint(style, 3, 7, 12, 6);
-    EXPECT_FALSE(painted.empty());
-    expectInsideRow(painted, 3, 7, 12, 6);
+  for (const Style style : {SOLID, TIGHT}) {
+    const auto painted = paint(style, 0, 0, 12, 6);
+    expectInsideRow(painted, 0, 0, 12, 6);
   }
+}
+
+TEST(SelectionStyle, ANarrowRowStillGetsAMark) {
+  // Trimming both ends off a row narrower than the inset would leave nothing to see.
+  const auto painted = paint(TIGHT, 0, 0, 8, 20);
+  ASSERT_EQ(1u, painted.size());
+  EXPECT_GT(painted[0].width, 0);
 }
 
 TEST(SelectionStyle, UnknownPersistedValueFallsBackToSolid) {
-  // settings.json is user-editable and survives downgrades, so a value from a
-  // firmware that knew more styles must not index past the enum.
-  EXPECT_EQ(SOLID, fromSetting(0));
-  EXPECT_EQ(BRACKETS, fromSetting(1));
-  EXPECT_EQ(CARET, fromSetting(2));
-  EXPECT_EQ(SOLID, fromSetting(3));
+  EXPECT_EQ(SOLID, fromSetting(9));
   EXPECT_EQ(SOLID, fromSetting(255));
+  EXPECT_EQ(SOLID, fromSetting(0));
+  EXPECT_EQ(TIGHT, fromSetting(1));
 }
 
-TEST(SelectionStyle, CaretIsWideEnoughToReadOnEInk) {
-  const auto painted = paint(CARET, 10, 20, 300, 30);
-  int leftmost = 1 << 20, rightmost = 0;
-  for (const Bar& b : painted) {
-    leftmost = b.x < leftmost ? b.x : leftmost;
-    rightmost = (b.x + b.width) > rightmost ? (b.x + b.width) : rightmost;
-  }
-  // A one-pixel-per-column arrow all but vanishes at e-ink pitch.
-  EXPECT_GE(rightmost - leftmost, 7);
+TEST(SelectionStyle, TheRetiredCaretValueReadsAsSolid) {
+  // 0.27 dropped brackets (1) and the caret (2). Slot 1 is the new tight block, so
+  // a settings.json still holding 2 lands on solid rather than past the enum.
+  EXPECT_EQ(SOLID, fromSetting(2));
 }
 
-TEST(SelectionStyle, ASpanIsGrownSoBracketsSitOutsideTheGlyphs) {
-  // Brackets drawn straight onto the text box touch the glyphs. The span is padded
-  // out first, so the marks read as hugging the word rather than crossing it.
-  const Bar row{0, 0, 300, 30};
-  const Bar grown = inflatedSpan(Bar{100, 10, 40, 12}, row);
-  EXPECT_LT(grown.x, 100);
-  EXPECT_LT(grown.y, 10);
-  EXPECT_GT(grown.width, 40);
-  EXPECT_GT(grown.height, 12);
-}
-
-TEST(SelectionStyle, AGrownSpanNeverEscapesItsRow) {
-  // A label starting hard against the row's left edge, and a value ending hard
-  // against its right, must not push brackets into the neighbouring rows.
-  const Bar row{20, 40, 300, 20};
-  for (const Bar span : {Bar{20, 40, 30, 20}, Bar{290, 44, 30, 12}, Bar{20, 40, 300, 20}}) {
-    const Bar grown = inflatedSpan(span, row);
-    EXPECT_GE(grown.x, row.x);
-    EXPECT_GE(grown.y, row.y);
-    EXPECT_LE(grown.x + grown.width, row.x + row.width);
-    EXPECT_LE(grown.y + grown.height, row.y + row.height);
-    EXPECT_GT(grown.width, 0);
-    EXPECT_GT(grown.height, 0);
-  }
-}
-
-TEST(SelectionStyle, AnEmptySpanStaysEmpty) {
-  // Rows with no value text hand over a zero-width span; it must not turn into a
-  // stray pair of brackets floating on the row.
-  const Bar row{0, 0, 300, 30};
-  const Bar grown = inflatedSpan(Bar{100, 10, 0, 12}, row);
-  EXPECT_EQ(0, grown.width);
-}

@@ -432,8 +432,8 @@ bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, cons
   const selection_style::Style style = selection_style::fromSetting(SETTINGS.selectionStyle);
   const selection_style::Bar row{rect.x, rect.y, rect.width, rect.height};
 
-  // The first span is the row's first line of text, which is where the caret goes.
-  // Without one (a cover, a tab) it falls back to the row.
+  // The first span is the row's first line of text, which is what the tight block
+  // hugs. Without one (a cover, a tab) it falls back to the row.
   const int firstLineY = (spans != nullptr && spanCount > 0) ? spans[0].y : -1;
   const int firstLineHeight = (spans != nullptr && spanCount > 0) ? spans[0].height : 0;
 
@@ -447,20 +447,8 @@ bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, cons
     }
   };
 
-  if (style == selection_style::BRACKETS && spans != nullptr && spanCount > 0) {
-    bool bracketed = false;
-    for (int i = 0; i < spanCount; ++i) {
-      const selection_style::Bar grown =
-          selection_style::inflatedSpan({spans[i].x, spans[i].y, spans[i].width, spans[i].height}, row);
-      if (grown.width <= 0 || grown.height <= 0) continue;  // e.g. a row with no value text
-      paint(style, grown);
-      bracketed = true;
-    }
-    // A caller that measured nothing usable still needs its row marked.
-    if (!bracketed) paint(style, row);
-    return false;
-  }
-
+  // The tight block hugs the row's first line of text, so a wrapped row is marked
+  // where reading starts rather than swallowing the gap under it.
   paint(style, row);
   return selection_style::invertsText(style);
 }
@@ -530,20 +518,17 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
     const int itemY = rect.y + (i - windowStart) * rowHeight;
 
-    // Section heading: a filled bar spanning the list, label centred and knocked out
-    // white. Deliberately the same fill the selected row uses — a heading is never
-    // landable (the caller's navigation steps past it), so the two can never be on
-    // screen in a way that makes one look like the other, and one solid band reads as
-    // a divider far better at e-ink contrast than a hairline rule does.
+    // Section heading: label centred on paper, no band behind it. The band it used to
+    // wear was the same fill the selected row uses, which put a second black bar on
+    // every screen and made the list read as mostly ink.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
       // Bracketed like the screen title above it, for the same reason: the UI font has
       // no bold face, so the brackets are what marks a line as a label rather than a row.
       const std::string headingText = header_title::decorate(rowTitle(i).c_str());
-      renderer.fillRect(rect.x, itemY - 2, rect.width, rowHeight);
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
       const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
       const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
-      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
+      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/true);
       continue;
     }
 
@@ -761,19 +746,14 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
 
     // Draw underline for selected tab. A tab that is selected but does not hold focus
     // always keeps its plain underline; the user's selection style applies only to the
-    // focused tab, and the caret style falls back to the solid highlight here because
-    // its own rule would be indistinguishable from that unfocused underline.
+    // focused tab. A tab is already a short label with air around it, so both styles
+    // paint the same block here.
     bool inverted = false;
     if (tab.selected) {
       if (selected) {
         const Rect tabRect(currentX - tabHighlightBleed, rect.y, textWidth + 2 * tabHighlightBleed,
                            lineHeight + underlineGap);
-        if (selection_style::fromSetting(SETTINGS.selectionStyle) == selection_style::BRACKETS) {
-          inverted = drawSelection(renderer, tabRect);
-        } else {
-          renderer.fillRect(tabRect.x, tabRect.y, tabRect.width, tabRect.height);
-          inverted = true;
-        }
+        inverted = drawSelection(renderer, tabRect);
       } else {
         renderer.fillRect(currentX, rect.y + lineHeight + underlineGap, textWidth, underlineHeight);
       }
@@ -821,9 +801,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
-  // The card is a cover plus its label boxes, not a list row, so only the solid style
-  // flips them all to white-on-black. Brackets and the caret mark the card's outline
-  // and leave the cover art, the title and the "Continue Reading" chip as they are.
+  // The card is a cover plus its label boxes, not a list row, so only the full-bleed
+  // solid style flips them all to white-on-black. The tight block marks the card's own
+  // label band and leaves the cover art as it is.
   const bool cardInverted =
       bookSelected && selection_style::fromSetting(SETTINGS.selectionStyle) == selection_style::SOLID;
 
@@ -1668,9 +1648,9 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
 
-    // Under a non-solid style the selected row keeps the popup's own background and
-    // gets brackets or a caret on top, so the theme's rounded/light-grey selection
-    // treatment applies to the solid style only.
+    // The theme's rounded / light-grey selection treatment is the full-bleed solid
+    // style's own look; under the tight style the row keeps the popup's background and
+    // takes the smaller block on top.
     const bool paintedOver = selectionStyle == selection_style::SOLID;
     if (metrics.optionPopupDrawAllRows || (selected && paintedOver)) {
       Color rowColor;

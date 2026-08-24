@@ -248,7 +248,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 
     v.push_back(
         SettingInfo::Enum(StrId::STR_SELECTION_STYLE, &CrossPointSettings::selectionStyle,
-                          {StrId::STR_SELECTION_SOLID, StrId::STR_SELECTION_BRACKETS, StrId::STR_SELECTION_CARET},
+                          {StrId::STR_SELECTION_SOLID, StrId::STR_SELECTION_TIGHT},
                           "selectionStyle", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
