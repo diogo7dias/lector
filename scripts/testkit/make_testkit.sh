@@ -11,7 +11,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT_DIR="${1:-$HOME/testkit-www}"
-ENV_NAME="testkit"
+# Overridable so a one-off kit can carry a different build (e.g. env:stock_refresh
+# for the X3 ghosting baseline) without editing this script.
+ENV_NAME="${TESTKIT_ENV:-testkit}"
 BUILD_DIR="$REPO_ROOT/.pio/build/$ENV_NAME"
 # Downloaded once by hand; see docs/testkit.md. Kept out of the repo because it
 # is a 13 MB prebuilt binary.
