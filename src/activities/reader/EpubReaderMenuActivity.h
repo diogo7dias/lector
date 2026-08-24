@@ -83,10 +83,9 @@ class EpubReaderMenuActivity final : public Activity {
     static MenuItem Header(const StrId labelId) { return MenuItem{MenuAction::SECTION_HEADER, labelId, true}; }
   };
 
-  // One tab page: which tab it is, the label drawn in the tab bar, its rows, and where
-  // the cursor sits inside it. selectedIndex is a nav-ring position, not a row index:
-  // 0 is the tab bar itself, 1..N are the rows. Each tab keeps its own cursor, so
-  // leaving a tab and coming back lands where you left it.
+  // One section of the menu: what it is, the heading drawn above its rows, and the rows
+  // themselves. Sections are built separately and then flattened into the single list
+  // the menu shows, so a section that has nothing to offer simply contributes nothing.
   struct TabPage {
     Tab tab;
     StrId labelId;
@@ -108,21 +107,31 @@ class EpubReaderMenuActivity final : public Activity {
   // menu open. Safe to call from loop(): it mutates one tab's item vector, never the
   // tabs vector itself, and no reference into either outlives the call.
   void syncProgressBarRow();
-  TabPage& activeTab() { return tabs[activeTabIndex]; }
-  const TabPage& activeTab() const { return tabs[activeTabIndex]; }
-  // Move to another tab, wrapping. The cursor of the tab being left is kept.
-  // True when this nav-ring position is a section heading (ring 0 is the tab bar).
-  bool isHeaderRing(int ringIndex) const;
-  // Walks on in `direction` until the ring position is landable, so a heading is never
-  // selected and Confirm can never fire on one.
-  int stepPastHeaders(int ringIndex, int direction) const;
-  void switchTab(int direction = 1);
+  // Flattens the built sections into the one list the menu shows: each section's label
+  // becomes a heading row, followed by that section's rows.
+  static std::vector<MenuItem> flatten(const std::vector<TabPage>& pages);
+  // True when this row is a section heading.
+  bool isHeaderRow(int index) const;
+  // Walks on in `direction` until the row is landable, so a heading is never selected
+  // and Confirm can never fire on one.
+  int stepPastHeaders(int index, int direction) const;
+  // Jumps the cursor to the next or previous section heading's first row, the same fast
+  // travel the Settings list gives a held nav button.
+  void jumpSection(bool forward);
+  // Index of the first landable row of the section named by SETTINGS.bookMenuTab, or 0.
+  int firstRowOfPreferredSection() const;
   void closeCancelled();
 
-  // Fixed menu layout: rows never change after construction, only the cursors do.
-  std::vector<TabPage> tabs;
+  // Fixed menu layout: one flat list of headings and rows, built once. Only the cursor
+  // and the scroll window move after that.
+  std::vector<MenuItem> items;
 
-  int activeTabIndex = 0;
+  int selectedIndex = 0;
+  // Owned by this activity and handed to drawList, which slides it by the least amount
+  // that keeps the cursor visible and writes the clamped value back.
+  int listScrollOffset = 0;
+  // The section the menu opened on, kept so the constructor's choice survives onEnter.
+  Tab preferredTab = Tab::Navigate;
 
   ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;

@@ -89,6 +89,14 @@ void EpubReaderBookmarksActivity::loop() {
     return;
   }
 
+  // A tap on a row selects and activates it, the same as every other list.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(bookmarks.size())) {
+    selectorIndex = tappedRow;
+    openBookmark();
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {  // Open
     openBookmark();
     return;

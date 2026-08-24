@@ -20,8 +20,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const uint8_t paperbackStatus, const uint8_t statusBar, const uint8_t progressBar, const bool hasSleepWallpaper,
     const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
     : Activity("EpubReaderMenu", renderer, mappedInput),
-      tabs(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar, hasSleepWallpaper,
-                     wallpaperFavorited, wallpaperPausable, hasQuotes)),
+      items(flatten(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar,
+                              hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes))),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -35,17 +35,40 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
-  // Start on the tab the user picked in Settings. buildTabs() only builds the tabs
-  // that have something to show, so the chosen tab can be absent (Look has no rows
-  // in a book with no reader override); the search simply finds nothing then and the
-  // menu stays on the first tab.
-  const Tab preferredTab = tabForSetting(SETTINGS.bookMenuTab);
-  for (int i = 0; i < static_cast<int>(tabs.size()); i++) {
-    if (tabs[i].tab == preferredTab) {
-      activeTabIndex = i;
-      break;
-    }
+  // The menu is one list, so the setting that used to pick a tab now picks the section
+  // the list opens on. A section with nothing to show is simply not in the list, and
+  // the lookup falls back to the first row.
+  preferredTab = tabForSetting(SETTINGS.bookMenuTab);
+}
+
+// The heading each section is built with, so a lookup by label can find it again in
+// the flattened list. Kept beside buildTabs: the two must name the same strings.
+static StrId labelForTab(const EpubReaderMenuActivity::Tab tab) {
+  switch (tab) {
+    case EpubReaderMenuActivity::Tab::ThisBook:
+      return StrId::STR_SEC_THIS_BOOK;
+    case EpubReaderMenuActivity::Tab::Look:
+      return StrId::STR_SEC_LOOK;
+    case EpubReaderMenuActivity::Tab::Sleep:
+      return StrId::STR_SEC_SLEEP_SCREEN;
+    case EpubReaderMenuActivity::Tab::Device:
+      return StrId::STR_SEC_DEVICE;
+    case EpubReaderMenuActivity::Tab::Navigate:
+    default:
+      return StrId::STR_SEC_NAVIGATE;
   }
+}
+
+// Section label first, then that section's rows. A section that built no rows
+// contributes nothing at all, heading included.
+std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::flatten(const std::vector<TabPage>& pages) {
+  std::vector<MenuItem> flat;
+  for (const auto& page : pages) {
+    if (page.items.empty()) continue;
+    flat.push_back(MenuItem::Header(page.labelId));
+    flat.insert(flat.end(), page.items.begin(), page.items.end());
+  }
+  return flat;
 }
 
 EpubReaderMenuActivity::Tab EpubReaderMenuActivity::tabForSetting(const uint8_t setting) {
@@ -219,71 +242,72 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
 }
 
 void EpubReaderMenuActivity::syncProgressBarRow() {
-  for (auto& page : tabs) {
-    auto& items = page.items;
-    const auto bar = std::find_if(items.begin(), items.end(),
-                                  [](const MenuItem& m) { return m.action == MenuAction::TOGGLE_STATUS_BAR; });
-    if (bar == items.end()) continue;
-    const auto next = bar + 1;
-    const bool present = next != items.end() && next->action == MenuAction::TOGGLE_PROGRESS_BAR;
-    if (!selectedStatusBar && !present) {
-      items.insert(next, MenuItem{MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
-    } else if (selectedStatusBar && present) {
-      items.erase(next);
-      // The cursor sits on the Status Bar row when this runs, so it is always above the
-      // row being removed and does not move. Clamped anyway: a nav-ring position past
-      // the end would index off the vector on the next render.
-      const int last = static_cast<int>(items.size());
-      if (page.selectedIndex > last) page.selectedIndex = last;
+  const auto bar = std::find_if(items.begin(), items.end(),
+                                [](const MenuItem& m) { return m.action == MenuAction::TOGGLE_STATUS_BAR; });
+  if (bar == items.end()) return;
+  const auto next = bar + 1;
+  const bool present = next != items.end() && next->action == MenuAction::TOGGLE_PROGRESS_BAR;
+  if (!selectedStatusBar && !present) {
+    items.insert(next, MenuItem{MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
+  } else if (selectedStatusBar && present) {
+    items.erase(next);
+    // The cursor sits on the Status Bar row when this runs, so it is always above the
+    // row being removed and does not move. Clamped anyway: a position past the end would
+    // index off the vector on the next render.
+    const int last = static_cast<int>(items.size()) - 1;
+    if (selectedIndex > last) selectedIndex = std::max(0, last);
+  }
+}
+
+bool EpubReaderMenuActivity::isHeaderRow(const int index) const {
+  const size_t row = static_cast<size_t>(index);
+  return index >= 0 && row < items.size() && items[row].isHeader;
+}
+
+int EpubReaderMenuActivity::stepPastHeaders(int index, const int direction) const {
+  const int count = static_cast<int>(items.size());
+  if (count <= 0) return 0;
+  // Bounded by the list so one made of nothing but headings cannot spin.
+  for (int guard = 0; guard < count && isHeaderRow(index); ++guard) {
+    index = direction >= 0 ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
+  }
+  return index;
+}
+
+void EpubReaderMenuActivity::jumpSection(const bool forward) {
+  const int count = static_cast<int>(items.size());
+  if (count <= 0) return;
+  // Walk to the next heading in that direction, then land on the row under it. Parking
+  // the window on the heading keeps the section's name on screen, so a jump reads as
+  // arriving somewhere rather than as the list sliding by an arbitrary amount.
+  int index = selectedIndex;
+  for (int guard = 0; guard < count; ++guard) {
+    index = forward ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
+    if (isHeaderRow(index)) {
+      listScrollOffset = std::max(0, index);
+      selectedIndex = stepPastHeaders(index, 1);
+      requestUpdate();
+      return;
     }
-    return;  // the row exists in exactly one tab
   }
 }
 
-bool EpubReaderMenuActivity::isHeaderRing(const int ringIndex) const {
-  if (ringIndex <= 0) return false;  // 0 is the tab bar, never a heading
-  const auto& items = activeTab().items;
-  const size_t row = static_cast<size_t>(ringIndex - 1);
-  return row < items.size() && items[row].isHeader;
-}
-
-int EpubReaderMenuActivity::stepPastHeaders(int ringIndex, const int direction) const {
-  const int ringSize = static_cast<int>(activeTab().items.size()) + 1;
-  // Bounded by the ring so a tab that somehow held nothing but headings cannot spin.
-  for (int guard = 0; guard < ringSize && isHeaderRing(ringIndex); ++guard) {
-    ringIndex = direction >= 0 ? ButtonNavigator::nextIndex(ringIndex, ringSize)
-                               : ButtonNavigator::previousIndex(ringIndex, ringSize);
+int EpubReaderMenuActivity::firstRowOfPreferredSection() const {
+  // Headings carry no Tab value, so the section is found by its label: buildTabs gives
+  // each section the heading its own labelId names.
+  const StrId wanted = labelForTab(preferredTab);
+  for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+    if (items[i].isHeader && items[i].labelId == wanted) return stepPastHeaders(i, 1);
   }
-  return ringIndex;
-}
-
-void EpubReaderMenuActivity::switchTab(const int direction) {
-  const int count = static_cast<int>(tabs.size());
-  if (count <= 1) return;
-  // Choosing tabs and choosing a row are different modes, so a switch made from the tab
-  // bar has to land on the tab bar. Without this, holding a nav button drops onto
-  // whatever row the next tab last had selected: the bar stops drawing as focused
-  // mid-hold, the Confirm hint reverts from the next tab's name to "Select", and a
-  // Confirm meant as "next tab" fires that row instead — which in the Sleep tab can be
-  // Delete Wallpaper, the row deliberately placed last so a stray press misses it.
-  const bool onTabBar = activeTab().selectedIndex == 0;
-  activeTabIndex = (activeTabIndex + direction + count) % count;
-  if (onTabBar) {
-    activeTab().selectedIndex = 0;
-  } else {
-    // The remembered position was landable when this tab was left, but a conditional row
-    // may have come or gone since, so re-settle it off any heading it now sits on.
-    activeTab().selectedIndex = stepPastHeaders(activeTab().selectedIndex, 1);
-  }
-  requestUpdate();
+  return stepPastHeaders(0, 1);
 }
 
 void EpubReaderMenuActivity::onEnter() {
   Activity::onEnter();
-  // Nav-ring position 0 is the tab bar, and that is where the menu opens: the tab it
-  // opens ON carries the intent (see the constructor), so the first thing offered is
-  // the choice of tab rather than whichever row happens to be first.
-  activeTab().selectedIndex = 0;
+  // Opens on the first row of the section the user chose in Settings, with that
+  // section's heading at the top of the window so the list reads from its name down.
+  selectedIndex = firstRowOfPreferredSection();
+  listScrollOffset = std::max(0, selectedIndex - 1);
   requestUpdate();
 }
 
@@ -362,15 +386,9 @@ void EpubReaderMenuActivity::loop() {
   }
 
   auto activateSelected = [this] {
-    // Position 0 is the tab bar, not a row: Confirm there steps to the NEXT tab, the
-    // same as holding NavNext (holding NavPrevious goes the other way; Confirm has no
-    // backwards form). It stays because it is the discoverable one — the button hint
-    // names the tab it moves to.
-    if (activeTab().selectedIndex == 0) {
-      switchTab();
-      return;
-    }
-    const auto selectedAction = activeTab().items[activeTab().selectedIndex - 1].action;
+    // Headings are never selectable, so anything landed on here is a real row.
+    if (selectedIndex < 0 || selectedIndex >= static_cast<int>(items.size()) || isHeaderRow(selectedIndex)) return;
+    const auto selectedAction = items[selectedIndex].action;
     if (selectedAction == MenuAction::ROTATE_SCREEN) {
       optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
                        pendingOrientation, [this](int idx) {
@@ -435,37 +453,32 @@ void EpubReaderMenuActivity::loop() {
     finish();
   };
 
-  // Handle navigation. The ring is the tab bar at 0 followed by this tab's rows, so
-  // walking off either end of the list lands back on the tab bar. Same gesture split the
-  // other tabbed screen uses (SettingsActivity): a tap moves one
-  // step along the ring, and holding switches tab instead of repeating. The hold has to
-  // carry tabs because NavNext/NavPrevious already carry Left/Right on the same axis as
-  // Down/Up, so there is no spare direction to spend. Moving on release (not press) is
-  // what makes the two separable: ButtonNavigator::onRelease suppresses itself once a
-  // hold has fired, so a hold switches tabs without also stepping the cursor when the
-  // button comes back up.
-  //
-  // The order below is load-bearing. The release handlers must run before the continuous
-  // ones so a tap's step is applied before anything in the same pass can raise the
-  // suppression flag. Reversed, a continuous that fires first sets the flag and the
-  // release is swallowed — and that is reachable, because a logical direction covers two
-  // physical buttons (NavNext is Down or Right), so one can still be held while the
-  // other is released in the same pass.
-  const int ringSize = static_cast<int>(activeTab().items.size()) + 1;
+  // A tap on a row selects and activates it in one go, the same as the Settings list.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(items.size()) &&
+      !isHeaderRow(tappedRow)) {
+    selectedIndex = tappedRow;
+    activateSelected();
+    return;
+  }
 
-  buttonNavigator.onNextStep([this, ringSize] {
-    activeTab().selectedIndex = stepPastHeaders(ButtonNavigator::nextIndex(activeTab().selectedIndex, ringSize), 1);
+  // Handle navigation. One flat list of headings and rows, walked exactly the way the
+  // Settings list is: a press steps one row past any heading, and holding jumps to the
+  // next section instead of repeating — the fast travel the tab bar used to provide.
+  const int count = static_cast<int>(items.size());
+
+  buttonNavigator.onNextStep([this, count] {
+    selectedIndex = stepPastHeaders(ButtonNavigator::nextIndex(selectedIndex, count), 1);
     requestUpdate();
   });
 
-  buttonNavigator.onPreviousStep([this, ringSize] {
-    activeTab().selectedIndex =
-        stepPastHeaders(ButtonNavigator::previousIndex(activeTab().selectedIndex, ringSize), -1);
+  buttonNavigator.onPreviousStep([this, count] {
+    selectedIndex = stepPastHeaders(ButtonNavigator::previousIndex(selectedIndex, count), -1);
     requestUpdate();
   });
 
-  buttonNavigator.onNextContinuous([this] { switchTab(); });
-  buttonNavigator.onPreviousContinuous([this] { switchTab(-1); });
+  buttonNavigator.onNextContinuous([this] { jumpSection(true); });
+  buttonNavigator.onPreviousContinuous([this] { jumpSection(false); });
 
   // With a function bound to the menu hold, Confirm carries two actions and cannot be
   // resolved until the button comes up. With nothing bound there is nothing to tell
@@ -535,30 +548,16 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());
   y += subLineHeight;
 
-  // Tab bar sits between the book header and the rows. It is nav-ring position 0, so it
-  // draws as selected whenever the cursor is on it.
-  const int tabTop = y + metrics.verticalSpacing;
-  const bool onTabBar = activeTab().selectedIndex == 0;
-  std::vector<TabInfo> tabInfos;
-  tabInfos.reserve(tabs.size());
-  for (int t = 0; t < static_cast<int>(tabs.size()); t++) {
-    tabInfos.push_back({I18N.get(tabs[t].labelId), t == activeTabIndex});
-  }
-  GUI.drawTabBar(renderer, Rect{screen.x, tabTop, screen.width, metrics.tabBarHeight}, tabInfos, onTabBar);
-
-  const int contentTop = tabTop + metrics.tabBarHeight + metrics.verticalSpacing;
+  const int contentTop = y + metrics.verticalSpacing;
   const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
 
-  // The list draws only this tab's rows. selectedIndex is a ring position, so it is
-  // shifted down by one to index the rows, and -1 (no row selected) parks the highlight
-  // while the tab bar has focus.
-  const auto& items = activeTab().items;
+  // One list of headings and rows, scrolled rather than paged so the rows around the
+  // cursor hold still as it moves.
   GUI.drawList(
-      renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, items.size(),
-      onTabBar ? -1 : activeTab().selectedIndex - 1,
-      [this](int index) { return I18N.get(activeTab().items[index].labelId); }, nullptr, nullptr,
+      renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, items.size(), selectedIndex,
+      [this](int index) { return I18N.get(items[index].labelId); }, nullptr, nullptr,
       [this](int index) {
-        const auto value = activeTab().items[index].action;
+        const auto value = items[index].action;
         if (value == MenuAction::ROTATE_SCREEN) {
           // Render current orientation value on the right edge of the content area.
           return I18N.get(orientationLabels[pendingOrientation]);
@@ -579,16 +578,9 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
           return "";
         }
       },
-      true, nullptr, UI_10_FONT_ID, [this](int index) { return activeTab().items[index].isHeader; });
+      true, nullptr, UI_10_FONT_ID, [this](int index) { return items[index].isHeader; }, &listScrollOffset);
 
-  // Footer / Hints. On the tab bar the Confirm button moves to the next tab, so the hint
-  // names that tab rather than saying "Select" — that is what makes tab switching
-  // findable without knowing the hold gesture.
-  const char* confirmLabel = tr(STR_SELECT);
-  if (onTabBar && tabs.size() > 1) {
-    confirmLabel = I18N.get(tabs[(activeTabIndex + 1) % static_cast<int>(tabs.size())].labelId);
-  }
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

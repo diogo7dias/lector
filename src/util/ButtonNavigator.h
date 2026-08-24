@@ -15,6 +15,7 @@ class ButtonNavigator final {
   static const MappedInputManager* mappedInput;
 
   [[nodiscard]] bool shouldNavigateContinuously() const;
+  [[nodiscard]] static bool swipeMatches(const Buttons& buttons);
 
  public:
   explicit ButtonNavigator(const uint16_t continuousIntervalMs = 500, const uint16_t continuousStartMs = 500)

@@ -85,6 +85,15 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (currentActivity) {
+    // Home from anywhere, handled once here rather than in every activity: the
+    // capacitive Home key on boards that have one, the bottom-edge up-swipe on the
+    // rest. Activities that need to intervene override handleHomeGesture().
+    if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
+      if (currentActivity->handleHomeGesture()) return;
+      goHome();
+      return;
+    }
+
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
   }

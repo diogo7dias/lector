@@ -1,5 +1,7 @@
 #include "ButtonNavigator.h"
 
+#include <algorithm>
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 void ButtonNavigator::onNext(const Callback& callback) {
@@ -56,7 +58,26 @@ void ButtonNavigator::onStep(const Buttons& buttons, const Callback& callback) {
   if (released) lastContinuousNavTime = 0;
 }
 
+// A body swipe drives the same movement the nav buttons do, so every list screen
+// scrolls under the finger without its own coordinate handling. It is wired to the
+// continuous step (a page or a section on the screens that define one) because a
+// swipe is a travel gesture, and because firing it here keeps a screen that calls
+// onNext() — press plus continuous — from moving twice on one swipe.
+bool ButtonNavigator::swipeMatches(const Buttons& buttons) {
+  if (mappedInput == nullptr) return false;
+  const auto scroll = mappedInput->wasListScrollSwipe();
+  if (scroll == list_swipe::Scroll::None) return false;
+  const bool wantsNext = std::find(buttons.begin(), buttons.end(), MappedInputManager::Button::NavNext) != buttons.end();
+  const bool wantsPrevious =
+      std::find(buttons.begin(), buttons.end(), MappedInputManager::Button::NavPrevious) != buttons.end();
+  return scroll == list_swipe::Scroll::PageDown ? wantsNext : wantsPrevious;
+}
+
 void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callback) {
+  if (swipeMatches(buttons)) {
+    callback();
+    return;
+  }
   const bool isPressed = std::any_of(buttons.begin(), buttons.end(), [this](const MappedInputManager::Button button) {
     return mappedInput != nullptr && mappedInput->isPressed(button) && shouldNavigateContinuously();
   });

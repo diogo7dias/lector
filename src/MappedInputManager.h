@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ListSwipeGesture.h"
+
 #include <HalGPIO.h>
 
 class GfxRenderer;
@@ -75,6 +77,9 @@ class MappedInputManager {
   // Bottom-edge up-swipe, offered as a reader-menu gesture only where Home is the
   // capacitive key: elsewhere that swipe already means Home (wasHomeGesture).
   bool wasReaderMenuSwipeUp() const;
+  // Vertical swipe over the body of a list screen, with the gesture bands excluded.
+  // ButtonNavigator turns it into the same movement the nav buttons make.
+  list_swipe::Scroll wasListScrollSwipe() const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;

@@ -378,6 +378,17 @@ bool MappedInputManager::wasHomeGesture() const {
 
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
+list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
+  int sx = 0;
+  int sy = 0;
+  int ex = 0;
+  int ey = 0;
+  if (!decodeSwipe(sx, sy, ex, ey)) return list_swipe::Scroll::None;
+  const auto scroll = list_swipe::scrollFrom(renderer.getScreenWidth(), renderer.getScreenHeight(), sx, sy, ex, ey);
+  if (scroll != list_swipe::Scroll::None) rememberTouchHeldTime();
+  return scroll;
+}
+
 bool MappedInputManager::wasPressed(const Button button) const {
   if (button == Button::Back && wasBackGesture()) return true;
   return mapButton(button, &HalGPIO::wasPressed);
