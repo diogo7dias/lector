@@ -381,9 +381,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   const unsigned long sleepTBudget = millis();
   // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
   // when the stages were first measured, and only about 4800 ms of that was the panel.
-  char paintStages[96];
+  char paintStages[256];
   SleepTiming::format(paintStages, sizeof(paintStages));
-  char sleepNote[224];
+  char sleepNote[384];
   snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
            sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint,
            sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi, paintStages);

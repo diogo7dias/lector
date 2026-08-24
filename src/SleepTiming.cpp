@@ -7,9 +7,10 @@
 namespace SleepTiming {
 namespace {
 
-// Eight is one more than the longest path in the current sleep faces (favourites, popup,
-// decode, face, state, plus room for two more before anyone has to think about it).
-constexpr size_t kMax = 8;
+// The wallpaper face is the longest path: favourites, popup, four index-pick stages, the
+// file open, decode, face, state -- ten today, with room left before anyone has to think
+// about it.
+constexpr size_t kMax = 16;
 
 const char* names[kMax];
 uint16_t stamps[kMax];

@@ -927,10 +927,24 @@ void SleepActivity::renderCustomSleepScreen() const {
       const uint32_t indexStartMs = millis();
       windex::Reader reader;
       if (reader.open() && reader.recordCount() > 0 && strcmp(windex::dirPathForId(reader.dirId()), sleepDir) == 0) {
+        SleepTiming::mark("idxopen");
         auto queueState = windex::loadQueueState();
+        SleepTiming::mark("idxstate");
         const std::string prefix = std::string(sleepDir) + "/";
         const auto nameAt = [&](const size_t i) { return reader.nameAt(i); };
-        const auto liveInFolder = [&](const std::string& n) { return Storage.exists((prefix + n).c_str()); };
+        // Counted and timed: each probe is a FAT lookup by name, which is a linear scan of
+        // a folder that can hold thousands of wallpapers. If the pick's cost turns out to
+        // be these probes rather than the index reads, the fix is to stop probing and let
+        // the open that follows be the liveness test.
+        uint32_t liveProbes = 0;
+        uint32_t liveProbeMs = 0;
+        const auto liveInFolder = [&](const std::string& n) {
+          const uint32_t probeStart = millis();
+          const bool live = Storage.exists((prefix + n).c_str());
+          liveProbeMs += millis() - probeStart;
+          liveProbes++;
+          return live;
+        };
         const auto counterpart = [](const std::string& n) { return FavoriteImage::favoriteCounterpart(n); };
         auto result = sleep_queue::pickNext(queueState, reader.recordCount(), esp_random(), esp_random(), nameAt,
                                             liveInFolder, counterpart);
@@ -947,12 +961,16 @@ void SleepActivity::renderCustomSleepScreen() const {
         // Lap over: every wallpaper has now been shown once, so this is the
         // cheapest possible moment to compact the holes that in-place deletes
         // left behind. Flags the next cold boot; nothing happens tonight.
+        SleepTiming::mark("idxpick");
+        LOG_INF("SLP", "index live probes %u in %ums", static_cast<unsigned>(liveProbes),
+                static_cast<unsigned>(liveProbeMs));
         if (result.lapWrapped) windex::noteLapWrapped();
         // Persist the advanced state even when the render below fails: the
         // cursor must step PAST a present-but-unrenderable file, or every
         // sleep would retry it and show the logo face forever. A crash before
         // the render costs one skipped wallpaper, nothing more.
         windex::storeQueueState(queueState);
+        SleepTiming::mark("idxstore");
         stateDirty = true;
         if (result.needsRebuild) {
           // Too many dead slots this pick: use the jump pick tonight and let

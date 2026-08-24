@@ -22,9 +22,15 @@
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const bool grayscale,
                           const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&)) {
   HalFile file;
+  const uint32_t openStartMs = millis();
   if (!Storage.openFileForRead("SLP", path, file)) {
     return false;
   }
+  // Opening by path is a FAT lookup: a linear walk of the directory. In a wallpaper
+  // folder with thousands of files that is not free, and the gap between picking a name
+  // and reading its header measured 2609 ms with nothing to explain it.
+  LOG_INF("SLP", "pxc open in %ums", static_cast<unsigned>(millis() - openStartMs));
+  SleepTiming::mark("pxcopen");
 
   uint16_t pxcWidth = 0, pxcHeight = 0;
   if (file.read(&pxcWidth, 2) != 2 || file.read(&pxcHeight, 2) != 2) {
