@@ -75,6 +75,14 @@ void OpdsServerListActivity::loop() {
     return;
   }
 
+  // A tap on a row selects and activates it, the same as every other list.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < getItemCount()) {
+    selectedIndex = tappedRow;
+    activateSelected();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     activateSelected();
     return;

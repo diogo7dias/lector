@@ -533,7 +533,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       renderer.fillRect(rect.x, itemY - 2, rect.width, rowHeight);
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
       const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
-      renderer.drawText(itemFontId, headingX, itemY, headingText.c_str(), /*black=*/false);
+      const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
+      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
       continue;
     }
 
@@ -555,16 +556,24 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     auto font = itemFontId;
     auto item = renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
 
+    // Rows are finger-height on a touch board (listRowHeight rises from 40 px to 56),
+    // so the text block is centred in the row rather than parked against its top edge,
+    // which is what leaves the taller row looking top-heavy and half empty.
+    const int subtitleOffset = 22;
+    const int blockHeight = (rowSubtitle != nullptr) ? subtitleOffset + renderer.getLineHeight(SMALL_FONT_ID)
+                                                     : renderer.getLineHeight(font);
+    const int textY = itemY + std::max(0, (rowHeight - blockHeight) / 2);
+
     // Where the value will land, needed here so the selection can bracket it before
     // any of the row's text is drawn over.
     const int valueTextWidth = valueText.empty() ? 0 : renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
     const int valueX = rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth;
-    const int valueY = (rowSubtitle != nullptr) ? itemY + 10 : itemY;
+    const int valueY = (rowSubtitle != nullptr) ? textY + 10 : textY;
 
     if (i == selectedIndex) {
       const int titleX = rect.x + BaseMetrics::values.contentSidePadding;
       const Rect spans[2] = {
-          Rect(titleX, itemY, renderer.getTextWidth(font, item.c_str()), renderer.getLineHeight(font)),
+          Rect(titleX, textY, renderer.getTextWidth(font, item.c_str()), renderer.getLineHeight(font)),
           Rect(valueX, valueY, valueTextWidth, renderer.getLineHeight(UI_10_FONT_ID)),
       };
       selectionInvertsText =
@@ -572,14 +581,14 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         spans, valueText.empty() ? 1 : 2);
     }
 
-    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), drawnOnPaper(i));
+    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, textY, item.c_str(), drawnOnPaper(i));
 
     // Apply checkerboard dither to create gray text effect for dimmed items
     if (rowDimmed && rowDimmed(i) && drawnOnPaper(i)) {
       const int titleWidth = renderer.getTextWidth(font, item.c_str());
       const int lineH = renderer.getLineHeight(font);
       const int tx = rect.x + BaseMetrics::values.contentSidePadding;
-      for (int py = itemY; py < itemY + lineH; py++)
+      for (int py = textY; py < textY + lineH; py++)
         for (int px = tx; px < tx + titleWidth; px++)
           if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
     }
@@ -588,8 +597,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
         auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 22, subtitle.c_str(),
-                          drawnOnPaper(i));
+        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding,
+                          textY + subtitleOffset, subtitle.c_str(), drawnOnPaper(i));
       }
     }
 
@@ -1317,8 +1326,15 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const bool outlined = SETTINGS.sbBarOutline != 0;
   const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), outlined);
   const int floatMargin = SETTINGS.floatingBarMarginPx();
-  const int barLeft = ml + floatMargin;
-  const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2);
+  // Edge bars bleed past both ends of the logical screen. On the X4 Pro the panel sits
+  // slightly off-centre behind its bezel, so a bar drawn exactly to x=0 stops short of
+  // the glass on one side and its starting edge shows as a stub at low percentages.
+  // Overdrawing costs nothing (fillRect clips) and makes an empty bar start off-screen
+  // and a full one run off the other end, which is what reads as edge to edge. A
+  // floating bar wants its gap, so it takes no bleed.
+  const int edgeBleed = floatMargin > 0 ? 0 : kEdgeBarBleedPx;
+  const int barLeft = ml + floatMargin - edgeBleed;
+  const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2 + edgeBleed * 2);
   auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
   // How far the bar nearest an edge is stretched to reach the panel itself. The
   // viewable margins hold content clear of the bezel, which leaves a strip of paper

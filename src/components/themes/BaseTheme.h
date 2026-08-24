@@ -182,6 +182,11 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 }
 
 class BaseTheme {
+  // How far the reader's edge progress bars overdraw past each end of the logical
+  // screen, so a mount offset behind the bezel cannot leave a visible stub at 0% or a
+  // gap at 100%. Clipped by the renderer, so it only ever costs pixels that exist.
+  static constexpr int kEdgeBarBleedPx = 8;
+
  public:
   virtual ~BaseTheme() = default;
 

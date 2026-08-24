@@ -52,6 +52,22 @@ class ValueBarPopup {
       return true;
     }
 
+    // Touch drives the bar directly: press anywhere along it, or drag across it, and the
+    // value follows the finger. The bar is the control, so this is what a touch user
+    // reaches for first — and it does not depend on the front-button hints underneath.
+    int tx = 0;
+    int ty = 0;
+    if (barW_ > 0 && (input.isScreenTouchHeld(tx, ty) || input.wasScreenTouchDown(tx, ty))) {
+      if (ty >= barY_ - kTouchSlack && ty <= barY_ + barH_ + kTouchSlack) {
+        const int next = clamp(valueForX(tx));
+        if (next != value_) {
+          value_ = next;
+          requestUpdate();
+        }
+        return true;
+      }
+    }
+
     // The nav callbacks fire synchronously inside these calls, so capturing
     // requestUpdate by reference is safe (never stored past this handleInput).
     nav_.onPressAndContinuous({MappedInputManager::Button::Left},
@@ -76,7 +92,7 @@ class ValueBarPopup {
     return true;
   }
 
-  void render(const GfxRenderer& renderer) const {
+  void render(const GfxRenderer& renderer) const {  // NOLINT: records the bar rect for touch
     if (!active) return;
     const auto& m = UITheme::getInstance().getMetrics();
     const int screenW = renderer.getScreenWidth();
@@ -120,6 +136,13 @@ class ValueBarPopup {
     const int barWidth = std::min(dialogW - innerPad * 2, 360);
     const int barX = dialogX + (dialogW - barWidth) / 2;
     const int barY = y;
+    // Remember where the bar landed so handleInput can hit-test it. Layout depends on the
+    // theme metrics and the screen, so it is cheaper to record what was drawn than to
+    // recompute it on every touch sample.
+    barX_ = barX;
+    barY_ = barY;
+    barW_ = barWidth;
+    barH_ = barH;
     renderer.drawRect(barX, barY, barWidth, barH);
     const int range = std::max(1, maxValue_ - minValue_);
     const int fillWidth = (barWidth - 4) * (value_ - minValue_) / range;
@@ -137,6 +160,17 @@ class ValueBarPopup {
 
  private:
   int clamp(int v) const { return std::clamp(v, minValue_, maxValue_); }
+
+  // Maps a touch x onto the value range, snapped to the setting's own step so a drag
+  // produces the same values the buttons do.
+  int valueForX(const int x) const {
+    const int usableW = std::max(1, barW_ - 4);
+    const int offset = std::clamp(x - (barX_ + 2), 0, usableW);
+    const int range = maxValue_ - minValue_;
+    const int raw = minValue_ + (offset * range + usableW / 2) / usableW;
+    const int step = std::max(1, smallStep_);
+    return minValue_ + ((raw - minValue_ + step / 2) / step) * step;
+  }
 
   void adjustBy(int delta, const std::function<void()>& requestUpdate) {
     const int next = clamp(value_ + delta);
@@ -157,4 +191,11 @@ class ValueBarPopup {
   std::function<void(int)> onCommitCallback;
   // Faster auto-repeat than the default nav cadence so a wide range is quick to cross.
   ButtonNavigator nav_{120, 350};
+  // Where render() last drew the bar, and how far above and below it a touch still counts:
+  // the bar itself is only 16 px tall, well under a finger.
+  static constexpr int kTouchSlack = 24;
+  mutable int barX_ = 0;
+  mutable int barY_ = 0;
+  mutable int barW_ = 0;
+  mutable int barH_ = 0;
 };

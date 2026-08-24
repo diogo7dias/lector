@@ -142,6 +142,16 @@ void InstalledFontsActivity::loopFamilies() {
 
   if (families.empty()) return;
 
+  // A tap on a family row selects it and opens its actions, the same as Confirm.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < itemCount()) {
+    selectedIndex = tappedRow;
+    selectedAction = Action::Send;
+    view = View::Actions;
+    requestUpdate();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     selectedAction = Action::Send;
     view = View::Actions;
@@ -174,6 +184,19 @@ void InstalledFontsActivity::loopActions() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     view = View::Families;
     requestUpdate();
+    return;
+  }
+
+  // Same for the action rows on the second view.
+  int tappedAction = 0;
+  if (mappedInput.wasRowTapped(tappedAction) && tappedAction >= 0 &&
+      tappedAction < static_cast<int>(Action::Count)) {
+    selectedAction = static_cast<Action>(tappedAction);
+    if (selectedAction == Action::Delete) {
+      promptDelete();
+    } else {
+      sendSelectedFamily();
+    }
     return;
   }
 

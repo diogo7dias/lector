@@ -39,6 +39,15 @@ void StealLookActivity::onExit() {
 void StealLookActivity::loop() {
   const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, true);
 
+  // A tap on a row selects and activates it, the same as every other list.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(candidates.size())) {
+    selectorIndex = static_cast<size_t>(tappedRow);
+    setResult(FilePathResult{candidates[selectorIndex].cachePath});
+    finish();
+    return;
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (!candidates.empty() && selectorIndex < candidates.size()) {
       setResult(FilePathResult{candidates[selectorIndex].cachePath});
