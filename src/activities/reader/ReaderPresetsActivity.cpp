@@ -17,6 +17,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 size_t ReaderPresetsActivity::presetCount() const { return READER_PRESETS.getCount(); }
 
 bool ReaderPresetsActivity::hasSaveRow() const { return !READER_PRESETS.isFull(); }
@@ -36,21 +38,21 @@ int ReaderPresetsActivity::matchingPresetIndex() const {
 }
 
 void ReaderPresetsActivity::clampSelector() {
-  const int rows = rowCount();
-  if (rows <= 0) {
-    selectorIndex = 0;
+  const int count = rowCount();
+  if (count <= 0) {
+    nav.selected = 0;
     return;
   }
-  if (selectorIndex >= static_cast<size_t>(rows)) selectorIndex = static_cast<size_t>(rows - 1);
+  if (nav.selected >= count) nav.selected = count - 1;
 }
 
-void ReaderPresetsActivity::onEnter() {
-  Activity::onEnter();
-  selectorIndex = 0;
-  requestUpdate();
+void ReaderPresetsActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+  labels.clear();
 }
 
-void ReaderPresetsActivity::onExit() { Activity::onExit(); }
+const char* ReaderPresetsActivity::headerTitle() const { return tr(STR_READING_THEMES); }
 
 // ── Actions ─────────────────────────────────────────────────────────────────
 
@@ -140,125 +142,104 @@ void ReaderPresetsActivity::confirmDelete(const size_t index) {
       });
 }
 
-void ReaderPresetsActivity::activateSelected() {
-  if (isSaveRow(selectorIndex)) {
+void ReaderPresetsActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  const size_t row = static_cast<size_t>(index);
+  if (isSaveRow(row)) {
     startSaveCurrent();
     return;
   }
-  if (selectorIndex >= presetCount()) return;
-  openPresetActions(selectorIndex);
+  if (row >= presetCount()) return;
+  openPresetActions(row);
+}
+
+void ReaderPresetsActivity::onBackButton() {
+  ActivityResult res;
+  res.isCancelled = true;
+  setResult(std::move(res));
+  finish();
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-void ReaderPresetsActivity::loop() {
+bool ReaderPresetsActivity::handleCustomInput() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
     // The popup acts on button press; if that input closed it, the trailing release
     // must be swallowed below (Back would leave the screen, Confirm would reopen it).
     popupClosing = !optionPopup.isActive();
-    return;
+    return true;
   }
   if (popupClosing) {
     if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
         mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return;  // closing press still held
+      return true;  // closing press still held
     }
     popupClosing = false;
     if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
         mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      return;  // swallow the release that closed the popup
+      return true;  // swallow the release that closed the popup
     }
   }
-
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, true);
-
-  // A tap on a row selects and activates it, the same as every other list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < rowCount()) {
-    selectorIndex = static_cast<size_t>(tappedRow);
-    activateSelected();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    activateSelected();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult res;
-    res.isCancelled = true;
-    setResult(std::move(res));
-    finish();
-    return;
-  }
-
-  const int listSize = rowCount();
-
-  buttonNavigator.onNextPress([this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousPress([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
+  return false;
 }
 
-void ReaderPresetsActivity::render(RenderLock&&) {
-  // Drawn over the list still in the framebuffer, so the popup reads as sitting on it.
-  if (optionPopup.processRender(renderer, mappedInput)) return;
-
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_READING_THEMES));
-
-  int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-
+const char* ReaderPresetsActivity::noteText() const {
   // One status line above the list: nothing saved yet, or no slot left to save into.
   // The list itself is never empty — it always holds either themes or the save row.
-  const char* note = nullptr;
-  if (presetCount() == 0) {
-    note = tr(STR_READING_THEMES_NONE);
-  } else if (!hasSaveRow()) {
-    note = tr(STR_READING_THEMES_FULL);
-  }
-  if (note != nullptr) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, note);
-    const int noteHeight = 20 + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
-    contentTop += noteHeight;
-    contentHeight -= noteHeight;
-  }
+  if (presetCount() == 0) return tr(STR_READING_THEMES_NONE);
+  if (!hasSaveRow()) return tr(STR_READING_THEMES_FULL);
+  return nullptr;
+}
+
+int ReaderPresetsActivity::noteHeight() const {
+  if (noteText() == nullptr) return 0;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return 20 + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
+}
+
+void ReaderPresetsActivity::drawChrome() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
+                 tr(STR_READING_THEMES));
+
+  const char* note = noteText();
+  if (note == nullptr) return;
+  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, note);
+}
+
+void ReaderPresetsActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // The note is drawn with the chrome, so the list starts below it.
+  screen.setContentMargin(fui::Insets{
+      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + noteHeight()), 0,
+      static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+
+  const int count = rowCount();
+  if (count <= 0) return;
 
   const int matching = matchingPresetIndex();
   const auto& presets = READER_PRESETS.getPresets();
+  labels.assign(static_cast<size_t>(count), std::string());
+  rows.assign(static_cast<size_t>(count), fui::ListItem{});
+  for (int i = 0; i < count; ++i) {
+    labels[i] = isSaveRow(static_cast<size_t>(i)) ? std::string(tr(STR_SAVE_CURRENT_LOOK)) : presets[i].name;
+    rows[i].label = labels[i].c_str();
+    // The book's own settings are marked in the value column rather than in the name,
+    // so the name stays what the user typed and the mark moves as the book changes.
+    if (i == matching) rows[i].value = tr(STR_CURRENT);
+    rows[i].actionValue = static_cast<int16_t>(i);
+  }
 
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, rowCount(), static_cast<int>(selectorIndex),
-      [this, &presets](int index) {
-        if (isSaveRow(static_cast<size_t>(index))) return std::string(tr(STR_SAVE_CURRENT_LOOK));
-        return presets[index].name;
-      },
-      nullptr, nullptr,
-      // The book's own settings are marked in the value column rather than in the name,
-      // so the name stays what the user typed and the mark moves as the book changes.
-      [matching](int index) { return index == matching ? std::string(tr(STR_CURRENT)) : std::string(); });
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(count);
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
+}
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+bool ReaderPresetsActivity::drawOverlay() {
+  // Drawn over the finished list, so the popup reads as sitting on it.
+  return optionPopup.processRender(renderer, mappedInput);
 }
