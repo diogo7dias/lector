@@ -12,6 +12,9 @@
 #include <Memory.h>
 #include <Txt.h>
 #include <Xtc.h>
+
+#include "SleepTiming.h"
+
 #include <esp_random.h>
 
 #include <algorithm>
@@ -650,6 +653,7 @@ void SleepActivity::onEnter() {
   // jammed worker can never block sleeping; sized for a few scan-heavy renames.
   DeferredFavorite::waitForIdle(15000);
   DeferredFavorite::reconcile();
+  SleepTiming::mark("favs");
 
   // Deep sleep is a chip reset, so the wake cannot know what the panel is holding unless
   // we write it down. Clear first and let the render path set it, so any screen that is
@@ -659,10 +663,12 @@ void SleepActivity::onEnter() {
   APP_STATE.lastSleepWallpaperPath.clear();
 
   renderSleepScreen();
+  SleepTiming::mark("face");
 
   if (APP_STATE.lastSleepWallpaperPath != previousWallpaper || stateDirty) {
     APP_STATE.saveToFile();
   }
+  SleepTiming::mark("state");
 }
 
 void SleepActivity::renderSleepScreen() const {
@@ -706,6 +712,7 @@ void SleepActivity::renderSleepScreen() const {
   } else {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
+  SleepTiming::mark("popup");
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
@@ -1122,6 +1129,10 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   // and once per pass below for the same reason the bitmap is. No-ops unless a
   // SleepInfoOverlayScope named a wallpaper, so the cover face draws nothing.
   drawSleepInfoOverlay(renderer);
+
+  // Everything above this point is card reading and decoding; everything below is the
+  // panel. The gap between "decode" and "face" is the wallpaper's own refresh cost.
+  SleepTiming::mark("decode");
 
   if (hasGreyscale) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is

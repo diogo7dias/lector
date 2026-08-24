@@ -12,6 +12,8 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include "SleepTiming.h"
+
 #include <cstdint>
 #include <cstdlib>
 
@@ -144,6 +146,8 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // refresh, so the two land together (no intermediate wallpaper-only flash).
   if (overlay != nullptr) overlay(renderer);
   stage("decode BW");
+  // Same split the bitmap face reports: card and decode above, panel below.
+  SleepTiming::mark("decode");
 
   if (!grayscale) {
     // 1-bit fast path: a single refresh of the dithered silhouette, skipping the

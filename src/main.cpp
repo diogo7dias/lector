@@ -33,6 +33,7 @@
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SleepTiming.h"
 #include "UiFont.h"
 #include "WakeTiming.h"
 #include "activities/Activity.h"
@@ -283,6 +284,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   // answered with a number. Same split idea: each stamp is taken after the step it names,
   // and the report prints the difference between neighbours.
   const unsigned long sleepT0 = millis();
+  SleepTiming::begin();
   unsigned long sleepTState = sleepT0;
   unsigned long sleepTPaint = sleepT0;
   unsigned long sleepTFrame = sleepT0;
@@ -377,10 +379,14 @@ void enterDeepSleep(bool fromTimeout = false) {
   // paid for. The panel power-down and the total are serial-only: the file is closed by
   // then, and a kit log is where those two get read anyway.
   const unsigned long sleepTBudget = millis();
-  char sleepNote[128];
-  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu",
+  // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
+  // when the stages were first measured, and only about 4800 ms of that was the panel.
+  char paintStages[96];
+  SleepTiming::format(paintStages, sizeof(paintStages));
+  char sleepNote[224];
+  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
            sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint,
-           sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi);
+           sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi, paintStages);
   PerfLog::note(sleepNote);
   PerfLog::flush();
 
