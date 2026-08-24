@@ -27,7 +27,17 @@ struct FontManifestFamily {
 
   char name[MAX_NAME] = {};
   char description[MAX_DESCRIPTION] = {};
+  // Empty unless this family is the one being retained: see FileRetention. The
+  // count survives either way, because the download screen needs "3 of 9" long
+  // after the names themselves have been dropped.
+  //
+  // Nothing is allocated here while a family is being parsed. The parser fills a
+  // fixed scratch array and copies into this vector only for a retained family:
+  // growing a vector per family cost 896 bytes each, and on the device that
+  // memory did not come back when the vector was cleared — 26 families burned
+  // 23 KB of the heap a TLS session then had to fit into.
   std::vector<FontManifestFile> files;
+  uint16_t fileCount = 0;
   uint32_t totalSize = 0;
 
   // Disk state, not manifest state: filled in by the caller after the parse, and
@@ -42,12 +52,37 @@ class FontManifestParser {
   // files; these leave room to grow while keeping the worst case bounded on a device
   // that cannot afford an unbounded one.
   static constexpr size_t MAX_FAMILIES = 96;
-  static constexpr size_t MAX_FILES_PER_FAMILY = 32;
+  // Held as a fixed array inside the parser, so this bound is also its cost:
+  // 16 * sizeof(FontManifestFile) = 896 bytes, against 9 files per family today.
+  static constexpr size_t MAX_FILES_PER_FAMILY = 16;
+
+  // Which families keep their file lists once parsed. 26 families of 9 files cost
+  // 27456 bytes resident, and on a reader that has just brought WiFi up, that is
+  // the difference between a TLS handshake that completes and one that dies with
+  // 4844 bytes free. Only the family actually being downloaded needs its names.
+  enum class FileRetention : uint8_t {
+    All,   // every family keeps its files (the default, and what tests use)
+    None,  // no family keeps files; counts and sizes still add up
+    One,   // only the family named by retainFilesFor(), and it is the only one kept at all
+  };
+
+  // Called as each family finishes parsing, while its file list is still intact
+  // even when it is about to be dropped. This is where a caller stamps whatever
+  // it can only work out from the names, such as what is already on the card.
+  // The files are the parser's scratch array, valid only for this call.
+  using FamilyHook = void (*)(void* context, FontManifestFamily& family, const FontManifestFile* files, size_t count);
 
   FontManifestParser();
 
   FontManifestParser(const FontManifestParser&) = delete;
   FontManifestParser& operator=(const FontManifestParser&) = delete;
+
+  void retainFiles(FileRetention retention) { retention_ = retention; }
+  void retainFilesFor(const char* familyName);
+  void setFamilyHook(FamilyHook hook, void* context) {
+    familyHook_ = hook;
+    familyHookContext_ = context;
+  }
 
   void reset();
   void feed(const char* data, size_t len);
@@ -122,7 +157,16 @@ class FontManifestParser {
   std::vector<FontManifestFamily> families_;
   FontManifestFamily currentFamily_;
   FontManifestFile currentFile_;
+  // The files of the family being parsed. Fixed storage, reused family after
+  // family, so parsing a manifest allocates nothing per family.
+  FontManifestFile fileScratch_[MAX_FILES_PER_FAMILY];
+  uint16_t fileScratchCount_ = 0;
   bool currentFileHasCrc32_ = false;
+
+  FileRetention retention_ = FileRetention::All;
+  char retainedFamily_[FontManifestFamily::MAX_NAME] = {};
+  FamilyHook familyHook_ = nullptr;
+  void* familyHookContext_ = nullptr;
 
   bool error_ = false;
   bool tooLarge_ = false;

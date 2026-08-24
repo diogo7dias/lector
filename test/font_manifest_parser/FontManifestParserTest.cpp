@@ -2,6 +2,7 @@
 
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "lib/JsonParser/FontManifestParser.h"
 
@@ -195,6 +196,72 @@ TEST(FontManifestParser, StopsAtTheFileCapInsteadOfGrowingForever) {
 
   EXPECT_TRUE(parser.hasError());
   EXPECT_TRUE(parser.tooLarge());
+}
+
+TEST(FontManifestParser, RetainingNoFilesKeepsCountsAndSizes) {
+  FontManifestParser parser;
+  parser.retainFiles(FontManifestParser::FileRetention::None);
+  feedAll(parser, kRealisticManifest);
+
+  ASSERT_FALSE(parser.hasError());
+  ASSERT_EQ(parser.families().size(), 2u);
+  for (const auto& family : parser.families()) {
+    EXPECT_TRUE(family.files.empty()) << family.name;
+  }
+  EXPECT_EQ(parser.families()[0].fileCount, 2u);
+  EXPECT_EQ(parser.families()[0].totalSize, 474680u + 537269u);
+  EXPECT_EQ(parser.families()[1].fileCount, 1u);
+  EXPECT_EQ(parser.families()[1].totalSize, 700000u);
+}
+
+TEST(FontManifestParser, RetainingOneFamilyKeepsOnlyThatFamily) {
+  FontManifestParser parser;
+  parser.retainFilesFor("Lora");
+  feedAll(parser, kRealisticManifest);
+
+  ASSERT_FALSE(parser.hasError());
+  ASSERT_EQ(parser.families().size(), 1u);
+  EXPECT_STREQ(parser.families()[0].name, "Lora");
+  ASSERT_EQ(parser.families()[0].files.size(), 1u);
+  EXPECT_STREQ(parser.families()[0].files[0].name, "Lora_14.cpfont");
+}
+
+TEST(FontManifestParser, RetainingAnAbsentFamilyKeepsNothing) {
+  FontManifestParser parser;
+  parser.retainFilesFor("NotHere");
+  feedAll(parser, kRealisticManifest);
+
+  ASSERT_FALSE(parser.hasError());
+  EXPECT_TRUE(parser.families().empty());
+}
+
+TEST(FontManifestParser, FamilyHookSeesTheFilesBeforeTheyAreDropped) {
+  struct Seen {
+    std::vector<std::string> names;
+    std::vector<size_t> fileCounts;
+  } seen;
+
+  FontManifestParser parser;
+  parser.retainFiles(FontManifestParser::FileRetention::None);
+  parser.setFamilyHook(
+      [](void* context, FontManifestFamily& family, const FontManifestFile* files, size_t count) {
+        auto* out = static_cast<Seen*>(context);
+        out->names.emplace_back(family.name);
+        // The point of the hook: the names are still here, and a moment later
+        // they are not.
+        EXPECT_NE(files, nullptr);
+        out->fileCounts.push_back(count);
+      },
+      &seen);
+  feedAll(parser, kRealisticManifest);
+
+  ASSERT_FALSE(parser.hasError());
+  ASSERT_EQ(seen.names.size(), 2u);
+  EXPECT_EQ(seen.names[0], "Alegreya");
+  EXPECT_EQ(seen.names[1], "Lora");
+  EXPECT_EQ(seen.fileCounts[0], 2u);
+  EXPECT_EQ(seen.fileCounts[1], 1u);
+  EXPECT_TRUE(parser.families()[0].files.empty());
 }
 
 TEST(FontManifestParser, ResetClearsPreviousParse) {

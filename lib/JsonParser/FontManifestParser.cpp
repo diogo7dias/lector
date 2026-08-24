@@ -22,7 +22,7 @@ uint32_t parseUnsigned(const char* value, size_t len) {
 // Vectors grow in steps rather than one element at a time: each step is a single
 // probed allocation instead of a doubling nobody checked.
 constexpr size_t FAMILY_GROWTH_STEP = 16;
-constexpr size_t FILE_GROWTH_STEP = 8;
+
 
 }  // namespace
 
@@ -30,6 +30,11 @@ FontManifestParser::FontManifestParser()
     : parser_(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
                             sOnArrayStart, sOnArrayEnd}) {
   reset();
+}
+
+void FontManifestParser::retainFilesFor(const char* familyName) {
+  retention_ = FileRetention::One;
+  safeCopy(retainedFamily_, sizeof(retainedFamily_), familyName, strlen(familyName));
 }
 
 void FontManifestParser::reset() {
@@ -45,7 +50,10 @@ void FontManifestParser::reset() {
   families_.shrink_to_fit();
   currentFamily_ = FontManifestFamily{};
   currentFile_ = FontManifestFile{};
+  fileScratchCount_ = 0;
   currentFileHasCrc32_ = false;
+  // Deliberately not cleared: retention, the retained name, and the hook are
+  // configuration the caller set before feeding, not parse state.
   error_ = false;
   tooLarge_ = false;
   outOfMemory_ = false;
@@ -64,10 +72,36 @@ void FontManifestParser::finish() {
 void FontManifestParser::beginFamily() {
   currentFamily_ = FontManifestFamily{};
   currentFile_ = FontManifestFile{};
+  fileScratchCount_ = 0;
   currentFileHasCrc32_ = false;
 }
 
 void FontManifestParser::commitFamily() {
+  currentFamily_.fileCount = fileScratchCount_;
+
+  // The hook runs while the names are still here, whatever happens to them next.
+  if (familyHook_) familyHook_(familyHookContext_, currentFamily_, fileScratch_, fileScratchCount_);
+
+  const bool isRetained = retention_ == FileRetention::One && strcmp(currentFamily_.name, retainedFamily_) == 0;
+  const bool keepFiles = retention_ == FileRetention::All || isRetained;
+
+  // A One re-read is asking about a single family, so the other 25 are not even
+  // kept as empty shells: holding them cost 4864 bytes of a heap that had 18608
+  // free, and growing that vector is where the re-read ran out of memory.
+  if (retention_ == FileRetention::One && !isRetained) {
+    currentFamily_ = FontManifestFamily{};
+    return;
+  }
+
+  if (keepFiles && fileScratchCount_ > 0) {
+    if (!reserveNoThrow(currentFamily_.files, fileScratchCount_)) {
+      outOfMemory_ = true;
+      error_ = true;
+      return;
+    }
+    currentFamily_.files.assign(fileScratch_, fileScratch_ + fileScratchCount_);
+  }
+
   if (families_.size() >= MAX_FAMILIES) {
     tooLarge_ = true;
     error_ = true;
@@ -97,22 +131,13 @@ void FontManifestParser::commitFile() {
     error_ = true;
     return;
   }
-  auto& files = currentFamily_.files;
-  if (files.size() >= MAX_FILES_PER_FAMILY) {
+  if (fileScratchCount_ >= MAX_FILES_PER_FAMILY) {
     tooLarge_ = true;
     error_ = true;
     return;
   }
-  if (files.size() == files.capacity()) {
-    const size_t next = files.size() + FILE_GROWTH_STEP;
-    if (!reserveNoThrow(files, next)) {
-      outOfMemory_ = true;
-      error_ = true;
-      return;
-    }
-  }
   currentFamily_.totalSize += currentFile_.size;
-  files.push_back(currentFile_);
+  fileScratch_[fileScratchCount_++] = currentFile_;
   currentFile_ = FontManifestFile{};
   currentFileHasCrc32_ = false;
 }
