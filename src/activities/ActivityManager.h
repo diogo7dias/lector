@@ -12,6 +12,7 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "components/LightPanel.h"
 #include "util/ScreenshotInfo.h"
 
 class Activity;    // forward declaration
@@ -41,6 +42,11 @@ class ActivityManager {
   MappedInputManager& mappedInput;
   std::vector<std::unique_ptr<Activity>> stackActivities;
   std::unique_ptr<Activity> currentActivity;
+
+  // The frontlight panel lives here rather than in any one activity: the top-edge swipe
+  // that opens it works from every screen, and the band is drawn over whatever the last
+  // render left in the framebuffer instead of replacing it.
+  LightPanel lightPanel;
 
   void exitActivity(const RenderLock& lock);
 

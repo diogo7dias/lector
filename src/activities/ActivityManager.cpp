@@ -68,8 +68,15 @@ void ActivityManager::renderTaskLoop() {
       // one place a paint begins, rather than inside the list draws — a screen that draws
       // two lists (the home's books and its menu) would otherwise have the second wipe the
       // first, and a screen that draws none would leave the previous screen's rows live.
-      row_hit::lastRows().begin();
-      currentActivity->render(std::move(lock));
+      if (lightPanel.isActive()) {
+        // Deliberately not re-rendering the activity: the panel is drawn over the page
+        // already in the framebuffer, which is what makes it a live preview of the light
+        // rather than a screen you leave the book for.
+        lightPanel.processRender(renderer);
+      } else {
+        row_hit::lastRows().begin();
+        currentActivity->render(std::move(lock));
+      }
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
@@ -88,6 +95,16 @@ void ActivityManager::loop() {
     // Home from anywhere, handled once here rather than in every activity: the
     // capacitive Home key on boards that have one, the bottom-edge up-swipe on the
     // rest. Activities that need to intervene override handleHomeGesture().
+    // The light panel takes input before anything else while it is up, and the top-edge
+    // swipe opens it from any screen. Handled once here for the same reason Home is.
+    if (lightPanel.isActive()) {
+      if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+    } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
+      lightPanel.show();
+      requestUpdate();
+      return;
+    }
+
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
       if (currentActivity->handleHomeGesture()) return;
       goHome();

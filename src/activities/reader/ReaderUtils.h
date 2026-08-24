@@ -85,13 +85,16 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   return result;
 }
 
-// The reader menu opens on the top-edge menu swipe, on the bottom-edge swipe where
-// that variant is selected, or on the centre tap detectTouchPageTurn reports. With
-// touch reader controls Off the page ignores touch entirely, menu included, so a
-// stray brush cannot open it; the menu stays reachable from the Confirm button.
+// The reader menu opens on the bottom-edge swipe where that variant is selected, or on
+// the centre tap detectTouchPageTurn reports. With touch reader controls Off the page
+// ignores touch entirely, menu included, so a stray brush cannot open it; the menu stays
+// reachable from the Confirm button.
+//
+// The top-edge swipe used to open the menu too. It belongs to the light panel now
+// (ActivityManager), which needs a gesture reachable from every screen; the menu keeps
+// two ways in and is the only one of the two that also has a button.
 inline bool isTouchMenuGesture(const MappedInputManager& input, bool centreTap = false) {
   if (touchMode() == reader_touch::Mode::Off || !input.hasTouch()) return false;
-  if (input.wasMenuGesture()) return true;
   if (readerMenuMode() == reader_touch::MenuMode::SwipeUp && input.wasReaderMenuSwipeUp()) return true;
   return centreTap;
 }
