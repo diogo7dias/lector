@@ -72,6 +72,7 @@
   X(sbChapterPctPos, sbChapterPctPos, chapterPctPos)       \
   X(sbChapterNumPos, sbChapterNumPos, chapterNumPos)       \
   X(sbSessionPagesPos, sbSessionPagesPos, sessionPagesPos) \
+  X(sbParaPagesPos, sbParaPagesPos, paraPagesPos)          \
   X(sbBookBar, sbBookBar, bookBar)                         \
   X(sbChapterBar, sbChapterBar, chapterBar)                \
   X(sbBarThickness, sbBarThickness, barThickness)          \

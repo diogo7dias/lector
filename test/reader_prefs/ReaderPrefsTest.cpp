@@ -536,13 +536,34 @@ TEST(ReaderPrefs, Version11SidecarSeedsTheLayoutSwitchFromTheOldSingleChoice) {
 
 // The layout switch is the newest field, so it must sit last: every field above it
 // keeps the offset a v11 record wrote it at.
-TEST(ReaderPrefs, TheLayoutSwitchIsTheLastFieldAndV11StopsBeforeIt) {
+TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(offsetof(ReaderPrefs, embeddedLayoutStyle), READER_PREFS_V11_SIZE);
-  EXPECT_EQ(READER_PREFS_V11_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(offsetof(ReaderPrefs, sbParaPagesPos), READER_PREFS_V12_SIZE);
+  EXPECT_EQ(READER_PREFS_V11_SIZE + 1, READER_PREFS_V12_SIZE);
+  EXPECT_EQ(READER_PREFS_V12_SIZE + 1, sizeof(ReaderPrefs));
   EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
+  EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(12, ReaderPrefs::VERSION);
+  EXPECT_EQ(13, ReaderPrefs::VERSION);
+}
+
+TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
+  // The byte appended by v13 is not in a v12 record. Everything written before it
+  // has to read back unchanged, and the new item has to land on its default.
+  ReaderPrefs written;
+  written.embeddedLayoutStyle = 0;
+  written.sbSessionPagesPos = 3;
+  written.sbParaPagesPos = 6;
+
+  const auto* raw = reinterpret_cast<const uint8_t*>(&written);
+  const std::string record(reinterpret_cast<const char*>(raw), READER_PREFS_V12_SIZE);
+
+  ReaderPrefs read;
+  std::memcpy(&read, record.data(), record.size());
+  EXPECT_EQ(read.embeddedLayoutStyle, 0);
+  EXPECT_EQ(read.sbSessionPagesPos, 3);
+  EXPECT_EQ(read.sbParaPagesPos, 0) << "a v12 record cannot carry this field";
 }
 
 // ── The interim v11 layout ────────────────────────────────────────────────────

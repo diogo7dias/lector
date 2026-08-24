@@ -1036,6 +1036,46 @@ std::optional<uint16_t> Section::getParagraphIndexForPage(const uint16_t page) c
   return pIdx;
 }
 
+std::optional<uint16_t> Section::pagesUntilNextParagraph(const uint16_t page) const {
+  HalFile f;
+  if (!Storage.openFileForRead("SCT", filePath, f)) {
+    return std::nullopt;
+  }
+
+  const uint32_t fileSize = f.size();
+  f.seek(HEADER_SIZE - sizeof(uint32_t) * 3);
+  uint32_t paragraphLutOffset;
+  serialization::readPod(f, paragraphLutOffset);
+  if (paragraphLutOffset == 0 || paragraphLutOffset >= fileSize) {
+    return std::nullopt;
+  }
+
+  f.seek(paragraphLutOffset);
+  uint16_t count;
+  serialization::readPod(f, count);
+  if (count == 0 || page >= count) {
+    return std::nullopt;
+  }
+
+  const uint32_t lutEnd = paragraphLutOffset + sizeof(uint16_t) + count * sizeof(uint16_t);
+  if (lutEnd > fileSize) {
+    return std::nullopt;
+  }
+
+  f.seek(paragraphLutOffset + sizeof(uint16_t) + page * sizeof(uint16_t));
+  uint16_t here;
+  serialization::readPod(f, here);
+
+  uint16_t spanned = 0;
+  for (uint16_t i = page + 1; i < count; i++) {
+    uint16_t next;
+    serialization::readPod(f, next);
+    if (next != here) break;
+    spanned++;
+  }
+  return spanned;
+}
+
 std::optional<uint16_t> Section::getPageForListItemIndex(const uint16_t liIndex) const {
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f)) {

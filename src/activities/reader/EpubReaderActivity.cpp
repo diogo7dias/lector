@@ -3348,6 +3348,14 @@ void EpubReaderActivity::renderStatusBar() const {
   // Pages turned this sitting. Left at -1 when statistics tracking is off, which
   // hides the item instead of showing a 0 that will never move.
   if (statsTrackingActive) d.sessionPages = static_cast<int>(statsSession.currentSession().pagesTurned);
+  // Read from the chapter's paragraph table, and only when the item is on: it costs
+  // one section-file open, which is not worth paying on every page for a number
+  // nobody asked to see.
+  if (SETTINGS.sbParaPagesPos != CrossPointSettings::SB_ANCHOR_OFF) {
+    if (const auto left = section->pagesUntilNextParagraph(section->currentPage)) {
+      d.paragraphPagesLeft = static_cast<int>(*left);
+    }
+  }
   d.bookmarked = currentPageBookmarked;
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so

@@ -62,6 +62,7 @@ void collectStatusBarSlots(bool top, std::string slots[3]) {
       {SETTINGS.sbPagePos, SAMPLE_PAGE},         {SETTINGS.sbBookPctPos, SAMPLE_PERCENT},
       {SETTINGS.sbChapterPctPos, SAMPLE_PERCENT}, {SETTINGS.sbChapterNumPos, "Ch 2/14"},
       {SETTINGS.sbSessionPagesPos, "+8"},
+      {SETTINGS.sbParaPagesPos, ">P.0"},
   };
   for (const auto& item : items) {
     if (item.anchor == CrossPointSettings::SB_ANCHOR_OFF) continue;

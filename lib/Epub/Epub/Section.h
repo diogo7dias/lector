@@ -176,6 +176,18 @@ class Section {
   // Look up the page number for a running list-item index from the li LUT.
   std::optional<uint16_t> getPageForListItemIndex(uint16_t liIndex) const;
 
+  /**
+   * How many pages after `page` are still inside the paragraph `page` starts in.
+   * 0 means a new paragraph starts on the very next page, which is the usual
+   * answer; a larger number means the paragraph runs on that many pages further.
+   *
+   * Read straight from the paragraph LUT, which stores one paragraph index per
+   * page, so a run of equal entries is a paragraph spanning those pages. Returns
+   * nullopt when the section has no paragraph LUT (an image-only chapter, or a
+   * cache written before the LUT existed).
+   */
+  std::optional<uint16_t> pagesUntilNextParagraph(uint16_t page) const;
+
   // Look up the synthetic paragraph index for the given rendered page.
   std::optional<uint16_t> getParagraphIndexForPage(uint16_t page) const;
 

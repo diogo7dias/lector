@@ -27,6 +27,7 @@ enum ItemId {
   ITEM_CHAPTER_PCT,     // anchor
   ITEM_CHAPTER_NUM,     // anchor
   ITEM_SESSION_PAGES,   // anchor
+  ITEM_PARA_PAGES,      // anchor
   ITEM_BOOK_BAR,        // Off / Top / Bottom (cycle)
   ITEM_CHAPTER_BAR,     // Off / Top / Bottom (cycle)
   ITEM_BAR_THICKNESS,   // Slim / Medium / Fat (cycle)
@@ -63,6 +64,8 @@ StrId itemLabel(int id) {
       return StrId::STR_CHAPTER_NUMBER;
     case ITEM_SESSION_PAGES:
       return StrId::STR_SESSION_PAGES;
+    case ITEM_PARA_PAGES:
+      return StrId::STR_PARA_PAGES;
     case ITEM_BOOK_BAR:
       return StrId::STR_BOOK_BAR;
     case ITEM_CHAPTER_BAR:
@@ -118,6 +121,8 @@ uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) const {
       return &SETTINGS.sbChapterNumPos;
     case ITEM_SESSION_PAGES:
       return &SETTINGS.sbSessionPagesPos;
+    case ITEM_PARA_PAGES:
+      return &SETTINGS.sbParaPagesPos;
     default:
       return nullptr;
   }
@@ -154,6 +159,7 @@ void StatusBarSettingsActivity::onEnter() {
   clampField(SETTINGS.sbChapterPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(SETTINGS.sbChapterNumPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(SETTINGS.sbSessionPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(SETTINGS.sbParaPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
   clampField(SETTINGS.sbTitleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
   clampField(SETTINGS.sbPageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
   clampField(SETTINGS.sbBookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);

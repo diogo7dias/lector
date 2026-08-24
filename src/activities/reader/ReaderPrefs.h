@@ -58,7 +58,7 @@ struct ReaderPrefs {
   // which is far worse than carrying an old one forward. Each of those older layouts is
   // a strict prefix of this struct, so a record is read at its own length and every
   // field appended since keeps its constructed default — see readerPrefsRecordSize().
-  static constexpr uint8_t VERSION = 12;  // v12: Embedded Style split into text + layout
+  static constexpr uint8_t VERSION = 13;  // v13: pages-to-paragraph status bar item
 
   // Bring a sidecar written before the current version onto the current reading
   // defaults. Only these values are re-seeded, and only for books that predate them.
@@ -162,6 +162,14 @@ struct ReaderPrefs {
   // this firmware misread every v11 sidecar on the card.
   uint8_t embeddedLayoutStyle = 1;
 
+  // Pages left in the current paragraph (">P.N") anchor. Belongs in the status bar
+  // block above, but goes here for the same reason embeddedLayoutStyle did: putting
+  // it there would shift every field below it and make this firmware misread every
+  // v12 sidecar on the card.
+  //
+  // APPENDED LAST. See the note above paragraphNumberSize.
+  uint8_t sbParaPagesPos = 0;  // SB_ANCHOR_OFF
+
   // Copy the status bar block from `source`.
   //
   // A sidecar written before v11 stops before that block, so every field would
@@ -186,6 +194,7 @@ inline constexpr size_t READER_PREFS_V8_SIZE = offsetof(ReaderPrefs, paragraphNu
 inline constexpr size_t READER_PREFS_V9_SIZE = offsetof(ReaderPrefs, statusBarEnabled);
 inline constexpr size_t READER_PREFS_V10_SIZE = offsetof(ReaderPrefs, sbBatteryPos);
 inline constexpr size_t READER_PREFS_V11_SIZE = offsetof(ReaderPrefs, embeddedLayoutStyle);
+inline constexpr size_t READER_PREFS_V12_SIZE = offsetof(ReaderPrefs, sbParaPagesPos);
 
 // A record older than v12 carries one "Embedded Style" choice, in what is now the text
 // switch. Someone who turned it off wanted the book's own styling gone, so the layout
@@ -233,6 +242,7 @@ inline constexpr size_t readerPrefsRecordSize(const uint8_t version) {
   if (version == 9) return READER_PREFS_V9_SIZE;
   if (version == 10) return READER_PREFS_V10_SIZE;
   if (version == 11) return READER_PREFS_V11_SIZE;
+  if (version == 12) return READER_PREFS_V12_SIZE;
   if (version == ReaderPrefs::VERSION) return sizeof(ReaderPrefs);
   return 0;
 }
@@ -247,8 +257,10 @@ static_assert(READER_PREFS_V10_SIZE == READER_PREFS_V9_SIZE + 1,
               "statusBarEnabled must sit between the v9 and v10 record ends, with no padding");
 static_assert(READER_PREFS_V11_SIZE == READER_PREFS_V10_SIZE + 17,
               "the v11 status bar block must be 17 bytes, with no padding before it");
-static_assert(sizeof(ReaderPrefs) == READER_PREFS_V11_SIZE + 1,
-              "embeddedLayoutStyle must be the last byte: every new field goes last, or "
+static_assert(READER_PREFS_V12_SIZE == READER_PREFS_V11_SIZE + 1,
+              "embeddedLayoutStyle must sit between the v11 and v12 record ends, with no padding");
+static_assert(sizeof(ReaderPrefs) == READER_PREFS_V12_SIZE + 1,
+              "sbParaPagesPos must be the last byte: every new field goes last, or "
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
