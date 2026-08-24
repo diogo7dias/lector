@@ -391,6 +391,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote,
           sleepTPanel - sleepTBudget);
   LOG_DBG("MAIN", "Entering deep sleep");
+  // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
+  // chip, so anything still buffered here is lost.
+  logFlush();
 
   powerManager.startDeepSleep(gpio);
 }
@@ -613,17 +616,25 @@ void setup() {
   }
 
   const auto wakeupReason = gpio.getWakeupReason();
+  // INF, and on every boot: a device that sleeps and is woken straight back up by its own
+  // USB power prints nothing else, so without this line the cycle can only be inferred
+  // from the gaps in a capture. See the AfterUSBPower branch below.
+  static constexpr const char* kWakeReasonNames[] = {"PowerButton", "AfterFlash", "AfterUSBPower", "Other"};
+  LOG_INF("SLP", "Wake reason %s", kWakeReasonNames[static_cast<int>(wakeupReason)]);
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
       if (!gpio.verifyPowerButtonWakeup(SETTINGS.getWakeHoldMs(), SETTINGS.wakeHoldIsFast())) {
+        LOG_INF("SLP", "Wake hold too short, back to sleep");
+        logFlush();
         powerManager.startDeepSleep(gpio);
       }
       wakePowerReleasePending = true;
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
-      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
+      LOG_INF("SLP", "USB power cold boot, back to sleep");
+      logFlush();
       powerManager.startDeepSleep(gpio);
       break;
     case HalGPIO::WakeupReason::AfterFlash:

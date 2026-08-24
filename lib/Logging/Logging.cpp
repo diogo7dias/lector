@@ -75,6 +75,18 @@ void logPrintf(const char* level, const char* origin, const char* format, ...) {
   addToLogRingBuffer(buf);
 }
 
+void logFlush() {
+#if FREEINK_LOG_TRANSPORT != FREEINK_LOG_TRANSPORT_ROM_PRINTF
+  if (logSerial) {
+    logSerial.flush();
+    // flush() only empties our side. The host's reader still has to be scheduled and
+    // read the bytes, and on a USB-CDC link that costs a poll interval or two. Measured
+    // against a lock: without this the last line before sleep is lost about every time.
+    delay(30);
+  }
+#endif
+}
+
 std::string getLastLogs() {
   if (rtcLogMagic != LOG_RTC_MAGIC) {
     return {};
