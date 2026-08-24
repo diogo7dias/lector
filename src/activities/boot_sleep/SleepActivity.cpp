@@ -932,19 +932,11 @@ void SleepActivity::renderCustomSleepScreen() const {
         SleepTiming::mark("idxstate");
         const std::string prefix = std::string(sleepDir) + "/";
         const auto nameAt = [&](const size_t i) { return reader.nameAt(i); };
-        // Counted and timed: each probe is a FAT lookup by name, which is a linear scan of
-        // a folder that can hold thousands of wallpapers. If the pick's cost turns out to
-        // be these probes rather than the index reads, the fix is to stop probing and let
-        // the open that follows be the liveness test.
-        uint32_t liveProbes = 0;
-        uint32_t liveProbeMs = 0;
-        const auto liveInFolder = [&](const std::string& n) {
-          const uint32_t probeStart = millis();
-          const bool live = Storage.exists((prefix + n).c_str());
-          liveProbeMs += millis() - probeStart;
-          liveProbes++;
-          return live;
-        };
+        // No probe: one Storage.exists() by name measured 1271 ms on a real wallpaper
+        // folder, because a FAT lookup walks the directory. The open in renderChosen()
+        // below answers the same question for free, and a record that fails it flags the
+        // index for rebuild there. The cost of being wrong is one fallback pick, once.
+        const auto liveInFolder = [](const std::string&) { return true; };
         const auto counterpart = [](const std::string& n) { return FavoriteImage::favoriteCounterpart(n); };
         auto result = sleep_queue::pickNext(queueState, reader.recordCount(), esp_random(), esp_random(), nameAt,
                                             liveInFolder, counterpart);
@@ -962,8 +954,6 @@ void SleepActivity::renderCustomSleepScreen() const {
         // cheapest possible moment to compact the holes that in-place deletes
         // left behind. Flags the next cold boot; nothing happens tonight.
         SleepTiming::mark("idxpick");
-        LOG_INF("SLP", "index live probes %u in %ums", static_cast<unsigned>(liveProbes),
-                static_cast<unsigned>(liveProbeMs));
         if (result.lapWrapped) windex::noteLapWrapped();
         // Persist the advanced state even when the render below fails: the
         // cursor must step PAST a present-but-unrenderable file, or every
@@ -1043,35 +1033,66 @@ void SleepActivity::renderCustomSleepScreen() const {
       LOG_INF("SLP", "fallback scan: %u entries (%u wallpapers) in %ums", scanned, seen,
               static_cast<unsigned>(millis() - scanStartMs));
     }
-    if (!chosen.empty()) {
-      const auto filename = std::string(sleepDir) + "/" + chosen;
+    // Rendering a picked wallpaper. Returns false when the file cannot be opened or
+    // parsed, which is also how a name that the index still lists but the folder no
+    // longer holds is discovered: the pick no longer probes for liveness (see the index
+    // block above), because a probe costs a full directory lookup -- 1271 ms measured on
+    // a real wallpaper folder -- and the open that follows already answers the same
+    // question.
+    const auto renderChosen = [&](const std::string& name) {
+      const auto filename = std::string(sleepDir) + "/" + name;
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       delay(100);
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
-      if (hasPxcExtension(chosen)) {
+      if (hasPxcExtension(name)) {
         if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
           APP_STATE.lastSleepWallpaperPath = filename;
+          return true;
+        }
+        return false;
+      }
+      HalFile randFile;
+      // Storage.open rather than openFileForRead: the latter calls exists() before
+      // open(), which is a second full directory lookup for the same name and measured
+      // as half of a 2543 ms wallpaper open. A failed open is reported here instead.
+      randFile = Storage.open(filename.c_str(), O_RDONLY);
+      if (!randFile) {
+        LOG_INF("SLP", "wallpaper open failed: %s", filename.c_str());
+        return false;
+      }
+      // Same rule the /sleep.bmp path above uses: stretch the tone range only when
+      // the user has asked for no cover filter, so a filtered image still looks the
+      // way they set it. Applies to .bmp wallpapers only; .pxc took the branch above
+      // and is already quantised to four levels when the file is written.
+      const bool adaptiveTone =
+          SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+      Bitmap bitmap(randFile, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
+      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
+        randFile.close();
+        return false;
+      }
+      renderBitmapSleepScreen(bitmap);
+      APP_STATE.lastSleepWallpaperPath = filename;
+      randFile.close();
+      return true;
+    };
+
+    if (!chosen.empty()) {
+      if (renderChosen(chosen)) {
+        dir.close();
+        return;
+      }
+      // The index named a file that is no longer renderable. Flag the index for rebuild
+      // on the next cold boot and fall back to the jump pick for tonight, rather than
+      // dropping the user to the logo face over one stale record.
+      if (pickedFromIndex) {
+        APP_STATE.sleepIndexNeedsRebuild = true;
+        stateDirty = true;
+        LOG_INF("SLP", "index record unrenderable, falling back to jump pick");
+        const std::string again = pickWallpaperByJump(dir);
+        if (!again.empty() && renderChosen(again)) {
           dir.close();
           return;
-        }
-      } else {
-        HalFile randFile;
-        if (Storage.openFileForRead("SLP", filename, randFile)) {
-          // Same rule the /sleep.bmp path above uses: stretch the tone range only when
-          // the user has asked for no cover filter, so a filtered image still looks the
-          // way they set it. Applies to .bmp wallpapers only; .pxc took the branch above
-          // and is already quantised to four levels when the file is written.
-          const bool adaptiveTone =
-              SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-          Bitmap bitmap(randFile, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
-          if (bitmap.parseHeaders() == BmpReaderError::Ok) {
-            renderBitmapSleepScreen(bitmap);
-            APP_STATE.lastSleepWallpaperPath = filename;
-            randFile.close();
-            dir.close();
-            return;
-          }
-          randFile.close();
         }
       }
     }

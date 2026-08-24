@@ -23,7 +23,12 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
                           const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&)) {
   HalFile file;
   const uint32_t openStartMs = millis();
-  if (!Storage.openFileForRead("SLP", path, file)) {
+  // Storage.open, not openFileForRead: the latter calls exists() and then open(), and
+  // each is a full FAT directory walk. In a wallpaper folder that is 1271 ms apiece,
+  // which is why a wallpaper open measured 2543 ms. One walk answers it.
+  file = Storage.open(path.c_str(), O_RDONLY);
+  if (!file) {
+    LOG_ERR("SLP", "pxc open failed: %s", path.c_str());
     return false;
   }
   // Opening by path is a FAT lookup: a linear walk of the directory. In a wallpaper
