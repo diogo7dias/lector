@@ -9,8 +9,11 @@ namespace {
 
 // Formats this reader can open: books first, then the image formats the sleep
 // screen and cover viewer use.
-constexpr std::array<std::string_view, 8> ACCEPTED_EXTENSIONS = {".epub", ".txt", ".md",  ".xtc",
-                                                                 ".xtch", ".pxc", ".png", ".bmp"};
+// ".cpcred" is a WiFi and OPDS credential bundle. It is not a file the reader
+// opens: the receiving screen reads it, offers to import it, and deletes it either
+// way. It is listed here because the offer has to survive the name check first.
+constexpr std::array<std::string_view, 9> ACCEPTED_EXTENSIONS = {".epub", ".txt", ".md",  ".xtc", ".xtch",
+                                                                 ".pxc",  ".png", ".bmp", ".cpcred"};
 
 /** The reserved and control characters that have no business in a FAT name. */
 bool isUnsafeCharacter(const unsigned char ch) {

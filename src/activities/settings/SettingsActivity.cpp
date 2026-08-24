@@ -19,6 +19,10 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
+#include "WifiCredentialStore.h"
+#include "OpdsServerStore.h"
+#include "activities/network/NearbyFileTransferActivity.h"
+#include "util/CredentialBundle.h"
 #include "OtaUpdateActivity.h"
 #include "PopupItemsActivity.h"
 #include "SdCardFontSystem.h"
@@ -133,6 +137,7 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_SHARE_CREDENTIALS, SettingAction::ShareCredentials));
   displaySettings.push_back(SettingInfo::Action(StrId::STR_SHUFFLE_WALLPAPERS, SettingAction::ShuffleWallpapers));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAN_STORAGE, SettingAction::CleanStorage));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
@@ -196,7 +201,9 @@ void SettingsActivity::rebuildSettingsList() {
            {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
           {StrId::STR_GRP_STATS, {StrId::STR_TRACK_READING_STATS, StrId::STR_READING_IDLE_LIMIT}},
-          {StrId::STR_GRP_NETWORK, {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS}},
+          {StrId::STR_GRP_NETWORK,
+           {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
+            StrId::STR_SHARE_CREDENTIALS}},
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
             StrId::STR_SD_FIRMWARE_UPDATE}},
@@ -441,6 +448,9 @@ void SettingsActivity::toggleCurrentSetting() {
       case SettingAction::OPDSBrowser:
         startActivityForResult(std::make_unique<OpdsServerListActivity>(renderer, mappedInput), resultHandler);
         break;
+      case SettingAction::ShareCredentials:
+        shareCredentials();
+        break;
       case SettingAction::Network:
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
         break;
@@ -544,6 +554,49 @@ void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChan
     SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_NEVER;
     quickResumeTimeoutAutoEnabled = false;
   }
+}
+
+void SettingsActivity::shareCredentials() {
+  credential_bundle::Bundle bundle;
+  for (size_t i = 0; i < WIFI_STORE.getCredentialCount(); i++) {
+    const auto credential = WIFI_STORE.getCredentialAt(i);
+    if (!credential || credential->ssid.empty()) continue;
+    if (bundle.wifi.size() >= credential_bundle::MAX_ENTRIES) break;
+    bundle.wifi.push_back({credential->ssid, credential->password});
+  }
+  for (const auto& server : OPDS_STORE.getServers()) {
+    if (server.url.empty()) continue;
+    if (bundle.opds.size() >= credential_bundle::MAX_ENTRIES) break;
+    bundle.opds.push_back({server.name, server.url, server.username, server.password});
+  }
+
+  if (bundle.empty()) {
+    GUI.drawPopup(renderer, tr(STR_NOTHING_TO_SHARE));
+    renderer.displayBuffer();
+    delay(1200);
+    requestUpdate(true);
+    return;
+  }
+
+  const std::string json = credential_bundle::serialize(bundle);
+  const std::string path = std::string("/") + credential_bundle::FILE_NAME;
+  Storage.remove(path.c_str());
+  {
+    HalFile file;
+    if (!Storage.openFileForWrite("SET", path, file) || !file.isOpen() ||
+        file.write(reinterpret_cast<const uint8_t*>(json.data()), json.size()) != json.size()) {
+      LOG_ERR("SET", "Could not write the credential bundle");
+      file.close();
+      Storage.remove(path.c_str());
+      return;
+    }
+    file.close();
+  }
+
+  // The Nearby screen owns the radio for its lifetime and removes the bundle when
+  // it is done with it, so nothing here waits around holding passwords on the card.
+  activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
+      renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path));
 }
 
 void SettingsActivity::openSleepTimeoutPicker() {

@@ -99,6 +99,12 @@ class NearbyFileTransferActivity final : public Activity {
   void discardPartialFamily();
   /** Removes a partly written file after a failed or cancelled transfer. */
   void discardPartialFile();
+  /**
+   * Reads the credential bundle just received, adds its WiFi networks and OPDS
+   * servers, and deletes the file. The file goes whether or not it parsed: it
+   * holds passwords in the clear and has no reason to stay on the card.
+   */
+  void importCredentialBundle();
   void closeFiles();
   void finishWithError(const char* message);
   /** Leaves the screen, back to the book when it was opened from one. */
@@ -134,6 +140,8 @@ class NearbyFileTransferActivity final : public Activity {
   HalFile outgoing;
   HalFile incoming;
   std::string destinationPath;
+  /** What an imported credential bundle did, shown on the finished screen. */
+  std::string credentialsMessage;
   bool destinationOpen = false;
 
   // Receiving: which batch, if any, the files arriving belong to.

@@ -16,7 +16,10 @@
 #include "activities/ActivityManager.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "OpdsServerStore.h"
+#include "WifiCredentialStore.h"
 #include "util/BookFilingNames.h"
+#include "util/CredentialBundle.h"
 
 using namespace nearby_file;
 using freeink::nearby::PacketType;
@@ -170,6 +173,57 @@ void NearbyFileTransferActivity::closeFiles() {
   if (outgoing.isOpen()) outgoing.close();
   if (incoming.isOpen()) incoming.close();
   destinationOpen = false;
+}
+
+void NearbyFileTransferActivity::importCredentialBundle() {
+  const std::string path = destinationPath;
+  destinationPath.clear();
+
+  std::string json;
+  {
+    HalFile file;
+    if (Storage.openFileForRead(LOG_TAG, path, file)) {
+      json.reserve(static_cast<size_t>(file.fileSize()));
+      char buffer[256];
+      while (file.available()) {
+        const int read = file.read(reinterpret_cast<uint8_t*>(buffer), sizeof(buffer));
+        if (read <= 0) break;
+        json.append(buffer, static_cast<size_t>(read));
+      }
+      file.close();
+    }
+  }
+  // Gone either way, and before anything is applied: a bundle that turns out to be
+  // malformed still had passwords in it.
+  Storage.remove(path.c_str());
+
+  credential_bundle::Bundle bundle;
+  if (json.empty() || !credential_bundle::parse(json, bundle)) {
+    LOG_ERR(LOG_TAG, "Credential bundle could not be read");
+    credentialsMessage = tr(STR_CREDENTIALS_REJECTED);
+    return;
+  }
+
+  int networks = 0;
+  for (const auto& entry : bundle.wifi) {
+    if (WIFI_STORE.addCredential(entry.ssid, entry.password)) networks++;
+  }
+  int servers = 0;
+  for (const auto& entry : bundle.opds) {
+    OpdsServer server;
+    server.name = entry.name.empty() ? entry.url : entry.name;
+    server.url = entry.url;
+    server.username = entry.username;
+    server.password = entry.password;
+    if (OPDS_STORE.addServer(server)) servers++;
+  }
+  if (networks > 0) WIFI_STORE.saveToFile();
+  if (servers > 0) OPDS_STORE.saveToFile();
+
+  LOG_DBG(LOG_TAG, "Imported %d WiFi networks and %d OPDS servers", networks, servers);
+  char buffer[96];
+  std::snprintf(buffer, sizeof(buffer), tr(STR_CREDENTIALS_IMPORTED_FORMAT), networks, servers);
+  credentialsMessage = buffer;
 }
 
 void NearbyFileTransferActivity::discardPartialFile() {
@@ -578,6 +632,10 @@ void NearbyFileTransferActivity::loop() {
     incoming.flush();
     incoming.close();
     destinationOpen = false;
+    // A credential bundle is not a file the reader keeps: it is read, applied, and
+    // removed. Doing it the moment the bytes land means the passwords sit on the
+    // card for as short a time as possible.
+    if (mode == Mode::Receive && credential_bundle::isBundleFilename(destinationPath)) importCredentialBundle();
   }
   if (session.shouldDiscardPartialFile() && !destinationPath.empty()) discardPartialFile();
 
@@ -786,6 +844,8 @@ void NearbyFileTransferActivity::render(RenderLock&&) {
             mode == Mode::Receive ? nearby_file::familyNameFromFolder(pendingOffer.folder) : std::string();
         if (!installedFamily.empty()) {
           std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_INSTALLED_FORMAT), installedFamily.c_str());
+        } else if (!credentialsMessage.empty()) {
+          std::snprintf(buffer, sizeof(buffer), "%s", credentialsMessage.c_str());
         } else if (mode == Mode::Receive && !destinationPath.empty()) {
           std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SAVED_AS_FORMAT),
                         std::string(bookfiling::fileNameOf(destinationPath)).c_str());

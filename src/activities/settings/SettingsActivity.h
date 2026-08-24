@@ -31,6 +31,7 @@ enum class SettingAction {
   InstalledFonts,
   TextSettings,
   PopupItems,
+  ShareCredentials,
 };
 
 struct SettingInfo {
@@ -221,6 +222,13 @@ class SettingsActivity final : public Activity {
   // removed rows under it.
   void restoreCursorAfterRebuild();
   void openSleepTimeoutPicker();
+  /**
+   * Writes this reader's WiFi networks and OPDS servers to a bundle on the card
+   * and hands it to the Nearby sender. The bundle carries passwords in the clear
+   * and the radio is not encrypted, so the other reader is asked before anything
+   * moves and both ends delete the file afterwards.
+   */
+  void shareCredentials();
   void rebuildSettingsList();
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
