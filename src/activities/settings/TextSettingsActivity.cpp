@@ -15,7 +15,9 @@
 #include "ReaderFontSizes.h"
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
+#include "components/RowHitTest.h"
 #include "components/UITheme.h"
+#include "components/themes/SelectionStyle.h"
 #include "fontIds.h"
 #include "util/MarginLink.h"
 
@@ -570,6 +572,26 @@ void TextSettingsActivity::stepEditedValue(const int delta) {
   requestUpdate();
 }
 
+void TextSettingsActivity::setEditedValue(const int value) {
+  const auto rows = visibleRows();
+  if (selectedIndex_ >= static_cast<int>(rows.size())) return;
+  const Row row = rows[selectedIndex_];
+  const uint8_t* field = numberField(row);
+  if (!field) return;
+
+  int minValue = 0, maxValue = 0;
+  numberRange(row, minValue, maxValue);
+  const int next = std::clamp(value, minValue, maxValue);
+  if (next == *field) return;
+  applyNumber(row, next);
+  // Same debounce as the buttons: the row follows the finger, the preview and the
+  // write wait for the drag to settle.
+  const uint32_t now = millis();
+  pendingRedrawAt_ = now + EDIT_REDRAW_DEBOUNCE_MS;
+  pendingSaveAt_ = now + EDIT_SAVE_DEBOUNCE_MS;
+  requestUpdate();
+}
+
 void TextSettingsActivity::leaveEdit() {
   editing_ = false;
   pendingRedrawAt_ = 0;
@@ -636,6 +658,25 @@ void TextSettingsActivity::loop() {
     return;
   }
 
+  if (editing_ && sliderBar_.width > 0) {
+    // Drag the track: the value follows the finger. Only while a row is armed, so an
+    // ordinary swipe over the list still scrolls it.
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.isScreenTouchHeld(tx, ty) || mappedInput.wasScreenTouchDown(tx, ty)) {
+      constexpr int kTouchSlack = 12;
+      if (ty >= sliderBar_.y - kTouchSlack && ty <= sliderBar_.y + sliderBar_.height + kTouchSlack) {
+        const auto rows = visibleRows();
+        if (selectedIndex_ < static_cast<int>(rows.size())) {
+          int minValue = 0, maxValue = 0;
+          numberRange(rows[selectedIndex_], minValue, maxValue);
+          setEditedValue(row_slider::valueForX(sliderBar_, tx, minValue, maxValue, 1));
+        }
+        return;
+      }
+    }
+  }
+
   if (editing_) {
     // A press always moves exactly one, whichever way; the ramp belongs to the hold, and a
     // tap must stay a nudge. Either press also restarts the ramp, so reversing direction
@@ -694,6 +735,41 @@ void TextSettingsActivity::render(RenderLock&&) {
       },
       true, nullptr, UI_10_FONT_ID, [&rows](int index) { return kindOf(rows[index]) == RowKind::Section; },
       &scrollOffset_);
+
+  // The armed numeric row gets a drag track between its label and its number. The
+  // row rects come from the draw that just ran (row_hit), so the track cannot land
+  // anywhere but on the row the list actually painted.
+  sliderBar_ = {};
+  if (editing_ && selectedIndex_ < static_cast<int>(rows.size()) &&
+      kindOf(rows[selectedIndex_]) == RowKind::Number) {
+    const auto& painted = row_hit::lastRows();
+    for (int i = 0; i < painted.count; ++i) {
+      const auto& entry = painted.entries[i];
+      if (entry.item != selectedIndex_) continue;
+
+      const std::string label = I18N.get(rowNameId(rows[selectedIndex_]));
+      const std::string value = "[ " + rowValueText(rows[selectedIndex_]) + " ]";
+      const int labelEnd = entry.x + metrics_.contentSidePadding + renderer.getTextWidth(UI_10_FONT_ID, label.c_str());
+      const int valueStart =
+          entry.x + entry.width - metrics_.contentSidePadding - renderer.getTextWidth(UI_10_FONT_ID, value.c_str());
+      sliderBar_ = row_slider::barBetween(labelEnd, valueStart, entry.y, entry.height);
+      break;
+    }
+  }
+  if (sliderBar_.width > 0) {
+    int minValue = 0, maxValue = 0;
+    numberRange(rows[selectedIndex_], minValue, maxValue);
+    const uint8_t* field = numberField(rows[selectedIndex_]);
+    const int filled = row_slider::filledWidth(sliderBar_, field ? *field : minValue, minValue, maxValue);
+    // The solid style paints the selected row black, so the track is drawn white
+    // there; the other styles leave the row on paper and take black.
+    const bool onDark = selection_style::invertsText(selection_style::fromSetting(SETTINGS.selectionStyle));
+    sliderOnDarkRow_ = onDark;
+    // Track outline, then the filled part solid: an outline alone is hard to read at
+    // e-ink pitch, a solid bar alone loses where the range ends.
+    renderer.drawRect(sliderBar_.x, sliderBar_.y, sliderBar_.width, sliderBar_.height, onDark);
+    if (filled > 0) renderer.fillRect(sliderBar_.x, sliderBar_.y, filled, sliderBar_.height, onDark);
+  }
 
   const char* confirmLabel = tr(STR_SELECT);
   const char* upLabel = tr(STR_DIR_UP);
