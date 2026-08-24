@@ -69,6 +69,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual void drawChrome();
   // Button hints, drawn after the app renders. Default: Back/Select/Up/Down.
   virtual void drawFooter();
+  // Drawn over the finished page, after the app and the hints. Return true when
+  // the overlay refreshed the display itself (GUI.drawPopup does) so the base
+  // does not push a second refresh behind it.
+  virtual bool drawOverlay() { return false; }
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the

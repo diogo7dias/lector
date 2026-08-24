@@ -15,6 +15,8 @@
 #include "fontIds.h"
 #include "util/DictionaryFailure.h"
 
+namespace fui = freeink::ui;
+
 namespace {
 constexpr unsigned long POPUP_DURATION_MS = 1500;
 
@@ -24,11 +26,16 @@ void indexBuildYield(void*) { vTaskDelay(1); }
 }  // namespace
 
 void DictionaryHistoryActivity::onEnter() {
-  Activity::onEnter();
   DICT_HISTORY.ensureLoaded();
-  selectorIndex = 0;
-  requestUpdate();
+  UiListActivity::onEnter();
 }
+
+void DictionaryHistoryActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+}
+
+const char* DictionaryHistoryActivity::headerTitle() const { return tr(STR_LOOKUP_HISTORY); }
 
 size_t DictionaryHistoryActivity::wordCount() const { return DICT_HISTORY.getWords().size(); }
 
@@ -85,15 +92,16 @@ void DictionaryHistoryActivity::lookUp(const std::string& word) {
   requestUpdate();
 }
 
-void DictionaryHistoryActivity::activateSelected() {
-  if (isClearRow(selectorIndex)) {
+void DictionaryHistoryActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  if (isClearRow(static_cast<size_t>(index))) {
     confirmClear();
     return;
   }
   const auto& words = DICT_HISTORY.getWords();
-  if (selectorIndex >= words.size()) return;
+  if (static_cast<size_t>(index) >= words.size()) return;
   // By value: the lookup pushes an activity, and the store can be written under it.
-  const std::string word = words[selectorIndex];
+  const std::string word = words[index];
   lookUp(word);
 }
 
@@ -104,96 +112,63 @@ void DictionaryHistoryActivity::confirmClear() {
                          [this](const ActivityResult& result) {
                            if (!result.isCancelled) {
                              DICT_HISTORY.clear();
-                             selectorIndex = 0;
+                             nav.reset();
                            }
                            requestUpdate();
                          });
 }
 
-void DictionaryHistoryActivity::loop() {
+bool DictionaryHistoryActivity::handleCustomInput() {
+  if (popup == Popup::None) return false;
   if (popup == Popup::NotFound || popup == Popup::Error) {
     if (millis() - popupShownAt >= POPUP_DURATION_MS) {
       popup = Popup::None;
       requestUpdate();
     }
-    return;
   }
-
-  // A tap on a row selects and activates it, the same as every other list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < rowCount()) {
-    selectorIndex = static_cast<size_t>(tappedRow);
-    activateSelected();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    activateSelected();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult res;
-    res.isCancelled = true;
-    setResult(std::move(res));
-    finish();
-    return;
-  }
-
-  const int listSize = rowCount();
-  if (listSize <= 0) return;
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, true);
-
-  buttonNavigator.onNextPress([this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousPress([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
+  return true;
 }
 
-void DictionaryHistoryActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+void DictionaryHistoryActivity::onBackButton() {
+  ActivityResult res;
+  res.isCancelled = true;
+  setResult(std::move(res));
+  finish();
+}
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+void DictionaryHistoryActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LOOKUP_HISTORY));
-
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
   const auto& words = DICT_HISTORY.getWords();
   if (words.empty()) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_NO_LOOKUPS));
-  } else {
-    GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, rowCount(), static_cast<int>(selectorIndex),
-                 [this, &words](int index) {
-                   if (isClearRow(static_cast<size_t>(index))) return std::string(tr(STR_CLEAR_HISTORY));
-                   return words[index];
-                 });
-  }
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  if (popup != Popup::None) {
-    // drawPopup overlays the framebuffer and refreshes the display itself.
-    // I18N.get directly: tr() only accepts literal key names.
-    GUI.drawPopup(renderer, I18N.get(popupMsg));
+    screen.centeredText(tr(STR_NO_LOOKUPS));
     return;
   }
 
-  renderer.displayBuffer();
+  rows.assign(static_cast<size_t>(rowCount()), fui::ListItem{});
+  for (size_t i = 0; i < words.size(); ++i) {
+    rows[i].label = words[i].c_str();
+    rows[i].actionValue = static_cast<int16_t>(i);
+  }
+  // Last row clears the history; it only exists while there is history to clear.
+  rows.back().label = tr(STR_CLEAR_HISTORY);
+  rows.back().actionValue = static_cast<int16_t>(words.size());
+
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(rows.size());
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
+}
+
+bool DictionaryHistoryActivity::drawOverlay() {
+  if (popup == Popup::None) return false;
+  // drawPopup overlays the framebuffer and refreshes the display itself.
+  // I18N.get directly: tr() only accepts literal key names.
+  GUI.drawPopup(renderer, I18N.get(popupMsg));
+  return true;
 }
