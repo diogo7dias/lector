@@ -1,4 +1,4 @@
-<!-- lector-version: 0.26.6 -->
+<!-- lector-version: 0.27.0 -->
 
 # Lector User Guide
 
@@ -509,6 +509,17 @@ send that stops part way leaves nothing half-installed.
 Turn Wi-Fi and File Transfer off first: the radio cannot do both at once, and the device says
 so if it is busy.
 
+#### Sharing Wi-Fi and OPDS credentials
+
+**Settings > System > Share WiFi and OPDS** sends this device's saved Wi-Fi networks and OPDS
+servers to another Lector over the same Nearby radio. Open **File Transfer > Nearby Reader** on
+the receiving device first, exactly as for a file. It asks before accepting, adds the networks
+and servers, and reports how many of each arrived.
+
+The bundle carries the passwords in the clear and the Nearby radio is not encrypted, so anyone
+in range while it is sending can capture them. Both devices delete the bundle as soon as they
+are done with it. Share when you mean to, not out of habit.
+
 ### OPDS catalogs
 
 **Settings > System > OPDS Servers** stores up to 8 catalogs. Each entry has a name, the
@@ -736,8 +747,8 @@ belongs to, so the rows here appear in the same order as on the device.
   **Solid** fills the row black and turns its text white (the original look). **Brackets**
   puts corner marks around the row's own text, hugging the label and its value
   separately, and leaves the text black.
-  **Caret** puts an arrow at the left of the row and a rule underneath it, text also left
-  black. Brackets and Caret redraw faster and ghost less on e-ink, because they leave most
+  **Caret** puts an arrow at the left of the row, beside its first line of text, and leaves the
+  text black. Brackets and Caret redraw faster and ghost less on e-ink, because they leave most
   of the row untouched.
 
 **Sleep screen**
@@ -759,7 +770,9 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Screen**
 
-- **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages.
+- **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
+  turns off the page-counted refresh only; the reader still cleans the panel when enough ink
+  has moved to need it, so a long session does not end up smeared.
 - **Sunlight Fading Fix** — software fix for white X4 units fading in direct sunlight.
 
 **Home**
@@ -824,10 +837,12 @@ hundred presses.
 **Customise Status Bar** places each element in one of six slots (top left, top centre, top
 right, bottom left, bottom centre, bottom right) or turns it off: **Battery**, **Clock**,
 **Title**, **Page in Chapter**, **Book %**, **Chapter %**, **Chapter Number**, **Pages This
-Session**. Alongside them:
+Session**, **Pages to Paragraph**. Alongside them:
 
 - **Title Source** — Book or Chapter, and **Truncate Title**.
 - **Page Format** — `N/M` or `N left`.
+- **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
+  next one starts. `>P.2` means it runs two more pages.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim, Medium,
   Fat), **Floating Bar** and **Bar Outline**.
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
@@ -898,7 +913,7 @@ the unlock screen footer, and a `.csv` file per session in the `/perf` folder on
 It is there so a slow page turn can be measured rather than guessed at. Turn it off again
 when you are done; it writes to the card while it is on.
 
-**Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**.
+**Network** — **Wi-Fi Networks**, **KOReader Sync**, **OPDS Servers**, **Share WiFi and OPDS**.
 
 **Device**
 
