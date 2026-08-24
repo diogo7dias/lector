@@ -180,7 +180,7 @@ void SettingsActivity::rebuildSettingsList() {
                    {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_WAKE_STRAIGHT_TO_BOOK,
                     StrId::STR_SLEEP_FOOTER_TEXT}},
                   {StrId::STR_GRP_WALLPAPER,
-                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SLEEP_IMAGE_QUALITY,
+                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
                   {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},

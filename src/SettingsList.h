@@ -261,10 +261,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, &CrossPointSettings::showSleepImageFilename,
                                     "showSleepImageFilename", StrId::STR_CAT_DISPLAY));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_IMAGE_QUALITY, &CrossPointSettings::sleepImageQuality,
-                                  {StrId::STR_SLEEP_QUALITY_FAST, StrId::STR_SLEEP_QUALITY_PRETTY}, "sleepImageQuality",
-                                  StrId::STR_CAT_DISPLAY));
-
     v.push_back(SettingInfo::Toggle(StrId::STR_WAKE_STRAIGHT_TO_BOOK, &CrossPointSettings::wakeStraightToBook,
                                     "wakeStraightToBook", StrId::STR_CAT_DISPLAY));
 

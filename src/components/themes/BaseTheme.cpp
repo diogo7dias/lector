@@ -20,6 +20,7 @@
 #include "components/HeaderTitle.h"
 #include "components/HintBandGeometry.h"
 #include "components/ListScrollPolicy.h"
+#include "components/ListScrollbar.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
@@ -492,36 +493,23 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     showUpArrow = showDownArrow = totalPages > 1;
   }
 
-  if (showUpArrow || showDownArrow) {
-    constexpr int indicatorWidth = 20;
-    constexpr int arrowSize = 6;
-    constexpr int margin = 15;  // Offset from right edge
-
-    const int centerX = rect.x + rect.width - indicatorWidth / 2 - margin;
-    const int indicatorTop = rect.y;  // Offset to avoid overlapping side button hints
-    const int indicatorBottom = rect.y + rect.height - arrowSize;
-
-    // Draw up arrow at top (^) - narrow point at top, wide base at bottom
-    if (showUpArrow) {
-      for (int i = 0; i < arrowSize; ++i) {
-        const int lineWidth = 1 + i * 2;
-        const int startX = centerX - i;
-        renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
-      }
-    }
-
-    // Draw down arrow at bottom (v) - wide base at top, narrow point at bottom
-    if (showDownArrow) {
-      for (int i = 0; i < arrowSize; ++i) {
-        const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
-        const int startX = centerX - (arrowSize - 1 - i);
-        renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
-                          indicatorBottom - arrowSize + 1 + i);
-      }
+  // The scroll indicator: a track down the right-hand edge with a thumb as long as the
+  // fraction of the list on screen. It replaced a pair of up/down arrows, which said only
+  // that there was more in that direction, never how much or how far in you were.
+  const bool scrollable = showUpArrow || showDownArrow;
+  if (scrollable) {
+    const list_scrollbar::Bar bar = list_scrollbar::forList(rect.y, rect.height, itemCount, windowStart, pageItems);
+    if (bar.visible) {
+      const int barX = list_scrollbar::trackX(rect.x, rect.width);
+      // The track is dithered, the thumb solid: on a one-bit panel that is the only way
+      // to show the thumb's position against the track it slides in.
+      renderer.fillRectDither(barX, bar.trackY, list_scrollbar::kWidth, bar.trackHeight, Color::LightGray);
+      renderer.fillRect(barX, bar.thumbY, list_scrollbar::kWidth, bar.thumbHeight);
     }
   }
 
-  int contentWidth = rect.width - 5;
+  // Rows stop short of the track when there is one, so a long value never runs under it.
+  int contentWidth = rect.width - (scrollable ? list_scrollbar::kReservedWidth : 5);
   // Only the solid style paints over the row, so only then does the row's own text
   // have to come out white. Resolved when the selected row is reached, because the
   // bracket style needs that row's label and value measured first.

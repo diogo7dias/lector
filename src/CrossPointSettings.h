@@ -651,11 +651,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char txtSdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
-  // Sleep wallpaper rendering quality. Pretty runs the OEM 3-pass grayscale pipeline;
-  // Fast draws one 1-bit pass, which is two panel refreshes cheaper on every sleep.
-  static constexpr uint8_t SLEEP_QUALITY_FAST = 0;
-  static constexpr uint8_t SLEEP_QUALITY_PRETTY = 1;
-  uint8_t sleepImageQuality = SLEEP_QUALITY_PRETTY;
+  // Kept only so an existing settings file still parses and the perf log keeps its
+  // column. The sleep wallpaper is always drawn through the OEM 3-pass grayscale
+  // pipeline now; nothing reads this to choose anything. See SleepActivity.
+  uint8_t sleepImageQuality = 1;
   // Skip the unlock screen on a wallpaper wake and go straight back into the book.
   //
   // The sleep screen itself is untouched: the wallpaper is drawn and shown exactly as
