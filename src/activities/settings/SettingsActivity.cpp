@@ -174,8 +174,17 @@ void SettingsActivity::rebuildSettingsList() {
 
   // Section headings. Applied last so the ACTION rows spliced in above are grouped
   // alongside the settings they belong with rather than stranded at the ends.
+  // Frontlight leads: brightness and warmth are reached for daily, the rest of this
+  // category once in a while. Then the screen itself, then the two sleep-screen groups,
+  // which are set up once and revisited only when the wallpapers change.
   applyGroups(displaySettings,
               {
+                  // Absent on a board with no frontlight, and applyGroups draws no
+                  // heading for a group whose rows are all missing.
+                  {StrId::STR_GRP_FRONTLIGHT,
+                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
+                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
                   {StrId::STR_GRP_SLEEP_SCREEN,
                    {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_WAKE_STRAIGHT_TO_BOOK,
                     StrId::STR_SLEEP_FOOTER_TEXT}},
@@ -183,12 +192,6 @@ void SettingsActivity::rebuildSettingsList() {
                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
-                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
-                  // Absent on a board with no frontlight, and applyGroups draws no
-                  // heading for a group whose rows are all missing.
-                  {StrId::STR_GRP_FRONTLIGHT,
-                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
-                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
@@ -235,7 +238,11 @@ void SettingsActivity::rebuildSettingsList() {
 
   settings.clear();
   settings.reserve(displaySettings.size() + readerSettings.size() + controlsSettings.size() + systemSettings.size());
-  for (auto* category : {&displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
+  // Reader first, then Display, Controls, System: ordered by how often a row is actually
+  // reached for. Text size, fonts and the status bar are tuned while reading; the
+  // frontlight is next, which is why it leads Display; buttons and the system rows are
+  // set once and then left alone.
+  for (auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
     settings.insert(settings.end(), std::make_move_iterator(category->begin()),
                     std::make_move_iterator(category->end()));
   }

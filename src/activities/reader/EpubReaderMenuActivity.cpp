@@ -111,6 +111,55 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     for (auto& member : members) items.push_back(member);
   };
 
+  // Sections run in the order a reader reaches for them. Look first: type size, the page
+  // and the status bar are what gets changed mid-book, and this menu is one tap away from
+  // the page. Then Navigate, then the rows about the book itself, then the wallpaper
+  // triage, then the device tools nobody opens a book to find.
+  //
+  // --- Look: everything that changes how the page is drawn ----------------------
+  {
+    auto& items = page(Tab::Look, StrId::STR_SEC_LOOK);
+    // Per-book reader settings. "Reset" only appears once this book has its own
+    // override (otherwise it already follows the global settings).
+    std::vector<MenuItem> thisBook{{MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS}};
+    if (hasReaderOverride) {
+      thisBook.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
+    }
+    // Sits with the reader settings because that is what it changes: it copies another
+    // book's look onto this one, once. The picker itself reports when nothing qualifies.
+    thisBook.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
+    // Same cluster for the same reason: a saved look applied to this book. Steal Look
+    // takes one from another book, this takes one from the named sets on the card.
+    thisBook.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
+    group(items, StrId::STR_GRP_THIS_BOOK, std::move(thisBook));
+
+    std::vector<MenuItem> pageGroup{{MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS}};
+    // Size sits directly under the mode it belongs to, and only when there is
+    // something to size. Turn numbering on, reopen the menu, and the row appears.
+    if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
+      pageGroup.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE, StrId::STR_PARAGRAPH_NUMBER_SIZE});
+    }
+    pageGroup.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
+    pageGroup.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
+    group(items, StrId::STR_GRP_PAGE, std::move(pageGroup));
+
+    items.push_back(MenuItem::Header(StrId::STR_GRP_STATUS_BAR));
+    items.push_back({MenuAction::TOGGLE_STATUS_BAR, StrId::STR_STATUS_BAR});
+    // Directly under the row it depends on, and only while that row reads OFF: with the
+    // bar shown the progress bars already draw from Book Bar / Chapter Bar + Bar
+    // Thickness, so this row would be a second control for the same thing. This decides
+    // the state the menu OPENS in; syncProgressBarRow keeps it right afterwards, so the
+    // row also arrives and leaves live as the Status Bar row is toggled.
+    if (!statusBar) {
+      items.push_back({MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
+    }
+    // Everything the bar can show, and where, for this book alone. Seeded from the
+    // global layout the first time this book gets an override.
+    items.push_back({MenuAction::CUSTOMISE_STATUS_BAR, StrId::STR_CUSTOMISE_STATUS_BAR});
+
+    group(items, StrId::STR_GRP_SCREEN, {{MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION}});
+  }
+
   // --- Navigate: everything that moves the reading position ---------------------
   {
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
@@ -159,50 +208,6 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     group(items, StrId::STR_GRP_REMOVE,
           {{MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK},
            {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}});
-  }
-
-  // --- Look: everything that changes how the page is drawn ----------------------
-  {
-    auto& items = page(Tab::Look, StrId::STR_SEC_LOOK);
-    // Per-book reader settings. "Reset" only appears once this book has its own
-    // override (otherwise it already follows the global settings).
-    std::vector<MenuItem> thisBook{{MenuAction::READER_SETTINGS, StrId::STR_READER_SETTINGS}};
-    if (hasReaderOverride) {
-      thisBook.push_back({MenuAction::RESET_READER_SETTINGS, StrId::STR_RESET_READER_SETTINGS});
-    }
-    // Sits with the reader settings because that is what it changes: it copies another
-    // book's look onto this one, once. The picker itself reports when nothing qualifies.
-    thisBook.push_back({MenuAction::STEAL_LOOK, StrId::STR_STEAL_LOOK});
-    // Same cluster for the same reason: a saved look applied to this book. Steal Look
-    // takes one from another book, this takes one from the named sets on the card.
-    thisBook.push_back({MenuAction::READING_THEMES, StrId::STR_READING_THEMES});
-    group(items, StrId::STR_GRP_THIS_BOOK, std::move(thisBook));
-
-    std::vector<MenuItem> pageGroup{{MenuAction::TOGGLE_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBERS}};
-    // Size sits directly under the mode it belongs to, and only when there is
-    // something to size. Turn numbering on, reopen the menu, and the row appears.
-    if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
-      pageGroup.push_back({MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE, StrId::STR_PARAGRAPH_NUMBER_SIZE});
-    }
-    pageGroup.push_back({MenuAction::TOGGLE_PAPERBACK_LOOK, StrId::STR_PAPERBACK_LOOK});
-    pageGroup.push_back({MenuAction::TOGGLE_PAPERBACK_STATUS, StrId::STR_PAPERBACK_STATUS});
-    group(items, StrId::STR_GRP_PAGE, std::move(pageGroup));
-
-    items.push_back(MenuItem::Header(StrId::STR_GRP_STATUS_BAR));
-    items.push_back({MenuAction::TOGGLE_STATUS_BAR, StrId::STR_STATUS_BAR});
-    // Directly under the row it depends on, and only while that row reads OFF: with the
-    // bar shown the progress bars already draw from Book Bar / Chapter Bar + Bar
-    // Thickness, so this row would be a second control for the same thing. This decides
-    // the state the menu OPENS in; syncProgressBarRow keeps it right afterwards, so the
-    // row also arrives and leaves live as the Status Bar row is toggled.
-    if (!statusBar) {
-      items.push_back({MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
-    }
-    // Everything the bar can show, and where, for this book alone. Seeded from the
-    // global layout the first time this book gets an override.
-    items.push_back({MenuAction::CUSTOMISE_STATUS_BAR, StrId::STR_CUSTOMISE_STATUS_BAR});
-
-    group(items, StrId::STR_GRP_SCREEN, {{MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION}});
   }
 
   // --- Sleep Screen: triage for the wallpaper the lock screen just showed -------
