@@ -73,6 +73,11 @@ class FontDownloadActivity : public Activity {
   FontInstaller fontInstaller_;
   ButtonNavigator buttonNavigator_;
 
+  // Streams the manifest file left on the card by fetchAndParseManifest().
+  bool parseManifest(FontManifestParser::FileRetention retention, const char* retainFor,
+                     std::vector<ManifestFamily>& out);
+  static void stampDiskState(void* context, ManifestFamily& family, const ManifestFile* files, size_t count);
+
   // Manifest data
   std::string baseUrl_;
   std::vector<ManifestFamily> families_;
@@ -84,6 +89,8 @@ class FontDownloadActivity : public Activity {
   size_t fileProgress_ = 0;
   size_t fileTotal_ = 0;
   int downloadingFamilyIndex_ = 0;
+  /** Drawn on the DOWNLOADING screen, which runs while families_ is empty. */
+  std::string downloadingFamilyName_;
   std::string errorMessage_;
   bool cancelRequested_ = false;
   // Which attempt at the current file is running, 0 while the first one is in
@@ -99,6 +106,11 @@ class FontDownloadActivity : public Activity {
   int lastDisplayedFamilyIndex_ = -1;
   size_t lastDisplayedFileIndex_ = SIZE_MAX;
   int lastDisplayedRetry_ = -1;
+  /**
+   * True while the framebuffer is lent to wolfSSL for a transfer. Nothing may
+   * draw then: the bytes the renderer would write to belong to the TLS session.
+   */
+  bool drawingSuspended_ = false;
   // Which PROGRESS_STEP_PERCENT bucket the drawn bar sits in, -1 before the first paint.
   int lastDrawnProgressStep_ = -1;
 
@@ -110,6 +122,13 @@ class FontDownloadActivity : public Activity {
   /** Read size for streaming the manifest off the SD card into the parser. */
   static constexpr size_t MANIFEST_CHUNK = 1024;
   static constexpr int MAX_ATTEMPTS = 5;
+  /**
+   * Hard ceiling on attempts for one file, however much progress they make. Only
+   * attempts that failed to grow the partial count against MAX_ATTEMPTS, so a
+   * transfer that carries a few kilobytes per attempt keeps going; this stops it
+   * from going forever.
+   */
+  static constexpr int MAX_TOTAL_ATTEMPTS = 60;
   /** Pause before a retry; each further retry waits a multiple of this. */
   static constexpr uint32_t RETRY_DELAY_MS = 1500;
   /** Longest wait for the access point to come back before an attempt. */
@@ -123,6 +142,13 @@ class FontDownloadActivity : public Activity {
    * moved. Redrawing in steps keeps the bar honest and the panel clean.
    */
   static constexpr int PROGRESS_STEP_PERCENT = 5;
+  /**
+   * Least free heap a TLS session is allowed to start on. The manifest's own
+   * handshake completed with 48188 bytes free and a file's handshake hung for a
+   * minute with 1004, taking the whole reader down with it; below this floor the
+   * download is refused with a message instead.
+   */
+  static constexpr int MIN_HEAP_FOR_TLS = 30000;
 
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
@@ -131,9 +157,16 @@ class FontDownloadActivity : public Activity {
    * file could not be fetched or did not survive its checks, and leaves the
    * state alone so a batch can carry on with the next family.
    */
-  bool downloadFamily(ManifestFamily& family);
+  /**
+   * Downloads one family by name rather than by reference: the family list is
+   * released for the duration of the transfer, so no element of it survives the
+   * call. See the note in the implementation for why the heap needs that.
+   */
+  bool downloadFamily(const std::string& familyName);
   /** downloadFamily() plus the COMPLETE or ERROR screen, for a single pick. */
-  void downloadSingleFamily(ManifestFamily& family);
+  void downloadSingleFamily(const std::string& familyName);
+  /** Re-reads the manifest on the card back into families_ after a download. */
+  bool reloadFamilies();
   /**
    * Fetches one font file, checks it, and retries a few times before giving up.
    *
@@ -168,6 +201,8 @@ class FontDownloadActivity : public Activity {
   /** Downloads every family `wanted` selects, carrying on past any that fail. */
   void runBatch(const std::function<bool(const ManifestFamily&)>& wanted);
   static bool computeFileCrc32(const char* path, uint32_t& outCrc);
+  /** Bytes currently staged at `path`, 0 when it does not exist. */
+  static size_t stagedSize(const char* path);
   bool showDownloadAllRow() const;
   bool showUpdateAllRow() const;
   int specialRowCount() const;

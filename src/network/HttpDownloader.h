@@ -29,8 +29,14 @@ class HttpDownloader {
   static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
                        const std::string& password = "");
 
+  /**
+   * As above, streaming into `stream`. outError receives why a failed fetch
+   * failed, so a caller can tell the reader whether the server refused it or the
+   * connection never got that far.
+   */
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", DownloadError* outError = nullptr,
+                       int* outStatus = nullptr);
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.

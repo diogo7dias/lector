@@ -49,6 +49,10 @@ struct Sink {
   // caller can name a file the URL did not name. Left untouched when the server
   // sends no such header.
   std::string* contentDisposition = nullptr;
+  // Status of the final response, 0 when the request never got one. A caller that
+  // shows an error to the reader needs to tell "the server said no" from "the
+  // connection never happened".
+  int status = 0;
   // Called when a ranged request came back 200 (whole body) rather than 206:
   // the partial the range was based on is worthless and must be thrown away
   // before the first chunk lands. Cleared rangeStart follows.
@@ -137,8 +141,10 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     if (restartFailed) return HttpDownloader::FILE_ERROR;
 
     if (http.aborted()) return HttpDownloader::ABORTED;
+    sink.status = status;
     if (status < 0) {
-      LOG_ERR("HTTP", "wolfSSL request failed: %s", url.c_str());
+      LOG_ERR("HTTP", "wolfSSL request failed: %s (free %d bytes, largest block %d bytes)", url.c_str(),
+              ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       return HttpDownloader::HTTP_ERROR;
     }
     if (isRedirect(status)) {
@@ -154,12 +160,13 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // the caller's checksum to make.
     if (http_range::isRangeAlreadyComplete(status, sink.rangeStart)) return HttpDownloader::OK;
     if (!http_range::isBodyStatus(status, sink.rangeStart)) {
-      LOG_ERR("HTTP", "wolfSSL unexpected status: %d", status);
+      LOG_ERR("HTTP", "wolfSSL unexpected status: %d for %s", status, url.c_str());
       return HttpDownloader::HTTP_ERROR;
     }
     if (http.callbackAborted()) return HttpDownloader::FILE_ERROR;
     if (!http.responseComplete()) {
-      LOG_ERR("HTTP", "wolfSSL incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);
+      LOG_ERR("HTTP", "wolfSSL incomplete: got %zu of %zu bytes (free %d bytes, largest block %d bytes)",
+              sink.downloaded, sink.total, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       return HttpDownloader::HTTP_ERROR;
     }
     if (sink.contentDisposition) *sink.contentDisposition = http.getHeader("content-disposition");
@@ -312,12 +319,16 @@ HttpDownloader::DownloadError runGetSecure(const std::string& url, const std::st
 }  // namespace
 
 bool HttpDownloader::fetchUrl(const std::string& url, Stream& outContent, const std::string& username,
-                              const std::string& password) {
-  LOG_DBG("HTTP", "Fetching: %s", url.c_str());
+                              const std::string& password, DownloadError* outError, int* outStatus) {
+  LOG_DBG("HTTP", "Fetching: %s (free %d bytes, largest block %d bytes)", url.c_str(), ESP.getFreeHeap(),
+          ESP.getMaxAllocHeap());
   const WifiFullPower fullPower;
   Sink sink;
   sink.write = [&outContent](const uint8_t* data, size_t len) { return outContent.write(data, len) == len; };
-  return runGetSecure(url, username, password, sink) == OK;
+  const DownloadError result = runGetSecure(url, username, password, sink);
+  if (outError) *outError = result;
+  if (outStatus) *outStatus = sink.status;
+  return result == OK;
 }
 
 bool HttpDownloader::fetchUrl(const std::string& url, std::string& outContent, const std::string& username,
@@ -376,8 +387,11 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
 
   HalFile file;
   if (resumeFrom > 0) {
-    file = Storage.open(destPath.c_str(), O_WRONLY | O_CREAT | O_APPEND);
-    if (!file.isOpen()) {
+    // Positioned, not appending: a server that ignores the Range makes the body
+    // start at 0 again, and O_APPEND would send those bytes to the end of the
+    // partial instead of over it.
+    file = Storage.open(destPath.c_str(), O_WRONLY | O_CREAT);
+    if (!file.isOpen() || !file.seekSet(resumeFrom)) {
       LOG_ERR("HTTP", "Failed to open file for append");
       return FILE_ERROR;
     }
@@ -394,13 +408,20 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   sink.downloaded = resumeFrom;
   sink.contentDisposition = contentDisposition;
   sink.write = [&file](const uint8_t* data, size_t len) { return file.write(data, len) == len; };
-  // The server answered a ranged request with the whole body, so the partial on
-  // the card is about to be overwritten from byte 0 rather than appended to.
+  // The server answered a ranged request with the whole body, so the bytes about
+  // to arrive start at 0 rather than continuing the partial.
+  //
+  // The partial is rewound, not deleted. It holds the head of this same file, and
+  // the body now arriving is that same content from byte 0, so the bytes past
+  // wherever this attempt stops are still the right ones. Truncating instead threw
+  // 32768 staged bytes away every time the CDN ignored a Range, which it does
+  // often enough that a file that needed several attempts never converged: each
+  // round carried 15 KB and then lost 32 KB. A wrong guess here cannot install a
+  // bad font; the caller checksums the finished file and starts clean on
+  // a mismatch.
   sink.restart = [&file, &destPath]() {
-    file.close();
-    Storage.remove(destPath.c_str());
-    if (!Storage.openFileForWrite("HTTP", destPath.c_str(), file)) {
-      LOG_ERR("HTTP", "Failed to reopen file after an ignored Range");
+    if (!file.seekSet(0)) {
+      LOG_ERR("HTTP", "Failed to rewind the partial after an ignored Range");
       return false;
     }
     return true;
@@ -417,8 +438,15 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
     // nowhere) leaves an empty file that would otherwise be resumed from 0 and
     // read as a partial, so it is swept up here along with every non-resumable
     // caller's leftovers.
-    const bool wroteNewBytes = sink.downloaded > sink.rangeStart;
-    if (!allowResume || !wroteNewBytes) Storage.remove(destPath.c_str());
+    // Bytes on the card, not bytes this attempt wrote: an attempt that was rewound
+    // by an ignored Range and then died early still leaves the longer partial an
+    // earlier attempt staged, and that is worth keeping.
+    size_t staged = 0;
+    if (HalFile existing; Storage.openFileForRead("HTTP", destPath.c_str(), existing)) {
+      staged = existing.fileSize();
+      existing.close();
+    }
+    if (!allowResume || staged == 0) Storage.remove(destPath.c_str());
     return result;
   }
   if (sink.downloaded == 0) {
