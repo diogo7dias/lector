@@ -10,7 +10,7 @@ namespace selection_style {
 enum Style : uint8_t {
   SOLID = 0,     // the whole row filled, text knocked out white (the original look)
   BRACKETS = 1,  // an L at each corner, text left black
-  CARET = 2,     // an arrow at the left plus a rule under the row, text left black
+  CARET = 2,     // an arrow at the left of the row's first line, text left black
   STYLE_COUNT = 3,
 };
 
@@ -44,10 +44,11 @@ constexpr int clampInt(const int value, const int low, const int high) {
   return value < low ? low : (value > high ? high : value);
 }
 
-// Stroke width, thinned on rows too short or too narrow to carry the full 3px.
+// Bracket arm thickness. Two pixels: three read as a box being drawn around the
+// row, one all but vanishes at e-ink pitch.
 constexpr int strokeFor(const int width, const int height) {
   const int limit = (width < height ? width : height) / 2;
-  return clampInt(3, 1, limit < 1 ? 1 : limit);
+  return clampInt(2, 1, limit < 1 ? 1 : limit);
 }
 
 }  // namespace detail
@@ -66,7 +67,13 @@ inline Bar inflatedSpan(const Bar span, const Bar row) {
 
 // Writes the bars painting `style` over the given row and returns how many were
 // written. A row with no area paints nothing.
-inline int bars(const Style style, const int x, const int y, const int width, const int height, Bar out[MAX_BARS]) {
+//
+// firstLineY/firstLineHeight describe the row's FIRST line of text. The caret sits
+// beside that line rather than at the row's middle, so a row that wraps onto two
+// lines is marked where reading starts instead of in the gap between them. Left at
+// their defaults the row itself is used, which is right for a single-line row.
+inline int bars(const Style style, const int x, const int y, const int width, const int height, Bar out[MAX_BARS],
+                const int firstLineY = -1, const int firstLineHeight = 0) {
   if (width <= 0 || height <= 0) return 0;
 
   if (style == SOLID) {
@@ -95,20 +102,34 @@ inline int bars(const Style style, const int x, const int y, const int width, co
     return 8;
   }
 
-  // CARET: the rule first, then the arrow drawn as columns that shorten towards
-  // its tip. On a row too short to hold a readable arrow the rule stands alone.
-  out[0] = Bar{x, y + height - stroke, width, stroke};
-  int count = 1;
+  // CARET: the arrow alone, drawn as columns that shorten towards its tip. No rule
+  // under the row -- an underline the full width of the row reads as a divider
+  // between rows rather than as the mark on one of them.
+  const bool haveLine = firstLineY >= 0 && firstLineHeight > 0;
+  const int lineY = haveLine ? firstLineY : y;
+  const int lineHeight = haveLine ? firstLineHeight : height;
 
-  int caretHeight = detail::clampInt(9, 0, height - stroke - 2);
+  int caretHeight = detail::clampInt(9, 0, lineHeight - 2);
   if (caretHeight % 2 == 0) caretHeight--;
-  if (caretHeight < 5) return count;
 
   // Two pixels per column: a one-pixel arrow all but vanishes at e-ink pitch.
   constexpr int columnWidth = 2;
   const int columns = detail::clampInt((caretHeight + 1) / 2, 2, 4);
-  const int caretLeft = x + detail::clampInt(4, 0, width - columns * columnWidth);
-  const int caretTop = y + (height - stroke - caretHeight) / 2;
+  // Clear of the row's left edge, so the arrow reads as pointing at the text
+  // rather than as part of a frame.
+  const int caretLeft = x + detail::clampInt(6, 0, width - columns * columnWidth);
+
+  if (caretHeight < 5) {
+    // Too short for an arrow to read as one. A plain tick beside the line still
+    // says which row has focus, which is the one thing that must not be dropped.
+    const int tickHeight = detail::clampInt(lineHeight, 1, height);
+    out[0] = Bar{caretLeft, detail::clampInt(lineY, y, y + height - tickHeight), columnWidth, tickHeight};
+    return 1;
+  }
+  // Centred on the first line, then held inside the row.
+  const int caretTop =
+      detail::clampInt(lineY + (lineHeight - caretHeight) / 2, y, y + height - caretHeight);
+  int count = 0;
   for (int c = 0; c < columns; ++c) {
     out[count++] = Bar{caretLeft + c * columnWidth, caretTop + c, columnWidth, caretHeight - 2 * c};
   }

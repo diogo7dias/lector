@@ -87,28 +87,52 @@ TEST(SelectionStyle, BracketArmsNeverMeetInTheMiddleOfANarrowRow) {
   }
 }
 
-TEST(SelectionStyle, CaretUnderlinesTheFullRowWidth) {
+TEST(SelectionStyle, CaretDrawsNoRuleUnderTheRow) {
   const auto painted = paint(CARET, 10, 20, 300, 30);
   expectInsideRow(painted, 10, 20, 300, 30);
-  bool underlined = false;
+  // A rule the full width of the row reads as a divider between rows, not as the
+  // mark on one of them.
   for (const Bar& b : painted) {
-    if (b.x == 10 && b.width == 300 && b.y + b.height == 50) underlined = true;
+    EXPECT_LT(b.width, 300);
   }
-  EXPECT_TRUE(underlined);
+}
+
+TEST(SelectionStyle, CaretClearsTheRowsLeftEdge) {
+  const auto painted = paint(CARET, 10, 20, 300, 30);
+  ASSERT_FALSE(painted.empty());
+  int leftmost = 1 << 20;
+  for (const Bar& b : painted) leftmost = b.x < leftmost ? b.x : leftmost;
+  EXPECT_GE(leftmost, 14);
+}
+
+TEST(SelectionStyle, CaretSitsOnTheFirstLineOfAWrappedRow) {
+  // A row two lines tall: the caret belongs beside the first line, where reading
+  // starts, not in the gap between the two.
+  Bar out[MAX_BARS];
+  const int count = bars(CARET, 10, 20, 300, 60, out, /*firstLineY=*/22, /*firstLineHeight=*/24);
+  ASSERT_GT(count, 0);
+  for (int i = 0; i < count; ++i) {
+    EXPECT_LT(out[i].y + out[i].height, 50) << "caret dropped past the first line";
+  }
 }
 
 TEST(SelectionStyle, CaretPointsAtTheRowFromTheLeft) {
   const auto painted = paint(CARET, 10, 20, 300, 30);
   // Beyond the underline, the caret is a triangle built from columns that get
   // shorter towards its tip, so the marker reads as an arrow and not a block.
-  std::vector<Bar> columns;
-  for (const Bar& b : painted) {
-    if (b.width != 300) columns.push_back(b);
-  }
+  std::vector<Bar> columns(painted.begin(), painted.end());
   ASSERT_GE(columns.size(), 3u);
   for (size_t i = 1; i < columns.size(); ++i) {
     EXPECT_LT(columns[i].height, columns[i - 1].height);
     EXPECT_GT(columns[i].x, columns[i - 1].x);
+  }
+}
+
+TEST(SelectionStyle, BracketArmsAreTwoPixelsThick) {
+  const auto painted = paint(BRACKETS, 10, 20, 300, 30);
+  ASSERT_FALSE(painted.empty());
+  for (const Bar& b : painted) {
+    EXPECT_TRUE(b.width == 2 || b.height == 2) << "a thicker arm reads as a box around the row";
   }
 }
 
@@ -134,7 +158,6 @@ TEST(SelectionStyle, CaretIsWideEnoughToReadOnEInk) {
   const auto painted = paint(CARET, 10, 20, 300, 30);
   int leftmost = 1 << 20, rightmost = 0;
   for (const Bar& b : painted) {
-    if (b.width == 300) continue;  // the underline
     leftmost = b.x < leftmost ? b.x : leftmost;
     rightmost = (b.x + b.width) > rightmost ? (b.x + b.width) : rightmost;
   }

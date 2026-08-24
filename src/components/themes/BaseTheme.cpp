@@ -408,9 +408,16 @@ bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, cons
   const selection_style::Style style = selection_style::fromSetting(SETTINGS.selectionStyle);
   const selection_style::Bar row{rect.x, rect.y, rect.width, rect.height};
 
-  const auto paint = [&renderer](const selection_style::Style s, const selection_style::Bar& area) {
+  // The first span is the row's first line of text, which is where the caret goes.
+  // Without one (a cover, a tab) it falls back to the row.
+  const int firstLineY = (spans != nullptr && spanCount > 0) ? spans[0].y : -1;
+  const int firstLineHeight = (spans != nullptr && spanCount > 0) ? spans[0].height : 0;
+
+  const auto paint = [&renderer, firstLineY, firstLineHeight](const selection_style::Style s,
+                                                              const selection_style::Bar& area) {
     selection_style::Bar painted[selection_style::MAX_BARS];
-    const int count = selection_style::bars(s, area.x, area.y, area.width, area.height, painted);
+    const int count =
+        selection_style::bars(s, area.x, area.y, area.width, area.height, painted, firstLineY, firstLineHeight);
     for (int i = 0; i < count; ++i) {
       renderer.fillRect(painted[i].x, painted[i].y, painted[i].width, painted[i].height);
     }
@@ -1292,20 +1299,28 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int barLeft = ml + floatMargin;
   const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2);
   auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
-  auto drawEdgeBar = [&](int y, int pct) {
+  // How far the bar nearest an edge is stretched to reach the panel itself. The
+  // viewable margins hold content clear of the bezel, which leaves a strip of paper
+  // between a "flush" bar and the edge of the screen; filling it is what makes the
+  // bar read as flush. A floating bar wants that gap, so it keeps it.
+  const int stretchTop = floatMargin > 0 ? 0 : mt;
+  const int stretchBottom = floatMargin > 0 ? 0 : mb;
+  auto drawEdgeBar = [&](int y, int pct, int stretchUp = 0, int stretchDown = 0) {
+    const int top = y - stretchUp;
+    const int height = barPx + stretchUp + stretchDown;
     if (!outlined) {
       const int w = barMaxW * clampPct(pct) / 100;
-      if (w > 0) renderer.fillRect(barLeft, y, w, barPx, true);
+      if (w > 0) renderer.fillRect(barLeft, top, w, height, true);
       return;
     }
     // Outlined: a 1px frame over the whole track, the fill inset inside it so the
     // empty remainder stays readable as a track.
-    renderer.drawRect(barLeft, y, barMaxW, barPx, 1, true);
+    renderer.drawRect(barLeft, top, barMaxW, height, 1, true);
     const int innerW = barMaxW - 2;
-    const int innerH = barPx - 2;
+    const int innerH = height - 2;
     if (innerW <= 0 || innerH <= 0) return;
     const int w = innerW * clampPct(pct) / 100;
-    if (w > 0) renderer.fillRect(barLeft + 1, y + 1, w, innerH, true);
+    if (w > 0) renderer.fillRect(barLeft + 1, top + 1, w, innerH, true);
   };
 
   const bool anyTopBar = SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP ||
@@ -1315,25 +1330,30 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
 
   // Top edge: book bar then chapter bar; text band below them.
   int topStack = mt + (anyTopBar ? floatMargin : 0);
+  // Only the bar nearest the edge reaches for it; a second bar stacks under the first.
+  bool topOutermost = true;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) {
-    drawEdgeBar(topStack, data.bookPercent);
+    drawEdgeBar(topStack, data.bookPercent, stretchTop);
     topStack += barPx;
+    topOutermost = false;
   }
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && data.hasChapters) {
-    drawEdgeBar(topStack, data.chapterPercent);
+    drawEdgeBar(topStack, data.chapterPercent, topOutermost ? stretchTop : 0);
     topStack += barPx;
   }
   const int topTextY = topStack + 2;
 
   // Bottom edge: bars along the bottom; text band above them.
   int bottomStack = screenH - mb - (anyBottomBar ? floatMargin : 0);
+  bool bottomOutermost = true;
   if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) {
     bottomStack -= barPx;
-    drawEdgeBar(bottomStack, data.bookPercent);
+    drawEdgeBar(bottomStack, data.bookPercent, 0, stretchBottom);
+    bottomOutermost = false;
   }
   if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && data.hasChapters) {
     bottomStack -= barPx;
-    drawEdgeBar(bottomStack, data.chapterPercent);
+    drawEdgeBar(bottomStack, data.chapterPercent, 0, bottomOutermost ? stretchBottom : 0);
   }
   const int bottomTextY = bottomStack - lineH - 2;
 
@@ -1424,6 +1444,15 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   if (data.sessionPages >= 0) {
     snprintf(sessionBuf, sizeof(sessionBuf), "+%d", data.sessionPages);
     push(SETTINGS.sbSessionPagesPos, false, sessionBuf, renderer.getTextWidth(f, sessionBuf), false);
+  }
+
+  // Pages left in the paragraph this page starts in (">P.2"). Almost always 0: a
+  // paragraph that does not run past the page bottom has nothing to warn about. The
+  // point of it is the other case, where it says how far the current thought runs on.
+  char paraBuf[12];
+  if (data.paragraphPagesLeft >= 0) {
+    snprintf(paraBuf, sizeof(paraBuf), ">P.%d", data.paragraphPagesLeft);
+    push(SETTINGS.sbParaPagesPos, false, paraBuf, renderer.getTextWidth(f, paraBuf), false);
   }
 
   // --- Reflow: a greedy (truncate-OFF) title bumps overlapping same-band
