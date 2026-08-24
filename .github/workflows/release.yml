@@ -52,12 +52,12 @@ jobs:
             echo "No version line found in platformio.ini." >&2
             exit 1
           fi
-          # Experimental tags carry no three-part number and ship their own version string
-          # to the site, so there is nothing to match; release candidates append -rc to the
-          # same number the tag names.
+          # Experimental tags carry no three-part number, so there is nothing to match a
+          # release number against: the firmware string is the tag itself. They are not
+          # published to the flasher site at all (see the publish step below); the check
+          # here is only that the build reports the tag it was cut from. Release
+          # candidates append -rc to the same number the tag names.
           if [[ "$TAG" =~ ^lector\.exp\.[0-9]+$ ]]; then
-            # The experimental channel publishes the tag name itself as the version, so
-            # the firmware string has to be that same name, not a stable number.
             if [ "$PIO_VERSION" != "$TAG" ]; then
               echo "Tag/firmware version mismatch." >&2
               echo "  tag:            $TAG" >&2
@@ -156,12 +156,20 @@ jobs:
               $PRERELEASE_FLAG
           fi
 
-      # Publishes the freshly built binaries into the wallpaper site so its
-      # /flash page can serve the latest build to the browser flasher.
-      # Stable tags only (skips *-rc*). Needs a fine-grained PAT with
-      # Contents:write on lector-xteink-firmware, stored as WALLPAPER_REPO_TOKEN.
+      # Publishes the freshly built binaries into the flasher site so its /flash page
+      # can serve the latest build to the browser flasher.
+      #
+      # Stable tags only: release candidates and experimental tags are skipped. The
+      # site serves one build and describes one release, and it has no experimental
+      # button any more -- untested firmware goes out as a USB test kit instead.
+      # Publishing an experimental payload there would put 5 MB on the site that
+      # nothing links to, which is what this skip prevents. An experimental tag still
+      # gets its GitHub prerelease with every asset attached, above.
+      #
+      # Needs a fine-grained PAT with Contents:write on lector-xteink-firmware,
+      # stored as WALLPAPER_REPO_TOKEN.
       - name: Publish firmware to flasher site
-        if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') }}
+        if: ${{ !contains(github.ref_name, 'rc') && !contains(github.ref_name, 'RC') && !startsWith(github.ref_name, 'lector.exp.') }}
         env:
           WALLPAPER_TOKEN: ${{ secrets.WALLPAPER_REPO_TOKEN }}
         run: |
@@ -170,30 +178,25 @@ jobs:
             echo "WALLPAPER_REPO_TOKEN is not set; skipping flasher publish." >&2
             exit 0
           fi
-          # Two channels, decided by the tag.
-          #   "lector.exp.N"  -> the experimental button, for firmware not yet proven
-          #                      on a device. Published as its own version string, its
-          #                      own firmware dir and its own manifest, so the stable
-          #                      button is untouched.
-          #   "lector-X.Y.Z"  -> the stable Update button (older tags were "vX.Y.Z").
-          # The site's tests enforce both display forms: "lector X.Y.Z" for stable and
-          # "lector.exp.N" for experimental, and that the two are never equal.
+          # One channel. The tag is "lector-X.Y.Z" (older ones were "vX.Y.Z"), and the
+          # site's tests enforce the "lector X.Y.Z" display form it is turned into.
+          #
+          # The step condition above keeps experimental tags out of here entirely, so
+          # there is no channel to choose: this refuses one rather than quietly
+          # publishing it as stable, because an experimental build reaching the Update
+          # button is the one mistake in this file that would ship untested firmware to
+          # every reader.
           if [[ "$GITHUB_REF_NAME" =~ ^lector\.exp\.[0-9]+$ ]]; then
-            CHANNEL=experimental
-            VERSION="$GITHUB_REF_NAME"
-            FW_DIR=experimental
-            VERSION_FILE=experimental-version.txt
-            MANIFESTS="manifest-experimental.json"
-          else
-            CHANNEL=stable
-            NUM="${GITHUB_REF_NAME#lector-}"
-            NUM="${NUM#v}"
-            VERSION="lector ${NUM}"
-            FW_DIR=latest
-            VERSION_FILE=version.txt
-            MANIFESTS="manifest-update.json manifest-full.json"
+            echo "$GITHUB_REF_NAME is an experimental tag and is not published to the site." >&2
+            exit 1
           fi
-          echo "Publishing $VERSION to the $CHANNEL channel."
+          NUM="${GITHUB_REF_NAME#lector-}"
+          NUM="${NUM#v}"
+          VERSION="lector ${NUM}"
+          FW_DIR=latest
+          VERSION_FILE=version.txt
+          MANIFESTS="manifest-update.json manifest-full.json"
+          echo "Publishing $VERSION to the stable channel."
           BUILD_DIR=.pio/build/gh_release
           BOOT_APP0="$(find "$HOME/.platformio/packages" -path '*/tools/partitions/boot_app0.bin' | head -n1)"
           if [ -z "$BOOT_APP0" ]; then
@@ -222,9 +225,9 @@ jobs:
                   with open(path) as fh:
                       data = json.load(fh)
               else:
-                  # The experimental manifest is created on its first publish. Same shape
-                  # as the update manifest (app-only: boot_app0 + firmware, no erase), only
-                  # pointed at this channel's firmware directory.
+                  # Both stable manifests are committed, so this is a first-publish
+                  # fallback only: app-only (boot_app0 + firmware, no erase), pointed at
+                  # this channel's firmware directory.
                   data = {
                       "name": "Lector",
                       "version": version,
