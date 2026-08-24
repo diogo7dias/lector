@@ -416,12 +416,16 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    // Front Left/Right step by the setting's own step; the side buttons jump by five of
-    // them, so a wide range is crossed in a few presses rather than tapped across one at
-    // a time. Back cancels, which stepping in place could not offer.
+    // Front Left/Right always step by one, whatever the setting declares: a row that can
+    // only be set to a multiple of five cannot be set to the value between them, and a
+    // brightness or a margin is exactly where that one unit is worth having. The side
+    // buttons carry the setting's own step (five, where it has one) so a wide range is
+    // still crossed in a few presses. Back cancels, which stepping in place could not
+    // offer.
     const auto valuePtr = setting.valuePtr;
-    valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, setting.valueRange.step,
-                  setting.valueRange.step * 5, SETTINGS.*(setting.valuePtr), setting.nameId,
+    constexpr int minLargeStep = 5;
+    valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
+                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr), setting.nameId,
                   [this, valuePtr](const int chosen) {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
                     applyFrontlightSetting(valuePtr);
