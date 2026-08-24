@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Build a Mac test kit: firmware + a double-clickable flasher and log recorder.
 #
-# Usage: scripts/testkit/make_testkit.sh [output_dir]
+# Usage: scripts/testkit/make_testkit.sh [output_dir] [env]
+#
+# env defaults to "testkit" (the ESP32-C3 X3/X4 build). Pass "x4pro" for the
+# X4 Pro, which is a different chip (ESP32-S3) and so needs its own kit: the
+# flasher reads the chip out of kit.env, and an S3 image written with --chip
+# esp32c3 is refused by the ROM loader.
 #
 # The kit is a zip the reader downloads, unzips, and double-clicks. It flashes
 # over USB and writes a log to ~/Downloads that comes back here as the evidence
@@ -11,7 +16,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT_DIR="${1:-$HOME/testkit-www}"
-ENV_NAME="testkit"
+ENV_NAME="${2:-testkit}"
 BUILD_DIR="$REPO_ROOT/.pio/build/$ENV_NAME"
 # Downloaded once by hand; see docs/testkit.md. Kept out of the repo because it
 # is a 13 MB prebuilt binary.
@@ -25,7 +30,11 @@ DIRTY=""
 git diff --quiet || DIRTY="-dirty"
 VERSION_SLUG="$(printf '%s' "$VERSION" | tr ' ' '-' | tr -cd '[:alnum:].-')"
 STAMP="$(date +%Y%m%d-%H%M%S)"
-KIT_NAME="lector-testkit-${VERSION_SLUG}-${COMMIT}${DIRTY}-${STAMP}"
+case "$ENV_NAME" in
+  x4pro) KIT_CHIP="esp32s3"; KIT_LABEL="x4pro-" ;;
+  *) KIT_CHIP="esp32c3"; KIT_LABEL="" ;;
+esac
+KIT_NAME="lector-testkit-${KIT_LABEL}${VERSION_SLUG}-${COMMIT}${DIRTY}-${STAMP}"
 
 echo "Building $ENV_NAME for $VERSION ($COMMIT$DIRTY)"
 pio run -e "$ENV_NAME" >/dev/null
@@ -51,7 +60,7 @@ KIT_VERSION="$VERSION"
 KIT_VERSION_SLUG="$VERSION_SLUG"
 KIT_COMMIT="$COMMIT$DIRTY"
 KIT_BUILT="$(date '+%Y-%m-%d %H:%M:%S %z')"
-KIT_CHIP="esp32c3"
+KIT_CHIP="$KIT_CHIP"
 KIT_BAUD="115200"
 KIT_FLASH_SIZE="16MB"
 ENVEOF
@@ -82,7 +91,7 @@ PYEOF
 
 # A stable name alongside the timestamped one, so the command handed over never
 # changes between kits.
-cp "$OUT_DIR/$KIT_NAME.zip" "$OUT_DIR/lector-testkit-latest.zip"
+cp "$OUT_DIR/$KIT_NAME.zip" "$OUT_DIR/lector-testkit-${KIT_LABEL}latest.zip"
 
 echo "$OUT_DIR/$KIT_NAME.zip"
 du -h "$OUT_DIR/$KIT_NAME.zip" | cut -f1
