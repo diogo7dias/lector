@@ -134,6 +134,17 @@ void HalGPIO::begin() {
   }
 #else
   _deviceType = DeviceType::X4;
+#if FREEINK_DEVICE_X4PRO
+  // The X4 Pro ships in two panel batches: the SSD1677 the profile defaults to,
+  // and the UltraChip sibling (UC8179 / UC8279). Fingerprint the live display
+  // bus before FreeInkDisplay claims the pins. Without this the build always
+  // drives SSD1677 commands, so an UltraChip unit paints nothing and every BUSY
+  // wait returns in 0 ms because BUSY is never asserted.
+  freeink::applyXteinkDisplayController();
+  LOG_INF("HW", "X4 Pro display controller=%u busy pin=%d level=%d",
+          static_cast<unsigned>(BoardConfig::ACTIVE.displayController), BoardConfig::ACTIVE.display.busy,
+          BoardConfig::ACTIVE.display.busy >= 0 ? digitalRead(BoardConfig::ACTIVE.display.busy) : -1);
+#endif
 #endif
   inputMgr.begin();
 }
