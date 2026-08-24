@@ -22,6 +22,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
+#include "SleepGrayscaleBase.h"
 #include "RecentBooksStore.h"
 #include "SleepInfoOverlay.h"
 #include "StatsDashboardPolicy.h"
@@ -490,7 +491,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
     return AlphaOverlayResult::Error;
   // Must stay HALF for the same reason renderBitmapSleepScreen documents: the gray
   // nudge LUT is calibrated against the state the HALF waveform leaves behind.
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -1129,7 +1130,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     // calibrated against the pixel state the single-pass HALF waveform leaves
     // behind. A FULL (GC) base parks pixels in a different charge state and
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
-    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+    renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
   } else {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
@@ -1197,7 +1198,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   LOG_DBG("SLP", "Rendering transparent PNG overlay: %s (%dx%d)", path.c_str(), dimensions.width, dimensions.height);
 
   if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);

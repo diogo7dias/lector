@@ -13,8 +13,12 @@ constexpr int kRightMargin = 6;
 // Below this the thumb reads as a speck rather than a position. Long lists (a font list,
 // a library) hit it, and a thumb that keeps its length still tracks position by moving.
 constexpr int kMinThumbHeight = 16;
+// The white margin knocked out around the track. Headings and the selected row are solid
+// black bars that run the full width of the list, and a black thumb on a black bar shows
+// nothing at all; the outline keeps the indicator readable wherever it lands.
+constexpr int kOutlineWidth = 1;
 // What the list has to give up on its right-hand side so rows never run under the track.
-constexpr int kReservedWidth = kWidth + kRightMargin * 2;
+constexpr int kReservedWidth = kWidth + kOutlineWidth * 2 + kRightMargin * 2;
 
 struct Bar {
   bool visible;

@@ -501,6 +501,11 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     const list_scrollbar::Bar bar = list_scrollbar::forList(rect.y, rect.height, itemCount, windowStart, pageItems);
     if (bar.visible) {
       const int barX = list_scrollbar::trackX(rect.x, rect.width);
+      // Knocked out of whatever is behind it first: a heading bar or a selected row is
+      // solid black, and a black thumb on black is no indicator at all.
+      renderer.fillRect(barX - list_scrollbar::kOutlineWidth, bar.trackY - list_scrollbar::kOutlineWidth,
+                        list_scrollbar::kWidth + list_scrollbar::kOutlineWidth * 2,
+                        bar.trackHeight + list_scrollbar::kOutlineWidth * 2, false);
       // The track is dithered, the thumb solid: on a one-bit panel that is the only way
       // to show the thumb's position against the track it slides in.
       renderer.fillRectDither(barX, bar.trackY, list_scrollbar::kWidth, bar.trackHeight, Color::LightGray);
@@ -531,7 +536,9 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     // screen in a way that makes one look like the other, and one solid band reads as
     // a divider far better at e-ink contrast than a hairline rule does.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
-      const std::string headingText = rowTitle(i);
+      // Bracketed like the screen title above it, for the same reason: the UI font has
+      // no bold face, so the brackets are what marks a line as a label rather than a row.
+      const std::string headingText = header_title::decorate(rowTitle(i).c_str());
       renderer.fillRect(rect.x, itemY - 2, rect.width, rowHeight);
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
       const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);

@@ -16,6 +16,7 @@
 #include <cstdlib>
 
 #include "Epub/converters/DirectPixelWriter.h"
+#include "SleepGrayscaleBase.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const bool grayscale,
                           const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&)) {
@@ -157,7 +158,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // gray-nudge LUT is calibrated against (see renderBitmapSleepScreen). On the X4
   // that waveform also powers the panel rails down, which is why the driver config
   // enables grayPowerUpFirst (src/platform/LectorSsd1677Config.cpp).
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
   stage("grayBase");
 
   renderer.clearScreen(0x00);
