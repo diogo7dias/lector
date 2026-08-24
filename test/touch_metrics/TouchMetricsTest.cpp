@@ -6,16 +6,15 @@ namespace {
 
 ThemeMetrics base() { return BaseMetrics::values; }
 
-TEST(TouchMetrics, ListRowsReachTheFingerTarget) {
+// Rows keep the button-era height on a touch board too: they span the full width, so
+// they are already a wide target, and matching the home screen's rows matters more than
+// the extra millimetre.
+TEST(TouchMetrics, ListRowsKeepTheirHeight) {
   EXPECT_EQ(base().listRowHeight, 30);
-  EXPECT_EQ(touch_metrics::adjusted(base()).listRowHeight, 56);
+  EXPECT_EQ(touch_metrics::adjusted(base()).listRowHeight, base().listRowHeight);
+  EXPECT_EQ(touch_metrics::adjusted(base()).listWithSubtitleRowHeight, base().listWithSubtitleRowHeight);
+  EXPECT_EQ(touch_metrics::adjusted(base()).menuRowHeight, base().menuRowHeight);
 }
-
-TEST(TouchMetrics, SubtitleRowsGrowWithTheirTwoLines) {
-  EXPECT_EQ(touch_metrics::adjusted(base()).listWithSubtitleRowHeight, 72);
-}
-
-TEST(TouchMetrics, MenuRowsReachTheFingerTarget) { EXPECT_EQ(touch_metrics::adjusted(base()).menuRowHeight, 60); }
 
 TEST(TouchMetrics, ButtonHintBandBecomesATapTarget) {
   EXPECT_EQ(touch_metrics::adjusted(base()).buttonHintsHeight, 56);
@@ -41,11 +40,10 @@ TEST(TouchMetrics, AlreadyRoomyMetricsAreNotShrunk) {
   EXPECT_EQ(touch.buttonHintsHeight, 90);
 }
 
-TEST(TouchMetrics, EveryTouchTargetClearsTheFortyEightPixelFloor) {
+// The bands that are narrow as well as short clear the floor. Rows are exempt by
+// design: full-screen width is what makes them hittable.
+TEST(TouchMetrics, TheNarrowTouchTargetsClearTheFortyEightPixelFloor) {
   const ThemeMetrics touch = touch_metrics::adjusted(base());
-  EXPECT_GE(touch.listRowHeight, touch_metrics::kMinTarget);
-  EXPECT_GE(touch.listWithSubtitleRowHeight, touch_metrics::kMinTarget);
-  EXPECT_GE(touch.menuRowHeight, touch_metrics::kMinTarget);
   EXPECT_GE(touch.buttonHintsHeight, touch_metrics::kMinTarget);
   EXPECT_GE(touch.keyboardKeyHeight, touch_metrics::kMinTarget);
 }
