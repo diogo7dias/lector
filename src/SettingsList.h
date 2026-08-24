@@ -284,7 +284,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // the option list.
     v.push_back(SettingInfo::Enum(
         StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-        {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30},
+        {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30,
+         StrId::STR_REFRESH_NEVER},
         "refreshFrequency", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
@@ -679,6 +680,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
                            StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
                           "sbSessionPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+
+    v.push_back(
+        SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos,
+                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
+                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
+                          "sbParaPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
     v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
                                   {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",

@@ -23,6 +23,7 @@ struct StatusBarBlock {
   uint8_t chapterPctPos = 0;
   uint8_t chapterNumPos = 0;
   uint8_t sessionPagesPos = 0;
+  uint8_t paraPagesPos = 0;
   uint8_t bookBar = 0;
   uint8_t chapterBar = 0;
   uint8_t barThickness = 0;
@@ -212,6 +213,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     REFRESH_10 = 2,
     REFRESH_15 = 3,
     REFRESH_30 = 4,
+    // Turns off the reader's own periodic clean, matching upstream. It is not a
+    // promise of no flashes: DisplayRefreshPolicy still forces one on ink debt,
+    // which is what makes the option safe to offer at all. A fork-only "Never"
+    // that disabled everything was removed in 060905bae because residue built up
+    // over a long reading run on the X3.
+    REFRESH_NEVER = 5,
     REFRESH_FREQUENCY_COUNT
   };
 
@@ -380,6 +387,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sbChapterPctPos = SB_ANCHOR_OFF;    // chapter % (C:NN%) anchor
   uint8_t sbChapterNumPos = SB_ANCHOR_OFF;    // chapter #/total (Ch N/M) anchor
   uint8_t sbSessionPagesPos = SB_ANCHOR_OFF;  // pages turned this sitting (+N) anchor
+  uint8_t sbParaPagesPos = SB_ANCHOR_OFF;     // pages left in this paragraph (>P.N) anchor
   uint8_t sbBookBar = SB_EDGE_OFF;            // book progress bar edge (Off/Top/Bottom)
   uint8_t sbChapterBar = SB_EDGE_OFF;         // chapter progress bar edge
   uint8_t sbBarThickness = SB_BAR_MEDIUM;     // progress bar thickness slim/med/fat
