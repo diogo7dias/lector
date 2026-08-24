@@ -17,6 +17,7 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/BannerStyle.h"
+#include "components/HeaderTitle.h"
 #include "components/HintBandGeometry.h"
 #include "components/ListScrollPolicy.h"
 #include "components/OptionPopupGeometry.h"
@@ -321,7 +322,20 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
     if (labels[i] != nullptr && labels[i][0] != '\0') {
       const hint_band::Slot slot = hint_band::slot(band, i);
       renderer.fillRect(slot.x, slot.y, slot.width, slot.height, false);
-      renderer.drawRect(slot.x, slot.y, slot.width, slot.height);
+      if (band.touch) {
+        // The touch band tiles the full width, so neighbouring slots share an edge and
+        // a per-slot drawRect() painted that edge twice: the dividers between the
+        // buttons came out two pixels wide against the one-pixel line along the top.
+        // Draw the outline by hand and let each slot own only its right-hand divider;
+        // the leftmost slot draws the outer left edge, and the rightmost one's divider
+        // is the outer right edge.
+        renderer.fillRect(slot.x, slot.y, slot.width, 1);                   // top
+        renderer.fillRect(slot.x, slot.y + slot.height - 1, slot.width, 1);  // bottom
+        renderer.fillRect(slot.x + slot.width - 1, slot.y, 1, slot.height);  // divider / right edge
+        if (i == 0) renderer.fillRect(slot.x, slot.y, 1, slot.height);       // outer left edge
+      } else {
+        renderer.drawRect(slot.x, slot.y, slot.width, slot.height);
+      }
       drawHintLabel(renderer, UI_10_FONT_ID, labels[i], slot.x, slot.width, slot.y, slot.height, textYOffset);
     }
   }
@@ -629,8 +643,10 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
     // Same size as the rows under it and as the home screen's own text. A step larger
-    // read as bold next to everything else on the screen.
-    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, title,
+    // read as bold next to everything else on the screen. The brackets are what marks it
+    // as the title instead: see components/HeaderTitle.h for why not bold.
+    const std::string decoratedTitle = header_title::decorate(title);
+    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, decoratedTitle.c_str(),
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::REGULAR);
     renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);

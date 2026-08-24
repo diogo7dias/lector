@@ -20,16 +20,18 @@ namespace touch_metrics {
 constexpr int kMinTarget = 48;
 
 // Chosen above the floor, not at it: a band that measures exactly the minimum leaves no
-// room for the miss, and these are what a reader hits over and over. Both are bands the
-// list rows are not: a hint slot is a quarter of the width, a key a tenth.
-constexpr int kButtonHintsHeight = 56;
+// room for the miss, and a key is only a tenth of the width.
 constexpr int kKeyboardKeyHeight = 62;
 
-// Raises only the interactive bands, and only upwards: a theme that already asks for a
-// roomier row keeps it.
+// THE BUTTON HINT BAND IS DELIBERATELY NOT RAISED EITHER. A 56 px band was tried on the
+// X4 Pro and read as a wall across the bottom of every screen; it keeps the button-era
+// 40 px instead. A hint slot is a quarter of the screen wide, so it stays an easy target,
+// and the pixels go back to the list above it.
+//
+// Raises only the keyboard, and only upwards: a theme that already asks for a roomier
+// key keeps it.
 inline ThemeMetrics adjusted(const ThemeMetrics& base) {
   ThemeMetrics touch = base;
-  touch.buttonHintsHeight = std::max(base.buttonHintsHeight, kButtonHintsHeight);
   touch.keyboardKeyHeight = std::max(base.keyboardKeyHeight, kKeyboardKeyHeight);
   return touch;
 }
