@@ -204,6 +204,12 @@ void WifiSelectionActivity::beginJoin(const std::string& ssid, const std::string
     LOG_ERR("WIFI", "Failed to read station MAC for hostname (err=%d)", static_cast<int>(macResult));
   }
 
+  // Length only, never the password itself: enough to tell a truncated or empty
+  // stored credential from a wrong one, without putting a secret in a log that
+  // gets mailed around.
+  LOG_INF("WIFI", "Joining: ssid_len=%u password_len=%u", static_cast<unsigned>(ssid.size()),
+          static_cast<unsigned>(password.size()));
+
   if (!password.empty()) {
     WiFi.begin(ssid.c_str(), password.c_str());
   } else {
@@ -336,7 +342,14 @@ void WifiSelectionActivity::pollRadio() {
         continue;
       }
       network.rssi = WiFi.RSSI(i);
-      network.isEncrypted = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+      const wifi_auth_mode_t authMode = WiFi.encryptionType(i);
+      network.isEncrypted = (authMode != WIFI_AUTH_OPEN);
+      // A join that dies in the 4-way handshake looks identical whether the saved
+      // password is stale or the access point demands something this radio will not
+      // do (WPA3-only, or PMF required). The auth mode separates the two, and it is
+      // only knowable here, while the scan results are still alive.
+      LOG_INF("WIFI", "Scan: auth=%d rssi=%d channel=%d", static_cast<int>(authMode), static_cast<int>(network.rssi),
+              static_cast<int>(WiFi.channel(i)));
       found.push_back(network);
     }
     WiFi.scanDelete();
