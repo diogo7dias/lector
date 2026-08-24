@@ -5,98 +5,57 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
+
+namespace fui = freeink::ui;
 
 namespace {
 constexpr int MENU_ITEM_COUNT = 4;
+constexpr StrId MENU_ITEMS[MENU_ITEM_COUNT] = {StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS,
+                                               StrId::STR_CREATE_HOTSPOT, StrId::STR_NEARBY_TRANSFER};
+constexpr StrId MENU_DESCS[MENU_ITEM_COUNT] = {StrId::STR_JOIN_DESC, StrId::STR_CALIBRE_DESC, StrId::STR_HOTSPOT_DESC,
+                                               StrId::STR_NEARBY_TRANSFER_DESC};
+constexpr UIIcon MENU_ICONS[MENU_ITEM_COUNT] = {UIIcon::Wifi, UIIcon::Library, UIIcon::Hotspot, UIIcon::Transfer};
+constexpr NetworkMode MENU_MODES[MENU_ITEM_COUNT] = {NetworkMode::JOIN_NETWORK, NetworkMode::CONNECT_CALIBRE,
+                                                     NetworkMode::CREATE_HOTSPOT, NetworkMode::NEARBY_READER};
 }  // namespace
 
-void NetworkModeSelectionActivity::onEnter() {
-  Activity::onEnter();
-
-  // Reset selection
-  selectedIndex = 0;
-
-  // Trigger first update
-  requestUpdate();
+void NetworkModeSelectionActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
 }
 
-void NetworkModeSelectionActivity::onExit() { Activity::onExit(); }
+int NetworkModeSelectionActivity::listCount() const { return MENU_ITEM_COUNT; }
 
-void NetworkModeSelectionActivity::loop() {
-  auto selectCurrent = [this] {
-    NetworkMode mode = NetworkMode::JOIN_NETWORK;
-    if (selectedIndex == 1) {
-      mode = NetworkMode::CONNECT_CALIBRE;
-    } else if (selectedIndex == 2) {
-      mode = NetworkMode::CREATE_HOTSPOT;
-    } else if (selectedIndex == 3) {
-      mode = NetworkMode::NEARBY_READER;
-    }
-    onModeSelected(mode);
-  };
+const char* NetworkModeSelectionActivity::headerTitle() const { return tr(STR_FILE_TRANSFER); }
 
-  // Handle back button - cancel
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onCancel();
-    return;
-  }
-
-  // A tap on a row selects and activates it, the same as every other list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(MENU_ITEM_COUNT)) {
-    selectedIndex = tappedRow;
-    selectCurrent();
-    return;
-  }
-
-  // Handle confirm button - select current option
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    selectCurrent();
-    return;
-  }
-
-  // Handle navigation
-  buttonNavigator.onNext([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, MENU_ITEM_COUNT);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPrevious([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, MENU_ITEM_COUNT);
-    requestUpdate();
-  });
-}
-
-void NetworkModeSelectionActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
+void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FILE_TRANSFER));
+  rows.assign(MENU_ITEM_COUNT, fui::ListItem{});
+  for (int i = 0; i < MENU_ITEM_COUNT; ++i) {
+    rows[i].label = I18N.get(MENU_ITEMS[i]);
+    rows[i].subtitle = I18N.get(MENU_DESCS[i]);
+    rows[i].icon = listIconFor(MENU_ICONS[i], 32);
+    rows[i].actionValue = static_cast<int16_t>(i);
+  }
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
-  // Menu items and descriptions
-  static constexpr StrId menuItems[MENU_ITEM_COUNT] = {StrId::STR_JOIN_NETWORK, StrId::STR_CALIBRE_WIRELESS,
-                                                       StrId::STR_CREATE_HOTSPOT, StrId::STR_NEARBY_TRANSFER};
-  static constexpr StrId menuDescs[MENU_ITEM_COUNT] = {StrId::STR_JOIN_DESC, StrId::STR_CALIBRE_DESC,
-                                                       StrId::STR_HOTSPOT_DESC, StrId::STR_NEARBY_TRANSFER_DESC};
-  static constexpr UIIcon menuIcons[MENU_ITEM_COUNT] = {UIIcon::Wifi, UIIcon::Library, UIIcon::Hotspot,
-                                                        UIIcon::Transfer};
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(MENU_ITEM_COUNT);
+  props.action = ACTION_ROW;
+  props.iconSize = 32;
+  syncListViewport(screen, props, true);
+  screen.list(props);
+}
 
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(MENU_ITEM_COUNT), selectedIndex,
-      [](int index) { return std::string(I18N.get(menuItems[index])); },
-      [](int index) { return std::string(I18N.get(menuDescs[index])); }, [](int index) { return menuIcons[index]; });
-
-  // Draw help text at bottom
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+void NetworkModeSelectionActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  onModeSelected(MENU_MODES[index]);
 }
 
 void NetworkModeSelectionActivity::onModeSelected(NetworkMode mode) {
