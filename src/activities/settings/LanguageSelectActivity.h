@@ -1,34 +1,31 @@
 #pragma once
 
-#include <GfxRenderer.h>
 #include <I18n.h>
 
-#include <functional>
+#include "activities/UiListActivity.h"
 
-#include "activities/Activity.h"
-#include "components/UITheme.h"
-#include "util/ButtonNavigator.h"
-
+class GfxRenderer;
 class MappedInputManager;
 
 /**
  * Activity for selecting UI language
  */
-class LanguageSelectActivity final : public Activity {
+class LanguageSelectActivity final : public UiListActivity {
  public:
-  explicit LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("LanguageSelect", renderer, mappedInput) {}
+  LanguageSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
+      : UiListActivity("LanguageSelect", renderer, mappedInput) {}
 
   void onEnter() override;
-  void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override { return totalItems; }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  const char* headerTitle() const override;
+  // Native language names span Arabic, Hebrew, Cyrillic and Latin, so the rows
+  // MUST use the full-coverage Ubuntu font whatever the active UI font is.
+  int listFontId() const override;
 
  private:
-  void handleSelection();
-
-  void onBack() { finish(); }
-  ButtonNavigator buttonNavigator;
-  int selectedIndex = 0;
-  constexpr static uint8_t totalItems = getLanguageCount();
+  constexpr static int totalItems = getLanguageCount();
 };

@@ -10,70 +10,55 @@
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
 #include "UiFont.h"
+#include "components/UITheme.h"
 #include "fontIds.h"
 
-void LanguageSelectActivity::onEnter() {
-  Activity::onEnter();
+namespace fui = freeink::ui;
 
-  // Set current selection based on current language
+void LanguageSelectActivity::onEnter() {
+  UiListActivity::onEnter();
+
+  // Start on the active language rather than the top of the list.
   const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
   const auto* begin = std::begin(SORTED_LANGUAGE_INDICES);
   const auto* end = std::end(SORTED_LANGUAGE_INDICES);
   const auto* it = std::find(begin, end, currentLang);
-  selectedIndex = (it != end) ? std::distance(begin, it) : 0;
-
-  requestUpdate();
+  moveSelectionTo(it != end ? static_cast<int>(std::distance(begin, it)) : 0);
 }
 
-void LanguageSelectActivity::onExit() { Activity::onExit(); }
+const char* LanguageSelectActivity::headerTitle() const { return tr(STR_LANGUAGE); }
 
-void LanguageSelectActivity::loop() {
-  auto activateSelected = [this] { handleSelection(); };
+int LanguageSelectActivity::listFontId() const { return UBUNTU_10_FONT_ID; }
 
-  // A tap on a row selects and activates it, the same as every other list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(totalItems)) {
-    selectedIndex = tappedRow;
-    activateSelected();
-    return;
+void LanguageSelectActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // The base paints the header and the button hints itself, outside the app.
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+
+  // Built on the render task, one screen at a time; the label pointers are
+  // I18n statics, so the array only holds borrowed strings.
+  static fui::ListItem items[totalItems];
+  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
+  for (int i = 0; i < totalItems; ++i) {
+    const uint8_t lang = SORTED_LANGUAGE_INDICES[i];
+    items[i] = fui::ListItem{};
+    items[i].label = I18N.getLanguageName(static_cast<Language>(lang));
+    items[i].value = lang == currentLang ? tr(STR_SELECTED) : nullptr;
+    items[i].actionValue = static_cast<int16_t>(i);
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    onBack();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    activateSelected();
-    return;
-  }
-
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
-
-  // Handle navigation
-  buttonNavigator.onNextStep([this] {
-    selectedIndex = ButtonNavigator::nextIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousStep([this] {
-    selectedIndex = ButtonNavigator::previousIndex(static_cast<int>(selectedIndex), totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectedIndex), totalItems, pageItems);
-    requestUpdate();
-  });
+  fui::ListProps props{};
+  props.items = items;
+  props.count = static_cast<uint16_t>(totalItems);
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
 }
 
-void LanguageSelectActivity::handleSelection() {
-  const uint8_t langIndex = SORTED_LANGUAGE_INDICES[selectedIndex];
+void LanguageSelectActivity::activateIndex(const int index) {
+  const uint8_t langIndex = SORTED_LANGUAGE_INDICES[index];
 
   {
     RenderLock lock(*this);
@@ -86,36 +71,6 @@ void LanguageSelectActivity::handleSelection() {
   SETTINGS.language = langIndex;
   SETTINGS.saveToFile();
 
-  // Return to previous page
-  onBack();
-}
-
-void LanguageSelectActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  auto metrics = UITheme::getInstance().getMetrics();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_LANGUAGE));
-
-  // Current language marker
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const auto currentLang = static_cast<uint8_t>(I18N.getLanguage());
-  // Native language names span Arabic, Hebrew, Cyrillic and Latin, so the list MUST use
-  // the full-coverage Ubuntu font (UBUNTU_10_FONT_ID) regardless of the active UI font —
-  // otherwise the Arabic/Hebrew names box out when Cozette is active.
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalItems, selectedIndex,
-      [this](int index) { return I18N.getLanguageName(static_cast<Language>(SORTED_LANGUAGE_INDICES[index])); },
-      nullptr, nullptr,
-      [this, currentLang](int index) { return SORTED_LANGUAGE_INDICES[index] == currentLang ? tr(STR_SELECTED) : ""; },
-      true, nullptr, UBUNTU_10_FONT_ID);
-
-  // Button hints
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+  app.clearTapFlash();
+  finish();
 }

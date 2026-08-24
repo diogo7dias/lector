@@ -17,6 +17,10 @@ UiListActivity::UiListActivity(const char* name, GfxRenderer& renderer, MappedIn
 
 void UiListActivity::onEnter() {
   Activity::onEnter();
+  // Before resetUi(): the shared theme tokens are derived from this target's
+  // fonts, so a screen-specific body font has to be bound first.
+  const int fontId = listFontId();
+  if (fontId >= 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
   activeNav().reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);

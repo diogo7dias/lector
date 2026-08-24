@@ -58,6 +58,11 @@ class UiListActivity : public Activity, protected UiAppHost {
   // variants. Return true when a button consumed the pass.
   virtual bool handleButtons();
   virtual void onBackButton() { finish(); }
+  // GfxRenderer font the list rows are drawn with, bound into the body slot on
+  // entry. -1 keeps the uiScale body font. Screens whose labels leave the UI
+  // font's coverage (native language names span Arabic, Hebrew and Cyrillic)
+  // name a full-coverage font here instead of boxing out.
+  virtual int listFontId() const { return -1; }
   // Header band, drawn before the app renders. Default paints GUI.drawHeader
   // with headerTitle(); override either for custom chrome.
   virtual const char* headerTitle() const { return nullptr; }
