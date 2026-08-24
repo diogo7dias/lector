@@ -59,6 +59,28 @@ struct ThemeMetrics {
   int scrollBarWidth;
   int scrollBarRightOffset;
 
+  // FreeInkUI theme tokens. The SDK's UI toolkit takes its shape from these rather
+  // than from hard-coded constants, so a screen hosted on FreeInkUI comes out looking
+  // like the rest of this firmware. Values below match what BaseTheme already draws by
+  // hand; a theme that overrides the hand-drawn look overrides these alongside it.
+  int listRowGap;
+  int listRowRadius;
+  int listInset;
+  int listSidePadding;
+  // 0 = the filled bar this firmware uses for a selected row.
+  int listSelectionStyle;
+  int listScrollWidth;
+  // 0 = scroll indicator on the right, 1 = on the left.
+  int listScrollSide;
+  bool listTitleBold;
+  int headerSidePadding;
+  int headerUnderlineSize;
+  // 0 = left aligned, 1 = centred.
+  int headerTitleAlign;
+  int controlRadius;
+  int sheetRadius;
+  int capsuleRadius;
+
   int homeTopPadding;
   int homeCoverHeight;
   int homeCoverTileHeight;
@@ -136,6 +158,20 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .tabBarHeight = 50,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
+                                 .listRowGap = 0,
+                                 .listRowRadius = 0,
+                                 .listInset = 0,
+                                 .listSidePadding = 20,  // matches contentSidePadding
+                                 .listSelectionStyle = 0,
+                                 .listScrollWidth = 4,
+                                 .listScrollSide = 0,
+                                 .listTitleBold = false,
+                                 .headerSidePadding = 20,
+                                 .headerUnderlineSize = 0,
+                                 .headerTitleAlign = 1,
+                                 .controlRadius = 0,
+                                 .sheetRadius = 0,
+                                 .capsuleRadius = 0,
                                  .homeTopPadding = 40,
                                  .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,

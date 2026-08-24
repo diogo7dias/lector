@@ -376,6 +376,19 @@ bool MappedInputManager::wasHomeGesture() const {
   return wasBottomEdgeUpSwipe();
 }
 
+bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (!gpio.wasTouchLongPress(nx, ny)) return false;
+  // Consuming the long press implies acting on it: drop the rest of the contact so the
+  // finger lift cannot also tap whatever the action opened.
+  gpio.suppressTouchContact();
+  renderer.tapToLogical(nx, ny, x, y);
+  return true;
+}
+
+bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
+
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
 list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {

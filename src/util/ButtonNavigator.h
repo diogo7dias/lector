@@ -31,6 +31,12 @@ class ButtonNavigator final {
   void onPreviousPress(const Callback& callback);
   void onPress(const Buttons& buttons, const Callback& callback);
 
+  // One step on the RELEASE, suppressed when a hold already repeated. Used by the
+  // FreeInkUI list host, where a hold pages and so must not also step on the way up.
+  void onNextRelease(const Callback& callback);
+  void onPreviousRelease(const Callback& callback);
+  void onRelease(const Buttons& buttons, const Callback& callback);
+
   // One step on the press, then auto-repeat while held (see onContinuous).
   void onNextStep(const Callback& callback);
   void onPreviousStep(const Callback& callback);

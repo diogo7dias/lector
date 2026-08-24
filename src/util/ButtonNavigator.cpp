@@ -23,6 +23,26 @@ void ButtonNavigator::onNextPress(const Callback& callback) { onPress(getNextBut
 
 void ButtonNavigator::onPreviousPress(const Callback& callback) { onPress(getPreviousButtons(), callback); }
 
+void ButtonNavigator::onNextRelease(const Callback& callback) { onRelease(getNextButtons(), callback); }
+
+void ButtonNavigator::onPreviousRelease(const Callback& callback) { onRelease(getPreviousButtons(), callback); }
+
+void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback) {
+  // A swipe carries no press or release, so it is taken here too: without it a list
+  // hosted on release-stepping would ignore touch scrolling entirely.
+  if (swipeMatches(buttons)) {
+    callback();
+    return;
+  }
+  const bool released = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
+    return mappedInput != nullptr && mappedInput->wasReleased(button);
+  });
+  if (!released) return;
+  // A release that ends a repeat run moves nothing: the hold already did the moving.
+  if (lastContinuousNavTime == 0) callback();
+  lastContinuousNavTime = 0;
+}
+
 void ButtonNavigator::onNextStep(const Callback& callback) { onStep(getNextButtons(), callback); }
 
 void ButtonNavigator::onPreviousStep(const Callback& callback) { onStep(getPreviousButtons(), callback); }
