@@ -31,6 +31,9 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["sleepCursorSeededCount"] = sleepCursorSeededCount;
   doc["sleepCursorSeeded"] = sleepCursorSeeded;
   doc["sleepFreshNext"] = sleepFreshNext;
+#ifdef LECTOR_LOCK_LAB
+  lockLabToJson(lockLab, doc);
+#endif
 }
 
 bool CrossPointState::fromJson(JsonVariantConst doc) {
@@ -65,5 +68,8 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   sleepCursorSeededCount = doc["sleepCursorSeededCount"] | static_cast<uint32_t>(0);
   sleepCursorSeeded = doc["sleepCursorSeeded"] | false;
   sleepFreshNext = doc["sleepFreshNext"] | static_cast<uint32_t>(0);
+#ifdef LECTOR_LOCK_LAB
+  lockLabFromJson(lockLab, doc);
+#endif
   return true;
 }

@@ -12,9 +12,6 @@
 #include <Memory.h>
 #include <Txt.h>
 #include <Xtc.h>
-
-#include "SleepTiming.h"
-
 #include <esp_random.h>
 
 #include <algorithm>
@@ -25,15 +22,17 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
-#include "SleepGrayscaleBase.h"
 #include "RecentBooksStore.h"
+#include "SleepGrayscaleBase.h"
 #include "SleepInfoOverlay.h"
+#include "SleepTiming.h"
 #include "StatsDashboardPolicy.h"
 #include "StatsDashboardRenderer.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/BannerStyle.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
+#include "dev/LockLab.h"
 #include "fontIds.h"
 #include "images/BootLogos.h"
 #include "images/MoonIcon.h"
@@ -845,6 +844,14 @@ void SleepActivity::renderStatsDashboardSleepScreen() const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
+#ifdef LECTOR_LOCK_LAB
+  // A Full lock run has to draw what the bench draws, or the number it reports belongs to
+  // a different recipe than the picture on the panel.
+  const PxcRenderOptions labOptions = locklab::optionsFor(APP_STATE.lockLab);
+  const PxcRenderOptions* const pxcOptions = &labOptions;
+#else
+  const PxcRenderOptions* const pxcOptions = nullptr;
+#endif
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
@@ -879,7 +886,8 @@ void SleepActivity::renderCustomSleepScreen() const {
   constexpr bool pxcGrayscale = true;
   {
     const SleepInfoOverlayScope overlayScope("/sleep.pxc");
-    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
+    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,
+                             pxcOptions)) {
       LOG_INF("SLP", "Loaded: /sleep.pxc");
       APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
       return;
@@ -1047,7 +1055,8 @@ void SleepActivity::renderCustomSleepScreen() const {
       delay(100);
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
       if (hasPxcExtension(name)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
+        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,
+                                 pxcOptions)) {
           APP_STATE.lastSleepWallpaperPath = filename;
           return true;
         }

@@ -44,6 +44,7 @@
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
+#include "dev/LockLab.h"
 #include "fontIds.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
@@ -383,12 +384,12 @@ void enterDeepSleep(bool fromTimeout = false) {
   const unsigned long sleepTBudget = millis();
   // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
   // when the stages were first measured, and only about 4800 ms of that was the panel.
-  char paintStages[256];
+  char paintStages[320];
   SleepTiming::format(paintStages, sizeof(paintStages));
-  char sleepNote[384];
+  char sleepNote[448];
   snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
-           sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint,
-           sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi, paintStages);
+           sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint, sleepTWifi - sleepTFrame,
+           sleepTBudget - sleepTWifi, paintStages);
   PerfLog::note(sleepNote);
   PerfLog::flush();
 
@@ -396,8 +397,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   const unsigned long sleepTPanel = millis();
   // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
   // what a lock cost.
-  LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote,
-          sleepTPanel - sleepTBudget);
+  LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote, sleepTPanel - sleepTBudget);
   LOG_DBG("MAIN", "Entering deep sleep");
   // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
   // chip, so anything still buffered here is lost.
@@ -1218,6 +1218,18 @@ void loop() {
     screenshotButtonsReleased = true;
     screenshotComboActive = false;
   }
+
+#ifdef LECTOR_LOCK_LAB
+  // The Lock Lab's "Full lock" run. It goes through the ordinary sleep path rather than
+  // rendering in place, because a render in isolation skips the favourites reconcile, the
+  // index pick, the frame save and the WiFi teardown, and those are most of the ten
+  // seconds being measured.
+  if (locklab::takePendingFullLock()) {
+    LOG_INF("LAB", "Full lock requested");
+    enterDeepSleep();
+    return;
+  }
+#endif
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {

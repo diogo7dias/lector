@@ -35,6 +35,9 @@ int HomeActivity::menuRowCount() const {
   if (hasOpdsServers) {
     count++;
   }
+#ifdef LECTOR_LOCK_LAB
+  count++;  // Lock Lab, kit builds only
+#endif
   return count;
 }
 
@@ -123,6 +126,11 @@ void HomeActivity::loop() {
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
+#ifdef LECTOR_LOCK_LAB
+      case HomeMenuItem::LOCK_LAB:
+        onLockLabOpen();
+        break;
+#endif
       default:
         break;
     }
@@ -254,6 +262,15 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
+#ifdef LECTOR_LOCK_LAB
+  // Appended after Settings, and after the OPDS insert above, so the row order every
+  // other index in this file assumes is untouched. Literal rather than tr(): the lab is
+  // never in a release build and the generated string tables are not #ifdef-aware, so a
+  // key for it would cost flash in shipped firmware.
+  menuItems.push_back("Lock Lab");
+  menuIcons.push_back(Settings);
+#endif
+
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
@@ -380,6 +397,10 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
+
+#ifdef LECTOR_LOCK_LAB
+void HomeActivity::onLockLabOpen() { activityManager.goToLockLab(); }
+#endif
 
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 

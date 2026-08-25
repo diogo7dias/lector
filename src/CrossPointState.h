@@ -5,6 +5,8 @@
 #include <cstdint>
 #include <string>
 
+#include "dev/LockLabState.h"
+
 class CrossPointState : public PersistableStore<CrossPointState> {
   CrossPointState() = default;
 
@@ -98,6 +100,12 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   static const char* getFilePath() { return "/.crosspoint/state.json"; }
   void toJson(JsonDocument& doc) const;
   bool fromJson(JsonVariantConst doc);
+
+#ifdef LECTOR_LOCK_LAB
+  // Bench knobs, not user settings: kept here because this store is the one already
+  // written on the way into sleep, which is the trip being measured.
+  LockLabState lockLab;
+#endif
 };
 
 // Helper macro to access state

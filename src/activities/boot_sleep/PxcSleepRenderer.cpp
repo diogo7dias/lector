@@ -12,16 +12,25 @@
 #include <Logging.h>
 #include <Memory.h>
 
-#include "SleepTiming.h"
-
 #include <cstdint>
 #include <cstdlib>
 
 #include "Epub/converters/DirectPixelWriter.h"
+#include "PxcDither.h"
 #include "SleepGrayscaleBase.h"
+#include "SleepTiming.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const bool grayscale,
-                          const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&)) {
+                          const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&),
+                          const PxcRenderOptions* const opts) {
+#ifdef LECTOR_LOCK_LAB
+  // A default-constructed struct is the shipped behaviour, so a lab build with no options
+  // set renders exactly what a release build renders.
+  static const PxcRenderOptions kShipped;
+  const PxcRenderOptions& o = (opts != nullptr) ? *opts : kShipped;
+#else
+  (void)opts;
+#endif
   HalFile file;
   const uint32_t openStartMs = millis();
   // Storage.open, not openFileForRead: the latter calls exists() and then open(), and
@@ -64,8 +73,14 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // not fit we fall back to the per-pass row-batch SD reads below. The 1-bit path
   // decodes exactly once, so the cache buys nothing there — skip the attempt.
   const size_t payloadBytes = static_cast<size_t>(bytesPerRow) * pxcHeight;
+  bool wantFrameCache = grayscale;
+#ifdef LECTOR_LOCK_LAB
+  // Turning the cache off is how the lab measures what the three re-reads actually cost
+  // on a board where the payload does fit, which is every X4 Pro (8MB PSRAM) and no C3.
+  wantFrameCache = grayscale && o.wholeFileCache;
+#endif
   std::unique_ptr<uint8_t[]> frame;
-  if (grayscale) {
+  if (wantFrameCache) {
     frame = makeUniqueNoThrow<uint8_t[]>(payloadBytes);
     if (frame) {
       if (!file.seek(dataOffset) || file.read(frame.get(), payloadBytes) != static_cast<int>(payloadBytes)) {
@@ -80,6 +95,9 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // from OOM-bricking (build is -fno-exceptions: a failed alloc must be caught
   // here, never thrown).
   int rowsPerRead = 4096 / bytesPerRow;
+#ifdef LECTOR_LOCK_LAB
+  if (o.rowsPerRead != 0) rowsPerRead = o.rowsPerRead;
+#endif
   if (rowsPerRead < 1) rowsPerRead = 1;
   if (rowsPerRead > pxcHeight) rowsPerRead = pxcHeight;
   auto readBuffer = makeUniqueNoThrow<uint8_t[]>(static_cast<size_t>(rowsPerRead) * bytesPerRow);
@@ -95,6 +113,16 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
 
   // The image is full-screen, so the origin is (0,0); no centering/scaling.
   const int x = 0, y = 0;
+
+  // Hoisted out of the per-pixel loop: one load here instead of 384000 of them. On the
+  // release path the dither mode is a literal, so the switch inside ditherMid folds away.
+#ifdef LECTOR_LOCK_LAB
+  const uint8_t* const levelMap = o.levelMap;
+  const bool invert = o.invert;
+  const PxcRenderOptions::Dither ditherMode = o.dither;
+#else
+  constexpr PxcRenderOptions::Dither ditherMode = PxcRenderOptions::BAYER2;
+#endif
 
   // Decode the whole frame into the CURRENT render mode. Re-seekable so it can be
   // replayed once per grayscale plane. Returns false on a read/seek error.
@@ -128,13 +156,18 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
         const int byteIdx = col >> 2;            // col / 4
         const int bitShift = 6 - (col & 3) * 2;  // MSB first within byte
         uint8_t pixelValue = (rowBuffer[byteIdx] >> bitShift) & 0x03;
+#ifdef LECTOR_LOCK_LAB
+        // Tone first, then polarity, then dither: the mask has to see the levels the
+        // panel will actually be asked to draw, or it dithers the wrong two.
+        pixelValue = levelMap[pixelValue];
+        if (invert) pixelValue = 3 - pixelValue;
+#endif
         if (!grayscale && pixelValue != 0 && pixelValue != 3) {
           // Standalone 1-bit render: the plain BW pass collapses every non-white
           // level to solid black, which turns a light wallpaper into a black blob.
-          // Ordered-dither the two mid levels (85 / 170) with a 2x2 Bayer matrix so
-          // tone survives in pure B&W; pure black (0) and pure white (3) stay solid.
-          static const uint8_t kBayer2[2][2] = {{0, 2}, {3, 1}};
-          pixelValue = (pixelValue > kBayer2[row & 1][col & 1]) ? 3 : 0;
+          // Ordered-dither the two mid levels (85 / 170) so tone survives in pure B&W;
+          // pure black (0) and pure white (3) stay solid.
+          pixelValue = pxcdither::ditherMid(ditherMode, pixelValue, row, col);
         }
         pw.writePixel(x + col, pixelValue);
       }
@@ -175,8 +208,27 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // gray-nudge LUT is calibrated against (see renderBitmapSleepScreen). On the X4
   // that waveform also powers the panel rails down, which is why the driver config
   // enables grayPowerUpFirst (src/platform/LectorSsd1677Config.cpp).
-  renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
+  HalDisplay::RefreshMode grayBase = sleepGrayscaleBaseRefresh();
+#ifdef LECTOR_LOCK_LAB
+  if (o.grayBaseRefresh >= 0) grayBase = static_cast<HalDisplay::RefreshMode>(o.grayBaseRefresh);
+  if (o.passes != PxcRenderOptions::PLANES_ONLY) {
+    renderer.displayGrayscaleBase(grayBase);
+  }
+#else
+  renderer.displayGrayscaleBase(grayBase);
+#endif
   stage("grayBase");
+  SleepTiming::mark("graybase");
+
+#ifdef LECTOR_LOCK_LAB
+  if (o.passes == PxcRenderOptions::BASE_ONLY) {
+    // The base paint alone, so whatever is left of the render's cost belongs to the two
+    // planes and the composite rather than to the waveform.
+    renderer.setRenderMode(GfxRenderer::BW);
+    stage("base only done");
+    return true;
+  }
+#endif
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -189,6 +241,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   if (overlay != nullptr) overlay(renderer);
   renderer.copyGrayscaleLsbBuffers();
   stage("copyLSB");
+  SleepTiming::mark("lsb");
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
@@ -199,6 +252,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   if (overlay != nullptr) overlay(renderer);
   renderer.copyGrayscaleMsbBuffers();
   stage("copyMSB");
+  SleepTiming::mark("msb");
 
   renderer.displayGrayBuffer();
   renderer.setRenderMode(GfxRenderer::BW);
