@@ -20,7 +20,8 @@ namespace {
 
 const char* const kQuality[] = {"Fast (1-bit)", "Pretty (4-level)"};
 const char* const kDither[] = {"Bayer 2x2", "Bayer 4x4", "Blue noise", "Threshold"};
-const char* const kLevelMap[] = {"Identity", "Lift blacks", "Crush whites", "High contrast"};
+const char* const kLevelMap[] = {"Identity",     "Lift blacks", "Crush whites", "High contrast",
+                                 "Darken lines", "Heavy ink",   "Bright mids",  "Ink on white"};
 const char* const kOffOn[] = {"Off", "On"};
 const char* const kRefresh[] = {"Full", "Half", "Fast"};
 const char* const kRefreshAuto[] = {"Auto", "Full", "Half", "Fast"};
@@ -33,12 +34,20 @@ const char* const kRealSleep[] = {"Render only", "Full lock"};
 // The tone curves. A .pxc carries four levels and nothing else, so a four-entry table is
 // the entire curve available: anything a converter can do to the midtones after the fact
 // is some permutation of these four numbers.
-constexpr uint8_t kLevelMaps[4][4] = {
+constexpr uint8_t kLevelMaps[8][4] = {
     {0, 1, 2, 3},  // Identity: the image as the encoder made it
     {1, 2, 2, 3},  // Lift blacks: shadow detail out of a picture that reads as a blob
     {0, 1, 3, 3},  // Crush whites: highlights to paper white, for a washed-out scan
     {0, 0, 3, 3},  // High contrast: the midtones gone, which is what the panel does anyway
                    // when the base pass is wrong, so it doubles as a control
+    {0, 0, 2, 3},  // Darken lines: level 1 to ink, midtone kept. Line art whose strokes
+                   // read grey rather than black, without flattening the background.
+    {0, 0, 1, 3},  // Heavy ink: as above and the midtone dropped a step. A background that
+                   // is too pale to sit behind white subject matter.
+    {0, 2, 3, 3},  // Bright mids: level 1 up to the midtone. Opens a picture that lost its
+                   // shadow detail to a base pass darker than the encoder assumed.
+    {0, 3, 3, 3},  // Ink on white: only true black survives. Maximum separation for pen
+                   // and ink, and the widest black-to-white span the format can express.
 };
 
 constexpr uint16_t kRowsPerReadValues[5] = {0, 1, 4, 8, 16};
@@ -46,7 +55,7 @@ constexpr uint16_t kRowsPerReadValues[5] = {0, 1, 4, 8, 16};
 const Knob kKnobs[] = {
     {"Quality", &LockLabState::quality, 2, kQuality},
     {"Dither (1-bit)", &LockLabState::dither, 4, kDither},
-    {"Tone curve", &LockLabState::levelMap, 4, kLevelMap},
+    {"Tone curve", &LockLabState::levelMap, 8, kLevelMap},
     {"Invert", &LockLabState::invert, 2, kOffOn},
     {"1-bit refresh", &LockLabState::oneBitRefresh, 3, kRefresh},
     {"Gray base refresh", &LockLabState::grayBaseRefresh, 4, kRefreshAuto},
@@ -105,7 +114,7 @@ PxcRenderOptions optionsFor(const LockLabState& state) {
   PxcRenderOptions o;
   o.dither = static_cast<PxcRenderOptions::Dither>(state.dither);
   o.passes = static_cast<PxcRenderOptions::Passes>(state.passes);
-  memcpy(o.levelMap, kLevelMaps[state.levelMap < 4 ? state.levelMap : 0], sizeof(o.levelMap));
+  memcpy(o.levelMap, kLevelMaps[state.levelMap < 8 ? state.levelMap : 0], sizeof(o.levelMap));
   o.invert = state.invert != 0;
   // Position 0 is Auto, which is the -1 the renderer reads as "ask
   // sleepGrayscaleBaseRefresh()"; the rest line up with HalDisplay::RefreshMode.
