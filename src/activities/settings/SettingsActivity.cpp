@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <GfxRenderer.h>
+#include <HalFrontlight.h>
 #include <Logging.h>
 
 #include <algorithm>
@@ -19,10 +20,7 @@
 #include "LanguageSelectActivity.h"
 #include "MappedInputManager.h"
 #include "OpdsServerListActivity.h"
-#include "WifiCredentialStore.h"
 #include "OpdsServerStore.h"
-#include "activities/network/NearbyFileTransferActivity.h"
-#include "util/CredentialBundle.h"
 #include "OtaUpdateActivity.h"
 #include "PopupItemsActivity.h"
 #include "SdCardFontSystem.h"
@@ -30,6 +28,8 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "WifiCredentialStore.h"
+#include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/settings/SettingsListNav.h"
 #include "activities/util/IntervalSelectionActivity.h"
@@ -38,8 +38,22 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "util/CredentialBundle.h"
 
 namespace {
+
+// Push a just-changed frontlight row down to the hardware, so the light answers
+// the row instead of waiting for the next boot. No-op for every other row, and
+// on a board with no frontlight (HalFrontlight is inert there).
+void applyFrontlightSetting(uint8_t CrossPointSettings::* const valuePtr) {
+  if (valuePtr == &CrossPointSettings::frontlightOn) {
+    Frontlight.setOn(SETTINGS.frontlightOn != 0);
+  } else if (valuePtr == &CrossPointSettings::frontlightBrightness) {
+    Frontlight.setBrightness(SETTINGS.frontlightBrightness);
+  } else if (valuePtr == &CrossPointSettings::frontlightWarmth) {
+    Frontlight.setWarmth(SETTINGS.frontlightWarmth);
+  }
+}
 
 // One section of the list: the heading, then the rows under it in display order.
 struct SettingsGroup {
@@ -118,6 +132,12 @@ void SettingsActivity::rebuildSettingsList() {
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
       }
+      // Touch reader settings only mean something on a board with a digitiser.
+      if ((setting.valuePtr == &CrossPointSettings::touchReaderControls ||
+           setting.valuePtr == &CrossPointSettings::showReaderMenu) &&
+          !gpio.hasTouch()) {
+        continue;
+      }
       controlsSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_SYSTEM) {
       systemSettings.push_back(setting);
@@ -154,30 +174,38 @@ void SettingsActivity::rebuildSettingsList() {
 
   // Section headings. Applied last so the ACTION rows spliced in above are grouped
   // alongside the settings they belong with rather than stranded at the ends.
+  // Frontlight leads: brightness and warmth are reached for daily, the rest of this
+  // category once in a while. Then the screen itself, then the two sleep-screen groups,
+  // which are set up once and revisited only when the wallpapers change.
   applyGroups(displaySettings,
               {
+                  // Absent on a board with no frontlight, and applyGroups draws no
+                  // heading for a group whose rows are all missing.
+                  {StrId::STR_GRP_FRONTLIGHT,
+                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
+                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
                   {StrId::STR_GRP_SLEEP_SCREEN,
                    {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_WAKE_STRAIGHT_TO_BOOK,
                     StrId::STR_SLEEP_FOOTER_TEXT}},
                   {StrId::STR_GRP_WALLPAPER,
-                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SLEEP_IMAGE_QUALITY,
+                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
-                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
               });
 
-  applyGroups(readerSettings,
-              {
-                  {StrId::STR_GRP_TEXT,
-                   {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS,
-                    StrId::STR_DICTIONARY}},
-                  {StrId::STR_GRP_PAGE,
-                   {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE}},
-                  {StrId::STR_GRP_LOOK,
-                   {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_NIGHT_MODE,
-                    StrId::STR_CUSTOMISE_STATUS_BAR}},
-              });
+  applyGroups(
+      readerSettings,
+      {
+          {StrId::STR_GRP_TEXT,
+           {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS, StrId::STR_DICTIONARY}},
+          {StrId::STR_GRP_PAGE,
+           {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE}},
+          {StrId::STR_GRP_LOOK,
+           {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_NIGHT_MODE,
+            StrId::STR_CUSTOMISE_STATUS_BAR}},
+      });
 
   applyGroups(
       controlsSettings,
@@ -188,9 +216,9 @@ void SettingsActivity::rebuildSettingsList() {
            {StrId::STR_SHORT_PWR_BTN, StrId::STR_PWR_BTN_FOOTNOTE_BACK, StrId::STR_DOUBLE_CLICK_POWER}},
           // Pop-up Items sits with the bindings, because it only configures what the
           // pop-up those bindings open actually contains.
-          {StrId::STR_GRP_HOLD,
-           {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
+          {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
           {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
+          {StrId::STR_GRP_TOUCH, {StrId::STR_TOUCH_READER_CONTROLS, StrId::STR_SHOW_READER_MENU}},
       });
 
   applyGroups(
@@ -202,8 +230,7 @@ void SettingsActivity::rebuildSettingsList() {
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
           {StrId::STR_GRP_STATS, {StrId::STR_TRACK_READING_STATS, StrId::STR_READING_IDLE_LIMIT}},
           {StrId::STR_GRP_NETWORK,
-           {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
-            StrId::STR_SHARE_CREDENTIALS}},
+           {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS, StrId::STR_SHARE_CREDENTIALS}},
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
             StrId::STR_SD_FIRMWARE_UPDATE}},
@@ -211,7 +238,11 @@ void SettingsActivity::rebuildSettingsList() {
 
   settings.clear();
   settings.reserve(displaySettings.size() + readerSettings.size() + controlsSettings.size() + systemSettings.size());
-  for (auto* category : {&displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
+  // Reader first, then Display, Controls, System: ordered by how often a row is actually
+  // reached for. Text size, fonts and the status bar are tuned while reading; the
+  // frontlight is next, which is why it leads Display; buttons and the system rows are
+  // set once and then left alone.
+  for (auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
     settings.insert(settings.end(), std::make_move_iterator(category->begin()),
                     std::make_move_iterator(category->end()));
   }
@@ -255,6 +286,14 @@ void SettingsActivity::onExit() {
 void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < settingsCount) {
+    selectedSettingIndex = tappedRow;
+    toggleCurrentSetting();
+    requestUpdate();
+    return;
+  }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     toggleCurrentSetting();
@@ -319,6 +358,7 @@ void SettingsActivity::toggleCurrentSetting() {
     // Toggle the boolean value using the member pointer
     const bool currentValue = SETTINGS.*(setting.valuePtr);
     SETTINGS.*(setting.valuePtr) = !currentValue;
+    applyFrontlightSetting(setting.valuePtr);
   } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
     const uint8_t currentValue = SETTINGS.*(setting.valuePtr);
     if (setting.enumValues.size() > 2) {
@@ -383,14 +423,19 @@ void SettingsActivity::toggleCurrentSetting() {
     }
     setting.valueSetter((cur + 1) % totalValues);
   } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-    // Front Left/Right step by the setting's own step; the side buttons jump by five of
-    // them, so a wide range is crossed in a few presses rather than tapped across one at
-    // a time. Back cancels, which stepping in place could not offer.
+    // Front Left/Right always step by one, whatever the setting declares: a row that can
+    // only be set to a multiple of five cannot be set to the value between them, and a
+    // brightness or a margin is exactly where that one unit is worth having. The side
+    // buttons carry the setting's own step (five, where it has one) so a wide range is
+    // still crossed in a few presses. Back cancels, which stepping in place could not
+    // offer.
     const auto valuePtr = setting.valuePtr;
-    valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, setting.valueRange.step,
-                  setting.valueRange.step * 5, SETTINGS.*(setting.valuePtr), setting.nameId,
+    constexpr int minLargeStep = 5;
+    valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
+                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr), setting.nameId,
                   [this, valuePtr](const int chosen) {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
+                    applyFrontlightSetting(valuePtr);
                     SETTINGS.saveToFile();
                     rebuildSettingsList();
                     restoreCursorAfterRebuild();

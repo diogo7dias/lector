@@ -1,9 +1,8 @@
 #pragma once
 
-#include <functional>
+#include <vector>
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiListActivity.h"
 
 enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, NEARBY_READER };
 
@@ -15,22 +14,25 @@ enum class NetworkMode { JOIN_NETWORK, CONNECT_CALIBRE, CREATE_HOTSPOT, NEARBY_R
  * - "Nearby Reader" - Receive a file straight from another reader over ESP-NOW,
  *   with no network involved at all
  *
- * The onModeSelected callback is called with the user's choice.
- * The onCancel callback is called if the user presses back.
+ * The chosen mode is returned as a NetworkModeResult; Back cancels.
  */
-class NetworkModeSelectionActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
-
-  int selectedIndex = 0;
-
+class NetworkModeSelectionActivity final : public UiListActivity {
  public:
   explicit NetworkModeSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("NetworkModeSelection", renderer, mappedInput) {}
-  void onEnter() override;
+      : UiListActivity("NetworkModeSelection", renderer, mappedInput) {}
+
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
 
   void onModeSelected(NetworkMode mode);
   void onCancel();
+
+ protected:
+  int listCount() const override;
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onBackButton() override { onCancel(); }
+  const char* headerTitle() const override;
+
+ private:
+  std::vector<freeink::ui::ListItem> rows;
 };

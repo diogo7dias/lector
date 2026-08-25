@@ -91,9 +91,19 @@ class HalGPIO {
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
   bool hasTouch() const;
+  // The X4 Pro's capacitive Home key, reported by the touch controller rather than
+  // a GPIO. Boards without one answer false and never fire the two events.
+  bool hasHomeKey() const;
+  bool wasHomeKeyTapped() const;
+  bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float& nx, float& ny) const;
   bool wasTouchDown(float& nx, float& ny) const;
   bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
+  bool wasTouchLongPress(float& nx, float& ny) const;
+  bool wasTouchReleased() const;
+  // Drop the rest of the current contact, so a finger lift after an action has already
+  // fired cannot also land as a tap on whatever that action opened.
+  void suppressTouchContact();
   bool isTouchHeldAt(float& nx, float& ny) const;
   unsigned long lastTouchHeldMs() const;
   bool wasSwipe(float& nxStart, float& nyStart, float& nxEnd, float& nyEnd) const;

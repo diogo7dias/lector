@@ -15,6 +15,7 @@ class ButtonNavigator final {
   static const MappedInputManager* mappedInput;
 
   [[nodiscard]] bool shouldNavigateContinuously() const;
+  [[nodiscard]] static bool swipeMatches(const Buttons& buttons);
 
  public:
   explicit ButtonNavigator(const uint16_t continuousIntervalMs = 500, const uint16_t continuousStartMs = 500)
@@ -29,6 +30,12 @@ class ButtonNavigator final {
   void onNextPress(const Callback& callback);
   void onPreviousPress(const Callback& callback);
   void onPress(const Buttons& buttons, const Callback& callback);
+
+  // One step on the RELEASE, suppressed when a hold already repeated. Used by the
+  // FreeInkUI list host, where a hold pages and so must not also step on the way up.
+  void onNextRelease(const Callback& callback);
+  void onPreviousRelease(const Callback& callback);
+  void onRelease(const Buttons& buttons, const Callback& callback);
 
   // One step on the press, then auto-repeat while held (see onContinuous).
   void onNextStep(const Callback& callback);

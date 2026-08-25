@@ -6,6 +6,7 @@
 
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
+#include "activities/reader/ReaderTouchZones.h"
 
 namespace ReaderUtils {
 
@@ -32,6 +33,70 @@ inline void applyOrientation(GfxRenderer& renderer, const uint8_t orientation) {
     default:
       break;
   }
+}
+
+struct TouchPageTurn {
+  bool prev;
+  bool next;
+  bool menu;
+  unsigned long heldMs;
+};
+
+inline reader_touch::Mode touchMode() { return static_cast<reader_touch::Mode>(SETTINGS.touchReaderControls); }
+inline reader_touch::MenuMode readerMenuMode() { return static_cast<reader_touch::MenuMode>(SETTINGS.showReaderMenu); }
+
+// Touch on the open page: page turns and the tap into the reader menu, in one pass.
+// A swipe is read first so a slow drag never also registers as a tap.
+inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const MappedInputManager& input) {
+  TouchPageTurn result{false, false, false, 0};
+  const reader_touch::Mode mode = touchMode();
+  if (mode == reader_touch::Mode::Off || !input.hasTouch()) return result;
+
+  if (reader_touch::swipeTurnsPages(mode)) {
+    const auto dir = input.wasSwipe();
+    if (dir == MappedInputManager::SwipeDir::Left) {
+      result.next = true;
+      return result;
+    }
+    if (dir == MappedInputManager::SwipeDir::Right) {
+      result.prev = true;
+      return result;
+    }
+  }
+
+  int x = 0;
+  int y = 0;
+  if (!input.wasScreenTapped(x, y)) return result;
+
+  switch (reader_touch::tapAction(mode, readerMenuMode(), renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
+    case reader_touch::TapAction::Prev:
+      result.prev = true;
+      break;
+    case reader_touch::TapAction::Next:
+      result.next = true;
+      break;
+    case reader_touch::TapAction::Menu:
+      result.menu = true;
+      break;
+    case reader_touch::TapAction::None:
+      break;
+  }
+  result.heldMs = gpio.lastTouchHeldMs();
+  return result;
+}
+
+// The reader menu opens on the bottom-edge swipe where that variant is selected, or on
+// the centre tap detectTouchPageTurn reports. With touch reader controls Off the page
+// ignores touch entirely, menu included, so a stray brush cannot open it; the menu stays
+// reachable from the Confirm button.
+//
+// The top-edge swipe used to open the menu too. It belongs to the light panel now
+// (ActivityManager), which needs a gesture reachable from every screen; the menu keeps
+// two ways in and is the only one of the two that also has a button.
+inline bool isTouchMenuGesture(const MappedInputManager& input, bool centreTap = false) {
+  if (touchMode() == reader_touch::Mode::Off || !input.hasTouch()) return false;
+  if (readerMenuMode() == reader_touch::MenuMode::SwipeUp && input.wasReaderMenuSwipeUp()) return true;
+  return centreTap;
 }
 
 struct PageTurnResult {

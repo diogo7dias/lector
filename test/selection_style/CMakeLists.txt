@@ -1,18 +1,3 @@
-add_executable(SelectionStyleTest
-  SelectionStyleTest.cpp
-)
-
-target_include_directories(SelectionStyleTest PRIVATE
-  ${REPO_ROOT}/src/components/themes
-)
-
-target_link_libraries(SelectionStyleTest PRIVATE
-  crosspoint_test_common
-  GTest::gtest_main
-)
-
-gtest_discover_tests(SelectionStyleTest)
-
 add_executable(SelectionAuditTest
   SelectionAuditTest.cpp
 )

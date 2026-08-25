@@ -8,9 +8,9 @@ namespace SleepTiming {
 namespace {
 
 // The wallpaper face is the longest path: favourites, popup, four index-pick stages, the
-// file open, decode, face, state -- ten today, with room left before anyone has to think
-// about it.
-constexpr size_t kMax = 16;
+// file open, decode, the three grayscale passes, face, state -- thirteen today, with room
+// left before anyone has to think about it.
+constexpr size_t kMax = 24;
 
 const char* names[kMax];
 uint16_t stamps[kMax];

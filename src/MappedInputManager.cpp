@@ -6,6 +6,8 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
+#include "components/HintBandGeometry.h"
+#include "components/RowHitTest.h"
 #include "components/UITheme.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
@@ -51,36 +53,52 @@ MappedInputManager::Button MappedInputManager::mapScreenDirection(const Button b
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
   const auto sideLayout = SETTINGS.sideButtonLayout;
+  // A tap on the hint band stands in for the front button that hint belongs to. Routed
+  // through the same hardware ids the physical keys use, so every logical role — Back,
+  // Confirm, NavNext, the lot — inherits it without a second mapping to keep in step.
+  // Only the edge queries take it: isPressed() asks whether a key is being held, which a
+  // tap never is.
+  const bool tapCounts = (fn == &HalGPIO::wasPressed || fn == &HalGPIO::wasReleased);
+  const int tapped = tapCounts ? tappedHintHardware() : -1;
+  const auto press = [&](const uint8_t hw) {
+    if ((gpio.*fn)(hw)) return true;
+    if (tapped < 0 || hw != tapped) return false;
+    // Spend the tap here. Without this a single tap answers both wasPressed() and
+    // wasReleased() in the same frame, which a physical key never does — it presses on one
+    // frame and releases on a later one — and an activity that watches both would act twice.
+    hintTapUsed = true;
+    return true;
+  };
 
   switch (button) {
     case Button::Back:
       // Logical Back maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonBack);
+      return press(SETTINGS.frontButtonBack);
     case Button::Confirm:
       // Logical Confirm maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonConfirm);
+      return press(SETTINGS.frontButtonConfirm);
     case Button::Left:
       // Logical Left maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonLeft);
+      return press(SETTINGS.frontButtonLeft);
     case Button::Right:
       // Logical Right maps to user-configured front button.
-      return (gpio.*fn)(SETTINGS.frontButtonRight);
+      return press(SETTINGS.frontButtonRight);
     case Button::Up:
       // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_UP);
+      return press(HalGPIO::BTN_UP);
     case Button::Down:
       // Side buttons remain fixed for Up/Down.
-      return (gpio.*fn)(HalGPIO::BTN_DOWN);
+      return press(HalGPIO::BTN_DOWN);
     case Button::Power:
       // Power button bypasses remapping.
-      return (gpio.*fn)(HalGPIO::BTN_POWER);
+      return press(HalGPIO::BTN_POWER);
     case Button::PageBack:
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(HalGPIO::BTN_UP);
+          return press(HalGPIO::BTN_UP);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(HalGPIO::BTN_DOWN);
+          return press(HalGPIO::BTN_DOWN);
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
@@ -89,9 +107,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       // Reader page navigation uses side buttons and can be swapped via settings.
       switch (sideLayout) {
         case CrossPointSettings::PREV_NEXT:
-          return (gpio.*fn)(HalGPIO::BTN_DOWN);
+          return press(HalGPIO::BTN_DOWN);
         case CrossPointSettings::NEXT_PREV:
-          return (gpio.*fn)(HalGPIO::BTN_UP);
+          return press(HalGPIO::BTN_UP);
         case CrossPointSettings::SIDE_BUTTONS_DISABLED:
         default:
           return false;
@@ -124,6 +142,48 @@ constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 }  // namespace
 
 bool MappedInputManager::hasTouch() const { return gpio.hasTouch(); }
+
+int MappedInputManager::tappedHintHardware() const {
+  // Slots are painted left to right in hardware order, the same order mapFrontLabels()
+  // fills its labels in, so slot N belongs to front button N.
+  static constexpr uint8_t kSlotHardware[hint_band::kSlotCount] = {HalGPIO::BTN_BACK, HalGPIO::BTN_CONFIRM,
+                                                                   HalGPIO::BTN_LEFT, HalGPIO::BTN_RIGHT};
+  const hint_band::Painted& painted = hint_band::lastPainted();
+
+  float nx = 0.0f;
+  float ny = 0.0f;
+  // Read the tap without consuming it at the HAL: an activity that also handles taps of
+  // its own still sees this one, and a tap outside the band is left entirely alone.
+  if (!gpio.wasTouchTap(nx, ny)) {
+    hintTapUsed = false;  // the tap event is over; the next one starts unspent
+    return -1;
+  }
+  if (hintTapUsed || !painted.valid) return -1;
+  int x = 0;
+  int y = 0;
+  renderer.tapToLogical(nx, ny, x, y);
+
+  const int slot = hint_band::tappedSlot(painted.band, x, y, painted.labelled);
+  if (slot < 0) return -1;
+  rememberTouchHeldTime();
+  return kSlotHardware[slot];
+}
+
+bool MappedInputManager::wasRowTapped(int& item) const {
+  if (!gpio.hasTouch()) return false;
+  int x = 0;
+  int y = 0;
+  if (!wasScreenTapped(x, y)) return false;
+  // A tap that lands in the hint band belongs to that button, not to a row, even when a
+  // list's rect runs under the band. Tested on geometry alone, so it holds whether or not
+  // the band's own press has already been spent this frame.
+  const hint_band::Painted& painted = hint_band::lastPainted();
+  if (painted.valid && hint_band::tappedSlot(painted.band, x, y, painted.labelled) >= 0) return false;
+  const int hit = row_hit::lastRows().itemAt(x, y);
+  if (hit == row_hit::kNoItem) return false;
+  item = hit;
+  return true;
+}
 
 void MappedInputManager::rememberTouchHeldTime() const {
   touchHeldOverrideValid = true;
@@ -293,7 +353,7 @@ bool MappedInputManager::wasMenuGesture() const {
   return hit;
 }
 
-bool MappedInputManager::wasHomeGesture() const {
+bool MappedInputManager::wasBottomEdgeUpSwipe() const {
   int sx = 0;
   int sy = 0;
   int ex = 0;
@@ -307,6 +367,39 @@ bool MappedInputManager::wasHomeGesture() const {
     }
   }
   return false;
+}
+
+bool MappedInputManager::wasHomeGesture() const {
+  // On a board with a capacitive Home key that key IS Home, which frees the bottom
+  // edge for the reader menu (wasReaderMenuSwipeUp).
+  if (gpio.hasHomeKey()) return gpio.wasHomeKeyTapped();
+  return wasBottomEdgeUpSwipe();
+}
+
+bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
+  float nx = 0.0f;
+  float ny = 0.0f;
+  if (!gpio.wasTouchLongPress(nx, ny)) return false;
+  // Consuming the long press implies acting on it: drop the rest of the contact so the
+  // finger lift cannot also tap whatever the action opened.
+  gpio.suppressTouchContact();
+  renderer.tapToLogical(nx, ny, x, y);
+  return true;
+}
+
+bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
+
+bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
+
+list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
+  int sx = 0;
+  int sy = 0;
+  int ex = 0;
+  int ey = 0;
+  if (!decodeSwipe(sx, sy, ex, ey)) return list_swipe::Scroll::None;
+  const auto scroll = list_swipe::scrollFrom(renderer.getScreenWidth(), renderer.getScreenHeight(), sx, sy, ex, ey);
+  if (scroll != list_swipe::Scroll::None) rememberTouchHeldTime();
+  return scroll;
 }
 
 bool MappedInputManager::wasPressed(const Button button) const {

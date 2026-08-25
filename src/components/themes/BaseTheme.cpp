@@ -17,12 +17,15 @@
 #include "I18n.h"
 #include "RecentBooksStore.h"
 #include "components/BannerStyle.h"
+#include "components/HeaderTitle.h"
+#include "components/HintBandGeometry.h"
 #include "components/ListScrollPolicy.h"
+#include "components/ListScrollbar.h"
 #include "components/OptionPopupGeometry.h"
+#include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
-#include "components/themes/SelectionStyle.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -302,29 +305,49 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
 
-  const int pageHeight = renderer.getScreenHeight();
-  constexpr int buttonWidth = 106;
-  constexpr int buttonHeight = BaseMetrics::values.buttonHintsHeight;
-  constexpr int buttonY = BaseMetrics::values.buttonHintsHeight;  // Distance from bottom
-  constexpr int textYOffset = 7;                                  // Distance from top of button to text baseline
-  // X3 has wider screen in portrait (528 vs 480), use more spacing
-  constexpr int x4ButtonPositions[] = {25, 130, 245, 350};
-  constexpr int x3ButtonPositions[] = {38, 154, 268, 384};
-  const int* buttonPositions = gpio.deviceIsX3() ? x3ButtonPositions : x4ButtonPositions;
-  const char* labels[] = {btn1, btn2, btn3, btn4};
+  constexpr int textYOffset = 7;  // Distance from top of button to text baseline
+  const hint_band::Band band = hintBand(renderer);
+  const char* labels[hint_band::kSlotCount] = {btn1, btn2, btn3, btn4};
 
-  for (int i = 0; i < 4; i++) {
+  hint_band::Painted& painted = hint_band::lastPainted();
+  painted.band = band;
+  painted.valid = true;
+
+  for (int i = 0; i < hint_band::kSlotCount; i++) {
+    painted.labelled[i] = labels[i] != nullptr && labels[i][0] != '\0';
+  }
+
+  for (int i = 0; i < hint_band::kSlotCount; i++) {
     // Only draw if the label is non-empty
     if (labels[i] != nullptr && labels[i][0] != '\0') {
-      const int x = buttonPositions[i];
-      renderer.fillRect(x, pageHeight - buttonY, buttonWidth, buttonHeight, false);
-      renderer.drawRect(x, pageHeight - buttonY, buttonWidth, buttonHeight);
-      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], x, buttonWidth, pageHeight - buttonY, buttonHeight,
-                    textYOffset);
+      const hint_band::Slot slot = hint_band::slot(band, i);
+      renderer.fillRect(slot.x, slot.y, slot.width, slot.height, false);
+      if (band.touch) {
+        // The touch band tiles the full width, so neighbouring slots share an edge and
+        // a per-slot drawRect() painted that edge twice: the dividers between the
+        // buttons came out two pixels wide against the one-pixel line along the top.
+        // Draw the outline by hand and let each slot own only its right-hand divider;
+        // the leftmost slot draws the outer left edge, and the rightmost one's divider
+        // is the outer right edge.
+        renderer.fillRect(slot.x, slot.y, slot.width, 1);                   // top
+        renderer.fillRect(slot.x, slot.y + slot.height - 1, slot.width, 1);  // bottom
+        renderer.fillRect(slot.x + slot.width - 1, slot.y, 1, slot.height);  // divider / right edge
+        if (i == 0) renderer.fillRect(slot.x, slot.y, 1, slot.height);       // outer left edge
+      } else {
+        renderer.drawRect(slot.x, slot.y, slot.width, slot.height);
+      }
+      drawHintLabel(renderer, UI_10_FONT_ID, labels[i], slot.x, slot.width, slot.y, slot.height, textYOffset);
     }
   }
 
   renderer.setOrientation(orig_orientation);
+}
+
+hint_band::Band BaseTheme::hintBand(const GfxRenderer& renderer) const {
+  // Measured in Portrait, which is the orientation drawButtonHints paints in and the one
+  // MappedInputManager hands back logical tap coordinates in.
+  return hint_band::Band{renderer.getScreenWidth(), renderer.getScreenHeight(),
+                         UITheme::getInstance().getMetrics().buttonHintsHeight, gpio.hasTouch(), gpio.deviceIsX3()};
 }
 
 void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const {
@@ -393,8 +416,8 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 }
 
 int BaseTheme::getListRowStep(bool hasSubtitle) const {
-  int rowHeight = (hasSubtitle) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
-  return rowHeight;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight;
 }
 
 int BaseTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
@@ -405,40 +428,13 @@ int BaseTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
 
 bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans,
                               const int spanCount) const {
-  const selection_style::Style style = selection_style::fromSetting(SETTINGS.selectionStyle);
-  const selection_style::Bar row{rect.x, rect.y, rect.width, rect.height};
-
-  // The first span is the row's first line of text, which is where the caret goes.
-  // Without one (a cover, a tab) it falls back to the row.
-  const int firstLineY = (spans != nullptr && spanCount > 0) ? spans[0].y : -1;
-  const int firstLineHeight = (spans != nullptr && spanCount > 0) ? spans[0].height : 0;
-
-  const auto paint = [&renderer, firstLineY, firstLineHeight](const selection_style::Style s,
-                                                              const selection_style::Bar& area) {
-    selection_style::Bar painted[selection_style::MAX_BARS];
-    const int count =
-        selection_style::bars(s, area.x, area.y, area.width, area.height, painted, firstLineY, firstLineHeight);
-    for (int i = 0; i < count; ++i) {
-      renderer.fillRect(painted[i].x, painted[i].y, painted[i].width, painted[i].height);
-    }
-  };
-
-  if (style == selection_style::BRACKETS && spans != nullptr && spanCount > 0) {
-    bool bracketed = false;
-    for (int i = 0; i < spanCount; ++i) {
-      const selection_style::Bar grown =
-          selection_style::inflatedSpan({spans[i].x, spans[i].y, spans[i].width, spans[i].height}, row);
-      if (grown.width <= 0 || grown.height <= 0) continue;  // e.g. a row with no value text
-      paint(style, grown);
-      bracketed = true;
-    }
-    // A caller that measured nothing usable still needs its row marked.
-    if (!bracketed) paint(style, row);
-    return false;
-  }
-
-  paint(style, row);
-  return selection_style::invertsText(style);
+  // One highlight: the row filled, its text knocked out white. The spans a caller
+  // measures are no longer read — they were what the retired bracket style bracketed —
+  // but the parameters stay so every surface keeps calling one painter.
+  (void)spans;
+  (void)spanCount;
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
+  return true;
 }
 
 void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
@@ -448,8 +444,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                          const std::function<std::string(int index)>& rowValue, bool highlightValue,
                          const std::function<bool(int index)>& rowDimmed, int itemFontId,
                          const std::function<bool(int index)>& rowIsHeader, int* scrollOffset) const {
-  int rowHeight =
-      (rowSubtitle != nullptr) ? BaseMetrics::values.listWithSubtitleRowHeight : BaseMetrics::values.listRowHeight;
+  const auto& listMetrics = UITheme::getInstance().getMetrics();
+  int rowHeight = (rowSubtitle != nullptr) ? listMetrics.listWithSubtitleRowHeight : listMetrics.listRowHeight;
   int pageItems = rowHeight > 0 ? std::max(1, rect.height / rowHeight) : 1;
 
   // Scrolling callers own their window start; paging callers get it snapped to a
@@ -469,36 +465,28 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     showUpArrow = showDownArrow = totalPages > 1;
   }
 
-  if (showUpArrow || showDownArrow) {
-    constexpr int indicatorWidth = 20;
-    constexpr int arrowSize = 6;
-    constexpr int margin = 15;  // Offset from right edge
-
-    const int centerX = rect.x + rect.width - indicatorWidth / 2 - margin;
-    const int indicatorTop = rect.y;  // Offset to avoid overlapping side button hints
-    const int indicatorBottom = rect.y + rect.height - arrowSize;
-
-    // Draw up arrow at top (^) - narrow point at top, wide base at bottom
-    if (showUpArrow) {
-      for (int i = 0; i < arrowSize; ++i) {
-        const int lineWidth = 1 + i * 2;
-        const int startX = centerX - i;
-        renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
-      }
-    }
-
-    // Draw down arrow at bottom (v) - wide base at top, narrow point at bottom
-    if (showDownArrow) {
-      for (int i = 0; i < arrowSize; ++i) {
-        const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
-        const int startX = centerX - (arrowSize - 1 - i);
-        renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
-                          indicatorBottom - arrowSize + 1 + i);
-      }
+  // The scroll indicator: a track down the right-hand edge with a thumb as long as the
+  // fraction of the list on screen. It replaced a pair of up/down arrows, which said only
+  // that there was more in that direction, never how much or how far in you were.
+  const bool scrollable = showUpArrow || showDownArrow;
+  if (scrollable) {
+    const list_scrollbar::Bar bar = list_scrollbar::forList(rect.y, rect.height, itemCount, windowStart, pageItems);
+    if (bar.visible) {
+      const int barX = list_scrollbar::trackX(rect.x, rect.width);
+      // Knocked out of whatever is behind it first: a heading bar or a selected row is
+      // solid black, and a black thumb on black is no indicator at all.
+      renderer.fillRect(barX - list_scrollbar::kOutlineWidth, bar.trackY - list_scrollbar::kOutlineWidth,
+                        list_scrollbar::kWidth + list_scrollbar::kOutlineWidth * 2,
+                        bar.trackHeight + list_scrollbar::kOutlineWidth * 2, false);
+      // The track is dithered, the thumb solid: on a one-bit panel that is the only way
+      // to show the thumb's position against the track it slides in.
+      renderer.fillRectDither(barX, bar.trackY, list_scrollbar::kWidth, bar.trackHeight, Color::LightGray);
+      renderer.fillRect(barX, bar.thumbY, list_scrollbar::kWidth, bar.thumbHeight);
     }
   }
 
-  int contentWidth = rect.width - 5;
+  // Rows stop short of the track when there is one, so a long value never runs under it.
+  int contentWidth = rect.width - (scrollable ? list_scrollbar::kReservedWidth : 5);
   // Only the solid style paints over the row, so only then does the row's own text
   // have to come out white. Resolved when the selected row is reached, because the
   // bracket style needs that row's label and value measured first.
@@ -508,23 +496,34 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   const auto drawnOnPaper = [&](const int index) { return index != selectedIndex || !selectionInvertsText; };
   constexpr int minValueGap = 10;
 
+  row_hit::Rows& hitRows = row_hit::lastRows();
+
   // Draw all items
   for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
     const int itemY = rect.y + (i - windowStart) * rowHeight;
 
-    // Section heading: a filled bar spanning the list, label centred and knocked out
-    // white. Deliberately the same fill the selected row uses — a heading is never
-    // landable (the caller's navigation steps past it), so the two can never be on
-    // screen in a way that makes one look like the other, and one solid band reads as
-    // a divider far better at e-ink contrast than a hairline rule does.
+    // Section heading: a filled plate hugging the label, brackets included, rather than a
+    // full-width band. A band the width of the row is the same shape as the selected row,
+    // so every screen would carry two black bars and the list would read as mostly ink.
+    // Sized to the text, it marks the heading without competing with the selection.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
-      const std::string headingText = rowTitle(i);
-      renderer.fillRect(rect.x, itemY - 2, rect.width, rowHeight);
+      // Bracketed like the screen title above it, for the same reason: the UI font has
+      // no bold face, so the brackets are what marks a line as a label rather than a row.
+      const std::string headingText = header_title::decorate(rowTitle(i).c_str());
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
       const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
-      renderer.drawText(itemFontId, headingX, itemY, headingText.c_str(), /*black=*/false);
+      const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
+      // A little air on each side so the brackets are not flush against the plate edge,
+      // clamped to the row so a heading that fills the width cannot bleed past it.
+      const int platePad = std::max(2, renderer.getTextWidth(itemFontId, " "));
+      const int plateX = std::max(rect.x, headingX - platePad);
+      const int plateRight = std::min(rect.x + rect.width, headingX + headingW + platePad);
+      renderer.fillRect(plateX, itemY, plateRight - plateX, rowHeight, /*state=*/true);
+      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
       continue;
     }
+
+    hitRows.add(i, rect.x, itemY, rect.width, rowHeight);
 
     int rowTextWidth = contentWidth - BaseMetrics::values.contentSidePadding * 2;
     std::string valueText;
@@ -542,16 +541,24 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     auto font = itemFontId;
     auto item = renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
 
+    // Rows are finger-height on a touch board (listRowHeight rises from 40 px to 56),
+    // so the text block is centred in the row rather than parked against its top edge,
+    // which is what leaves the taller row looking top-heavy and half empty.
+    const int subtitleOffset = 22;
+    const int blockHeight = (rowSubtitle != nullptr) ? subtitleOffset + renderer.getLineHeight(SMALL_FONT_ID)
+                                                     : renderer.getLineHeight(font);
+    const int textY = itemY + std::max(0, (rowHeight - blockHeight) / 2);
+
     // Where the value will land, needed here so the selection can bracket it before
     // any of the row's text is drawn over.
     const int valueTextWidth = valueText.empty() ? 0 : renderer.getTextWidth(UI_10_FONT_ID, valueText.c_str());
     const int valueX = rect.x + contentWidth - BaseMetrics::values.contentSidePadding - valueTextWidth;
-    const int valueY = (rowSubtitle != nullptr) ? itemY + 10 : itemY;
+    const int valueY = (rowSubtitle != nullptr) ? textY + 10 : textY;
 
     if (i == selectedIndex) {
       const int titleX = rect.x + BaseMetrics::values.contentSidePadding;
       const Rect spans[2] = {
-          Rect(titleX, itemY, renderer.getTextWidth(font, item.c_str()), renderer.getLineHeight(font)),
+          Rect(titleX, textY, renderer.getTextWidth(font, item.c_str()), renderer.getLineHeight(font)),
           Rect(valueX, valueY, valueTextWidth, renderer.getLineHeight(UI_10_FONT_ID)),
       };
       selectionInvertsText =
@@ -559,14 +566,14 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         spans, valueText.empty() ? 1 : 2);
     }
 
-    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, itemY, item.c_str(), drawnOnPaper(i));
+    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, textY, item.c_str(), drawnOnPaper(i));
 
     // Apply checkerboard dither to create gray text effect for dimmed items
     if (rowDimmed && rowDimmed(i) && drawnOnPaper(i)) {
       const int titleWidth = renderer.getTextWidth(font, item.c_str());
       const int lineH = renderer.getLineHeight(font);
       const int tx = rect.x + BaseMetrics::values.contentSidePadding;
-      for (int py = itemY; py < itemY + lineH; py++)
+      for (int py = textY; py < textY + lineH; py++)
         for (int px = tx; px < tx + titleWidth; px++)
           if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
     }
@@ -575,8 +582,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
         auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, itemY + 22, subtitle.c_str(),
-                          drawnOnPaper(i));
+        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding,
+                          textY + subtitleOffset, subtitle.c_str(), drawnOnPaper(i));
       }
     }
 
@@ -607,8 +614,10 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
     // Same size as the rows under it and as the home screen's own text. A step larger
-    // read as bold next to everything else on the screen.
-    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, title,
+    // read as bold next to everything else on the screen. The brackets are what marks it
+    // as the title instead: see components/HeaderTitle.h for why not bold.
+    const std::string decoratedTitle = header_title::decorate(title);
+    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, decoratedTitle.c_str(),
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::REGULAR);
     renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);
@@ -626,7 +635,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     constexpr int subtitleGap = 6;
     int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
     renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
-    const int subtitleY = renderer.getScreenHeight() - viewBottom - BaseMetrics::values.buttonHintsHeight -
+    const int subtitleY = renderer.getScreenHeight() - viewBottom -
+                          UITheme::getInstance().getMetrics().buttonHintsHeight -
                           renderer.getLineHeight(SMALL_FONT_ID) - subtitleGap;
     renderer.drawText(SMALL_FONT_ID,
                       rect.x + rect.width - BaseMetrics::values.contentSidePadding - truncatedSubtitleWidth, subtitleY,
@@ -727,19 +737,14 @@ void BaseTheme::drawTabBar(const GfxRenderer& renderer, const Rect rect, const s
 
     // Draw underline for selected tab. A tab that is selected but does not hold focus
     // always keeps its plain underline; the user's selection style applies only to the
-    // focused tab, and the caret style falls back to the solid highlight here because
-    // its own rule would be indistinguishable from that unfocused underline.
+    // focused tab. A tab is already a short label with air around it, so both styles
+    // paint the same block here.
     bool inverted = false;
     if (tab.selected) {
       if (selected) {
         const Rect tabRect(currentX - tabHighlightBleed, rect.y, textWidth + 2 * tabHighlightBleed,
                            lineHeight + underlineGap);
-        if (selection_style::fromSetting(SETTINGS.selectionStyle) == selection_style::BRACKETS) {
-          inverted = drawSelection(renderer, tabRect);
-        } else {
-          renderer.fillRect(tabRect.x, tabRect.y, tabRect.width, tabRect.height);
-          inverted = true;
-        }
+        inverted = drawSelection(renderer, tabRect);
       } else {
         renderer.fillRect(currentX, rect.y + lineHeight + underlineGap, textWidth, underlineHeight);
       }
@@ -787,11 +792,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
-  // The card is a cover plus its label boxes, not a list row, so only the solid style
-  // flips them all to white-on-black. Brackets and the caret mark the card's outline
-  // and leave the cover art, the title and the "Continue Reading" chip as they are.
-  const bool cardInverted =
-      bookSelected && selection_style::fromSetting(SETTINGS.selectionStyle) == selection_style::SOLID;
+  // The card is a cover plus its label boxes, not a list row: selecting it flips the
+  // cover art, the title and the "Continue Reading" chip together.
+  const bool cardInverted = bookSelected;
 
   // --- Top "book" card for the current title (selectorIndex == 0) ---
   // When there's no cover image, use fixed size (half screen)
@@ -1131,6 +1134,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
   }
 
   int rowY = listTop;
+  row_hit::Rows& wrappedHitRows = row_hit::lastRows();
   for (const Row& row : rows) {
     const bool selected = row.index == selectedIndex;
     const int valueX = contentX + contentW - (row.valueW - valueGap);
@@ -1168,6 +1172,7 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
       renderer.drawText(UI_10_FONT_ID, textX, baselineY, line.c_str(), !inverted);
       baselineY += lineHeight;
     }
+    wrappedHitRows.add(row.index, rect.x, rowY, rect.width, row.height);
     rowY += row.height + rowGap;
   }
 
@@ -1176,10 +1181,12 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
 
 void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                                const std::function<std::string(int index)>& buttonLabel,
-                               const std::function<UIIcon(int index)>& rowIcon) const {
+                               const std::function<UIIcon(int index)>& rowIcon, const int itemIndexBase) const {
+  const auto& menuMetrics = UITheme::getInstance().getMetrics();
+  row_hit::Rows& menuHitRows = row_hit::lastRows();
   for (int i = 0; i < buttonCount; ++i) {
     const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
-                      static_cast<int>(i) * (BaseMetrics::values.menuRowHeight + BaseMetrics::values.menuSpacing);
+                      static_cast<int>(i) * (menuMetrics.menuRowHeight + menuMetrics.menuSpacing);
 
     const bool selected = selectedIndex == i;
 
@@ -1189,13 +1196,16 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const int textX = rect.x + (rect.width - textWidth) / 2;
     const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
     const int textY =
-        tileY + (BaseMetrics::values.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
+        tileY + (menuMetrics.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
 
     // Unselected tiles already carry an outline, so the highlight has to read against
     // one. Brackets hug the tile's own label and the caret rule doubles the tile's
     // bottom edge; both stay legible without the tile inverting.
-    const Rect tile(rect.x + BaseMetrics::values.contentSidePadding, tileY,
-                    rect.width - BaseMetrics::values.contentSidePadding * 2, BaseMetrics::values.menuRowHeight);
+    menuHitRows.add(itemIndexBase + i, rect.x + menuMetrics.contentSidePadding, tileY,
+                    rect.width - menuMetrics.contentSidePadding * 2, menuMetrics.menuRowHeight);
+
+    const Rect tile(rect.x + menuMetrics.contentSidePadding, tileY, rect.width - menuMetrics.contentSidePadding * 2,
+                    menuMetrics.menuRowHeight);
     bool inverted = false;
     if (selected) {
       const Rect labelSpan(textX, textY, textWidth, lineHeight);
@@ -1296,8 +1306,15 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const bool outlined = SETTINGS.sbBarOutline != 0;
   const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), outlined);
   const int floatMargin = SETTINGS.floatingBarMarginPx();
-  const int barLeft = ml + floatMargin;
-  const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2);
+  // Edge bars bleed past both ends of the logical screen. On the X4 Pro the panel sits
+  // slightly off-centre behind its bezel, so a bar drawn exactly to x=0 stops short of
+  // the glass on one side and its starting edge shows as a stub at low percentages.
+  // Overdrawing costs nothing (fillRect clips) and makes an empty bar start off-screen
+  // and a full one run off the other end, which is what reads as edge to edge. A
+  // floating bar wants its gap, so it takes no bleed.
+  const int edgeBleed = floatMargin > 0 ? 0 : kEdgeBarBleedPx;
+  const int barLeft = ml + floatMargin - edgeBleed;
+  const int barMaxW = std::max(1, screenW - ml - mr - floatMargin * 2 + edgeBleed * 2);
   auto clampPct = [](int p) { return p < 0 ? 0 : (p > 100 ? 100 : p); };
   // How far the bar nearest an edge is stretched to reach the panel itself. The
   // viewable margins hold content clear of the bezel, which leaves a strip of paper
@@ -1613,17 +1630,15 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const int itemRectW = geometry.itemRectW;
   const int selectionRadius = metrics.optionPopupSelectionRadius;
   const int optionLineHeight = renderer.getLineHeight(optionFontId);
-  const selection_style::Style selectionStyle = selection_style::fromSetting(SETTINGS.selectionStyle);
 
   for (int i = 0; i < optionCount; i++) {
     const int itemY = geometry.firstItemY + i * rowPitch;
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
 
-    // Under a non-solid style the selected row keeps the popup's own background and
-    // gets brackets or a caret on top, so the theme's rounded/light-grey selection
-    // treatment applies to the solid style only.
-    const bool paintedOver = selectionStyle == selection_style::SOLID;
+    // The selected row is always painted over; the theme decides whether that is a
+    // black fill or its light-grey rounded pill.
+    constexpr bool paintedOver = true;
     if (metrics.optionPopupDrawAllRows || (selected && paintedOver)) {
       Color rowColor;
       if (selected && paintedOver) {
@@ -1813,6 +1828,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
   const int blockHeight = aboveH + totalVisibleHeight + belowH;
   const int blockTop = rowsTopMinY + std::max(0, (rowsAvailableHeight - blockHeight) / 2);
   int rowY = blockTop + aboveH;
+  row_hit::Rows& recentHitRows = row_hit::lastRows();
 
   if (hasMoreAbove) {
     drawMoreIndicator(renderer, firstVisible, StrId::STR_MORE_ABOVE, rowX, rowW, blockTop, rowLineHeight);
@@ -1851,6 +1867,7 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
       baselineY += rowLineHeight;
     }
 
+    recentHitRows.add(entry.bookIdx, rowX, rowY, rowW, entry.height);
     rowY += entry.height + rowGap;
   }
 

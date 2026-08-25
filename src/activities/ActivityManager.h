@@ -12,12 +12,23 @@
 
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
+#include "components/LightPanel.h"
 #include "util/ScreenshotInfo.h"
 
 class Activity;    // forward declaration
 class RenderLock;  // forward declaration
 
-enum class HomeMenuItem { NONE, FILE_BROWSER, OPDS_BROWSER, FILE_TRANSFER, SETTINGS_MENU };
+enum class HomeMenuItem {
+  NONE,
+  FILE_BROWSER,
+  OPDS_BROWSER,
+  FILE_TRANSFER,
+  SETTINGS_MENU,
+#ifdef LECTOR_LOCK_LAB_UI
+  // Last on purpose, so the throwaway row cannot shift the index of a real one.
+  LOCK_LAB,
+#endif
+};
 
 /**
  * ActivityManager
@@ -41,6 +52,11 @@ class ActivityManager {
   MappedInputManager& mappedInput;
   std::vector<std::unique_ptr<Activity>> stackActivities;
   std::unique_ptr<Activity> currentActivity;
+
+  // The frontlight panel lives here rather than in any one activity: the top-edge swipe
+  // that opens it works from every screen, and the band is drawn over whatever the last
+  // render left in the framebuffer instead of replacing it.
+  LightPanel lightPanel;
 
   void exitActivity(const RenderLock& lock);
 
@@ -83,6 +99,9 @@ class ActivityManager {
   // goTo... functions are convenient wrapper for replaceActivity()
   void goToFileTransfer();
   void goToSettings();
+#ifdef LECTOR_LOCK_LAB_UI
+  void goToLockLab();
+#endif
   void goToFileBrowser(std::string path = {});
   void goToBrowser();
   void goToReader(std::string path, bool allowFastInitialRefresh = false);

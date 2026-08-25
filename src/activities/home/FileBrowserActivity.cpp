@@ -612,6 +612,17 @@ void FileBrowserActivity::loop() {
     return;
   };
 
+  // A tapped row opens straight away, exactly as a short press on it would: the wrapped
+  // list records the rect of each row it paints, so a two-line title answers over both
+  // of its lines.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < totalRowCount()) {
+    selectorIndex = static_cast<size_t>(tappedRow);
+    activateSelected(/*holdAction=*/false);
+    requestUpdate();
+    return;
+  }
+
   // Confirm carries two actions, so it cannot fire on the press: the firmware has to
   // wait to learn which one was meant. The hold half no longer waits for the release
   // though — it fires the moment the threshold passes, and the delete it opens asks

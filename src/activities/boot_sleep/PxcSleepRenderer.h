@@ -1,6 +1,7 @@
 #pragma once
 #include <HalDisplay.h>
 
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -15,6 +16,33 @@ inline bool hasPxcExtension(std::string_view fileName) {
   return fileName[n - 4] == '.' && (fileName[n - 3] | 0x20) == 'p' && (fileName[n - 2] | 0x20) == 'x' &&
          (fileName[n - 1] | 0x20) == 'c';
 }
+
+// The knobs the Lock Lab turns. Default-constructed, this struct describes exactly what
+// the renderer did before it existed, and every call site that does not care passes
+// nullptr, so the release path is unchanged. The lab build (LECTOR_LOCK_LAB) is the only
+// thing that ever fills one in; see src/dev/LockLab.h.
+struct PxcRenderOptions {
+  // How the two mid levels survive a 1-bit render. BAYER2 is what the wallpaper has
+  // always used; the rest are here to be compared against it.
+  enum Dither : uint8_t { BAYER2 = 0, BAYER4, BLUE16, THRESHOLD };
+  // Which of the three grayscale passes actually run, so the cost of the base paint can
+  // be told apart from the cost of the two planes.
+  enum Passes : uint8_t { THREE = 0, BASE_ONLY, PLANES_ONLY };
+
+  Dither dither = BAYER2;
+  Passes passes = THREE;
+  // The whole tone curve a 2bpp source can carry: level 0..3 in, level 0..3 out. Identity
+  // leaves the image as the encoder made it.
+  uint8_t levelMap[4] = {0, 1, 2, 3};
+  bool invert = false;
+  // Negative means "ask sleepGrayscaleBaseRefresh()", which is the shipped behaviour;
+  // otherwise a HalDisplay::RefreshMode to force.
+  int8_t grayBaseRefresh = -1;
+  // False forces the per-pass row-batch SD reads even when the payload would fit RAM.
+  bool wholeFileCache = true;
+  // 0 means the shipped ~4KB batch; anything else is that many rows per read.
+  uint16_t rowsPerRead = 0;
+};
 
 // Renders a full-screen (panel-sized, e.g. 480x800) pre-dithered 2-bits-per-pixel
 // .pxc wallpaper to the e-ink framebuffer using CrossPoint's 3-pass grayscale
@@ -49,6 +77,11 @@ inline bool hasPxcExtension(std::string_view fileName) {
 // Decode is on demand (no pre-staging): the payload is read once into RAM when it
 // fits, else re-read in small row batches per pass, so it never OOM-bricks at the
 // low, fragmented heap of sleep entry.
+//
+// opts is nullptr everywhere except the Lock Lab, and a nullptr means "behave exactly as
+// this function did before the lab existed". The parts of the decode loop it can change
+// are compiled out entirely unless LECTOR_LOCK_LAB is defined, so a release build carries
+// neither the branches nor the tables.
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, bool grayscale = true,
                           HalDisplay::RefreshMode oneBitRefresh = HalDisplay::HALF_REFRESH,
-                          void (*overlay)(GfxRenderer&) = nullptr);
+                          void (*overlay)(GfxRenderer&) = nullptr, const PxcRenderOptions* opts = nullptr);

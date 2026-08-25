@@ -6,6 +6,7 @@
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -43,7 +44,9 @@
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
+#include "dev/LockLab.h"
 #include "fontIds.h"
+#include "frontlight/FrontlightBootPolicy.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
@@ -381,12 +384,12 @@ void enterDeepSleep(bool fromTimeout = false) {
   const unsigned long sleepTBudget = millis();
   // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
   // when the stages were first measured, and only about 4800 ms of that was the panel.
-  char paintStages[256];
+  char paintStages[320];
   SleepTiming::format(paintStages, sizeof(paintStages));
-  char sleepNote[384];
+  char sleepNote[448];
   snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
-           sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint,
-           sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi, paintStages);
+           sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint, sleepTWifi - sleepTFrame,
+           sleepTBudget - sleepTWifi, paintStages);
   PerfLog::note(sleepNote);
   PerfLog::flush();
 
@@ -394,8 +397,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   const unsigned long sleepTPanel = millis();
   // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
   // what a lock cost.
-  LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote,
-          sleepTPanel - sleepTBudget);
+  LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote, sleepTPanel - sleepTBudget);
   LOG_DBG("MAIN", "Entering deep sleep");
   // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
   // chip, so anything still buffered here is lost.
@@ -621,6 +623,12 @@ void setup() {
     if (wakeDiag[0] != '\0') LOG_INF("SLP", "Unlock %s", wakeDiag);
   }
 
+  // Brightness and warmth always come back; whether the light itself does is
+  // FrontlightBootPolicy's call. Inert on a board without a frontlight.
+  Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
+                   frontlight::restoreLightOnAtBoot(
+                       {SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0, isSilentReboot}));
+
   const auto wakeupReason = gpio.getWakeupReason();
   // INF, and on every boot: a device that sleeps and is woken straight back up by its own
   // USB power prints nothing else, so without this line the cycle can only be inferred
@@ -724,9 +732,11 @@ void setup() {
     asyncBlankInFlight = true;
   }
 
-  // Recovery firmware mode: hold left side button (BTN_UP) together with the power button at
-  // boot to skip directly to the SD-card firmware update screen. Useful on devices where USB
-  // flashing has been locked down (e.g. recent X3 firmware).
+  // Recovery firmware mode: hold a side button together with the power button at boot to skip
+  // directly to the SD-card firmware update screen. Useful on devices where USB flashing has
+  // been locked down (e.g. recent X3 firmware). BTN_UP everywhere except the X4 Pro, whose
+  // BTN_UP sits on GPIO0, the boot-strap pin: holding that at boot drops the chip into the ROM
+  // bootloader instead of into our firmware, so the chord uses BTN_DOWN there.
   //
   // This runs AFTER the panel is up, not before. The check waits out a fixed window
   // measured from gpio.begin(), and everything that happens inside that window is free:
@@ -757,23 +767,31 @@ void setup() {
     //
     // The loop still stops the moment UP is confirmed: once the answer is yes, waiting
     // longer cannot change it.
-    constexpr unsigned long kInputSettleMs = 500;
-    const auto upConfirmed = [] {
+    //
+    // None of that ladder reasoning applies to the X4 Pro: its side buttons are plain
+    // debounced digital inputs that read true almost immediately, so the settle window is
+    // 20 ms there instead of 500. The two-sample confirm stays either way; on a digital
+    // input it costs one extra 6 ms read and rules out a single nudged sample all the same.
+    const bool isX4Pro = BoardConfig::isX4Pro();
+    const unsigned long inputSettleMs = isX4Pro ? 20 : 500;
+    const uint8_t chordButton = isX4Pro ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
+    const auto chordConfirmed = [chordButton] {
       gpio.update();
-      if (!gpio.isPressed(HalGPIO::BTN_UP)) return false;
+      if (!gpio.isPressed(chordButton)) return false;
       delay(6);
       gpio.update();
-      return gpio.isPressed(HalGPIO::BTN_UP);
+      return gpio.isPressed(chordButton);
     };
-    while (millis() - inputStartedMs < kInputSettleMs) {
-      if (upConfirmed()) {
+    while (millis() - inputStartedMs < inputSettleMs) {
+      if (chordConfirmed()) {
         recoveryFirmwareMode = true;
         break;
       }
       delay(10);
     }
-    if (!recoveryFirmwareMode && upConfirmed()) recoveryFirmwareMode = true;
-    if (recoveryFirmwareMode) LOG_INF("MAIN", "Recovery firmware mode (UP + POWER held at boot)");
+    if (!recoveryFirmwareMode && chordConfirmed()) recoveryFirmwareMode = true;
+    if (recoveryFirmwareMode)
+      LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", isX4Pro ? "DOWN" : "UP");
   }
 
   WakeTiming::mark(WakeTiming::Stage::InputSettled);
@@ -1130,9 +1148,11 @@ void loop() {
   mappedInputManager.setPowerReleaseOverride(false, false);
 
   renderer.setFadingFix(SETTINGS.fadingFix);
-  // Read every pass, like the fading fix above, so toggling the setting takes effect on
-  // the next paint instead of on the next boot.
-  renderer.setTimingOverlay(SETTINGS.showTimings != 0, UI_10_FONT_ID);
+  // Never on, in any build. The numbers reach the serial log and the perf CSV by paths
+  // that do not touch this flag, and an overlay across the top of every frame covers part
+  // of the screen a kit round exists to look at: a lock screen or a wallpaper cannot be
+  // judged with a timing bar painted over it.
+  renderer.setTimingOverlay(false, UI_10_FONT_ID);
   display.setFastPageTurns(SETTINGS.fastPageTurns != 0);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
@@ -1200,6 +1220,18 @@ void loop() {
     screenshotButtonsReleased = true;
     screenshotComboActive = false;
   }
+
+#ifdef LECTOR_LOCK_LAB
+  // The Lock Lab's "Full lock" run. It goes through the ordinary sleep path rather than
+  // rendering in place, because a render in isolation skips the favourites reconcile, the
+  // index pick, the frame save and the WiFi teardown, and those are most of the ten
+  // seconds being measured.
+  if (locklab::takePendingFullLock()) {
+    LOG_INF("LAB", "Full lock requested");
+    enterDeepSleep();
+    return;
+  }
+#endif
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {

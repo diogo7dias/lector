@@ -18,6 +18,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
 
 constexpr const char* LOG_TAG = "FONTS";
@@ -25,11 +27,29 @@ constexpr const char* LOG_TAG = "FONTS";
 }  // namespace
 
 InstalledFontsActivity::InstalledFontsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("InstalledFonts", renderer, mappedInput), fontInstaller(sdFontSystem.registry()) {}
+    : UiListActivity("InstalledFonts", renderer, mappedInput), fontInstaller(sdFontSystem.registry()) {}
 
 void InstalledFontsActivity::onEnter() {
-  Activity::onEnter();
   loadFamilies();
+  UiListActivity::onEnter();
+}
+
+void InstalledFontsActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+  labels.clear();
+  subtitles.clear();
+}
+
+int InstalledFontsActivity::listCount() const {
+  return view == View::Actions ? static_cast<int>(Action::Count) : itemCount();
+}
+
+void InstalledFontsActivity::showView(const View next) {
+  view = next;
+  // Each view owns its own selection: entering the actions starts on Send, and
+  // coming back lands on the family that was picked.
+  nav.reset(next == View::Actions ? 0 : selectedIndex);
   requestUpdate();
 }
 
@@ -92,7 +112,7 @@ void InstalledFontsActivity::promptDelete() {
 }
 
 void InstalledFontsActivity::onDeleteConfirmed(const ActivityResult& result) {
-  view = View::Families;
+  showView(View::Families);
   if (result.isCancelled) {
     requestUpdate();
     return;
@@ -119,7 +139,7 @@ void InstalledFontsActivity::sendSelectedFamily() {
   const Family* family = selectedFamily();
   if (family == nullptr || family->facePaths.empty()) return;
 
-  view = View::Families;
+  showView(View::Families);
   // Refused here rather than at the other end: a family the offer cannot name
   // would be turned away only after the reader had picked a device to send to.
   if (!family->sendable) {
@@ -134,127 +154,85 @@ void InstalledFontsActivity::sendSelectedFamily() {
                          [this](const ActivityResult&) { requestUpdate(true); });
 }
 
-void InstalledFontsActivity::loopFamilies() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
+void InstalledFontsActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  if (view == View::Actions) {
+    if (static_cast<Action>(index) == Action::Delete) {
+      promptDelete();
+      return;
+    }
+    sendSelectedFamily();
     return;
   }
 
   if (families.empty()) return;
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    selectedAction = Action::Send;
-    view = View::Actions;
-    requestUpdate();
-    return;
-  }
-
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
-  const int total = itemCount();
-
-  buttonNavigator.onNextStep([this, total] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, total);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousStep([this, total] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, total);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, total, pageItems] {
-    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, total, pageItems);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, total, pageItems] {
-    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, total, pageItems);
-    requestUpdate();
-  });
+  selectedIndex = index;
+  showView(View::Actions);
 }
 
-void InstalledFontsActivity::loopActions() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    view = View::Families;
-    requestUpdate();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selectedAction == Action::Delete) {
-      promptDelete();
-    } else {
-      sendSelectedFamily();
-    }
-    return;
-  }
-
-  constexpr int actionCount = static_cast<int>(Action::Count);
-  buttonNavigator.onNextStep([this] {
-    selectedAction = static_cast<Action>(ButtonNavigator::nextIndex(static_cast<int>(selectedAction), actionCount));
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousStep([this] {
-    selectedAction = static_cast<Action>(ButtonNavigator::previousIndex(static_cast<int>(selectedAction), actionCount));
-    requestUpdate();
-  });
-}
-
-void InstalledFontsActivity::loop() {
+void InstalledFontsActivity::onBackButton() {
   if (view == View::Actions) {
-    loopActions();
+    showView(View::Families);
     return;
   }
-  loopFamilies();
+  finish();
 }
 
-void InstalledFontsActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+void InstalledFontsActivity::drawChrome() {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  // The actions view is headed by the family it is acting on, not by the screen name.
+  const Family* family = selectedFamily();
+  const char* title = (view == View::Actions && family != nullptr) ? family->name.c_str() : tr(STR_INSTALLED_FONTS);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, title);
+}
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_INSTALLED_FONTS));
+void InstalledFontsActivity::drawFooter() {
+  // With no fonts installed there is nothing to open and nothing to move between.
+  const bool hasRows = listCount() > 0;
+  const auto hints = mappedInput.mapLabels(tr(STR_BACK), hasRows ? tr(STR_SELECT) : "", hasRows ? tr(STR_DIR_UP) : "",
+                                           hasRows ? tr(STR_DIR_DOWN) : "");
+  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
+
+  if (errorMessage.empty()) return;
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight,
+                            errorMessage.c_str());
+}
+
+void InstalledFontsActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
   if (families.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, (pageHeight - lineHeight) / 2, tr(STR_NO_INSTALLED_FONTS));
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
+    screen.centeredText(tr(STR_NO_INSTALLED_FONTS));
     return;
   }
 
-  if (view == View::Actions) {
-    const Family* family = selectedFamily();
-    const std::string title = family != nullptr ? family->name : std::string();
-    renderer.drawCenteredText(UI_10_FONT_ID, contentTop, title.c_str(), true, EpdFontFamily::REGULAR);
+  const int count = listCount();
+  labels.assign(static_cast<size_t>(count), std::string());
+  subtitles.assign(static_cast<size_t>(count), std::string());
+  rows.assign(static_cast<size_t>(count), fui::ListItem{});
 
-    GUI.drawList(
-        renderer, Rect{0, contentTop + lineHeight * 2, pageWidth, contentHeight - lineHeight * 2},
-        static_cast<int>(Action::Count), static_cast<int>(selectedAction),
-        [](const int index) -> std::string {
-          return static_cast<Action>(index) == Action::Delete ? tr(STR_DELETE) : tr(STR_SEND_FONT);
-        },
-        nullptr, nullptr, nullptr, true);
-
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
+  for (int i = 0; i < count; ++i) {
+    if (view == View::Actions) {
+      labels[i] = static_cast<Action>(i) == Action::Delete ? tr(STR_DELETE) : tr(STR_SEND_FONT);
+    } else {
+      labels[i] = families[i].name;
+      subtitles[i] = sizeLine(families[i]);
+      rows[i].subtitle = subtitles[i].c_str();
+      rows[i].value = families[i].inUse ? tr(STR_SELECTED) : nullptr;
+    }
+    rows[i].label = labels[i].c_str();
+    rows[i].actionValue = static_cast<int16_t>(i);
   }
 
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, itemCount(), selectedIndex,
-      [this](const int index) -> std::string { return families[index].name; },
-      [this](const int index) -> std::string { return sizeLine(families[index]); }, nullptr,
-      [this](const int index) -> std::string { return families[index].inUse ? tr(STR_SELECTED) : ""; }, true);
-
-  if (!errorMessage.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight - metrics.buttonHintsHeight - lineHeight, errorMessage.c_str());
-  }
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(count);
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props, view == View::Families);
+  screen.list(props);
 }

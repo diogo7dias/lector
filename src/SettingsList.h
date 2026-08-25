@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <HalClock.h>
+#include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 #include <SdCardFontRegistry.h>
@@ -245,11 +246,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           "sleepScreen", StrId::STR_CAT_DISPLAY)
             .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::BLANK, CrossPointSettings::FREEZE}));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_SELECTION_STYLE, &CrossPointSettings::selectionStyle,
-                          {StrId::STR_SELECTION_SOLID, StrId::STR_SELECTION_BRACKETS, StrId::STR_SELECTION_CARET},
-                          "selectionStyle", StrId::STR_CAT_DISPLAY));
-
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                                   {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));
 
@@ -259,10 +255,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, &CrossPointSettings::showSleepImageFilename,
                                     "showSleepImageFilename", StrId::STR_CAT_DISPLAY));
-
-    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_IMAGE_QUALITY, &CrossPointSettings::sleepImageQuality,
-                                  {StrId::STR_SLEEP_QUALITY_FAST, StrId::STR_SLEEP_QUALITY_PRETTY}, "sleepImageQuality",
-                                  StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_WAKE_STRAIGHT_TO_BOOK, &CrossPointSettings::wakeStraightToBook,
                                     "wakeStraightToBook", StrId::STR_CAT_DISPLAY));
@@ -290,6 +282,22 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                     StrId::STR_CAT_DISPLAY));
+
+    // Frontlight. Dropped below on a board the SDK reports no frontlight for,
+    // so these four rows only ever appear on hardware that has one.
+    v.push_back(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn",
+                                    StrId::STR_CAT_DISPLAY));
+
+    // Step 5 rather than 1: the panel's perceived brightness moves in coarse
+    // jumps, and a 0-100 row stepped by one takes twenty presses to cross.
+    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_BRIGHTNESS, &CrossPointSettings::frontlightBrightness,
+                                   {0, 100, 5}, "frontlightBrightness", StrId::STR_CAT_DISPLAY));
+
+    v.push_back(SettingInfo::Value(StrId::STR_FRONTLIGHT_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5},
+                                   "frontlightWarmth", StrId::STR_CAT_DISPLAY));
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
+                                    "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Enum(StrId::STR_AUTHOR_DISPLAY, &CrossPointSettings::authorDisplay,
                                   {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
@@ -479,6 +487,17 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
                                   boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions()));
+
+    v.push_back(SettingInfo::Enum(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE,
+                                   StrId::STR_STATE_INVERTED_TAP},
+                                  "touchReaderControls", StrId::STR_CAT_CONTROLS));
+
+    // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
+    // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
+    v.push_back(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP},
+                                  "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
 
     v.push_back(SettingInfo::Enum(
         StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
@@ -746,6 +765,25 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   //
   // Filtered in this per-call copy rather than in the static baseList: the static is
   // built on first use, which is not guaranteed to be after HalClock::begin().
+  // No frontlight on this board: drop the four light rows rather than offer
+  // controls that move nothing. Filtered in this per-call copy rather than in
+  // the static baseList because the static is built on first use, which is not
+  // guaranteed to be after HalFrontlight::begin().
+  if (!Frontlight.present()) {
+    static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
+                                                StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE};
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) {
+                             return std::find(std::begin(FRONTLIGHT_ROWS), std::end(FRONTLIGHT_ROWS), s.nameId) !=
+                                    std::end(FRONTLIGHT_ROWS);
+                           }),
+            v.end());
+  } else if (!Frontlight.hasColorTemperature()) {
+    // Single-colour light: brightness applies, warmth does not.
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONTLIGHT_WARMTH; }),
+            v.end());
+  }
   if (!halClock.isAvailable()) {
     v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_CLOCK; }),
             v.end());

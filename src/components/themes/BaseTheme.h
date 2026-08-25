@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "components/HintBandGeometry.h"
 #include "components/StatusBar.h"  // StatusBarData for the v2 status bar
 #include "fontIds.h"               // UI_10_FONT_ID default for drawList
 
@@ -57,6 +58,28 @@ struct ThemeMetrics {
 
   int scrollBarWidth;
   int scrollBarRightOffset;
+
+  // FreeInkUI theme tokens. The SDK's UI toolkit takes its shape from these rather
+  // than from hard-coded constants, so a screen hosted on FreeInkUI comes out looking
+  // like the rest of this firmware. Values below match what BaseTheme already draws by
+  // hand; a theme that overrides the hand-drawn look overrides these alongside it.
+  int listRowGap;
+  int listRowRadius;
+  int listInset;
+  int listSidePadding;
+  // 0 = the filled bar this firmware uses for a selected row.
+  int listSelectionStyle;
+  int listScrollWidth;
+  // 0 = scroll indicator on the right, 1 = on the left.
+  int listScrollSide;
+  bool listTitleBold;
+  int headerSidePadding;
+  int headerUnderlineSize;
+  // 0 = left aligned, 1 = centred.
+  int headerTitleAlign;
+  int controlRadius;
+  int sheetRadius;
+  int capsuleRadius;
 
   int homeTopPadding;
   int homeCoverHeight;
@@ -135,6 +158,20 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .tabBarHeight = 50,
                                  .scrollBarWidth = 4,
                                  .scrollBarRightOffset = 5,
+                                 .listRowGap = 0,
+                                 .listRowRadius = 0,
+                                 .listInset = 0,
+                                 .listSidePadding = 20,  // matches contentSidePadding
+                                 .listSelectionStyle = 0,
+                                 .listScrollWidth = 4,
+                                 .listScrollSide = 0,
+                                 .listTitleBold = false,
+                                 .headerSidePadding = 20,
+                                 .headerUnderlineSize = 0,
+                                 .headerTitleAlign = 1,
+                                 .controlRadius = 0,
+                                 .sheetRadius = 0,
+                                 .capsuleRadius = 0,
                                  .homeTopPadding = 40,
                                  .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
@@ -181,6 +218,11 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
 }
 
 class BaseTheme {
+  // How far the reader's edge progress bars overdraw past each end of the logical
+  // screen, so a mount offset behind the bezel cannot leave a visible stub at 0% or a
+  // gap at 100%. Clipped by the renderer, so it only ever costs pixels that exist.
+  static constexpr int kEdgeBarBleedPx = 8;
+
  public:
   virtual ~BaseTheme() = default;
 
@@ -191,6 +233,9 @@ class BaseTheme {
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
                         bool showPercentage = true) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
+  // Where the four hint slots are this frame: 106 px legend boxes on a button board,
+  // four full-width columns on a touch board. Shared by the draw and the tap test.
+  hint_band::Band hintBand(const GfxRenderer& renderer) const;
   virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                const char* btn4) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
@@ -265,9 +310,11 @@ class BaseTheme {
                                          // the chip and its continuation lines stay under the first line, not
                                          // back at the left margin, so the text block keeps a straight edge.
                                          const std::function<std::string(int index)>& rowBadge = nullptr) const;
+  // itemIndexBase is what a tapped tile reports as its item: the home screen's menu sits
+  // below its book list in one selection space, so its first tile is item N, not item 0.
   virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
                               const std::function<std::string(int index)>& buttonLabel,
-                              const std::function<UIIcon(int index)>& rowIcon) const;
+                              const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.

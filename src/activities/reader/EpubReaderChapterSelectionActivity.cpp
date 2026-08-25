@@ -10,14 +10,16 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
-int EpubReaderChapterSelectionActivity::getTotalItems() const { return epub->getTocItemsCount(); }
+namespace fui = freeink::ui;
+
+int EpubReaderChapterSelectionActivity::listCount() const { return epub ? epub->getTocItemsCount() : 0; }
+
+const char* EpubReaderChapterSelectionActivity::headerTitle() const { return tr(STR_SELECT_CHAPTER); }
 
 void EpubReaderChapterSelectionActivity::onEnter() {
-  Activity::onEnter();
+  UiListActivity::onEnter();
 
-  if (!epub) {
-    return;
-  }
+  if (!epub) return;
 
   // The reader underneath still pins its page-render glyph arenas. clearCache() is
   // heap-adaptive: below the retention floor it frees them, which is what leaves this
@@ -27,25 +29,24 @@ void EpubReaderChapterSelectionActivity::onEnter() {
     fcm->clearCache();
   }
 
-  selectorIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  if (selectorIndex == -1) {
-    selectorIndex = 0;
-  }
-
-  // Trigger first update
-  requestUpdate();
+  const int selected = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  moveSelectionTo(selected == -1 ? 0 : selected);
 }
 
-void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start, const int pageItems) {
-  const int total = getTotalItems();
-  const int clamped = std::max(0, std::min(start, total));
-  const int count = std::max(0, std::min({pageItems, TOC_WINDOW, total - clamped}));
-  if (clamped == windowStart && count == windowCount) return;
+void EpubReaderChapterSelectionActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+  windowStart = -1;
+  windowCount = 0;
+}
 
-  windowStart = clamped;
+void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start, const int count) {
+  if (start == windowStart && count == windowCount) return;
+
+  windowStart = start;
   windowCount = count;
   for (int i = 0; i < windowCount; i++) {
-    windowLabels[i] = tocLabelAt(clamped + i);
+    windowLabels[i] = tocLabelAt(start + i);
   }
 
   // One SD pass for the whole visible page. The getter form is deliberate: building a
@@ -71,84 +72,52 @@ std::string EpubReaderChapterSelectionActivity::tocLabelAt(const int index) cons
   return indent + item.title;
 }
 
-void EpubReaderChapterSelectionActivity::onExit() { Activity::onExit(); }
+void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
-void EpubReaderChapterSelectionActivity::loop() {
-  const int pageItems = UITheme::getInstance().getNumberOfItemsPerPage(renderer, true, false, true, false);
-  const int totalItems = getTotalItems();
+  const int total = listCount();
+  if (total <= 0) return;
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
-    return;
+  fui::ListProps props{};
+  props.count = static_cast<uint16_t>(total);
+  props.action = ACTION_ROW;
+  // Viewport first: the window has to cover the rows the sync just decided on.
+  syncListViewport(screen, props);
+
+  const int start = std::max(0, std::min(static_cast<int>(props.topIndex), total));
+  // One row past the measured page: list() lays out a partial row at the bottom band
+  // when one fits, and it reads its label like any other.
+  const int count = std::max(0, std::min({nav.visibleRows + 1, TOC_WINDOW, total - start}));
+  refreshTocWindow(start, count);
+
+  rows.assign(static_cast<size_t>(count), fui::ListItem{});
+  for (int i = 0; i < count; ++i) {
+    rows[i].label = windowLabels[i].c_str();
+    rows[i].actionValue = static_cast<int16_t>(start + i);
   }
-
-  auto selectChapter = [this] {
-    const auto tocItem = epub->getTocItem(selectorIndex);
-    if (tocItem.spineIndex == -1) {
-      ActivityResult result;
-      result.isCancelled = true;
-      setResult(std::move(result));
-      finish();
-    } else {
-      setResult(ChapterResult{tocItem.spineIndex, tocItem.anchor});
-      finish();
-    }
-  };
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    selectChapter();
-  }
-
-  buttonNavigator.onNextStep([this, totalItems] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousStep([this, totalItems] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
+  props.items = rows.data();
+  props.itemsWindowFirst = static_cast<uint16_t>(start);
+  props.itemsWindowCount = static_cast<uint16_t>(count);
+  screen.list(props);
 }
 
-void EpubReaderChapterSelectionActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+void EpubReaderChapterSelectionActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  const auto tocItem = epub->getTocItem(index);
+  if (tocItem.spineIndex == -1) {
+    onBackButton();
+    return;
+  }
+  setResult(ChapterResult{tocItem.spineIndex, tocItem.anchor});
+  finish();
+}
 
-  auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_SELECT_CHAPTER));
-
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
-
-  const int totalItems = getTotalItems();
-  // drawList() snaps paging callers to a whole page, so the same arithmetic here makes
-  // the cached window cover exactly the rows it is about to ask for.
-  const int pageItems = std::max(1, GUI.getListPageItems(contentHeight, false));
-  refreshTocWindow(selectorIndex / pageItems * pageItems, pageItems);
-  GUI.drawList(renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, totalItems, selectorIndex,
-               [this](const int index) {
-                 const int offset = index - windowStart;
-                 if (offset >= 0 && offset < windowCount) return windowLabels[offset];
-                 return tocLabelAt(index);
-               });
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+void EpubReaderChapterSelectionActivity::onBackButton() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
 }

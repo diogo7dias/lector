@@ -1,10 +1,12 @@
 #pragma once
 #include <cstddef>
 
+#include <string>
+#include <vector>
+
 #include "ReaderPrefs.h"
-#include "activities/Activity.h"
+#include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
-#include "util/ButtonNavigator.h"
 
 // "Reading Themes": the saved reader looks, listed for the book the user is in.
 // Sibling of StealLookActivity — that one copies a look from another book, this one
@@ -13,23 +15,30 @@
 // The screen owns every edit: renaming, overwriting and deleting all happen here
 // against the store. Only "Apply" goes back to the reader (as PresetResult, the index
 // of the chosen theme), because only the reader can re-lay out the book. Back cancels.
-class ReaderPresetsActivity final : public Activity {
+class ReaderPresetsActivity final : public UiListActivity {
  public:
   ReaderPresetsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const ReaderPrefs& currentPrefs)
-      : Activity("ReaderPresets", renderer, mappedInput), currentPrefs(currentPrefs) {}
+      : UiListActivity("ReaderPresets", renderer, mappedInput), currentPrefs(currentPrefs) {}
 
-  void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override { return rowCount(); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onBackButton() override;
+  const char* headerTitle() const override;
+  void drawChrome() override;
+  // The theme actions popup owns the pass while it is up, and paints over the
+  // finished list.
+  bool handleCustomInput() override;
+  bool drawOverlay() override;
 
  private:
   // This book's settings as they are right now: what "Save current look" stores, what
   // "Overwrite with current" writes, and what the Current mark is compared against.
   ReaderPrefs currentPrefs;
 
-  size_t selectorIndex = 0;
-  ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;
   // True while the button press that closed the popup is still held; its release must
   // not fall through to this screen's own Back/Confirm handlers.
@@ -44,11 +53,17 @@ class ReaderPresetsActivity final : public Activity {
   // Index of the theme whose settings equal this book's, or -1 when none does.
   int matchingPresetIndex() const;
 
-  void activateSelected();
   void openPresetActions(size_t index);
   void startSaveCurrent();
   void startRename(size_t index);
   void confirmDelete(size_t index);
   // Keep the cursor on a row that still exists after an add or a delete.
   void clampSelector();
+  // The status line above the list, or nullptr when there is nothing to say.
+  const char* noteText() const;
+  int noteHeight() const;
+
+  // Row labels own their strings; the ListItems borrow them.
+  std::vector<std::string> labels;
+  std::vector<freeink::ui::ListItem> rows;
 };

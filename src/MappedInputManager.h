@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ListSwipeGesture.h"
+
 #include <HalGPIO.h>
 
 class GfxRenderer;
@@ -42,9 +44,16 @@ class MappedInputManager {
   bool wasReleased(Button button) const;
   bool isPressed(Button button) const;
   bool hasTouch() const;
+  // The front-button hardware id a tap on the hint band stands for, or -1. Non-consuming.
+  int tappedHintHardware() const;
+  // The list item a tap landed on, out of the rows the last list draw painted. False when
+  // the tap was somewhere else, when nothing tappable was drawn, or on a button-only board.
+  bool wasRowTapped(int& item) const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   bool isScreenTouchHeld(int& x, int& y) const;
+  bool wasScreenLongPress(int& x, int& y) const;
+  bool wasScreenTouchReleased() const;
   bool wasTapInRect(int x, int y, int width, int height) const;
   bool wasListItemTapped(int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
                          bool hasSubtitle) const;
@@ -65,7 +74,14 @@ class MappedInputManager {
 
   SwipeDir wasSwipe() const;
   bool wasHomeGesture() const;
+  bool wasBottomEdgeUpSwipe() const;
   bool wasMenuGesture() const;
+  // Bottom-edge up-swipe, offered as a reader-menu gesture only where Home is the
+  // capacitive key: elsewhere that swipe already means Home (wasHomeGesture).
+  bool wasReaderMenuSwipeUp() const;
+  // Vertical swipe over the body of a list screen, with the gesture bands excluded.
+  // ButtonNavigator turns it into the same movement the nav buttons make.
+  list_swipe::Scroll wasListScrollSwipe() const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
@@ -120,6 +136,9 @@ class MappedInputManager {
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
                          bool hasSubtitle) const;
   void rememberTouchHeldTime() const;
+  // A tap on the hint band stands for one button press, not one per query: cleared as soon
+  // as the tap event is gone, so the next tap is heard again.
+  mutable bool hintTapUsed = false;
 
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;

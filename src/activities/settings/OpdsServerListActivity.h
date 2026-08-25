@@ -1,7 +1,9 @@
 #pragma once
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include <string>
+#include <vector>
+
+#include "activities/UiListActivity.h"
 
 /**
  * Activity showing the list of configured OPDS servers.
@@ -9,21 +11,28 @@
  * When pickerMode is true, selecting a server navigates to the OPDS browser
  * instead of opening the editor (used from the home screen).
  */
-class OpdsServerListActivity final : public Activity {
+class OpdsServerListActivity final : public UiListActivity {
  public:
   explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false)
-      : Activity("OpdsServerList", renderer, mappedInput), pickerMode(pickerMode) {}
+      : UiListActivity("OpdsServerList", renderer, mappedInput), pickerMode(pickerMode) {}
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override { return getItemCount(); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onBackButton() override;
+  const char* headerTitle() const override;
 
  private:
-  ButtonNavigator buttonNavigator;
-  int selectedIndex = 0;
   bool pickerMode = false;
 
   int getItemCount() const;
-  void handleSelection();
+
+  // Row text owns its strings; the ListItems borrow them.
+  std::vector<std::string> labels;
+  std::vector<std::string> subtitles;
+  std::vector<freeink::ui::ListItem> rows;
 };

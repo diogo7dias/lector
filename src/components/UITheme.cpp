@@ -13,6 +13,7 @@
 #include "RecentBooksStore.h"
 #include "components/StatusBar.h"  // statusBarThicknessPx for the v2 height helpers
 #include "components/themes/BaseTheme.h"
+#include "components/themes/TouchMetrics.h"
 
 UITheme UITheme::instance;
 
@@ -37,7 +38,19 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME /*type*/) {
   metricsValid = false;
 }
 
-const ThemeMetrics& UITheme::getMetrics() const { return *currentMetrics; }
+const ThemeMetrics& UITheme::getMetrics() const {
+  // A touch board gets finger-sized interactive bands; a button-only board keeps the
+  // metrics exactly as the theme declares them. Cached because getMetrics() is called
+  // several times per frame, and re-derived when the answer to hasTouch() changes (it
+  // does once, at boot, after the panel is probed).
+  const bool touch = gpio.hasTouch();
+  if (!metricsValid || metricsForTouch != touch) {
+    adjustedMetrics = touch ? touch_metrics::adjusted(*currentMetrics) : *currentMetrics;
+    metricsForTouch = touch;
+    metricsValid = true;
+  }
+  return adjustedMetrics;
+}
 
 int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
                                      bool hasSubtitle, int extraReservedHeight) {
@@ -121,11 +134,10 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
 // progress bar / nothing) so it can reserve space for the countdown indicator.
 int UITheme::getStatusBarHeight() {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const bool showText =
-      SETTINGS.statusBarEnabled() &&
-      (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
-       SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos ||
-       SETTINGS.sbSessionPagesPos || SETTINGS.sbParaPagesPos);
+  const bool showText = SETTINGS.statusBarEnabled() &&
+                        (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
+                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos ||
+                         SETTINGS.sbSessionPagesPos || SETTINGS.sbParaPagesPos);
   return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
 }
 

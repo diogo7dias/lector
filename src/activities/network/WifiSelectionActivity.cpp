@@ -461,7 +461,13 @@ void WifiSelectionActivity::handleNetworkListInput() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  // A tap on a network row selects it and connects, the same as Confirm.
+  int tappedRow = 0;
+  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(networks.size())) {
+    selectedNetworkIndex = static_cast<size_t>(tappedRow);
+  }
+
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) || tappedRow >= 0) {
     if (selectedNetworkIndex < networks.size() && networks[selectedNetworkIndex].isHiddenPlaceholder) {
       promptHiddenSsid();
       return;

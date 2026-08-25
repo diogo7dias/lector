@@ -35,6 +35,9 @@ int HomeActivity::menuRowCount() const {
   if (hasOpdsServers) {
     count++;
   }
+#ifdef LECTOR_LOCK_LAB_UI
+  count++;  // Lock Lab, kit builds only
+#endif
   return count;
 }
 
@@ -123,10 +126,24 @@ void HomeActivity::loop() {
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
+#ifdef LECTOR_LOCK_LAB_UI
+      case HomeMenuItem::LOCK_LAB:
+        onLockLabOpen();
+        break;
+#endif
       default:
         break;
     }
   };
+
+  // A tap picks the row it landed on and acts on it in one go — the selection moving
+  // first is what the paint after the action shows, so no extra refresh is spent on it.
+  int tappedItem = 0;
+  if (mappedInput.wasRowTapped(tappedItem) && tappedItem >= 0 && tappedItem < menuCount) {
+    selectorIndex = tappedItem;
+    activateSelection();
+    return;
+  }
 
   const int bookCount = static_cast<int>(recentBooks.size());
   // Keep the selected book within the list's visible window as it moves. drawList
@@ -245,6 +262,15 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
+#ifdef LECTOR_LOCK_LAB_UI
+  // Appended after Settings, and after the OPDS insert above, so the row order every
+  // other index in this file assumes is untouched. Literal rather than tr(): the lab is
+  // never in a release build and the generated string tables are not #ifdef-aware, so a
+  // key for it would cost flash in shipped firmware.
+  menuItems.push_back("Lock Lab");
+  menuIcons.push_back(Settings);
+#endif
+
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
     // Insert Continue Reading at the top if enabled in theme
     menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
@@ -284,7 +310,9 @@ void HomeActivity::render(RenderLock&&) {
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
       menuCount, metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
       [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; });
+      [&menuIcons](int index) { return menuIcons[index]; },
+      // The books above own indices 0..N-1 of the same selection space the menu continues.
+      metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
 
   // Back's hint must match what it actually does. An empty label draws no
   // button box at all, which is what HOME_BACK_NONE wants.
@@ -369,6 +397,10 @@ void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToR
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
+
+#ifdef LECTOR_LOCK_LAB_UI
+void HomeActivity::onLockLabOpen() { activityManager.goToLockLab(); }
+#endif
 
 void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
 

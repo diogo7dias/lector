@@ -50,6 +50,18 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_PAUSE_WALLPAPER_ROTATION;
     case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
       return StrId::STR_NEARBY_SEND_FILE;
+    case CrossPointSettings::LP_MENU_PAGE_PREV:
+      return StrId::STR_PREV_PAGE;
+    case CrossPointSettings::LP_MENU_PAGE_NEXT:
+      return StrId::STR_NEXT_PAGE;
+    case CrossPointSettings::LP_MENU_GO_HOME:
+      return StrId::STR_HOME;
+    case CrossPointSettings::LP_MENU_BACK:
+      return StrId::STR_BACK;
+    case CrossPointSettings::LP_MENU_LIGHT_PANEL:
+      return StrId::STR_FRONTLIGHT;
+    case CrossPointSettings::LP_MENU_SLEEP:
+      return StrId::STR_SLEEP;
     case CrossPointSettings::LP_MENU_POPUP:
     default:
       return StrId::STR_MENU_POPUP;

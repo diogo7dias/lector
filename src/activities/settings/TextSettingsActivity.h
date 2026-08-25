@@ -10,6 +10,7 @@
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
+#include "components/RowSlider.h"
 #include "util/ButtonNavigator.h"
 #include "util/HoldRepeat.h"
 
@@ -84,6 +85,14 @@ class TextSettingsActivity final : public Activity {
   // Numeric rows share one editing path; these give it the field and its range.
   uint8_t* numberField(Row row) const;
   void numberRange(Row row, int& minValue, int& maxValue) const;
+  // Drag track for the armed numeric row: drawn by render(), hit-tested by loop().
+  // Zero width whenever no row is armed or the row has no space for a track, which
+  // is also what makes a touch fall through to ordinary list handling.
+  void setEditedValue(int value);
+  row_slider::Bar sliderBar_{};
+  // The armed row is painted over by the solid selection style, so the track is
+  // drawn white there and black on the styles that leave the row on paper.
+  bool sliderOnDarkRow_ = false;
   void applyNumber(Row row, int value);
 
   void activateRow(Row row);

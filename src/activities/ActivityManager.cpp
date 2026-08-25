@@ -13,6 +13,8 @@
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/RowHitTest.h"
+#include "dev/LockLabActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -62,7 +64,20 @@ void ActivityManager::renderTaskLoop() {
       // resolving the output polarity here, per render, means menus, popups,
       // and every other activity revert to normal automatically.
       display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
-      currentActivity->render(std::move(lock));
+      // A tap answers to what is on screen now, so the row table starts empty on every
+      // paint and each list draw appends the rows it actually painted. Cleared here, the
+      // one place a paint begins, rather than inside the list draws — a screen that draws
+      // two lists (the home's books and its menu) would otherwise have the second wipe the
+      // first, and a screen that draws none would leave the previous screen's rows live.
+      if (lightPanel.isActive()) {
+        // Deliberately not re-rendering the activity: the panel is drawn over the page
+        // already in the framebuffer, which is what makes it a live preview of the light
+        // rather than a screen you leave the book for.
+        lightPanel.processRender(renderer);
+      } else {
+        row_hit::lastRows().begin();
+        currentActivity->render(std::move(lock));
+      }
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
@@ -78,6 +93,25 @@ void ActivityManager::renderTaskLoop() {
 
 void ActivityManager::loop() {
   if (currentActivity) {
+    // Home from anywhere, handled once here rather than in every activity: the
+    // capacitive Home key on boards that have one, the bottom-edge up-swipe on the
+    // rest. Activities that need to intervene override handleHomeGesture().
+    // The light panel takes input before anything else while it is up, and the top-edge
+    // swipe opens it from any screen. Handled once here for the same reason Home is.
+    if (lightPanel.isActive()) {
+      if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+    } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
+      lightPanel.show();
+      requestUpdate();
+      return;
+    }
+
+    if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {
+      if (currentActivity->handleHomeGesture()) return;
+      goHome();
+      return;
+    }
+
     // Note: do not hold a lock here, the loop() method must be responsible for acquire one if needed
     currentActivity->loop();
   }
@@ -199,6 +233,10 @@ void ActivityManager::goToFileTransfer() {
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
+
+#ifdef LECTOR_LOCK_LAB_UI
+void ActivityManager::goToLockLab() { replaceActivity(std::make_unique<LockLabActivity>(renderer, mappedInput)); }
+#endif
 
 void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));

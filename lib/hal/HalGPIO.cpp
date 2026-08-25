@@ -134,6 +134,17 @@ void HalGPIO::begin() {
   }
 #else
   _deviceType = DeviceType::X4;
+#if FREEINK_DEVICE_X4PRO
+  // The X4 Pro ships in two panel batches: the SSD1677 the profile defaults to,
+  // and the UltraChip sibling (UC8179 / UC8279). Fingerprint the live display
+  // bus before FreeInkDisplay claims the pins. Without this the build always
+  // drives SSD1677 commands, so an UltraChip unit paints nothing and every BUSY
+  // wait returns in 0 ms because BUSY is never asserted.
+  freeink::applyXteinkDisplayController();
+  LOG_INF("HW", "X4 Pro display controller=%u busy pin=%d level=%d",
+          static_cast<unsigned>(BoardConfig::ACTIVE.displayController), BoardConfig::ACTIVE.display.busy,
+          BoardConfig::ACTIVE.display.busy >= 0 ? digitalRead(BoardConfig::ACTIVE.display.busy) : -1);
+#endif
 #endif
   inputMgr.begin();
 }
@@ -173,6 +184,18 @@ unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPower
 
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
+bool HalGPIO::wasTouchLongPress(float& nx, float& ny) const { return inputMgr.wasTouchLongPress(nx, ny); }
+
+bool HalGPIO::wasTouchReleased() const { return inputMgr.wasTouchReleased(); }
+
+void HalGPIO::suppressTouchContact() { inputMgr.suppressTouchContact(); }
+
+bool HalGPIO::hasHomeKey() const { return BoardConfig::hasHomeKey(); }
+
+bool HalGPIO::wasHomeKeyTapped() const { return inputMgr.wasHomeKeyTapped(); }
+
+bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPressed(); }
+
 bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
 
 bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
@@ -203,8 +226,10 @@ bool HalGPIO::isXteinkDevice() const {
 
 bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
   // Boards without a power button (or M5Paper's latch circuit) cannot verify a
-  // hold; treat the wake as valid.
-  if (BoardConfig::ACTIVE.input.power < 0) {
+  // hold; treat the wake as valid. The X4 Pro joins them for a different reason:
+  // it wakes on any power-button press at all, so there is no hold to measure
+  // and requiring one would reject every legitimate wake.
+  if (BoardConfig::isX4Pro() || BoardConfig::ACTIVE.input.power < 0) {
     return true;
   }
 #if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER

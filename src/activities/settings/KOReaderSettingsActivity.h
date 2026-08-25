@@ -1,26 +1,32 @@
 #pragma once
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include <string>
+#include <vector>
+
+#include "activities/UiListActivity.h"
 
 /**
  * Submenu for KOReader Sync settings.
  * Shows username, password, and authenticate options.
  */
-class KOReaderSettingsActivity final : public Activity {
+class KOReaderSettingsActivity final : public UiListActivity {
  public:
   explicit KOReaderSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("KOReaderSettings", renderer, mappedInput) {}
+      : UiListActivity("KOReaderSettings", renderer, mappedInput) {}
 
-  void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override;
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  const char* headerTitle() const override;
 
  private:
-  ButtonNavigator buttonNavigator;
+  // The right-hand column for a row: what the setting currently is.
+  std::string statusFor(int index) const;
 
-  size_t selectedIndex = 0;
-
-  void handleSelection();
+  // Row values own their strings; the ListItems borrow them.
+  std::vector<std::string> values;
+  std::vector<freeink::ui::ListItem> rows;
 };

@@ -8,8 +8,11 @@
 #include "RecentBooksStore.h"
 #include "activities/ActivityResult.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "util/BookFilingNames.h"
+
+namespace fui = freeink::ui;
 
 void StealLookActivity::loadCandidates() {
   candidates.clear();
@@ -25,79 +28,55 @@ void StealLookActivity::loadCandidates() {
 }
 
 void StealLookActivity::onEnter() {
-  Activity::onEnter();
   loadCandidates();
-  selectorIndex = 0;
-  requestUpdate();
+  UiListActivity::onEnter();
 }
 
 void StealLookActivity::onExit() {
-  Activity::onExit();
+  UiListActivity::onExit();
+  rows.clear();
   candidates.clear();
 }
 
-void StealLookActivity::loop() {
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, true);
+const char* StealLookActivity::headerTitle() const { return tr(STR_STEAL_LOOK); }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (!candidates.empty() && selectorIndex < candidates.size()) {
-      setResult(FilePathResult{candidates[selectorIndex].cachePath});
-      finish();
-      return;
-    }
-  }
+void StealLookActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // The base paints the header and the button hints itself, outside the app.
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult res;
-    res.isCancelled = true;
-    setResult(std::move(res));
-    finish();
+  if (candidates.empty()) {
+    screen.centeredText(tr(STR_STEAL_LOOK_NONE));
     return;
   }
 
-  const int listSize = static_cast<int>(candidates.size());
-
-  buttonNavigator.onNextPress([this, listSize] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousPress([this, listSize] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
-    requestUpdate();
-  });
-}
-
-void StealLookActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_STEAL_LOOK));
-
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-
-  if (candidates.empty()) {
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, tr(STR_STEAL_LOOK_NONE));
-  } else {
-    GUI.drawList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(candidates.size()),
-        static_cast<int>(selectorIndex), [this](int index) { return candidates[index].title; },
-        [](int) { return std::string(); }, [this](int index) { return UITheme::getFileIcon(candidates[index].path); });
+  rows.assign(candidates.size(), fui::ListItem{});
+  for (size_t i = 0; i < candidates.size(); ++i) {
+    rows[i].label = candidates[i].title.c_str();
+    rows[i].icon = listIconFor(UITheme::getFileIcon(candidates[i].path));
+    rows[i].actionValue = static_cast<int16_t>(i);
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(rows.size());
+  props.action = ACTION_ROW;
+  props.iconSize = 24;
+  syncListViewport(screen, props);
+  screen.list(props);
+}
 
-  renderer.displayBuffer();
+void StealLookActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  setResult(FilePathResult{candidates[index].cachePath});
+  finish();
+}
+
+void StealLookActivity::onBackButton() {
+  ActivityResult res;
+  res.isCancelled = true;
+  setResult(std::move(res));
+  finish();
 }

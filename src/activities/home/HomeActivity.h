@@ -35,6 +35,10 @@ class HomeActivity final : public Activity {
     if (item == HomeMenuItem::FILE_TRANSFER) return i;
     ++i;
     if (item == HomeMenuItem::SETTINGS_MENU) return i;
+#ifdef LECTOR_LOCK_LAB_UI
+    ++i;
+    if (item == HomeMenuItem::LOCK_LAB) return i;
+#endif
     return 0;
   }
 
@@ -45,11 +49,18 @@ class HomeActivity final : public Activity {
     if (hasOpdsUrl && idx == i++) return HomeMenuItem::OPDS_BROWSER;
     if (idx == i++) return HomeMenuItem::FILE_TRANSFER;
     if (idx == i) return HomeMenuItem::SETTINGS_MENU;
+#ifdef LECTOR_LOCK_LAB_UI
+    ++i;
+    if (idx == i) return HomeMenuItem::LOCK_LAB;
+#endif
     return HomeMenuItem::NONE;
   }
   void onSelectBook(const std::string& path);
   void onFileBrowserOpen();
   void onSettingsOpen();
+#ifdef LECTOR_LOCK_LAB_UI
+  void onLockLabOpen();
+#endif
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
 

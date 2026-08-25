@@ -12,9 +12,6 @@
 #include <Memory.h>
 #include <Txt.h>
 #include <Xtc.h>
-
-#include "SleepTiming.h"
-
 #include <esp_random.h>
 
 #include <algorithm>
@@ -26,13 +23,16 @@
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
 #include "RecentBooksStore.h"
+#include "SleepGrayscaleBase.h"
 #include "SleepInfoOverlay.h"
+#include "SleepTiming.h"
 #include "StatsDashboardPolicy.h"
 #include "StatsDashboardRenderer.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/BannerStyle.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
+#include "dev/LockLab.h"
 #include "fontIds.h"
 #include "images/BootLogos.h"
 #include "images/MoonIcon.h"
@@ -493,7 +493,7 @@ AlphaOverlayResult tryRenderTransparentOverlayBmp(HalFile& file, GfxRenderer& re
     return AlphaOverlayResult::Error;
   // Must stay HALF for the same reason renderBitmapSleepScreen documents: the gray
   // nudge LUT is calibrated against the state the HALF waveform leaves behind.
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -844,6 +844,18 @@ void SleepActivity::renderStatsDashboardSleepScreen() const {
 }
 
 void SleepActivity::renderCustomSleepScreen() const {
+#ifdef LECTOR_LOCK_LAB
+  // A Full lock run has to draw what the bench draws, or the number it reports belongs to
+  // a different recipe than the picture on the panel.
+  const PxcRenderOptions labOptions = locklab::optionsFor(APP_STATE.lockLab);
+  const PxcRenderOptions* const pxcOptions = &labOptions;
+  // Before anything is drawn, and before any sleep face is chosen: a scrub is about the
+  // panel's charge history, not about which picture is going on top of it.
+  const uint32_t preClearMs = locklab::applyPreClear(renderer);
+  if (preClearMs != 0) LOG_INF("LAB", "pre-clear %ums", static_cast<unsigned>(preClearMs));
+#else
+  const PxcRenderOptions* const pxcOptions = nullptr;
+#endif
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
@@ -871,13 +883,15 @@ void SleepActivity::renderCustomSleepScreen() const {
   // sequence powers the panel rails down, and the grayscale refresh that follows then
   // shared one activation with the rail ramp. Fixed at the driver-config level; see
   // src/platform/LectorSsd1677Config.cpp.
-  // Quality is the user's call: Pretty is the 3-pass grayscale above, Fast is a single
-  // 1-bit pass. Three panel refreshes instead of one is real time spent going to sleep,
-  // which is worth trading away on a dithered image.
-  const bool pxcGrayscale = SETTINGS.sleepImageQuality == CrossPointSettings::SLEEP_QUALITY_PRETTY;
+  // Always the 3-pass grayscale, never the 1-bit pass. This used to be a setting, and it
+  // was the wrong thing to offer: the sleep screen is the picture the device wears while
+  // it is off, so tone is the whole point of it, and the second or so the extra two panel
+  // refreshes cost is spent after the user has already put the device down.
+  constexpr bool pxcGrayscale = true;
   {
     const SleepInfoOverlayScope overlayScope("/sleep.pxc");
-    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
+    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,
+                             pxcOptions)) {
       LOG_INF("SLP", "Loaded: /sleep.pxc");
       APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
       return;
@@ -1045,7 +1059,8 @@ void SleepActivity::renderCustomSleepScreen() const {
       delay(100);
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
       if (hasPxcExtension(name)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay)) {
+        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,
+                                 pxcOptions)) {
           APP_STATE.lastSleepWallpaperPath = filename;
           return true;
         }
@@ -1178,7 +1193,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
     // calibrated against the pixel state the single-pass HALF waveform leaves
     // behind. A FULL (GC) base parks pixels in a different charge state and
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
-    renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+    renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
   } else {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
@@ -1246,7 +1261,7 @@ bool SleepActivity::renderTransparentOverlayPng(const std::string& path) const {
   LOG_DBG("SLP", "Rendering transparent PNG overlay: %s (%dx%d)", path.c_str(), dimensions.width, dimensions.height);
 
   if (!converter.decodeToFramebuffer(path, renderer, config)) return false;
-  renderer.displayGrayscaleBase(HalDisplay::HALF_REFRESH);
+  renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
 
   renderer.clearScreen(0x00);
   renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);

@@ -224,6 +224,19 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   // Short power button press actions
   enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
+  // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
+  // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
+  // swipe. Values match CrossPoint so a settings file moves between the two.
+  enum TOUCH_READER_CONTROLS {
+    TOUCH_READER_OFF = 0,
+    TOUCH_READER_TAP = 1,
+    TOUCH_READER_SWIPE = 2,
+    TOUCH_READER_INVERTED_TAP = 3,
+    TOUCH_READER_CONTROLS_COUNT
+  };
+  // How the reader menu opens on a touch board. Swipe Up is only offered where the
+  // Home key is capacitive, since there the bottom edge is otherwise unused.
+  enum SHOW_READER_MENU { READER_MENU_OFF = 0, READER_MENU_TAP = 1, READER_MENU_SWIPE_UP = 2, SHOW_READER_MENU_COUNT };
 
   // How long Power must be held to wake the device from deep sleep. Normal rejects a
   // pocket brush; Fast wakes on any press, which is what Short Power Button Click = Sleep
@@ -274,7 +287,29 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // there is. Listing it in the pop-up means widening that mask and migrating
     // every stored value.
     LP_MENU_NEARBY_SEND_BOOK = 16,
+    // Appended for the per-button bindings (Buttons settings screen). The first four
+    // are what a button does rather than what a menu offers, so they are absent from
+    // POPUP_ITEM_FUNCTIONS: ticking "Next page" into the reader's pop-up would be a
+    // row that turns the page the pop-up is covering.
+    LP_MENU_PAGE_PREV = 17,
+    LP_MENU_PAGE_NEXT = 18,
+    LP_MENU_GO_HOME = 19,
+    LP_MENU_BACK = 20,
+    LP_MENU_LIGHT_PANEL = 21,
+    LP_MENU_SLEEP = 22,
     LONG_PRESS_MENU_FUNCTION_COUNT
+  };
+
+  // The three buttons the Buttons screen binds, in the order it lists them. Left and
+  // Right are the two side keys; Home is the capacitive key under the panel on the
+  // boards that have one (BoardConfig::hasHomeKey).
+  enum BOUND_BUTTON : uint8_t { BOUND_BTN_LEFT = 0, BOUND_BTN_RIGHT = 1, BOUND_BTN_HOME = 2, BOUND_BTN_COUNT = 3 };
+  // The three gestures each of those carries.
+  enum BOUND_GESTURE : uint8_t {
+    BOUND_SINGLE = 0,
+    BOUND_DOUBLE = 1,
+    BOUND_HOLD = 2,
+    BOUND_GESTURE_COUNT = 3,
   };
 
   // Actions that may be ticked into the pop-up: every binding value except Disabled
@@ -343,9 +378,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;
-  // How the focused row is highlighted across every menu, list and popup.
-  // selection_style::Style; see src/components/themes/SelectionStyle.h.
-  uint8_t selectionStyle = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter
@@ -429,6 +461,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t textAntiAliasing = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = IGNORE;
+  // Swipe by default: it works the same wherever the thumb lands, and it leaves the
+  // whole page free of invisible tap targets.
+  uint8_t touchReaderControls = TOUCH_READER_SWIPE;
+  // Persisted under the legacy "tapForReaderMenu" key, whose old values line up:
+  // 0 = Off, 1 = Tap.
+  uint8_t showReaderMenu = READER_MENU_TAP;
   // Wake hold. Defaults to Normal, including for a settings file that predates this
   // setting and chose Sleep — fromJson carries those forward to Fast, so nobody's wake
   // gets slower without them asking (see the migration there).
@@ -550,6 +588,55 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // to the EPUB reader (main.cpp only arms the detector there) and disappears entirely
   // at LP_MENU_DISABLED, which is why Disabled is the default.
   uint8_t doubleClickPowerFunction = LP_MENU_DISABLED;
+
+  // Per-button bindings: what each button does for each gesture, in a book and out of
+  // one. Values are LONG_PRESS_MENU_FUNCTION, so the picker offers the same list every
+  // other binding does.
+  //
+  // Defaults keep the device as it was: the side keys turn pages in a book and step
+  // the selection outside one, Home goes home, and every double click and hold is
+  // Disabled. That matters beyond taste — a bound double click delays the single by
+  // the double-click window, and a bound hold takes the press away from the firmware's
+  // own hold behaviour (page repeat, list paging). Leaving them Disabled is what keeps
+  // both free until the user asks for them.
+  uint8_t btnBookLeftSingle = LP_MENU_PAGE_PREV;
+  uint8_t btnBookLeftDouble = LP_MENU_DISABLED;
+  uint8_t btnBookLeftHold = LP_MENU_DISABLED;
+  uint8_t btnBookRightSingle = LP_MENU_PAGE_NEXT;
+  uint8_t btnBookRightDouble = LP_MENU_DISABLED;
+  uint8_t btnBookRightHold = LP_MENU_DISABLED;
+  uint8_t btnBookHomeSingle = LP_MENU_GO_HOME;
+  uint8_t btnBookHomeDouble = LP_MENU_DISABLED;
+  uint8_t btnBookHomeHold = LP_MENU_DISABLED;
+  uint8_t btnUiLeftSingle = LP_MENU_PAGE_PREV;
+  uint8_t btnUiLeftDouble = LP_MENU_DISABLED;
+  uint8_t btnUiLeftHold = LP_MENU_DISABLED;
+  uint8_t btnUiRightSingle = LP_MENU_PAGE_NEXT;
+  uint8_t btnUiRightDouble = LP_MENU_DISABLED;
+  uint8_t btnUiRightHold = LP_MENU_DISABLED;
+  uint8_t btnUiHomeSingle = LP_MENU_GO_HOME;
+  uint8_t btnUiHomeDouble = LP_MENU_DISABLED;
+  uint8_t btnUiHomeHold = LP_MENU_DISABLED;
+
+  // The binding field for one button and gesture, in or out of a book. Returns a
+  // pointer so both the settings rows and the router read the same storage.
+  uint8_t* buttonBinding(const bool inBook, const uint8_t button, const uint8_t gesture) {
+    static uint8_t CrossPointSettings::* const table[2][BOUND_BTN_COUNT][BOUND_GESTURE_COUNT] = {
+        {{&CrossPointSettings::btnUiLeftSingle, &CrossPointSettings::btnUiLeftDouble,
+          &CrossPointSettings::btnUiLeftHold},
+         {&CrossPointSettings::btnUiRightSingle, &CrossPointSettings::btnUiRightDouble,
+          &CrossPointSettings::btnUiRightHold},
+         {&CrossPointSettings::btnUiHomeSingle, &CrossPointSettings::btnUiHomeDouble,
+          &CrossPointSettings::btnUiHomeHold}},
+        {{&CrossPointSettings::btnBookLeftSingle, &CrossPointSettings::btnBookLeftDouble,
+          &CrossPointSettings::btnBookLeftHold},
+         {&CrossPointSettings::btnBookRightSingle, &CrossPointSettings::btnBookRightDouble,
+          &CrossPointSettings::btnBookRightHold},
+         {&CrossPointSettings::btnBookHomeSingle, &CrossPointSettings::btnBookHomeDouble,
+          &CrossPointSettings::btnBookHomeHold}}};
+    if (button >= BOUND_BTN_COUNT || gesture >= BOUND_GESTURE_COUNT) return nullptr;
+    return &(this->*table[inBook ? 1 : 0][button][gesture]);
+  }
   // Which actions the Menu Pop-up lists, as a bitmask indexed by LONG_PRESS_MENU_FUNCTION
   // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
   // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
@@ -641,11 +728,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char txtSdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
-  // Sleep wallpaper rendering quality. Pretty runs the OEM 3-pass grayscale pipeline;
-  // Fast draws one 1-bit pass, which is two panel refreshes cheaper on every sleep.
-  static constexpr uint8_t SLEEP_QUALITY_FAST = 0;
-  static constexpr uint8_t SLEEP_QUALITY_PRETTY = 1;
-  uint8_t sleepImageQuality = SLEEP_QUALITY_PRETTY;
+  // Kept only so an existing settings file still parses and the perf log keeps its
+  // column. The sleep wallpaper is always drawn through the OEM 3-pass grayscale
+  // pipeline now; nothing reads this to choose anything. See SleepActivity.
+  uint8_t sleepImageQuality = 1;
   // Skip the unlock screen on a wallpaper wake and go straight back into the book.
   //
   // The sleep screen itself is untouched: the wallpaper is drawn and shown exactly as
@@ -714,6 +800,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t language = 0;
   // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
+
+  // Frontlight (X4 Pro and other boards the SDK reports a frontlight for). The
+  // rows are filtered out of Settings on a board without one, but the values
+  // still persist so moving an SD card between devices keeps them.
+  uint8_t frontlightBrightness = 60;
+  uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm; ignored without warm/cold LEDs
+  uint8_t frontlightOn = 0;
+  // Bring the light back by itself on wake. Off by default: a light that
+  // switches itself on in a bright room is worse than one you turn on.
+  // Brightness and warmth are remembered either way. See FrontlightBootPolicy.h.
+  uint8_t frontlightRestoreOnWake = 0;
 
   static constexpr uint8_t MIN_SLEEP_TIMEOUT_MINUTES = 1;
   static constexpr uint8_t SLEEP_TIMEOUT_NEVER_MINUTES = 31;

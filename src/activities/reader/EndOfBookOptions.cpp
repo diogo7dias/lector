@@ -45,6 +45,18 @@ std::string EndOfBookOptions::fullPath(const size_t index) const {
 }
 
 EndOfBookOptions::Action EndOfBookOptions::handleMenuInput(const MappedInputManager& input, std::string* openPath) {
+  // A tap on a row picks it, the same as Confirm. The row list is the suggestions
+  // followed by the Home entry, so the tapped index maps straight onto the selector.
+  int tappedRow = 0;
+  if (input.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow <= static_cast<int>(names.size())) {
+    selector = tappedRow;
+    if (selector < static_cast<int>(names.size())) {
+      if (openPath) *openPath = fullPath(selector);
+      return Action::OpenBook;
+    }
+    return Action::GoHome;
+  }
+
   if (input.wasReleased(MappedInputManager::Button::Confirm)) {
     if (selector < static_cast<int>(names.size())) {
       if (openPath) {

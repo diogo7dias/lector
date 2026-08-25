@@ -13,53 +13,50 @@
 #include "fontIds.h"
 #include "util/BoundMenuLabels.h"
 
+namespace fui = freeink::ui;
+
 namespace {
 
 constexpr int ITEM_COUNT = static_cast<int>(std::size(CrossPointSettings::POPUP_ITEM_FUNCTIONS));
 
 }  // namespace
 
-void PopupItemsActivity::onEnter() {
-  Activity::onEnter();
-  selectedIndex = 0;
-  requestUpdate();
+void PopupItemsActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+  labels.clear();
 }
 
-void PopupItemsActivity::onExit() { Activity::onExit(); }
+int PopupItemsActivity::listCount() const { return ITEM_COUNT; }
 
-void PopupItemsActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-    return;
+void PopupItemsActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
+
+  labels.assign(ITEM_COUNT, std::string());
+  rows.assign(ITEM_COUNT, fui::ListItem{});
+  for (int i = 0; i < ITEM_COUNT; ++i) {
+    const uint8_t function = CrossPointSettings::POPUP_ITEM_FUNCTIONS[i];
+    // The box sits on the left, in a fixed-width column, so ticking a row never
+    // shifts its label sideways.
+    labels[i] = std::string(SETTINGS.isPopupItem(function) ? "[x]  " : "[ ]  ") +
+                I18N.get(boundMenuActionLabel(function));
+    rows[i].label = labels[i].c_str();
+    rows[i].actionValue = static_cast<int16_t>(i);
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    toggleSelected();
-    return;
-  }
-
-  const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
-
-  buttonNavigator.onNextStep([this] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, ITEM_COUNT);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousStep([this] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, ITEM_COUNT);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::nextPageIndex(selectedIndex, ITEM_COUNT, pageItems);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, pageItems] {
-    selectedIndex = ButtonNavigator::previousPageIndex(selectedIndex, ITEM_COUNT, pageItems);
-    requestUpdate();
-  });
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(ITEM_COUNT);
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
 }
 
-void PopupItemsActivity::toggleSelected() {
-  const uint8_t function = CrossPointSettings::POPUP_ITEM_FUNCTIONS[selectedIndex];
+void PopupItemsActivity::activateIndex(const int index) {
+  const uint8_t function = CrossPointSettings::POPUP_ITEM_FUNCTIONS[index];
   const bool wantOn = !SETTINGS.isPopupItem(function);
 
   if (!SETTINGS.setPopupItem(function, wantOn)) {
@@ -78,30 +75,16 @@ void PopupItemsActivity::toggleSelected() {
   requestUpdate();
 }
 
-void PopupItemsActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const auto metrics = UITheme::getInstance().getMetrics();
-
+void PopupItemsActivity::drawChrome() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
   char counter[16];
   snprintf(counter, sizeof(counter), "%u / %u", static_cast<unsigned>(SETTINGS.popupItemCount()),
            static_cast<unsigned>(CrossPointSettings::POPUP_ITEM_MAX));
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_POPUP_ITEMS), counter);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
+                 tr(STR_POPUP_ITEMS), counter);
+}
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing;
-
-  GUI.drawList(renderer, Rect{0, contentTop, pageWidth, contentHeight}, ITEM_COUNT, selectedIndex, [](int index) {
-    const uint8_t function = CrossPointSettings::POPUP_ITEM_FUNCTIONS[index];
-    // The box sits on the left, in a fixed-width column, so ticking a row never
-    // shifts its label sideways.
-    return std::string(SETTINGS.isPopupItem(function) ? "[x]  " : "[ ]  ") + I18N.get(boundMenuActionLabel(function));
-  });
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+void PopupItemsActivity::drawFooter() {
+  const auto hints = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
 }
