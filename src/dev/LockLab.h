@@ -49,6 +49,13 @@ PxcRenderOptions optionsFor(const LockLabState& state);
 // render, in which case the caller reports that rather than rendering a failure.
 std::string nextSourcePath(LockLabState& state);
 
+// Drives every pixel to the opposite rail before a render, as the Pre-clear knob asks,
+// and returns what it cost in milliseconds. Zero when the knob is Off.
+//
+// Called from both paths on purpose. The bench needs it to measure the cost, and a Full
+// lock needs it or the knob does nothing on the one path a tester actually watches.
+uint32_t applyPreClear(GfxRenderer& renderer);
+
 // Renders one wallpaper with the current knobs, repeated as many times as the Repeat knob
 // asks, and writes a one-line summary of the recipe and the timings into `out`. The
 // summary also reaches the serial log and the perf CSV, so a kit log carries the whole

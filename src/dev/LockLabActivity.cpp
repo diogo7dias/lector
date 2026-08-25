@@ -44,6 +44,17 @@ void LockLabActivity::activateIndex(const int index) {
   }
 
   app.clearTapFlash();
+  if (state.realSleep == 2) {
+    // Render then lock: the bench runs first, so the recipe and its timings reach the log
+    // and the perf CSV, and the lock that follows leaves the picture on the panel long
+    // enough to actually look at. Watching the result and measuring it stop being a
+    // choice between two settings.
+    char summary[512];
+    locklab::runOnce(renderer, summary, sizeof(summary));
+    locklab::requestFullLock();
+    finish();
+    return;
+  }
   if (state.realSleep != 0) {
     // A render in isolation is not a lock: it skips the favourites reconcile, the index
     // pick, the frame save and the WiFi teardown. Hand the request to the main loop so

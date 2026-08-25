@@ -33,7 +33,7 @@ const char* const kPreClear[] = {"Off", "White FULL", "Black then white", "Two c
 const char* const kRowsPerRead[] = {"Auto", "1", "4", "8", "16"};
 const char* const kSource[] = {"/sleep.pxc", "/sleep folder", "/locklab folder"};
 const char* const kRepeat[] = {"1 run", "3 runs", "5 runs"};
-const char* const kRealSleep[] = {"Render only", "Full lock"};
+const char* const kRealSleep[] = {"Render only", "Full lock", "Render then lock"};
 
 // The tone curves. A .pxc carries four levels and nothing else, so a four-entry table is
 // the entire curve available: anything a converter can do to the midtones after the fact
@@ -86,7 +86,7 @@ const Knob kKnobs[] = {
     {"Source", &LockLabState::source, 3, kSource},
     {"Repeat", &LockLabState::repeat, 3, kRepeat},
     {"Info overlay", &LockLabState::overlay, 2, kOffOn},
-    {"On Run", &LockLabState::realSleep, 2, kRealSleep},
+    {"On Run", &LockLabState::realSleep, 3, kRealSleep},
 };
 
 bool pendingFullLock = false;
@@ -116,6 +116,8 @@ std::string pxcAt(const char* dirPath, uint16_t wanted, uint16_t& outCount) {
 }
 
 
+}  // namespace
+
 // A clean pass before the render, which the X4 Pro sleep path has never had.
 //
 // The pre-sleep full clean was removed on purpose (SleepActivity.cpp:705) and replaced by
@@ -124,7 +126,8 @@ std::string pxcAt(const char* dirPath, uint16_t wanted, uint16_t& outCount) {
 // it is not the base's to fix: displayGrayBuffer paints a differential FAST-class waveform
 // over whatever the panel already holds. This is the knob that tests whether an explicit
 // scrub first is what the panel actually needs, and what that scrub costs.
-uint32_t runPreClear(GfxRenderer& renderer, const uint8_t mode) {
+uint32_t applyPreClear(GfxRenderer& renderer) {
+  const uint8_t mode = APP_STATE.lockLab.preClear;
   if (mode == 0) return 0;
   const uint32_t startMs = millis();
   const int cycles = (mode == 3) ? 2 : 1;
@@ -141,8 +144,6 @@ uint32_t runPreClear(GfxRenderer& renderer, const uint8_t mode) {
   }
   return millis() - startMs;
 }
-
-}  // namespace
 
 const Knob* knobs() { return kKnobs; }
 
@@ -210,7 +211,7 @@ void runOnce(GfxRenderer& renderer, char* const out, const size_t outLen) {
   stages[0] = '\0';
   uint32_t preClearMs = 0;
   for (int i = 0; i < runs; i++) {
-    preClearMs = runPreClear(renderer, state.preClear);
+    preClearMs = applyPreClear(renderer);
     SleepTiming::begin();
     const uint32_t startMs = millis();
     bool rendered;

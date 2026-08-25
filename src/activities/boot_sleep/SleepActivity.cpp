@@ -849,6 +849,10 @@ void SleepActivity::renderCustomSleepScreen() const {
   // a different recipe than the picture on the panel.
   const PxcRenderOptions labOptions = locklab::optionsFor(APP_STATE.lockLab);
   const PxcRenderOptions* const pxcOptions = &labOptions;
+  // Before anything is drawn, and before any sleep face is chosen: a scrub is about the
+  // panel's charge history, not about which picture is going on top of it.
+  const uint32_t preClearMs = locklab::applyPreClear(renderer);
+  if (preClearMs != 0) LOG_INF("LAB", "pre-clear %ums", static_cast<unsigned>(preClearMs));
 #else
   const PxcRenderOptions* const pxcOptions = nullptr;
 #endif
