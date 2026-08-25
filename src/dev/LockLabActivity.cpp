@@ -1,4 +1,4 @@
-#ifdef LECTOR_LOCK_LAB
+#ifdef LECTOR_LOCK_LAB_UI
 
 #include "dev/LockLabActivity.h"
 
@@ -104,4 +104,4 @@ void LockLabActivity::buildScreen(UiScreen& screen) {
   screen.list(props);
 }
 
-#endif  // LECTOR_LOCK_LAB
+#endif  // LECTOR_LOCK_LAB_UI

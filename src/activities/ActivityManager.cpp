@@ -234,7 +234,7 @@ void ActivityManager::goToFileTransfer() {
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
 
-#ifdef LECTOR_LOCK_LAB
+#ifdef LECTOR_LOCK_LAB_UI
 void ActivityManager::goToLockLab() { replaceActivity(std::make_unique<LockLabActivity>(renderer, mappedInput)); }
 #endif
 

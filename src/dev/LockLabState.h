@@ -14,18 +14,22 @@
 // very thing they exist to measure.
 //
 // Every field is an index into the matching name table in LockLab.cpp, so the UI, the
-// persistence and the render options all agree by construction. Defaults describe the
-// shipped behaviour, so a freshly flashed kit renders what a release build renders until
-// someone changes something.
+// persistence and the render options all agree by construction.
+//
+// The defaults are no longer "what a release build does". They are the recipe chosen on
+// glass: Identity tone curve, a FULL grayscale base, and a white FULL pre-clear before
+// the render. The JSON key carries a version suffix so a device that already holds the
+// old block falls back to these rather than resurrecting whatever was last cycled; a
+// stale saved state would silently defeat the point of changing the defaults at all.
 struct LockLabState {
   uint8_t quality = 1;          // 0 Fast (1-bit), 1 Pretty (4-level)
   uint8_t dither = 0;           // PxcRenderOptions::Dither
   uint8_t levelMap = 0;         // preset index
   uint8_t invert = 0;
   uint8_t oneBitRefresh = 1;    // 0 Full, 1 Half, 2 Fast (HalDisplay::RefreshMode)
-  uint8_t grayBaseRefresh = 0;  // 0 Auto, then Full / Half / Fast
+  uint8_t grayBaseRefresh = 1;  // 0 Auto, then Full / Half / Fast
   uint8_t passes = 0;           // PxcRenderOptions::Passes
-  uint8_t preClear = 0;         // 0 Off, 1 White FULL, 2 Black then white, 3 Two cycles
+  uint8_t preClear = 1;         // 0 Off, 1 White FULL, 2 Black then white, 3 Two cycles
   uint8_t wholeFileCache = 1;
   uint8_t rowsPerRead = 0;  // 0 Auto, then 1 / 4 / 8 / 16
   uint8_t source = 0;       // 0 /sleep.pxc, 1 /sleep folder, 2 /locklab folder
@@ -38,7 +42,7 @@ struct LockLabState {
 };
 
 inline void lockLabToJson(const LockLabState& s, JsonDocument& doc) {
-  JsonObject o = doc["lockLab"].to<JsonObject>();
+  JsonObject o = doc["lockLab2"].to<JsonObject>();
   o["quality"] = s.quality;
   o["dither"] = s.dither;
   o["levelMap"] = s.levelMap;
@@ -57,7 +61,7 @@ inline void lockLabToJson(const LockLabState& s, JsonDocument& doc) {
 }
 
 inline void lockLabFromJson(LockLabState& s, JsonVariantConst doc) {
-  JsonVariantConst o = doc["lockLab"];
+  JsonVariantConst o = doc["lockLab2"];
   if (o.isNull()) return;
   s.quality = o["quality"] | s.quality;
   s.dither = o["dither"] | s.dither;

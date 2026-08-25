@@ -1,6 +1,6 @@
 #pragma once
 
-#ifdef LECTOR_LOCK_LAB
+#ifdef LECTOR_LOCK_LAB_UI
 
 #include <string>
 #include <vector>
@@ -36,4 +36,4 @@ class LockLabActivity final : public UiListActivity {
   std::string result;
 };
 
-#endif  // LECTOR_LOCK_LAB
+#endif  // LECTOR_LOCK_LAB_UI
