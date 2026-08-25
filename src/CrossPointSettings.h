@@ -287,7 +287,29 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // there is. Listing it in the pop-up means widening that mask and migrating
     // every stored value.
     LP_MENU_NEARBY_SEND_BOOK = 16,
+    // Appended for the per-button bindings (Buttons settings screen). The first four
+    // are what a button does rather than what a menu offers, so they are absent from
+    // POPUP_ITEM_FUNCTIONS: ticking "Next page" into the reader's pop-up would be a
+    // row that turns the page the pop-up is covering.
+    LP_MENU_PAGE_PREV = 17,
+    LP_MENU_PAGE_NEXT = 18,
+    LP_MENU_GO_HOME = 19,
+    LP_MENU_BACK = 20,
+    LP_MENU_LIGHT_PANEL = 21,
+    LP_MENU_SLEEP = 22,
     LONG_PRESS_MENU_FUNCTION_COUNT
+  };
+
+  // The three buttons the Buttons screen binds, in the order it lists them. Left and
+  // Right are the two side keys; Home is the capacitive key under the panel on the
+  // boards that have one (BoardConfig::hasHomeKey).
+  enum BOUND_BUTTON : uint8_t { BOUND_BTN_LEFT = 0, BOUND_BTN_RIGHT = 1, BOUND_BTN_HOME = 2, BOUND_BTN_COUNT = 3 };
+  // The three gestures each of those carries.
+  enum BOUND_GESTURE : uint8_t {
+    BOUND_SINGLE = 0,
+    BOUND_DOUBLE = 1,
+    BOUND_HOLD = 2,
+    BOUND_GESTURE_COUNT = 3,
   };
 
   // Actions that may be ticked into the pop-up: every binding value except Disabled
@@ -569,6 +591,55 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // to the EPUB reader (main.cpp only arms the detector there) and disappears entirely
   // at LP_MENU_DISABLED, which is why Disabled is the default.
   uint8_t doubleClickPowerFunction = LP_MENU_DISABLED;
+
+  // Per-button bindings: what each button does for each gesture, in a book and out of
+  // one. Values are LONG_PRESS_MENU_FUNCTION, so the picker offers the same list every
+  // other binding does.
+  //
+  // Defaults keep the device as it was: the side keys turn pages in a book and step
+  // the selection outside one, Home goes home, and every double click and hold is
+  // Disabled. That matters beyond taste — a bound double click delays the single by
+  // the double-click window, and a bound hold takes the press away from the firmware's
+  // own hold behaviour (page repeat, list paging). Leaving them Disabled is what keeps
+  // both free until the user asks for them.
+  uint8_t btnBookLeftSingle = LP_MENU_PAGE_PREV;
+  uint8_t btnBookLeftDouble = LP_MENU_DISABLED;
+  uint8_t btnBookLeftHold = LP_MENU_DISABLED;
+  uint8_t btnBookRightSingle = LP_MENU_PAGE_NEXT;
+  uint8_t btnBookRightDouble = LP_MENU_DISABLED;
+  uint8_t btnBookRightHold = LP_MENU_DISABLED;
+  uint8_t btnBookHomeSingle = LP_MENU_GO_HOME;
+  uint8_t btnBookHomeDouble = LP_MENU_DISABLED;
+  uint8_t btnBookHomeHold = LP_MENU_DISABLED;
+  uint8_t btnUiLeftSingle = LP_MENU_PAGE_PREV;
+  uint8_t btnUiLeftDouble = LP_MENU_DISABLED;
+  uint8_t btnUiLeftHold = LP_MENU_DISABLED;
+  uint8_t btnUiRightSingle = LP_MENU_PAGE_NEXT;
+  uint8_t btnUiRightDouble = LP_MENU_DISABLED;
+  uint8_t btnUiRightHold = LP_MENU_DISABLED;
+  uint8_t btnUiHomeSingle = LP_MENU_GO_HOME;
+  uint8_t btnUiHomeDouble = LP_MENU_DISABLED;
+  uint8_t btnUiHomeHold = LP_MENU_DISABLED;
+
+  // The binding field for one button and gesture, in or out of a book. Returns a
+  // pointer so both the settings rows and the router read the same storage.
+  uint8_t* buttonBinding(const bool inBook, const uint8_t button, const uint8_t gesture) {
+    static uint8_t CrossPointSettings::* const table[2][BOUND_BTN_COUNT][BOUND_GESTURE_COUNT] = {
+        {{&CrossPointSettings::btnUiLeftSingle, &CrossPointSettings::btnUiLeftDouble,
+          &CrossPointSettings::btnUiLeftHold},
+         {&CrossPointSettings::btnUiRightSingle, &CrossPointSettings::btnUiRightDouble,
+          &CrossPointSettings::btnUiRightHold},
+         {&CrossPointSettings::btnUiHomeSingle, &CrossPointSettings::btnUiHomeDouble,
+          &CrossPointSettings::btnUiHomeHold}},
+        {{&CrossPointSettings::btnBookLeftSingle, &CrossPointSettings::btnBookLeftDouble,
+          &CrossPointSettings::btnBookLeftHold},
+         {&CrossPointSettings::btnBookRightSingle, &CrossPointSettings::btnBookRightDouble,
+          &CrossPointSettings::btnBookRightHold},
+         {&CrossPointSettings::btnBookHomeSingle, &CrossPointSettings::btnBookHomeDouble,
+          &CrossPointSettings::btnBookHomeHold}}};
+    if (button >= BOUND_BTN_COUNT || gesture >= BOUND_GESTURE_COUNT) return nullptr;
+    return &(this->*table[inBook ? 1 : 0][button][gesture]);
+  }
   // Which actions the Menu Pop-up lists, as a bitmask indexed by LONG_PRESS_MENU_FUNCTION
   // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
   // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
