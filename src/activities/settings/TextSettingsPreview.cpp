@@ -276,13 +276,26 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
   const int marginTop = SETTINGS.screenMarginTop;
   const int marginBottom = SETTINGS.screenMarginBottom;
 
+  // The two ends of the page show the Paperback Look setting both ways: the top
+  // without the smear, the bottom with it, so the choice can be judged on the same
+  // words rather than by toggling the setting and remembering the last screen.
+  // Labelled at the cut, because the difference is a thickening that is easy to miss.
+  //
   // The smear is renderer state, so it must be cleared on every exit path below —
   // otherwise the row list and the button hints would render thickened too.
   struct PaperbackScope {
     const GfxRenderer& renderer;
     ~PaperbackScope() { renderer.setPaperbackLook(false); }
   } paperbackScope{renderer};
-  renderer.setPaperbackLook(SETTINGS.paperbackLookBody != 0);
+  const std::string offLabel = std::string(I18N.get(StrId::STR_PAPERBACK_LOOK)) + " " + I18N.get(StrId::STR_STATE_OFF);
+  const std::string onLabel = std::string(I18N.get(StrId::STR_PAPERBACK_LOOK)) + " " + I18N.get(StrId::STR_STATE_ON);
+  const int labelHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int labelRight = paneLeft + paneWidth - marginH;
+  renderer.drawText(UI_10_FONT_ID, labelRight - renderer.getTextWidth(UI_10_FONT_ID, offLabel.c_str()),
+                    cutY - labelHeight - 2, offLabel.c_str());
+  renderer.drawText(UI_10_FONT_ID, labelRight - renderer.getTextWidth(UI_10_FONT_ID, onLabel.c_str()), cutY + 3,
+                    onLabel.c_str());
+  renderer.setPaperbackLook(false);
 
   // --- top of the page: first lines, drawn down from the top margin ---
   const int topTextTop = top + topBarHeight + marginTop;
@@ -291,7 +304,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
     int y = topTextTop;
     for (const auto& entry : layout.lines) {
       y += entry.gapBefore;
-      if (y + lineH > cutY) break;
+      if (y + lineH > cutY - labelHeight - 4) break;
       entry.line->render(renderer, fontId, textLeft, y);
       y += lineAdvance;
       topLineCount++;
@@ -300,6 +313,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
   }
 
   // --- bottom of the page: last lines, sitting on the bottom margin ---
+  renderer.setPaperbackLook(true);
   const int bottomTextLimit = top + height - bottomBarHeight - marginBottom;
   const int bottomSpace = bottomTextLimit - (cutY + 1);
   if (bottomSpace >= lineH) {

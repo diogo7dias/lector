@@ -378,9 +378,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;
-  // How the focused row is highlighted across every menu, list and popup.
-  // selection_style::Style; see src/components/themes/SelectionStyle.h.
-  uint8_t selectionStyle = 0;
   // Sleep screen cover mode settings
   uint8_t sleepScreenCoverMode = FIT;
   // Sleep screen cover filter

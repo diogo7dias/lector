@@ -26,7 +26,6 @@
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
-#include "components/themes/SelectionStyle.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -429,28 +428,13 @@ int BaseTheme::getListPageItems(int contentHeight, bool hasSubtitle) const {
 
 bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans,
                               const int spanCount) const {
-  const selection_style::Style style = selection_style::fromSetting(SETTINGS.selectionStyle);
-  const selection_style::Bar row{rect.x, rect.y, rect.width, rect.height};
-
-  // The first span is the row's first line of text, which is what the tight block
-  // hugs. Without one (a cover, a tab) it falls back to the row.
-  const int firstLineY = (spans != nullptr && spanCount > 0) ? spans[0].y : -1;
-  const int firstLineHeight = (spans != nullptr && spanCount > 0) ? spans[0].height : 0;
-
-  const auto paint = [&renderer, firstLineY, firstLineHeight](const selection_style::Style s,
-                                                              const selection_style::Bar& area) {
-    selection_style::Bar painted[selection_style::MAX_BARS];
-    const int count =
-        selection_style::bars(s, area.x, area.y, area.width, area.height, painted, firstLineY, firstLineHeight);
-    for (int i = 0; i < count; ++i) {
-      renderer.fillRect(painted[i].x, painted[i].y, painted[i].width, painted[i].height);
-    }
-  };
-
-  // The tight block hugs the row's first line of text, so a wrapped row is marked
-  // where reading starts rather than swallowing the gap under it.
-  paint(style, row);
-  return selection_style::invertsText(style);
+  // One highlight: the row filled, its text knocked out white. The spans a caller
+  // measures are no longer read — they were what the retired bracket style bracketed —
+  // but the parameters stay so every surface keeps calling one painter.
+  (void)spans;
+  (void)spanCount;
+  renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
+  return true;
 }
 
 void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
@@ -801,11 +785,9 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
                                     bool& bufferRestored, std::function<bool()> storeCoverBuffer) const {
   const bool hasContinueReading = !recentBooks.empty();
   const bool bookSelected = hasContinueReading && selectorIndex == 0;
-  // The card is a cover plus its label boxes, not a list row, so only the full-bleed
-  // solid style flips them all to white-on-black. The tight block marks the card's own
-  // label band and leaves the cover art as it is.
-  const bool cardInverted =
-      bookSelected && selection_style::fromSetting(SETTINGS.selectionStyle) == selection_style::SOLID;
+  // The card is a cover plus its label boxes, not a list row: selecting it flips the
+  // cover art, the title and the "Continue Reading" chip together.
+  const bool cardInverted = bookSelected;
 
   // --- Top "book" card for the current title (selectorIndex == 0) ---
   // When there's no cover image, use fixed size (half screen)
@@ -1641,17 +1623,15 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
   const int itemRectW = geometry.itemRectW;
   const int selectionRadius = metrics.optionPopupSelectionRadius;
   const int optionLineHeight = renderer.getLineHeight(optionFontId);
-  const selection_style::Style selectionStyle = selection_style::fromSetting(SETTINGS.selectionStyle);
 
   for (int i = 0; i < optionCount; i++) {
     const int itemY = geometry.firstItemY + i * rowPitch;
     const bool selected = (i == selectedIndex);
     const char* labelText = options[i].c_str();
 
-    // The theme's rounded / light-grey selection treatment is the full-bleed solid
-    // style's own look; under the tight style the row keeps the popup's background and
-    // takes the smaller block on top.
-    const bool paintedOver = selectionStyle == selection_style::SOLID;
+    // The selected row is always painted over; the theme decides whether that is a
+    // black fill or its light-grey rounded pill.
+    constexpr bool paintedOver = true;
     if (metrics.optionPopupDrawAllRows || (selected && paintedOver)) {
       Color rowColor;
       if (selected && paintedOver) {

@@ -17,7 +17,6 @@
 #include "TextSettingsPreview.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
-#include "components/themes/SelectionStyle.h"
 #include "fontIds.h"
 #include "util/MarginLink.h"
 
@@ -761,14 +760,14 @@ void TextSettingsActivity::render(RenderLock&&) {
     numberRange(rows[selectedIndex_], minValue, maxValue);
     const uint8_t* field = numberField(rows[selectedIndex_]);
     const int filled = row_slider::filledWidth(sliderBar_, field ? *field : minValue, minValue, maxValue);
-    // The solid style paints the selected row black, so the track is drawn white
-    // there; the other styles leave the row on paper and take black.
-    const bool onDark = selection_style::invertsText(selection_style::fromSetting(SETTINGS.selectionStyle));
-    sliderOnDarkRow_ = onDark;
+    // The armed row is the selected one and the selection fills it black, so the
+    // track is drawn in white (state false).
+    constexpr bool trackInk = false;
+    sliderOnDarkRow_ = true;
     // Track outline, then the filled part solid: an outline alone is hard to read at
     // e-ink pitch, a solid bar alone loses where the range ends.
-    renderer.drawRect(sliderBar_.x, sliderBar_.y, sliderBar_.width, sliderBar_.height, onDark);
-    if (filled > 0) renderer.fillRect(sliderBar_.x, sliderBar_.y, filled, sliderBar_.height, onDark);
+    renderer.drawRect(sliderBar_.x, sliderBar_.y, sliderBar_.width, sliderBar_.height, trackInk);
+    if (filled > 0) renderer.fillRect(sliderBar_.x, sliderBar_.y, filled, sliderBar_.height, trackInk);
   }
 
   const char* confirmLabel = tr(STR_SELECT);
