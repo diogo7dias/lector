@@ -9,7 +9,6 @@
 #include "BannerStyle.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
-#include "WakeTiming.h"
 #include "fontIds.h"
 
 namespace {
@@ -118,11 +117,9 @@ void drawBanners(GfxRenderer& renderer, const bool withFooter) {
   // formatDiagnostic, not formatPrevious: an empty result used to fall through to the
   // normal footer, which reads exactly like a device with the setting off. The diagnostic
   // always prints something, so "no numbers" becomes a readable cause.
-  char timings[176];
-  if (SETTINGS.showTimings) {
-    WakeTiming::formatDiagnostic(timings, sizeof(timings));
-    if (timings[0] != '\0') footer = timings;
-  }
+  // The wake breakdown is logged, not drawn: main.cpp logs the same formatDiagnostic
+  // string on every unlock and PerfLogSink writes the row to the CSV. Replacing the
+  // footer here only took the numbers to the one place they get in the way.
   renderer.drawCenteredText(banner::FONT_ID, botY + pad, footer, false);
 }
 

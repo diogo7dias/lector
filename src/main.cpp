@@ -1148,9 +1148,11 @@ void loop() {
   mappedInputManager.setPowerReleaseOverride(false, false);
 
   renderer.setFadingFix(SETTINGS.fadingFix);
-  // Read every pass, like the fading fix above, so toggling the setting takes effect on
-  // the next paint instead of on the next boot.
-  renderer.setTimingOverlay(SETTINGS.showTimings != 0, UI_10_FONT_ID);
+  // Never on, in any build. The numbers reach the serial log and the perf CSV by paths
+  // that do not touch this flag, and an overlay across the top of every frame covers part
+  // of the screen a kit round exists to look at: a lock screen or a wallpaper cannot be
+  // judged with a timing bar painted over it.
+  renderer.setTimingOverlay(false, UI_10_FONT_ID);
   display.setFastPageTurns(SETTINGS.fastPageTurns != 0);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
