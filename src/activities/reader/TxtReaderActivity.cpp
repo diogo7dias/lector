@@ -149,26 +149,30 @@ void TxtReaderActivity::loop() {
   if (!prevTriggered && !nextTriggered) {
     return;
   }
+  pageTurn(nextTriggered);
+}
 
-  if (prevTriggered && currentPage > 0) {
+void TxtReaderActivity::pageTurn(const bool forward) {
+  if (!forward) {
+    if (currentPage == 0) return;
     // Backward is re-reading, not progress: close the page out rather than credit it.
     if (statsTrackingActive) statsSession.pause(millis());
     currentPage--;
     requestUpdate();
-  } else if (nextTriggered) {
-    if (currentPage < totalPages - 1) {
-      if (statsTrackingActive) {
-        statsSession.forwardTurn(millis());
-        if (currentPage + 1 == totalPages - 1) {
-          const auto now = reading_stats::currentLocalDateTime();
-          statsSession.markCompleted(now.valid ? now.dayIndex : 0);
-        }
+    return;
+  }
+  if (currentPage < totalPages - 1) {
+    if (statsTrackingActive) {
+      statsSession.forwardTurn(millis());
+      if (currentPage + 1 == totalPages - 1) {
+        const auto now = reading_stats::currentLocalDateTime();
+        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
       }
-      currentPage++;
-      requestUpdate();
-    } else {
-      onGoHome();
     }
+    currentPage++;
+    requestUpdate();
+  } else {
+    onGoHome();
   }
 }
 
@@ -568,11 +572,16 @@ void TxtReaderActivity::relayoutForFontChange() {
   requestUpdate();
 }
 
-void TxtReaderActivity::runPowerDoubleClick() {
-  // The pop-up owns the buttons while it is up; a double click must not act underneath it.
-  if (settingsPopup.isActive()) return;
+bool TxtReaderActivity::runBoundAction(const uint8_t function) {
+  // The pop-up owns the buttons while it is up; a bound gesture must not act underneath it.
+  if (settingsPopup.isActive()) return true;
 
-  switch (simple_reader_shortcut::resolve(SETTINGS.doubleClickPowerFunction, /*supportsStatusBarToggle=*/true)) {
+  if (function == CrossPointSettings::LP_MENU_PAGE_PREV || function == CrossPointSettings::LP_MENU_PAGE_NEXT) {
+    pageTurn(function == CrossPointSettings::LP_MENU_PAGE_NEXT);
+    return true;
+  }
+
+  switch (simple_reader_shortcut::resolve(function, /*supportsStatusBarToggle=*/true)) {
     case simple_reader_shortcut::Action::ToggleStatusBar:
       SETTINGS.sbEnabled = SETTINGS.sbEnabled ? 0 : 1;
       SETTINGS.saveToFile();
@@ -581,20 +590,20 @@ void TxtReaderActivity::runPowerDoubleClick() {
       // and keep the reader on the byte it was showing (the font-change path already
       // does exactly this).
       relayoutForFontChange();
-      break;
+      return true;
     case simple_reader_shortcut::Action::WallpaperHold:
       SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
       SETTINGS.saveToFile();
       GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
       requestUpdate();
-      break;
+      return true;
     case simple_reader_shortcut::Action::None:
-      // Reachable for Hold Wallpaper only: arming asks whether a wallpaper path exists,
-      // and the card read that confirms the file is still there happens here.
-      GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
-      requestUpdate();
       break;
   }
+  // Not runnable in this reader, or runnable only when a card read says so (Hold
+  // Wallpaper checks the file is still there). Fall through to the shared handler, which
+  // answers the device-wide actions and reports the rest as unavailable.
+  return false;
 }
 
 void TxtReaderActivity::askDeleteBook() {

@@ -64,6 +64,10 @@ enum LONG_PRESS_MENU_FUNCTION {
   LP_MENU_BACK = 20,
   LP_MENU_LIGHT_PANEL = 21,
   LP_MENU_SLEEP = 22,
+  // Appended when the power button joined the Buttons screen: its old shortPwrBtn
+  // setting could force a screen refresh, and folding that setting into the shared
+  // bindings would have dropped the ability if the action did not come with it.
+  LP_MENU_FORCE_REFRESH = 23,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

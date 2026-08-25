@@ -317,14 +317,6 @@ bool ActivityManager::isHomeActivity() const { return currentActivity && current
 
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
-bool ActivityManager::wantsPowerDoubleClick() const {
-  return currentActivity && currentActivity->wantsPowerDoubleClick();
-}
-
-void ActivityManager::runPowerDoubleClick() {
-  if (currentActivity) currentActivity->runPowerDoubleClick();
-}
-
 bool ActivityManager::isBookContext() const { return currentActivity && currentActivity->isBookContext(); }
 
 bool ActivityManager::runBoundAction(const uint8_t function) {

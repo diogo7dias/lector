@@ -37,6 +37,9 @@ class Detector {
   // A button with no single-click binding still reports Single by default: the caller
   // decides whether to act on it. Clearing this silences the button entirely.
   void setSingleBound(const bool bound) { hasSingle_ = bound; }
+  // How long this button's hold is. Defaults to HOLD_MS; the power button keeps the
+  // user's own sleepHoldMs, because that is the threshold its hold has always used.
+  void setHoldMs(const uint32_t ms) { holdMs_ = ms; }
 
   Event onPress(const uint32_t nowMs) {
     holdFired_ = false;
@@ -72,7 +75,7 @@ class Detector {
   // Called every loop pass, whether or not an edge arrived: hold fires while the
   // button is still down, and a deferred single fires when its window closes.
   Event tick(const uint32_t nowMs) {
-    if (pressed_ && hasHold_ && !holdFired_ && elapsed(nowMs, pressedAt_) >= HOLD_MS) {
+    if (pressed_ && hasHold_ && !holdFired_ && elapsed(nowMs, pressedAt_) >= holdMs_) {
       holdFired_ = true;
       return Event::Hold;
     }
@@ -106,6 +109,7 @@ class Detector {
   bool awaitingSecond_ = false;
   bool holdFired_ = false;
   bool swallowRelease_ = false;
+  uint32_t holdMs_ = HOLD_MS;
   uint32_t pressedAt_ = 0;
   uint32_t releasedAt_ = 0;
 };

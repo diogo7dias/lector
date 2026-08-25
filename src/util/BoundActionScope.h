@@ -24,6 +24,7 @@ inline bool allowedOutsideBook(const uint8_t function) {
     case LP_MENU_BACK:
     case LP_MENU_LIGHT_PANEL:
     case LP_MENU_SLEEP:
+    case LP_MENU_FORCE_REFRESH:
       return true;
     default:
       return false;

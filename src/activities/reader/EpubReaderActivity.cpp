@@ -557,6 +557,9 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // The number to type is the one the marks print; with numbering off there is none.
       return prefs_.paragraphNumbering != 0;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
+      // Inside a footnote the same binding walks back out, which is what the "Power
+      // returns from footnote" toggle governs. With that off, only the way in is offered.
+      if (footnoteDepth > 0) return SETTINGS.pwrBtnFootnoteBack != 0;
       return !currentPageFootnotes.empty();
     case CrossPointSettings::LP_MENU_BOOKMARKS:
       // Same test the in-book menu uses for its own Bookmarks row: an empty list screen
@@ -631,6 +634,11 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH);
       return true;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
+      if (footnoteDepth > 0) {
+        if (SETTINGS.pwrBtnFootnoteBack == 0) return false;
+        restoreSavedPosition();
+        return true;
+      }
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::FOOTNOTES);
       return true;
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
@@ -657,21 +665,6 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
       return false;
-  }
-}
-
-void EpubReaderActivity::runPowerDoubleClick() {
-  // The pop-up already owns the buttons; a second double click while it is up must not
-  // rebuild it underneath itself.
-  if (quickMenu.isActive()) return;
-
-  const uint8_t function = SETTINGS.doubleClickPowerFunction;
-  // Bound but impossible right now (no footnote on this page, numbering off, no KOReader
-  // credentials). Saying so beats a button that silently does nothing.
-  if (!runBoundMenuFunction(function)) {
-    GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
-    scheduleGhostCleanup();
-    requestUpdate();
   }
 }
 
@@ -972,30 +965,6 @@ void EpubReaderActivity::loop() {
   }
 
   // auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-
-  // Handle short power button press for footnotes
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
-      !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (footnoteDepth > 0) {
-      restoreSavedPosition();
-    } else {
-      if (currentPageFootnotes.size() == 1) {
-        navigateToHref(currentPageFootnotes[0].href, true);
-      } else if (currentPageFootnotes.size() > 1) {
-        startActivityForResult(
-            std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                navigateToHref(footnoteResult.href, true);
-              }
-              requestUpdate();
-            });
-      }
-    }
-    return;
-  }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;

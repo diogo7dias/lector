@@ -224,7 +224,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
   // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
   // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
   // swipe. Values match CrossPoint so a settings file moves between the two.
@@ -272,12 +271,19 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_BACK = bound_action::LP_MENU_BACK;
   static constexpr auto LP_MENU_LIGHT_PANEL = bound_action::LP_MENU_LIGHT_PANEL;
   static constexpr auto LP_MENU_SLEEP = bound_action::LP_MENU_SLEEP;
+  static constexpr auto LP_MENU_FORCE_REFRESH = bound_action::LP_MENU_FORCE_REFRESH;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
   // Right are the two side keys; Home is the capacitive key under the panel on the
   // boards that have one (BoardConfig::hasHomeKey).
-  enum BOUND_BUTTON : uint8_t { BOUND_BTN_LEFT = 0, BOUND_BTN_RIGHT = 1, BOUND_BTN_HOME = 2, BOUND_BTN_COUNT = 3 };
+  enum BOUND_BUTTON : uint8_t {
+    BOUND_BTN_LEFT = 0,
+    BOUND_BTN_RIGHT = 1,
+    BOUND_BTN_HOME = 2,
+    BOUND_BTN_POWER = 3,
+    BOUND_BTN_COUNT = 4
+  };
   // The three gestures each of those carries.
   enum BOUND_GESTURE : uint8_t {
     BOUND_SINGLE = 0,
@@ -433,8 +439,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.
   uint8_t textAntiAliasing = 0;
-  // Short power button click behaviour
-  uint8_t shortPwrBtn = IGNORE;
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
@@ -553,15 +557,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // needs. Costs nothing when Disabled, and nothing when set: the menu acts on release,
   // so a plain tap is unaffected either way.
   uint8_t menuHoldFunction = LP_MENU_DISABLED;
-  // Double-click of the power button while reading an EPUB. Shares the same
-  // LONG_PRESS_MENU_FUNCTION list as the two bindings above.
-  //
-  // Unlike those two this one is not free when set: nothing can tell a single click
-  // from the first half of a double click until the window closes, so arming it delays
-  // every single power click by DoubleClickDetector::WINDOW_MS. That cost is confined
-  // to the EPUB reader (main.cpp only arms the detector there) and disappears entirely
-  // at LP_MENU_DISABLED, which is why Disabled is the default.
-  uint8_t doubleClickPowerFunction = LP_MENU_DISABLED;
 
   // Per-button bindings: what each button does for each gesture, in a book and out of
   // one. Values are LONG_PRESS_MENU_FUNCTION, so the picker offers the same list every
@@ -591,6 +586,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t btnUiHomeSingle = LP_MENU_GO_HOME;
   uint8_t btnUiHomeDouble = LP_MENU_DISABLED;
   uint8_t btnUiHomeHold = LP_MENU_DISABLED;
+  // Power. Its defaults are what the old shortPwrBtn / doubleClickPowerFunction pair
+  // defaulted to: a click does nothing, a hold sleeps. The hold keeps its own threshold
+  // (sleepHoldMs), so leaving it on Sleep leaves the sleep hold exactly as it was.
+  uint8_t btnBookPowerSingle = LP_MENU_DISABLED;
+  uint8_t btnBookPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnBookPowerHold = LP_MENU_SLEEP;
+  uint8_t btnUiPowerSingle = LP_MENU_DISABLED;
+  uint8_t btnUiPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnUiPowerHold = LP_MENU_SLEEP;
 
   // The binding field for one button and gesture, in or out of a book. Returns a
   // pointer so both the settings rows and the router read the same storage.
@@ -601,13 +605,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
          {&CrossPointSettings::btnUiRightSingle, &CrossPointSettings::btnUiRightDouble,
           &CrossPointSettings::btnUiRightHold},
          {&CrossPointSettings::btnUiHomeSingle, &CrossPointSettings::btnUiHomeDouble,
-          &CrossPointSettings::btnUiHomeHold}},
+          &CrossPointSettings::btnUiHomeHold},
+         {&CrossPointSettings::btnUiPowerSingle, &CrossPointSettings::btnUiPowerDouble,
+          &CrossPointSettings::btnUiPowerHold}},
         {{&CrossPointSettings::btnBookLeftSingle, &CrossPointSettings::btnBookLeftDouble,
           &CrossPointSettings::btnBookLeftHold},
          {&CrossPointSettings::btnBookRightSingle, &CrossPointSettings::btnBookRightDouble,
           &CrossPointSettings::btnBookRightHold},
          {&CrossPointSettings::btnBookHomeSingle, &CrossPointSettings::btnBookHomeDouble,
-          &CrossPointSettings::btnBookHomeHold}}};
+          &CrossPointSettings::btnBookHomeHold},
+         {&CrossPointSettings::btnBookPowerSingle, &CrossPointSettings::btnBookPowerDouble,
+          &CrossPointSettings::btnBookPowerHold}}};
     if (button >= BOUND_BTN_COUNT || gesture >= BOUND_GESTURE_COUNT) return nullptr;
     return &(this->*table[inBook ? 1 : 0][button][gesture]);
   }
@@ -810,15 +818,18 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // with no release required; Fast skips the check altogether.
   uint16_t getWakeHoldMs() const { return 200; }
   bool wakeHoldIsFast() const { return wakeHold == WAKE_HOLD_FAST; }
-  // True when a function is bound to the power double click (see doubleClickPowerFunction).
-  bool powerDoubleClickBound() const { return doubleClickPowerFunction != LP_MENU_DISABLED; }
+  // True when Footnotes is on any of the power button's in-book gestures. Governs the
+  // "Power returns from footnote" row, which only describes that binding.
+  bool powerOpensFootnotes() const {
+    return btnBookPowerSingle == LP_MENU_FOOTNOTES || btnBookPowerDouble == LP_MENU_FOOTNOTES ||
+           btnBookPowerHold == LP_MENU_FOOTNOTES;
+  }
 
   // True when anything at all opens the reader pop-up: the three legacy bindings or any
   // of the per-button ones. Settings offers the Pop-up Items tick screen only then, so a
   // screen that exists to fill a pop-up is not shown to someone who has no pop-up.
   bool anyBindingOpensPopup() const {
-    if (doubleClickPowerFunction == LP_MENU_POPUP || longPressMenuFunction == LP_MENU_POPUP ||
-        menuHoldFunction == LP_MENU_POPUP) {
+    if (longPressMenuFunction == LP_MENU_POPUP || menuHoldFunction == LP_MENU_POPUP) {
       return true;
     }
     for (const bool inBook : {false, true}) {
@@ -831,12 +842,25 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     }
     return false;
   }
-  // Whether a single power press sleeps the device. Every consumer of the Sleep value of
-  // shortPwrBtn must ask this rather than comparing the setting itself, so the double-click
-  // override is applied in one place: the wake-hold verification, the sleep threshold, and
-  // the shared Confirm/Power boards that route a short press to Power instead of Confirm.
-  bool shortPressSleeps() const {
-    return shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP && !powerDoubleClickBound();
+  // Whether a single power press sleeps the device. Every consumer must ask this rather
+  // than reading a binding itself, so the answer is decided in one place: the wake-hold
+  // verification, the sleep threshold, and the shared Confirm/Power boards that route a
+  // short press to Power instead of Confirm.
+  bool shortPressSleeps() const { return btnUiPowerSingle == LP_MENU_SLEEP || btnBookPowerSingle == LP_MENU_SLEEP; }
+
+  // True when Sleep is bound to any gesture, on any button, in either context. False here
+  // means the device has no manual route to sleep at all, and getSleepTimeoutMs() caps the
+  // auto-sleep timeout in response; see util/SleepTimeoutGuard.h.
+  bool anySleepBinding() const {
+    for (const bool inBook : {false, true}) {
+      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
+        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
+          const uint8_t* binding = const_cast<CrossPointSettings*>(this)->buttonBinding(inBook, button, gesture);
+          if (binding != nullptr && *binding == LP_MENU_SLEEP) return true;
+        }
+      }
+    }
+    return false;
   }
   // Pop-up membership. The mask layout has exactly one owner: these three.
   bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }

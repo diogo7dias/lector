@@ -1256,7 +1256,13 @@ void loop() {
   static bool powerReleasedSinceWake = false;
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
-  if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+  // Only while the power hold is still Sleep. Bind that gesture to anything else and this
+  // check must stand down, or the device would sleep at sleepHoldMs while the bound action
+  // was still waiting for the same hold.
+  const uint8_t* powerHoldBinding = SETTINGS.buttonBinding(
+      activityManager.isBookContext(), CrossPointSettings::BOUND_BTN_POWER, CrossPointSettings::BOUND_HOLD);
+  const bool powerHoldSleeps = powerHoldBinding == nullptr || *powerHoldBinding == CrossPointSettings::LP_MENU_SLEEP;
+  if (powerHoldSleeps && powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
       gpio.getPowerButtonHeldTime() > SETTINGS.getSleepHoldMs()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
@@ -1267,42 +1273,11 @@ void loop() {
     return;
   }
 
-  // Power double-click, EPUB reader only.
-  //
-  // Sits below the screenshot combo and both sleep checks, so holding to sleep and
-  // Power+Down still win outright, and above every consumer of a power release, so a click
-  // is held back before anything acts on it. Nothing can tell a single click from the first
-  // half of a double click until the window closes, which is why a click is delayed rather
-  // than acted on and undone.
-  //
-  // The detector is static: it must survive between loop passes. It is reset whenever the
-  // feature is not armed, so a click pending when the book closes cannot fire into the
-  // screen that replaced it.
-  {
-    static reader_input::DoubleClickDetector powerClicks;
-    if (!activityManager.wantsPowerDoubleClick()) {
-      powerClicks.reset();
-    } else {
-      // The RAW edge, deliberately: mappedInputManager.wasReleased() is what the override
-      // below rewrites, and feeding the detector its own output would latch it.
-      const bool released = gpio.wasReleased(HalGPIO::BTN_POWER);
-      const auto event = powerClicks.update(released, millis());
-      if (event == reader_input::DoubleClickDetector::Event::Double) {
-        activityManager.runPowerDoubleClick();
-      }
-      // Hide the release while the verdict is pending (and on the pass the verdict is
-      // Double, whose second edge belongs to the double click); replay it on the pass the
-      // verdict is Single, where every consumer below sees the edge it always saw.
-      mappedInputManager.setPowerReleaseOverride(
-          powerClicks.waiting() || event == reader_input::DoubleClickDetector::Event::Double,
-          event == reader_input::DoubleClickDetector::Event::Single);
-    }
-  }
-
   // Per-button bindings (Settings > Controls > Buttons).
   //
-  // Sits with the power double-click above and for the same reason: a key press has to be
-  // held back before anything acts on it, because nothing can tell a single click from the
+  // Sits below the screenshot combo and both sleep checks, so Power+Down and the sleep
+  // hold still win outright, and above every consumer of a button edge, because a press has
+  // to be held back before anything acts on it: nothing can tell a single click from the
   // first half of a double until the window closes.
   //
   // A key the router does not intercept is never touched — no gating, no detector, no
@@ -1328,23 +1303,35 @@ void loop() {
       for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
         // The Home key goes home; the two side keys page. A key still set to what it
         // already did is left alone entirely (Router::intercepts).
-        const auto& native =
-            key == CrossPointSettings::BOUND_BTN_HOME ? button_router::NATIVE_HOME_KEY : button_router::NATIVE_SIDE_KEY;
+        const auto& native = key == CrossPointSettings::BOUND_BTN_HOME    ? button_router::NATIVE_HOME_KEY
+                             : key == CrossPointSettings::BOUND_BTN_POWER ? button_router::NATIVE_POWER_KEY
+                                                                          : button_router::NATIVE_SIDE_KEY;
         bindingRouter.configure(key,
                                 button_router::Binding{wanted[key][CrossPointSettings::BOUND_SINGLE],
                                                        wanted[key][CrossPointSettings::BOUND_DOUBLE],
                                                        wanted[key][CrossPointSettings::BOUND_HOLD]},
                                 native);
       }
+      // Power holds at the user's own sleepHoldMs, not the shared 500 ms: that is the
+      // threshold its hold has always used, and leaving it on Sleep must not change it.
+      bindingRouter.setHoldMs(CrossPointSettings::BOUND_BTN_POWER, SETTINGS.getSleepHoldMs());
       memcpy(appliedBindings, wanted, sizeof(wanted));
       bindingsApplied = true;
     }
 
-    // Sleep is the one action ActivityManager cannot run: only this file can put the
-    // device down.
+    // Two actions ActivityManager cannot run: only this file can put the device down, and
+    // only this file owns the renderer a forced refresh paints through.
     const auto runBoundFunction = [&](const uint8_t function) {
       if (function == CrossPointSettings::LP_MENU_SLEEP) {
         enterDeepSleep();
+        return;
+      }
+      if (function == CrossPointSettings::LP_MENU_FORCE_REFRESH) {
+        LOG_DBG("MAIN", "Manual screen refresh triggered");
+        if (!activityManager.handleForcedRefresh()) {
+          RenderLock lock;
+          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        }
         return;
       }
       activityManager.runBoundAction(function);
@@ -1372,6 +1359,24 @@ void loop() {
                                             /*injectRelease=*/fired.valid && fired.replayRawEdge);
     }
 
+    // Power. Raw edges like a side key, but its release is gated through the same override
+    // the wake-hold path already uses, so nothing downstream needs to know the router exists.
+    // A hold left on Sleep is not intercepted at all: the sleep-hold check further up keeps
+    // it, threshold included.
+    if (bindingRouter.intercepts(CrossPointSettings::BOUND_BTN_POWER)) {
+      constexpr int POWER_KEY = CrossPointSettings::BOUND_BTN_POWER;
+      button_router::Fired fired;
+      if (gpio.wasPressed(HalGPIO::BTN_POWER)) {
+        fired = bindingRouter.onPress(POWER_KEY, now);
+      } else if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
+        fired = bindingRouter.onRelease(POWER_KEY, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(POWER_KEY, now);
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      mappedInputManager.setPowerReleaseOverride(/*suppress=*/true,
+                                                 /*inject=*/fired.valid && fired.replayRawEdge);
+    }
+
     // The Home key reports taps and long presses, never raw edges, so its press and release
     // are manufactured from the tap it already completed. A long press is the hold outright;
     // the detector is reset after one so a tap reported alongside it cannot fire as well.
@@ -1389,16 +1394,6 @@ void loop() {
       // gesture: an activity that must save or confirm first still gets its say.
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       mappedInputManager.setHomeKeyOverride(/*suppress=*/true, fired.valid && fired.replayRawEdge);
-    }
-  }
-
-  // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
-      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
-    LOG_DBG("MAIN", "Manual screen refresh triggered");
-    if (!activityManager.handleForcedRefresh()) {
-      RenderLock lock;
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
   }
 

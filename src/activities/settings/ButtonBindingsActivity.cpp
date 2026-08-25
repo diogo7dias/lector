@@ -56,6 +56,7 @@ void ButtonBindingsActivity::loadButtons() {
   buttons.push_back(CrossPointSettings::BOUND_BTN_LEFT);
   buttons.push_back(CrossPointSettings::BOUND_BTN_RIGHT);
   if (gpio.hasHomeKey()) buttons.push_back(CrossPointSettings::BOUND_BTN_HOME);
+  buttons.push_back(CrossPointSettings::BOUND_BTN_POWER);
 }
 
 void ButtonBindingsActivity::buildBindingRows() {
@@ -80,6 +81,8 @@ const char* ButtonBindingsActivity::buttonLabel(const uint8_t button) const {
       return tr(STR_BTN_LEFT);
     case CrossPointSettings::BOUND_BTN_RIGHT:
       return tr(STR_BTN_RIGHT);
+    case CrossPointSettings::BOUND_BTN_POWER:
+      return tr(STR_BTN_POWER);
     default:
       return tr(STR_BTN_HOME);
   }

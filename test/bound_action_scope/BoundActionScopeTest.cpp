@@ -43,3 +43,5 @@ TEST(BoundActionScope, TheReaderQuickMenuIsRefusedOutsideABook) {
   // whose every row is unavailable.
   EXPECT_FALSE(allowedOutsideBook(LP_MENU_POPUP));
 }
+
+TEST(BoundActionScope, ForceRefreshWorksAnywhere) { EXPECT_TRUE(allowedOutsideBook(LP_MENU_FORCE_REFRESH)); }

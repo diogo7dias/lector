@@ -16,7 +16,9 @@
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
 #include "fontIds.h"
+#include "util/BoundActionScope.h"
 #include "util/MarginLink.h"
+#include "util/SleepTimeoutGuard.h"
 
 namespace {
 
@@ -226,7 +228,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // the WAKE threshold to 10 ms, so anyone who chose Sleep already had a fast wake. A
   // settings file written before this key existed therefore carries that forward rather
   // than silently making their wake slower; every other file keeps the Normal default.
-  if (!doc["wakeHold"].is<uint8_t>() && shortPwrBtn == SHORT_PWRBTN::SLEEP) {
+  // 1 is the retired SHORT_PWRBTN::SLEEP; the field itself is gone, so the old key is
+  // read straight from the document.
+  if (!doc["wakeHold"].is<uint8_t>() && (doc["shortPwrBtn"] | (uint8_t)0) == 1) {
     wakeHold = WAKE_HOLD_FAST;
     needsResave = true;
   }
@@ -278,13 +282,47 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // fall back to Disabled. The pickers can no longer produce those values, but a settings file written
   // by 0.20.0 can still name one, and it would go on working invisibly.
   for (uint8_t CrossPointSettings::* binding :
-       {&CrossPointSettings::longPressMenuFunction, &CrossPointSettings::menuHoldFunction,
-        &CrossPointSettings::doubleClickPowerFunction}) {
+       {&CrossPointSettings::longPressMenuFunction, &CrossPointSettings::menuHoldFunction}) {
     if (s.*binding == LP_MENU_SELECT_CHAPTER || s.*binding == LP_MENU_GO_TO_PERCENT ||
         s.*binding == LP_MENU_TEXT_SETTINGS) {
       s.*binding = LP_MENU_DISABLED;
       needsResave = true;
     }
+  }
+
+  // The power button's two old settings folded into its per-button bindings (0.29).
+  // shortPwrBtn offered five choices and doubleClickPowerFunction the full action list;
+  // both are now three of the power button's six bindings, so the stored values are
+  // copied across once and the old keys stop being written.
+  //
+  // Copied into BOTH contexts, because neither old setting knew about one: they applied
+  // wherever the reader was. Footnotes is the exception, being the one migrated value that
+  // needs an open book, so outside a book it lands on Disabled instead.
+  // Both old keys are read straight from the document: their fields are gone, so the
+  // settings-list walk above no longer loads them.
+  if (!doc["btnUiPowerSingle"].is<uint8_t>()) {
+    // 0 Ignore, 1 Sleep, 2 Page turn, 3 Force refresh, 4 Footnotes — the retired
+    // SHORT_PWRBTN enum, spelled out here because nothing else needs it any more.
+    const uint8_t single = [&]() -> uint8_t {
+      switch (doc["shortPwrBtn"] | (uint8_t)0) {
+        case 1:
+          return LP_MENU_SLEEP;
+        case 2:
+          return LP_MENU_PAGE_NEXT;
+        case 3:
+          return LP_MENU_FORCE_REFRESH;
+        case 4:
+          return LP_MENU_FOOTNOTES;
+        default:
+          return LP_MENU_DISABLED;
+      }
+    }();
+    const uint8_t doubleClick = doc["doubleClickPowerFunction"] | (uint8_t)LP_MENU_DISABLED;
+    btnBookPowerSingle = single;
+    btnUiPowerSingle = bound_action::allowedOutsideBook(single) ? single : LP_MENU_DISABLED;
+    btnBookPowerDouble = doubleClick;
+    btnUiPowerDouble = bound_action::allowedOutsideBook(doubleClick) ? doubleClick : LP_MENU_DISABLED;
+    needsResave = true;
   }
 
   // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
@@ -412,9 +450,14 @@ float CrossPointSettings::resolveLineCompression(const uint8_t lineSpacingPercen
 float CrossPointSettings::getReaderLineCompression() const { return resolveLineCompression(lineSpacingPercent); }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
-  if (sleepTimeoutMinutes >= SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
+  // The floor first: with Sleep bound to nothing, auto-sleep is the only thing left that
+  // puts the device down, so Never and any long timeout are capped. The stored setting is
+  // untouched and returns the moment Sleep is bound again.
+  const uint8_t requested =
+      sleep_guard::effectiveMinutes(sleepTimeoutMinutes, anySleepBinding(), SLEEP_TIMEOUT_NEVER_MINUTES);
+  if (requested >= SLEEP_TIMEOUT_NEVER_MINUTES) return 0UL;
   const uint8_t minutes =
-      std::clamp(sleepTimeoutMinutes, MIN_SLEEP_TIMEOUT_MINUTES, static_cast<uint8_t>(SLEEP_TIMEOUT_NEVER_MINUTES - 1));
+      std::clamp(requested, MIN_SLEEP_TIMEOUT_MINUTES, static_cast<uint8_t>(SLEEP_TIMEOUT_NEVER_MINUTES - 1));
   return static_cast<unsigned long>(minutes) * 60UL * 1000UL;
 }
 

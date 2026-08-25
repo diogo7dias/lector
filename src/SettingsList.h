@@ -483,10 +483,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   {StrId::STR_WAKE_HOLD_NORMAL, StrId::STR_WAKE_HOLD_FAST}, "wakeHold",
                                   StrId::STR_CAT_CONTROLS));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
-                                  boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions()));
-
     // The per-button bindings. Registered here so they persist and reach the web API;
     // the Buttons screen is what actually lists them (withButtons keeps them out of the
     // flat Controls list). Key names match the field names so a settings file reads as
@@ -527,6 +523,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "btnBookHomeHold", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions())
                     .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerSingle, boundFunctionLabels(),
+                                  "btnBookPowerSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerDouble, boundFunctionLabels(),
+                                  "btnBookPowerDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerHold, boundFunctionLabels(),
+                                  "btnBookPowerHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
     v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftSingle, boundFunctionLabels(),
                                   "btnUiLeftSingle", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions())
@@ -563,6 +571,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "btnUiHomeHold", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions())
                     .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerSingle, boundFunctionLabels(),
+                                  "btnUiPowerSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerDouble, boundFunctionLabels(),
+                                  "btnUiPowerDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerHold, boundFunctionLabels(),
+                                  "btnUiPowerHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
 
     v.push_back(SettingInfo::Enum(
         StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
@@ -574,11 +594,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
                                   {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP},
                                   "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
-
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-        {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-        "shortPwrBtn", StrId::STR_CAT_CONTROLS));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                                     "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));

@@ -132,8 +132,9 @@ void SettingsActivity::rebuildSettingsList() {
       // The per-button bindings live in the Buttons screen; they stay in the shared
       // list only so they persist and reach the web settings API.
       if (setting.inButtons) continue;
-      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
-          SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
+      // Only means anything while Footnotes is on one of the power button's in-book
+      // gestures: it says whether that same gesture walks back out of the footnote.
+      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack && !SETTINGS.powerOpensFootnotes()) {
         continue;
       }
       // Touch reader settings only mean something on a board with a digitiser.

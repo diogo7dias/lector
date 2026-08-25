@@ -19,6 +19,7 @@ using button_router::Router;
 
 constexpr int LEFT = 0;
 constexpr int HOME = 2;
+constexpr int POWER = 3;
 
 // A press and its release, far enough apart to be a click and not a hold.
 button_router::Fired click(Router& router, const int key, uint32_t& now) {
@@ -217,4 +218,52 @@ TEST(ButtonRouter, HomeBoundToASideKeyIsDispatchedRatherThanReplayed) {
   }();
   EXPECT_TRUE(fired.valid);
   EXPECT_FALSE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, ThePowerKeyIsTheFourthKey) { EXPECT_EQ(button_router::KEY_COUNT, 4); }
+
+TEST(ButtonRouter, SleepOnThePowerHoldIsWhatTheKeyAlreadyDoes) {
+  // Power hold sleeps today, at the user's own sleepHoldMs. Leaving that binding alone
+  // must not put the key behind the router, or the threshold would silently become 500 ms.
+  Router router;
+  router.configure(POWER, {LP_MENU_DISABLED, LP_MENU_DISABLED, LP_MENU_SLEEP}, button_router::NATIVE_POWER_KEY);
+  EXPECT_FALSE(router.intercepts(POWER));
+}
+
+TEST(ButtonRouter, SleepOnThePowerSingleIsDispatchedRatherThanReplayed) {
+  // Native is per gesture: a power RELEASE has never slept the device, so replaying it
+  // would do nothing at all.
+  Router router;
+  router.configure(POWER, {LP_MENU_SLEEP, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::NATIVE_POWER_KEY);
+  ASSERT_TRUE(router.intercepts(POWER));
+  uint32_t now = 1000;
+  const auto fired = click(router, POWER, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_FALSE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, PagingOnASideKeyHoldIsStillReplayed) {
+  // The side keys repeat while held, so a hold bound back to paging keeps the firmware's
+  // own repeat rather than firing one page at half a second.
+  Router router;
+  router.configure(LEFT, {LP_MENU_DISABLED, LP_MENU_DISABLED, LP_MENU_PAGE_NEXT});
+  uint32_t now = 1000;
+  router.onPress(LEFT, now);
+  now += button_gestures::HOLD_MS;
+  const auto fired = router.tick(LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_TRUE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, AKeyCanBeGivenItsOwnHoldThreshold) {
+  // Power keeps sleepHoldMs; every other key holds at the shared 500 ms.
+  Router router;
+  router.configure(POWER, {LP_MENU_DISABLED, LP_MENU_DISABLED, LP_MENU_BOOKMARK}, button_router::NATIVE_POWER_KEY);
+  router.setHoldMs(POWER, 2000);
+  uint32_t now = 1000;
+  router.onPress(POWER, now);
+  now += 1500;
+  EXPECT_FALSE(router.tick(POWER, now).valid);
+  now += 600;
+  EXPECT_TRUE(router.tick(POWER, now).valid);
 }

@@ -22,17 +22,26 @@ using bound_action::LP_MENU_PAGE_NEXT;
 using bound_action::LP_MENU_PAGE_PREV;
 
 // What a key already does when nothing is bound to it: paging for a side key, Home for
-// the capacitive Home key. Binding one of these back to the same key is answered by
-// replaying its raw edge rather than by dispatching, so the reader and every list keep
-// their own code for it, repeat included.
+// the capacitive Home key, sleep for a held power button. Binding one of these back to
+// the same key is answered by replaying its raw edge rather than by dispatching, so the
+// reader and every list keep their own code for it, repeat included.
+//
+// Split by gesture, because one key can differ between the two. A held power button
+// sleeps; a released one never has. Treating Sleep as native to both would answer a
+// power single click by replaying an edge that does nothing.
 struct Native {
-  uint8_t first = LP_MENU_DISABLED;
-  uint8_t second = LP_MENU_DISABLED;
+  uint8_t click[2] = {LP_MENU_DISABLED, LP_MENU_DISABLED};
+  uint8_t hold[2] = {LP_MENU_DISABLED, LP_MENU_DISABLED};
 };
 
-// The two side keys page; the capacitive Home key goes home.
-constexpr Native NATIVE_SIDE_KEY{LP_MENU_PAGE_PREV, LP_MENU_PAGE_NEXT};
-constexpr Native NATIVE_HOME_KEY{bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLED};
+// The two side keys page, held as well as clicked (they repeat while held); the
+// capacitive Home key goes home; the power button sleeps when held and does nothing
+// of its own when clicked.
+constexpr Native NATIVE_SIDE_KEY{{LP_MENU_PAGE_PREV, LP_MENU_PAGE_NEXT}, {LP_MENU_PAGE_PREV, LP_MENU_PAGE_NEXT}};
+constexpr Native NATIVE_HOME_KEY{{bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLED},
+                                 {LP_MENU_DISABLED, LP_MENU_DISABLED}};
+constexpr Native NATIVE_POWER_KEY{{LP_MENU_DISABLED, LP_MENU_DISABLED},
+                                  {bound_action::LP_MENU_SLEEP, LP_MENU_DISABLED}};
 
 // The three bindings of one key, in gesture order.
 struct Binding {
@@ -50,8 +59,8 @@ struct Fired {
   bool replayRawEdge = false;
 };
 
-// Left side key, right side key, Home. Indexes match CrossPointSettings::BOUND_BUTTON.
-constexpr int KEY_COUNT = 3;
+// Left side key, right side key, Home, Power. Indexes match CrossPointSettings::BOUND_BUTTON.
+constexpr int KEY_COUNT = 4;
 
 class Router {
  public:
@@ -66,6 +75,13 @@ class Router {
     detectors_[key].reset();
     detectors_[key].configure(binding.doubleClick != LP_MENU_DISABLED, binding.hold != LP_MENU_DISABLED);
     detectors_[key].setSingleBound(binding.single != LP_MENU_DISABLED);
+  }
+
+  // Overrides this key's hold threshold. Power keeps the user's own sleepHoldMs; every
+  // other key holds at the shared button_gestures::HOLD_MS.
+  void setHoldMs(const int key, const uint32_t ms) {
+    if (!valid(key)) return;
+    detectors_[key].setHoldMs(ms);
   }
 
   Fired onPress(const int key, const uint32_t nowMs) {
@@ -106,14 +122,14 @@ class Router {
   bool intercepts(const int key) const {
     if (!valid(key)) return false;
     const Binding& binding = bindings_[key];
-    return binding.doubleClick != LP_MENU_DISABLED || binding.hold != LP_MENU_DISABLED ||
-           !isNative(key, binding.single);
+    return binding.doubleClick != LP_MENU_DISABLED || !isNativeHold(key, binding.hold) ||
+           !isNativeClick(key, binding.single);
   }
 
   // True when the key's held state must be hidden as well as its edges. Only a bound hold
   // costs that, and it costs the key its hold-to-repeat: one key cannot both repeat while
   // held and fire a different action at half a second.
-  bool suppressesHold(const int key) const { return valid(key) && bindings_[key].hold != LP_MENU_DISABLED; }
+  bool suppressesHold(const int key) const { return valid(key) && !isNativeHold(key, bindings_[key].hold); }
 
   void reset() {
     for (auto& detector : detectors_) detector.reset();
@@ -122,11 +138,20 @@ class Router {
  private:
   static bool valid(const int key) { return key >= 0 && key < KEY_COUNT; }
 
-  // True when the binding is what this key already did. Kept apart from the rest because
-  // it is answered by replaying the edge rather than by dispatching.
-  bool isNative(const int key, const uint8_t function) const {
-    if (function == LP_MENU_DISABLED) return false;
-    return function == natives_[key].first || function == natives_[key].second;
+  // True when the binding is what this key already did for that gesture. Kept apart from
+  // the rest because it is answered by replaying the edge rather than by dispatching.
+  static bool matches(const uint8_t (&native)[2], const uint8_t function) {
+    return function == native[0] || function == native[1];
+  }
+  // Disabled on a click means the key is to do nothing, which is only what it already did
+  // where the key had no click action of its own — the power button. On a side key it is a
+  // request to suppress the page turn, and suppressing needs the gating.
+  bool isNativeClick(const int key, const uint8_t function) const { return matches(natives_[key].click, function); }
+  // Disabled on a hold means nothing was bound, and the firmware's own hold behaviour
+  // (page repeat, list paging, the sleep hold) keeps the press. That is native on every
+  // key, so it is the one place Disabled is left alone rather than suppressed.
+  bool isNativeHold(const int key, const uint8_t function) const {
+    return function == LP_MENU_DISABLED || matches(natives_[key].hold, function);
   }
 
   Fired resolve(const int key, const button_gestures::Event event) const {
@@ -149,12 +174,13 @@ class Router {
     Fired fired;
     fired.valid = true;
     fired.function = function;
-    fired.replayRawEdge = isNative(key, function);
+    fired.replayRawEdge =
+        event == button_gestures::Event::Hold ? isNativeHold(key, function) : isNativeClick(key, function);
     return fired;
   }
 
   Binding bindings_[KEY_COUNT]{};
-  Native natives_[KEY_COUNT]{NATIVE_SIDE_KEY, NATIVE_SIDE_KEY, NATIVE_HOME_KEY};
+  Native natives_[KEY_COUNT]{NATIVE_SIDE_KEY, NATIVE_SIDE_KEY, NATIVE_HOME_KEY, NATIVE_POWER_KEY};
   button_gestures::Detector detectors_[KEY_COUNT]{};
 };
 

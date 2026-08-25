@@ -51,12 +51,6 @@ class Activity {
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
 
-  // Power double-click. Only the EPUB reader answers these, and only while it is the
-  // activity on top: main.cpp arms the detector from wantsPowerDoubleClick() alone, so a
-  // child screen opened from the book (dictionary, chapter list) never pays the delay.
-  virtual bool wantsPowerDoubleClick() const { return false; }
-  virtual void runPowerDoubleClick() {}
-
   // Per-button bindings (Settings > Controls > Buttons). The router picks the in-book set
   // of bindings while a book is open, so the same key can page a book and open the light
   // panel on the home screen.

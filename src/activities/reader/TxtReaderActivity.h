@@ -62,6 +62,9 @@ class TxtReaderActivity final : public Activity {
   void relayoutForFontChange();
 
   void renderPage();
+  // One page forward or back, with the reading-stats bookkeeping a turn carries. Shared
+  // by the side keys and by a paging action bound to any other button.
+  void pageTurn(bool forward);
   void renderStatusBar() const;
 
   void initializeReader();
@@ -88,10 +91,7 @@ class TxtReaderActivity final : public Activity {
   // binding this reader cannot honour does not cost every power click the ~280 ms
   // hold-back the detector needs.
   bool isBookContext() const override { return true; }
-  bool wantsPowerDoubleClick() const override {
-    return simple_reader_shortcut::armsDoubleClick(/*supportsStatusBarToggle=*/true);
-  }
-  void runPowerDoubleClick() override;
+  bool runBoundAction(uint8_t function) override;
   bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {
