@@ -79,9 +79,12 @@ say "Device: $PORT"
 } > "$LOG"
 
 say ""
+# Flash mode and frequency come from the image header, which PlatformIO wrote
+# for this board. Hardcoding dio would silently downgrade a qio board (the
+# X4 Pro is qio_opi) and skew every timing this kit exists to measure.
 say "Flashing. Do not unplug."
 "$ESPTOOL" --chip "$KIT_CHIP" --port "$PORT" --baud "$KIT_BAUD" \
-  write-flash -z --flash-mode dio --flash-freq 80m --flash-size "$KIT_FLASH_SIZE" \
+  write-flash -z --flash-mode keep --flash-freq keep --flash-size "$KIT_FLASH_SIZE" \
   0x0 firmware/bootloader.bin \
   0x8000 firmware/partitions.bin \
   0xe000 firmware/boot_app0.bin \
@@ -93,7 +96,7 @@ if [ "$FLASH_RC" -ne 0 ]; then
   # Intel Mac running an older pip install still works.
   say "Retrying with the older esptool command names."
   "$ESPTOOL" --chip "$KIT_CHIP" --port "$PORT" --baud "$KIT_BAUD" \
-    write_flash -z --flash_mode dio --flash_freq 80m --flash_size "$KIT_FLASH_SIZE" \
+    write_flash -z --flash_mode keep --flash_freq keep --flash_size "$KIT_FLASH_SIZE" \
     0x0 firmware/bootloader.bin \
     0x8000 firmware/partitions.bin \
     0xe000 firmware/boot_app0.bin \
