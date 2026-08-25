@@ -162,17 +162,38 @@ void SdFirmwareUpdateActivity::performUpdate() {
     self->requestUpdate(true);
   };
 
+  // The readback pass streams the image a second time, so it gets its own
+  // labelled progress bar rather than leaving the write bar parked at 100%.
+  auto verifyCb = +[](size_t checked, size_t total, void* ctx) {
+    auto* self = static_cast<SdFirmwareUpdateActivity*>(ctx);
+    if (self->state != State::VERIFYING) {
+      self->state = State::VERIFYING;
+      self->lastRenderedPercent = 101;
+    }
+    self->writtenBytes = checked;
+    self->firmwareSize = total;
+    self->requestUpdate(true);
+  };
+
   // Re-validate at flash time (TOCTOU): SD is removable, so don't trust the
   // pre-confirmation pass. The alreadyValidated parameter on the API stays
   // for callers (e.g. an OTA staging path) where the same byte stream was
   // just hashed and there's no removable-media gap.
-  const auto result = firmware_flash::flashFromSdPath(firmwarePath.c_str(), progressCb, this);
+  const auto result = firmware_flash::flashFromSdPath(firmwarePath.c_str(), progressCb, this,
+                                                      /*alreadyValidated=*/false, verifyCb);
   if (result != firmware_flash::Result::OK) {
     LOG_ERR("FW", "flash failed: %s", firmware_flash::resultName(result));
     // BAD_CHIP here is the TOCTOU re-validation catching a wrong-MCU image the
     // pre-confirmation pass missed (e.g. the SD card was swapped).
-    errorMessage =
-        result == firmware_flash::Result::BAD_CHIP ? tr(STR_FIRMWARE_WRONG_DEVICE) : tr(STR_FIRMWARE_WRITE_FAILED);
+    if (result == firmware_flash::Result::BAD_CHIP) {
+      errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+    } else if (result == firmware_flash::Result::VERIFY_FAIL) {
+      // The bytes in flash do not match the file. otadata was left alone, so
+      // the device still boots the firmware it is running now.
+      errorMessage = tr(STR_FIRMWARE_VERIFY_FAILED);
+    } else {
+      errorMessage = tr(STR_FIRMWARE_WRITE_FAILED);
+    }
     RenderLock lock(*this);
     state = State::FAILED;
     requestUpdate();
@@ -219,7 +240,7 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
 
   if (state == State::VALIDATING) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_VALIDATING_FIRMWARE));
-  } else if (state == State::UPDATING) {
+  } else if (state == State::UPDATING || state == State::VERIFYING) {
     // Throttle redraws to once per percent.
     const unsigned int pct = firmwareSize > 0 ? static_cast<unsigned int>((writtenBytes * 100) / firmwareSize) : 0;
     if (pct == lastRenderedPercent) {
@@ -227,7 +248,9 @@ void SdFirmwareUpdateActivity::render(RenderLock&&) {
     }
     lastRenderedPercent = pct;
 
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING), true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, top,
+                              state == State::VERIFYING ? tr(STR_FIRMWARE_CHECKING) : tr(STR_UPDATING), true,
+                              EpdFontFamily::REGULAR);
 
     int y = top + lineHeight + metrics.verticalSpacing;
     GUI.drawProgressBar(

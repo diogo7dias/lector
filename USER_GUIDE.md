@@ -944,6 +944,10 @@ Three routes:
 - **Over USB:** the [Lector flasher](https://diogo7dias.github.io/lector-xteink-firmware/)
   installs over Web Serial from a browser.
 
+A firmware written from the SD card is read back off the flash and compared against the file
+before the device is told to boot it, so a bad write is reported as **Firmware check failed,
+nothing changed** instead of restarting into the old firmware as though it had worked.
+
 If the device will not boot far enough to reach Settings, hold **Volume Up** together with
 **Power** at boot. That goes straight to the SD card firmware update screen, which is the way
 back on devices where USB flashing is locked down.
@@ -962,6 +966,11 @@ cache folders.
 
 **A crash happened.** Lector writes a crash report to the SD card without needing a USB
 connection. Attach that file to any bug report.
+
+**A firmware update ran to the end, but the old firmware came back.** The image passed every
+check and the device was told to boot it, so the bootloader refused it and fell back. Lector
+records that on the next boot in `lector-firmware-update.log` at the root of the card. Send
+that file: it names the slot the image went to and the slot that actually booted.
 
 **More detail is needed.** Connect the device over USB and run the debugging monitor (needs
 Python 3 with `pyserial`, `colorama` and `matplotlib`; install with

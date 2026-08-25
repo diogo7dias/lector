@@ -31,6 +31,7 @@ enum class Result {
   ERASE_FAIL,
   WRITE_FAIL,
   OTADATA_FAIL,
+  VERIFY_FAIL,  // flash readback does not match the source image
 };
 
 // Progress callback: called after every chunk write. `written`/`total` are bytes.
@@ -46,7 +47,17 @@ using ProgressCb = void (*)(size_t written, size_t total, void* ctx);
 // the user the confirmation prompt) skip the redundant second pass. Defaults
 // to false so callers without prior validation (any future entry point) keep
 // the defense-in-depth check.
-Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated = false);
+// After the write, every byte is read back out of the partition and compared
+// against the file; otadata is switched only when they match. A bad write is
+// otherwise invisible: the bootloader refuses the image, falls back to the
+// slot Lector runs from, and leaves otadata pointing at the rejected copy, so
+// the device reports a successful update and comes back on the old firmware
+// on every boot from then on.
+//
+// `onVerifyProgress` (optional) reports that readback pass, which streams the
+// same number of bytes again and so takes about as long as the write.
+Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated = false,
+                       ProgressCb onVerifyProgress = nullptr);
 
 // Full-image integrity check that mirrors the bootloader's verification:
 // header magic, segment table walk, XOR checksum, and SHA256 trailer (when

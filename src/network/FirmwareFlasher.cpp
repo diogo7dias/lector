@@ -6,12 +6,13 @@
 #include <esp_ota_ops.h>
 #include <esp_partition.h>
 #include <mbedtls/sha256.h>
-#include <spi_flash_mmap.h>
 
 #include <algorithm>
 #include <cstring>
 #include <memory>
 
+#include "FirmwareSwitchAudit.h"
+#include "FlashWriteVerify.h"
 #include "OtaBootSwitch.h"
 
 namespace firmware_flash {
@@ -19,8 +20,6 @@ namespace firmware_flash {
 namespace {
 constexpr uint8_t ESP_IMAGE_MAGIC = 0xE9;
 constexpr size_t MIN_FIRMWARE_SIZE = 64 * 1024;
-constexpr size_t SEC = SPI_FLASH_SEC_SIZE;  // 4 KiB
-constexpr size_t BLK = 64 * 1024;           // 64 KiB block-erase granularity
 constexpr size_t CHUNK = 4096;
 constexpr size_t SHA_TRAILER = 32;
 constexpr uint8_t CHECKSUM_SEED = 0xEF;
@@ -62,6 +61,8 @@ const char* resultName(Result r) {
       return "WRITE_FAIL";
     case Result::OTADATA_FAIL:
       return "OTADATA_FAIL";
+    case Result::VERIFY_FAIL:
+      return "VERIFY_FAIL";
   }
   return "?";
 }
@@ -255,7 +256,51 @@ Result validateImageFile(const char* sdPath, size_t partitionSize) {
   return Result::OK;
 }
 
-Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated) {
+namespace {
+
+// SD-card file as a rewindable byte stream.
+class SdFileSource : public ByteSource {
+ public:
+  bool open(const char* path) {
+    if (!Storage.openFileForRead("FLASH", path, file_) || !file_) return false;
+    size_ = file_.fileSize();
+    return true;
+  }
+  ~SdFileSource() override { file_.close(); }
+  size_t size() const override { return size_; }
+  bool rewind() override { return file_.seek(0); }
+  int read(uint8_t* dst, size_t len) override { return file_.read(dst, len); }
+
+ private:
+  HalFile file_;
+  size_t size_ = 0;
+};
+
+// The destination OTA app partition.
+class PartitionTarget : public FlashTarget {
+ public:
+  explicit PartitionTarget(const esp_partition_t* part) : part_(part) {}
+  size_t size() const override { return part_->size; }
+  bool erase(size_t offset, size_t len) override { return esp_partition_erase_range(part_, offset, len) == ESP_OK; }
+  bool write(size_t offset, const uint8_t* src, size_t len) override {
+    const bool ok = esp_partition_write(part_, offset, src, len) == ESP_OK;
+    // Yield between chunks so the watchdog and the render task still run
+    // through a multi-megabyte write.
+    delay(1);
+    return ok;
+  }
+  bool read(size_t offset, uint8_t* dst, size_t len) override {
+    return esp_partition_read(part_, offset, dst, len) == ESP_OK;
+  }
+
+ private:
+  const esp_partition_t* part_;
+};
+
+}  // namespace
+
+Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, bool alreadyValidated,
+                       ProgressCb onVerifyProgress) {
   // Resolve destination first so we can size-check during validation. The full image-integrity
   // pass below verifies header, segment table, XOR checksum and SHA256 trailer end-to-end before
   // we touch otadata, so a truncated/corrupted .bin can never become the next boot target.
@@ -277,63 +322,38 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
     }
   }
 
-  HalFile file;
-  if (!Storage.openFileForRead("FLASH", sdPath, file) || !file) {
+  SdFileSource source;
+  if (!source.open(sdPath)) {
     LOG_ERR("FLASH", "open failed: %s", sdPath);
     return Result::OPEN_FAIL;
   }
+  PartitionTarget target(dest);
+  LOG_INF("FLASH", "src=%s size=%u dest=%s @0x%x partsize=%u", sdPath, static_cast<unsigned>(source.size()),
+          dest->label, static_cast<unsigned>(dest->address), static_cast<unsigned>(dest->size));
 
-  const size_t firmwareSize = file.fileSize();
-  LOG_INF("FLASH", "src=%s size=%u dest=%s @0x%x partsize=%u", sdPath, static_cast<unsigned>(firmwareSize), dest->label,
-          static_cast<unsigned>(dest->address), static_cast<unsigned>(dest->size));
-
-  auto buffer = std::unique_ptr<uint8_t[]>(new (std::nothrow) uint8_t[CHUNK]);
-  if (!buffer) {
-    LOG_ERR("FLASH", "OOM");
-    file.close();
-    return Result::OOM;
+  const Result writeRes = writeImage(source, target, onProgress, ctx);
+  if (writeRes != Result::OK) {
+    LOG_ERR("FLASH", "write failed: %s", resultName(writeRes));
+    return writeRes;
   }
 
-  // Interleave erase + write so the progress bar advances 0→100% smoothly
-  // rather than stalling for several seconds during a single up-front erase.
-  size_t streamPos = 0;
-  size_t erasedUpto = 0;
-  while (streamPos < firmwareSize) {
-    if (streamPos >= erasedUpto) {
-      size_t eraseLen = std::min<size_t>(BLK, dest->size - streamPos);
-      eraseLen = (eraseLen + SEC - 1) & ~(SEC - 1);
-      eraseLen = std::min<size_t>(eraseLen, dest->size - streamPos);
-      if (esp_partition_erase_range(dest, streamPos, eraseLen) != ESP_OK) {
-        LOG_ERR("FLASH", "erase @%u (len=%u) failed", static_cast<unsigned>(streamPos),
-                static_cast<unsigned>(eraseLen));
-        file.close();
-        return Result::ERASE_FAIL;
-      }
-      erasedUpto = streamPos + eraseLen;
-    }
-
-    const size_t want = std::min<size_t>(CHUNK, firmwareSize - streamPos);
-    const int read = file.read(buffer.get(), want);
-    if (read <= 0 || static_cast<size_t>(read) != want) {
-      LOG_ERR("FLASH", "read @%u: got=%d want=%u", static_cast<unsigned>(streamPos), read, static_cast<unsigned>(want));
-      file.close();
-      return Result::READ_FAIL;
-    }
-    if (esp_partition_write(dest, streamPos, buffer.get(), want) != ESP_OK) {
-      LOG_ERR("FLASH", "write @%u failed", static_cast<unsigned>(streamPos));
-      file.close();
-      return Result::WRITE_FAIL;
-    }
-    streamPos += want;
-    if (onProgress) onProgress(streamPos, firmwareSize, ctx);
-    delay(1);
+  // Readback: what the bootloader will validate is what is in flash now, not
+  // what was on the card. Switching otadata to a slot the bootloader then
+  // refuses leaves the device booting the old firmware forever, with no error.
+  const Result verifyRes = verifyImage(source, target, onVerifyProgress, ctx);
+  if (verifyRes != Result::OK) {
+    LOG_ERR("FLASH", "readback failed: %s (offset %u)", resultName(verifyRes),
+            static_cast<unsigned>(lastVerifyMismatchOffset()));
+    return verifyRes;
   }
-  file.close();
-
   if (!ota_boot::switchTo(dest)) {
     LOG_ERR("FLASH", "otadata switch failed");
     return Result::OTADATA_FAIL;
   }
+  // Leave a breadcrumb the next boot checks: if the bootloader refuses this
+  // image it boots the other slot without touching otadata, and that silent
+  // fallback is the only trace it leaves.
+  recordPendingSwitch(dest->address, source.size());
   return Result::OK;
 }
 

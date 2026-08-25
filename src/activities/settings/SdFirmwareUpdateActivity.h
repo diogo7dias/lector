@@ -11,8 +11,8 @@
  *  1) onEnter -> push FileBrowserActivity in PickFirmware mode (only .bin files visible).
  *  2) On result: validate the .bin (header magic, size fits OTA partition).
  *  3) Push ConfirmationActivity ("Update firmware?").
- *  4) On confirm: stream the file into the OTA partition via the Arduino Update API,
- *     drawing a progress bar; on success ESP.restart().
+ *  4) On confirm: stream the file into the OTA partition, drawing a progress bar, then
+ *     read every byte back and compare it against the file; on success ESP.restart().
  *
  * Used both from Settings -> System -> "SD Card Firmware Update", and as the only
  * activity launched in boot recovery mode (left side button + power on X3).
@@ -24,6 +24,7 @@ class SdFirmwareUpdateActivity : public Activity {
     VALIDATING,
     CONFIRMING,
     UPDATING,
+    VERIFYING,
     SUCCESS,
     FAILED,
   };
@@ -34,8 +35,10 @@ class SdFirmwareUpdateActivity : public Activity {
   void onEnter() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return state == State::UPDATING || state == State::VALIDATING; }
-  bool skipLoopDelay() override { return state == State::UPDATING; }
+  bool preventAutoSleep() override {
+    return state == State::UPDATING || state == State::VERIFYING || state == State::VALIDATING;
+  }
+  bool skipLoopDelay() override { return state == State::UPDATING || state == State::VERIFYING; }
 
  private:
   State state = State::PICKING;
