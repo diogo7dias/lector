@@ -5,6 +5,6 @@
 	# fetch Free-Ink as a second remote inside the submodule and merge into the lector
 	# branch when syncing.
 	url = https://github.com/diogo7dias/freeink-sdk.git
-	# The X4 Pro line: lector/x4pro-sdk with Free-Ink main merged in. Not pushed yet,
-	# so a fresh clone still needs the local submodule checkout.
+	# The X4 Pro line: lector/x4pro-sdk-merged, the fork's X4 Pro work with Free-Ink
+	# main merged in (UC8179 driver, UC8279 grayscale plane inversion fix).
 	branch = lector/x4pro-sdk-merged
