@@ -34,6 +34,7 @@
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "SleepTiming.h"
 #include "UiFont.h"
 #include "WakeTiming.h"
 #include "activities/Activity.h"
@@ -280,6 +281,16 @@ static bool loadSleepFrameBuffer() {
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+  // Lock cost, stage by stage. The wake side has had WakeTiming since the boot path was
+  // first measured; the sleep side had nothing, so "locking feels slow" could not be
+  // answered with a number. Same split idea: each stamp is taken after the step it names,
+  // and the report prints the difference between neighbours.
+  const unsigned long sleepT0 = millis();
+  SleepTiming::begin();
+  unsigned long sleepTState = sleepT0;
+  unsigned long sleepTPaint = sleepT0;
+  unsigned long sleepTFrame = sleepT0;
+  unsigned long sleepTWifi = sleepT0;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -329,11 +340,13 @@ void enterDeepSleep(bool fromTimeout = false) {
   }
 
   APP_STATE.saveToFile();
+  sleepTState = millis();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
   // a WiFi activity would otherwise silentRestart() here and reboot instead.
   deepSleepInProgress = true;
   activityManager.goToSleep(fromTimeout);
+  sleepTPaint = millis();
 
   // Quick resume keeps its frame, because its wake restores that exact frame. A wallpaper
   // sleep face does not: its wake blanks the panel and goes to the book, so saving 48KB to
@@ -345,12 +358,16 @@ void enterDeepSleep(bool fromTimeout = false) {
     Storage.remove(SLEEP_FRAME_FILE);
   }
 
+  sleepTFrame = millis();
+
   // Tear down WiFi so the modem power domain isn't held alive across deep sleep.
   // Wake from deep sleep is effectively a chip reset, so no state needs to survive.
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
   }
+
+  sleepTWifi = millis();
 
   // Read after the sleep screen has painted, so the passes it just spent are counted,
   // and written with the state the next boot reads back.
@@ -359,9 +376,32 @@ void enterDeepSleep(bool fromTimeout = false) {
   // The per-mode totals for the session, written last so the file ends with the summary
   // of everything above it.
   logPerfSummary();
+
+  // Written before the flush, so the stages land in the same CSV as the refreshes they
+  // paid for. The panel power-down and the total are serial-only: the file is closed by
+  // then, and a kit log is where those two get read anyway.
+  const unsigned long sleepTBudget = millis();
+  // The paint stage is the one worth breaking down: it was 10112 ms of a 10258 ms lock
+  // when the stages were first measured, and only about 4800 ms of that was the panel.
+  char paintStages[256];
+  SleepTiming::format(paintStages, sizeof(paintStages));
+  char sleepNote[384];
+  snprintf(sleepNote, sizeof(sleepNote), "sleep state=%lu paint=%lu frame=%lu wifi=%lu save=%lu [%s]",
+           sleepTState - sleepT0, sleepTPaint - sleepTState, sleepTFrame - sleepTPaint,
+           sleepTWifi - sleepTFrame, sleepTBudget - sleepTWifi, paintStages);
+  PerfLog::note(sleepNote);
   PerfLog::flush();
+
   display.deepSleep();
+  const unsigned long sleepTPanel = millis();
+  // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
+  // what a lock cost.
+  LOG_INF("SLP", "Lock %lu ms total (%s panel=%lu)", sleepTPanel - sleepT0, sleepNote,
+          sleepTPanel - sleepTBudget);
   LOG_DBG("MAIN", "Entering deep sleep");
+  // Last chance: startDeepSleep() does not return, and the USB-CDC link dies with the
+  // chip, so anything still buffered here is lost.
+  logFlush();
 
   powerManager.startDeepSleep(gpio);
 }
@@ -575,6 +615,14 @@ void setup() {
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
   logWakeTimingToPerfLog();
+  // Also on serial, so a kit log answers the unlock half without the card having to be
+  // read. Empty on the first boot after a flash, when there is no previous wake to report.
+  {
+    char wakeDiag[176];
+    WakeTiming::formatDiagnostic(wakeDiag, sizeof(wakeDiag));
+    if (wakeDiag[0] != '\0') LOG_INF("SLP", "Unlock %s", wakeDiag);
+  }
+
   // Brightness and warmth always come back; whether the light itself does is
   // FrontlightBootPolicy's call. Inert on a board without a frontlight.
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth,
@@ -582,17 +630,25 @@ void setup() {
                        {SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0, isSilentReboot}));
 
   const auto wakeupReason = gpio.getWakeupReason();
+  // INF, and on every boot: a device that sleeps and is woken straight back up by its own
+  // USB power prints nothing else, so without this line the cycle can only be inferred
+  // from the gaps in a capture. See the AfterUSBPower branch below.
+  static constexpr const char* kWakeReasonNames[] = {"PowerButton", "AfterFlash", "AfterUSBPower", "Other"};
+  LOG_INF("SLP", "Wake reason %s", kWakeReasonNames[static_cast<int>(wakeupReason)]);
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying power button press duration");
       if (!gpio.verifyPowerButtonWakeup(SETTINGS.getWakeHoldMs(), SETTINGS.wakeHoldIsFast())) {
+        LOG_INF("SLP", "Wake hold too short, back to sleep");
+        logFlush();
         powerManager.startDeepSleep(gpio);
       }
       wakePowerReleasePending = true;
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // If USB power caused a cold boot, go back to sleep
-      LOG_DBG("MAIN", "Wakeup reason: After USB Power");
+      LOG_INF("SLP", "USB power cold boot, back to sleep");
+      logFlush();
       powerManager.startDeepSleep(gpio);
       break;
     case HalGPIO::WakeupReason::AfterFlash:

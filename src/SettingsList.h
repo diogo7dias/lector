@@ -573,8 +573,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // to /perf on the card for reading on a computer. It exists because the device has no
     // serial console in a reader's hands, so the only honest way to judge a speed change
     // is to have the device report its own numbers. See docs/perf-measurement.md.
+    // Instrumented builds keep it on and out of sight; releases never show it. See the
+    // field's declaration in CrossPointSettings.h.
+#ifndef LECTOR_FORCE_PERF_TIMINGS
     v.push_back(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
                                     StrId::STR_CAT_SYSTEM));
+#endif
 
     // The panel's cheapest partial waveform on page turns and menu moves. On by default
     // on the one board validated for it; the row is here so a panel that turns out to

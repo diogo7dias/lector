@@ -651,7 +651,16 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // no file is opened and every record() call returns on its first line. Deliberately not
   // persisted-by-default-on: a reader who never measures anything should never pay a card
   // write for it.
+  // Instrumented builds (development, testkit, experimental) force this on and hide the
+  // row: a kit round that comes back without /perf/<device>-NNN.csv has wasted a flash and
+  // half an hour of the tester's time, and asking them to remember a toggle is what makes
+  // that happen. Release builds compile the row out of the settings list entirely and
+  // leave the field at 0.
+#ifdef LECTOR_FORCE_PERF_TIMINGS
+  uint8_t showTimings = 1;
+#else
   uint8_t showTimings = 0;
+#endif
   // Fast page turns (1 = on). Asks the panel for its cheapest partial waveform on FAST
   // refreshes. Measured on the X4: 578 ms a page becomes roughly 150 ms. The trade is
   // ghosting -- a shorter drive leaves more behind -- so the anti-ghost budget charges

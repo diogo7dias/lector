@@ -111,7 +111,7 @@ void note(const char* const text) {
   // Flushed first so the annotation lands in sequence with the refreshes around it,
   // rather than ahead of records that were taken before it.
   flush();
-  char line[160];
+  char line[384];
   snprintf(line, sizeof(line), "# %s\n", text);
   if (!lineSink(line)) droppedRecords++;
   if (commitSink != nullptr) commitSink();

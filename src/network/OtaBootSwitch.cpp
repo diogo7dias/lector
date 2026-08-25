@@ -54,16 +54,9 @@ bool switchTo(const esp_partition_t* dest) {
     return false;
   }
 
-  // Find smallest seq > activeSeq such that (seq-1) % 2 == destOtaIdx,
-  // assuming 2 OTA partitions (matches our partitions.csv with ota_0 + ota_1).
-  uint32_t newSeq = activeSeq + 1;
-  while (((newSeq - 1u) % 2u) != (destOtaIdx % 2u)) ++newSeq;
-
-  SelectEntry next = {};
-  next.ota_seq = newSeq;
-  memset(next.seq_label, 0xFF, sizeof(next.seq_label));
-  next.ota_state = kOtaImgNew;
-  next.crc = computeSeqCrc(next.ota_seq);
+  // Two OTA partitions, matching our partitions.csv (ota_0 + ota_1).
+  const uint32_t newSeq = nextSeqFor(activeSeq, destOtaIdx, 2);
+  const SelectEntry next = makeSelectEntry(newSeq, computeSeqCrc(newSeq));
 
   // Write to the OTHER slot (so the bootloader sees a higher seq there).
   const int targetSlot = (activeIdx == 0) ? 1 : 0;

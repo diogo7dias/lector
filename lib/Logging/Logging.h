@@ -41,6 +41,13 @@ static HardwareSerial& logSerial = Serial;
 
 void logPrintf(const char* level, const char* origin, const char* format, ...);
 
+// Pushes anything still buffered out of the serial link, and gives the host a moment to
+// read it. Deep sleep tears the USB-CDC link down, so a line printed immediately before
+// esp_deep_sleep_start() otherwise dies in the buffer and never reaches the log -- which
+// is exactly where the most interesting lines are. No-op on the ROM-printf transport,
+// which is unbuffered.
+void logFlush();
+
 #ifdef ENABLE_SERIAL_LOG
 #if LOG_LEVEL >= 0
 #define LOG_ERR(origin, format, ...) logPrintf("ERR", origin, format "\n", ##__VA_ARGS__)

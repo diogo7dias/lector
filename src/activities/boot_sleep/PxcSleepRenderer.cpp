@@ -12,6 +12,8 @@
 #include <Logging.h>
 #include <Memory.h>
 
+#include "SleepTiming.h"
+
 #include <cstdint>
 #include <cstdlib>
 
@@ -21,9 +23,22 @@
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const bool grayscale,
                           const HalDisplay::RefreshMode oneBitRefresh, void (*const overlay)(GfxRenderer&)) {
   HalFile file;
-  if (!Storage.openFileForRead("SLP", path, file)) {
+  const uint32_t openStartMs = millis();
+  // Storage.open, not openFileForRead: the latter calls exists() and then open(), and
+  // each is a full FAT directory walk. In a wallpaper folder that is 1271 ms apiece,
+  // which is why a wallpaper open measured 2543 ms. One walk answers it.
+  file = Storage.open(path.c_str(), O_RDONLY);
+  if (!file) {
+    // INF, not ERR: the sleep faces probe for an optional /sleep.pxc on every lock, and
+    // most cards do not have one. A miss here is the normal case, not a fault.
+    LOG_INF("SLP", "pxc open failed: %s", path.c_str());
     return false;
   }
+  // Opening by path is a FAT lookup: a linear walk of the directory. In a wallpaper
+  // folder with thousands of files that is not free, and the gap between picking a name
+  // and reading its header measured 2609 ms with nothing to explain it.
+  LOG_INF("SLP", "pxc open in %ums", static_cast<unsigned>(millis() - openStartMs));
+  SleepTiming::mark("pxcopen");
 
   uint16_t pxcWidth = 0, pxcHeight = 0;
   if (file.read(&pxcWidth, 2) != 2 || file.read(&pxcHeight, 2) != 2) {
@@ -145,6 +160,8 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // refresh, so the two land together (no intermediate wallpaper-only flash).
   if (overlay != nullptr) overlay(renderer);
   stage("decode BW");
+  // Same split the bitmap face reports: card and decode above, panel below.
+  SleepTiming::mark("decode");
 
   if (!grayscale) {
     // 1-bit fast path: a single refresh of the dithered silhouette, skipping the
