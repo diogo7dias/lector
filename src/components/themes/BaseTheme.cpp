@@ -502,9 +502,10 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
     const int itemY = rect.y + (i - windowStart) * rowHeight;
 
-    // Section heading: label centred on paper, no band behind it. The band it used to
-    // wear was the same fill the selected row uses, which put a second black bar on
-    // every screen and made the list read as mostly ink.
+    // Section heading: a filled plate hugging the label, brackets included, rather than a
+    // full-width band. A band the width of the row is the same shape as the selected row,
+    // so every screen would carry two black bars and the list would read as mostly ink.
+    // Sized to the text, it marks the heading without competing with the selection.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
       // Bracketed like the screen title above it, for the same reason: the UI font has
       // no bold face, so the brackets are what marks a line as a label rather than a row.
@@ -512,7 +513,13 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
       const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
       const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
-      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/true);
+      // A little air on each side so the brackets are not flush against the plate edge,
+      // clamped to the row so a heading that fills the width cannot bleed past it.
+      const int platePad = std::max(2, renderer.getTextWidth(itemFontId, " "));
+      const int plateX = std::max(rect.x, headingX - platePad);
+      const int plateRight = std::min(rect.x + rect.width, headingX + headingW + platePad);
+      renderer.fillRect(plateX, itemY, plateRight - plateX, rowHeight, /*state=*/true);
+      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
       continue;
     }
 
