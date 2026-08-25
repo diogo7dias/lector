@@ -325,6 +325,30 @@ void ActivityManager::runPowerDoubleClick() {
   if (currentActivity) currentActivity->runPowerDoubleClick();
 }
 
+bool ActivityManager::isBookContext() const { return currentActivity && currentActivity->isBookContext(); }
+
+bool ActivityManager::runBoundAction(const uint8_t function) {
+  // The screen on top gets first refusal: in a book, most of these actions are its own.
+  if (currentActivity && currentActivity->runBoundAction(function)) return true;
+
+  switch (function) {
+    case CrossPointSettings::LP_MENU_GO_HOME:
+      if (currentActivity && currentActivity->isHomeActivity()) return false;
+      goHome();
+      return true;
+    case CrossPointSettings::LP_MENU_BACK:
+      popActivity();
+      return true;
+    case CrossPointSettings::LP_MENU_LIGHT_PANEL:
+      if (!Frontlight.present() || lightPanel.isActive()) return false;
+      lightPanel.show();
+      requestUpdate();
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool ActivityManager::skipLoopDelay() const { return currentActivity && currentActivity->skipLoopDelay(); }
 
 ScreenshotInfo ActivityManager::getScreenshotInfo() const {

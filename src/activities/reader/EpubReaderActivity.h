@@ -403,6 +403,10 @@ class EpubReaderActivity final : public Activity {
   // for a second one, and a page turn on Power is the thing that lag is most felt on, so
   // a binding that cannot fire on this page (footnotes bound with none here, Go to
   // Paragraph with numbering off, KOSync with no credentials) leaves clicks instant.
+  bool isBookContext() const override { return true; }
+  // The bindings router hands every gesture here first; the reader answers with the same
+  // entry points the pop-up and the long-press bindings already use.
+  bool runBoundAction(const uint8_t function) override { return runBoundMenuFunction(function); }
   bool wantsPowerDoubleClick() const override {
     const uint8_t function = SETTINGS.doubleClickPowerFunction;
     switch (function) {

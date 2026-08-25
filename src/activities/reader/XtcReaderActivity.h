@@ -68,6 +68,7 @@ class XtcReaderActivity final : public Activity {
   // No in-book menu here either, and this reader's status bar is the three-way
   // xtcStatusBarMode rather than the shared toggle, so the runnable subset is smaller
   // than the TXT reader's (see SimpleReaderShortcut.h).
+  bool isBookContext() const override { return true; }
   bool wantsPowerDoubleClick() const override {
     return simple_reader_shortcut::armsDoubleClick(/*supportsStatusBarToggle=*/false);
   }

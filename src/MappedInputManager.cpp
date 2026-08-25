@@ -60,7 +60,17 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   // tap never is.
   const bool tapCounts = (fn == &HalGPIO::wasPressed || fn == &HalGPIO::wasReleased);
   const int tapped = tapCounts ? tappedHintHardware() : -1;
+  const bool heldQuery = (fn == &HalGPIO::isPressed);
+  const bool releaseQuery = (fn == &HalGPIO::wasReleased);
   const auto press = [&](const uint8_t hw) {
+    // Router gating, before the hardware is read: every logical role that maps to this
+    // key inherits it, which is the same reason the hint tap below lives here.
+    const int slot = sideKeySlot(hw);
+    if (slot >= 0) {
+      const SideKeyOverride& override = sideKeyOverrides[slot];
+      if (releaseQuery && override.injectRelease) return true;
+      if (heldQuery ? override.suppressHeld : override.suppressEdges) return false;
+    }
     if ((gpio.*fn)(hw)) return true;
     if (tapped < 0 || hw != tapped) return false;
     // Spend the tap here. Without this a single tap answers both wasPressed() and
@@ -372,8 +382,33 @@ bool MappedInputManager::wasBottomEdgeUpSwipe() const {
 bool MappedInputManager::wasHomeGesture() const {
   // On a board with a capacitive Home key that key IS Home, which frees the bottom
   // edge for the reader menu (wasReaderMenuSwipeUp).
-  if (gpio.hasHomeKey()) return gpio.wasHomeKeyTapped();
+  if (gpio.hasHomeKey()) {
+    // See setHomeKeyOverride(): the router holds a tap back while it decides whether a
+    // second one is coming, and replays it here when it rules the tap a plain single.
+    if (homeKeyInjected) return true;
+    if (homeKeySuppressed) return false;
+    return gpio.wasHomeKeyTapped();
+  }
   return wasBottomEdgeUpSwipe();
+}
+
+int MappedInputManager::sideKeySlot(const uint8_t hardware) {
+  if (hardware == HalGPIO::BTN_UP) return 0;
+  if (hardware == HalGPIO::BTN_DOWN) return 1;
+  return -1;
+}
+
+void MappedInputManager::setSideKeyOverride(const uint8_t hardware, const bool suppressEdges, const bool suppressHeld,
+                                            const bool injectRelease) {
+  const int slot = sideKeySlot(hardware);
+  if (slot < 0) return;
+  sideKeyOverrides[slot] = SideKeyOverride{suppressEdges, suppressHeld, injectRelease};
+}
+
+void MappedInputManager::clearBindingOverrides() {
+  for (auto& override : sideKeyOverrides) override = SideKeyOverride{};
+  homeKeySuppressed = false;
+  homeKeyInjected = false;
 }
 
 bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {

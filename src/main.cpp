@@ -53,6 +53,7 @@
 #include "sleep/WakeRoutePolicy.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
+#include "util/ButtonRouter.h"
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
@@ -1152,6 +1153,8 @@ void loop() {
   // paths) leaves the power release ungated. The double-click block further down is the
   // only thing that ever sets it, and only for the pass that sets it.
   mappedInputManager.setPowerReleaseOverride(false, false);
+  // Same reason, for the per-button bindings: an early return must never leave a key gated.
+  mappedInputManager.clearBindingOverrides();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
   // Never on, in any build. The numbers reach the serial log and the perf CSV by paths
@@ -1293,6 +1296,99 @@ void loop() {
       mappedInputManager.setPowerReleaseOverride(
           powerClicks.waiting() || event == reader_input::DoubleClickDetector::Event::Double,
           event == reader_input::DoubleClickDetector::Event::Single);
+    }
+  }
+
+  // Per-button bindings (Settings > Controls > Buttons).
+  //
+  // Sits with the power double-click above and for the same reason: a key press has to be
+  // held back before anything acts on it, because nothing can tell a single click from the
+  // first half of a double until the window closes.
+  //
+  // A key the router does not intercept is never touched — no gating, no detector, no
+  // delay — so paging and hold-to-repeat are exactly what they were for anyone who has not
+  // opened the Buttons screen.
+  {
+    static button_router::Router bindingRouter;
+    // The bindings the router is currently armed with. Compared rather than watched: the
+    // Buttons screen writes the settings directly, and re-arming every pass would reset
+    // the detectors and drop whatever gesture was in flight.
+    static uint8_t appliedBindings[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
+    static bool bindingsApplied = false;
+
+    const bool inBook = activityManager.isBookContext();
+    uint8_t wanted[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
+    for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
+      for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
+        const uint8_t* binding = SETTINGS.buttonBinding(inBook, key, gesture);
+        wanted[key][gesture] = binding != nullptr ? *binding : CrossPointSettings::LP_MENU_DISABLED;
+      }
+    }
+    if (!bindingsApplied || memcmp(wanted, appliedBindings, sizeof(wanted)) != 0) {
+      for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
+        // The Home key goes home; the two side keys page. A key still set to what it
+        // already did is left alone entirely (Router::intercepts).
+        const auto& native =
+            key == CrossPointSettings::BOUND_BTN_HOME ? button_router::NATIVE_HOME_KEY : button_router::NATIVE_SIDE_KEY;
+        bindingRouter.configure(key,
+                                button_router::Binding{wanted[key][CrossPointSettings::BOUND_SINGLE],
+                                                       wanted[key][CrossPointSettings::BOUND_DOUBLE],
+                                                       wanted[key][CrossPointSettings::BOUND_HOLD]},
+                                native);
+      }
+      memcpy(appliedBindings, wanted, sizeof(wanted));
+      bindingsApplied = true;
+    }
+
+    // Sleep is the one action ActivityManager cannot run: only this file can put the
+    // device down.
+    const auto runBoundFunction = [&](const uint8_t function) {
+      if (function == CrossPointSettings::LP_MENU_SLEEP) {
+        enterDeepSleep();
+        return;
+      }
+      activityManager.runBoundAction(function);
+    };
+
+    const uint32_t now = millis();
+    // Left is the upper side key, Right the lower one, matching the hint labels.
+    constexpr uint8_t SIDE_HARDWARE[] = {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN};
+    for (uint8_t key = 0; key < 2; ++key) {
+      if (!bindingRouter.intercepts(key)) continue;
+      const uint8_t hardware = SIDE_HARDWARE[key];
+      // The RAW edges, deliberately: the override below is what rewrites the mapped ones,
+      // and feeding the router its own output would latch it.
+      button_router::Fired fired;
+      if (gpio.wasPressed(hardware)) {
+        fired = bindingRouter.onPress(key, now);
+      } else if (gpio.wasReleased(hardware)) {
+        fired = bindingRouter.onRelease(key, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(key, now);
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      // Edges stay hidden for as long as this key is intercepted, and are replayed only on
+      // the pass the router rules the gesture the paging the key already did.
+      mappedInputManager.setSideKeyOverride(hardware, /*suppressEdges=*/true, bindingRouter.suppressesHold(key),
+                                            /*injectRelease=*/fired.valid && fired.replayRawEdge);
+    }
+
+    // The Home key reports taps and long presses, never raw edges, so its press and release
+    // are manufactured from the tap it already completed. A long press is the hold outright;
+    // the detector is reset after one so a tap reported alongside it cannot fire as well.
+    constexpr uint8_t HOME_KEY = 2;
+    if (gpio.hasHomeKey() && bindingRouter.intercepts(HOME_KEY)) {
+      button_router::Fired fired;
+      if (gpio.wasHomeKeyLongPressed()) {
+        fired = bindingRouter.fireHold(HOME_KEY);
+      } else if (gpio.wasHomeKeyTapped()) {
+        bindingRouter.onPress(HOME_KEY, now);
+        fired = bindingRouter.onRelease(HOME_KEY, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(HOME_KEY, now);
+      // Home is what this key already does, so that binding is answered by replaying the
+      // gesture: an activity that must save or confirm first still gets its say.
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      mappedInputManager.setHomeKeyOverride(/*suppress=*/true, fired.valid && fired.replayRawEdge);
     }
   }
 

@@ -21,6 +21,19 @@ using bound_action::LP_MENU_DISABLED;
 using bound_action::LP_MENU_PAGE_NEXT;
 using bound_action::LP_MENU_PAGE_PREV;
 
+// What a key already does when nothing is bound to it: paging for a side key, Home for
+// the capacitive Home key. Binding one of these back to the same key is answered by
+// replaying its raw edge rather than by dispatching, so the reader and every list keep
+// their own code for it, repeat included.
+struct Native {
+  uint8_t first = LP_MENU_DISABLED;
+  uint8_t second = LP_MENU_DISABLED;
+};
+
+// The two side keys page; the capacitive Home key goes home.
+constexpr Native NATIVE_SIDE_KEY{LP_MENU_PAGE_PREV, LP_MENU_PAGE_NEXT};
+constexpr Native NATIVE_HOME_KEY{bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLED};
+
 // The three bindings of one key, in gesture order.
 struct Binding {
   uint8_t single = LP_MENU_DISABLED;
@@ -32,9 +45,8 @@ struct Binding {
 struct Fired {
   bool valid = false;
   uint8_t function = LP_MENU_DISABLED;
-  // Prev/Next page is what a side key already does, so rather than dispatching it the
-  // caller replays the raw edge it was holding back. The reader and every list then page
-  // through their own code, repeat included, and none of them learns the router exists.
+  // The binding is what this key already did, so the caller replays the raw edge it was
+  // holding back instead of dispatching; see Native.
   bool replayRawEdge = false;
 };
 
@@ -47,9 +59,10 @@ class Router {
   // leaving it): the same key can carry a double in one context and not the other. Any
   // gesture still pending on that key is dropped, so a click pressed on the page cannot
   // fire into the screen that replaced it.
-  void configure(const int key, const Binding& binding) {
+  void configure(const int key, const Binding& binding, const Native& native = NATIVE_SIDE_KEY) {
     if (!valid(key)) return;
     bindings_[key] = binding;
+    natives_[key] = native;
     detectors_[key].reset();
     detectors_[key].configure(binding.doubleClick != LP_MENU_DISABLED, binding.hold != LP_MENU_DISABLED);
     detectors_[key].setSingleBound(binding.single != LP_MENU_DISABLED);
@@ -72,6 +85,16 @@ class Router {
     return resolve(key, detectors_[key].tick(nowMs));
   }
 
+  // Names this key's hold outright, without timing it. The capacitive Home key reports a
+  // completed long press rather than a held edge, so there is nothing here to time. Drops
+  // any gesture still in flight on that key: the same press may also be reported as a tap,
+  // and it must not fire twice.
+  Fired fireHold(const int key) {
+    if (!valid(key)) return {};
+    detectors_[key].reset();
+    return resolve(key, button_gestures::Event::Hold);
+  }
+
   // True while the router owes an answer on this key and the caller must keep its edges
   // from the rest of the firmware.
   bool busy(const int key) const { return valid(key) && detectors_[key].busy(); }
@@ -84,7 +107,7 @@ class Router {
     if (!valid(key)) return false;
     const Binding& binding = bindings_[key];
     return binding.doubleClick != LP_MENU_DISABLED || binding.hold != LP_MENU_DISABLED ||
-           !isNativePaging(binding.single);
+           !isNative(key, binding.single);
   }
 
   // True when the key's held state must be hidden as well as its edges. Only a bound hold
@@ -99,10 +122,11 @@ class Router {
  private:
   static bool valid(const int key) { return key >= 0 && key < KEY_COUNT; }
 
-  // The two actions that mean "what this key already did". Kept apart from the rest
-  // because they are answered by replaying the edge rather than by dispatching.
-  static bool isNativePaging(const uint8_t function) {
-    return function == LP_MENU_PAGE_PREV || function == LP_MENU_PAGE_NEXT;
+  // True when the binding is what this key already did. Kept apart from the rest because
+  // it is answered by replaying the edge rather than by dispatching.
+  bool isNative(const int key, const uint8_t function) const {
+    if (function == LP_MENU_DISABLED) return false;
+    return function == natives_[key].first || function == natives_[key].second;
   }
 
   Fired resolve(const int key, const button_gestures::Event event) const {
@@ -125,11 +149,12 @@ class Router {
     Fired fired;
     fired.valid = true;
     fired.function = function;
-    fired.replayRawEdge = isNativePaging(function);
+    fired.replayRawEdge = isNative(key, function);
     return fired;
   }
 
   Binding bindings_[KEY_COUNT]{};
+  Native natives_[KEY_COUNT]{NATIVE_SIDE_KEY, NATIVE_SIDE_KEY, NATIVE_HOME_KEY};
   button_gestures::Detector detectors_[KEY_COUNT]{};
 };
 

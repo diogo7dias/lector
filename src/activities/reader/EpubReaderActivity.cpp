@@ -581,6 +581,10 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     case CrossPointSettings::LP_MENU_BOOKMARK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+    // Bound to a key that does not already page (the Home key, or a side key whose single
+    // was remapped), paging is an action like any other and the reader can always run it.
+    case CrossPointSettings::LP_MENU_PAGE_PREV:
+    case CrossPointSettings::LP_MENU_PAGE_NEXT:
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -643,6 +647,12 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_HOLD);
+      return true;
+    case CrossPointSettings::LP_MENU_PAGE_PREV:
+      pageTurn(false);
+      return true;
+    case CrossPointSettings::LP_MENU_PAGE_NEXT:
+      pageTurn(true);
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:

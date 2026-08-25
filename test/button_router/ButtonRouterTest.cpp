@@ -18,6 +18,7 @@ using bound_action::LP_MENU_SLEEP;
 using button_router::Router;
 
 constexpr int LEFT = 0;
+constexpr int HOME = 2;
 
 // A press and its release, far enough apart to be a click and not a hold.
 button_router::Fired click(Router& router, const int key, uint32_t& now) {
@@ -81,6 +82,35 @@ TEST(ButtonRouter, AHoldFiresWhileTheKeyIsStillDown) {
   const auto fired = router.tick(LEFT, now);
   EXPECT_TRUE(fired.valid);
   EXPECT_EQ(fired.function, LP_MENU_SLEEP);
+}
+
+TEST(ButtonRouter, AKeyThatReportsItsOwnLongPressNamesTheHoldDirectly) {
+  // The capacitive Home key reports a completed long press rather than a held edge, so
+  // its hold cannot be timed here.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  const auto fired = router.fireHold(LEFT);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_EQ(fired.function, LP_MENU_SLEEP);
+}
+
+TEST(ButtonRouter, FiringTheHoldDropsAGestureStillInFlight) {
+  // The key may report a tap alongside its long press; that tap must not fire as well.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_SLEEP});
+  uint32_t now = 1000;
+  click(router, LEFT, now);
+  ASSERT_TRUE(router.busy(LEFT));
+  EXPECT_TRUE(router.fireHold(LEFT).valid);
+  EXPECT_FALSE(router.busy(LEFT));
+  now += button_gestures::DOUBLE_WINDOW_MS;
+  EXPECT_FALSE(router.tick(LEFT, now).valid);
+}
+
+TEST(ButtonRouter, FiringTheHoldOnAKeyWithNoHoldBoundDoesNothing) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  EXPECT_FALSE(router.fireHold(LEFT).valid);
 }
 
 TEST(ButtonRouter, AnUnboundGestureNeverFires) {
@@ -156,4 +186,35 @@ TEST(ButtonRouter, ReconfiguringClearsAPendingGesture) {
   EXPECT_FALSE(router.busy(LEFT));
   now += button_gestures::DOUBLE_WINDOW_MS;
   EXPECT_FALSE(router.tick(LEFT, now).valid);
+}
+
+TEST(ButtonRouter, TheHomeKeyTreatsHomeAsWhatItAlreadyDoes) {
+  // Home on the Home key is not a remap, so the key must not be intercepted at all: no
+  // gating, no detector, no delay for anyone who leaves the bindings alone.
+  Router router;
+  router.configure(HOME, {bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLED, LP_MENU_DISABLED},
+                   button_router::NATIVE_HOME_KEY);
+  EXPECT_FALSE(router.intercepts(HOME));
+}
+
+TEST(ButtonRouter, PagingBoundToTheHomeKeyIsDispatchedRatherThanReplayed) {
+  // The Home key does not page, so replaying its tap would go home instead.
+  Router router;
+  router.configure(HOME, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED}, button_router::NATIVE_HOME_KEY);
+  ASSERT_TRUE(router.intercepts(HOME));
+  uint32_t now = 1000;
+  const auto fired = click(router, HOME, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_FALSE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, HomeBoundToASideKeyIsDispatchedRatherThanReplayed) {
+  Router router;
+  router.configure(LEFT, {bound_action::LP_MENU_GO_HOME, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  const auto fired = [&] {
+    uint32_t now = 1000;
+    return click(router, LEFT, now);
+  }();
+  EXPECT_TRUE(fired.valid);
+  EXPECT_FALSE(fired.replayRawEdge);
 }

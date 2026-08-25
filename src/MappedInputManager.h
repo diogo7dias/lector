@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ListSwipeGesture.h"
-
 #include <HalGPIO.h>
+
+#include "ListSwipeGesture.h"
 
 class GfxRenderer;
 
@@ -112,6 +112,29 @@ class MappedInputManager {
     powerReleaseInjected = inject;
   }
 
+  // The same gating for the two side keys and for the capacitive Home key, driven by the
+  // per-button bindings router (see util/ButtonRouter.h). main.cpp sets these once per
+  // loop pass, before any consumer reads an edge, and clears them every pass.
+  //
+  //  - suppressEdges: hide this key's press and release from everyone while the router
+  //    decides which gesture it was. Without it the release would still turn the page
+  //    before the double-click window closed.
+  //  - suppressHeld: hide the key's held state too. Only a bound hold needs this, and it
+  //    is what costs that key its hold-to-repeat: one key cannot both repeat while held
+  //    and fire a different action at half a second.
+  //  - injectRelease: manufacture a release on the pass the router rules the gesture a
+  //    plain single click, so every downstream consumer sees the edge it always saw.
+  //
+  // A key the router does not intercept is never touched, which is why nobody who leaves
+  // the bindings alone can feel this.
+  void setSideKeyOverride(uint8_t hardware, bool suppressEdges, bool suppressHeld, bool injectRelease);
+  // The Home key reports taps, not edges, so it needs only hiding and replaying.
+  void setHomeKeyOverride(const bool suppress, const bool inject) {
+    homeKeySuppressed = suppress;
+    homeKeyInjected = inject;
+  }
+  void clearBindingOverrides();
+
   // True when the control axis is flipped relative to the physical buttons: the user opted into
   // orientation-following front buttons AND the screen is *currently rendered* rotated (INVERTED /
   // LANDSCAPE_CCW). Keyed on the live renderer orientation rather than the persisted reader setting,
@@ -142,6 +165,18 @@ class MappedInputManager {
 
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;
+
+  // Router gating, one slot per side key. Indexed by sideKeySlot(); a hardware id that is
+  // not a side key has no slot and is never gated.
+  struct SideKeyOverride {
+    bool suppressEdges = false;
+    bool suppressHeld = false;
+    bool injectRelease = false;
+  };
+  static int sideKeySlot(uint8_t hardware);
+  SideKeyOverride sideKeyOverrides[2];
+  bool homeKeySuppressed = false;
+  bool homeKeyInjected = false;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;

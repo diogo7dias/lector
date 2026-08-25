@@ -87,6 +87,7 @@ class TxtReaderActivity final : public Activity {
   // detector is armed only for the ones that can (see SimpleReaderShortcut.h), so a
   // binding this reader cannot honour does not cost every power click the ~280 ms
   // hold-back the detector needs.
+  bool isBookContext() const override { return true; }
   bool wantsPowerDoubleClick() const override {
     return simple_reader_shortcut::armsDoubleClick(/*supportsStatusBarToggle=*/true);
   }

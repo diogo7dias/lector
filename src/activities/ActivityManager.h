@@ -130,6 +130,13 @@ class ActivityManager {
   // while a child screen launched from the reader sits on top of it.
   bool wantsPowerDoubleClick() const;
   void runPowerDoubleClick();
+
+  // Per-button bindings. isBookContext() picks which of the two binding sets the router
+  // arms; runBoundAction() offers the action to the screen on top first and falls back to
+  // the ones that work anywhere (Home, Back, Frontlight). Sleep is not here: only main.cpp
+  // can put the device to sleep.
+  bool isBookContext() const;
+  bool runBoundAction(uint8_t function);
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 
