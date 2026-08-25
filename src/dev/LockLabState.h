@@ -25,6 +25,7 @@ struct LockLabState {
   uint8_t oneBitRefresh = 1;    // 0 Full, 1 Half, 2 Fast (HalDisplay::RefreshMode)
   uint8_t grayBaseRefresh = 0;  // 0 Auto, then Full / Half / Fast
   uint8_t passes = 0;           // PxcRenderOptions::Passes
+  uint8_t preClear = 0;         // 0 Off, 1 White FULL, 2 Black then white, 3 Two cycles
   uint8_t wholeFileCache = 1;
   uint8_t rowsPerRead = 0;  // 0 Auto, then 1 / 4 / 8 / 16
   uint8_t source = 0;       // 0 /sleep.pxc, 1 /sleep folder, 2 /locklab folder
@@ -45,6 +46,7 @@ inline void lockLabToJson(const LockLabState& s, JsonDocument& doc) {
   o["oneBitRefresh"] = s.oneBitRefresh;
   o["grayBaseRefresh"] = s.grayBaseRefresh;
   o["passes"] = s.passes;
+  o["preClear"] = s.preClear;
   o["wholeFileCache"] = s.wholeFileCache;
   o["rowsPerRead"] = s.rowsPerRead;
   o["source"] = s.source;
@@ -64,6 +66,7 @@ inline void lockLabFromJson(LockLabState& s, JsonVariantConst doc) {
   s.oneBitRefresh = o["oneBitRefresh"] | s.oneBitRefresh;
   s.grayBaseRefresh = o["grayBaseRefresh"] | s.grayBaseRefresh;
   s.passes = o["passes"] | s.passes;
+  s.preClear = o["preClear"] | s.preClear;
   s.wholeFileCache = o["wholeFileCache"] | s.wholeFileCache;
   s.rowsPerRead = o["rowsPerRead"] | s.rowsPerRead;
   s.source = o["source"] | s.source;

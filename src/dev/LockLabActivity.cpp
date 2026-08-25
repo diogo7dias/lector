@@ -53,7 +53,7 @@ void LockLabActivity::activateIndex(const int index) {
     return;
   }
 
-  char summary[384];
+  char summary[512];
   locklab::runOnce(renderer, summary, sizeof(summary));
   result = summary;
 }
