@@ -47,6 +47,7 @@
 #include "dev/LockLab.h"
 #include "fontIds.h"
 #include "frontlight/FrontlightBootPolicy.h"
+#include "network/FirmwareSwitchAudit.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
@@ -565,6 +566,11 @@ void setup() {
   // that display the numbers.
 
   HalSystem::checkPanic();
+
+  // If a firmware update handed the device to another image and the bootloader
+  // refused it, we are running the old firmware right now and nothing else
+  // would say so. Write that to the SD card while it is fresh.
+  firmware_flash::auditPendingSwitch(CROSSPOINT_VERSION);
 
   // Lector: on first install (fresh SD) make sure the folders lector uses exist,
   // so the user can drop files straight in (over WiFi or a card reader) without
