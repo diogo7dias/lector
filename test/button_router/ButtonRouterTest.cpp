@@ -1,0 +1,159 @@
+// Host tests for the per-button binding router.
+//
+// The router is the part that turns "this key went down" into "run this action": it arms
+// each key's gesture detector from what the user actually bound in the current context,
+// and names the action the gesture landed on. The gesture timing itself belongs to
+// button_gestures and is tested there; what matters here is the arming and the naming.
+#include <gtest/gtest.h>
+
+#include "util/ButtonRouter.h"
+
+namespace {
+
+using bound_action::LP_MENU_BOOKMARK;
+using bound_action::LP_MENU_DISABLED;
+using bound_action::LP_MENU_LIGHT_PANEL;
+using bound_action::LP_MENU_PAGE_NEXT;
+using bound_action::LP_MENU_SLEEP;
+using button_router::Router;
+
+constexpr int LEFT = 0;
+
+// A press and its release, far enough apart to be a click and not a hold.
+button_router::Fired click(Router& router, const int key, uint32_t& now) {
+  router.onPress(key, now);
+  now += 50;
+  return router.onRelease(key, now);
+}
+
+}  // namespace
+
+TEST(ButtonRouter, ASingleClickNamesTheActionBoundToIt) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  const auto fired = click(router, LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_EQ(fired.function, LP_MENU_PAGE_NEXT);
+}
+
+TEST(ButtonRouter, WithNothingOnTheDoubleTheSingleFiresOnRelease) {
+  // The whole point of arming per binding: a key that carries no double must not make
+  // the page turn wait for a second press that is never coming.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  EXPECT_TRUE(click(router, LEFT, now).valid);
+  EXPECT_FALSE(router.busy(LEFT));
+}
+
+TEST(ButtonRouter, WithADoubleBoundTheSingleWaitsForTheWindowToClose) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  EXPECT_FALSE(click(router, LEFT, now).valid);
+  EXPECT_TRUE(router.busy(LEFT));
+
+  now += button_gestures::DOUBLE_WINDOW_MS;
+  const auto fired = router.tick(LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_EQ(fired.function, LP_MENU_PAGE_NEXT);
+  EXPECT_FALSE(router.busy(LEFT));
+}
+
+TEST(ButtonRouter, ASecondPressInsideTheWindowNamesTheDoubleAction) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  click(router, LEFT, now);
+  now += 100;
+  const auto fired = router.onPress(LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_EQ(fired.function, LP_MENU_LIGHT_PANEL);
+}
+
+TEST(ButtonRouter, AHoldFiresWhileTheKeyIsStillDown) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  uint32_t now = 1000;
+  router.onPress(LEFT, now);
+  now += button_gestures::HOLD_MS;
+  const auto fired = router.tick(LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_EQ(fired.function, LP_MENU_SLEEP);
+}
+
+TEST(ButtonRouter, AnUnboundGestureNeverFires) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_DISABLED, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  EXPECT_FALSE(click(router, LEFT, now).valid);
+  now += 2000;
+  EXPECT_FALSE(router.tick(LEFT, now).valid);
+}
+
+TEST(ButtonRouter, PagingActionsAskForTheRawEdgeInsteadOfBeingDispatched) {
+  // Prev/Next page on a side key IS what the key already does; replaying the edge lets
+  // the reader and every list keep their own paging code, including its repeat.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  const auto fired = click(router, LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_TRUE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, EveryOtherActionIsDispatchedRatherThanReplayed) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_BOOKMARK, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  const auto fired = click(router, LEFT, now);
+  EXPECT_TRUE(fired.valid);
+  EXPECT_FALSE(fired.replayRawEdge);
+}
+
+TEST(ButtonRouter, AKeyWithOnlyItsDefaultSingleNeedsNoGating) {
+  // Nothing bound beyond the paging the key already does: the router must not suppress
+  // a single edge, or holding the key to page-repeat through a list would stop working.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  EXPECT_FALSE(router.intercepts(LEFT));
+}
+
+TEST(ButtonRouter, AKeyWithADoubleOrAHoldIsIntercepted) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  EXPECT_TRUE(router.intercepts(LEFT));
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  EXPECT_TRUE(router.intercepts(LEFT));
+}
+
+TEST(ButtonRouter, AKeyWhoseSingleWasRemappedIsInterceptedToo) {
+  // The single no longer means what the key natively does, so the raw edge must be
+  // hidden even though no double or hold is bound.
+  Router router;
+  router.configure(LEFT, {LP_MENU_BOOKMARK, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  EXPECT_TRUE(router.intercepts(LEFT));
+}
+
+TEST(ButtonRouter, OnlyAHoldBindingCostsTheKeyItsRepeat) {
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  EXPECT_FALSE(router.suppressesHold(LEFT));
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_SLEEP});
+  EXPECT_TRUE(router.suppressesHold(LEFT));
+}
+
+TEST(ButtonRouter, ReconfiguringClearsAPendingGesture) {
+  // Leaving a book re-arms every key. A click still waiting for its window must not
+  // fire into the screen that replaced the one it was pressed on.
+  Router router;
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_LIGHT_PANEL, LP_MENU_DISABLED});
+  uint32_t now = 1000;
+  click(router, LEFT, now);
+  ASSERT_TRUE(router.busy(LEFT));
+  router.configure(LEFT, {LP_MENU_PAGE_NEXT, LP_MENU_DISABLED, LP_MENU_DISABLED});
+  EXPECT_FALSE(router.busy(LEFT));
+  now += button_gestures::DOUBLE_WINDOW_MS;
+  EXPECT_FALSE(router.tick(LEFT, now).valid);
+}
