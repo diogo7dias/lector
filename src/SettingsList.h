@@ -274,11 +274,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // and upstream never offered it. A settings file still holding 5 clamps back to the
     // 15-page default, because load() falls back to the field default for any index past
     // the option list.
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-        {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30,
-         StrId::STR_REFRESH_NEVER},
-        "refreshFrequency", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+                                  {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
+                                   StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
+                                  "refreshFrequency", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                     StrId::STR_CAT_DISPLAY));
@@ -488,10 +487,87 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions()));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE,
-                                   StrId::STR_STATE_INVERTED_TAP},
-                                  "touchReaderControls", StrId::STR_CAT_CONTROLS));
+    // The per-button bindings. Registered here so they persist and reach the web API;
+    // the Buttons screen is what actually lists them (withButtons keeps them out of the
+    // flat Controls list). Key names match the field names so a settings file reads as
+    // context + button + gesture.
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftSingle, boundFunctionLabels(),
+                                  "btnBookLeftSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftDouble, boundFunctionLabels(),
+                                  "btnBookLeftDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftHold, boundFunctionLabels(),
+                                  "btnBookLeftHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightSingle, boundFunctionLabels(),
+                                  "btnBookRightSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightDouble, boundFunctionLabels(),
+                                  "btnBookRightDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightHold, boundFunctionLabels(),
+                                  "btnBookRightHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeSingle, boundFunctionLabels(),
+                                  "btnBookHomeSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeDouble, boundFunctionLabels(),
+                                  "btnBookHomeDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeHold, boundFunctionLabels(),
+                                  "btnBookHomeHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftSingle, boundFunctionLabels(),
+                                  "btnUiLeftSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftDouble, boundFunctionLabels(),
+                                  "btnUiLeftDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftHold, boundFunctionLabels(),
+                                  "btnUiLeftHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightSingle, boundFunctionLabels(),
+                                  "btnUiRightSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightDouble, boundFunctionLabels(),
+                                  "btnUiRightDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightHold, boundFunctionLabels(),
+                                  "btnUiRightHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeSingle, boundFunctionLabels(),
+                                  "btnUiHomeSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeDouble, boundFunctionLabels(),
+                                  "btnUiHomeDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeHold, boundFunctionLabels(),
+                                  "btnUiHomeHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+
+    v.push_back(SettingInfo::Enum(
+        StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+        {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
+        "touchReaderControls", StrId::STR_CAT_CONTROLS));
 
     // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
     // line up (0 = Off, 1 = Tap), so a settings file carries over either way.

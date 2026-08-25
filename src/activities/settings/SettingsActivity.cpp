@@ -10,6 +10,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "ButtonBindingsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "CleanStorageActivity.h"
 #include "ClearCacheActivity.h"
@@ -128,6 +129,9 @@ void SettingsActivity::rebuildSettingsList() {
       if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
+      // The per-button bindings live in the Buttons screen; they stay in the shared
+      // list only so they persist and reach the web settings API.
+      if (setting.inButtons) continue;
       if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
           SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
         continue;
@@ -147,11 +151,10 @@ void SettingsActivity::rebuildSettingsList() {
   // Append ACTION items
   controlsSettings.insert(controlsSettings.begin(),
                           SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  controlsSettings.insert(controlsSettings.begin(), SettingInfo::Action(StrId::STR_BUTTONS, SettingAction::Buttons));
   // Pop-up Items only exists to serve a binding set to Menu Pop-up, so it is offered
   // only while at least one of the three bindings actually opens one.
-  if (SETTINGS.doubleClickPowerFunction == CrossPointSettings::LP_MENU_POPUP ||
-      SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_POPUP ||
-      SETTINGS.menuHoldFunction == CrossPointSettings::LP_MENU_POPUP) {
+  if (SETTINGS.anyBindingOpensPopup()) {
     controlsSettings.push_back(SettingInfo::Action(StrId::STR_POPUP_ITEMS, SettingAction::PopupItems));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
@@ -177,23 +180,22 @@ void SettingsActivity::rebuildSettingsList() {
   // Frontlight leads: brightness and warmth are reached for daily, the rest of this
   // category once in a while. Then the screen itself, then the two sleep-screen groups,
   // which are set up once and revisited only when the wallpapers change.
-  applyGroups(displaySettings,
-              {
-                  // Absent on a board with no frontlight, and applyGroups draws no
-                  // heading for a group whose rows are all missing.
-                  {StrId::STR_GRP_FRONTLIGHT,
-                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
-                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
-                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
-                  {StrId::STR_GRP_SLEEP_SCREEN,
-                   {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_WAKE_STRAIGHT_TO_BOOK,
-                    StrId::STR_SLEEP_FOOTER_TEXT}},
-                  {StrId::STR_GRP_WALLPAPER,
-                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
-                    StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
-                    StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
-                  {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
-              });
+  applyGroups(displaySettings, {
+                                   // Absent on a board with no frontlight, and applyGroups draws no
+                                   // heading for a group whose rows are all missing.
+                                   {StrId::STR_GRP_FRONTLIGHT,
+                                    {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
+                                     StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+                                   {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
+                                   {StrId::STR_GRP_SLEEP_SCREEN,
+                                    {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT,
+                                     StrId::STR_WAKE_STRAIGHT_TO_BOOK, StrId::STR_SLEEP_FOOTER_TEXT}},
+                                   {StrId::STR_GRP_WALLPAPER,
+                                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
+                                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
+                                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
+                                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
+                               });
 
   applyGroups(
       readerSettings,
@@ -432,8 +434,8 @@ void SettingsActivity::toggleCurrentSetting() {
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
     valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
-                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr), setting.nameId,
-                  [this, valuePtr](const int chosen) {
+                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr),
+                  setting.nameId, [this, valuePtr](const int chosen) {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
                     applyFrontlightSetting(valuePtr);
                     SETTINGS.saveToFile();
@@ -483,6 +485,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::Buttons:
+        startActivityForResult(std::make_unique<ButtonBindingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::PopupItems:
         startActivityForResult(std::make_unique<PopupItemsActivity>(renderer, mappedInput), resultHandler);

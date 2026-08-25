@@ -31,6 +31,7 @@ enum class SettingAction {
   InstalledFonts,
   TextSettings,
   PopupItems,
+  Buttons,
   ShareCredentials,
 };
 
@@ -57,6 +58,10 @@ struct SettingInfo {
   bool isHeader = false;
   bool obfuscated = false;      // Save/load via base64 obfuscation (passwords)
   bool inTextSettings = false;  // Surfaced in the Text Settings screen; hidden from the flat Reader list
+  // Surfaced in the Buttons screen; hidden from the flat Controls list. The eighteen
+  // per-button bindings stay in the shared list so they persist and reach the web API,
+  // but eighteen rows in Controls would bury every other control there.
+  bool inButtons = false;
 
   // Enum values that are no longer offered but must keep their slot. ENUM settings persist
   // by index, so a retired option cannot simply be deleted from enumValues without
@@ -86,6 +91,11 @@ struct SettingInfo {
 
   SettingInfo& withTextSettings() {
     inTextSettings = true;
+    return *this;
+  }
+
+  SettingInfo& withButtons() {
+    inButtons = true;
     return *this;
   }
 

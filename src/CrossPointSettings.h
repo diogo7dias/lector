@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "activities/reader/ReaderPrefs.h"
+#include "util/BoundMenuActions.h"
 #include "util/MarginLink.h"
 
 // The whole status bar configuration as one value, so it can be swapped in and out
@@ -243,62 +244,35 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // used to force on everyone who picked it (one setting, two behaviours).
   enum WAKE_HOLD { WAKE_HOLD_NORMAL = 0, WAKE_HOLD_FAST = 1, WAKE_HOLD_COUNT };
 
-  // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
-  // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
-  // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
-  // stored indices shift and existing saves are silently misinterpreted.
-  enum LONG_PRESS_MENU_FUNCTION {
-    LP_MENU_KOSYNC = 0,
-    LP_MENU_DISABLED = 1,
-    LP_MENU_BOOKMARK = 2,
-    LP_MENU_DICTIONARY = 3,
-    LP_MENU_GRAB_QUOTE = 4,
-    // Appended for the shared binding list (0.20). Order is frozen: the values
-    // below double as bit positions in popupItems, so reordering them would both
-    // shift saved bindings and silently re-tick a different set of pop-up rows.
-    // RETIRED 2026-08-11 (Diogo): both left the offered list. The values stay so every
-    // binding value after them keeps its meaning, they are listed in withHiddenEnumValues()
-    // in SettingsList.h, and fromJson folds a binding still set to one of them to Disabled.
-    // LP_MENU_TEXT_SETTINGS below was retired the same way on 2026-08-22: the global text
-    // settings belong in Settings > Reader, and having them a button press from the page
-    // made it easy to edit every book while meaning to edit this one (Reader Settings).
-    LP_MENU_SELECT_CHAPTER = 5,
-    LP_MENU_GO_TO_PERCENT = 6,
-    LP_MENU_GO_TO_PARAGRAPH = 7,
-    LP_MENU_FOOTNOTES = 8,
-    LP_MENU_TEXT_SETTINGS = 9,
-    LP_MENU_READER_SETTINGS = 10,
-    LP_MENU_TOGGLE_STATUS_BAR = 11,
-    // Not an action: opens the pop-up built from popupItems. Always last, and it is
-    // the only value runBoundMenuFunction() refuses to run, so a pop-up cannot list
-    // itself and recurse.
-    LP_MENU_POPUP = 12,
-    // Holds the wallpaper the lock screen last showed, instead of picking a new one at
-    // the next sleep. Appended after LP_MENU_POPUP, so Menu Pop-up is no longer the last
-    // value even though it is still the only non-action one.
-    LP_MENU_WALLPAPER_HOLD = 13,
-    // The list of saved bookmarks, next to the toggle that adds one.
-    LP_MENU_BOOKMARKS = 14,
-    // The saved-quotes viewer, next to Grab Quote that writes to it.
-    LP_MENU_VIEW_QUOTES = 15,
-    // Sends this book's own file to another reader over ESP-NOW. Bindable to a
-    // button, but deliberately absent from POPUP_ITEM_FUNCTIONS below: popupItems
-    // is a 16-bit mask keyed by these values, and bit 15 is already the last one
-    // there is. Listing it in the pop-up means widening that mask and migrating
-    // every stored value.
-    LP_MENU_NEARBY_SEND_BOOK = 16,
-    // Appended for the per-button bindings (Buttons settings screen). The first four
-    // are what a button does rather than what a menu offers, so they are absent from
-    // POPUP_ITEM_FUNCTIONS: ticking "Next page" into the reader's pop-up would be a
-    // row that turns the page the pop-up is covering.
-    LP_MENU_PAGE_PREV = 17,
-    LP_MENU_PAGE_NEXT = 18,
-    LP_MENU_GO_HOME = 19,
-    LP_MENU_BACK = 20,
-    LP_MENU_LIGHT_PANEL = 21,
-    LP_MENU_SLEEP = 22,
-    LONG_PRESS_MENU_FUNCTION_COUNT
-  };
+  // The bindable actions, defined in util/BoundMenuActions.h and re-exported here so
+  // every CrossPointSettings::LP_MENU_* call site keeps working. The list itself lives
+  // apart from this header because its rules are pure and host-tested; see that file
+  // for the ordering constraints, the retired values and what each action means.
+  using LONG_PRESS_MENU_FUNCTION = bound_action::LONG_PRESS_MENU_FUNCTION;
+  static constexpr auto LP_MENU_KOSYNC = bound_action::LP_MENU_KOSYNC;
+  static constexpr auto LP_MENU_DISABLED = bound_action::LP_MENU_DISABLED;
+  static constexpr auto LP_MENU_BOOKMARK = bound_action::LP_MENU_BOOKMARK;
+  static constexpr auto LP_MENU_DICTIONARY = bound_action::LP_MENU_DICTIONARY;
+  static constexpr auto LP_MENU_GRAB_QUOTE = bound_action::LP_MENU_GRAB_QUOTE;
+  static constexpr auto LP_MENU_SELECT_CHAPTER = bound_action::LP_MENU_SELECT_CHAPTER;
+  static constexpr auto LP_MENU_GO_TO_PERCENT = bound_action::LP_MENU_GO_TO_PERCENT;
+  static constexpr auto LP_MENU_GO_TO_PARAGRAPH = bound_action::LP_MENU_GO_TO_PARAGRAPH;
+  static constexpr auto LP_MENU_FOOTNOTES = bound_action::LP_MENU_FOOTNOTES;
+  static constexpr auto LP_MENU_TEXT_SETTINGS = bound_action::LP_MENU_TEXT_SETTINGS;
+  static constexpr auto LP_MENU_READER_SETTINGS = bound_action::LP_MENU_READER_SETTINGS;
+  static constexpr auto LP_MENU_TOGGLE_STATUS_BAR = bound_action::LP_MENU_TOGGLE_STATUS_BAR;
+  static constexpr auto LP_MENU_POPUP = bound_action::LP_MENU_POPUP;
+  static constexpr auto LP_MENU_WALLPAPER_HOLD = bound_action::LP_MENU_WALLPAPER_HOLD;
+  static constexpr auto LP_MENU_BOOKMARKS = bound_action::LP_MENU_BOOKMARKS;
+  static constexpr auto LP_MENU_VIEW_QUOTES = bound_action::LP_MENU_VIEW_QUOTES;
+  static constexpr auto LP_MENU_NEARBY_SEND_BOOK = bound_action::LP_MENU_NEARBY_SEND_BOOK;
+  static constexpr auto LP_MENU_PAGE_PREV = bound_action::LP_MENU_PAGE_PREV;
+  static constexpr auto LP_MENU_PAGE_NEXT = bound_action::LP_MENU_PAGE_NEXT;
+  static constexpr auto LP_MENU_GO_HOME = bound_action::LP_MENU_GO_HOME;
+  static constexpr auto LP_MENU_BACK = bound_action::LP_MENU_BACK;
+  static constexpr auto LP_MENU_LIGHT_PANEL = bound_action::LP_MENU_LIGHT_PANEL;
+  static constexpr auto LP_MENU_SLEEP = bound_action::LP_MENU_SLEEP;
+  static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
   // Right are the two side keys; Home is the capacitive key under the panel on the
@@ -838,6 +812,25 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   bool wakeHoldIsFast() const { return wakeHold == WAKE_HOLD_FAST; }
   // True when a function is bound to the power double click (see doubleClickPowerFunction).
   bool powerDoubleClickBound() const { return doubleClickPowerFunction != LP_MENU_DISABLED; }
+
+  // True when anything at all opens the reader pop-up: the three legacy bindings or any
+  // of the per-button ones. Settings offers the Pop-up Items tick screen only then, so a
+  // screen that exists to fill a pop-up is not shown to someone who has no pop-up.
+  bool anyBindingOpensPopup() const {
+    if (doubleClickPowerFunction == LP_MENU_POPUP || longPressMenuFunction == LP_MENU_POPUP ||
+        menuHoldFunction == LP_MENU_POPUP) {
+      return true;
+    }
+    for (const bool inBook : {false, true}) {
+      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
+        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
+          const uint8_t* binding = const_cast<CrossPointSettings*>(this)->buttonBinding(inBook, button, gesture);
+          if (binding != nullptr && *binding == LP_MENU_POPUP) return true;
+        }
+      }
+    }
+    return false;
+  }
   // Whether a single power press sleeps the device. Every consumer of the Sleep value of
   // shortPwrBtn must ask this rather than comparing the setting itself, so the double-click
   // override is applied in one place: the wake-hold verification, the sleep threshold, and
