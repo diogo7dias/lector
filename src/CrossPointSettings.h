@@ -178,8 +178,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName).
-  // Vollkorn is the sole built-in reading family; more fonts are added from the SD card.
-  enum FONT_FAMILY { VOLLKORN = 0, FONT_FAMILY_COUNT };
+  // ChareInk is the sole built-in reading family; more fonts are added from the SD card.
+  enum FONT_FAMILY { CHAREINK = 0, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Reader font size is a point size, not an enum slot — see fontPointSize.
@@ -388,22 +388,26 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Master on/off. NEVER read this field to decide whether to draw or reserve the bar —
   // call statusBarEnabled() instead, so a book that turned the bar off for itself is
   // honoured. This field stays the global default and the value written to settings.json.
+  // Status bar defaults. Chapter title top-left on its own line, the page in that chapter
+  // bottom-left, the two chapter readouts bottom-right, the two session counters
+  // bottom-centre, and a chapter progress bar along the bottom edge. Battery, clock, book
+  // percentage and the book bar are off: the chapter is what a page is read against.
   uint8_t sbEnabled = 1;
-  uint8_t sbBatteryPos = SB_ANCHOR_BL;        // battery anchor
-  uint8_t sbClockPos = SB_ANCHOR_OFF;         // clock anchor (X3 RTC only)
-  uint8_t sbTitlePos = SB_ANCHOR_BC;          // title anchor
-  uint8_t sbTitleSource = SB_TITLE_CHAPTER;   // book or chapter title
-  uint8_t sbTitleTruncate = 0;                // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
-  uint8_t sbPagePos = SB_ANCHOR_BR;           // page-in-chapter anchor
-  uint8_t sbPageFormat = SB_PAGE_FRACTION;    // "3/40" vs "8 left"
-  uint8_t sbBookPctPos = SB_ANCHOR_BR;        // book % (B:NN%) anchor
-  uint8_t sbChapterPctPos = SB_ANCHOR_OFF;    // chapter % (C:NN%) anchor
-  uint8_t sbChapterNumPos = SB_ANCHOR_OFF;    // chapter #/total (Ch N/M) anchor
-  uint8_t sbSessionPagesPos = SB_ANCHOR_OFF;  // pages turned this sitting (+N) anchor
-  uint8_t sbParaPagesPos = SB_ANCHOR_OFF;     // pages left in this paragraph (>P.N) anchor
-  uint8_t sbBookBar = SB_EDGE_OFF;            // book progress bar edge (Off/Top/Bottom)
-  uint8_t sbChapterBar = SB_EDGE_OFF;         // chapter progress bar edge
-  uint8_t sbBarThickness = SB_BAR_MEDIUM;     // progress bar thickness slim/med/fat
+  uint8_t sbBatteryPos = SB_ANCHOR_OFF;      // battery anchor
+  uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
+  uint8_t sbTitlePos = SB_ANCHOR_TL;         // title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
+  uint8_t sbTitleTruncate = 0;               // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
+  uint8_t sbPagePos = SB_ANCHOR_BL;          // page-in-chapter anchor
+  uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
+  uint8_t sbBookPctPos = SB_ANCHOR_OFF;      // book % (B:NN%) anchor
+  uint8_t sbChapterPctPos = SB_ANCHOR_BR;    // chapter % (C:NN%) anchor
+  uint8_t sbChapterNumPos = SB_ANCHOR_BR;    // chapter #/total (Ch N/M) anchor
+  uint8_t sbSessionPagesPos = SB_ANCHOR_BC;  // pages turned this sitting (+N) anchor
+  uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
+  uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
+  uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
+  uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
   // Lift the progress bars off the screen edge: one small margin applied to the
   // outer edge and to both ends, so the bar reads as a floating pill instead of
   // a strip welded to the frame. Position and thickness are unaffected.
@@ -464,7 +468,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
-  uint8_t fontFamily = VOLLKORN;
+  uint8_t fontFamily = CHAREINK;
   // Point size of the reader font (upstream #2720 replaced the SMALL/MEDIUM/LARGE
   // enum with a real point size). Only sizes the active family actually ships are
   // selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
@@ -479,7 +483,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // float is part of the cache key, so a change rebuilds the section cache.
   static constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
   static constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
-  uint8_t lineSpacingPercent = 100;
+  uint8_t lineSpacingPercent = 95;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
@@ -496,9 +500,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SCREEN_MARGIN_MIN = 0;
   static constexpr uint8_t SCREEN_MARGIN_MAX = 100;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
-  uint8_t screenMargin = 20;
-  uint8_t screenMarginTop = 20;
-  uint8_t screenMarginBottom = 20;
+  uint8_t screenMargin = 17;
+  uint8_t screenMarginTop = 17;
+  uint8_t screenMarginBottom = 17;
   // margin_link::Mode as a number: 0 = Separate, 1 = top and bottom move together,
   // 2 = All Sides (every side holds the horizontal value). See util/MarginLink.h.
   static constexpr uint8_t MARGIN_LINK_MODE_COUNT = margin_link::MODE_COUNT;
@@ -538,7 +542,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
   // Default to a real indent rather than trusting the publisher's CSS, which on many
   // EPUBs is absent entirely.
-  static constexpr uint8_t DEFAULT_FIRST_LINE_INDENT_PERCENT = reader_defaults::FIRST_LINE_INDENT_PERCENT;
+  // Deliberately not reader_defaults::FIRST_LINE_INDENT_PERCENT. That constant re-seeds
+  // sidecars written before v9, which must go on looking the way they did; this is what a
+  // new install starts from.
+  static constexpr uint8_t DEFAULT_FIRST_LINE_INDENT_PERCENT = 23;
   uint8_t firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
   uint8_t firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
   // OPDS download destination folder ("" = SD root). Global; edited from the
@@ -692,14 +699,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // per-book ReaderPrefs seed from; the EPUB reader then uses its per-book copy, the
   // TXT/XTC readers use these global values directly.
   uint8_t paperbackLookBody = 1;
-  uint8_t paperbackLookStatus = 1;
+  uint8_t paperbackLookStatus = 0;
   // Default paragraph numbering for books that have no per-book override yet. A book
   // already carrying its own reader_override.bin keeps whatever it was set to in the
   // in-book menu; this only seeds the next book opened fresh.
   uint8_t paragraphNumbering = PARA_NUM_CHAPTER;
   // Default size for those numbers. Double is the default: at the native cell the digits
   // are 8px tall, which reads as too small on the device.
-  uint8_t paragraphNumberSize = PARA_NUM_SIZE_DOUBLE;
+  uint8_t paragraphNumberSize = PARA_NUM_SIZE_SMALL;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // TXT reader font, kept apart from the EPUB reader font above. A plain text file

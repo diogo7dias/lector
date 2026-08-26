@@ -78,7 +78,7 @@ struct ReaderPrefs {
   }
 
   // Font (Family/Size tabs)
-  uint8_t fontFamily = 0;      // CrossPointSettings::VOLLKORN
+  uint8_t fontFamily = 0;      // CrossPointSettings::CHAREINK
   uint8_t fontPointSize = 14;  // CrossPointSettings::DEFAULT_FONT_POINT_SIZE
   // Layout tab
   uint8_t lineSpacingPercent = 100;  // % of natural line height (restored granular)
@@ -131,15 +131,17 @@ struct ReaderPrefs {
   uint8_t statusBarEnabled = 1;
 
   // The whole status bar layout, per book, seeded from the global settings the first
-  // time this book gets a sidecar. Defaults below mirror CrossPointSettings so a
-  // record written before v11 falls back to the same layout the firmware ships with,
-  // rather than to a blank bar.
+  // time this book gets a sidecar. The defaults below are the layout the firmware
+  // shipped through 0.28 and they stay frozen there: a record written before v11 has no
+  // stored layout, and a book read under that layout must go on looking the way it did
+  // rather than jump to whatever the current firmware defaults to. New books are seeded
+  // from CrossPointSettings and never reach these values.
   //
   // APPENDED LAST as one block. See the note above paragraphNumberSize.
   uint8_t sbBatteryPos = 4;       // CrossPointSettings::SB_ANCHOR_BL
   uint8_t sbClockPos = 0;         // SB_ANCHOR_OFF
   uint8_t sbTitlePos = 5;         // SB_ANCHOR_BC
-  uint8_t sbTitleSource = 0;      // SB_TITLE_CHAPTER
+  uint8_t sbTitleSource = 0;      // SB_TITLE_BOOK
   uint8_t sbTitleTruncate = 0;    // greedy, no ellipsis
   uint8_t sbPagePos = 6;          // SB_ANCHOR_BR
   uint8_t sbPageFormat = 0;       // SB_PAGE_FRACTION

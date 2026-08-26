@@ -104,7 +104,13 @@ int clusterWidth(const BarLayout& layout, int anchor, int sepW);
 // columns room, else is hidden. `destBandReserved` MUST be false when the
 // opposite band has no native text (its height is not reserved) — then bumped
 // items are hidden rather than drawn into unreserved space.
-void reflowTitle(BarLayout& layout, int titleAnchor, bool titleTruncate, int bandWidth, int sepW,
+//
+// Items sharing the title's OWN anchor are moved out the same way, but only when the
+// combined cluster is wider than the band. Left in place they would be drawn as one
+// centred cluster with no clipping, which is how a long chapter title beside a page count
+// used to run off both edges. `titleSegIndex` says which segment of that anchor is the
+// title; it is rarely 0, because battery and clock are placed before it.
+void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool titleTruncate, int bandWidth, int sepW,
                  bool destBandReserved);
 
 }  // namespace statusbar

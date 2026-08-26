@@ -83,7 +83,7 @@ void TextSettingsActivity::onEnter() {
 
   fonts_.clear();
   fonts_.reserve(CrossPointSettings::BUILTIN_FONT_COUNT + (registry_ ? registry_->getFamilyCount() : 0));
-  fonts_.push_back({I18N.get(StrId::STR_VOLLKORN), true, static_cast<uint8_t>(CrossPointSettings::VOLLKORN)});
+  fonts_.push_back({I18N.get(StrId::STR_CHAREINK), true, static_cast<uint8_t>(CrossPointSettings::CHAREINK)});
   if (registry_) {
     const auto& families = registry_->getFamilies();
     for (int i = 0; i < static_cast<int>(families.size()); i++) {
@@ -739,8 +739,7 @@ void TextSettingsActivity::render(RenderLock&&) {
   // row rects come from the draw that just ran (row_hit), so the track cannot land
   // anywhere but on the row the list actually painted.
   sliderBar_ = {};
-  if (editing_ && selectedIndex_ < static_cast<int>(rows.size()) &&
-      kindOf(rows[selectedIndex_]) == RowKind::Number) {
+  if (editing_ && selectedIndex_ < static_cast<int>(rows.size()) && kindOf(rows[selectedIndex_]) == RowKind::Number) {
     const auto& painted = row_hit::lastRows();
     for (int i = 0; i < painted.count; ++i) {
       const auto& entry = painted.entries[i];

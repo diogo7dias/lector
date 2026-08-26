@@ -329,7 +329,7 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
         // Draw the outline by hand and let each slot own only its right-hand divider;
         // the leftmost slot draws the outer left edge, and the rightmost one's divider
         // is the outer right edge.
-        renderer.fillRect(slot.x, slot.y, slot.width, 1);                   // top
+        renderer.fillRect(slot.x, slot.y, slot.width, 1);                    // top
         renderer.fillRect(slot.x, slot.y + slot.height - 1, slot.width, 1);  // bottom
         renderer.fillRect(slot.x + slot.width - 1, slot.y, 1, slot.height);  // divider / right edge
         if (i == 0) renderer.fillRect(slot.x, slot.y, 1, slot.height);       // outer left edge
@@ -582,8 +582,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
         auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding,
-                          textY + subtitleOffset, subtitle.c_str(), drawnOnPaper(i));
+        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, textY + subtitleOffset,
+                          subtitle.c_str(), drawnOnPaper(i));
       }
     }
 
@@ -1392,6 +1392,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   using statusbar::Seg;
   statusbar::BarLayout L{};
   int titleAnchorIdx = -1;  // set when the title item is actually placed
+  // Which segment of that anchor the title is. Battery and clock are placed before it, so
+  // it is only 0 when neither of them shares the title's anchor.
+  int titleSegIdx = -1;
   auto push = [&](uint8_t anchor, bool chapterOnly, const char* text, int width, bool isBattery) {
     if (anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
     if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
@@ -1433,8 +1436,10 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
     if (title[0] != '\0') {
       push(SETTINGS.sbTitlePos, false, title, renderer.getTextWidth(f, title), false);
       const int idx = static_cast<int>(SETTINGS.sbTitlePos) - 1;
-      if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && idx >= 0 && idx < statusbar::kAnchorCount)
+      if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && idx >= 0 && idx < statusbar::kAnchorCount) {
         titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
+        titleSegIdx = L.counts[idx] - 1;
+      }
     }
   }
   // Page in chapter ("3/40" or "8 left")
@@ -1480,7 +1485,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   if (titleAnchorIdx >= 0 && SETTINGS.sbTitleTruncate == 0) {
     const int destBase = (titleAnchorIdx < 3) ? 3 : 0;
     const bool destReserved = L.counts[destBase] > 0 || L.counts[destBase + 1] > 0 || L.counts[destBase + 2] > 0;
-    statusbar::reflowTitle(L, titleAnchorIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
+    statusbar::reflowTitle(L, titleAnchorIdx, titleSegIdx, /*titleTruncate=*/false, bandWidth, sepW, destReserved);
   }
 
   auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };

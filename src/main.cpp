@@ -70,35 +70,17 @@ static unsigned long allowSleepAt = 0;
 static bool wakePowerReleasePending = false;
 
 // Fonts
-// Vollkorn is lector's single built-in reading family (serif). Noto Serif / Noto Sans
-// were dropped as reading fonts; users add more via SD-card fonts. Noto Sans survives
-// only as the 8pt small font (below) and Ubuntu as the UI font.
-EpdFont vollkorn14RegularFont(&vollkorn_14_regular);
-EpdFont vollkorn14BoldFont(&vollkorn_14_bold);
-EpdFont vollkorn14ItalicFont(&vollkorn_14_italic);
-EpdFont vollkorn14BoldItalicFont(&vollkorn_14_bolditalic);
-EpdFontFamily vollkorn14FontFamily(&vollkorn14RegularFont, &vollkorn14BoldFont, &vollkorn14ItalicFont,
-                                   &vollkorn14BoldItalicFont);
-#ifndef OMIT_FONTS
-EpdFont vollkorn12RegularFont(&vollkorn_12_regular);
-EpdFont vollkorn12BoldFont(&vollkorn_12_bold);
-EpdFont vollkorn12ItalicFont(&vollkorn_12_italic);
-EpdFont vollkorn12BoldItalicFont(&vollkorn_12_bolditalic);
-EpdFontFamily vollkorn12FontFamily(&vollkorn12RegularFont, &vollkorn12BoldFont, &vollkorn12ItalicFont,
-                                   &vollkorn12BoldItalicFont);
-EpdFont vollkorn16RegularFont(&vollkorn_16_regular);
-EpdFont vollkorn16BoldFont(&vollkorn_16_bold);
-EpdFont vollkorn16ItalicFont(&vollkorn_16_italic);
-EpdFont vollkorn16BoldItalicFont(&vollkorn_16_bolditalic);
-EpdFontFamily vollkorn16FontFamily(&vollkorn16RegularFont, &vollkorn16BoldFont, &vollkorn16ItalicFont,
-                                   &vollkorn16BoldItalicFont);
-EpdFont vollkorn18RegularFont(&vollkorn_18_regular);
-EpdFont vollkorn18BoldFont(&vollkorn_18_bold);
-EpdFont vollkorn18ItalicFont(&vollkorn_18_italic);
-EpdFont vollkorn18BoldItalicFont(&vollkorn_18_bolditalic);
-EpdFontFamily vollkorn18FontFamily(&vollkorn18RegularFont, &vollkorn18BoldFont, &vollkorn18ItalicFont,
-                                   &vollkorn18BoldItalicFont);
-#endif  // OMIT_FONTS
+// ChareInk is lector's single built-in reading family (an e-ink tuned Charis derivative).
+// It is compiled in at 14 pt only: its glyph set is far larger than the Vollkorn it
+// replaced, and four sizes would not fit the app partition. Every other size, and every
+// other family, is installed from the SD card. Noto Sans survives only as the 8 pt small
+// font (below) and Ubuntu as the UI font.
+EpdFont chareink14RegularFont(&chareink_14_regular);
+EpdFont chareink14BoldFont(&chareink_14_bold);
+EpdFont chareink14ItalicFont(&chareink_14_italic);
+EpdFont chareink14BoldItalicFont(&chareink_14_bolditalic);
+EpdFontFamily chareink14FontFamily(&chareink14RegularFont, &chareink14BoldFont, &chareink14ItalicFont,
+                                   &chareink14BoldItalicFont);
 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
@@ -420,12 +402,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(VOLLKORN_14_FONT_ID, vollkorn14FontFamily);
-#ifndef OMIT_FONTS
-  renderer.insertFont(VOLLKORN_12_FONT_ID, vollkorn12FontFamily);
-  renderer.insertFont(VOLLKORN_16_FONT_ID, vollkorn16FontFamily);
-  renderer.insertFont(VOLLKORN_18_FONT_ID, vollkorn18FontFamily);
-#endif  // OMIT_FONTS
+  renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
   // Permanent Ubuntu ids (full Latin/Arabic/Hebrew/Vietnamese coverage) for the
   // language-select native-name list and the Arabic/Hebrew UI.
   renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);

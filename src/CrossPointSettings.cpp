@@ -367,7 +367,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
   sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
   if (storedFontFamily == LEGACY_OPENDYSLEXIC && sdFontFamilyName[0] == '\0') {
-    fontFamily = VOLLKORN;
+    fontFamily = CHAREINK;
     strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
     sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
     needsResave = true;
@@ -515,20 +515,12 @@ int CrossPointSettings::resolveReaderFontId(const uint8_t fontFamily, const uint
   // in the page render loop) so rendering is correct even before it has run.
   const uint8_t pt =
       snapToNearestPointSize(BUILTIN_READER_POINT_SIZES, std::size(BUILTIN_READER_POINT_SIZES), pointSize);
-  switch (fontFamily) {
-    case VOLLKORN:
+  // One built-in size, so the snap above can only land on it. The switch stays a switch so
+  // adding a second compiled-in size is a case rather than a rewrite.
+  switch (pt) {
+    case 14:
     default:
-      switch (pt) {
-        case 12:
-          return VOLLKORN_12_FONT_ID;
-        case 16:
-          return VOLLKORN_16_FONT_ID;
-        case 18:
-          return VOLLKORN_18_FONT_ID;
-        case 14:
-        default:
-          return VOLLKORN_14_FONT_ID;
-      }
+      return CHAREINK_14_FONT_ID;
   }
 }
 
