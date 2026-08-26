@@ -62,6 +62,7 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   const int tapped = tapCounts ? tappedHintHardware() : -1;
   const bool heldQuery = (fn == &HalGPIO::isPressed);
   const bool releaseQuery = (fn == &HalGPIO::wasReleased);
+  const bool pressQuery = (fn == &HalGPIO::wasPressed);
   const auto press = [&](const uint8_t hw) {
     // Router gating, before the hardware is read: every logical role that maps to this
     // key inherits it, which is the same reason the hint tap below lives here.
@@ -69,6 +70,7 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
     if (slot >= 0) {
       const SideKeyOverride& override = sideKeyOverrides[slot];
       if (releaseQuery && override.injectRelease) return true;
+      if (pressQuery && override.injectPress) return true;
       if (heldQuery ? override.suppressHeld : override.suppressEdges) return false;
     }
     if ((gpio.*fn)(hw)) return true;
@@ -399,10 +401,10 @@ int MappedInputManager::sideKeySlot(const uint8_t hardware) {
 }
 
 void MappedInputManager::setSideKeyOverride(const uint8_t hardware, const bool suppressEdges, const bool suppressHeld,
-                                            const bool injectRelease) {
+                                            const bool injectPress, const bool injectRelease) {
   const int slot = sideKeySlot(hardware);
   if (slot < 0) return;
-  sideKeyOverrides[slot] = SideKeyOverride{suppressEdges, suppressHeld, injectRelease};
+  sideKeyOverrides[slot] = SideKeyOverride{suppressEdges, suppressHeld, injectPress, injectRelease};
 }
 
 void MappedInputManager::clearBindingOverrides() {

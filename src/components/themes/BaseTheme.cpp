@@ -140,33 +140,34 @@ int BaseTheme::batteryIconTop(const GfxRenderer& renderer, const Rect& rect, con
   return rect.y + std::max(0, (renderer.getLineHeight(fontId) - rect.height) / 2);
 }
 
-void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight) {
+void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,
+                                   const bool ink) {
   // Top line
-  renderer.drawLine(x + 1, y, x + battWidth - 3, y);
+  renderer.drawLine(x + 1, y, x + battWidth - 3, y, ink);
   // Bottom line
-  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1);
+  renderer.drawLine(x + 1, y + rectHeight - 1, x + battWidth - 3, y + rectHeight - 1, ink);
   // Left line
-  renderer.drawLine(x, y + 1, x, y + rectHeight - 2);
+  renderer.drawLine(x, y + 1, x, y + rectHeight - 2, ink);
   // Battery end
-  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2);
-  renderer.drawPixel(x + battWidth - 1, y + 3);
-  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4);
-  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5);
+  renderer.drawLine(x + battWidth - 2, y + 1, x + battWidth - 2, y + rectHeight - 2, ink);
+  renderer.drawPixel(x + battWidth - 1, y + 3, ink);
+  renderer.drawPixel(x + battWidth - 1, y + rectHeight - 4, ink);
+  renderer.drawLine(x + battWidth - 0, y + 4, x + battWidth - 0, y + rectHeight - 5, ink);
 }
 
-void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY) {
-  // Draw lightning bolt (white/inverted on black fill for visibility)
-  renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, false);
-  renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, false);
-  renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, false);
-  renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, false);
-  renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, false);
-  renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, false);
-  renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, false);
-  renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, false);
+void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY, const bool ink) {
+  // Draw lightning bolt (knocked out of the charge fill, so it takes the fill's opposite)
+  renderer.drawLine(boltX + 4, boltY + 0, boltX + 5, boltY + 0, ink);
+  renderer.drawLine(boltX + 3, boltY + 1, boltX + 4, boltY + 1, ink);
+  renderer.drawLine(boltX + 2, boltY + 2, boltX + 5, boltY + 2, ink);
+  renderer.drawLine(boltX + 3, boltY + 3, boltX + 4, boltY + 3, ink);
+  renderer.drawLine(boltX + 2, boltY + 4, boltX + 3, boltY + 4, ink);
+  renderer.drawLine(boltX + 1, boltY + 5, boltX + 4, boltY + 5, ink);
+  renderer.drawLine(boltX + 2, boltY + 6, boltX + 3, boltY + 6, ink);
+  renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, ink);
 }
 
-void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const {
+void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage, const bool ink) const {
   const bool charging = gpio.isUsbConnected();
 
   const int maxFillWidth = rect.width - 5;
@@ -186,10 +187,10 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
     filledWidth = std::min(minFillForBolt, maxFillWidth);
   }
 
-  renderer.fillRect(rect.x + 2, rect.y + 2, filledWidth, fillHeight);
+  renderer.fillRect(rect.x + 2, rect.y + 2, filledWidth, fillHeight, ink);
 
   if (charging) {
-    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2);
+    drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2, !ink);
   }
 }
 
@@ -211,7 +212,8 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   fillBatteryIcon(renderer, iconRect, percentage);
 }
 
-void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
+void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage,
+                                const bool onBlack) const {
   // Right aligned: percentage on left, icon on right (UI headers)
   // rect.x is already positioned for the icon (drawHeader calculated it)
   const uint16_t percentage = powerManager.getBatteryPercentage();
@@ -220,12 +222,13 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
     const int textWidth = renderer.getTextWidth(batteryPercentFontId, percentageText.c_str());
-    renderer.drawText(batteryPercentFontId, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str());
+    renderer.drawText(batteryPercentFontId, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str(),
+                      /*black=*/!onBlack);
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
-  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
-  fillBatteryIcon(renderer, iconRect, percentage);
+  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height, /*ink=*/!onBlack);
+  fillBatteryIcon(renderer, iconRect, percentage, /*ink=*/!onBlack);
 }
 
 void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const size_t current,
@@ -502,10 +505,8 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   for (int i = windowStart; i < itemCount && i < windowStart + pageItems; i++) {
     const int itemY = rect.y + (i - windowStart) * rowHeight;
 
-    // Section heading: a filled plate hugging the label, brackets included, rather than a
-    // full-width band. A band the width of the row is the same shape as the selected row,
-    // so every screen would carry two black bars and the list would read as mostly ink.
-    // Sized to the text, it marks the heading without competing with the selection.
+    // Section heading: a full-width filled band with the label knocked out of it, the same
+    // shape the screen title band above the list has.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
       // Bracketed like the screen title above it, for the same reason: the UI font has
       // no bold face, so the brackets are what marks a line as a label rather than a row.
@@ -513,12 +514,10 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
       const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
       const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
       const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
-      // A little air on each side so the brackets are not flush against the plate edge,
-      // clamped to the row so a heading that fills the width cannot bleed past it.
-      const int platePad = std::max(2, renderer.getTextWidth(itemFontId, " "));
-      const int plateX = std::max(rect.x, headingX - platePad);
-      const int plateRight = std::min(rect.x + rect.width, headingX + headingW + platePad);
-      renderer.fillRect(plateX, itemY, plateRight - plateX, rowHeight, /*state=*/true);
+      // The plate spans the whole row, matching the inverted header band at the top of the
+      // screen: a heading is a band, a selected row is a band, and the cursor is what tells
+      // them apart. A plate sized to the text read as a stray highlight instead.
+      renderer.fillRect(rect.x, itemY, rect.width, rowHeight, /*state=*/true);
       renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
       continue;
     }
@@ -594,13 +593,21 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
-  // Hide last battery draw. Both the width and the height come from the cluster's own
-  // metrics: a hardcoded box was narrower than the percentage text in the taller UI
-  // font, and started below the text's tallest glyphs, so a partial redraw left
-  // fragments of the previous reading behind.
-  const int clusterWidth = batteryClusterWidth(renderer);
-  renderer.fillRect(rect.x + rect.width - clusterWidth, rect.y, clusterWidth,
-                    renderer.getLineHeight(batteryPercentFontId) + 10, false);
+  // A titled header is one solid black row, battery cluster included: the brackets alone
+  // read as just another line of text next to the rows under them. Filling the whole row
+  // also clears the last battery reading, which is why no separate knock-out box is left
+  // here — a partial clear used to leave fragments of the previous percentage behind.
+  const bool inverted = title != nullptr && title[0] != '\0';
+  if (inverted) {
+    renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+  } else {
+    // Untitled band (the home screen). Nothing to invert, so only the cluster is cleared.
+    // Both the width and the height come from the cluster's own metrics: a hardcoded box
+    // was narrower than the percentage text in the taller UI font.
+    const int clusterWidth = batteryClusterWidth(renderer);
+    renderer.fillRect(rect.x + rect.width - clusterWidth, rect.y, clusterWidth,
+                      renderer.getLineHeight(batteryPercentFontId) + 10, false);
+  }
 
   // The percentage is always drawn: the setting that used to hide it was removed, and its
   // default was "never hide", so this is the behaviour every existing device already had.
@@ -609,7 +616,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   const int batteryX = rect.x + rect.width - batteryRightPadding - BaseMetrics::values.batteryWidth;
   drawBatteryRight(renderer,
                    Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
-                   showBatteryPercentage);
+                   showBatteryPercentage, /*onBlack=*/inverted);
 
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
@@ -620,7 +627,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, decoratedTitle.c_str(),
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), false, EpdFontFamily::REGULAR);
   }
 
   if (subtitle) {

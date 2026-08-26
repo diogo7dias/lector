@@ -1320,8 +1320,17 @@ void loop() {
     const uint32_t now = millis();
     // Left is the upper side key, Right the lower one, matching the hint labels.
     constexpr uint8_t SIDE_HARDWARE[] = {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN};
+    // A replayed side-key gesture is two passes long: the press on the pass the router
+    // rules it, the release on the pass after. Every side-key consumer in the firmware
+    // steps on the press, a few also end a repeat run on the release, and no physical key
+    // ever delivers both in one frame — so neither may be dropped and they may not share
+    // a pass. This remembers that a release is owed.
+    static bool replayReleasePending[2] = {false, false};
     for (uint8_t key = 0; key < 2; ++key) {
-      if (!bindingRouter.intercepts(key)) continue;
+      if (!bindingRouter.intercepts(key)) {
+        replayReleasePending[key] = false;
+        continue;
+      }
       const uint8_t hardware = SIDE_HARDWARE[key];
       // The RAW edges, deliberately: the override below is what rewrites the mapped ones,
       // and feeding the router its own output would latch it.
@@ -1335,8 +1344,11 @@ void loop() {
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       // Edges stay hidden for as long as this key is intercepted, and are replayed only on
       // the pass the router rules the gesture the paging the key already did.
+      const bool injectPress = fired.valid && fired.replayRawEdge;
+      const bool injectRelease = replayReleasePending[key];
+      replayReleasePending[key] = injectPress;
       mappedInputManager.setSideKeyOverride(hardware, /*suppressEdges=*/true, bindingRouter.suppressesHold(key),
-                                            /*injectRelease=*/fired.valid && fired.replayRawEdge);
+                                            injectPress, injectRelease);
     }
 
     // Power. Raw edges like a side key, but its release is gated through the same override
