@@ -153,6 +153,16 @@ families:
       italic:     {path: "builtinFonts/source/ChareInk7/ChareInk7-Italic.ttf"}
       bolditalic: {path: "builtinFonts/source/ChareInk7/ChareInk7-BoldItalic.ttf"}
 
+  - name: Gelasio
+    description: "Georgia-metric serif (Latin, Cyrillic, Greek)"
+    intervals: latin-ext,cyrillic,greek
+    sizes: [10, 11, 12, 13, 14, 15, 16, 17, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gelasio/Gelasio%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gelasio/Gelasio%5Bwght%5D.ttf", variable: {wght: 700}}
+      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gelasio/Gelasio-Italic%5Bwght%5D.ttf", variable: {wght: 400}}
+      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/gelasio/Gelasio-Italic%5Bwght%5D.ttf", variable: {wght: 700}}
+
   - name: XCharter
     description: "Bitstream Charter extension (Latin, Cyrillic)"
     intervals: latin-ext,cyrillic
@@ -162,6 +172,29 @@ families:
       bold:       {path: "builtinFonts/source/XCharter/XCharter-Bold.ttf"}
       italic:     {path: "builtinFonts/source/XCharter/XCharter-Italic.ttf"}
       bolditalic: {path: "builtinFonts/source/XCharter/XCharter-BoldItalic.ttf"}
+
+  - name: ChareInkCJK
+    description: "ChareInk with Korean and Chinese (Latin, Cyrillic, Hangul, CJK)"
+    intervals: latin-ext,cyrillic,ipa-chars,hangul,cjk
+    # Five sizes and two styles, not nine and four: hangul plus cjk is roughly 33,000
+    # glyphs against ChareInk's own 2,100, so each file is tens of megabytes and every one
+    # of them is a download over TLS on an ESP32.
+    sizes: [12, 13, 14, 15, 16]
+    styles:
+      regular:    {path: "builtinFonts/source/ChareInk7/ChareInk7-Regular.ttf",
+                   fallback: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Serif/OTC/NotoSerifCJK-Regular.ttc", face: 1}}
+      bold:       {path: "builtinFonts/source/ChareInk7/ChareInk7-Bold.ttf",
+                   fallback: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Serif/OTC/NotoSerifCJK-Bold.ttc", face: 1}}
+
+  - name: XCharterCJK
+    description: "XCharter with Korean and Chinese (Latin, Cyrillic, Hangul, CJK)"
+    intervals: latin-ext,cyrillic,hangul,cjk
+    sizes: [12, 13, 14, 15, 16]
+    styles:
+      regular:    {path: "builtinFonts/source/XCharter/XCharter-Regular.ttf",
+                   fallback: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Serif/OTC/NotoSerifCJK-Regular.ttc", face: 1}}
+      bold:       {path: "builtinFonts/source/XCharter/XCharter-Bold.ttf",
+                   fallback: {url: "https://raw.githubusercontent.com/notofonts/noto-cjk/main/Serif/OTC/NotoSerifCJK-Bold.ttc", face: 1}}
 
   - name: Newsreader
     description: "Newspaper serif for screens (Latin)"

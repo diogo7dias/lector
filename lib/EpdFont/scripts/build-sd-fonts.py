@@ -198,12 +198,29 @@ def build_family(
     sizes = ",".join(str(s) for s in family["sizes"])
 
     # Resolve all font file paths (downloads as needed)
+    #
+    # A style may name its own fallback. The default one covers Latin only, so a family
+    # that asks for hangul or cjk intervals its primary font does not have would otherwise
+    # produce nothing for them: fontconvert_sdcard.py drops every codepoint neither the
+    # primary nor the fallback can draw.
     try:
         resolved_styles = {}
+        resolved_fallbacks = {}
         for style_name, style_spec in styles.items():
             resolved_styles[style_name] = resolve_font_path(style_spec, name, style_name)
+            if "fallback" in style_spec:
+                spec = style_spec["fallback"]
+                path = resolve_font_path(spec, name, style_name + "-fallback")
+                # Collections are selected by face index; see the note in
+                # fontconvert_sdcard.py's rasterize_font_style.
+                if "face" in spec:
+                    path = f"{path}#{int(spec['face'])}"
+                resolved_fallbacks[style_name] = path
     except (FileNotFoundError, RuntimeError) as e:
         return name, False, str(e)
+
+    def fallback_for(style_name):
+        return resolved_fallbacks.get(style_name, DEFAULT_FALLBACK_FONT)
 
     # Build the fontconvert_sdcard.py command
     cmd = [sys.executable, str(FONTCONVERT)]
@@ -215,14 +232,14 @@ def build_family(
         # Multi-style mode
         for style_name, font_path in resolved_styles.items():
             cmd.extend([f"--{style_name}", str(font_path)])
-            cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
+            cmd.extend([f"--fallback-{style_name}", str(fallback_for(style_name))])
     else:
         # Single-style mode
         style_name = next(iter(resolved_styles))
         font_path = resolved_styles[style_name]
         cmd.append(str(font_path))
         cmd.extend(["--style", style_name])
-        cmd.extend([f"--fallback-{style_name}", str(DEFAULT_FALLBACK_FONT)])
+        cmd.extend([f"--fallback-{style_name}", str(fallback_for(style_name))])
 
     cmd.extend(["--intervals", intervals])
     cmd.extend(["--sizes", sizes])
