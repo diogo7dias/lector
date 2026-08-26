@@ -45,3 +45,9 @@ TEST(BoundActionScope, TheReaderQuickMenuIsRefusedOutsideABook) {
 }
 
 TEST(BoundActionScope, ForceRefreshWorksAnywhere) { EXPECT_TRUE(allowedOutsideBook(LP_MENU_FORCE_REFRESH)); }
+
+TEST(BoundActionScope, DeletingAWallpaperNeedsAnOpenBook) {
+  // It runs through the in-book menu's own confirmation, so it is offered only where that
+  // menu is: the reader.
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_WALLPAPER_DELETE));
+}

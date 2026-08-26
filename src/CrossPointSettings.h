@@ -272,6 +272,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_LIGHT_PANEL = bound_action::LP_MENU_LIGHT_PANEL;
   static constexpr auto LP_MENU_SLEEP = bound_action::LP_MENU_SLEEP;
   static constexpr auto LP_MENU_FORCE_REFRESH = bound_action::LP_MENU_FORCE_REFRESH;
+  static constexpr auto LP_MENU_WALLPAPER_DELETE = bound_action::LP_MENU_WALLPAPER_DELETE;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -298,13 +299,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
       LP_MENU_KOSYNC,          LP_MENU_BOOKMARK,          LP_MENU_BOOKMARKS,       LP_MENU_DICTIONARY,
       LP_MENU_GRAB_QUOTE,      LP_MENU_VIEW_QUOTES,       LP_MENU_GO_TO_PARAGRAPH, LP_MENU_FOOTNOTES,
-      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
+      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD,  LP_MENU_WALLPAPER_DELETE};
 
   // Cap on ticked pop-up rows. Every action can be ticked at once; the ceiling only exists
-  // because popupItems is a 16-bit mask, so 16 is as many bits as there are to set. The
+  // because popupItems is a bit mask, so its width is as many bits as there are to set. The
   // pop-up itself no longer needs the cap to stay on screen — option_popup::compute()
   // tightens its spacing when the rows would otherwise run off the panel.
-  static constexpr uint8_t POPUP_ITEM_MAX = 16;
+  static constexpr uint8_t POPUP_ITEM_MAX = 32;
 
   // UI Theme
   // Lector ships a single UI theme (the CrossPoint "Classic" base, renamed). All
@@ -623,7 +624,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
   // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
   // At most POPUP_ITEM_MAX bits are ever set; the tick screen enforces it.
-  uint16_t popupItems = 0;
+  uint32_t popupItems = 0;
   // UI Theme
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
@@ -877,9 +878,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     if (isPopupItem(function) == on) return false;
     if (on && popupItemCount() >= POPUP_ITEM_MAX) return false;
     if (on) {
-      popupItems |= static_cast<uint16_t>(1u << function);
+      popupItems |= static_cast<uint32_t>(1u << function);
     } else {
-      popupItems &= static_cast<uint16_t>(~(1u << function));
+      popupItems &= static_cast<uint32_t>(~(1u << function));
     }
     return true;
   }

@@ -68,6 +68,9 @@ enum LONG_PRESS_MENU_FUNCTION {
   // setting could force a screen refresh, and folding that setting into the shared
   // bindings would have dropped the ability if the action did not come with it.
   LP_MENU_FORCE_REFRESH = 23,
+  // Deletes the wallpaper the lock screen last showed, behind the in-book menu's own
+  // confirmation. The first pop-up row past bit 15, which is why popupItems is 32 bits.
+  LP_MENU_WALLPAPER_DELETE = 24,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

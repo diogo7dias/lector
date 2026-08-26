@@ -330,16 +330,19 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // trimmed to POPUP_ITEM_MAX so a file claiming twenty rows cannot build a pop-up
   // taller than the panel.
   {
-    uint16_t storedPopupItems = doc["popupItems"] | (uint16_t)0;
-    uint16_t validMask = 0;
-    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) validMask |= static_cast<uint16_t>(1u << fn);
+    // Widened to 32 bits when Delete Wallpaper became the first pop-up row past bit 15.
+    // No migration: the mask persists as a plain number and every existing bit keeps its
+    // position, so a file written by an older build reads back unchanged.
+    uint32_t storedPopupItems = doc["popupItems"] | (uint32_t)0;
+    uint32_t validMask = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) validMask |= static_cast<uint32_t>(1u << fn);
     storedPopupItems &= validMask;
     popupItems = 0;
     uint8_t kept = 0;
     for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
       if (!((storedPopupItems >> fn) & 1u)) continue;
       if (kept >= POPUP_ITEM_MAX) break;
-      popupItems |= static_cast<uint16_t>(1u << fn);
+      popupItems |= static_cast<uint32_t>(1u << fn);
       kept++;
     }
     if (popupItems != storedPopupItems) needsResave = true;

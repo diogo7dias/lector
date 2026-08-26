@@ -58,6 +58,8 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_HOME;
     case CrossPointSettings::LP_MENU_BACK:
       return StrId::STR_BACK;
+    case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+      return StrId::STR_DELETE_WALLPAPER;
     case CrossPointSettings::LP_MENU_FORCE_REFRESH:
       return StrId::STR_FORCE_REFRESH;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:

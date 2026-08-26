@@ -578,7 +578,8 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // An empty pop-up is a dead press; Pop-up Items has not been filled in yet.
       return SETTINGS.popupItemCount() > 0;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
-      // Same test the in-book menu uses to offer its own row: there must be a wallpaper
+    case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+      // Same test the in-book menu uses to offer its own rows: there must be a wallpaper
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
     case CrossPointSettings::LP_MENU_BOOKMARK:
@@ -655,6 +656,10 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_HOLD);
+      return true;
+    case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+      // Asks for confirmation itself before removing the file; see the menu action.
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_DELETE);
       return true;
     case CrossPointSettings::LP_MENU_PAGE_PREV:
       pageTurn(false);
