@@ -393,6 +393,9 @@ void enterDeepSleep(bool fromTimeout = false) {
 void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
   renderer.begin();
+  // Only this file can put the device down, so the light panel's Sleep button is handed
+  // the same entry point every other sleep route uses.
+  activityManager.setSleepAction([] { enterDeepSleep(); });
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
 

@@ -51,6 +51,14 @@ class Activity {
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
 
+  // Turn the screen. False means this screen does not own an orientation, and the host
+  // persists the setting instead: only the readers lay out against it, so everywhere else
+  // the new orientation is simply what the next book opens in.
+  virtual bool applyReaderOrientation(uint8_t orientation) {
+    (void)orientation;
+    return false;
+  }
+
   // Per-button bindings (Settings > Controls > Buttons). The router picks the in-book set
   // of bindings while a book is open, so the same key can page a book and open the light
   // panel on the home screen.

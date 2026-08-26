@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>lector — light panel with Sleep and Rotate, four page treatments</title>
+<style>
+  body { background:#3a3a3a; color:#ddd; font:13px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; margin:24px; }
+  h1 { font-size:16px; font-weight:600; margin:0 0 4px; color:#fff; }
+  p.note { margin:0 0 22px; max-width:900px; color:#bbb; }
+  .row { display:flex; gap:22px; flex-wrap:wrap; }
+  figure { margin:0; }
+  figcaption { margin-top:8px; font-size:12px; color:#ccc; width:300px; }
+  figcaption b { color:#fff; display:block; }
+  .screen { width:300px; height:500px; position:relative; background:#fff; overflow:hidden;
+            box-shadow:0 0 0 1px #000, 0 6px 18px rgba(0,0,0,.5); }
+  /* the page beneath */
+  .page { position:absolute; inset:0; padding:14px 16px; box-sizing:border-box;
+          font:12px/1.55 Georgia,serif; color:#111; }
+  .page p { margin:0 0 9px; text-align:justify; }
+  /* the darkening treatment sits over the page, under the panel */
+  .veil { position:absolute; inset:0; pointer-events:none; }
+  .v1 { background-image:
+          repeating-conic-gradient(#000 0% 25%, transparent 0% 50%);
+          background-size:2px 2px; opacity:1; }
+  .v2 { background-image:
+          repeating-conic-gradient(#000 0% 25%, transparent 0% 50%);
+          background-size:4px 4px; }
+  .v3 { background-image: repeating-linear-gradient(0deg,#000 0 1px, transparent 1px 3px); }
+  .v4 { background-image:
+          radial-gradient(#000 45%, transparent 46%);
+          background-size:3px 3px; }
+  /* the panel */
+  .panel { position:absolute; left:0; right:0; top:0; background:#000; color:#fff;
+           border-bottom:2px solid #fff; padding:6px 0 8px; }
+  .prow { display:flex; align-items:center; height:22px; padding:0 12px; box-sizing:border-box; }
+  .plabel { width:82px; flex:0 0 82px; font:11px/22px -apple-system,Segoe UI,Roboto,sans-serif;
+            letter-spacing:.02em; }
+  .pval { width:34px; flex:0 0 34px; text-align:right; font:11px/22px ui-monospace,Menlo,monospace; }
+  .bar { flex:1; height:12px; border:1px solid #fff; margin-left:8px; position:relative; }
+  .bar i { position:absolute; left:0; top:0; bottom:0; background:#fff; display:block; }
+  .state { margin-left:auto; font:11px/22px -apple-system,Segoe UI,Roboto,sans-serif; }
+  .btns { display:flex; gap:8px; padding:6px 12px 0; }
+  .btn { flex:1; text-align:center; border:1px solid #fff; padding:5px 0;
+         font:11px/1 -apple-system,Segoe UI,Roboto,sans-serif; letter-spacing:.04em; }
+  .btn.on { background:#fff; color:#000; }
+</style>
+<h1>Light panel, top edge — with Sleep and Rotate</h1>
+<p class="note">Four rows then two text buttons. Rotate is a toggle: it reads Rotate in portrait and
+Portrait once the screen is turned, so one control goes both ways. The four panes differ only in how
+the page beneath is darkened — pick by number. Drawn at 300&times;500 for the page; the device panel is
+480&times;800.</p>
+
+<div class="row" id="row"></div>
+
+<script>
+const PAGE = `<p>He had been an unusually quiet child, and the house had grown quiet around him,
+so that by the time anyone noticed, the silence belonged to both of them equally.</p>
+<p>The lamp on the landing was never turned off. His mother said it was for the stairs,
+but the stairs were straight and he had climbed them in the dark a hundred times.</p>
+<p>In the mornings the light came through the east window in a single hard bar that
+crossed the floor and climbed the far wall, and he used to lie and watch it move.</p>
+<p>Later he would remember the room as being much larger, and would be surprised,
+returning as a grown man, to find that he could touch both walls at once.</p>
+<p>The books were his father's. Nobody had read them for years. They smelled of the
+cupboard they had come from, which smelled of the house before this one.</p>`;
+
+const PANEL = `
+<div class="panel">
+  <div class="prow"><span class="plabel">Light</span><span class="state">On</span></div>
+  <div class="prow"><span class="plabel">Brightness</span><span class="pval">64</span>
+    <span class="bar"><i style="width:64%"></i></span></div>
+  <div class="prow"><span class="plabel">Warmth</span><span class="pval">30</span>
+    <span class="bar"><i style="width:30%"></i></span></div>
+  <div class="btns"><span class="btn">Sleep</span><span class="btn">Rotate</span></div>
+</div>`;
+
+const VARIANTS = [
+  ["1 — 50% checkerboard", "Every other pixel black, on a 2&times;2 grid. The heaviest of the four; the page reads as a grey field and the panel sits on it with real separation."],
+  ["2 — 25% coarse dither", "One pixel in four, on a 4&times;4 grid. Lighter, and the pattern is visible as a texture rather than as grey."],
+  ["3 — horizontal rules", "One black line every three pixels. Directional: it reads as a shade pulled down, and it never fights the text's own horizontals as much as a dot grid does."],
+  ["4 — round dots", "A dot per 3&times;3 cell. The closest to a printed halftone; softest edge, least contrast against the panel."],
+];
+
+document.getElementById('row').innerHTML = VARIANTS.map(([t,d],i)=>`
+  <figure>
+    <div class="screen">
+      <div class="page">${PAGE}</div>
+      <div class="veil v${i+1}"></div>
+      ${PANEL}
+    </div>
+    <figcaption><b>${t}</b>${d}</figcaption>
+  </figure>`).join('');
+</script>

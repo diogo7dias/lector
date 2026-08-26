@@ -82,3 +82,52 @@ TEST(LightPanelGeometry, ANarrowScreenStillLeavesABarToDrag) {
 }
 
 }  // namespace
+
+// --- The two action buttons ---
+//
+// Sleep and Rotate sit below the sliders as a pair of text buttons, side by side. They
+// are the only controls in the panel that do something other than change the light, and
+// on a board with no touch the panel is unreachable anyway, so they are touch targets
+// first: each takes half the width, which is a far larger target than a 12 px bar.
+
+TEST(LightPanelGeometry, TheTwoButtonsSplitTheWidthBelowTheSliders) {
+  const auto layout = warm();
+  EXPECT_GT(layout.sleep.width, 0);
+  EXPECT_EQ(layout.sleep.width, layout.rotate.width);
+  EXPECT_EQ(layout.sleep.y, layout.rotate.y);
+  EXPECT_GT(layout.sleep.y, layout.warmth.y);
+  EXPECT_LT(layout.sleep.x, layout.rotate.x);
+  // Inside the band, and clear of each other.
+  EXPECT_GE(layout.sleep.x, 0);
+  EXPECT_LE(layout.rotate.x + layout.rotate.width, layout.width);
+  EXPECT_LE(layout.sleep.x + layout.sleep.width, layout.rotate.x);
+  EXPECT_LE(layout.rotate.y + layout.rotate.height, layout.height);
+}
+
+TEST(LightPanelGeometry, TheButtonsFollowTheSlidersUpOnABoardWithoutWarmth) {
+  const auto with = warm();
+  const auto without = plain();
+  EXPECT_LT(without.sleep.y, with.sleep.y);
+  EXPECT_LE(without.rotate.y + without.rotate.height, without.height);
+}
+
+TEST(LightPanelGeometry, ATouchLandsOnTheButtonItIsOver) {
+  const auto layout = warm();
+  using light_panel::Button;
+  EXPECT_EQ(light_panel::buttonAt(layout, layout.sleep.x + 2, layout.sleep.y + 2), Button::Sleep);
+  EXPECT_EQ(light_panel::buttonAt(layout, layout.rotate.x + 2, layout.rotate.y + 2), Button::Rotate);
+}
+
+TEST(LightPanelGeometry, ATouchBetweenOrAboveTheButtonsHitsNeither) {
+  const auto layout = warm();
+  using light_panel::Button;
+  const int gapX = (layout.sleep.x + layout.sleep.width + layout.rotate.x) / 2;
+  EXPECT_EQ(light_panel::buttonAt(layout, gapX, layout.sleep.y + 2), Button::None);
+  EXPECT_EQ(light_panel::buttonAt(layout, layout.sleep.x + 2, layout.brightness.y), Button::None);
+}
+
+TEST(LightPanelGeometry, TheButtonRowIsNotAlsoASliderRow) {
+  // rowAt drives the drag handling, so the buttons must not read as Warmth and move it.
+  const auto layout = warm();
+  EXPECT_EQ(light_panel::rowAt(layout, layout.sleep.x + 2, layout.sleep.y + 2), light_panel::Row::None);
+}

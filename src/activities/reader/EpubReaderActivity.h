@@ -399,6 +399,10 @@ class EpubReaderActivity final : public Activity {
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
   bool isBookContext() const override { return true; }
+  bool applyReaderOrientation(const uint8_t orientation) override {
+    applyOrientation(orientation);
+    return true;
+  }
   // The bindings router hands every gesture here first; the reader answers with the same
   // entry points the pop-up and the long-press bindings already use.
   bool runBoundAction(const uint8_t function) override { return runBoundMenuFunction(function); }

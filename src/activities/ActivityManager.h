@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -91,6 +92,11 @@ class ActivityManager {
   ~ActivityManager() { assert(false); /* should never be called */ };
 
   void begin();
+
+  // The light panel's two actions. Sleep can only be run by main.cpp, so it is handed in;
+  // Rotate is answered here, because whether an orientation means anything depends on the
+  // screen on top.
+  void setSleepAction(std::function<void()> onSleep);
   void loop();
 
   // Will replace currentActivity and drop all activities on stack

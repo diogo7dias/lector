@@ -13,6 +13,11 @@ namespace light_panel {
 
 enum class Row : uint8_t { None = 0, Toggle, Brightness, Warmth };
 
+// The two actions under the sliders. Not rows: they are the only controls here that do
+// something other than change the light, and rowAt must not report them, or a drag that
+// ends on one would move the warmth bar as well.
+enum class Button : uint8_t { None = 0, Sleep, Rotate };
+
 // Matches banner::PAD/RULE (components/BannerStyle.h). Repeated rather than included so
 // this header stays free of the font and renderer headers the host tests do not build.
 constexpr int kPad = 6;
@@ -26,6 +31,12 @@ constexpr int kLabelWidth = 110;
 // A bar 12 px tall is far under a fingertip, so a touch counts from anywhere in the row.
 // Rows are the hit targets; the bar is only what is drawn.
 constexpr int kMinBarWidth = 40;
+// Air between the last slider and the buttons, and between the two buttons. The buttons
+// are the only destructive control in the panel (one of them puts the device down), so
+// they sit clear of the bar a thumb was just dragging.
+constexpr int kButtonGap = 10;
+// Text plus a box around it. Height is the row height; this is only the padding.
+constexpr int kButtonPadY = 5;
 
 struct Bar {
   int x;
@@ -33,6 +44,9 @@ struct Bar {
   int width;
   int height;
 };
+
+// A button's box. Same shape as Bar, named for what it is.
+using Rect = Bar;
 
 struct RowLayout {
   Row row;
@@ -50,6 +64,8 @@ struct Layout {
   RowLayout toggle;
   RowLayout brightness;
   RowLayout warmth;  // height 0 when the board has no colour temperature
+  Rect sleep;
+  Rect rotate;
 };
 
 inline Layout forScreen(const int screenWidth, const int lineHeight, const bool hasWarmth) {
@@ -84,8 +100,17 @@ inline Layout forScreen(const int screenWidth, const int lineHeight, const bool 
     layout.warmth = RowLayout{Row::Warmth, y, 0, Bar{}};
   }
 
-  // y overshot by one gap after the last row; that gap becomes the bottom padding.
-  layout.height = y - kRowGap + kPad + kRule;
+  // The buttons: one row, each half the width less the gap between them. Half the panel
+  // is a target no slider can offer, which is what they are given in exchange for being
+  // the two controls that must never be hit by accident.
+  y += kButtonGap - kRowGap;
+  const int buttonHeight = lineHeight + kButtonPadY * 2;
+  const int buttonWidth = (screenWidth - kSidePad * 2 - kButtonGap) / 2;
+  layout.sleep = Rect{kSidePad, y, buttonWidth, buttonHeight};
+  layout.rotate = Rect{kSidePad + buttonWidth + kButtonGap, y, buttonWidth, buttonHeight};
+  y += buttonHeight;
+
+  layout.height = y + kPad + kRule;
   return layout;
 }
 
@@ -100,6 +125,16 @@ inline Row rowAt(const Layout& layout, const int x, const int y) {
   if (hits(layout.brightness)) return Row::Brightness;
   if (layout.hasWarmth && hits(layout.warmth)) return Row::Warmth;
   return Row::None;
+}
+
+inline bool insideRect(const Rect& rect, const int x, const int y) {
+  return rect.width > 0 && x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
+}
+
+inline Button buttonAt(const Layout& layout, const int x, const int y) {
+  if (insideRect(layout.sleep, x, y)) return Button::Sleep;
+  if (insideRect(layout.rotate, x, y)) return Button::Rotate;
+  return Button::None;
 }
 
 // Maps a touch x onto the bar's range. Past either end clamps rather than doing nothing,

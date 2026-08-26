@@ -26,6 +26,17 @@
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
+void ActivityManager::setSleepAction(std::function<void()> onSleep) {
+  lightPanel.setActions(std::move(onSleep), [this](const uint8_t orientation) {
+    // The reader owns this: it persists the setting and re-indexes the chapter at the new
+    // column width. Anywhere else there is nothing laid out against an orientation, so the
+    // setting is simply stored and the next book opens turned.
+    if (currentActivity && currentActivity->applyReaderOrientation(orientation)) return;
+    SETTINGS.orientation = orientation;
+    SETTINGS.saveToFile();
+  });
+}
+
 void ActivityManager::begin() {
 #if defined(configNUM_CORES) && configNUM_CORES > 1
   constexpr BaseType_t renderTaskCore = 1;
