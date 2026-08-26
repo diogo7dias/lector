@@ -148,7 +148,8 @@ class LightPanel {
 
     const int screenWidth = renderer.getScreenWidth();
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-    layout_ = light_panel::forScreen(screenWidth, lineHeight, Frontlight.hasColorTemperature());
+    layout_ = light_panel::forScreen(screenWidth, lineHeight, Frontlight.hasColorTemperature(),
+                                     labelColumnWidth(renderer));
 
     // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
     // edge while the rows sit below the crop, the same trick the unlock banners use.
@@ -201,9 +202,23 @@ class LightPanel {
   void stipplePageBelow(const GfxRenderer& renderer, const int bandHeight) const {
     const int width = renderer.getScreenWidth();
     const int height = renderer.getScreenHeight();
-    for (int y = bandHeight; y < height; y += 2) {
-      for (int x = 0; x < width; x += 2) renderer.drawPixel(x, y, true);
+    for (int y = bandHeight; y < height; ++y) {
+      for (int x = (y & 1); x < width; x += 2) renderer.drawPixel(x, y, true);
     }
+  }
+
+  // Wide enough for the longest thing the left column ever holds, measured rather than
+  // guessed: a fixed 110 px was narrower than "Brightness 100" in this font, so the bar
+  // was drawn over the end of its own label and the toggle's state ran into "Frontlight".
+  int labelColumnWidth(const GfxRenderer& renderer) const {
+    const auto measure = [&](const char* text) { return renderer.getTextWidth(banner::FONT_ID, text); };
+    char sample[48];
+    int widest = measure(I18N.get(StrId::STR_FRONTLIGHT));
+    snprintf(sample, sizeof(sample), "%s 100", I18N.get(StrId::STR_FRONTLIGHT_BRIGHTNESS));
+    widest = std::max(widest, measure(sample));
+    snprintf(sample, sizeof(sample), "%s 100", I18N.get(StrId::STR_FRONTLIGHT_WARMTH));
+    widest = std::max(widest, measure(sample));
+    return widest + light_panel::kLabelGap;
   }
 
   void drawButton(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label,
@@ -214,7 +229,9 @@ class LightPanel {
     const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
     const int textX = rect.x + (rect.width - textWidth) / 2;
     const int textY = y + light_panel::kButtonPadY;
-    renderer.drawText(banner::FONT_ID, textX, textY, label, pressed);
+    // Knocked out of the fill when pressed, drawn in ink when not. It was the wrong way
+    // round, which is why both buttons showed as empty boxes.
+    renderer.drawText(banner::FONT_ID, textX, textY, label, !pressed);
   }
 
   void close(const std::function<void()>& requestUpdate) {

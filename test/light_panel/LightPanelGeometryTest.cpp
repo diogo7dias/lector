@@ -131,3 +131,14 @@ TEST(LightPanelGeometry, TheButtonRowIsNotAlsoASliderRow) {
   const auto layout = warm();
   EXPECT_EQ(light_panel::rowAt(layout, layout.sleep.x + 2, layout.sleep.y + 2), light_panel::Row::None);
 }
+
+// The device drew "FrontlighOFF" and a bar over the end of "Brightness": the fixed 110 px
+// label column was narrower than the strings the panel actually puts in it. The width is
+// measured and passed in now, and the bar has to start clear of it.
+TEST(LightPanelGeometry, TheBarStartsAfterTheMeasuredLabelColumn) {
+  const auto layout = light_panel::forScreen(480, 22, /*hasWarmth=*/true, /*labelWidth=*/220);
+  EXPECT_GE(layout.brightness.bar.x, light_panel::kSidePad + 220);
+  EXPECT_EQ(layout.warmth.bar.x, layout.brightness.bar.x);
+  EXPECT_GE(layout.brightness.bar.width, light_panel::kMinBarWidth);
+  EXPECT_LE(layout.brightness.bar.x + layout.brightness.bar.width, 480 - light_panel::kSidePad);
+}

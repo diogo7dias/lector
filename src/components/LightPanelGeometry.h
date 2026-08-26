@@ -25,9 +25,13 @@ constexpr int kRule = 2;
 constexpr int kSidePad = 12;
 constexpr int kRowGap = 6;
 constexpr int kBarHeight = 12;
-// Left column: the row's name and, on a slider row, its number. Fixed so the two bars
-// line up under each other instead of each starting after its own label.
+// Left column: the row's name and, on a slider row, its number. One width for every row,
+// so the two bars line up under each other instead of each starting after its own label.
+// This is only the fallback: the caller measures its own strings in the UI font and passes
+// the real width, because a fixed guess had the bar drawn straight over "Brightness".
 constexpr int kLabelWidth = 110;
+// Air between the label column and whatever sits to its right.
+constexpr int kLabelGap = 10;
 // A bar 12 px tall is far under a fingertip, so a touch counts from anywhere in the row.
 // Rows are the hit targets; the bar is only what is drawn.
 constexpr int kMinBarWidth = 40;
@@ -68,12 +72,13 @@ struct Layout {
   Rect rotate;
 };
 
-inline Layout forScreen(const int screenWidth, const int lineHeight, const bool hasWarmth) {
+inline Layout forScreen(const int screenWidth, const int lineHeight, const bool hasWarmth,
+                        const int labelWidth = kLabelWidth) {
   const int rowHeight = std::max(lineHeight, kBarHeight);
   // The label column gives way before the bar does: on a narrow screen a readable bar
   // matters more than an untruncated word.
-  const int barWidth = std::max(kMinBarWidth, screenWidth - kSidePad * 2 - kLabelWidth);
-  const int barX = std::min(kSidePad + kLabelWidth, screenWidth - kSidePad - barWidth);
+  const int barWidth = std::max(kMinBarWidth, screenWidth - kSidePad * 2 - labelWidth);
+  const int barX = std::min(kSidePad + labelWidth, screenWidth - kSidePad - barWidth);
 
   Layout layout{};
   layout.x = 0;
