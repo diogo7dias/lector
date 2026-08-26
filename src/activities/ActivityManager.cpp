@@ -110,8 +110,12 @@ void ActivityManager::loop() {
     // rest. Activities that need to intervene override handleHomeGesture().
     // The light panel takes input before anything else while it is up, and the top-edge
     // swipe opens it from any screen. Handled once here for the same reason Home is.
+    // Immediate, not deferred. Every branch below returns out of loop() before the
+    // deferred-update flush at the bottom of this function, and once the panel is up
+    // handleInput() consumes the pass on every pass, so a deferred request would never
+    // be flushed at all: the panel opened, reported present=1, and was never drawn.
     if (lightPanel.isActive()) {
-      if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+      if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(/*immediate=*/true); })) return;
     } else if (mappedInput.wasMenuGesture()) {
       // Logged rather than silently skipped: a board with no frontlight and a swipe that
       // never decoded look the same from the outside, and only the log separates them.
@@ -120,7 +124,7 @@ void ActivityManager::loop() {
       } else {
         debug_trace::note("top-edge gesture: opening the light panel");
         lightPanel.show();
-        requestUpdate();
+        requestUpdate(/*immediate=*/true);
         return;
       }
     }
@@ -361,7 +365,9 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
         return false;
       }
       lightPanel.show();
-      requestUpdate();
+      // Immediate for the same reason the gesture path is: ActivityManager::loop() will
+      // hand the very next pass to the panel and return before its own flush.
+      requestUpdate(/*immediate=*/true);
       return true;
     default:
       return false;

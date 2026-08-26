@@ -651,6 +651,10 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       // there is no MenuAction to reuse. sbOffBar is passed unchanged — this flips the
       // master switch only, leaving the hidden-bar progress choice alone.
       applyStatusBar(prefs_.statusBarEnabled ? 0 : 1, prefs_.sbOffBar);
+      // applyStatusBar only drops the section for relayout; the menu path repaints when
+      // the menu closes over it, and a binding has no menu to close. Without this the bar
+      // appeared or vanished only at the next page turn, which read as a dead button.
+      requestUpdate();
       return true;
     case CrossPointSettings::LP_MENU_POPUP:
       openQuickMenu();
