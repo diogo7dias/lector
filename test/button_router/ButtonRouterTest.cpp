@@ -267,3 +267,23 @@ TEST(ButtonRouter, AKeyCanBeGivenItsOwnHoldThreshold) {
   now += 600;
   EXPECT_TRUE(router.tick(POWER, now).valid);
 }
+
+// Reported from a device: with this exact set the single click and the double click both
+// worked and the hold never fired. It does fire here, which is what moved the search off
+// the router and onto what the action itself does.
+TEST(ButtonRouter, TheHoldFiresWithAPagePrevSingleAndABoundDouble) {
+  button_router::Router router;
+  router.configure(0,
+                   button_router::Binding{bound_action::LP_MENU_PAGE_PREV, bound_action::LP_MENU_FORCE_REFRESH,
+                                          bound_action::LP_MENU_LIGHT_PANEL},
+                   button_router::NATIVE_SIDE_KEY);
+  EXPECT_TRUE(router.intercepts(0));
+  EXPECT_TRUE(router.suppressesHold(0));
+
+  EXPECT_FALSE(router.onPress(0, 1000).valid);
+  EXPECT_FALSE(router.tick(0, 1400).valid);
+  const auto held = router.tick(0, 1500);
+  ASSERT_TRUE(held.valid);
+  EXPECT_EQ(held.function, bound_action::LP_MENU_LIGHT_PANEL);
+  EXPECT_FALSE(held.replayRawEdge);
+}

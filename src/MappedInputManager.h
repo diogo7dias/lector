@@ -173,6 +173,11 @@ class MappedInputManager {
   mutable int menuDragStartX_ = -1;
   mutable int menuDragStartY_ = -1;
   mutable bool menuDragFired_ = false;
+  // True while a contact is live. The start point is taken on the pass this turns true,
+  // which is the only way to catch a finger that is already moving: the tap-candidate
+  // query (wasScreenTouchDown) is false for anything past tap slop, so a swipe never
+  // reports a "down" at all.
+  mutable bool menuDragTracking_ = false;
 
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;

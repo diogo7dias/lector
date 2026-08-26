@@ -11,6 +11,8 @@
 #include "components/UITheme.h"
 #include <PerfLog.h>
 
+#include "util/DebugTrace.h"
+
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
   // setting. The reader (and its modal menus) render rotated, so navigation/labels flip there; the
@@ -370,24 +372,32 @@ bool MappedInputManager::wasMenuGesture() const {
   const int topEdgeBottom = static_cast<int>(renderer.getScreenHeight() * TOP_EDGE_MENU_GESTURE_FRAC_Y);
   int tx = 0;
   int ty = 0;
-  if (wasScreenTouchDown(tx, ty)) {
-    menuDragStartX_ = ty <= topEdgeBottom ? tx : -1;
-    menuDragStartY_ = ty <= topEdgeBottom ? ty : -1;
-    menuDragFired_ = false;
-  } else if (menuDragStartY_ >= 0 && isScreenTouchHeld(tx, ty)) {
+  if (isScreenTouchHeld(tx, ty)) {
+    if (!menuDragTracking_) {
+      // First sighting of this contact. Deliberately NOT wasScreenTouchDown(): that asks
+      // whether the contact is still a tap candidate, which a finger already sliding down
+      // the screen has stopped being, so the drag could never arm from it.
+      menuDragTracking_ = true;
+      menuDragFired_ = false;
+      menuDragStartX_ = tx;
+      menuDragStartY_ = ty;
+      debug_trace::note("touch down (%d,%d) topEdge=%d", tx, ty, topEdgeBottom);
+    }
     const int travel = ty - menuDragStartY_;
-    if (!menuDragFired_ && travel >= static_cast<int>(renderer.getScreenHeight() * MENU_DRAG_TRAVEL_FRAC_Y) &&
+    if (!menuDragFired_ && menuDragStartY_ <= topEdgeBottom &&
+        travel >= static_cast<int>(renderer.getScreenHeight() * MENU_DRAG_TRAVEL_FRAC_Y) &&
         travel > std::abs(tx - menuDragStartX_)) {
       menuDragFired_ = true;
       // The rest of the contact belongs to the gesture: without this the finger lifting
       // would tap whatever the panel just drew under it.
       gpio.suppressTouchContact();
-      LOG_DBG("INPUT", "top-edge drag: %d px down from y=%d", travel, menuDragStartY_);
+      debug_trace::note("top-edge drag fired: %d px down from y=%d", travel, menuDragStartY_);
       rememberTouchHeldTime();
       return true;
     }
-  } else if (!isScreenTouchHeld(tx, ty)) {
-    menuDragStartY_ = -1;
+  } else if (menuDragTracking_) {
+    menuDragTracking_ = false;
+    debug_trace::note("contact ended, started (%d,%d), drag did not fire", menuDragStartX_, menuDragStartY_);
   }
 
   // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
@@ -399,12 +409,11 @@ bool MappedInputManager::wasMenuGesture() const {
     // A contact that ended without qualifying as a swipe at all: too slow (over 700 ms),
     // or under the 60 px the flick needs. Logged because the two failures look identical
     // on the device, and only the log can tell them apart.
-    if (gpio.wasTouchReleased()) LOG_DBG("INPUT", "touch released, no swipe decoded");
+    if (gpio.wasTouchReleased()) debug_trace::note("touch released, no flick decoded");
     return false;
   }
   const bool hit = sy <= topEdgeBottom && ey > sy && std::abs(ey - sy) > std::abs(ex - sx);
-  LOG_DBG("INPUT", "swipe (%d,%d)->(%d,%d) topEdgeBottom=%d screenH=%d menuGesture=%d", sx, sy, ex, ey, topEdgeBottom,
-          renderer.getScreenHeight(), hit ? 1 : 0);
+  debug_trace::note("flick (%d,%d)->(%d,%d) topEdge=%d menu=%d", sx, sy, ex, ey, topEdgeBottom, hit ? 1 : 0);
   if (hit) rememberTouchHeldTime();
   return hit;
 }

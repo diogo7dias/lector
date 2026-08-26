@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "util/DebugTrace.h"
 #include "OpdsServerStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
@@ -115,9 +116,9 @@ void ActivityManager::loop() {
       // Logged rather than silently skipped: a board with no frontlight and a swipe that
       // never decoded look the same from the outside, and only the log separates them.
       if (!Frontlight.present()) {
-        LOG_DBG("ACT", "top-edge swipe ignored: no frontlight on this board");
+        debug_trace::note("top-edge gesture ignored: no frontlight on this board");
       } else {
-        LOG_DBG("ACT", "top-edge swipe: opening the light panel");
+        debug_trace::note("top-edge gesture: opening the light panel");
         lightPanel.show();
         requestUpdate();
         return;
@@ -338,8 +339,12 @@ bool ActivityManager::handleForcedRefresh() { return currentActivity && currentA
 bool ActivityManager::isBookContext() const { return currentActivity && currentActivity->isBookContext(); }
 
 bool ActivityManager::runBoundAction(const uint8_t function) {
+  debug_trace::note("bound action %u dispatched", function);
   // The screen on top gets first refusal: in a book, most of these actions are its own.
-  if (currentActivity && currentActivity->runBoundAction(function)) return true;
+  if (currentActivity && currentActivity->runBoundAction(function)) {
+    debug_trace::note("bound action %u taken by the activity", function);
+    return true;
+  }
 
   switch (function) {
     case CrossPointSettings::LP_MENU_GO_HOME:
@@ -350,7 +355,11 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       popActivity();
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
-      if (!Frontlight.present() || lightPanel.isActive()) return false;
+      if (!Frontlight.present() || lightPanel.isActive()) {
+        debug_trace::note("light panel refused: present=%d active=%d", Frontlight.present() ? 1 : 0,
+                          lightPanel.isActive() ? 1 : 0);
+        return false;
+      }
       lightPanel.show();
       requestUpdate();
       return true;

@@ -31,6 +31,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "PerfLogSink.h"
+#include "util/DebugTrace.h"
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -598,6 +599,7 @@ void setup() {
   // constructed, so the very first refresh of the session is recorded rather than missed,
   // and the previous wake's stage breakdown is appended straight after the header so one
   // copied file carries both the wake cost and the refresh costs that follow it.
+  debug_trace::begin();
   startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
@@ -1341,6 +1343,8 @@ void loop() {
         fired = bindingRouter.onRelease(key, now);
       }
       if (!fired.valid) fired = bindingRouter.tick(key, now);
+      if (fired.valid) debug_trace::note("side key %u fired action %u replay=%d", key, fired.function,
+                                        fired.replayRawEdge ? 1 : 0);
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       // Edges stay hidden for as long as this key is intercepted, and are replayed only on
       // the pass the router rules the gesture the paging the key already did.
