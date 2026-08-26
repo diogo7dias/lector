@@ -11,6 +11,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
 // Item ids in display order. Clock is X3-only and is filtered out in onEnter().
 enum ItemId {
@@ -140,9 +142,6 @@ void StatusBarSettingsActivity::rebuildVisibleItems() {
 }
 
 void StatusBarSettingsActivity::onEnter() {
-  Activity::onEnter();
-
-  selectedIndex = 0;
   pickerActive = false;
 
   rebuildVisibleItems();
@@ -167,87 +166,49 @@ void StatusBarSettingsActivity::onEnter() {
   clampField(SETTINGS.sbBarThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
   clampField(SETTINGS.sbOffBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
 
-  requestUpdate();
+  // Last: it resets the selection and asks for the first paint, so the rows and the
+  // clamped values must already be settled.
+  UiListActivity::onEnter();
 }
 
-void StatusBarSettingsActivity::onExit() { Activity::onExit(); }
+void StatusBarSettingsActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+  subtitles.clear();
+}
 
-void StatusBarSettingsActivity::loop() {
-  // --- Anchor picker overlay owns input while active ---
-  if (pickerActive) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      pickerActive = false;
-      requestUpdate();
-      return;
-    }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (pickerTarget) *pickerTarget = static_cast<uint8_t>(pickerIndex);
-      SETTINGS.saveToFile();
-      pickerActive = false;
-      requestUpdate();
-      return;
-    }
-    buttonNavigator.onNextPress([this] {
-      pickerIndex = ButtonNavigator::nextIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-      requestUpdate();
-    });
-    buttonNavigator.onPreviousPress([this] {
-      pickerIndex = ButtonNavigator::previousIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-      requestUpdate();
-    });
-    buttonNavigator.onNextContinuous([this] {
-      pickerIndex = ButtonNavigator::nextIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-      requestUpdate();
-    });
-    buttonNavigator.onPreviousContinuous([this] {
-      pickerIndex = ButtonNavigator::previousIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-      requestUpdate();
-    });
-    return;
-  }
+bool StatusBarSettingsActivity::handleCustomInput() {
+  // The anchor picker is a modal over the list: while it is up it takes Back, Confirm
+  // and both nav directions, and the list underneath sees none of them.
+  if (!pickerActive) return false;
 
-  // --- Normal list navigation ---
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
-
-  // A tap on a row selects and activates it, the same as every other list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(visibleItems.size())) {
-    selectedIndex = tappedRow;
-    handleSelection();
+    pickerActive = false;
     requestUpdate();
-    return;
+    return true;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    handleSelection();
+    if (pickerTarget) *pickerTarget = static_cast<uint8_t>(pickerIndex);
+    SETTINGS.saveToFile();
+    pickerActive = false;
     requestUpdate();
-    return;
+    return true;
   }
-
-  const int count = static_cast<int>(visibleItems.size());
-  buttonNavigator.onNextPress([this, count] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, count);
+  const auto step = [this](const int delta) {
+    pickerIndex = delta > 0 ? ButtonNavigator::nextIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT)
+                            : ButtonNavigator::previousIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
     requestUpdate();
-  });
-  buttonNavigator.onPreviousPress([this, count] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, count);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, count] {
-    selectedIndex = ButtonNavigator::nextIndex(selectedIndex, count);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, count] {
-    selectedIndex = ButtonNavigator::previousIndex(selectedIndex, count);
-    requestUpdate();
-  });
+  };
+  buttonNavigator.onNextPress([step] { step(1); });
+  buttonNavigator.onPreviousPress([step] { step(-1); });
+  buttonNavigator.onNextContinuous([step] { step(1); });
+  buttonNavigator.onPreviousContinuous([step] { step(-1); });
+  return true;
 }
 
-void StatusBarSettingsActivity::handleSelection() {
-  if (selectedIndex < 0 || selectedIndex >= static_cast<int>(visibleItems.size())) return;
-  const int id = visibleItems[selectedIndex];
+void StatusBarSettingsActivity::handleSelection(const int index) {
+  if (index < 0 || index >= static_cast<int>(visibleItems.size())) return;
+  const int id = visibleItems[index];
 
   // Position items open the anchor picker.
   if (uint8_t* field = anchorFieldFor(id)) {
@@ -261,7 +222,7 @@ void StatusBarSettingsActivity::handleSelection() {
     case ITEM_ENABLED:
       SETTINGS.sbEnabled = cycle(SETTINGS.sbEnabled, 2);
       // Turning the bar off reveals the hidden-bar progress row directly below this
-      // one; turning it back on hides it again. Rebuild before selectedIndex can point
+      // one; turning it back on hides it again. Rebuild before the selection can point
       // past the shortened list. This row is index 0, so the cursor stays put.
       rebuildVisibleItems();
       break;
@@ -298,6 +259,12 @@ void StatusBarSettingsActivity::handleSelection() {
   SETTINGS.saveToFile();
 }
 
+void StatusBarSettingsActivity::activateIndex(const int index) {
+  app.clearTapFlash();
+  handleSelection(index);
+  requestUpdate();
+}
+
 void StatusBarSettingsActivity::renderPicker() {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int screenW = renderer.getScreenWidth();
@@ -327,66 +294,72 @@ void StatusBarSettingsActivity::renderPicker() {
   (void)metrics;
 }
 
-void StatusBarSettingsActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+// The value shown on the right of a row: an anchor in brackets for a position item,
+// otherwise whatever that row cycles through. Pulled out of the old drawList callback
+// unchanged, so the rows read exactly as they did.
+std::string StatusBarSettingsActivity::rowValue(const int id) const {
+  if (const uint8_t* field = anchorFieldFor(id)) return anchorRowValue(*field);
+  switch (id) {
+    case ITEM_ENABLED:
+      return SETTINGS.sbEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case ITEM_OFF_BAR:
+      return I18N.get(
+          offBarNames[SETTINGS.sbOffBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? SETTINGS.sbOffBar : 0]);
+    case ITEM_TITLE_SOURCE:
+      return SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER ? tr(STR_CHAPTER) : tr(STR_BOOK);
+    case ITEM_TITLE_TRUNCATE:
+      return SETTINGS.sbTitleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case ITEM_PAGE_FORMAT:
+      return SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT) : tr(STR_PAGE_FRACTION);
+    case ITEM_BOOK_BAR:
+      return I18N.get(edgeNames[SETTINGS.sbBookBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? SETTINGS.sbBookBar
+                                                                                              : 0]);
+    case ITEM_CHAPTER_BAR:
+      return I18N.get(
+          edgeNames[SETTINGS.sbChapterBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? SETTINGS.sbChapterBar : 0]);
+    case ITEM_BAR_THICKNESS:
+      return I18N.get(thicknessNames[SETTINGS.sbBarThickness < CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT
+                                         ? SETTINGS.sbBarThickness
+                                         : 0]);
+    case ITEM_FLOATING_BAR:
+      return SETTINGS.sbFloatingBar ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    case ITEM_BAR_OUTLINE:
+      return SETTINGS.sbBarOutline ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+    default:
+      return std::string();
+  }
+}
 
+void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  screen.setContentMargin(
+      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
+                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CUSTOMISE_STATUS_BAR));
+  const int itemCount = static_cast<int>(visibleItems.size());
+  subtitles.assign(static_cast<size_t>(itemCount), std::string());
+  rows.assign(static_cast<size_t>(itemCount), fui::ListItem{});
 
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing * 2;
+  for (int i = 0; i < itemCount; ++i) {
+    const int id = visibleItems[i];
+    rows[i].label = I18N.get(itemLabel(id));
+    subtitles[i] = rowValue(id);
+    if (!subtitles[i].empty()) rows[i].subtitle = subtitles[i].c_str();
+    rows[i].actionValue = static_cast<int16_t>(i);
+  }
 
-  GUI.drawList(
-      renderer, Rect{0, contentTop, pageWidth, contentHeight}, static_cast<int>(visibleItems.size()), selectedIndex,
-      [this](int index) { return std::string(I18N.get(itemLabel(visibleItems[index]))); }, nullptr, nullptr,
-      [this](int index) -> std::string {
-        const int id = visibleItems[index];
-        if (const uint8_t* field = anchorFieldFor(id)) return anchorRowValue(*field);
-        switch (id) {
-          case ITEM_ENABLED:
-            return SETTINGS.sbEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-          case ITEM_OFF_BAR:
-            return I18N.get(
-                offBarNames[SETTINGS.sbOffBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? SETTINGS.sbOffBar : 0]);
-          case ITEM_TITLE_SOURCE:
-            return SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER ? tr(STR_CHAPTER) : tr(STR_BOOK);
-          case ITEM_TITLE_TRUNCATE:
-            return SETTINGS.sbTitleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-          case ITEM_PAGE_FORMAT:
-            return SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT)
-                                                                             : tr(STR_PAGE_FRACTION);
-          case ITEM_BOOK_BAR:
-            return I18N.get(
-                edgeNames[SETTINGS.sbBookBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? SETTINGS.sbBookBar : 0]);
-          case ITEM_CHAPTER_BAR:
-            return I18N.get(
-                edgeNames[SETTINGS.sbChapterBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? SETTINGS.sbChapterBar
-                                                                                            : 0]);
-          case ITEM_BAR_THICKNESS:
-            return I18N.get(thicknessNames[SETTINGS.sbBarThickness < CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT
-                                               ? SETTINGS.sbBarThickness
-                                               : 0]);
-          case ITEM_FLOATING_BAR:
-            return SETTINGS.sbFloatingBar ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-          case ITEM_BAR_OUTLINE:
-            return SETTINGS.sbBarOutline ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-          default:
-            return "";
-        }
-      },
-      true);
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(itemCount);
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props, true);
+  screen.list(props);
+}
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  if (pickerActive) renderPicker();
-
-  // Plain fast refresh, same as every other settings screen. This screen used to
-  // force a FULL refresh every 6th render to bound X3 fast-refresh bloom, but a
-  // ~770 ms whole-screen flash every few button presses is far more intrusive than
-  // the ghosting it prevented, and Home already runs a full refresh on return.
-  renderer.displayBuffer();
+bool StatusBarSettingsActivity::drawOverlay() {
+  if (!pickerActive) return false;
+  // Painted over the finished page; the base still pushes the refresh behind it, which
+  // is why this returns false rather than true.
+  renderPicker();
+  return false;
 }
