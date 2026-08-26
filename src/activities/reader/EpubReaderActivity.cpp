@@ -579,6 +579,7 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       return SETTINGS.popupItemCount() > 0;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
     case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+    case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:
       // Same test the in-book menu uses to offer its own rows: there must be a wallpaper
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
@@ -661,6 +662,9 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       // Asks for confirmation itself before removing the file; see the menu action.
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_DELETE);
       return true;
+    case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE);
+      return true;
     case CrossPointSettings::LP_MENU_PAGE_PREV:
       pageTurn(false);
       return true;
@@ -688,7 +692,13 @@ void EpubReaderActivity::openQuickMenu() {
     const bool available = boundMenuFunctionAvailable(function);
     // Fixed-width status column, and the pop-up is left-aligned, so ticking or losing a
     // footnote never shifts a label sideways.
-    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(boundMenuActionLabel(function)));
+    // One row, two names: a wallpaper already starred offers Unfavorite. Same swap the
+    // reader menu's own Sleep Screen row makes, so the two never disagree.
+    const StrId label = function == CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE &&
+                                FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath)
+                            ? StrId::STR_UNFAVORITE_WALLPAPER
+                            : boundMenuActionLabel(function);
+    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(label));
     disabledRows.push_back(!available);
     quickMenuFunctions.push_back(function);
   }

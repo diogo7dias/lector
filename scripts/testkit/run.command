@@ -175,8 +175,10 @@ capture_loop() {
     fi
 
     # Reattach when the node changed (device reset) or nothing has arrived for
-    # 20 s (the handle is stale, or the device slept and came back).
-    if [ "$now_id" != "$READER_ID" ] || [ "$quiet" -ge 20 ]; then
+    # 5 s (the handle is stale, or the device slept and came back). Five, not twenty:
+    # on the X4 Pro the handle goes stale far more often than the node changes, and at
+    # twenty seconds whole minutes of a test session were lost between reattaches.
+    if [ "$now_id" != "$READER_ID" ] || [ "$quiet" -ge 5 ]; then
       stop_reader
       local found
       found="$(find_port)"

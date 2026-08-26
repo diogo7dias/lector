@@ -273,6 +273,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_SLEEP = bound_action::LP_MENU_SLEEP;
   static constexpr auto LP_MENU_FORCE_REFRESH = bound_action::LP_MENU_FORCE_REFRESH;
   static constexpr auto LP_MENU_WALLPAPER_DELETE = bound_action::LP_MENU_WALLPAPER_DELETE;
+  static constexpr auto LP_MENU_WALLPAPER_FAVORITE = bound_action::LP_MENU_WALLPAPER_FAVORITE;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
@@ -299,7 +300,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
       LP_MENU_KOSYNC,          LP_MENU_BOOKMARK,          LP_MENU_BOOKMARKS,       LP_MENU_DICTIONARY,
       LP_MENU_GRAB_QUOTE,      LP_MENU_VIEW_QUOTES,       LP_MENU_GO_TO_PARAGRAPH, LP_MENU_FOOTNOTES,
-      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD,  LP_MENU_WALLPAPER_DELETE};
+      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD,  LP_MENU_WALLPAPER_FAVORITE,
+      LP_MENU_WALLPAPER_DELETE};
 
   // Cap on ticked pop-up rows. Every action can be ticked at once; the ceiling only exists
   // because popupItems is a bit mask, so its width is as many bits as there are to set. The

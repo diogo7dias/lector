@@ -150,6 +150,9 @@ namespace {
 constexpr float LEFT_EDGE_BACK_GESTURE_FRAC_X = 0.25f;
 constexpr float BOTTOM_EDGE_BACK_GESTURE_FRAC_Y = 0.14f;
 constexpr float TOP_EDGE_MENU_GESTURE_FRAC_Y = 0.14f;
+// How far down the finger must travel before a top-edge drag counts as the gesture.
+// A fifth of the screen: past any accidental slip, short of a full page-height drag.
+constexpr float MENU_DRAG_TRAVEL_FRAC_Y = 0.20f;
 constexpr unsigned long TOUCH_DOWN_SELECT_DELAY_MS = 90;
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 }  // namespace
@@ -354,6 +357,39 @@ bool MappedInputManager::wasBackGesture() const {
 }
 
 bool MappedInputManager::wasMenuGesture() const {
+  // Two ways in, because one was not enough.
+  //
+  // The first is a pull-down tracked here, pass by pass: the finger goes down inside the
+  // top band and is dragged more than a fifth of the screen straight down. No time limit,
+  // so a slow, deliberate pull works — which is how a panel dragged off the top edge is
+  // actually handled, and it is the reason this gesture was all but unusable before: the
+  // SDK's swipe is a flick, under 700 ms, and a deliberate drag rarely beats that clock.
+  //
+  // The second is that flick, kept because a fast swipe from the edge never lingers long
+  // enough for the drag to arm.
+  const int topEdgeBottom = static_cast<int>(renderer.getScreenHeight() * TOP_EDGE_MENU_GESTURE_FRAC_Y);
+  int tx = 0;
+  int ty = 0;
+  if (wasScreenTouchDown(tx, ty)) {
+    menuDragStartX_ = ty <= topEdgeBottom ? tx : -1;
+    menuDragStartY_ = ty <= topEdgeBottom ? ty : -1;
+    menuDragFired_ = false;
+  } else if (menuDragStartY_ >= 0 && isScreenTouchHeld(tx, ty)) {
+    const int travel = ty - menuDragStartY_;
+    if (!menuDragFired_ && travel >= static_cast<int>(renderer.getScreenHeight() * MENU_DRAG_TRAVEL_FRAC_Y) &&
+        travel > std::abs(tx - menuDragStartX_)) {
+      menuDragFired_ = true;
+      // The rest of the contact belongs to the gesture: without this the finger lifting
+      // would tap whatever the panel just drew under it.
+      gpio.suppressTouchContact();
+      LOG_DBG("INPUT", "top-edge drag: %d px down from y=%d", travel, menuDragStartY_);
+      rememberTouchHeldTime();
+      return true;
+    }
+  } else if (!isScreenTouchHeld(tx, ty)) {
+    menuDragStartY_ = -1;
+  }
+
   // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
   int sx = 0;
   int sy = 0;
@@ -366,7 +402,6 @@ bool MappedInputManager::wasMenuGesture() const {
     if (gpio.wasTouchReleased()) LOG_DBG("INPUT", "touch released, no swipe decoded");
     return false;
   }
-  const int topEdgeBottom = static_cast<int>(renderer.getScreenHeight() * TOP_EDGE_MENU_GESTURE_FRAC_Y);
   const bool hit = sy <= topEdgeBottom && ey > sy && std::abs(ey - sy) > std::abs(ex - sx);
   LOG_DBG("INPUT", "swipe (%d,%d)->(%d,%d) topEdgeBottom=%d screenH=%d menuGesture=%d", sx, sy, ex, ey, topEdgeBottom,
           renderer.getScreenHeight(), hit ? 1 : 0);

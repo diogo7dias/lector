@@ -166,6 +166,14 @@ class MappedInputManager {
   // as the tap event is gone, so the next tap is heard again.
   mutable bool hintTapUsed = false;
 
+  // Top-edge pull-down state (see wasMenuGesture). The SDK's swipe is a flick: under
+  // 700 ms, over 60 px. A hand pulling a panel down from the edge is slower than that far
+  // more often than not, so the gesture is also tracked directly here, across passes,
+  // with no time limit at all. -1 = not armed.
+  mutable int menuDragStartX_ = -1;
+  mutable int menuDragStartY_ = -1;
+  mutable bool menuDragFired_ = false;
+
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;
 

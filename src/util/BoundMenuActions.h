@@ -71,6 +71,9 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Deletes the wallpaper the lock screen last showed, behind the in-book menu's own
   // confirmation. The first pop-up row past bit 15, which is why popupItems is 32 bits.
   LP_MENU_WALLPAPER_DELETE = 24,
+  // Stars or unstars that same wallpaper. Paired with the delete row: the two decisions
+  // you make about last night's lock screen are "keep it" and "lose it".
+  LP_MENU_WALLPAPER_FAVORITE = 25,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 
