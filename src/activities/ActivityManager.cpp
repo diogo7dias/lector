@@ -111,10 +111,17 @@ void ActivityManager::loop() {
     // swipe opens it from any screen. Handled once here for the same reason Home is.
     if (lightPanel.isActive()) {
       if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-    } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
-      lightPanel.show();
-      requestUpdate();
-      return;
+    } else if (mappedInput.wasMenuGesture()) {
+      // Logged rather than silently skipped: a board with no frontlight and a swipe that
+      // never decoded look the same from the outside, and only the log separates them.
+      if (!Frontlight.present()) {
+        LOG_DBG("ACT", "top-edge swipe ignored: no frontlight on this board");
+      } else {
+        LOG_DBG("ACT", "top-edge swipe: opening the light panel");
+        lightPanel.show();
+        requestUpdate();
+        return;
+      }
     }
 
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {

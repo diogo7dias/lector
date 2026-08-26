@@ -1,6 +1,10 @@
 Lector test kit
 ===============
 
+The quickest route is the one-line command that comes with each kit: paste it
+into Terminal and it downloads this kit, flashes, records, and removes itself,
+leaving only the log in Downloads. What follows is the manual route.
+
 1. Plug the reader into the Mac with a data cable (a charge-only cable will not
    show up).
 2. Double-click run.command.
