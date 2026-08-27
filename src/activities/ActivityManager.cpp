@@ -526,7 +526,9 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       goHome(HomeMenuItem::FILE_BROWSER);
       return true;
     case CrossPointSettings::LP_MENU_SETTINGS:
-      goHome(HomeMenuItem::SETTINGS_MENU);
+      // The screen itself, not Home with the Settings row picked: goHome only moves the
+      // selection, which left the button looking like it had done nothing.
+      goToSettings();
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
       if (!Frontlight.present() || lightPanel.isActive()) {

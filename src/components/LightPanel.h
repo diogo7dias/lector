@@ -17,6 +17,8 @@
 #include "MappedInputManager.h"
 #include "fontIds.h"
 #include "util/BoundMenuLabels.h"
+#include "icons/sun24.h"
+#include "icons/thermometer24.h"
 #include "util/ButtonNavigator.h"
 #include "util/DebugTrace.h"
 
@@ -190,8 +192,8 @@ class LightPanel {
 
     const int screenWidth = renderer.getScreenWidth();
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-    layout_ = light_panel::forScreen(screenWidth, lineHeight, Frontlight.hasColorTemperature(), context_.hasAux(),
-                                     context_.actionCount);
+    layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(SMALL_FONT_ID),
+                                     Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount);
 
     // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
     // edge while the rows sit below the crop, the same trick the unlock banners use.
@@ -213,13 +215,9 @@ class LightPanel {
              I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF));
     drawBox(renderer, layout_.toggle, text, /*filled=*/on_);
 
-    snprintf(text, sizeof(text), "%s %d", I18N.get(StrId::STR_FRONTLIGHT_BRIGHTNESS), static_cast<int>(brightness_));
-    drawStepRow(renderer, layout_.brightness, text, brightness_);
-    if (layout_.hasWarmth) {
-      snprintf(text, sizeof(text), "%s %d", I18N.get(StrId::STR_FRONTLIGHT_WARMTH), static_cast<int>(warmth_));
-      drawStepRow(renderer, layout_.warmth, text, warmth_);
-    }
-    if (layout_.hasAux) drawStepRow(renderer, layout_.aux, context_.auxText, 0);
+    drawSliderRow(renderer, layout_.brightness, Sun24Icon, brightness_);
+    if (layout_.hasWarmth) drawSliderRow(renderer, layout_.warmth, Thermometer24Icon, warmth_);
+    if (layout_.hasAux) drawAuxRow(renderer, layout_.aux, context_.auxText);
 
     for (int i = 0; i < layout_.actionCount; ++i) {
       drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
@@ -281,27 +279,49 @@ class LightPanel {
     renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !filled);
   }
 
-  void drawStepRow(const GfxRenderer& renderer, const light_panel::StepRow& row, const char* label,
-                   const uint8_t value) const {
+  // Icon, track, number, then the two steppers. The row is named by its icon rather than
+  // by a word: the word and the track were fighting for the same 44 px, and the icon says
+  // which value this is in a third of the space.
+  void drawSliderRow(const GfxRenderer& renderer, const light_panel::StepRow& row, const freeink::Icon& icon,
+                     const uint8_t value) const {
     if (row.height == 0) return;
-    drawBox(renderer, row.minus, "-", /*filled=*/false);
-    drawBox(renderer, row.plus, "+", /*filled=*/false);
+    drawSteppers(renderer, row);
 
-    // The label sits between the steppers, over the track when there is one.
-    const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
-    const int span = row.plus.x - (row.minus.x + row.minus.width);
-    const int textX = row.minus.x + row.minus.width + (span - textWidth) / 2;
-    renderer.drawText(banner::FONT_ID, textX, row.y + topInset_ + 1, label, true);
+    const int rowCenter = row.y + topInset_ + row.height / 2;
+    renderer.drawIcon(icon.bits, row.icon.x, rowCenter - icon.opticalCenterY, icon.w);
 
-    if (row.bar.width == 0) {
-      drawSelection(renderer, row);
-      return;
-    }
     const int barY = row.bar.y + topInset_;
     renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, true);
     const int fill = row.bar.width * value / 100;
     if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, true);
+
+    char number[8];
+    snprintf(number, sizeof(number), "%d", static_cast<int>(value));
+    drawCentered(renderer, row.value, number, /*center=*/false);
     drawSelection(renderer, row);
+  }
+
+  // No icon and no track: the label owns the run up to the stepper column.
+  void drawAuxRow(const GfxRenderer& renderer, const light_panel::StepRow& row, const char* label) const {
+    if (row.height == 0) return;
+    drawSteppers(renderer, row);
+    drawCentered(renderer, row.value, label, /*center=*/true);
+    drawSelection(renderer, row);
+  }
+
+  void drawSteppers(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
+    drawBox(renderer, row.minus, "-", /*filled=*/false);
+    drawBox(renderer, row.plus, "+", /*filled=*/false);
+  }
+
+  // Vertically centred in `rect` either way; `center` picks horizontal centring over
+  // starting at the left edge.
+  void drawCentered(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* text,
+                    const bool center) const {
+    const int textY = rect.y + topInset_ + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
+    const int textX =
+        center ? rect.x + (rect.width - renderer.getTextWidth(banner::FONT_ID, text)) / 2 : rect.x;
+    renderer.drawText(banner::FONT_ID, textX, textY, text, true);
   }
 
   // Button users need to see which row Left/Right will move. A rule under the row rather
@@ -312,15 +332,16 @@ class LightPanel {
                       layout_.width - light_panel::kSidePad * 2, 1, true);
   }
 
+  // Battery and free space, in the small UI font. No rule above it: the button grid it
+  // follows is already a row of boxes, and a line under those read as a second border.
   void drawReadout(const GfxRenderer& renderer) const {
     const auto& rect = layout_.readout;
     const int y = rect.y + topInset_;
-    renderer.fillRect(rect.x, y - light_panel::kPad / 2, rect.width, 1, true);
 
     char left[32];
     snprintf(left, sizeof(left), "%s %u%%", I18N.get(StrId::STR_BATTERY),
              static_cast<unsigned>(powerManager.getBatteryPercentage()));
-    renderer.drawText(banner::FONT_ID, rect.x, y, left, true);
+    renderer.drawText(SMALL_FONT_ID, rect.x, y, left, true);
 
     char right[32];
     // Whole gigabytes below ten get a decimal; above it the tenth is noise on a card this
@@ -331,8 +352,8 @@ class LightPanel {
     } else {
       snprintf(right, sizeof(right), "%d GB %s", static_cast<int>(gigabytes + 0.5), I18N.get(StrId::STR_FREE_SPACE));
     }
-    const int width = renderer.getTextWidth(banner::FONT_ID, right);
-    renderer.drawText(banner::FONT_ID, rect.x + rect.width - width, y, right, true);
+    const int width = renderer.getTextWidth(SMALL_FONT_ID, right);
+    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - width, y, right, true);
   }
 
   void close(const std::function<void()>& requestUpdate) {
