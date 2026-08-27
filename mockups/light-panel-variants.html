@@ -1,0 +1,127 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>lector — light panel, agreed design (X4 Pro, 480x800)</title>
+<style>
+  :root { --ink:#111; --paper:#fff; }
+  body { margin:0; padding:28px; background:#e9e7e2; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#222; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:#666; margin:0 0 22px; }
+  .grid { display:flex; gap:26px; flex-wrap:wrap; align-items:flex-start; }
+  .col { width:480px; }
+  .col h2 { font-size:16px; margin:0 0 2px; }
+  .col p.note { margin:0 0 10px; color:#555; font-size:13px; min-height:56px; }
+  /* device */
+  .dev { position:relative; width:480px; height:520px; background:var(--paper); overflow:hidden;
+         box-shadow:0 2px 10px rgba(0,0,0,.25); border:1px solid #bbb; }
+  .page { position:absolute; inset:0; padding:14px 16px; font:17px/25px Georgia,serif; color:#111; }
+  /* stipple over the page below the band */
+  .stipple { position:absolute; left:0; right:0; bottom:0;
+    background-image:repeating-linear-gradient(0deg,#000 0 1px,transparent 1px 2px),
+                     repeating-linear-gradient(90deg,#000 0 1px,transparent 1px 2px);
+    background-size:2px 2px; opacity:.5; mix-blend-mode:multiply; }
+  .band { position:absolute; left:0; top:0; width:480px; background:var(--paper);
+          border-bottom:2px solid var(--ink); }
+  .band * { box-sizing:border-box; }
+  .abs { position:absolute; }
+  .t { font:17px/25px "DejaVu Sans",Verdana,sans-serif; color:var(--ink); white-space:nowrap; }
+  .bar { border:1px solid var(--ink); background:var(--paper); }
+  .fill { position:absolute; left:0; top:0; bottom:0; background:var(--ink); }
+  .btn { border:1px solid var(--ink); display:flex; align-items:center; justify-content:center;
+         font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:var(--ink); background:var(--paper); }
+  .btn.on { background:var(--ink); color:var(--paper); }
+  .step { border:1px solid var(--ink); display:flex; align-items:center; justify-content:center;
+          font:19px/1 "DejaVu Sans",Verdana,sans-serif; color:var(--ink); background:var(--paper); }
+  .sel { position:absolute; height:1px; background:var(--ink); }
+  .cap { font-size:12px; color:#777; margin-top:6px; }
+</style>
+<h1>lector — top-edge light panel, agreed design (X4 Pro, 480 x 800)</h1>
+<p class="sub">Panel drawn 1:1 over a real page, stippled 50%. Two contexts; the light rows are identical in both.</p>
+<div class="grid" id="grid"></div>
+
+<script>
+const PAGE = `the sea, and the sea gave up the dead which were in it;
+and death and hell delivered up the dead which were in
+them: and they were judged every man according to their
+works. And whosoever was not found written in the book
+of life was cast into the lake of fire. And I saw a new
+heaven and a new earth: for the first heaven and the
+first earth were passed away; and there was no more sea.`;
+
+function device(bandHeight, inner) {
+  return `<div class="dev">
+    <div class="page">${PAGE.replace(/\n/g,'<br>')}</div>
+    <div class="stipple" style="top:${bandHeight}px"></div>
+    <div class="band" style="height:${bandHeight}px">${inner}</div>
+  </div>`;
+}
+function txt(x,y,s,extra='') { return `<div class="abs t" style="left:${x}px;top:${y}px;${extra}">${s}</div>`; }
+function bar(x,y,w,h,pct) { return `<div class="abs bar" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">
+    <div class="fill" style="width:${(w-2)*pct/100}px"></div></div>`; }
+function btn(x,y,w,h,label,on) { return `<div class="abs btn${on?' on':''}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${label}</div>`; }
+function step(x,y,w,h,label) { return `<div class="abs step" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${label}</div>`; }
+function rule(x,y,w) { return `<div class="sel" style="left:${x}px;top:${y}px;width:${w}px"></div>`; }
+
+
+const BRIGHT = 42, WARM = 65;
+const PAD=6, SIDE=12, LINE=25, BTNPADY=5, BTNGAP=10;
+const SW=64, RH=44, TRACK=16, ROWGAP=8;
+const W=480;
+
+function bigToggle(y, label, on) { return btn(SIDE, y, W-SIDE*2, RH, label, on); }
+
+function stepRow(y, name, valueText, pct) {
+  let s = step(SIDE, y, SW, RH, '−') + step(W-SIDE-SW, y, SW, RH, '+');
+  const bx = SIDE + SW + 10, bw = W - SIDE*2 - (SW+10)*2;
+  s += txt(bx, y + 1, name + ' ' + valueText, `width:${bw}px;text-align:center`);
+  if (pct !== null) s += bar(bx, y + RH - 22, bw, TRACK, pct);
+  return s;
+}
+
+function grid(y, labels) {
+  const bh = LINE + BTNPADY*2, bw = (W - SIDE*2 - BTNGAP)/2;
+  let s = '';
+  labels.forEach((l, i) => {
+    const col = i % 2, row = (i / 2) | 0;
+    s += btn(SIDE + col*(bw+BTNGAP), y + row*(bh+BTNGAP), bw, bh, l, false);
+  });
+  return { html: s, height: Math.ceil(labels.length/2)*(bh+BTNGAP) - BTNGAP };
+}
+
+function readout(y) {
+  return `<div class="abs" style="left:${SIDE}px;top:${y}px;width:${W-SIDE*2}px;height:1px;background:#111;opacity:.35"></div>`
+       + txt(SIDE, y+4, 'Battery 72%')
+       + txt(SIDE, y+4, '12.4 GB free', `width:${W-SIDE*2}px;text-align:right`);
+}
+
+function inBook() {
+  let y = PAD, h = '';
+  h += bigToggle(y, 'Frontlight · ON', true);            y += RH + ROWGAP;
+  h += stepRow(y, 'Brightness', String(BRIGHT), BRIGHT);      y += RH + ROWGAP;
+  h += stepRow(y, 'Warmth', String(WARM), WARM);              y += RH + ROWGAP;
+  h += stepRow(y, 'Text Size', '17', null);                   y += RH + ROWGAP;
+  const g = grid(y, ['Refresh', 'Rotate', 'Status Bar', 'Reader Settings']);
+  h += g.html;                                                y += g.height + ROWGAP;
+  h += readout(y);                                            y += LINE + 4;
+  return device(y + PAD + 2, h);
+}
+
+function outOfBook() {
+  let y = PAD, h = '';
+  h += bigToggle(y, 'Frontlight · ON', true);            y += RH + ROWGAP;
+  h += stepRow(y, 'Brightness', String(BRIGHT), BRIGHT);      y += RH + ROWGAP;
+  h += stepRow(y, 'Warmth', String(WARM), WARM);              y += RH + ROWGAP;
+  h += stepRow(y, 'Sort:', 'Recently Added', null);            y += RH + ROWGAP;
+  const g = grid(y, ['Refresh', 'Rotate', 'Continue Reading', 'Random Book', 'Search', 'Settings']);
+  h += g.html;                                                y += g.height + ROWGAP;
+  h += readout(y);                                            y += LINE + 4;
+  return device(y + PAD + 2, h);
+}
+
+const cols = [
+  ['In a book', 'Frontlight as the big button. Brightness and Warmth on 16 px tracks with 64 x 44 steppers; a tap on the track lands the value where the finger lands. Text Size takes the same row shape with no track. Four actions, then the readout line. Band 333 px of 800.', inBook()],
+  ['Outside a book', 'Same three light rows. Text Size gives way to Sort, which steps through Name, Recently Added, Last Read and Random in the same row shape. Six actions: Refresh and Rotate stay, the other four are what you want when you are not reading. Band 376 px of 800.', outOfBook()],
+];
+document.getElementById('grid').innerHTML = cols.map(([t,n,d]) =>
+  `<div class="col"><h2>${t}</h2><p class="note">${n}</p>${d}<div class="cap">panel 1:1 &middot; page below is a real page, stippled</div></div>`).join('');
+
+</script>
