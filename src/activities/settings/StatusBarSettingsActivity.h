@@ -2,27 +2,33 @@
 #include <cstdint>
 #include <vector>
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include <string>
+
+#include "activities/UiListActivity.h"
 
 // Reader status bar configuration activity (v2 per-item model). Each text item is
 // parked at one of six anchors (or Off) via a small in-place position picker; the
 // progress bars, thickness and title/page sub-options cycle in place. A live
 // preview of the real status bar is drawn at the bottom.
-class StatusBarSettingsActivity final : public Activity {
+class StatusBarSettingsActivity final : public UiListActivity {
  public:
   explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("StatusBarSettings", renderer, mappedInput) {}
+      : UiListActivity("StatusBarSettings", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override { return static_cast<int>(visibleItems.size()); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  const char* headerTitle() const override { return tr(STR_CUSTOMISE_STATUS_BAR); }
+  // The anchor picker owns every button while it is up, so it runs before the base
+  // touches Back, Confirm or the selection.
+  bool handleCustomInput() override;
+  bool drawOverlay() override;
 
  private:
-  ButtonNavigator buttonNavigator;
-
-  int selectedIndex = 0;
   // The item ids that apply to this device (clock is X3-only), in display order.
   std::vector<int> visibleItems;
 
@@ -33,7 +39,7 @@ class StatusBarSettingsActivity final : public Activity {
   int pickerIndex = 0;
   uint8_t* pickerTarget = nullptr;
 
-  void handleSelection();
+  void handleSelection(int index);
   // Rebuilds the display list. Two items are conditional: the clock (X3 RTC only) and
   // the hidden-bar progress row, which only makes sense while the status bar is off.
   // Called again whenever the master toggle flips so that row appears/disappears live.
@@ -41,4 +47,10 @@ class StatusBarSettingsActivity final : public Activity {
   // Returns the SETTINGS anchor field for a position item, or nullptr for non-anchor items.
   uint8_t* anchorFieldFor(int itemId) const;
   void renderPicker();
+  // The value column text for one item id.
+  std::string rowValue(int id) const;
+
+  // Row text owns its strings; the ListItems borrow them.
+  std::vector<std::string> subtitles;
+  std::vector<freeink::ui::ListItem> rows;
 };
