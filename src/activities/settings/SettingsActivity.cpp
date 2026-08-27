@@ -403,9 +403,11 @@ void SettingsActivity::rebuildSettingsList() {
   // reached for. Text size, fonts and the status bar are tuned while reading; the
   // frontlight is next, which is why it leads Display; buttons and the system rows are
   // set once and then left alone.
-  for (auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
-    settings.insert(settings.end(), std::make_move_iterator(category->begin()),
-                    std::make_move_iterator(category->end()));
+  // Copied, never moved: selectCategory reads the four vectors again every time a
+  // category is opened or a change rebuilds the list. Moving out of them leaves each row
+  // with an empty valueGetter/stringGetter, and calling one of those aborts.
+  for (const auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
+    settings.insert(settings.end(), category->begin(), category->end());
   }
 
   settingsCount = static_cast<int>(settings.size());
