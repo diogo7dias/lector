@@ -354,6 +354,12 @@ class EpubReaderActivity final : public Activity {
   static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
   // Delete this book's override and follow the global settings again.
   // Reads the Customise Status Bar screen's result back into this book's override.
+  // The light panel's aux row is this book's text size. Only the sizes actually installed
+  // for the active family are reachable, so on a device carrying only the built-in
+  // ChareInk (one compiled-in size) the row shows the size and the steppers do nothing.
+  bool lightPanelAuxText(char* out, size_t length) const override;
+  bool lightPanelStepAux(int delta) override;
+
   void applyStatusBarEdit();
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.

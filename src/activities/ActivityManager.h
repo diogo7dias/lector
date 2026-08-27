@@ -58,6 +58,7 @@ class ActivityManager {
   // that opens it works from every screen, and the band is drawn over whatever the last
   // render left in the framebuffer instead of replacing it.
   LightPanel lightPanel;
+  std::function<void()> onSleep_;
 
   void exitActivity(const RenderLock& lock);
 
@@ -97,6 +98,14 @@ class ActivityManager {
   // Rotate is answered here, because whether an orientation means anything depends on the
   // screen on top.
   void setSleepAction(std::function<void()> onSleep);
+
+  // The light panel asks for these every time it opens: what to put in its aux row and
+  // its action grid, and what a step of that aux row means here.
+  void buildLightPanelContext(light_panel::Context& context);
+  bool stepLightPanelAux(int delta);
+
+  // One book chosen at random from the card, or empty when the card holds none.
+  std::string randomBookPath();
   void loop();
 
   // Will replace currentActivity and drop all activities on stack

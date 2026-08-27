@@ -1,19 +1,24 @@
 #include "ActivityManager.h"
 
 #include <FontCacheManager.h>
+#include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <PerfLog.h>
 #include <PerfStats.h>
+#include <esp_random.h>
 
 #include <algorithm>
+#include <cstring>
+#include <string_view>
 
 #include "CrossPointSettings.h"
-#include "util/DebugTrace.h"
 #include "OpdsServerStore.h"
+#include "RecentBooksStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/BusyBanner.h"
 #include "components/RowHitTest.h"
 #include "dev/LockLabActivity.h"
 #include "home/CrashActivity.h"
@@ -23,19 +28,146 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
+#include "util/BusyTick.h"
+#include "util/DebugTrace.h"
 #include "util/FullScreenMessageActivity.h"
+#include "util/OrientationCycle.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
 
+namespace {
+
+// The Sort row's current value, for the light panel's aux row outside a book.
+StrId bookOrderLabel(const uint8_t order) {
+  switch (order) {
+    case CrossPointSettings::BOOK_ORDER_RANDOM:
+      return StrId::STR_BOOK_ORDER_RANDOM;
+    case CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED:
+      return StrId::STR_BOOK_ORDER_RECENTLY_ADDED;
+    case CrossPointSettings::BOOK_ORDER_LAST_READ:
+      return StrId::STR_BOOK_ORDER_LAST_READ;
+    default:
+      return StrId::STR_BOOK_ORDER_ALPHABETICAL;
+  }
+}
+
+// What the panel's action grid holds. Refresh and Rotate work anywhere, so they lead both
+// sets; the rest is what you would want where you are. In a book that is the two things
+// about this book you change most; outside one it is getting back into a book, or finding
+// a different one.
+constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH,
+                                       CrossPointSettings::LP_MENU_ROTATE,
+                                       CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
+                                       CrossPointSettings::LP_MENU_READER_SETTINGS};
+
+constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
+    CrossPointSettings::LP_MENU_FORCE_REFRESH, CrossPointSettings::LP_MENU_ROTATE,
+    CrossPointSettings::LP_MENU_CONTINUE_READING, CrossPointSettings::LP_MENU_RANDOM_BOOK,
+    CrossPointSettings::LP_MENU_SEARCH, CrossPointSettings::LP_MENU_SETTINGS};
+
+// One book chosen at random from the card, or empty when there are none.
+//
+// A reservoir sample over a bounded walk: the whole point is one press and one book, and
+// building a list of every book on the card first would cost the memory and the time that
+// the file browser already spends when you want to choose for yourself. Caps exist because
+// this runs on the loop task with a busy banner over it, not because a bigger card is
+// wrong — a card past the cap simply picks from the first 4000 books it meets.
+constexpr int RANDOM_BOOK_MAX_DEPTH = 4;
+constexpr uint32_t RANDOM_BOOK_MAX_BOOKS = 4000;
+// The walk is bounded by what it reads, not only by what it finds: a folder of ten
+// thousand images holds no books at all, and without this the book cap would never
+// be reached while the card was read from end to end.
+constexpr uint32_t RANDOM_BOOK_MAX_SCANNED = 20000;
+
+struct RandomBookScan {
+  uint32_t books = 0;
+  uint32_t scanned = 0;
+  std::string picked;
+
+  bool exhausted() const { return books >= RANDOM_BOOK_MAX_BOOKS || scanned >= RANDOM_BOOK_MAX_SCANNED; }
+};
+
+void walkForRandomBook(const std::string& path, const int depth, RandomBookScan& scan) {
+  if (depth > RANDOM_BOOK_MAX_DEPTH || scan.exhausted()) return;
+  auto dir = Storage.open(path.c_str());
+  if (!dir || !dir.isDirectory()) return;
+  dir.rewindDirectory();
+
+  char name[256];
+  for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
+    if (scan.exhausted()) break;
+    // Blocks the loop task, so let the busy banner appear and keep the watchdog fed.
+    if ((++scan.scanned & 0x3F) == 0) busy::tick();
+    entry.getName(name, sizeof(name));
+    if (name[0] == '.' || strcmp(name, "System Volume Information") == 0) continue;
+
+    const std::string child = path == "/" ? std::string("/") + name : path + "/" + name;
+    if (entry.isDirectory()) {
+      // The wallpaper folders hold thousands of images and no books.
+      if (child == "/sleep" || child == "/sleep pause") continue;
+      entry.close();
+      walkForRandomBook(child, depth + 1, scan);
+      continue;
+    }
+    const std::string_view filename{name};
+    if (!FsHelpers::hasEpubExtension(filename) && !FsHelpers::hasXtcExtension(filename) &&
+        !FsHelpers::hasTxtExtension(filename) && !FsHelpers::hasMarkdownExtension(filename)) {
+      continue;
+    }
+    // Reservoir sampling: the nth book seen replaces the pick with probability 1/n, which
+    // leaves every book equally likely without knowing how many there are.
+    ++scan.books;
+    if (esp_random() % scan.books == 0) scan.picked = child;
+  }
+  dir.close();
+}
+
+}  // namespace
+
+std::string ActivityManager::randomBookPath() {
+  BusyBanner banner(renderer, tr(STR_BUSY_READING_FOLDER));
+  RandomBookScan scan;
+  walkForRandomBook("/", 0, scan);
+  return std::move(scan.picked);
+}
+
 void ActivityManager::setSleepAction(std::function<void()> onSleep) {
-  lightPanel.setActions(std::move(onSleep), [this](const uint8_t orientation) {
-    // The reader owns this: it persists the setting and re-indexes the chapter at the new
-    // column width. Anywhere else there is nothing laid out against an orientation, so the
-    // setting is simply stored and the next book opens turned.
-    if (currentActivity && currentActivity->applyReaderOrientation(orientation)) return;
-    SETTINGS.orientation = orientation;
-    SETTINGS.saveToFile();
-  });
+  onSleep_ = std::move(onSleep);
+  lightPanel.setHost([this](light_panel::Context& context) { buildLightPanelContext(context); },
+                     [this](const uint8_t function) { return runBoundAction(function); },
+                     [this](const int delta) { return stepLightPanelAux(delta); });
+}
+
+void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
+  // The screen on top names its own aux row if it has one (Text Size in a book). Outside a
+  // book the browser order is the value worth a stepper, and it belongs to the setting
+  // rather than to any one screen, so it is filled in here.
+  const bool taken = currentActivity && currentActivity->lightPanelAuxText(context.auxText, sizeof(context.auxText));
+  if (!taken && !isBookContext()) {
+    snprintf(context.auxText, sizeof(context.auxText), "%s: %s", I18N.get(StrId::STR_SORT),
+             I18N.get(bookOrderLabel(SETTINGS.bookBrowserOrder)));
+  }
+
+  const bool inBook = isBookContext();
+  const uint8_t* actions = inBook ? IN_BOOK_ACTIONS : OUT_OF_BOOK_ACTIONS;
+  const int count = inBook ? static_cast<int>(std::size(IN_BOOK_ACTIONS)) : static_cast<int>(std::size(OUT_OF_BOOK_ACTIONS));
+  context.actionCount = std::min(count, light_panel::kMaxActions);
+  for (int i = 0; i < context.actionCount; ++i) context.actions[i] = actions[i];
+}
+
+bool ActivityManager::stepLightPanelAux(const int delta) {
+  if (currentActivity && currentActivity->lightPanelStepAux(delta)) return true;
+  if (isBookContext()) return false;
+
+  const int count = CrossPointSettings::BOOK_ORDER_COUNT;
+  const int next = (static_cast<int>(SETTINGS.bookBrowserOrder) + delta % count + count) % count;
+  if (next == SETTINGS.bookBrowserOrder) return false;
+  SETTINGS.bookBrowserOrder = static_cast<uint8_t>(next);
+  SETTINGS.saveToFile();
+  // The browser is the only screen laid out against this, and it has to re-read the folder
+  // rather than re-sort what it drew: Last Read reads a key per book off the card.
+  if (currentActivity) currentActivity->onBookOrderChanged();
+  return true;
 }
 
 void ActivityManager::begin() {
@@ -357,6 +489,44 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_BACK:
       popActivity();
+      return true;
+    case CrossPointSettings::LP_MENU_SLEEP:
+      if (!onSleep_) return false;
+      onSleep_();
+      return true;
+    case CrossPointSettings::LP_MENU_ROTATE: {
+      const uint8_t orientation = orientation_cycle::next(SETTINGS.orientation);
+      // The reader owns this: it persists the setting and re-indexes the chapter at the
+      // new column width. Anywhere else there is nothing laid out against an orientation,
+      // so the setting is simply stored and the next book opens turned.
+      if (currentActivity && currentActivity->applyReaderOrientation(orientation)) return true;
+      SETTINGS.orientation = orientation;
+      SETTINGS.saveToFile();
+      renderer.setOrientation(static_cast<GfxRenderer::Orientation>(SETTINGS.orientation));
+      requestUpdate(/*immediate=*/true);
+      return true;
+    }
+    case CrossPointSettings::LP_MENU_CONTINUE_READING: {
+      const auto& books = RECENT_BOOKS.getBooks();
+      // Nothing read yet, or the card no longer holds it: a dead press is better than an
+      // error screen from a panel you opened to change the light.
+      if (books.empty() || !Storage.exists(books.front().path.c_str())) return false;
+      goToReader(books.front().path);
+      return true;
+    }
+    case CrossPointSettings::LP_MENU_RANDOM_BOOK: {
+      std::string picked = randomBookPath();
+      if (picked.empty()) return false;
+      goToReader(std::move(picked));
+      return true;
+    }
+    case CrossPointSettings::LP_MENU_SEARCH:
+      // The browser owns Search and answered above if it is the screen on top. From
+      // anywhere else the search has no folder to run in, so this opens the one it does.
+      goHome(HomeMenuItem::FILE_BROWSER);
+      return true;
+    case CrossPointSettings::LP_MENU_SETTINGS:
+      goHome(HomeMenuItem::SETTINGS_MENU);
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
       if (!Frontlight.present() || lightPanel.isActive()) {

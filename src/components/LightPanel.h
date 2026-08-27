@@ -2,10 +2,13 @@
 
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
+#include <HalPowerManager.h>
+#include <HalStorage.h>
 #include <I18n.h>
 
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 
 #include "BannerStyle.h"
@@ -13,34 +16,52 @@
 #include "LightPanelGeometry.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
+#include "util/BoundMenuLabels.h"
 #include "util/ButtonNavigator.h"
 #include "util/DebugTrace.h"
-#include "util/OrientationCycle.h"
 
-// The light panel: a band pulled down from the top edge holding the frontlight's three
-// controls and two actions. Drawn over whatever is on screen without clearing it, the
-// same way OptionPopup and ValueBarPopup are, so the page you were reading is still there
-// to judge the light against — which is the whole reason to reach for it mid-page.
+// The light panel: a band pulled down from the top edge holding the frontlight's controls
+// and the actions that make sense where you are. Drawn over whatever is on screen without
+// clearing it, the same way OptionPopup and ValueBarPopup are, so the page you were
+// reading is still there to judge the light against — which is the whole reason to reach
+// for it mid-page.
 //
-// White with black text, unlike the banner style it borrows its metrics from. It gained
-// two text buttons, and a filled button inside a black band inverts twice; a mostly-white
-// band is also the cheaper of the two to paint on e-ink.
+// White with black text, unlike the banner style it borrows its metrics from: it is mostly
+// buttons, and a filled button inside a black band inverts twice. A mostly-white band is
+// also the cheaper of the two to paint on e-ink.
 //
-// The page below is stippled rather than left plain: one pixel in four turned black,
-// which reads as a shade drawn over the page without erasing a word of it. Drawn once,
-// when the panel opens.
+// The page below is stippled, one pixel in two, which reads as a shade drawn over the page
+// without erasing a word of it.
 //
-// Every change applies to the hardware immediately; SETTINGS is written once, on close,
-// so a drag across the bar does not spend a file write per pixel.
+// Every light change applies to the hardware immediately; SETTINGS is written once, on
+// close, so a drag across the track does not spend a file write per pixel.
+namespace light_panel {
+
+// What the host puts in the panel for the screen that is currently up. Rebuilt every time
+// the panel opens and after every step, so a value shown in the aux row is never stale.
+struct Context {
+  // The aux row: Text Size in a book, Sort outside one. Empty text means the context has
+  // nothing to step, and the row is not drawn at all.
+  char auxText[48] = {};
+  // CrossPointSettings::LONG_PRESS_MENU_FUNCTION values, in grid order.
+  uint8_t actions[kMaxActions] = {};
+  int actionCount = 0;
+
+  bool hasAux() const { return auxText[0] != '\0'; }
+};
+
+}  // namespace light_panel
+
 class LightPanel {
  public:
-  // onSleep: only main.cpp can put the device down, so the panel names the action and the
-  // host runs it. onRotate is handed the orientation to move to and does NOT write it:
-  // the reader's own applyOrientation persists it and re-indexes the chapter at the new
-  // column width, and it no-ops when the setting already holds the value.
-  void setActions(std::function<void()> onSleep, std::function<void(uint8_t)> onRotate) {
-    onSleep_ = std::move(onSleep);
-    onRotate_ = std::move(onRotate);
+  // buildContext fills in what belongs in the panel here; runAction is handed one of the
+  // CrossPointSettings::LP_MENU_* values and returns whether anything took it; stepAux
+  // moves the aux row by -1 or +1 and returns whether the value changed.
+  void setHost(std::function<void(light_panel::Context&)> buildContext, std::function<bool(uint8_t)> runAction,
+               std::function<bool(int)> stepAux) {
+    buildContext_ = std::move(buildContext);
+    runAction_ = std::move(runAction);
+    stepAux_ = std::move(stepAux);
   }
 
   void show() {
@@ -50,7 +71,10 @@ class LightPanel {
     brightness_ = Frontlight.brightness();
     warmth_ = Frontlight.warmth();
     selected_ = light_panel::Row::Brightness;
-    pressed_ = light_panel::Button::None;
+    actionPressed_ = -1;
+    dragging_ = light_panel::Row::None;
+    rebuildContext();
+    readFreeSpace();
     active_ = true;
   }
 
@@ -59,8 +83,8 @@ class LightPanel {
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active_) return false;
 
-    // A second top swipe puts the panel away: the gesture that opened it is the one
-    // the hand is already making.
+    // A second top swipe puts the panel away: the gesture that opened it is the one the
+    // hand is already making.
     if (input.wasMenuGesture() || input.wasPressed(MappedInputManager::Button::Back) ||
         input.wasPressed(MappedInputManager::Button::Confirm)) {
       close(requestUpdate);
@@ -72,18 +96,19 @@ class LightPanel {
     const bool down = input.wasScreenTouchDown(tx, ty);
     const bool held = !down && input.isScreenTouchHeld(tx, ty);
 
-    // A button fires when the finger comes up inside the button it went down in. Sleep
-    // puts the device away and Rotate rebuilds the page, so neither may go off under a
-    // thumb that was dragging the warmth bar and drifted low.
     if (!down && !held) {
-      const auto fired = input.wasScreenTouchReleased() ? pressed_ : light_panel::Button::None;
+      // An action fires when the finger comes up inside the button it went down in. Every
+      // one of them leaves this screen behind, so none may go off under a thumb that was
+      // dragging a track and drifted low.
+      const int fired = input.wasScreenTouchReleased() ? actionPressed_ : -1;
       // Cleared either way. A finger that leaves the digitiser without a release event
       // would otherwise leave the press armed, and the next unrelated release would fire
       // a button nobody was touching.
-      const bool wasArmed = pressed_ != light_panel::Button::None;
-      pressed_ = light_panel::Button::None;
-      if (fired != light_panel::Button::None) {
-        runButton(fired, requestUpdate);
+      const bool wasArmed = actionPressed_ >= 0;
+      actionPressed_ = -1;
+      dragging_ = light_panel::Row::None;
+      if (fired >= 0 && fired < context_.actionCount) {
+        runAction(context_.actions[fired], requestUpdate);
         return true;
       }
       if (wasArmed) requestUpdate();
@@ -91,54 +116,71 @@ class LightPanel {
 
     if (down || held) {
       const int localY = ty - topInset_;
-      const auto button = light_panel::buttonAt(layout_, tx, localY);
-      if (down && button != light_panel::Button::None) {
-        pressed_ = button;
-        requestUpdate();
+      // A drag that began on a track owns every following frame, wherever the finger has
+      // wandered to: letting the hit test speak again mid-drag would hand the finger to
+      // whatever it slid over.
+      if (!down && dragging_ != light_panel::Row::None) {
+        const auto& bar = dragging_ == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
+        if (setValue(dragging_, light_panel::valueForX(bar, tx, 0, 100))) requestUpdate();
         return true;
       }
-      if (pressed_ != light_panel::Button::None) {
+
+      const auto hit = light_panel::hitTest(layout_, tx, localY);
+      if (actionPressed_ >= 0) {
         // Still down: keep the press only while the finger stays on it.
-        if (button != pressed_) {
-          pressed_ = light_panel::Button::None;
+        if (hit.kind != light_panel::Hit::Kind::Action || hit.action != actionPressed_) {
+          actionPressed_ = -1;
           requestUpdate();
         }
         return true;
       }
+
       if (!light_panel::insidePanel(layout_, tx, localY)) {
         // A tap on the page below is "put it away", not a page turn: the host returns
         // early on a consumed input, so the tap cannot also reach the reader.
         if (down) close(requestUpdate);
         return true;
       }
-      const auto row = light_panel::rowAt(layout_, tx, localY);
-      if (row == light_panel::Row::Toggle) {
-        if (down) {
+      if (!down) return true;  // a hold that started on nothing stays on nothing
+
+      switch (hit.kind) {
+        case light_panel::Hit::Kind::Toggle:
           on_ = !on_;
           applyLight();
           requestUpdate();
+          break;
+        case light_panel::Hit::Kind::Step:
+          selected_ = hit.row;
+          step(hit.row, hit.delta, requestUpdate);
+          break;
+        case light_panel::Hit::Kind::Track: {
+          selected_ = hit.row;
+          dragging_ = hit.row;
+          const auto& bar = hit.row == light_panel::Row::Warmth ? layout_.warmth.bar : layout_.brightness.bar;
+          if (setValue(hit.row, light_panel::valueForX(bar, tx, 0, 100))) requestUpdate();
+          break;
         }
-        return true;
-      }
-      if (row == light_panel::Row::Brightness || row == light_panel::Row::Warmth) {
-        selected_ = row;
-        const auto& bar = row == light_panel::Row::Brightness ? layout_.brightness.bar : layout_.warmth.bar;
-        const int next = static_cast<uint8_t>(light_panel::valueForX(bar, tx, 0, 100));
-        if (setValue(row, next)) requestUpdate();
+        case light_panel::Hit::Kind::Action:
+          actionPressed_ = hit.action;
+          requestUpdate();
+          break;
+        default:
+          break;
       }
       return true;
     }
 
-    // Buttons: Up/Down pick the row, Left/Right step it by 1. Same small step the
-    // numeric settings rows use, so the two feel like one control.
+    // Buttons: Up/Down pick the row, Left/Right step it. Same small step the numeric
+    // settings rows use, so the two feel like one control. The action grid is touch-only:
+    // on a board without touch the panel cannot be opened by a gesture in the first place.
     nav_.onPressAndContinuous({MappedInputManager::Button::Up},
                               [this, &requestUpdate] { moveSelection(-1, requestUpdate); });
     nav_.onPressAndContinuous({MappedInputManager::Button::Down},
                               [this, &requestUpdate] { moveSelection(1, requestUpdate); });
     nav_.onPressAndContinuous({MappedInputManager::Button::Left},
-                              [this, &requestUpdate] { adjustBy(-1, requestUpdate); });
+                              [this, &requestUpdate] { step(selected_, -1, requestUpdate); });
     nav_.onPressAndContinuous({MappedInputManager::Button::Right},
-                              [this, &requestUpdate] { adjustBy(1, requestUpdate); });
+                              [this, &requestUpdate] { step(selected_, 1, requestUpdate); });
     return true;
   }
 
@@ -148,8 +190,8 @@ class LightPanel {
 
     const int screenWidth = renderer.getScreenWidth();
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-    layout_ = light_panel::forScreen(screenWidth, lineHeight, Frontlight.hasColorTemperature(),
-                                     labelColumnWidth(renderer));
+    layout_ = light_panel::forScreen(screenWidth, lineHeight, Frontlight.hasColorTemperature(), context_.hasAux(),
+                                     context_.actionCount);
 
     // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
     // edge while the rows sit below the crop, the same trick the unlock banners use.
@@ -166,13 +208,24 @@ class LightPanel {
     renderer.fillRect(0, 0, screenWidth, bandHeight, false);
     renderer.fillRect(0, bandHeight - banner::RULE, screenWidth, banner::RULE, true);
 
-    drawToggleRow(renderer);
-    drawBarRow(renderer, layout_.brightness, I18N.get(StrId::STR_FRONTLIGHT_BRIGHTNESS), brightness_);
+    char text[64];
+    snprintf(text, sizeof(text), "%s  %s", I18N.get(StrId::STR_FRONTLIGHT),
+             I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF));
+    drawBox(renderer, layout_.toggle, text, /*filled=*/on_);
+
+    snprintf(text, sizeof(text), "%s %d", I18N.get(StrId::STR_FRONTLIGHT_BRIGHTNESS), static_cast<int>(brightness_));
+    drawStepRow(renderer, layout_.brightness, text, brightness_);
     if (layout_.hasWarmth) {
-      drawBarRow(renderer, layout_.warmth, I18N.get(StrId::STR_FRONTLIGHT_WARMTH), warmth_);
+      snprintf(text, sizeof(text), "%s %d", I18N.get(StrId::STR_FRONTLIGHT_WARMTH), static_cast<int>(warmth_));
+      drawStepRow(renderer, layout_.warmth, text, warmth_);
     }
-    drawButton(renderer, layout_.sleep, I18N.get(StrId::STR_SLEEP), pressed_ == light_panel::Button::Sleep);
-    drawButton(renderer, layout_.rotate, I18N.get(StrId::STR_ROTATE), pressed_ == light_panel::Button::Rotate);
+    if (layout_.hasAux) drawStepRow(renderer, layout_.aux, context_.auxText, 0);
+
+    for (int i = 0; i < layout_.actionCount; ++i) {
+      drawBox(renderer, layout_.actions[i], I18N.get(boundMenuActionLabel(context_.actions[i])),
+              /*filled=*/i == actionPressed_);
+    }
+    drawReadout(renderer);
   }
 
   bool processRender(GfxRenderer& renderer) const {
@@ -184,18 +237,27 @@ class LightPanel {
   }
 
  private:
-  void runButton(const light_panel::Button button, const std::function<void()>& requestUpdate) {
-    // Both actions leave this screen behind, so the panel's own values are written first
-    // and the panel is shut before the host acts.
-    close(requestUpdate);
-    if (button == light_panel::Button::Sleep) {
-      if (onSleep_) onSleep_();
-      return;
-    }
-    if (onRotate_) onRotate_(orientation_cycle::next(SETTINGS.orientation));
+  void rebuildContext() {
+    context_ = light_panel::Context{};
+    if (buildContext_) buildContext_(context_);
   }
 
-  // One pixel in four, on a 4x4 grid: dark enough to read as a shade over the page and
+  // Read once per opening, not per frame: sdUsedBytes walks the allocation table, which is
+  // far too much work to repeat on every drag of the brightness track.
+  void readFreeSpace() {
+    const uint64_t total = Storage.sdTotalBytes();
+    const uint64_t used = Storage.sdUsedBytes();
+    freeBytes_ = total > used ? total - used : 0;
+  }
+
+  void runAction(const uint8_t function, const std::function<void()>& requestUpdate) {
+    // Every action leaves this screen behind, so the panel's own values are written first
+    // and the panel is shut before the host acts.
+    close(requestUpdate);
+    if (runAction_) runAction_(function);
+  }
+
+  // One pixel in two, on a checkerboard: dark enough to read as a shade over the page and
   // sparse enough to leave the words under it legible. Only black pixels are written, so
   // the page is darkened rather than replaced — which is why this is a loop and not
   // fillRectDither(LightGray), whose white pixels would erase it.
@@ -207,31 +269,70 @@ class LightPanel {
     }
   }
 
-  // Wide enough for the longest thing the left column ever holds, measured rather than
-  // guessed: a fixed 110 px was narrower than "Brightness 100" in this font, so the bar
-  // was drawn over the end of its own label and the toggle's state ran into "Frontlight".
-  int labelColumnWidth(const GfxRenderer& renderer) const {
-    const auto measure = [&](const char* text) { return renderer.getTextWidth(banner::FONT_ID, text); };
-    char sample[48];
-    int widest = measure(I18N.get(StrId::STR_FRONTLIGHT));
-    snprintf(sample, sizeof(sample), "%s 100", I18N.get(StrId::STR_FRONTLIGHT_BRIGHTNESS));
-    widest = std::max(widest, measure(sample));
-    snprintf(sample, sizeof(sample), "%s 100", I18N.get(StrId::STR_FRONTLIGHT_WARMTH));
-    widest = std::max(widest, measure(sample));
-    return widest + light_panel::kLabelGap;
-  }
-
-  void drawButton(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label,
-                  const bool pressed) const {
+  // A framed box with its label centred. Filled while pressed, and the text is knocked out
+  // of the fill rather than drawn over it.
+  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label,
+               const bool filled) const {
     const int y = rect.y + topInset_;
-    if (pressed) renderer.fillRect(rect.x, y, rect.width, rect.height, true);
+    if (filled) renderer.fillRect(rect.x, y, rect.width, rect.height, true);
     renderer.drawRect(rect.x, y, rect.width, rect.height, true);
     const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
-    const int textX = rect.x + (rect.width - textWidth) / 2;
-    const int textY = y + light_panel::kButtonPadY;
-    // Knocked out of the fill when pressed, drawn in ink when not. It was the wrong way
-    // round, which is why both buttons showed as empty boxes.
-    renderer.drawText(banner::FONT_ID, textX, textY, label, !pressed);
+    const int textY = y + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
+    renderer.drawText(banner::FONT_ID, rect.x + (rect.width - textWidth) / 2, textY, label, !filled);
+  }
+
+  void drawStepRow(const GfxRenderer& renderer, const light_panel::StepRow& row, const char* label,
+                   const uint8_t value) const {
+    if (row.height == 0) return;
+    drawBox(renderer, row.minus, "-", /*filled=*/false);
+    drawBox(renderer, row.plus, "+", /*filled=*/false);
+
+    // The label sits between the steppers, over the track when there is one.
+    const int textWidth = renderer.getTextWidth(banner::FONT_ID, label);
+    const int span = row.plus.x - (row.minus.x + row.minus.width);
+    const int textX = row.minus.x + row.minus.width + (span - textWidth) / 2;
+    renderer.drawText(banner::FONT_ID, textX, row.y + topInset_ + 1, label, true);
+
+    if (row.bar.width == 0) {
+      drawSelection(renderer, row);
+      return;
+    }
+    const int barY = row.bar.y + topInset_;
+    renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, true);
+    const int fill = row.bar.width * value / 100;
+    if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, true);
+    drawSelection(renderer, row);
+  }
+
+  // Button users need to see which row Left/Right will move. A rule under the row rather
+  // than a box: a full frame fought with the steppers.
+  void drawSelection(const GfxRenderer& renderer, const light_panel::StepRow& row) const {
+    if (selected_ != row.row) return;
+    renderer.fillRect(light_panel::kSidePad, row.y + row.height + topInset_ - 1,
+                      layout_.width - light_panel::kSidePad * 2, 1, true);
+  }
+
+  void drawReadout(const GfxRenderer& renderer) const {
+    const auto& rect = layout_.readout;
+    const int y = rect.y + topInset_;
+    renderer.fillRect(rect.x, y - light_panel::kPad / 2, rect.width, 1, true);
+
+    char left[32];
+    snprintf(left, sizeof(left), "%s %u%%", I18N.get(StrId::STR_BATTERY),
+             static_cast<unsigned>(powerManager.getBatteryPercentage()));
+    renderer.drawText(banner::FONT_ID, rect.x, y, left, true);
+
+    char right[32];
+    // Whole gigabytes below ten get a decimal; above it the tenth is noise on a card this
+    // size and the shorter string is easier to read at a glance.
+    const double gigabytes = static_cast<double>(freeBytes_) / (1024.0 * 1024.0 * 1024.0);
+    if (gigabytes < 10.0) {
+      snprintf(right, sizeof(right), "%.1f GB %s", gigabytes, I18N.get(StrId::STR_FREE_SPACE));
+    } else {
+      snprintf(right, sizeof(right), "%d GB %s", static_cast<int>(gigabytes + 0.5), I18N.get(StrId::STR_FREE_SPACE));
+    }
+    const int width = renderer.getTextWidth(banner::FONT_ID, right);
+    renderer.drawText(banner::FONT_ID, rect.x + rect.width - width, y, right, true);
   }
 
   void close(const std::function<void()>& requestUpdate) {
@@ -251,9 +352,10 @@ class LightPanel {
     }
   }
 
-  // Moving either bar off zero turns the light back on: the user dragged brightness up,
+  // Moving either track off zero turns the light back on: the user dragged brightness up,
   // so asking them to also find the toggle would be a puzzle, not a control.
   bool setValue(const light_panel::Row row, const int raw) {
+    if (row != light_panel::Row::Brightness && row != light_panel::Row::Warmth) return false;
     const auto next = static_cast<uint8_t>(std::clamp(raw, 0, 100));
     uint8_t& target = row == light_panel::Row::Warmth ? warmth_ : brightness_;
     if (target == next) return false;
@@ -263,11 +365,27 @@ class LightPanel {
     return true;
   }
 
+  void step(const light_panel::Row row, const int delta, const std::function<void()>& requestUpdate) {
+    if (row == light_panel::Row::Aux) {
+      if (!stepAux_ || !stepAux_(delta)) return;
+      // The row shows the value it just moved, so the text has to be asked for again.
+      rebuildContext();
+      requestUpdate();
+      return;
+    }
+    const uint8_t current = row == light_panel::Row::Warmth ? warmth_ : brightness_;
+    if (setValue(row, current + delta)) requestUpdate();
+  }
+
   void moveSelection(const int delta, const std::function<void()>& requestUpdate) {
-    const bool warm = Frontlight.hasColorTemperature();
-    const light_panel::Row order[3] = {light_panel::Row::Toggle, light_panel::Row::Brightness,
-                                       light_panel::Row::Warmth};
-    const int count = warm ? 3 : 2;
+    light_panel::Row order[3] = {light_panel::Row::Brightness, light_panel::Row::Warmth, light_panel::Row::Aux};
+    int count = 1;
+    if (Frontlight.hasColorTemperature()) {
+      count = 2;
+    } else {
+      order[1] = light_panel::Row::Aux;
+    }
+    if (context_.hasAux()) count++;
     int index = 0;
     for (int i = 0; i < count; ++i) {
       if (order[i] == selected_) index = i;
@@ -276,57 +394,18 @@ class LightPanel {
     requestUpdate();
   }
 
-  void adjustBy(const int delta, const std::function<void()>& requestUpdate) {
-    if (selected_ == light_panel::Row::Toggle) {
-      on_ = !on_;
-      applyLight();
-      requestUpdate();
-      return;
-    }
-    const uint8_t current = selected_ == light_panel::Row::Warmth ? warmth_ : brightness_;
-    if (setValue(selected_, current + delta)) requestUpdate();
-  }
-
-  void drawToggleRow(const GfxRenderer& renderer) const {
-    const int y = layout_.toggle.y + topInset_;
-    const bool picked = selected_ == light_panel::Row::Toggle;
-    drawSelection(renderer, layout_.toggle, picked);
-    renderer.drawText(banner::FONT_ID, light_panel::kSidePad, y, I18N.get(StrId::STR_FRONTLIGHT), true);
-    const char* state = I18N.get(on_ ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-    renderer.drawText(banner::FONT_ID, light_panel::kSidePad + light_panel::kLabelWidth, y, state, true);
-  }
-
-  void drawBarRow(const GfxRenderer& renderer, const light_panel::RowLayout& row, const char* label,
-                  const uint8_t value) const {
-    const int y = row.y + topInset_;
-    drawSelection(renderer, row, selected_ == row.row);
-    char text[48];
-    snprintf(text, sizeof(text), "%s %d", label, static_cast<int>(value));
-    renderer.drawText(banner::FONT_ID, light_panel::kSidePad, y, text, true);
-
-    const auto& bar = row.bar;
-    const int barY = bar.y + topInset_;
-    renderer.drawRect(bar.x, barY, bar.width, bar.height, true);
-    const int fill = bar.width * value / 100;
-    if (fill > 0) renderer.fillRect(bar.x, barY, fill, bar.height, true);
-  }
-
-  // Button users need to see which row Left/Right will move. A rule under the row rather
-  // than a box: a full frame fought with the bar.
-  void drawSelection(const GfxRenderer& renderer, const light_panel::RowLayout& row, const bool picked) const {
-    if (!picked) return;
-    renderer.fillRect(light_panel::kSidePad, row.y + row.height + topInset_ - 1,
-                      layout_.width - light_panel::kSidePad * 2, 1, true);
-  }
-
   bool active_ = false;
   bool on_ = false;
   uint8_t brightness_ = 0;
   uint8_t warmth_ = 0;
+  uint64_t freeBytes_ = 0;
   light_panel::Row selected_ = light_panel::Row::Brightness;
-  light_panel::Button pressed_ = light_panel::Button::None;
-  std::function<void()> onSleep_;
-  std::function<void(uint8_t)> onRotate_;
+  light_panel::Row dragging_ = light_panel::Row::None;
+  int actionPressed_ = -1;
+  light_panel::Context context_{};
+  std::function<void(light_panel::Context&)> buildContext_;
+  std::function<bool(uint8_t)> runAction_;
+  std::function<bool(int)> stepAux_;
   mutable int topInset_ = 0;
   mutable light_panel::Layout layout_{};
   ButtonNavigator nav_{120, 350};

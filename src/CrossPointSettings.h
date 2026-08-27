@@ -274,6 +274,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_FORCE_REFRESH = bound_action::LP_MENU_FORCE_REFRESH;
   static constexpr auto LP_MENU_WALLPAPER_DELETE = bound_action::LP_MENU_WALLPAPER_DELETE;
   static constexpr auto LP_MENU_WALLPAPER_FAVORITE = bound_action::LP_MENU_WALLPAPER_FAVORITE;
+  static constexpr auto LP_MENU_CONTINUE_READING = bound_action::LP_MENU_CONTINUE_READING;
+  static constexpr auto LP_MENU_RANDOM_BOOK = bound_action::LP_MENU_RANDOM_BOOK;
+  static constexpr auto LP_MENU_SEARCH = bound_action::LP_MENU_SEARCH;
+  static constexpr auto LP_MENU_SETTINGS = bound_action::LP_MENU_SETTINGS;
+  static constexpr auto LP_MENU_ROTATE = bound_action::LP_MENU_ROTATE;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and

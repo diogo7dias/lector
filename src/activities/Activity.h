@@ -70,6 +70,23 @@ class Activity {
     (void)function;
     return false;
   }
+  // The light panel's aux row: the one value this screen lets the panel step. Fill `out`
+  // with the label and the current value ("Text Size 17") and return true; false leaves
+  // the row out of the panel entirely.
+  virtual bool lightPanelAuxText(char* out, size_t length) const {
+    (void)out;
+    (void)length;
+    return false;
+  }
+  // Move that value by -1 or +1. True means it changed and the screen has redrawn itself.
+  virtual bool lightPanelStepAux(int delta) {
+    (void)delta;
+    return false;
+  }
+  // The browser order changed under this screen (the light panel's Sort row). Only the
+  // file browser is laid out against it, and it has to re-read the folder rather than
+  // re-sort what it drew: Last Read reads a key per book off the card.
+  virtual void onBookOrderChanged() {}
   virtual bool isHomeActivity() const { return false; }
   // The Home gesture (the capacitive Home key, or a bottom-edge up-swipe on boards
   // without one) pops to Home from anywhere. An activity that must do something

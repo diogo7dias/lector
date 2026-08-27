@@ -74,6 +74,17 @@ enum LONG_PRESS_MENU_FUNCTION {
   // Stars or unstars that same wallpaper. Paired with the delete row: the two decisions
   // you make about last night's lock screen are "keep it" and "lose it".
   LP_MENU_WALLPAPER_FAVORITE = 25,
+  // Appended for the light panel's action grid (0.21). All five are bindable to a button
+  // too, and none is listed in POPUP_ITEM_FUNCTIONS: the reader's pop-up already sits
+  // inside a book, where four of them have nothing to do.
+  LP_MENU_CONTINUE_READING = 26,
+  LP_MENU_RANDOM_BOOK = 27,
+  LP_MENU_SEARCH = 28,
+  LP_MENU_SETTINGS = 29,
+  // Rotate was the light panel's own button before this, reached through a callback
+  // rather than through the action list. Folding it in makes the panel's grid uniform:
+  // every cell in it is one of these values.
+  LP_MENU_ROTATE = 30,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

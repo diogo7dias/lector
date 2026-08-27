@@ -23,6 +23,7 @@
 #include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
+#include "ReaderFontSizes.h"
 #include "CrossPointState.h"
 #include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
@@ -1698,6 +1699,34 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 }
 
 std::string EpubReaderActivity::readerOverridePath() const { return epub->getCachePath() + "/reader_override.bin"; }
+
+bool EpubReaderActivity::lightPanelAuxText(char* out, const size_t length) const {
+  snprintf(out, length, "%s %u", I18N.get(StrId::STR_TEXT_SIZE), static_cast<unsigned>(prefs_.fontPointSize));
+  return true;
+}
+
+bool EpubReaderActivity::lightPanelStepAux(const int delta) {
+  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), prefs_.sdFontFamilyName);
+  if (sizes.size() < 2) return false;  // one installed size: the row is a readout
+
+  const uint8_t current = snapToNearestPointSize(sizes, prefs_.fontPointSize);
+  int index = 0;
+  for (size_t i = 0; i < sizes.size(); ++i) {
+    if (sizes[i] == current) index = static_cast<int>(i);
+  }
+  const int next = std::clamp(index + delta, 0, static_cast<int>(sizes.size()) - 1);
+  if (sizes[next] == prefs_.fontPointSize) return false;
+
+  prefs_.fontPointSize = sizes[next];
+  // Per-book, like every other change made from inside the book: the global size belongs
+  // to Settings > Reader.
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
+  reloadForReaderPrefsChange();
+  requestUpdate();
+  return true;
+}
 
 void EpubReaderActivity::loadReaderPrefs() {
   prefsCustom_ = false;

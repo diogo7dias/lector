@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
@@ -100,6 +101,22 @@ class FileBrowserActivity final : public Activity {
   void applyBrowserOrder();
   // True when the current setting needs a key per entry gathered while the folder is
   // scanned (the two date orders, books only).
+  // Search belongs to whatever folder is on screen, so the light panel's Search button
+  // is this screen's to answer. Anywhere else ActivityManager opens the browser instead.
+  bool runBoundAction(uint8_t function) override {
+    if (function != CrossPointSettings::LP_MENU_SEARCH) return false;
+    openSearchEntry();
+    return true;
+  }
+
+  // The light panel's Sort row changed the order under us. Re-read rather than re-sort:
+  // Last Read reads a key per book off the card, and those keys are gathered by the scan.
+  void onBookOrderChanged() override {
+    loadFiles();
+    requestUpdate();
+  }
+
+  bool isWallpaperFolder() const;
   bool needsSortKeys() const;
   // Appends one key, growing the buffer through the nothrow path. False means the folder is
   // too big to key and the listing stays alphabetical.
