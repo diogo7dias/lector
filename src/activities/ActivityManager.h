@@ -104,7 +104,7 @@ class ActivityManager {
   void buildLightPanelContext(light_panel::Context& context);
   bool stepLightPanelAux(int delta);
 
-  // One book chosen at random from the card, or empty when the card holds none.
+  // One of the home screen's books, chosen at random, or empty when the list is.
   std::string randomBookPath();
   void loop();
 
