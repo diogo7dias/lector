@@ -102,6 +102,147 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 
 }  // namespace
 
+namespace {
+// Display, Reader, Controls, System, in the order the flat list used to concatenate them.
+constexpr int kCategoryCount = 4;
+}  // namespace
+
+std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
+  std::string valueText;
+  if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
+    return SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+  }
+  if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
+    return I18N.get(setting.enumValues[SETTINGS.*(setting.valuePtr)]);
+  }
+  if (setting.type == SettingType::ENUM && setting.valueGetter) {
+    const uint8_t value = setting.valueGetter();
+    if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
+      return setting.enumStringValues[value];
+    }
+    if (value < setting.enumValues.size()) return I18N.get(setting.enumValues[value]);
+    return {};
+  }
+  if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
+    char valueBuffer[32];
+    if (setting.nameId == StrId::STR_READING_IDLE_LIMIT) {
+      // Stored in 10-second units, which means nothing on screen. Whole minutes read as
+      // minutes; the steps between them read as seconds.
+      const unsigned seconds = SETTINGS.readingStatsIdleSeconds();
+      if (seconds % 60 == 0) {
+        snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT), seconds / 60);
+      } else {
+        snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SECONDS_VALUE_FORMAT), seconds);
+      }
+      return valueBuffer;
+    }
+    if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
+      if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) return tr(STR_SLEEP_NEVER);
+      snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
+               static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
+      return valueBuffer;
+    }
+    return std::to_string(SETTINGS.*(setting.valuePtr));
+  }
+  if (setting.type == SettingType::STRING) {
+    if (setting.stringGetter) return setting.stringGetter();
+    if (setting.stringMaxLen > 0) {
+      return reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
+    }
+  }
+  return valueText;
+}
+
+StrId SettingsActivity::categoryName(const int index) const {
+  switch (index) {
+    case 0:
+      return StrId::STR_CAT_DISPLAY;
+    case 1:
+      return StrId::STR_CAT_READER;
+    case 2:
+      return StrId::STR_CAT_CONTROLS;
+    default:
+      return StrId::STR_CAT_SYSTEM;
+  }
+}
+
+std::vector<SettingInfo>& SettingsActivity::categoryRows(const int index) {
+  switch (index) {
+    case 0:
+      return displaySettings;
+    case 1:
+      return readerSettings;
+    case 2:
+      return controlsSettings;
+    default:
+      return systemSettings;
+  }
+}
+
+// The chosen category's rows, group headings dropped. The headings did their work in
+// rebuildSettingsList, which ordered each category by group; a cell names itself, so a
+// heading band would cost a whole grid row to repeat what the order already says.
+void SettingsActivity::selectCategory(const int index) {
+  selectedCategory = std::clamp(index, 0, kCategoryCount - 1);
+  settings.clear();
+  for (const auto& row : categoryRows(selectedCategory)) {
+    if (row.isHeader) continue;
+    settings.push_back(row);
+  }
+  settingsCount = static_cast<int>(settings.size());
+  headerFlags.assign(static_cast<size_t>(settingsCount), false);
+  selectedSettingIndex = 0;
+  scrollRow = 0;
+}
+
+Rect SettingsActivity::gridPane() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int top = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int height = renderer.getScreenHeight() - top - metrics.buttonHintsHeight - metrics.verticalSpacing;
+  return Rect{0, top, renderer.getScreenWidth(), height};
+}
+
+settings_grid::Layout SettingsActivity::gridLayout() const {
+  const auto pane = gridPane();
+  return settings_grid::forPane(pane.width, pane.height, settingsCount, scrollRow);
+}
+
+// One cell: its name in the small font over its value in the UI font, both centred.
+void SettingsActivity::drawCell(const settings_grid::Rect& rect, const std::string& name, const std::string& value,
+                                const bool selected) {
+  if (selected) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+  const bool ink = !selected;
+
+  const int nameHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int valueHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int blockTop = rect.y + (rect.height - nameHeight - valueHeight) / 2;
+
+  const auto centred = [&](const int fontId, const std::string& text, const int y) {
+    if (text.empty()) return;
+    std::string shown = text;
+    // A long name or a long path has to give way to the cell rather than run out of it.
+    while (!shown.empty() && renderer.getTextWidth(fontId, shown.c_str()) > rect.width - 8) shown.pop_back();
+    const int width = renderer.getTextWidth(fontId, shown.c_str());
+    renderer.drawText(fontId, rect.x + (rect.width - width) / 2, y, shown.c_str(), ink);
+  };
+  centred(SMALL_FONT_ID, name, blockTop);
+  centred(UI_10_FONT_ID, value, blockTop + nameHeight);
+}
+
+// Up and Down move a whole grid row so the column is kept; Left and Right move one cell.
+void SettingsActivity::moveSelection(const int deltaRows, const int deltaCells) {
+  if (mode == Mode::Hub) {
+    selectedCategory = settings_grid::step(selectedCategory, kCategoryCount, deltaRows, deltaCells);
+    requestUpdate();
+    return;
+  }
+  if (settingsCount == 0) return;
+  selectedSettingIndex = settings_grid::step(selectedSettingIndex, settingsCount, deltaRows, deltaCells);
+  scrollRow = settings_grid::scrollToShow(gridLayout(), selectedSettingIndex);
+  requestUpdate();
+}
+
 void SettingsActivity::rebuildSettingsList() {
   // Built per category so each keeps its own grouping map, then concatenated: the
   // four categories are the top-level order of one flat list, not four screens.
@@ -283,15 +424,17 @@ void SettingsActivity::onEnter() {
   BusyBanner banner(renderer, tr(STR_BUSY_LOADING_SETTINGS));
 
   selectedSettingIndex = 0;
-  listScrollOffset = 0;
+  scrollRow = 0;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
   syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
 
   rebuildSettingsList();
-  // The list opens on a heading, so the cursor starts on the first row under it.
-  selectedSettingIndex = settings_nav::firstLandableRow(headerFlags);
+  // Opens on the hub: which four categories there are is the first thing to say now that
+  // the group headings live inside them.
+  mode = Mode::Hub;
+  selectedCategory = 0;
 
   // Trigger first update
   requestUpdate();
@@ -307,52 +450,60 @@ void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < settingsCount) {
-    selectedSettingIndex = tappedRow;
-    toggleCurrentSetting();
-    requestUpdate();
-    return;
+  // A tap picks the cell it landed on and acts on it in one go.
+  {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTouchDown(tx, ty)) {
+      const auto pane = gridPane();
+      const int count = mode == Mode::Hub ? kCategoryCount : settingsCount;
+      const auto layout = mode == Mode::Hub ? settings_grid::forPane(pane.width, pane.height, kCategoryCount, 0)
+                                            : gridLayout();
+      for (int i = 0; i < count; ++i) {
+        const auto rect = settings_grid::cellAt(layout, pane.y, i);
+        if (rect.width == 0) continue;
+        if (tx < rect.x || tx >= rect.x + rect.width || ty < rect.y || ty >= rect.y + rect.height) continue;
+        if (mode == Mode::Hub) {
+          selectCategory(i);
+          mode = Mode::Category;
+        } else {
+          selectedSettingIndex = i;
+          toggleCurrentSetting();
+        }
+        requestUpdate();
+        return;
+      }
+    }
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    toggleCurrentSetting();
+    if (mode == Mode::Hub) {
+      selectCategory(selectedCategory);
+      mode = Mode::Category;
+    } else {
+      toggleCurrentSetting();
+    }
     requestUpdate();
     return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    // Back inside a category returns to the hub; from the hub it leaves the screen.
+    if (mode == Mode::Category) {
+      mode = Mode::Hub;
+      requestUpdate();
+      return;
+    }
     SETTINGS.saveToFile();
     onGoHome();
     return;
   }
 
-  buttonNavigator.onNextStep([this] {
-    selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, true);
-    requestUpdate();
-  });
+  buttonNavigator.onNextStep([this] { moveSelection(1, 0); });
+  buttonNavigator.onPreviousStep([this] { moveSelection(-1, 0); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { moveSelection(0, -1); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { moveSelection(0, 1); });
 
-  buttonNavigator.onPreviousStep([this] {
-    selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, false);
-    requestUpdate();
-  });
-
-  // Held, the same buttons jump a whole section. One flat list is long, and this is
-  // the fast travel the tab bar used to provide.
-  //
-  // The jump also parks the window on the section's heading. Left to slide by the least
-  // it can, the list would show the arrived-at row against the top or bottom edge with
-  // the heading and the rest of the section off-screen, which is the opposite of what
-  // jumping to a section is for.
-  const auto jumpSection = [this](const bool forward) {
-    selectedSettingIndex = settings_nav::nextSection(selectedSettingIndex, headerFlags, forward);
-    listScrollOffset = std::max(0, selectedSettingIndex - 1);
-    requestUpdate();
-  };
-
-  buttonNavigator.onNextContinuous([jumpSection] { jumpSection(true); });
-
-  buttonNavigator.onPreviousContinuous([jumpSection] { jumpSection(false); });
 }
 
 void SettingsActivity::toggleCurrentSetting() {
@@ -593,12 +744,17 @@ void SettingsActivity::toggleCurrentSetting() {
 }
 
 void SettingsActivity::restoreCursorAfterRebuild() {
-  // A change can add or remove rows (Quick-return from footnotes, Pop-up Items), which
-  // shifts everything below it and can slide a heading under the cursor.
-  selectedSettingIndex = std::clamp(selectedSettingIndex, 0, std::max(0, settingsCount - 1));
-  if (selectedSettingIndex < settingsCount && settings[selectedSettingIndex].isHeader) {
-    selectedSettingIndex = settings_nav::nextRow(selectedSettingIndex, headerFlags, true);
-  }
+  // rebuildSettingsList refills the four category vectors, so the active category's cells
+  // have to be taken from them again or the grid would keep drawing the old ones.
+  // A change can also add or remove cells (Quick-return from footnotes, Pop-up Items),
+  // which moves everything after it; the cursor is clamped rather than chased, since the
+  // cell it was on may no longer exist.
+  const int wasSelected = selectedSettingIndex;
+  const int wasScroll = scrollRow;
+  selectCategory(selectedCategory);
+  selectedSettingIndex = std::clamp(wasSelected, 0, std::max(0, settingsCount - 1));
+  scrollRow = settings_grid::scrollToShow(gridLayout(), selectedSettingIndex);
+  if (wasScroll == 0 && settingsCount == 0) scrollRow = 0;
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
@@ -693,72 +849,35 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 CROSSPOINT_VERSION);
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                 mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory)),
+                 mode == Mode::Hub ? CROSSPOINT_VERSION : nullptr);
 
-  const auto& rows = settings;  // named for the lambdas below, which cannot capture a member
-  GUI.drawList(
-      renderer,
-      Rect{0, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing, pageWidth,
-           pageHeight -
-               (metrics.topPadding + metrics.headerHeight + metrics.buttonHintsHeight + metrics.verticalSpacing * 2)},
-      settingsCount, selectedSettingIndex, [&rows](int index) { return std::string(I18N.get(rows[index].nameId)); },
-      nullptr, nullptr,
-      [&rows](int i) {
-        const auto& setting = rows[i];
-        std::string valueText = "";
-        if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-          const bool value = SETTINGS.*(setting.valuePtr);
-          valueText = value ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
-        } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
-          const uint8_t value = SETTINGS.*(setting.valuePtr);
-          valueText = I18N.get(setting.enumValues[value]);
-        } else if (setting.type == SettingType::ENUM && setting.valueGetter) {
-          const uint8_t value = setting.valueGetter();
-          if (!setting.enumStringValues.empty() && value < setting.enumStringValues.size()) {
-            valueText = setting.enumStringValues[value];
-          } else if (value < setting.enumValues.size()) {
-            valueText = I18N.get(setting.enumValues[value]);
-          }
-        } else if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
-          if (setting.nameId == StrId::STR_READING_IDLE_LIMIT) {
-            // Stored in 10-second units, which means nothing on screen. Whole minutes
-            // read as minutes; the steps between them read as seconds.
-            char valueBuffer[32];
-            const unsigned seconds = SETTINGS.readingStatsIdleSeconds();
-            if (seconds % 60 == 0) {
-              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT), seconds / 60);
-            } else {
-              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SECONDS_VALUE_FORMAT), seconds);
-            }
-            valueText = valueBuffer;
-          } else if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
-            char valueBuffer[32];
-            if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) {
-              valueText = tr(STR_SLEEP_NEVER);
-            } else {
-              snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
-                       static_cast<unsigned int>(SETTINGS.*(setting.valuePtr)));
-              valueText = valueBuffer;
-            }
-          } else {
-            valueText = std::to_string(SETTINGS.*(setting.valuePtr));
-          }
-        } else if (setting.type == SettingType::STRING) {
-          if (setting.stringGetter) {
-            valueText = setting.stringGetter();
-          } else if (setting.stringMaxLen > 0) {
-            valueText =
-                reinterpret_cast<const char*>(reinterpret_cast<const uint8_t*>(&SETTINGS) + setting.stringOffset);
-          }
-        }
-        return valueText;
-      },
-      true, nullptr, UI_10_FONT_ID, [&rows](int i) { return rows[i].isHeader; }, &listScrollOffset);
+  if (mode == Mode::Hub) {
+    const auto pane = gridPane();
+    const auto layout = settings_grid::forPane(pageWidth, pane.height, kCategoryCount, 0);
+    for (int i = 0; i < kCategoryCount; ++i) {
+      const auto rect = settings_grid::cellAt(layout, pane.y, i);
+      if (rect.width == 0) continue;
+      char count[24];
+      snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT),
+               static_cast<unsigned>(const_cast<SettingsActivity*>(this)->categoryRows(i).size()));
+      drawCell(rect, I18N.get(categoryName(i)), count, i == selectedCategory);
+    }
+  } else {
+    const auto pane = gridPane();
+    const auto layout = gridLayout();
+    for (int i = 0; i < settingsCount; ++i) {
+      const auto rect = settings_grid::cellAt(layout, pane.y, i);
+      if (rect.width == 0) continue;
+      drawCell(rect, I18N.get(settings[i].nameId), settingValueText(settings[i]), i == selectedSettingIndex);
+    }
+  }
 
   // Draw help text
-  const bool onSleepTimeout = selectedSettingIndex >= 0 && selectedSettingIndex < settingsCount &&
-                              rows[selectedSettingIndex].nameId == StrId::STR_TIME_TO_SLEEP;
+  const bool onSleepTimeout = mode == Mode::Category && selectedSettingIndex >= 0 &&
+                              selectedSettingIndex < settingsCount &&
+                              settings[selectedSettingIndex].nameId == StrId::STR_TIME_TO_SLEEP;
   const auto confirmLabel = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
