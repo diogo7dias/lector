@@ -65,7 +65,6 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
-static unsigned long allowSleepAt = 0;
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
@@ -1063,8 +1062,6 @@ void setup() {
     delay(10);
     gpio.update();
   }
-
-  allowSleepAt = millis() + 2000;
 }
 
 // delay() counts ticks, and the tick stops while onEinkBusyWaitSlice() light-sleeps
@@ -1232,9 +1229,10 @@ void loop() {
     return;
   }
 
-  // A hold that woke the device must be released before it can count as a new
-  // in-app long press. Otherwise a user who keeps holding after wake would put
-  // the device straight back to sleep once allowSleepAt expires.
+  // A hold that woke the device must be released before it can count as a new in-app long
+  // press. Otherwise a user who keeps holding after wake would put the device straight
+  // back to sleep. This is the whole guard: a two-second window after boot used to sit
+  // beside it, and all it did was make the first re-lock after an unlock a dead press.
   static bool powerReleasedSinceWake = false;
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
@@ -1244,7 +1242,7 @@ void loop() {
   const uint8_t* powerHoldBinding = SETTINGS.buttonBinding(
       activityManager.isBookContext(), CrossPointSettings::BOUND_BTN_POWER, CrossPointSettings::BOUND_HOLD);
   const bool powerHoldSleeps = powerHoldBinding == nullptr || *powerHoldBinding == CrossPointSettings::LP_MENU_SLEEP;
-  if (powerHoldSleeps && powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+  if (powerHoldSleeps && powerReleasedSinceWake && gpio.isPressed(HalGPIO::BTN_POWER) &&
       gpio.getPowerButtonHeldTime() > SETTINGS.getSleepHoldMs()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
