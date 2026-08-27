@@ -45,6 +45,9 @@ void moveCluster(BarLayout& layout, int src, int dst) {
 // Relocate a bumped cluster to the opposite band. Searches same-side-first; sits
 // at the first free anchor, else joins the first occupied anchor that still
 // leaves the band's other two columns room, else hides (drops) the cluster.
+//
+// `src` is emptied either way. Callers that must keep part of an anchor (the title
+// sharing its own) move what stays back afterwards.
 void bumpCluster(BarLayout& layout, int src, bool destBandReserved, int bandWidth, int sepW) {
   const int scol = src % 3;
   const int dband = 1 - (src / 3);
@@ -99,11 +102,29 @@ void bumpCluster(BarLayout& layout, int src, bool destBandReserved, int bandWidt
 
 }  // namespace
 
-void reflowTitle(BarLayout& layout, int titleAnchor, bool titleTruncate, int bandWidth, int sepW,
+void reflowTitle(BarLayout& layout, int titleAnchor, int titleSegIndex, bool titleTruncate, int bandWidth, int sepW,
                  bool destBandReserved) {
   if (titleAnchor < 0 || titleAnchor >= kAnchorCount) return;
   if (titleTruncate) return;                    // clipping title never reflows
   if (layout.counts[titleAnchor] == 0) return;  // no title placed
+
+  // Anything sharing the title's own anchor goes first, and only if the cluster is too
+  // wide for the band: a short title beside a page count is left as it is. The title is
+  // lifted out, the rest is relocated by the same rule a bumped neighbour follows, and the
+  // title is put back alone — which is what returns it to the wrap-or-ellipsis path.
+  if (layout.counts[titleAnchor] > 1 && titleSegIndex >= 0 && titleSegIndex < layout.counts[titleAnchor] &&
+      clusterWidth(layout, titleAnchor, sepW) > bandWidth) {
+    const Seg title = layout.buckets[titleAnchor][titleSegIndex];
+    int kept = 0;
+    for (int i = 0; i < layout.counts[titleAnchor]; i++) {
+      if (i == titleSegIndex) continue;
+      layout.buckets[titleAnchor][kept++] = layout.buckets[titleAnchor][i];
+    }
+    layout.counts[titleAnchor] = kept;
+    bumpCluster(layout, titleAnchor, destBandReserved, bandWidth, sepW);
+    layout.buckets[titleAnchor][0] = title;
+    layout.counts[titleAnchor] = 1;
+  }
 
   const int tband = titleAnchor / 3;
   const int tcol = titleAnchor % 3;

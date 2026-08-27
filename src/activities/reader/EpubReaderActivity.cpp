@@ -23,6 +23,7 @@
 #include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
+#include "ReaderFontSizes.h"
 #include "CrossPointState.h"
 #include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
@@ -557,6 +558,9 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // The number to type is the one the marks print; with numbering off there is none.
       return prefs_.paragraphNumbering != 0;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
+      // Inside a footnote the same binding walks back out, which is what the "Power
+      // returns from footnote" toggle governs. With that off, only the way in is offered.
+      if (footnoteDepth > 0) return SETTINGS.pwrBtnFootnoteBack != 0;
       return !currentPageFootnotes.empty();
     case CrossPointSettings::LP_MENU_BOOKMARKS:
       // Same test the in-book menu uses for its own Bookmarks row: an empty list screen
@@ -575,12 +579,18 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // An empty pop-up is a dead press; Pop-up Items has not been filled in yet.
       return SETTINGS.popupItemCount() > 0;
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
-      // Same test the in-book menu uses to offer its own row: there must be a wallpaper
+    case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+    case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:
+      // Same test the in-book menu uses to offer its own rows: there must be a wallpaper
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
     case CrossPointSettings::LP_MENU_BOOKMARK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
+    // Bound to a key that does not already page (the Home key, or a side key whose single
+    // was remapped), paging is an action like any other and the reader can always run it.
+    case CrossPointSettings::LP_MENU_PAGE_PREV:
+    case CrossPointSettings::LP_MENU_PAGE_NEXT:
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -627,6 +637,11 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::GO_TO_PARAGRAPH);
       return true;
     case CrossPointSettings::LP_MENU_FOOTNOTES:
+      if (footnoteDepth > 0) {
+        if (SETTINGS.pwrBtnFootnoteBack == 0) return false;
+        restoreSavedPosition();
+        return true;
+      }
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::FOOTNOTES);
       return true;
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
@@ -637,6 +652,10 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       // there is no MenuAction to reuse. sbOffBar is passed unchanged — this flips the
       // master switch only, leaving the hidden-bar progress choice alone.
       applyStatusBar(prefs_.statusBarEnabled ? 0 : 1, prefs_.sbOffBar);
+      // applyStatusBar only drops the section for relayout; the menu path repaints when
+      // the menu closes over it, and a binding has no menu to close. Without this the bar
+      // appeared or vanished only at the next page turn, which read as a dead button.
+      requestUpdate();
       return true;
     case CrossPointSettings::LP_MENU_POPUP:
       openQuickMenu();
@@ -644,24 +663,22 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
     case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
       onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_HOLD);
       return true;
+    case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+      // Asks for confirmation itself before removing the file; see the menu action.
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_DELETE);
+      return true;
+    case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:
+      onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE);
+      return true;
+    case CrossPointSettings::LP_MENU_PAGE_PREV:
+      pageTurn(false);
+      return true;
+    case CrossPointSettings::LP_MENU_PAGE_NEXT:
+      pageTurn(true);
+      return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
       return false;
-  }
-}
-
-void EpubReaderActivity::runPowerDoubleClick() {
-  // The pop-up already owns the buttons; a second double click while it is up must not
-  // rebuild it underneath itself.
-  if (quickMenu.isActive()) return;
-
-  const uint8_t function = SETTINGS.doubleClickPowerFunction;
-  // Bound but impossible right now (no footnote on this page, numbering off, no KOReader
-  // credentials). Saying so beats a button that silently does nothing.
-  if (!runBoundMenuFunction(function)) {
-    GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
-    scheduleGhostCleanup();
-    requestUpdate();
   }
 }
 
@@ -680,7 +697,13 @@ void EpubReaderActivity::openQuickMenu() {
     const bool available = boundMenuFunctionAvailable(function);
     // Fixed-width status column, and the pop-up is left-aligned, so ticking or losing a
     // footnote never shifts a label sideways.
-    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(boundMenuActionLabel(function)));
+    // One row, two names: a wallpaper already starred offers Unfavorite. Same swap the
+    // reader menu's own Sleep Screen row makes, so the two never disagree.
+    const StrId label = function == CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE &&
+                                FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath)
+                            ? StrId::STR_UNFAVORITE_WALLPAPER
+                            : boundMenuActionLabel(function);
+    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(label));
     disabledRows.push_back(!available);
     quickMenuFunctions.push_back(function);
   }
@@ -962,30 +985,6 @@ void EpubReaderActivity::loop() {
   }
 
   // auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
-
-  // Handle short power button press for footnotes
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FOOTNOTES &&
-      mappedInput.wasReleased(MappedInputManager::Button::Power) &&
-      !mappedInput.wasReleased(MappedInputManager::Button::Down)) {
-    if (footnoteDepth > 0) {
-      restoreSavedPosition();
-    } else {
-      if (currentPageFootnotes.size() == 1) {
-        navigateToHref(currentPageFootnotes[0].href, true);
-      } else if (currentPageFootnotes.size() > 1) {
-        startActivityForResult(
-            std::make_unique<EpubReaderFootnotesActivity>(renderer, mappedInput, currentPageFootnotes),
-            [this](const ActivityResult& result) {
-              if (!result.isCancelled) {
-                const auto& footnoteResult = std::get<FootnoteResult>(result.data);
-                navigateToHref(footnoteResult.href, true);
-              }
-              requestUpdate();
-            });
-      }
-    }
-    return;
-  }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
   prevTriggered = prevTriggered || touch.prev;
@@ -1701,6 +1700,34 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
 
 std::string EpubReaderActivity::readerOverridePath() const { return epub->getCachePath() + "/reader_override.bin"; }
 
+bool EpubReaderActivity::lightPanelAuxText(char* out, const size_t length) const {
+  snprintf(out, length, "%s %u", I18N.get(StrId::STR_TEXT_SIZE), static_cast<unsigned>(prefs_.fontPointSize));
+  return true;
+}
+
+bool EpubReaderActivity::lightPanelStepAux(const int delta) {
+  const auto sizes = readerFontPointSizes(&sdFontSystem.registry(), prefs_.sdFontFamilyName);
+  if (sizes.size() < 2) return false;  // one installed size: the row is a readout
+
+  const uint8_t current = snapToNearestPointSize(sizes, prefs_.fontPointSize);
+  int index = 0;
+  for (size_t i = 0; i < sizes.size(); ++i) {
+    if (sizes[i] == current) index = static_cast<int>(i);
+  }
+  const int next = std::clamp(index + delta, 0, static_cast<int>(sizes.size()) - 1);
+  if (sizes[next] == prefs_.fontPointSize) return false;
+
+  prefs_.fontPointSize = sizes[next];
+  // Per-book, like every other change made from inside the book: the global size belongs
+  // to Settings > Reader.
+  prefsCustom_ = true;
+  writeReaderOverride(prefs_);
+  sdFontSystem.ensureLoadedFor(renderer, prefs_.sdFontFamilyName, prefs_.fontPointSize);
+  reloadForReaderPrefsChange();
+  requestUpdate();
+  return true;
+}
+
 void EpubReaderActivity::loadReaderPrefs() {
   prefsCustom_ = false;
   HalFile f;
@@ -2030,7 +2057,7 @@ ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming
       LOG_ERR("ERS", "Reader prefs name a missing SD font '%s' — falling back to the built-in family",
               next.sdFontFamilyName);
       std::memset(next.sdFontFamilyName, 0, sizeof(next.sdFontFamilyName));
-      next.fontFamily = 0;  // CrossPointSettings::VOLLKORN
+      next.fontFamily = 0;  // CrossPointSettings::CHAREINK
     }
   }
 

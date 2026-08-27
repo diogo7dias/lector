@@ -6,6 +6,7 @@
 #include <cstdint>
 
 #include "activities/reader/ReaderPrefs.h"
+#include "util/BoundMenuActions.h"
 #include "util/MarginLink.h"
 
 // The whole status bar configuration as one value, so it can be swapped in and out
@@ -177,8 +178,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum SIDE_BUTTON_LAYOUT { PREV_NEXT = 0, NEXT_PREV = 1, SIDE_BUTTONS_DISABLED = 2, SIDE_BUTTON_LAYOUT_COUNT };
 
   // Font family options (built-in fonts only; SD card fonts use sdFontFamilyName).
-  // Vollkorn is the sole built-in reading family; more fonts are added from the SD card.
-  enum FONT_FAMILY { VOLLKORN = 0, FONT_FAMILY_COUNT };
+  // ChareInk is the sole built-in reading family; more fonts are added from the SD card.
+  enum FONT_FAMILY { CHAREINK = 0, FONT_FAMILY_COUNT };
   static constexpr uint8_t LEGACY_OPENDYSLEXIC = 2;
   static constexpr uint8_t BUILTIN_FONT_COUNT = FONT_FAMILY_COUNT;
   // Reader font size is a point size, not an enum slot — see fontPointSize.
@@ -223,7 +224,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Short power button press actions
-  enum SHORT_PWRBTN { IGNORE = 0, SLEEP = 1, PAGE_TURN = 2, FORCE_REFRESH = 3, FOOTNOTES = 4, SHORT_PWRBTN_COUNT };
   // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
   // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
   // swipe. Values match CrossPoint so a settings file moves between the two.
@@ -243,67 +243,54 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // used to force on everyone who picked it (one setting, two behaviours).
   enum WAKE_HOLD { WAKE_HOLD_NORMAL = 0, WAKE_HOLD_FAST = 1, WAKE_HOLD_COUNT };
 
-  // Long-press Confirm action while reading an EPUB. The setting cycles through these values.
-  // Persisted in settings.json by index: any new function (e.g. dictionary, bookmark) MUST use a
-  // value >= 2 and be appended at the END of the enumValues array in SettingsList.h, otherwise the
-  // stored indices shift and existing saves are silently misinterpreted.
-  enum LONG_PRESS_MENU_FUNCTION {
-    LP_MENU_KOSYNC = 0,
-    LP_MENU_DISABLED = 1,
-    LP_MENU_BOOKMARK = 2,
-    LP_MENU_DICTIONARY = 3,
-    LP_MENU_GRAB_QUOTE = 4,
-    // Appended for the shared binding list (0.20). Order is frozen: the values
-    // below double as bit positions in popupItems, so reordering them would both
-    // shift saved bindings and silently re-tick a different set of pop-up rows.
-    // RETIRED 2026-08-11 (Diogo): both left the offered list. The values stay so every
-    // binding value after them keeps its meaning, they are listed in withHiddenEnumValues()
-    // in SettingsList.h, and fromJson folds a binding still set to one of them to Disabled.
-    // LP_MENU_TEXT_SETTINGS below was retired the same way on 2026-08-22: the global text
-    // settings belong in Settings > Reader, and having them a button press from the page
-    // made it easy to edit every book while meaning to edit this one (Reader Settings).
-    LP_MENU_SELECT_CHAPTER = 5,
-    LP_MENU_GO_TO_PERCENT = 6,
-    LP_MENU_GO_TO_PARAGRAPH = 7,
-    LP_MENU_FOOTNOTES = 8,
-    LP_MENU_TEXT_SETTINGS = 9,
-    LP_MENU_READER_SETTINGS = 10,
-    LP_MENU_TOGGLE_STATUS_BAR = 11,
-    // Not an action: opens the pop-up built from popupItems. Always last, and it is
-    // the only value runBoundMenuFunction() refuses to run, so a pop-up cannot list
-    // itself and recurse.
-    LP_MENU_POPUP = 12,
-    // Holds the wallpaper the lock screen last showed, instead of picking a new one at
-    // the next sleep. Appended after LP_MENU_POPUP, so Menu Pop-up is no longer the last
-    // value even though it is still the only non-action one.
-    LP_MENU_WALLPAPER_HOLD = 13,
-    // The list of saved bookmarks, next to the toggle that adds one.
-    LP_MENU_BOOKMARKS = 14,
-    // The saved-quotes viewer, next to Grab Quote that writes to it.
-    LP_MENU_VIEW_QUOTES = 15,
-    // Sends this book's own file to another reader over ESP-NOW. Bindable to a
-    // button, but deliberately absent from POPUP_ITEM_FUNCTIONS below: popupItems
-    // is a 16-bit mask keyed by these values, and bit 15 is already the last one
-    // there is. Listing it in the pop-up means widening that mask and migrating
-    // every stored value.
-    LP_MENU_NEARBY_SEND_BOOK = 16,
-    // Appended for the per-button bindings (Buttons settings screen). The first four
-    // are what a button does rather than what a menu offers, so they are absent from
-    // POPUP_ITEM_FUNCTIONS: ticking "Next page" into the reader's pop-up would be a
-    // row that turns the page the pop-up is covering.
-    LP_MENU_PAGE_PREV = 17,
-    LP_MENU_PAGE_NEXT = 18,
-    LP_MENU_GO_HOME = 19,
-    LP_MENU_BACK = 20,
-    LP_MENU_LIGHT_PANEL = 21,
-    LP_MENU_SLEEP = 22,
-    LONG_PRESS_MENU_FUNCTION_COUNT
-  };
+  // The bindable actions, defined in util/BoundMenuActions.h and re-exported here so
+  // every CrossPointSettings::LP_MENU_* call site keeps working. The list itself lives
+  // apart from this header because its rules are pure and host-tested; see that file
+  // for the ordering constraints, the retired values and what each action means.
+  using LONG_PRESS_MENU_FUNCTION = bound_action::LONG_PRESS_MENU_FUNCTION;
+  static constexpr auto LP_MENU_KOSYNC = bound_action::LP_MENU_KOSYNC;
+  static constexpr auto LP_MENU_DISABLED = bound_action::LP_MENU_DISABLED;
+  static constexpr auto LP_MENU_BOOKMARK = bound_action::LP_MENU_BOOKMARK;
+  static constexpr auto LP_MENU_DICTIONARY = bound_action::LP_MENU_DICTIONARY;
+  static constexpr auto LP_MENU_GRAB_QUOTE = bound_action::LP_MENU_GRAB_QUOTE;
+  static constexpr auto LP_MENU_SELECT_CHAPTER = bound_action::LP_MENU_SELECT_CHAPTER;
+  static constexpr auto LP_MENU_GO_TO_PERCENT = bound_action::LP_MENU_GO_TO_PERCENT;
+  static constexpr auto LP_MENU_GO_TO_PARAGRAPH = bound_action::LP_MENU_GO_TO_PARAGRAPH;
+  static constexpr auto LP_MENU_FOOTNOTES = bound_action::LP_MENU_FOOTNOTES;
+  static constexpr auto LP_MENU_TEXT_SETTINGS = bound_action::LP_MENU_TEXT_SETTINGS;
+  static constexpr auto LP_MENU_READER_SETTINGS = bound_action::LP_MENU_READER_SETTINGS;
+  static constexpr auto LP_MENU_TOGGLE_STATUS_BAR = bound_action::LP_MENU_TOGGLE_STATUS_BAR;
+  static constexpr auto LP_MENU_POPUP = bound_action::LP_MENU_POPUP;
+  static constexpr auto LP_MENU_WALLPAPER_HOLD = bound_action::LP_MENU_WALLPAPER_HOLD;
+  static constexpr auto LP_MENU_BOOKMARKS = bound_action::LP_MENU_BOOKMARKS;
+  static constexpr auto LP_MENU_VIEW_QUOTES = bound_action::LP_MENU_VIEW_QUOTES;
+  static constexpr auto LP_MENU_NEARBY_SEND_BOOK = bound_action::LP_MENU_NEARBY_SEND_BOOK;
+  static constexpr auto LP_MENU_PAGE_PREV = bound_action::LP_MENU_PAGE_PREV;
+  static constexpr auto LP_MENU_PAGE_NEXT = bound_action::LP_MENU_PAGE_NEXT;
+  static constexpr auto LP_MENU_GO_HOME = bound_action::LP_MENU_GO_HOME;
+  static constexpr auto LP_MENU_BACK = bound_action::LP_MENU_BACK;
+  static constexpr auto LP_MENU_LIGHT_PANEL = bound_action::LP_MENU_LIGHT_PANEL;
+  static constexpr auto LP_MENU_SLEEP = bound_action::LP_MENU_SLEEP;
+  static constexpr auto LP_MENU_FORCE_REFRESH = bound_action::LP_MENU_FORCE_REFRESH;
+  static constexpr auto LP_MENU_WALLPAPER_DELETE = bound_action::LP_MENU_WALLPAPER_DELETE;
+  static constexpr auto LP_MENU_WALLPAPER_FAVORITE = bound_action::LP_MENU_WALLPAPER_FAVORITE;
+  static constexpr auto LP_MENU_CONTINUE_READING = bound_action::LP_MENU_CONTINUE_READING;
+  static constexpr auto LP_MENU_RANDOM_BOOK = bound_action::LP_MENU_RANDOM_BOOK;
+  static constexpr auto LP_MENU_SEARCH = bound_action::LP_MENU_SEARCH;
+  static constexpr auto LP_MENU_SETTINGS = bound_action::LP_MENU_SETTINGS;
+  static constexpr auto LP_MENU_ROTATE = bound_action::LP_MENU_ROTATE;
+  static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and
   // Right are the two side keys; Home is the capacitive key under the panel on the
   // boards that have one (BoardConfig::hasHomeKey).
-  enum BOUND_BUTTON : uint8_t { BOUND_BTN_LEFT = 0, BOUND_BTN_RIGHT = 1, BOUND_BTN_HOME = 2, BOUND_BTN_COUNT = 3 };
+  enum BOUND_BUTTON : uint8_t {
+    BOUND_BTN_LEFT = 0,
+    BOUND_BTN_RIGHT = 1,
+    BOUND_BTN_HOME = 2,
+    BOUND_BTN_POWER = 3,
+    BOUND_BTN_COUNT = 4
+  };
   // The three gestures each of those carries.
   enum BOUND_GESTURE : uint8_t {
     BOUND_SINGLE = 0,
@@ -318,13 +305,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t POPUP_ITEM_FUNCTIONS[] = {
       LP_MENU_KOSYNC,          LP_MENU_BOOKMARK,          LP_MENU_BOOKMARKS,       LP_MENU_DICTIONARY,
       LP_MENU_GRAB_QUOTE,      LP_MENU_VIEW_QUOTES,       LP_MENU_GO_TO_PARAGRAPH, LP_MENU_FOOTNOTES,
-      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD};
+      LP_MENU_READER_SETTINGS, LP_MENU_TOGGLE_STATUS_BAR, LP_MENU_WALLPAPER_HOLD,  LP_MENU_WALLPAPER_FAVORITE,
+      LP_MENU_WALLPAPER_DELETE};
 
   // Cap on ticked pop-up rows. Every action can be ticked at once; the ceiling only exists
-  // because popupItems is a 16-bit mask, so 16 is as many bits as there are to set. The
+  // because popupItems is a bit mask, so its width is as many bits as there are to set. The
   // pop-up itself no longer needs the cap to stay on screen — option_popup::compute()
   // tightens its spacing when the rows would otherwise run off the panel.
-  static constexpr uint8_t POPUP_ITEM_MAX = 16;
+  static constexpr uint8_t POPUP_ITEM_MAX = 32;
 
   // UI Theme
   // Lector ships a single UI theme (the CrossPoint "Classic" base, renamed). All
@@ -407,22 +395,26 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Master on/off. NEVER read this field to decide whether to draw or reserve the bar —
   // call statusBarEnabled() instead, so a book that turned the bar off for itself is
   // honoured. This field stays the global default and the value written to settings.json.
+  // Status bar defaults. Chapter title top-left on its own line, the page in that chapter
+  // bottom-left, the two chapter readouts bottom-right, the two session counters
+  // bottom-centre, and a chapter progress bar along the bottom edge. Battery, clock, book
+  // percentage and the book bar are off: the chapter is what a page is read against.
   uint8_t sbEnabled = 1;
-  uint8_t sbBatteryPos = SB_ANCHOR_BL;        // battery anchor
-  uint8_t sbClockPos = SB_ANCHOR_OFF;         // clock anchor (X3 RTC only)
-  uint8_t sbTitlePos = SB_ANCHOR_BC;          // title anchor
-  uint8_t sbTitleSource = SB_TITLE_CHAPTER;   // book or chapter title
-  uint8_t sbTitleTruncate = 0;                // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
-  uint8_t sbPagePos = SB_ANCHOR_BR;           // page-in-chapter anchor
-  uint8_t sbPageFormat = SB_PAGE_FRACTION;    // "3/40" vs "8 left"
-  uint8_t sbBookPctPos = SB_ANCHOR_BR;        // book % (B:NN%) anchor
-  uint8_t sbChapterPctPos = SB_ANCHOR_OFF;    // chapter % (C:NN%) anchor
-  uint8_t sbChapterNumPos = SB_ANCHOR_OFF;    // chapter #/total (Ch N/M) anchor
-  uint8_t sbSessionPagesPos = SB_ANCHOR_OFF;  // pages turned this sitting (+N) anchor
-  uint8_t sbParaPagesPos = SB_ANCHOR_OFF;     // pages left in this paragraph (>P.N) anchor
-  uint8_t sbBookBar = SB_EDGE_OFF;            // book progress bar edge (Off/Top/Bottom)
-  uint8_t sbChapterBar = SB_EDGE_OFF;         // chapter progress bar edge
-  uint8_t sbBarThickness = SB_BAR_MEDIUM;     // progress bar thickness slim/med/fat
+  uint8_t sbBatteryPos = SB_ANCHOR_OFF;      // battery anchor
+  uint8_t sbClockPos = SB_ANCHOR_OFF;        // clock anchor (X3 RTC only)
+  uint8_t sbTitlePos = SB_ANCHOR_TL;         // title anchor
+  uint8_t sbTitleSource = SB_TITLE_CHAPTER;  // book or chapter title
+  uint8_t sbTitleTruncate = 0;               // 0 = greedy, no ellipsis (drives reflow); 1 = clip with ellipsis
+  uint8_t sbPagePos = SB_ANCHOR_BL;          // page-in-chapter anchor
+  uint8_t sbPageFormat = SB_PAGE_FRACTION;   // "3/40" vs "8 left"
+  uint8_t sbBookPctPos = SB_ANCHOR_OFF;      // book % (B:NN%) anchor
+  uint8_t sbChapterPctPos = SB_ANCHOR_BR;    // chapter % (C:NN%) anchor
+  uint8_t sbChapterNumPos = SB_ANCHOR_BR;    // chapter #/total (Ch N/M) anchor
+  uint8_t sbSessionPagesPos = SB_ANCHOR_BC;  // pages turned this sitting (+N) anchor
+  uint8_t sbParaPagesPos = SB_ANCHOR_BC;     // pages left in this paragraph (>P.N) anchor
+  uint8_t sbBookBar = SB_EDGE_OFF;           // book progress bar edge (Off/Top/Bottom)
+  uint8_t sbChapterBar = SB_EDGE_BOTTOM;     // chapter progress bar edge
+  uint8_t sbBarThickness = SB_BAR_MEDIUM;    // progress bar thickness slim/med/fat
   // Lift the progress bars off the screen edge: one small margin applied to the
   // outer edge and to both ends, so the bar reads as a floating pill instead of
   // a strip welded to the frame. Position and thickness are unaffected.
@@ -459,8 +451,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.
   uint8_t textAntiAliasing = 0;
-  // Short power button click behaviour
-  uint8_t shortPwrBtn = IGNORE;
   // Swipe by default: it works the same wherever the thumb lands, and it leaves the
   // whole page free of invisible tap targets.
   uint8_t touchReaderControls = TOUCH_READER_SWIPE;
@@ -485,7 +475,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t frontButtonLeft = FRONT_HW_LEFT;
   uint8_t frontButtonRight = FRONT_HW_RIGHT;
   // Reader font settings
-  uint8_t fontFamily = VOLLKORN;
+  uint8_t fontFamily = CHAREINK;
   // Point size of the reader font (upstream #2720 replaced the SMALL/MEDIUM/LARGE
   // enum with a real point size). Only sizes the active family actually ships are
   // selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
@@ -500,7 +490,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // float is part of the cache key, so a change rebuilds the section cache.
   static constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
   static constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
-  uint8_t lineSpacingPercent = 100;
+  uint8_t lineSpacingPercent = 95;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
@@ -517,9 +507,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t SCREEN_MARGIN_MIN = 0;
   static constexpr uint8_t SCREEN_MARGIN_MAX = 100;
   static constexpr uint8_t SCREEN_MARGIN_STEP = 1;
-  uint8_t screenMargin = 20;
-  uint8_t screenMarginTop = 20;
-  uint8_t screenMarginBottom = 20;
+  uint8_t screenMargin = 17;
+  uint8_t screenMarginTop = 17;
+  uint8_t screenMarginBottom = 17;
   // margin_link::Mode as a number: 0 = Separate, 1 = top and bottom move together,
   // 2 = All Sides (every side holds the horizontal value). See util/MarginLink.h.
   static constexpr uint8_t MARGIN_LINK_MODE_COUNT = margin_link::MODE_COUNT;
@@ -559,7 +549,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr uint8_t MAX_FIRST_LINE_INDENT_PERCENT = 100;
   // Default to a real indent rather than trusting the publisher's CSS, which on many
   // EPUBs is absent entirely.
-  static constexpr uint8_t DEFAULT_FIRST_LINE_INDENT_PERCENT = reader_defaults::FIRST_LINE_INDENT_PERCENT;
+  // Deliberately not reader_defaults::FIRST_LINE_INDENT_PERCENT. That constant re-seeds
+  // sidecars written before v9, which must go on looking the way they did; this is what a
+  // new install starts from.
+  static constexpr uint8_t DEFAULT_FIRST_LINE_INDENT_PERCENT = 23;
   uint8_t firstLineIndentMode = FIRST_LINE_INDENT_PERCENT;
   uint8_t firstLineIndentPercent = DEFAULT_FIRST_LINE_INDENT_PERCENT;
   // OPDS download destination folder ("" = SD root). Global; edited from the
@@ -579,15 +572,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // needs. Costs nothing when Disabled, and nothing when set: the menu acts on release,
   // so a plain tap is unaffected either way.
   uint8_t menuHoldFunction = LP_MENU_DISABLED;
-  // Double-click of the power button while reading an EPUB. Shares the same
-  // LONG_PRESS_MENU_FUNCTION list as the two bindings above.
-  //
-  // Unlike those two this one is not free when set: nothing can tell a single click
-  // from the first half of a double click until the window closes, so arming it delays
-  // every single power click by DoubleClickDetector::WINDOW_MS. That cost is confined
-  // to the EPUB reader (main.cpp only arms the detector there) and disappears entirely
-  // at LP_MENU_DISABLED, which is why Disabled is the default.
-  uint8_t doubleClickPowerFunction = LP_MENU_DISABLED;
 
   // Per-button bindings: what each button does for each gesture, in a book and out of
   // one. Values are LONG_PRESS_MENU_FUNCTION, so the picker offers the same list every
@@ -617,6 +601,15 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t btnUiHomeSingle = LP_MENU_GO_HOME;
   uint8_t btnUiHomeDouble = LP_MENU_DISABLED;
   uint8_t btnUiHomeHold = LP_MENU_DISABLED;
+  // Power. Its defaults are what the old shortPwrBtn / doubleClickPowerFunction pair
+  // defaulted to: a click does nothing, a hold sleeps. The hold keeps its own threshold
+  // (sleepHoldMs), so leaving it on Sleep leaves the sleep hold exactly as it was.
+  uint8_t btnBookPowerSingle = LP_MENU_DISABLED;
+  uint8_t btnBookPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnBookPowerHold = LP_MENU_SLEEP;
+  uint8_t btnUiPowerSingle = LP_MENU_DISABLED;
+  uint8_t btnUiPowerDouble = LP_MENU_DISABLED;
+  uint8_t btnUiPowerHold = LP_MENU_SLEEP;
 
   // The binding field for one button and gesture, in or out of a book. Returns a
   // pointer so both the settings rows and the router read the same storage.
@@ -627,13 +620,17 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
          {&CrossPointSettings::btnUiRightSingle, &CrossPointSettings::btnUiRightDouble,
           &CrossPointSettings::btnUiRightHold},
          {&CrossPointSettings::btnUiHomeSingle, &CrossPointSettings::btnUiHomeDouble,
-          &CrossPointSettings::btnUiHomeHold}},
+          &CrossPointSettings::btnUiHomeHold},
+         {&CrossPointSettings::btnUiPowerSingle, &CrossPointSettings::btnUiPowerDouble,
+          &CrossPointSettings::btnUiPowerHold}},
         {{&CrossPointSettings::btnBookLeftSingle, &CrossPointSettings::btnBookLeftDouble,
           &CrossPointSettings::btnBookLeftHold},
          {&CrossPointSettings::btnBookRightSingle, &CrossPointSettings::btnBookRightDouble,
           &CrossPointSettings::btnBookRightHold},
          {&CrossPointSettings::btnBookHomeSingle, &CrossPointSettings::btnBookHomeDouble,
-          &CrossPointSettings::btnBookHomeHold}}};
+          &CrossPointSettings::btnBookHomeHold},
+         {&CrossPointSettings::btnBookPowerSingle, &CrossPointSettings::btnBookPowerDouble,
+          &CrossPointSettings::btnBookPowerHold}}};
     if (button >= BOUND_BTN_COUNT || gesture >= BOUND_GESTURE_COUNT) return nullptr;
     return &(this->*table[inBook ? 1 : 0][button][gesture]);
   }
@@ -641,7 +638,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
   // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
   // At most POPUP_ITEM_MAX bits are ever set; the tick screen enforces it.
-  uint16_t popupItems = 0;
+  uint32_t popupItems = 0;
   // UI Theme
   uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
@@ -709,14 +706,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // per-book ReaderPrefs seed from; the EPUB reader then uses its per-book copy, the
   // TXT/XTC readers use these global values directly.
   uint8_t paperbackLookBody = 1;
-  uint8_t paperbackLookStatus = 1;
+  uint8_t paperbackLookStatus = 0;
   // Default paragraph numbering for books that have no per-book override yet. A book
   // already carrying its own reader_override.bin keeps whatever it was set to in the
   // in-book menu; this only seeds the next book opened fresh.
   uint8_t paragraphNumbering = PARA_NUM_CHAPTER;
   // Default size for those numbers. Double is the default: at the native cell the digits
   // are 8px tall, which reads as too small on the device.
-  uint8_t paragraphNumberSize = PARA_NUM_SIZE_DOUBLE;
+  uint8_t paragraphNumberSize = PARA_NUM_SIZE_SMALL;
   // SD card font family name (empty = use built-in fontFamily)
   char sdFontFamilyName[32] = "";
   // TXT reader font, kept apart from the EPUB reader font above. A plain text file
@@ -836,14 +833,49 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // with no release required; Fast skips the check altogether.
   uint16_t getWakeHoldMs() const { return 200; }
   bool wakeHoldIsFast() const { return wakeHold == WAKE_HOLD_FAST; }
-  // True when a function is bound to the power double click (see doubleClickPowerFunction).
-  bool powerDoubleClickBound() const { return doubleClickPowerFunction != LP_MENU_DISABLED; }
-  // Whether a single power press sleeps the device. Every consumer of the Sleep value of
-  // shortPwrBtn must ask this rather than comparing the setting itself, so the double-click
-  // override is applied in one place: the wake-hold verification, the sleep threshold, and
-  // the shared Confirm/Power boards that route a short press to Power instead of Confirm.
-  bool shortPressSleeps() const {
-    return shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::SLEEP && !powerDoubleClickBound();
+  // True when Footnotes is on any of the power button's in-book gestures. Governs the
+  // "Power returns from footnote" row, which only describes that binding.
+  bool powerOpensFootnotes() const {
+    return btnBookPowerSingle == LP_MENU_FOOTNOTES || btnBookPowerDouble == LP_MENU_FOOTNOTES ||
+           btnBookPowerHold == LP_MENU_FOOTNOTES;
+  }
+
+  // True when anything at all opens the reader pop-up: the three legacy bindings or any
+  // of the per-button ones. Settings offers the Pop-up Items tick screen only then, so a
+  // screen that exists to fill a pop-up is not shown to someone who has no pop-up.
+  bool anyBindingOpensPopup() const {
+    if (longPressMenuFunction == LP_MENU_POPUP || menuHoldFunction == LP_MENU_POPUP) {
+      return true;
+    }
+    for (const bool inBook : {false, true}) {
+      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
+        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
+          const uint8_t* binding = const_cast<CrossPointSettings*>(this)->buttonBinding(inBook, button, gesture);
+          if (binding != nullptr && *binding == LP_MENU_POPUP) return true;
+        }
+      }
+    }
+    return false;
+  }
+  // Whether a single power press sleeps the device. Every consumer must ask this rather
+  // than reading a binding itself, so the answer is decided in one place: the wake-hold
+  // verification, the sleep threshold, and the shared Confirm/Power boards that route a
+  // short press to Power instead of Confirm.
+  bool shortPressSleeps() const { return btnUiPowerSingle == LP_MENU_SLEEP || btnBookPowerSingle == LP_MENU_SLEEP; }
+
+  // True when Sleep is bound to any gesture, on any button, in either context. False here
+  // means the device has no manual route to sleep at all, and getSleepTimeoutMs() caps the
+  // auto-sleep timeout in response; see util/SleepTimeoutGuard.h.
+  bool anySleepBinding() const {
+    for (const bool inBook : {false, true}) {
+      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
+        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
+          const uint8_t* binding = const_cast<CrossPointSettings*>(this)->buttonBinding(inBook, button, gesture);
+          if (binding != nullptr && *binding == LP_MENU_SLEEP) return true;
+        }
+      }
+    }
+    return false;
   }
   // Pop-up membership. The mask layout has exactly one owner: these three.
   bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }
@@ -860,9 +892,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     if (isPopupItem(function) == on) return false;
     if (on && popupItemCount() >= POPUP_ITEM_MAX) return false;
     if (on) {
-      popupItems |= static_cast<uint16_t>(1u << function);
+      popupItems |= static_cast<uint32_t>(1u << function);
     } else {
-      popupItems &= static_cast<uint16_t>(~(1u << function));
+      popupItems &= static_cast<uint32_t>(~(1u << function));
     }
     return true;
   }

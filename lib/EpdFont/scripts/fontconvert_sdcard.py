@@ -582,7 +582,12 @@ def rasterize_font_style(fontfile, size, intervals, style_id=0, force_autohint=F
     ligature_glyph_indices = extract_ligature_glyph_indices_fonttools(fontfile)
     fallback_face = None
     if fallback_fontfile:
-        fallback_face = freetype.Face(fallback_fontfile)
+        # "path#N" selects face N of a collection. Noto Serif CJK ships as one .ttc whose
+        # five faces share every glyph and differ only in which regional variant a han
+        # codepoint maps to, so the face index is how a Korean build asks for the Korean
+        # forms rather than the Japanese ones it would get from face 0.
+        fallback_path, _, fallback_face_index = str(fallback_fontfile).partition("#")
+        fallback_face = freetype.Face(fallback_path, index=int(fallback_face_index or 0))
         fallback_face.set_char_size(size << 6, size << 6, 150, 150)
 
     load_flags = freetype.FT_LOAD_RENDER

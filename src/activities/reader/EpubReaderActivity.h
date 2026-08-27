@@ -354,6 +354,12 @@ class EpubReaderActivity final : public Activity {
   static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
   // Delete this book's override and follow the global settings again.
   // Reads the Customise Status Bar screen's result back into this book's override.
+  // The light panel's aux row is this book's text size. Only the sizes actually installed
+  // for the active family are reachable, so on a device carrying only the built-in
+  // ChareInk (one compiled-in size) the row shows the size and the steppers do nothing.
+  bool lightPanelAuxText(char* out, size_t length) const override;
+  bool lightPanelStepAux(int delta) override;
+
   void applyStatusBarEdit();
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.
@@ -398,26 +404,14 @@ class EpubReaderActivity final : public Activity {
   // speed would only burn battery; the paused gate still retries every loop pass).
   bool skipLoopDelay() override { return section && section->isBuilding() && !buildHeapPaused; }
   bool isReaderActivity() const override { return true; }
-  // Arms the power double-click only when the bound function could actually run right
-  // now. Every single power click pays the detector's ~280 ms hold-back while it waits
-  // for a second one, and a page turn on Power is the thing that lag is most felt on, so
-  // a binding that cannot fire on this page (footnotes bound with none here, Go to
-  // Paragraph with numbering off, KOSync with no credentials) leaves clicks instant.
-  bool wantsPowerDoubleClick() const override {
-    const uint8_t function = SETTINGS.doubleClickPowerFunction;
-    switch (function) {
-      case CrossPointSettings::LP_MENU_DISABLED:
-        return false;
-      // These two answer by reading the card, and this runs on EVERY main-loop pass, so
-      // they arm unconditionally and report themselves unavailable at the press instead.
-      case CrossPointSettings::LP_MENU_VIEW_QUOTES:
-      case CrossPointSettings::LP_MENU_WALLPAPER_HOLD:
-        return true;
-      default:
-        return boundMenuFunctionAvailable(function);
-    }
+  bool isBookContext() const override { return true; }
+  bool applyReaderOrientation(const uint8_t orientation) override {
+    applyOrientation(orientation);
+    return true;
   }
-  void runPowerDoubleClick() override;
+  // The bindings router hands every gesture here first; the reader answers with the same
+  // entry points the pop-up and the long-press bindings already use.
+  bool runBoundAction(const uint8_t function) override { return runBoundMenuFunction(function); }
   bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {

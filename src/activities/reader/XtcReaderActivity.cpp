@@ -57,21 +57,24 @@ void XtcReaderActivity::onEnter() {
   requestUpdate();
 }
 
-void XtcReaderActivity::runPowerDoubleClick() {
-  // Wallpaper Hold is the only binding this reader can run; wantsPowerDoubleClick() keeps
-  // the detector disarmed for every other one. It can still resolve to None here: arming
-  // only checks that a wallpaper path exists, and this is where the card is asked whether
-  // the file is still on it.
-  if (simple_reader_shortcut::resolve(SETTINGS.doubleClickPowerFunction, /*supportsStatusBarToggle=*/false) !=
+bool XtcReaderActivity::runBoundAction(const uint8_t function) {
+  if (function == CrossPointSettings::LP_MENU_PAGE_PREV || function == CrossPointSettings::LP_MENU_PAGE_NEXT) {
+    pageTurn(function == CrossPointSettings::LP_MENU_PAGE_NEXT);
+    return true;
+  }
+
+  // Wallpaper Hold is the only binding this reader can run itself; everything else falls
+  // through to the shared handler. Resolve can still say None for Wallpaper Hold, because
+  // this is where the card is asked whether the file is still on it.
+  if (simple_reader_shortcut::resolve(function, /*supportsStatusBarToggle=*/false) !=
       simple_reader_shortcut::Action::WallpaperHold) {
-    GUI.drawPopup(renderer, tr(STR_NOT_AVAILABLE));
-    requestUpdate();
-    return;
+    return false;
   }
   SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
   SETTINGS.saveToFile();
   GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
   requestUpdate();
+  return true;
 }
 
 void XtcReaderActivity::onExit() {
@@ -151,6 +154,12 @@ void XtcReaderActivity::loop() {
   if (!prevTriggered && !nextTriggered) {
     return;
   }
+  pageTurn(nextTriggered);
+}
+
+void XtcReaderActivity::pageTurn(const bool forward) {
+  const bool prevTriggered = !forward;
+  const bool nextTriggered = forward;
 
   // At end of the book with no suggestion menu, forward button goes home and back
   // button returns to last page

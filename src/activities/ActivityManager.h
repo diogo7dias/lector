@@ -6,6 +6,7 @@
 
 #include <atomic>
 #include <cassert>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -57,6 +58,7 @@ class ActivityManager {
   // that opens it works from every screen, and the band is drawn over whatever the last
   // render left in the framebuffer instead of replacing it.
   LightPanel lightPanel;
+  std::function<void()> onSleep_;
 
   void exitActivity(const RenderLock& lock);
 
@@ -91,6 +93,19 @@ class ActivityManager {
   ~ActivityManager() { assert(false); /* should never be called */ };
 
   void begin();
+
+  // The light panel's two actions. Sleep can only be run by main.cpp, so it is handed in;
+  // Rotate is answered here, because whether an orientation means anything depends on the
+  // screen on top.
+  void setSleepAction(std::function<void()> onSleep);
+
+  // The light panel asks for these every time it opens: what to put in its aux row and
+  // its action grid, and what a step of that aux row means here.
+  void buildLightPanelContext(light_panel::Context& context);
+  bool stepLightPanelAux(int delta);
+
+  // One book chosen at random from the card, or empty when the card holds none.
+  std::string randomBookPath();
   void loop();
 
   // Will replace currentActivity and drop all activities on stack
@@ -128,8 +143,13 @@ class ActivityManager {
   bool handleForcedRefresh();
   // Forwarded to the CURRENT activity only — unlike isReaderActivity(), which is also true
   // while a child screen launched from the reader sits on top of it.
-  bool wantsPowerDoubleClick() const;
-  void runPowerDoubleClick();
+
+  // Per-button bindings. isBookContext() picks which of the two binding sets the router
+  // arms; runBoundAction() offers the action to the screen on top first and falls back to
+  // the ones that work anywhere (Home, Back, Frontlight). Sleep is not here: only main.cpp
+  // can put the device to sleep.
+  bool isBookContext() const;
+  bool runBoundAction(uint8_t function);
   bool skipLoopDelay() const;
   ScreenshotInfo getScreenshotInfo() const;
 

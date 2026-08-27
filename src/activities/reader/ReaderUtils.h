@@ -68,7 +68,8 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   int y = 0;
   if (!input.wasScreenTapped(x, y)) return result;
 
-  switch (reader_touch::tapAction(mode, readerMenuMode(), renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
+  switch (
+      reader_touch::tapAction(mode, readerMenuMode(), renderer.getScreenWidth(), renderer.getScreenHeight(), x, y)) {
     case reader_touch::TapAction::Prev:
       result.prev = true;
       break;
@@ -108,17 +109,14 @@ struct PageTurnResult {
 // so it is the one thing that must never wait: nothing is bound to holding a page
 // turn button any more, which is what makes firing this early unambiguous.
 //
-// Power is the exception and stays on the release, because a short press turning the
-// page has to be told apart from a hold (sleep) and from a double click.
+// Power is absent: paging on the power button is a binding like any other now, dispatched
+// through the reader's runBoundAction rather than read off a raw release here.
 inline PageTurnResult detectPageTurn(const MappedInputManager& input) {
   const bool swapFront = input.isNavDirectionSwapped();
   const auto prevButton = swapFront ? MappedInputManager::Button::Right : MappedInputManager::Button::Left;
   const auto nextButton = swapFront ? MappedInputManager::Button::Left : MappedInputManager::Button::Right;
   const bool prev = input.wasPressed(MappedInputManager::Button::PageBack) || input.wasPressed(prevButton);
-  const bool powerTurn = SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::PAGE_TURN &&
-                         input.wasReleased(MappedInputManager::Button::Power);
-  const bool next =
-      input.wasPressed(MappedInputManager::Button::PageForward) || powerTurn || input.wasPressed(nextButton);
+  const bool next = input.wasPressed(MappedInputManager::Button::PageForward) || input.wasPressed(nextButton);
   return {prev, next};
 }
 

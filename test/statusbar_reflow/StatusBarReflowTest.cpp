@@ -40,7 +40,7 @@ TEST(StatusBarReflow, NoTitleIsNoOp) {
   BarLayout l;
   put(l, BL, 40);
   put(l, BR, 40);
-  reflowTitle(l, /*titleAnchor=*/-1, /*truncate=*/false, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, /*titleAnchor=*/-1, /*titleSegIndex=*/0, /*truncate=*/false, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[BL], 1);
   EXPECT_EQ(l.counts[BR], 1);
 }
@@ -50,7 +50,7 @@ TEST(StatusBarReflow, TruncatingTitleNeverReflows) {
   put(l, BC, 240);  // wide title, would overlap both corners
   put(l, BL, 40);
   put(l, BR, 40);
-  reflowTitle(l, BC, /*truncate=*/true, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, BC, /*titleSegIndex=*/0, /*truncate=*/true, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[BL], 1);
   EXPECT_EQ(l.counts[BR], 1);
   EXPECT_EQ(l.counts[TL], 0);
@@ -61,7 +61,7 @@ TEST(StatusBarReflow, ShortTitleDoesNotBumpNeighbours) {
   put(l, BC, 100);  // centred [100,200], clears both corners
   put(l, BL, 40);
   put(l, BR, 40);
-  reflowTitle(l, BC, false, kBand, kSep, true);
+  reflowTitle(l, BC, /*titleSegIndex=*/0, false, kBand, kSep, true);
   EXPECT_EQ(l.counts[BL], 1);
   EXPECT_EQ(l.counts[BR], 1);
   EXPECT_EQ(l.counts[TL], 0);
@@ -73,7 +73,7 @@ TEST(StatusBarReflow, CentreTitleBumpsBothCornersToFreeOppositeAnchors) {
   put(l, BC, 240);  // centred [30,270] overlaps both corners
   put(l, BL, 40);
   put(l, BR, 40);
-  reflowTitle(l, BC, false, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, BC, /*titleSegIndex=*/0, false, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[BC], 1);  // title stays
   EXPECT_EQ(l.counts[BL], 0);  // left corner left
   EXPECT_EQ(l.counts[BR], 0);  // right corner left
@@ -86,7 +86,7 @@ TEST(StatusBarReflow, BumpedItemsHideWhenOppositeBandUnreserved) {
   put(l, BC, 240);
   put(l, BL, 40);
   put(l, BR, 40);
-  reflowTitle(l, BC, false, kBand, kSep, /*destReserved=*/false);
+  reflowTitle(l, BC, /*titleSegIndex=*/0, false, kBand, kSep, /*destReserved=*/false);
   EXPECT_EQ(l.counts[BC], 1);  // title stays
   EXPECT_EQ(l.counts[BL], 0);  // corners hidden, not relocated
   EXPECT_EQ(l.counts[BR], 0);
@@ -100,7 +100,7 @@ TEST(StatusBarReflow, TopCornerTitleBumpsNeighboursDown) {
   put(l, TL, 280);  // left-aligned [0,280] overlaps TC and TR
   put(l, TC, 40);
   put(l, TR, 40);
-  reflowTitle(l, TL, false, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, TL, /*titleSegIndex=*/0, false, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[TL], 1);  // title stays
   EXPECT_EQ(l.counts[TC], 0);
   EXPECT_EQ(l.counts[TR], 0);
@@ -117,7 +117,7 @@ TEST(StatusBarReflow, BumpedItemJoinsOccupiedRoomyAnchor) {
   put(l, BL, 30);  // opposite band pre-occupied but roomy
   put(l, BC, 30);
   put(l, BR, 30);
-  reflowTitle(l, TC, false, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, false, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[TC], 1);
   EXPECT_EQ(l.counts[TL], 0);
   EXPECT_EQ(l.counts[TR], 0);
@@ -134,7 +134,7 @@ TEST(StatusBarReflow, BumpedItemHiddenWhenOppositeBandFull) {
   put(l, BL, 280);  // every opposite anchor occupied and too wide to join
   put(l, BC, 280);
   put(l, BR, 280);
-  reflowTitle(l, TC, false, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, false, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[TC], 1);
   EXPECT_EQ(l.counts[TL], 0);  // hidden
   EXPECT_EQ(l.counts[TR], 0);  // hidden
@@ -148,9 +148,66 @@ TEST(StatusBarReflow, JoinRespectsBucketCapacity) {
   put(l, TC, 240);
   put(l, TR, 40);                                          // one overlapping neighbour on the right
   for (int i = 0; i < kMaxPerAnchor; i++) put(l, BR, 10);  // dest already full
-  reflowTitle(l, TC, false, kBand, kSep, /*destReserved=*/true);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, false, kBand, kSep, /*destReserved=*/true);
   // BR is full and narrow siblings BC/BL are empty -> right item falls to BC.
   EXPECT_EQ(l.counts[TR], 0);
   EXPECT_EQ(l.counts[BR], kMaxPerAnchor);  // unchanged, capacity respected
   EXPECT_EQ(l.counts[BC], 1);              // landed at next search column
+}
+
+// --- The title sharing its own anchor ---
+//
+// Two items on the same anchor used to be drawn as one centred cluster with no clipping
+// at all, so a long chapter title next to a page count ran off both edges of the panel.
+// The title keeps its place and the items beside it are moved out, which leaves the title
+// alone on its anchor and back on the wrap-or-ellipsis path it takes when nothing shares
+// it. Placement of a moved item is the same rule a bumped neighbour follows.
+
+TEST(StatusBarReflow, CoTenantsStayWhenTheWholeClusterFits) {
+  BarLayout l;
+  put(l, TC, 40);  // title
+  put(l, TC, 30);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, /*truncate=*/false, kBand, kSep, /*destReserved=*/true);
+  EXPECT_EQ(l.counts[TC], 2);
+  EXPECT_EQ(total(l), 2);
+}
+
+TEST(StatusBarReflow, ACoTenantIsEvictedWhenTheClusterOverflowsTheBand) {
+  BarLayout l;
+  put(l, TC, 280);  // title, nearly the whole band on its own
+  put(l, TC, 30);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, /*truncate=*/false, kBand, kSep, /*destReserved=*/true);
+  EXPECT_EQ(l.counts[TC], 1);
+  EXPECT_EQ(l.buckets[TC][0].width, 280);  // the title itself never moves
+  EXPECT_EQ(total(l), 2);                  // the other item is placed, not dropped
+  EXPECT_EQ(l.counts[BC], 1);              // centre goes to the opposite centre first
+}
+
+TEST(StatusBarReflow, AnEvictedCoTenantHidesWhenTheOppositeBandIsUnreserved) {
+  BarLayout l;
+  put(l, TC, 280);
+  put(l, TC, 30);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, /*truncate=*/false, kBand, kSep, /*destReserved=*/false);
+  EXPECT_EQ(l.counts[TC], 1);
+  EXPECT_EQ(total(l), 1);
+}
+
+TEST(StatusBarReflow, TheTitleIsKeptEvenWhenItIsNotTheFirstSegment) {
+  // Battery and clock are pushed before the title, so the title is rarely index 0.
+  BarLayout l;
+  put(l, TC, 30);   // battery
+  put(l, TC, 280);  // title
+  reflowTitle(l, TC, /*titleSegIndex=*/1, /*truncate=*/false, kBand, kSep, /*destReserved=*/true);
+  ASSERT_EQ(l.counts[TC], 1);
+  EXPECT_EQ(l.buckets[TC][0].width, 280);
+  EXPECT_EQ(l.counts[BC], 1);
+}
+
+TEST(StatusBarReflow, ACoTenantIsNeverEvictedWhileTruncationIsOn) {
+  // A truncating title clips itself to the space its neighbours leave, so nothing moves.
+  BarLayout l;
+  put(l, TC, 280);
+  put(l, TC, 30);
+  reflowTitle(l, TC, /*titleSegIndex=*/0, /*truncate=*/true, kBand, kSep, /*destReserved=*/true);
+  EXPECT_EQ(l.counts[TC], 2);
 }

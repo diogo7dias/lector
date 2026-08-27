@@ -127,8 +127,15 @@ void FileBrowserActivity::loadFiles() {
         // its key lives in the book's cache directory, so it is gathered in a second pass
         // once the listing is known.
         if (gatherKeys) {
-          const uint32_t key =
-              SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED ? modifiedStamp(file) : 0;
+          // A wallpaper folder is keyed on favorite/not and nothing else: the two groups
+          // sort alphabetically inside themselves, which is what the folder looked like
+          // before any of them were starred.
+          uint32_t key = 0;
+          if (isWallpaperFolder()) {
+            key = FavoriteImage::hasFavoriteSuffix(filename) ? 0 : 1;
+          } else if (SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED) {
+            key = modifiedStamp(file);
+          }
           if (!pushSortKey(key)) gatherKeys = false;
         }
       }
@@ -293,8 +300,18 @@ void FileBrowserActivity::openSearchEntry() {
       });
 }
 
+// The two folders the sleep screen draws from. Listing them is triage — you are deciding
+// what to keep — so the ones already kept sink to the bottom and the undecided pile is
+// what you land on.
+bool FileBrowserActivity::isWallpaperFolder() const {
+  std::string folder = basepath;
+  while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
+  return folder == "/sleep" || folder == "/sleep pause";
+}
+
 bool FileBrowserActivity::needsSortKeys() const {
   if (mode != Mode::Books) return false;  // the firmware picker wants a predictable list
+  if (isWallpaperFolder()) return true;
   return SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_RECENTLY_ADDED ||
          SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_LAST_READ;
 }
@@ -341,7 +358,7 @@ void FileBrowserActivity::applyBrowserOrder() {
   // session stay alphabetical among themselves. Every other order starts alphabetical.
   const bool dateOrder = needsSortKeys() && sortKeys.size() == files.size();
   if (dateOrder) {
-    if (SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_LAST_READ) {
+    if (!isWallpaperFolder() && SETTINGS.bookBrowserOrder == CrossPointSettings::BOOK_ORDER_LAST_READ) {
       busy::tickNow();  // always slow, so the banner is worth showing up front
       fillLastReadKeys();
     }
@@ -359,7 +376,10 @@ void FileBrowserActivity::applyBrowserOrder() {
 
   // Books only, and only for Random: the firmware picker keeps its predictable list, and
   // shuffling folders would make navigating a deep card a lottery.
-  if (mode != Mode::Books || SETTINGS.bookBrowserOrder != CrossPointSettings::BOOK_ORDER_RANDOM) return;
+  if (mode != Mode::Books || isWallpaperFolder() ||
+      SETTINGS.bookBrowserOrder != CrossPointSettings::BOOK_ORDER_RANDOM) {
+    return;
+  }
 
   size_t first = 0;
   while (first < files.size() && !files[first].empty() && files[first].back() == '/') first++;

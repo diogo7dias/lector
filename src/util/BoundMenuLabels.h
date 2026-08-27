@@ -58,6 +58,24 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_HOME;
     case CrossPointSettings::LP_MENU_BACK:
       return StrId::STR_BACK;
+    case CrossPointSettings::LP_MENU_WALLPAPER_DELETE:
+      return StrId::STR_DELETE_WALLPAPER;
+    // The tick screen and the Buttons screen name the action; the pop-up itself swaps in
+    // Unfavorite when the wallpaper already carries the star, the way the reader menu does.
+    case CrossPointSettings::LP_MENU_CONTINUE_READING:
+      return StrId::STR_CONTINUE_READING;
+    case CrossPointSettings::LP_MENU_RANDOM_BOOK:
+      return StrId::STR_RANDOM_BOOK;
+    case CrossPointSettings::LP_MENU_SEARCH:
+      return StrId::STR_SEARCH;
+    case CrossPointSettings::LP_MENU_SETTINGS:
+      return StrId::STR_SETTINGS_TITLE;
+    case CrossPointSettings::LP_MENU_ROTATE:
+      return StrId::STR_ROTATE;
+    case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:
+      return StrId::STR_FAVORITE_WALLPAPER;
+    case CrossPointSettings::LP_MENU_FORCE_REFRESH:
+      return StrId::STR_FORCE_REFRESH;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
       return StrId::STR_FRONTLIGHT;
     case CrossPointSettings::LP_MENU_SLEEP:

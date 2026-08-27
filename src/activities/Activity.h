@@ -51,11 +51,42 @@ class Activity {
   // Returns true when the activity schedules its own forced refresh.
   virtual bool handleForcedRefresh() { return false; }
 
-  // Power double-click. Only the EPUB reader answers these, and only while it is the
-  // activity on top: main.cpp arms the detector from wantsPowerDoubleClick() alone, so a
-  // child screen opened from the book (dictionary, chapter list) never pays the delay.
-  virtual bool wantsPowerDoubleClick() const { return false; }
-  virtual void runPowerDoubleClick() {}
+  // Turn the screen. False means this screen does not own an orientation, and the host
+  // persists the setting instead: only the readers lay out against it, so everywhere else
+  // the new orientation is simply what the next book opens in.
+  virtual bool applyReaderOrientation(uint8_t orientation) {
+    (void)orientation;
+    return false;
+  }
+
+  // Per-button bindings (Settings > Controls > Buttons). The router picks the in-book set
+  // of bindings while a book is open, so the same key can page a book and open the light
+  // panel on the home screen.
+  virtual bool isBookContext() const { return false; }
+  // Run a bound action on this screen. False means "not consumed": either this screen
+  // cannot run it, or it is bound but impossible right now (no footnote on the page, no
+  // KOReader credentials). ActivityManager then tries the actions that work anywhere.
+  virtual bool runBoundAction(uint8_t function) {
+    (void)function;
+    return false;
+  }
+  // The light panel's aux row: the one value this screen lets the panel step. Fill `out`
+  // with the label and the current value ("Text Size 17") and return true; false leaves
+  // the row out of the panel entirely.
+  virtual bool lightPanelAuxText(char* out, size_t length) const {
+    (void)out;
+    (void)length;
+    return false;
+  }
+  // Move that value by -1 or +1. True means it changed and the screen has redrawn itself.
+  virtual bool lightPanelStepAux(int delta) {
+    (void)delta;
+    return false;
+  }
+  // The browser order changed under this screen (the light panel's Sort row). Only the
+  // file browser is laid out against it, and it has to re-read the folder rather than
+  // re-sort what it drew: Last Read reads a key per book off the card.
+  virtual void onBookOrderChanged() {}
   virtual bool isHomeActivity() const { return false; }
   // The Home gesture (the capacitive Home key, or a bottom-edge up-swipe on boards
   // without one) pops to Home from anywhere. An activity that must do something

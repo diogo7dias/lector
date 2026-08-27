@@ -9,6 +9,9 @@
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
+#include <PerfLog.h>
+
+#include "util/DebugTrace.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
   // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
@@ -60,7 +63,19 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
   // tap never is.
   const bool tapCounts = (fn == &HalGPIO::wasPressed || fn == &HalGPIO::wasReleased);
   const int tapped = tapCounts ? tappedHintHardware() : -1;
+  const bool heldQuery = (fn == &HalGPIO::isPressed);
+  const bool releaseQuery = (fn == &HalGPIO::wasReleased);
+  const bool pressQuery = (fn == &HalGPIO::wasPressed);
   const auto press = [&](const uint8_t hw) {
+    // Router gating, before the hardware is read: every logical role that maps to this
+    // key inherits it, which is the same reason the hint tap below lives here.
+    const int slot = sideKeySlot(hw);
+    if (slot >= 0) {
+      const SideKeyOverride& override = sideKeyOverrides[slot];
+      if (releaseQuery && override.injectRelease) return true;
+      if (pressQuery && override.injectPress) return true;
+      if (heldQuery ? override.suppressHeld : override.suppressEdges) return false;
+    }
     if ((gpio.*fn)(hw)) return true;
     if (tapped < 0 || hw != tapped) return false;
     // Spend the tap here. Without this a single tap answers both wasPressed() and
@@ -137,6 +152,9 @@ namespace {
 constexpr float LEFT_EDGE_BACK_GESTURE_FRAC_X = 0.25f;
 constexpr float BOTTOM_EDGE_BACK_GESTURE_FRAC_Y = 0.14f;
 constexpr float TOP_EDGE_MENU_GESTURE_FRAC_Y = 0.14f;
+// How far down the finger must travel before a top-edge drag counts as the gesture.
+// A fifth of the screen: past any accidental slip, short of a full page-height drag.
+constexpr float MENU_DRAG_TRAVEL_FRAC_Y = 0.20f;
 constexpr unsigned long TOUCH_DOWN_SELECT_DELAY_MS = 90;
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
 }  // namespace
@@ -341,14 +359,61 @@ bool MappedInputManager::wasBackGesture() const {
 }
 
 bool MappedInputManager::wasMenuGesture() const {
+  // Two ways in, because one was not enough.
+  //
+  // The first is a pull-down tracked here, pass by pass: the finger goes down inside the
+  // top band and is dragged more than a fifth of the screen straight down. No time limit,
+  // so a slow, deliberate pull works — which is how a panel dragged off the top edge is
+  // actually handled, and it is the reason this gesture was all but unusable before: the
+  // SDK's swipe is a flick, under 700 ms, and a deliberate drag rarely beats that clock.
+  //
+  // The second is that flick, kept because a fast swipe from the edge never lingers long
+  // enough for the drag to arm.
+  const int topEdgeBottom = static_cast<int>(renderer.getScreenHeight() * TOP_EDGE_MENU_GESTURE_FRAC_Y);
+  int tx = 0;
+  int ty = 0;
+  if (isScreenTouchHeld(tx, ty)) {
+    if (!menuDragTracking_) {
+      // First sighting of this contact. Deliberately NOT wasScreenTouchDown(): that asks
+      // whether the contact is still a tap candidate, which a finger already sliding down
+      // the screen has stopped being, so the drag could never arm from it.
+      menuDragTracking_ = true;
+      menuDragFired_ = false;
+      menuDragStartX_ = tx;
+      menuDragStartY_ = ty;
+      debug_trace::note("touch down (%d,%d) topEdge=%d", tx, ty, topEdgeBottom);
+    }
+    const int travel = ty - menuDragStartY_;
+    if (!menuDragFired_ && menuDragStartY_ <= topEdgeBottom &&
+        travel >= static_cast<int>(renderer.getScreenHeight() * MENU_DRAG_TRAVEL_FRAC_Y) &&
+        travel > std::abs(tx - menuDragStartX_)) {
+      menuDragFired_ = true;
+      // The rest of the contact belongs to the gesture: without this the finger lifting
+      // would tap whatever the panel just drew under it.
+      gpio.suppressTouchContact();
+      debug_trace::note("top-edge drag fired: %d px down from y=%d", travel, menuDragStartY_);
+      rememberTouchHeldTime();
+      return true;
+    }
+  } else if (menuDragTracking_) {
+    menuDragTracking_ = false;
+    debug_trace::note("contact ended, started (%d,%d), drag did not fire", menuDragStartX_, menuDragStartY_);
+  }
+
   // Downward swipe starting at the top edge (mirror of the bottom-edge home gesture).
   int sx = 0;
   int sy = 0;
   int ex = 0;
   int ey = 0;
-  if (!decodeSwipe(sx, sy, ex, ey)) return false;
-  const int topEdgeBottom = static_cast<int>(renderer.getScreenHeight() * TOP_EDGE_MENU_GESTURE_FRAC_Y);
+  if (!decodeSwipe(sx, sy, ex, ey)) {
+    // A contact that ended without qualifying as a swipe at all: too slow (over 700 ms),
+    // or under the 60 px the flick needs. Logged because the two failures look identical
+    // on the device, and only the log can tell them apart.
+    if (gpio.wasTouchReleased()) debug_trace::note("touch released, no flick decoded");
+    return false;
+  }
   const bool hit = sy <= topEdgeBottom && ey > sy && std::abs(ey - sy) > std::abs(ex - sx);
+  debug_trace::note("flick (%d,%d)->(%d,%d) topEdge=%d menu=%d", sx, sy, ex, ey, topEdgeBottom, hit ? 1 : 0);
   if (hit) rememberTouchHeldTime();
   return hit;
 }
@@ -372,8 +437,33 @@ bool MappedInputManager::wasBottomEdgeUpSwipe() const {
 bool MappedInputManager::wasHomeGesture() const {
   // On a board with a capacitive Home key that key IS Home, which frees the bottom
   // edge for the reader menu (wasReaderMenuSwipeUp).
-  if (gpio.hasHomeKey()) return gpio.wasHomeKeyTapped();
+  if (gpio.hasHomeKey()) {
+    // See setHomeKeyOverride(): the router holds a tap back while it decides whether a
+    // second one is coming, and replays it here when it rules the tap a plain single.
+    if (homeKeyInjected) return true;
+    if (homeKeySuppressed) return false;
+    return gpio.wasHomeKeyTapped();
+  }
   return wasBottomEdgeUpSwipe();
+}
+
+int MappedInputManager::sideKeySlot(const uint8_t hardware) {
+  if (hardware == HalGPIO::BTN_UP) return 0;
+  if (hardware == HalGPIO::BTN_DOWN) return 1;
+  return -1;
+}
+
+void MappedInputManager::setSideKeyOverride(const uint8_t hardware, const bool suppressEdges, const bool suppressHeld,
+                                            const bool injectPress, const bool injectRelease) {
+  const int slot = sideKeySlot(hardware);
+  if (slot < 0) return;
+  sideKeyOverrides[slot] = SideKeyOverride{suppressEdges, suppressHeld, injectPress, injectRelease};
+}
+
+void MappedInputManager::clearBindingOverrides() {
+  for (auto& override : sideKeyOverrides) override = SideKeyOverride{};
+  homeKeySuppressed = false;
+  homeKeyInjected = false;
 }
 
 bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {

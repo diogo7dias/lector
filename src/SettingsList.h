@@ -43,8 +43,9 @@ inline std::vector<StrId> boundFunctionLabels() {
 // Build the font family setting dynamically. When registry is non-null, SD card fonts
 // are appended after the built-in fonts. Otherwise only built-in fonts are listed.
 inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
-  // Built-in font labels (StrId)
-  std::vector<StrId> enumValues = {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS};
+  // Built-in font labels (StrId). One entry: ChareInk is the only compiled-in reading
+  // family, and BUILTIN_FONT_COUNT is what the index arithmetic below counts on.
+  std::vector<StrId> enumValues = {StrId::STR_CHAREINK};
   // Runtime string labels for SD card fonts
   std::vector<std::string> enumStringValues;
 
@@ -65,8 +66,7 @@ inline SettingInfo buildFontFamilySetting(const SdCardFontRegistry* registry) {
   // with all options when SD fonts are present.
   std::vector<std::string> allStringValues;
   if (sdFontCount > 0) {
-    allStringValues.push_back(I18N.get(StrId::STR_NOTO_SERIF));
-    allStringValues.push_back(I18N.get(StrId::STR_NOTO_SANS));
+    allStringValues.push_back(I18N.get(StrId::STR_CHAREINK));
     allStringValues.insert(allStringValues.end(), enumStringValues.begin(), enumStringValues.end());
   }
 
@@ -274,11 +274,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // and upstream never offered it. A settings file still holding 5 clamps back to the
     // 15-page default, because load() falls back to the field default for any index past
     // the option list.
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
-        {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15, StrId::STR_PAGES_30,
-         StrId::STR_REFRESH_NEVER},
-        "refreshFrequency", StrId::STR_CAT_DISPLAY));
+    v.push_back(SettingInfo::Enum(StrId::STR_REFRESH_FREQ, &CrossPointSettings::refreshFrequency,
+                                  {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
+                                   StrId::STR_PAGES_30, StrId::STR_REFRESH_NEVER},
+                                  "refreshFrequency", StrId::STR_CAT_DISPLAY));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                                     StrId::STR_CAT_DISPLAY));
@@ -307,11 +306,26 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::String(StrId::STR_SLEEP_FOOTER_TEXT, &SETTINGS.customFooter[0],
                                     sizeof(SETTINGS.customFooter), "customFooter", StrId::STR_CAT_DISPLAY));
 
+    v.push_back(SettingInfo::Enum(
+        StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
+        {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},
+        "touchReaderControls", StrId::STR_CAT_CONTROLS));
+
+    // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
+    // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
+    v.push_back(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
+                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP},
+                                  "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
+
+    v.push_back(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
+                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_READING_STATS}, "homeBackAction",
+                                  StrId::STR_CAT_CONTROLS));
+
     // --- Reader ---
     // Built-in font-family entry. Replaced per-call with a registry-aware
     // version when SD fonts are installed.
-    v.push_back(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily,
-                                  {StrId::STR_NOTO_SERIF, StrId::STR_NOTO_SANS}, "fontFamily", StrId::STR_CAT_READER)
+    v.push_back(SettingInfo::Enum(StrId::STR_FONT_FAMILY, &CrossPointSettings::fontFamily, {StrId::STR_CHAREINK},
+                                  "fontFamily", StrId::STR_CAT_READER)
                     .withTextSettings());
 
     // Placeholder: the selectable sizes depend on the active font family, so
@@ -326,6 +340,31 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                     StrId::STR_LINE_SPACING, &CrossPointSettings::lineSpacingPercent,
                     {CrossPointSettings::MIN_LINE_SPACING_PERCENT, CrossPointSettings::MAX_LINE_SPACING_PERCENT, 5},
                     "lineSpacingPercent", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
+                                    "extraParagraphSpacing", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
+                                  {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
+                                   StrId::STR_BOOK_S_STYLE},
+                                  "paragraphAlignment", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled,
+                                    "hyphenationEnabled", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
+    v.push_back(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
+                                  {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
+                                  StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    v.push_back(SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
+                                   {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
+                                   StrId::STR_CAT_READER)
                     .withTextSettings());
 
     // The web settings API can write this key straight into the field, so the mode's own
@@ -358,29 +397,25 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                     "dynamicMargins", StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
-    v.push_back(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
-                                  {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",
-                                  StrId::STR_CAT_READER)
-                    .withTextSettings());
-
-    v.push_back(SettingInfo::Value(StrId::STR_FIRST_LINE_INDENT_PERCENT, &CrossPointSettings::firstLineIndentPercent,
-                                   {0, CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT, 5}, "firstLineIndentPercent",
-                                   StrId::STR_CAT_READER)
-                    .withTextSettings());
-
-    v.push_back(SettingInfo::Enum(StrId::STR_PARA_ALIGNMENT, &CrossPointSettings::paragraphAlignment,
-                                  {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
-                                   StrId::STR_BOOK_S_STYLE},
-                                  "paragraphAlignment", StrId::STR_CAT_READER)
-                    .withTextSettings());
-
     v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_TEXT_STYLE, &CrossPointSettings::embeddedTextStyle,
                                     "embeddedStyle", StrId::STR_CAT_READER)
                     .withTextSettings());
 
     v.push_back(SettingInfo::Toggle(StrId::STR_EMBEDDED_LAYOUT_STYLE, &CrossPointSettings::embeddedLayoutStyle,
                                     "embeddedLayoutStyle", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
+    // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
+    // the Extra Paragraph Spacing toggle above already does. The field and its render
+    // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
+    // 0 and no longer editable, here or in the in-book Layout tab. Restore this entry
+    // to bring the control back.
+    // SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
+    //                    {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
+    //                    StrId::STR_CAT_READER)
+    //     .withTextSettings(),
+    v.push_back(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
+                                    StrId::STR_CAT_READER)
                     .withTextSettings());
 
     v.push_back(SettingInfo::Toggle(StrId::STR_FOCUS_READING, &CrossPointSettings::focusReadingEnabled,
@@ -399,31 +434,28 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled,
-                                    "hyphenationEnabled", StrId::STR_CAT_READER)
-                    .withTextSettings());
-
     v.push_back(SettingInfo::Enum(
         StrId::STR_ORIENTATION, &CrossPointSettings::orientation,
         {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},
         "orientation", StrId::STR_CAT_READER));
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &CrossPointSettings::extraParagraphSpacing,
-                                    "extraParagraphSpacing", StrId::STR_CAT_READER)
-                    .withTextSettings());
+    // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
+    // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
+    // settings persist by index.
+    {
+      std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
+      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_SLEEP] = StrId::STR_SEC_SLEEP_SCREEN;
 
-    // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
-    // the Extra Paragraph Spacing toggle above already does. The field and its render
-    // spec entry are kept (old caches and sidecars still carry it) but it is pinned to
-    // 0 and no longer editable, here or in the in-book Layout tab. Restore this entry
-    // to bring the control back.
-    // SettingInfo::Value(StrId::STR_PARAGRAPH_SPACING, &CrossPointSettings::paragraphSpacing,
-    //                    {0, CrossPointSettings::MAX_PARAGRAPH_SPACING, 10}, "paragraphSpacing",
-    //                    StrId::STR_CAT_READER)
-    //     .withTextSettings(),
-    v.push_back(SettingInfo::Toggle(StrId::STR_TEXT_AA, &CrossPointSettings::textAntiAliasing, "textAntiAliasing",
-                                    StrId::STR_CAT_READER)
-                    .withTextSettings());
+      v.push_back(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab,
+                                    std::move(bookMenuTabValues), "bookMenuTab", StrId::STR_CAT_READER));
+    }
+
+    v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
+                                    "paperbackLookBody", StrId::STR_CAT_READER));
 
     // Defaults for the three per-book looks that used to be reachable only from the
     // in-book menu. Changing one here sets what the NEXT freshly opened book starts
@@ -436,23 +468,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
                                   {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE},
                                   "paragraphNumberSize", StrId::STR_CAT_READER));
-
-    // Which tab the in-book menu lands on. Labels are the tab bar's own strings, and
-    // the list is index-aligned with CrossPointSettings::BOOK_MENU_TAB because ENUM
-    // settings persist by index.
-    {
-      std::vector<StrId> bookMenuTabValues(CrossPointSettings::BOOK_MENU_TAB_COUNT);
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_NAVIGATE] = StrId::STR_SEC_NAVIGATE;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK] = StrId::STR_SEC_THIS_BOOK;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_LOOK] = StrId::STR_SEC_LOOK;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_DEVICE] = StrId::STR_SEC_DEVICE;
-      bookMenuTabValues[CrossPointSettings::BOOK_MENU_TAB_SLEEP] = StrId::STR_SEC_SLEEP_SCREEN;
-      v.push_back(SettingInfo::Enum(StrId::STR_BOOK_MENU_TAB, &CrossPointSettings::bookMenuTab,
-                                    std::move(bookMenuTabValues), "bookMenuTab", StrId::STR_CAT_READER));
-    }
-
-    v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_LOOK, &CrossPointSettings::paperbackLookBody,
-                                    "paperbackLookBody", StrId::STR_CAT_READER));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_STATUS, &CrossPointSettings::paperbackLookStatus,
                                     "paperbackLookStatus", StrId::STR_CAT_READER));
@@ -484,35 +499,112 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   {StrId::STR_WAKE_HOLD_NORMAL, StrId::STR_WAKE_HOLD_FAST}, "wakeHold",
                                   StrId::STR_CAT_CONTROLS));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_DOUBLE_CLICK_POWER, &CrossPointSettings::doubleClickPowerFunction,
-                                  boundFunctionLabels(), "doubleClickPowerFunction", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions()));
-
-    v.push_back(SettingInfo::Enum(StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE,
-                                   StrId::STR_STATE_INVERTED_TAP},
-                                  "touchReaderControls", StrId::STR_CAT_CONTROLS));
-
-    // Persisted under CrossPoint's legacy "tapForReaderMenu" key: the old values
-    // line up (0 = Off, 1 = Tap), so a settings file carries over either way.
-    v.push_back(SettingInfo::Enum(StrId::STR_SHOW_READER_MENU, &CrossPointSettings::showReaderMenu,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE_UP},
-                                  "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
-
-    v.push_back(SettingInfo::Enum(
-        StrId::STR_SHORT_PWR_BTN, &CrossPointSettings::shortPwrBtn,
-        {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES},
-        "shortPwrBtn", StrId::STR_CAT_CONTROLS));
-
     v.push_back(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                                     "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_BACK_SHORT_TO_FILE_BROWSER, &CrossPointSettings::backShortToFileBrowser,
                                     "backShortToFileBrowser", StrId::STR_CAT_CONTROLS));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
-                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_READING_STATS}, "homeBackAction",
-                                  StrId::STR_CAT_CONTROLS));
+    // The per-button bindings. Registered here so they persist and reach the web API;
+    // the Buttons screen is what actually lists them (withButtons keeps them out of the
+    // flat Controls list). Key names match the field names so a settings file reads as
+    // context + button + gesture.
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftSingle, boundFunctionLabels(),
+                                  "btnBookLeftSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftDouble, boundFunctionLabels(),
+                                  "btnBookLeftDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftHold, boundFunctionLabels(),
+                                  "btnBookLeftHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightSingle, boundFunctionLabels(),
+                                  "btnBookRightSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightDouble, boundFunctionLabels(),
+                                  "btnBookRightDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightHold, boundFunctionLabels(),
+                                  "btnBookRightHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeSingle, boundFunctionLabels(),
+                                  "btnBookHomeSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeDouble, boundFunctionLabels(),
+                                  "btnBookHomeDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeHold, boundFunctionLabels(),
+                                  "btnBookHomeHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerSingle, boundFunctionLabels(),
+                                  "btnBookPowerSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerDouble, boundFunctionLabels(),
+                                  "btnBookPowerDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerHold, boundFunctionLabels(),
+                                  "btnBookPowerHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftSingle, boundFunctionLabels(),
+                                  "btnUiLeftSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftDouble, boundFunctionLabels(),
+                                  "btnUiLeftDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftHold, boundFunctionLabels(),
+                                  "btnUiLeftHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightSingle, boundFunctionLabels(),
+                                  "btnUiRightSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightDouble, boundFunctionLabels(),
+                                  "btnUiRightDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightHold, boundFunctionLabels(),
+                                  "btnUiRightHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeSingle, boundFunctionLabels(),
+                                  "btnUiHomeSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeDouble, boundFunctionLabels(),
+                                  "btnUiHomeDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeHold, boundFunctionLabels(),
+                                  "btnUiHomeHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerSingle, boundFunctionLabels(),
+                                  "btnUiPowerSingle", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerDouble, boundFunctionLabels(),
+                                  "btnUiPowerDouble", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
+    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerHold, boundFunctionLabels(),
+                                  "btnUiPowerHold", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues(retiredBoundFunctions())
+                    .withButtons());
 
     // --- System ---
     v.push_back(SettingInfo::Value(

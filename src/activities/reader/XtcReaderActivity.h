@@ -47,6 +47,9 @@ class XtcReaderActivity final : public Activity {
   };
 
   void renderPage();
+  // One page forward or back, end-of-book handling included. Shared by the side keys and
+  // by a paging action bound to any other button.
+  void pageTurn(bool forward);
   // Opens chapter selection when the book has chapters (short-press Confirm); no-op otherwise
   void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
@@ -68,10 +71,8 @@ class XtcReaderActivity final : public Activity {
   // No in-book menu here either, and this reader's status bar is the three-way
   // xtcStatusBarMode rather than the shared toggle, so the runnable subset is smaller
   // than the TXT reader's (see SimpleReaderShortcut.h).
-  bool wantsPowerDoubleClick() const override {
-    return simple_reader_shortcut::armsDoubleClick(/*supportsStatusBarToggle=*/false);
-  }
-  void runPowerDoubleClick() override;
+  bool isBookContext() const override { return true; }
+  bool runBoundAction(uint8_t function) override;
   bool appliesNightMode() const override { return true; }
   bool handleForcedRefresh() override {
     {

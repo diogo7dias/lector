@@ -83,33 +83,57 @@ say ""
 # for this board. Hardcoding dio would silently downgrade a qio board (the
 # X4 Pro is qio_opi) and skew every timing this kit exists to measure.
 say "Flashing. Do not unplug."
-"$ESPTOOL" --chip "$KIT_CHIP" --port "$PORT" --baud "$KIT_BAUD" \
-  write-flash -z --flash-mode keep --flash-freq keep --flash-size "$KIT_FLASH_SIZE" \
-  0x0 firmware/bootloader.bin \
-  0x8000 firmware/partitions.bin \
-  0xe000 firmware/boot_app0.bin \
-  0x10000 firmware/firmware.bin 2>&1 | tee -a "$LOG"
-FLASH_RC="${PIPESTATUS[0]}"
 
-if [ "$FLASH_RC" -ne 0 ]; then
-  # esptool v5 renamed the subcommands; retry once with the old spelling so an
-  # Intel Mac running an older pip install still works.
-  say "Retrying with the older esptool command names."
-  "$ESPTOOL" --chip "$KIT_CHIP" --port "$PORT" --baud "$KIT_BAUD" \
+# --connect-attempts: the X4 Pro speaks over USB-Serial/JTAG, so esptool resets it
+# over RTS and the reset does not always take on the first try — "No serial data
+# received" with the board sitting there perfectly healthy. Letting esptool retry
+# the handshake itself costs nothing and clears it most times.
+flash_once() {
+  "$ESPTOOL" --chip "$KIT_CHIP" --port "$1" --baud "$KIT_BAUD" --connect-attempts 5 \
+    write-flash -z --flash-mode keep --flash-freq keep --flash-size "$KIT_FLASH_SIZE" \
+    0x0 firmware/bootloader.bin \
+    0x8000 firmware/partitions.bin \
+    0xe000 firmware/boot_app0.bin \
+    0x10000 firmware/firmware.bin 2>&1 | tee -a "$LOG"
+  return "${PIPESTATUS[0]}"
+}
+
+# esptool v5 renamed the subcommands; the old spelling is kept for an Intel Mac
+# running an older pip install.
+flash_once_legacy() {
+  "$ESPTOOL" --chip "$KIT_CHIP" --port "$1" --baud "$KIT_BAUD" \
     write_flash -z --flash_mode keep --flash_freq keep --flash_size "$KIT_FLASH_SIZE" \
     0x0 firmware/bootloader.bin \
     0x8000 firmware/partitions.bin \
     0xe000 firmware/boot_app0.bin \
     0x10000 firmware/firmware.bin 2>&1 | tee -a "$LOG"
-  FLASH_RC="${PIPESTATUS[0]}"
-fi
+  return "${PIPESTATUS[0]}"
+}
+
+FLASH_RC=1
+for round in 1 2 3; do
+  # The port can be renamed between rounds when the board re-enumerates, so it is
+  # looked up again each time rather than trusted from the first scan.
+  found="$(ls /dev/cu.usbmodem* /dev/cu.usbserial* /dev/cu.wchusbserial* 2>/dev/null | head -1)"
+  [ -n "$found" ] && PORT="$found"
+  [ "$round" -gt 1 ] && say "Attempt $round of 3 on $PORT."
+  flash_once "$PORT"
+  FLASH_RC=$?
+  [ "$FLASH_RC" -eq 0 ] && break
+  flash_once_legacy "$PORT"
+  FLASH_RC=$?
+  [ "$FLASH_RC" -eq 0 ] && break
+  [ "$round" -lt 3 ] && sleep 3
+done
 
 log_line ""
 log_line "flash exit code: $FLASH_RC"
 
 if [ "$FLASH_RC" -ne 0 ]; then
   say ""
-  say "Flashing failed. The log still has the reason: $LOG"
+  say "Flashing failed after three attempts. The log has the reason: $LOG"
+  say "If it says \"No serial data received\": unplug the reader, plug it back in,"
+  say "and run the command again straight away."
   read -r -p "Press Return to close. " _
   exit 1
 fi
@@ -175,8 +199,10 @@ capture_loop() {
     fi
 
     # Reattach when the node changed (device reset) or nothing has arrived for
-    # 20 s (the handle is stale, or the device slept and came back).
-    if [ "$now_id" != "$READER_ID" ] || [ "$quiet" -ge 20 ]; then
+    # 5 s (the handle is stale, or the device slept and came back). Five, not twenty:
+    # on the X4 Pro the handle goes stale far more often than the node changes, and at
+    # twenty seconds whole minutes of a test session were lost between reattaches.
+    if [ "$now_id" != "$READER_ID" ] || [ "$quiet" -ge 5 ]; then
       stop_reader
       local found
       found="$(find_port)"

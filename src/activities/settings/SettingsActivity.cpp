@@ -10,6 +10,7 @@
 #include <cstring>
 #include <iterator>
 
+#include "ButtonBindingsActivity.h"
 #include "ButtonRemapActivity.h"
 #include "CleanStorageActivity.h"
 #include "ClearCacheActivity.h"
@@ -128,8 +129,12 @@ void SettingsActivity::rebuildSettingsList() {
       if (setting.inTextSettings) continue;
       readerSettings.push_back(setting);
     } else if (setting.category == StrId::STR_CAT_CONTROLS) {
-      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack &&
-          SETTINGS.shortPwrBtn != CrossPointSettings::SHORT_PWRBTN::FOOTNOTES) {
+      // The per-button bindings live in the Buttons screen; they stay in the shared
+      // list only so they persist and reach the web settings API.
+      if (setting.inButtons) continue;
+      // Only means anything while Footnotes is on one of the power button's in-book
+      // gestures: it says whether that same gesture walks back out of the footnote.
+      if (setting.valuePtr == &CrossPointSettings::pwrBtnFootnoteBack && !SETTINGS.powerOpensFootnotes()) {
         continue;
       }
       // Touch reader settings only mean something on a board with a digitiser.
@@ -144,14 +149,14 @@ void SettingsActivity::rebuildSettingsList() {
     }
   }
 
-  // Append ACTION items
-  controlsSettings.insert(controlsSettings.begin(),
-                          SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  // Append ACTION items. Position here does not decide what the screen shows: applyGroups
+  // below rebuilds every category from its group map, and each of these rows is named
+  // there.
+  controlsSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  controlsSettings.push_back(SettingInfo::Action(StrId::STR_BUTTONS, SettingAction::Buttons));
   // Pop-up Items only exists to serve a binding set to Menu Pop-up, so it is offered
   // only while at least one of the three bindings actually opens one.
-  if (SETTINGS.doubleClickPowerFunction == CrossPointSettings::LP_MENU_POPUP ||
-      SETTINGS.longPressMenuFunction == CrossPointSettings::LP_MENU_POPUP ||
-      SETTINGS.menuHoldFunction == CrossPointSettings::LP_MENU_POPUP) {
+  if (SETTINGS.anyBindingOpensPopup()) {
     controlsSettings.push_back(SettingInfo::Action(StrId::STR_POPUP_ITEMS, SettingAction::PopupItems));
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
@@ -164,12 +169,9 @@ void SettingsActivity::rebuildSettingsList() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CHECK_UPDATES, SettingAction::CheckForUpdates));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
-  readerSettings.insert(readerSettings.begin(),
-                        SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
-  readerSettings.insert(readerSettings.begin() + 1,
-                        SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
-  readerSettings.insert(readerSettings.begin() + 2,
-                        SettingInfo::Action(StrId::STR_INSTALLED_FONTS, SettingAction::InstalledFonts));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_MANAGE_FONTS, SettingAction::DownloadFonts));
+  readerSettings.push_back(SettingInfo::Action(StrId::STR_INSTALLED_FONTS, SettingAction::InstalledFonts));
   readerSettings.push_back(SettingInfo::Action(StrId::STR_CUSTOMISE_STATUS_BAR, SettingAction::CustomiseStatusBar));
 
   // Section headings. Applied last so the ACTION rows spliced in above are grouped
@@ -177,49 +179,59 @@ void SettingsActivity::rebuildSettingsList() {
   // Frontlight leads: brightness and warmth are reached for daily, the rest of this
   // category once in a while. Then the screen itself, then the two sleep-screen groups,
   // which are set up once and revisited only when the wallpapers change.
-  applyGroups(displaySettings,
-              {
-                  // Absent on a board with no frontlight, and applyGroups draws no
-                  // heading for a group whose rows are all missing.
-                  {StrId::STR_GRP_FRONTLIGHT,
-                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
-                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
-                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
-                  {StrId::STR_GRP_SLEEP_SCREEN,
-                   {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT, StrId::STR_WAKE_STRAIGHT_TO_BOOK,
-                    StrId::STR_SLEEP_FOOTER_TEXT}},
-                  {StrId::STR_GRP_WALLPAPER,
-                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
-                    StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
-                    StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
-                  {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
-              });
+  applyGroups(displaySettings, {
+                                   // Absent on a board with no frontlight, and applyGroups draws no
+                                   // heading for a group whose rows are all missing.
+                                   {StrId::STR_GRP_FRONTLIGHT,
+                                    {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
+                                     StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+                                   {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
+                                   {StrId::STR_GRP_SLEEP_SCREEN,
+                                    {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT,
+                                     StrId::STR_WAKE_STRAIGHT_TO_BOOK, StrId::STR_SLEEP_FOOTER_TEXT}},
+                                   {StrId::STR_GRP_WALLPAPER,
+                                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
+                                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
+                                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
+                                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
+                               });
 
   applyGroups(
       readerSettings,
       {
           {StrId::STR_GRP_TEXT,
            {StrId::STR_TEXT_SETTINGS, StrId::STR_MANAGE_FONTS, StrId::STR_INSTALLED_FONTS, StrId::STR_DICTIONARY}},
+          // Book Menu Opens On belongs here: it is about the page you are on, and left out
+          // of the map it fell to the bottom of the category under no heading at all.
           {StrId::STR_GRP_PAGE,
-           {StrId::STR_ORIENTATION, StrId::STR_PARAGRAPH_NUMBERS, StrId::STR_PARAGRAPH_NUMBER_SIZE}},
+           {StrId::STR_ORIENTATION, StrId::STR_BOOK_MENU_TAB, StrId::STR_PARAGRAPH_NUMBERS,
+            StrId::STR_PARAGRAPH_NUMBER_SIZE}},
+          // The status bar rows adjacent, and the screen that configures it straight after
+          // the toggle that hides it.
           {StrId::STR_GRP_LOOK,
-           {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_NIGHT_MODE,
-            StrId::STR_CUSTOMISE_STATUS_BAR}},
+           {StrId::STR_PAPERBACK_LOOK, StrId::STR_PAPERBACK_STATUS, StrId::STR_CUSTOMISE_STATUS_BAR,
+            StrId::STR_NIGHT_MODE}},
       });
 
-  applyGroups(
-      controlsSettings,
-      {
-          {StrId::STR_GRP_BUTTONS,
-           {StrId::STR_REMAP_FRONT_BUTTONS, StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION, StrId::STR_SIDE_BTN_LAYOUT}},
-          {StrId::STR_GRP_POWER_BUTTON,
-           {StrId::STR_SHORT_PWR_BTN, StrId::STR_PWR_BTN_FOOTNOTE_BACK, StrId::STR_DOUBLE_CLICK_POWER}},
-          // Pop-up Items sits with the bindings, because it only configures what the
-          // pop-up those bindings open actually contains.
-          {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
-          {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
-          {StrId::STR_GRP_TOUCH, {StrId::STR_TOUCH_READER_CONTROLS, StrId::STR_SHOW_READER_MENU}},
-      });
+  applyGroups(controlsSettings,
+              {
+                  // Touch leads on a board that has it: it is how that reader is driven all day.
+                  // On a board without a digitiser both rows are absent and the heading with them.
+                  {StrId::STR_GRP_TOUCH, {StrId::STR_TOUCH_READER_CONTROLS, StrId::STR_SHOW_READER_MENU}},
+                  {StrId::STR_GRP_BACK, {StrId::STR_BACK_SHORT_TO_FILE_BROWSER, StrId::STR_HOME_BACK_ACTION}},
+                  // Buttons leads its group: it holds the eighteen per-button bindings, and left
+                  // out of the map it fell to the bottom of the category under no heading.
+                  {StrId::STR_GRP_BUTTONS,
+                   {StrId::STR_BUTTONS, StrId::STR_REMAP_FRONT_BUTTONS, StrId::STR_SIDE_BTN_LAYOUT,
+                    StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION}},
+                  // What is left of this group now the power button's own bindings moved into the
+                  // Buttons screen: how long a wake hold is, and whether the footnote binding also
+                  // walks back out.
+                  {StrId::STR_GRP_POWER_BUTTON, {StrId::STR_WAKE_HOLD, StrId::STR_PWR_BTN_FOOTNOTE_BACK}},
+                  // Pop-up Items sits with the bindings, because it only configures what the
+                  // pop-up those bindings open actually contains.
+                  {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
+              });
 
   applyGroups(
       systemSettings,
@@ -229,11 +241,19 @@ void SettingsActivity::rebuildSettingsList() {
            {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
           {StrId::STR_GRP_STATS, {StrId::STR_TRACK_READING_STATS, StrId::STR_READING_IDLE_LIMIT}},
+          // Device Name leads: it is the name this reader broadcasts to another one during
+          // Nearby Position Sync, so it belongs with the network rows rather than stranded
+          // at the bottom of the category, which is where it sat.
           {StrId::STR_GRP_NETWORK,
-           {StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS, StrId::STR_SHARE_CREDENTIALS}},
+           {StrId::STR_DEVICE_NAME, StrId::STR_WIFI_NETWORKS, StrId::STR_KOREADER_SYNC, StrId::STR_OPDS_SERVERS,
+            StrId::STR_SHARE_CREDENTIALS}},
           {StrId::STR_GRP_DEVICE,
            {StrId::STR_LANGUAGE, StrId::STR_CLEAN_STORAGE, StrId::STR_CLEAR_READING_CACHE, StrId::STR_CHECK_UPDATES,
             StrId::STR_SD_FIRMWARE_UPDATE}},
+          // Last, and named for what they are: a panel-tuning escape hatch and a
+          // diagnostics readout. Performance Timings is compiled out of some builds, and
+          // applyGroups draws no heading for a group whose rows are all missing.
+          {StrId::STR_GRP_ADVANCED, {StrId::STR_FAST_PAGE_TURNS, StrId::STR_PERF_TIMINGS}},
       });
 
   settings.clear();
@@ -432,8 +452,8 @@ void SettingsActivity::toggleCurrentSetting() {
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
     valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
-                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr), setting.nameId,
-                  [this, valuePtr](const int chosen) {
+                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr),
+                  setting.nameId, [this, valuePtr](const int chosen) {
                     SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
                     applyFrontlightSetting(valuePtr);
                     SETTINGS.saveToFile();
@@ -483,6 +503,9 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::CustomiseStatusBar:
         startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::Buttons:
+        startActivityForResult(std::make_unique<ButtonBindingsActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::PopupItems:
         startActivityForResult(std::make_unique<PopupItemsActivity>(renderer, mappedInput), resultHandler);

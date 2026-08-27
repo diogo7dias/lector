@@ -230,9 +230,11 @@ class BaseTheme {
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
                        int fontId = UI_10_FONT_ID) const;  // Left aligned (reader mode)
-  void drawBatteryRight(const GfxRenderer& renderer, Rect rect,
-                        bool showPercentage = true) const;  // Right aligned (UI headers)
-  virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage) const;
+  // Right aligned (UI headers). onBlack draws the cluster knocked out, for the inverted
+  // header band drawHeader paints behind it.
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
+                        bool onBlack = false) const;
+  virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage, bool ink = true) const;
   // Where the four hint slots are this frame: 106 px legend boxes on a button board,
   // four full-width columns on a touch board. Shared by the draw and the tap test.
   hint_band::Band hintBand(const GfxRenderer& renderer) const;
@@ -353,8 +355,9 @@ class BaseTheme {
   // Top of the battery icon for a cluster whose text is drawn at rect.y: centres the
   // icon in that text's line box so icon and percentage read as one row.
   static int batteryIconTop(const GfxRenderer& renderer, const Rect& rect, int fontId);
-  static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);
-  static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY);
+  static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,
+                                 bool ink = true);
+  static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY, bool ink = false);
 
  protected:
   // Index of the leftmost tab the bar draws. Zero while every label fits; once they do

@@ -505,20 +505,19 @@
   }
 
   function updateSettingsVisibility() {
-    const shortPwrBtnVal = getControlValue('shortPwrBtn');
+    // 8 is LP_MENU_FOOTNOTES: the row only describes the power button's own footnote
+    // binding, so it follows those three and nothing else.
+    const powerOpensFootnotes = ['btnBookPowerSingle', 'btnBookPowerDouble', 'btnBookPowerHold']
+      .some((key) => getControlValue(key) === 8);
     const pwrBtnFootnoteBackRow = document.getElementById('row-setting-pwrBtnFootnoteBack');
     if (pwrBtnFootnoteBackRow) {
-      if (shortPwrBtnVal === 4) {
-        pwrBtnFootnoteBackRow.style.display = '';
-      } else {
-        pwrBtnFootnoteBackRow.style.display = 'none';
-      }
+      pwrBtnFootnoteBackRow.style.display = powerOpensFootnotes ? '' : 'none';
     }
   }
 
   function handleSettingChanged(key) {
     syncQuickResumeTimeoutForSleepScreen(key === 'sleepScreen', key === 'quickResumeSleepScreen');
-    if (key === 'shortPwrBtn') {
+    if (key === 'btnBookPowerSingle' || key === 'btnBookPowerDouble' || key === 'btnBookPowerHold') {
       updateSettingsVisibility();
     }
     markChanged();

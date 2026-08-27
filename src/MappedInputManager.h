@@ -1,8 +1,8 @@
 #pragma once
 
-#include "ListSwipeGesture.h"
-
 #include <HalGPIO.h>
+
+#include "ListSwipeGesture.h"
 
 class GfxRenderer;
 
@@ -112,6 +112,32 @@ class MappedInputManager {
     powerReleaseInjected = inject;
   }
 
+  // The same gating for the two side keys and for the capacitive Home key, driven by the
+  // per-button bindings router (see util/ButtonRouter.h). main.cpp sets these once per
+  // loop pass, before any consumer reads an edge, and clears them every pass.
+  //
+  //  - suppressEdges: hide this key's press and release from everyone while the router
+  //    decides which gesture it was. Without it the release would still turn the page
+  //    before the double-click window closed.
+  //  - suppressHeld: hide the key's held state too. Only a bound hold needs this, and it
+  //    is what costs that key its hold-to-repeat: one key cannot both repeat while held
+  //    and fire a different action at half a second.
+  //  - injectPress / injectRelease: manufacture the held-back edges on the pass the router
+  //    rules the gesture a plain single click, and on the pass after it. Both are needed and
+  //    they cannot share a pass: every side-key consumer in the firmware steps on the PRESS
+  //    (ReaderUtils::detectPageTurn, ButtonNavigator::onStep), while release-stepping lists
+  //    take the release, and a key that pressed and released in one frame would move twice.
+  //
+  // A key the router does not intercept is never touched, which is why nobody who leaves
+  // the bindings alone can feel this.
+  void setSideKeyOverride(uint8_t hardware, bool suppressEdges, bool suppressHeld, bool injectPress, bool injectRelease);
+  // The Home key reports taps, not edges, so it needs only hiding and replaying.
+  void setHomeKeyOverride(const bool suppress, const bool inject) {
+    homeKeySuppressed = suppress;
+    homeKeyInjected = inject;
+  }
+  void clearBindingOverrides();
+
   // True when the control axis is flipped relative to the physical buttons: the user opted into
   // orientation-following front buttons AND the screen is *currently rendered* rotated (INVERTED /
   // LANDSCAPE_CCW). Keyed on the live renderer orientation rather than the persisted reader setting,
@@ -140,8 +166,34 @@ class MappedInputManager {
   // as the tap event is gone, so the next tap is heard again.
   mutable bool hintTapUsed = false;
 
+  // Top-edge pull-down state (see wasMenuGesture). The SDK's swipe is a flick: under
+  // 700 ms, over 60 px. A hand pulling a panel down from the edge is slower than that far
+  // more often than not, so the gesture is also tracked directly here, across passes,
+  // with no time limit at all. -1 = not armed.
+  mutable int menuDragStartX_ = -1;
+  mutable int menuDragStartY_ = -1;
+  mutable bool menuDragFired_ = false;
+  // True while a contact is live. The start point is taken on the pass this turns true,
+  // which is the only way to catch a finger that is already moving: the tap-candidate
+  // query (wasScreenTouchDown) is false for anything past tap slop, so a swipe never
+  // reports a "down" at all.
+  mutable bool menuDragTracking_ = false;
+
   bool powerReleaseSuppressed = false;
   bool powerReleaseInjected = false;
+
+  // Router gating, one slot per side key. Indexed by sideKeySlot(); a hardware id that is
+  // not a side key has no slot and is never gated.
+  struct SideKeyOverride {
+    bool suppressEdges = false;
+    bool suppressHeld = false;
+    bool injectPress = false;
+    bool injectRelease = false;
+  };
+  static int sideKeySlot(uint8_t hardware);
+  SideKeyOverride sideKeyOverrides[2];
+  bool homeKeySuppressed = false;
+  bool homeKeyInjected = false;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;

@@ -31,6 +31,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "PerfLogSink.h"
+#include "util/DebugTrace.h"
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -53,6 +54,7 @@
 #include "sleep/WakeRoutePolicy.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
+#include "util/ButtonRouter.h"
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
@@ -63,41 +65,22 @@ ActivityManager activityManager(renderer, mappedInputManager);
 FontDecompressor fontDecompressor;
 SdCardFontSystem sdFontSystem;
 FontCacheManager fontCacheManager(renderer.getFontMap(), renderer.getSdCardFonts());
-static unsigned long allowSleepAt = 0;
 // A wake hold must never become an in-app power-button action.  Boot may continue
 // while the button is held; swallow the one release that ends that wake gesture.
 static bool wakePowerReleasePending = false;
 
 // Fonts
-// Vollkorn is lector's single built-in reading family (serif). Noto Serif / Noto Sans
-// were dropped as reading fonts; users add more via SD-card fonts. Noto Sans survives
-// only as the 8pt small font (below) and Ubuntu as the UI font.
-EpdFont vollkorn14RegularFont(&vollkorn_14_regular);
-EpdFont vollkorn14BoldFont(&vollkorn_14_bold);
-EpdFont vollkorn14ItalicFont(&vollkorn_14_italic);
-EpdFont vollkorn14BoldItalicFont(&vollkorn_14_bolditalic);
-EpdFontFamily vollkorn14FontFamily(&vollkorn14RegularFont, &vollkorn14BoldFont, &vollkorn14ItalicFont,
-                                   &vollkorn14BoldItalicFont);
-#ifndef OMIT_FONTS
-EpdFont vollkorn12RegularFont(&vollkorn_12_regular);
-EpdFont vollkorn12BoldFont(&vollkorn_12_bold);
-EpdFont vollkorn12ItalicFont(&vollkorn_12_italic);
-EpdFont vollkorn12BoldItalicFont(&vollkorn_12_bolditalic);
-EpdFontFamily vollkorn12FontFamily(&vollkorn12RegularFont, &vollkorn12BoldFont, &vollkorn12ItalicFont,
-                                   &vollkorn12BoldItalicFont);
-EpdFont vollkorn16RegularFont(&vollkorn_16_regular);
-EpdFont vollkorn16BoldFont(&vollkorn_16_bold);
-EpdFont vollkorn16ItalicFont(&vollkorn_16_italic);
-EpdFont vollkorn16BoldItalicFont(&vollkorn_16_bolditalic);
-EpdFontFamily vollkorn16FontFamily(&vollkorn16RegularFont, &vollkorn16BoldFont, &vollkorn16ItalicFont,
-                                   &vollkorn16BoldItalicFont);
-EpdFont vollkorn18RegularFont(&vollkorn_18_regular);
-EpdFont vollkorn18BoldFont(&vollkorn_18_bold);
-EpdFont vollkorn18ItalicFont(&vollkorn_18_italic);
-EpdFont vollkorn18BoldItalicFont(&vollkorn_18_bolditalic);
-EpdFontFamily vollkorn18FontFamily(&vollkorn18RegularFont, &vollkorn18BoldFont, &vollkorn18ItalicFont,
-                                   &vollkorn18BoldItalicFont);
-#endif  // OMIT_FONTS
+// ChareInk is lector's single built-in reading family (an e-ink tuned Charis derivative).
+// It is compiled in at 14 pt only: its glyph set is far larger than the Vollkorn it
+// replaced, and four sizes would not fit the app partition. Every other size, and every
+// other family, is installed from the SD card. Noto Sans survives only as the 8 pt small
+// font (below) and Ubuntu as the UI font.
+EpdFont chareink14RegularFont(&chareink_14_regular);
+EpdFont chareink14BoldFont(&chareink_14_bold);
+EpdFont chareink14ItalicFont(&chareink_14_italic);
+EpdFont chareink14BoldItalicFont(&chareink_14_bolditalic);
+EpdFontFamily chareink14FontFamily(&chareink14RegularFont, &chareink14BoldFont, &chareink14ItalicFont,
+                                   &chareink14BoldItalicFont);
 
 EpdFont smallFont(&notosans_8_regular);
 EpdFontFamily smallFontFamily(&smallFont);
@@ -410,6 +393,9 @@ void enterDeepSleep(bool fromTimeout = false) {
 void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
   renderer.begin();
+  // Only this file can put the device down, so the light panel's Sleep button is handed
+  // the same entry point every other sleep route uses.
+  activityManager.setSleepAction([] { enterDeepSleep(); });
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
 
@@ -419,12 +405,7 @@ void setupDisplayAndFonts(bool seamless = false) {
   }
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
-  renderer.insertFont(VOLLKORN_14_FONT_ID, vollkorn14FontFamily);
-#ifndef OMIT_FONTS
-  renderer.insertFont(VOLLKORN_12_FONT_ID, vollkorn12FontFamily);
-  renderer.insertFont(VOLLKORN_16_FONT_ID, vollkorn16FontFamily);
-  renderer.insertFont(VOLLKORN_18_FONT_ID, vollkorn18FontFamily);
-#endif  // OMIT_FONTS
+  renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
   // Permanent Ubuntu ids (full Latin/Arabic/Hebrew/Vietnamese coverage) for the
   // language-select native-name list and the Arabic/Hebrew UI.
   renderer.insertFont(UBUNTU_10_FONT_ID, ubuntu10FontFamily);
@@ -617,6 +598,7 @@ void setup() {
   // constructed, so the very first refresh of the session is recorded rather than missed,
   // and the previous wake's stage breakdown is appended straight after the header so one
   // copied file carries both the wake cost and the refresh costs that follow it.
+  debug_trace::begin();
   startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
@@ -1080,8 +1062,6 @@ void setup() {
     delay(10);
     gpio.update();
   }
-
-  allowSleepAt = millis() + 2000;
 }
 
 // delay() counts ticks, and the tick stops while onEinkBusyWaitSlice() light-sleeps
@@ -1152,6 +1132,8 @@ void loop() {
   // paths) leaves the power release ungated. The double-click block further down is the
   // only thing that ever sets it, and only for the pass that sets it.
   mappedInputManager.setPowerReleaseOverride(false, false);
+  // Same reason, for the per-button bindings: an early return must never leave a key gated.
+  mappedInputManager.clearBindingOverrides();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
   // Never on, in any build. The numbers reach the serial log and the perf CSV by paths
@@ -1247,13 +1229,20 @@ void loop() {
     return;
   }
 
-  // A hold that woke the device must be released before it can count as a new
-  // in-app long press. Otherwise a user who keeps holding after wake would put
-  // the device straight back to sleep once allowSleepAt expires.
+  // A hold that woke the device must be released before it can count as a new in-app long
+  // press. Otherwise a user who keeps holding after wake would put the device straight
+  // back to sleep. This is the whole guard: a two-second window after boot used to sit
+  // beside it, and all it did was make the first re-lock after an unlock a dead press.
   static bool powerReleasedSinceWake = false;
   if (!gpio.isPressed(HalGPIO::BTN_POWER)) powerReleasedSinceWake = true;
 
-  if (powerReleasedSinceWake && millis() >= allowSleepAt && gpio.isPressed(HalGPIO::BTN_POWER) &&
+  // Only while the power hold is still Sleep. Bind that gesture to anything else and this
+  // check must stand down, or the device would sleep at sleepHoldMs while the bound action
+  // was still waiting for the same hold.
+  const uint8_t* powerHoldBinding = SETTINGS.buttonBinding(
+      activityManager.isBookContext(), CrossPointSettings::BOUND_BTN_POWER, CrossPointSettings::BOUND_HOLD);
+  const bool powerHoldSleeps = powerHoldBinding == nullptr || *powerHoldBinding == CrossPointSettings::LP_MENU_SLEEP;
+  if (powerHoldSleeps && powerReleasedSinceWake && gpio.isPressed(HalGPIO::BTN_POWER) &&
       gpio.getPowerButtonHeldTime() > SETTINGS.getSleepHoldMs()) {
     // If the screenshot combination is potentially being pressed, don't sleep
     if (gpio.isPressed(HalGPIO::BTN_DOWN)) {
@@ -1264,45 +1253,141 @@ void loop() {
     return;
   }
 
-  // Power double-click, EPUB reader only.
+  // Per-button bindings (Settings > Controls > Buttons).
   //
-  // Sits below the screenshot combo and both sleep checks, so holding to sleep and
-  // Power+Down still win outright, and above every consumer of a power release, so a click
-  // is held back before anything acts on it. Nothing can tell a single click from the first
-  // half of a double click until the window closes, which is why a click is delayed rather
-  // than acted on and undone.
+  // Sits below the screenshot combo and both sleep checks, so Power+Down and the sleep
+  // hold still win outright, and above every consumer of a button edge, because a press has
+  // to be held back before anything acts on it: nothing can tell a single click from the
+  // first half of a double until the window closes.
   //
-  // The detector is static: it must survive between loop passes. It is reset whenever the
-  // feature is not armed, so a click pending when the book closes cannot fire into the
-  // screen that replaced it.
+  // A key the router does not intercept is never touched — no gating, no detector, no
+  // delay — so paging and hold-to-repeat are exactly what they were for anyone who has not
+  // opened the Buttons screen.
   {
-    static reader_input::DoubleClickDetector powerClicks;
-    if (!activityManager.wantsPowerDoubleClick()) {
-      powerClicks.reset();
-    } else {
-      // The RAW edge, deliberately: mappedInputManager.wasReleased() is what the override
-      // below rewrites, and feeding the detector its own output would latch it.
-      const bool released = gpio.wasReleased(HalGPIO::BTN_POWER);
-      const auto event = powerClicks.update(released, millis());
-      if (event == reader_input::DoubleClickDetector::Event::Double) {
-        activityManager.runPowerDoubleClick();
-      }
-      // Hide the release while the verdict is pending (and on the pass the verdict is
-      // Double, whose second edge belongs to the double click); replay it on the pass the
-      // verdict is Single, where every consumer below sees the edge it always saw.
-      mappedInputManager.setPowerReleaseOverride(
-          powerClicks.waiting() || event == reader_input::DoubleClickDetector::Event::Double,
-          event == reader_input::DoubleClickDetector::Event::Single);
-    }
-  }
+    static button_router::Router bindingRouter;
+    // The bindings the router is currently armed with. Compared rather than watched: the
+    // Buttons screen writes the settings directly, and re-arming every pass would reset
+    // the detectors and drop whatever gesture was in flight.
+    static uint8_t appliedBindings[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
+    static bool bindingsApplied = false;
 
-  // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
-  if (SETTINGS.shortPwrBtn == CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH &&
-      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
-    LOG_DBG("MAIN", "Manual screen refresh triggered");
-    if (!activityManager.handleForcedRefresh()) {
-      RenderLock lock;
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    const bool inBook = activityManager.isBookContext();
+    uint8_t wanted[button_router::KEY_COUNT][CrossPointSettings::BOUND_GESTURE_COUNT] = {};
+    for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
+      for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
+        const uint8_t* binding = SETTINGS.buttonBinding(inBook, key, gesture);
+        wanted[key][gesture] = binding != nullptr ? *binding : CrossPointSettings::LP_MENU_DISABLED;
+      }
+    }
+    if (!bindingsApplied || memcmp(wanted, appliedBindings, sizeof(wanted)) != 0) {
+      for (uint8_t key = 0; key < button_router::KEY_COUNT; ++key) {
+        // The Home key goes home; the two side keys page. A key still set to what it
+        // already did is left alone entirely (Router::intercepts).
+        const auto& native = key == CrossPointSettings::BOUND_BTN_HOME    ? button_router::NATIVE_HOME_KEY
+                             : key == CrossPointSettings::BOUND_BTN_POWER ? button_router::NATIVE_POWER_KEY
+                                                                          : button_router::NATIVE_SIDE_KEY;
+        bindingRouter.configure(key,
+                                button_router::Binding{wanted[key][CrossPointSettings::BOUND_SINGLE],
+                                                       wanted[key][CrossPointSettings::BOUND_DOUBLE],
+                                                       wanted[key][CrossPointSettings::BOUND_HOLD]},
+                                native);
+      }
+      // Power holds at the user's own sleepHoldMs, not the shared 500 ms: that is the
+      // threshold its hold has always used, and leaving it on Sleep must not change it.
+      bindingRouter.setHoldMs(CrossPointSettings::BOUND_BTN_POWER, SETTINGS.getSleepHoldMs());
+      memcpy(appliedBindings, wanted, sizeof(wanted));
+      bindingsApplied = true;
+    }
+
+    // Two actions ActivityManager cannot run: only this file can put the device down, and
+    // only this file owns the renderer a forced refresh paints through.
+    const auto runBoundFunction = [&](const uint8_t function) {
+      if (function == CrossPointSettings::LP_MENU_SLEEP) {
+        enterDeepSleep();
+        return;
+      }
+      if (function == CrossPointSettings::LP_MENU_FORCE_REFRESH) {
+        LOG_DBG("MAIN", "Manual screen refresh triggered");
+        if (!activityManager.handleForcedRefresh()) {
+          RenderLock lock;
+          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        }
+        return;
+      }
+      activityManager.runBoundAction(function);
+    };
+
+    const uint32_t now = millis();
+    // Left is the upper side key, Right the lower one, matching the hint labels.
+    constexpr uint8_t SIDE_HARDWARE[] = {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN};
+    // A replayed side-key gesture is two passes long: the press on the pass the router
+    // rules it, the release on the pass after. Every side-key consumer in the firmware
+    // steps on the press, a few also end a repeat run on the release, and no physical key
+    // ever delivers both in one frame — so neither may be dropped and they may not share
+    // a pass. This remembers that a release is owed.
+    static bool replayReleasePending[2] = {false, false};
+    for (uint8_t key = 0; key < 2; ++key) {
+      if (!bindingRouter.intercepts(key)) {
+        replayReleasePending[key] = false;
+        continue;
+      }
+      const uint8_t hardware = SIDE_HARDWARE[key];
+      // The RAW edges, deliberately: the override below is what rewrites the mapped ones,
+      // and feeding the router its own output would latch it.
+      button_router::Fired fired;
+      if (gpio.wasPressed(hardware)) {
+        fired = bindingRouter.onPress(key, now);
+      } else if (gpio.wasReleased(hardware)) {
+        fired = bindingRouter.onRelease(key, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(key, now);
+      if (fired.valid) debug_trace::note("side key %u fired action %u replay=%d", key, fired.function,
+                                        fired.replayRawEdge ? 1 : 0);
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      // Edges stay hidden for as long as this key is intercepted, and are replayed only on
+      // the pass the router rules the gesture the paging the key already did.
+      const bool injectPress = fired.valid && fired.replayRawEdge;
+      const bool injectRelease = replayReleasePending[key];
+      replayReleasePending[key] = injectPress;
+      mappedInputManager.setSideKeyOverride(hardware, /*suppressEdges=*/true, bindingRouter.suppressesHold(key),
+                                            injectPress, injectRelease);
+    }
+
+    // Power. Raw edges like a side key, but its release is gated through the same override
+    // the wake-hold path already uses, so nothing downstream needs to know the router exists.
+    // A hold left on Sleep is not intercepted at all: the sleep-hold check further up keeps
+    // it, threshold included.
+    if (bindingRouter.intercepts(CrossPointSettings::BOUND_BTN_POWER)) {
+      constexpr int POWER_KEY = CrossPointSettings::BOUND_BTN_POWER;
+      button_router::Fired fired;
+      if (gpio.wasPressed(HalGPIO::BTN_POWER)) {
+        fired = bindingRouter.onPress(POWER_KEY, now);
+      } else if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
+        fired = bindingRouter.onRelease(POWER_KEY, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(POWER_KEY, now);
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      mappedInputManager.setPowerReleaseOverride(/*suppress=*/true,
+                                                 /*inject=*/fired.valid && fired.replayRawEdge);
+    }
+
+    // The Home key reports taps and long presses, never raw edges, so its press and release
+    // are manufactured from the tap it already completed. A long press is the hold outright;
+    // the detector is reset after one so a tap reported alongside it cannot fire as well.
+    constexpr uint8_t HOME_KEY = 2;
+    if (gpio.hasHomeKey() && bindingRouter.intercepts(HOME_KEY)) {
+      button_router::Fired fired;
+      if (gpio.wasHomeKeyLongPressed()) {
+        fired = bindingRouter.fireHold(HOME_KEY);
+      } else if (gpio.wasHomeKeyTapped()) {
+        bindingRouter.onPress(HOME_KEY, now);
+        fired = bindingRouter.onRelease(HOME_KEY, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(HOME_KEY, now);
+      // Home is what this key already does, so that binding is answered by replaying the
+      // gesture: an activity that must save or confirm first still gets its say.
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      mappedInputManager.setHomeKeyOverride(/*suppress=*/true, fired.valid && fired.replayRawEdge);
     }
   }
 
