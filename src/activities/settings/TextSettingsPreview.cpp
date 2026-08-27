@@ -104,16 +104,6 @@ int drawStatusBarEdge(const GfxRenderer& renderer, bool top, int edgeY, int pane
   return lineH;
 }
 
-// The cut between the two page ends. Dashed so it can never be mistaken for a rule the
-// book itself drew.
-void drawCut(const GfxRenderer& renderer, int y, int left, int width) {
-  constexpr int dash = 6;
-  constexpr int gap = 5;
-  for (int x = left; x < left + width; x += dash + gap) {
-    renderer.drawLine(x, y, std::min(x + dash - 1, left + width - 1), y);
-  }
-}
-
 // Horizontal reading margin, resolved exactly like EpubReaderActivity::computeReaderMargins
 // does for the page: Dynamic Margins replaces the fixed margin with a width aimed at ~62
 // characters per line. Measured against the FULL screen, which is also the pane's width,
@@ -186,6 +176,7 @@ void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fon
 void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, int lineAdvance,
               int paragraphGap) {
   layout.lines.clear();
+  layout.secondParagraphLine = 0;
 
   const BlockStyle body = bodyStyle(fontId, renderer);
   if (SETTINGS.embeddedLayoutStyle) {
@@ -198,6 +189,7 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
   } else {
     appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
   }
+  layout.secondParagraphLine = static_cast<int>(layout.lines.size());
   appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_TEXT_2), body, false, paragraphGap);
 }
 
@@ -264,75 +256,32 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
   }
   if (layout.lines.empty()) return;
 
-  // The two page ends. The split is fixed rather than proportional to the margins so the
-  // cut does not walk up and down the pane while a margin is being tuned.
-  const int topStripHeight = height * 47 / 100;
-  const int cutY = top + topStripHeight;
-
   const int topBarHeight = drawStatusBarEdge(renderer, /*top=*/true, top, paneLeft, paneWidth);
-  const int bottomBarHeight = drawStatusBarEdge(renderer, /*top=*/false, top + height, paneLeft, paneWidth);
-  drawCut(renderer, cutY, paneLeft, paneWidth);
 
-  const int marginTop = SETTINGS.screenMarginTop;
-  const int marginBottom = SETTINGS.screenMarginBottom;
-
-  // The two ends of the page show the Paperback Look setting both ways: the top
-  // without the smear, the bottom with it, so the choice can be judged on the same
-  // words rather than by toggling the setting and remembering the last screen.
-  // Labelled at the cut, because the difference is a thickening that is easy to miss.
-  //
   // The smear is renderer state, so it must be cleared on every exit path below —
-  // otherwise the row list and the button hints would render thickened too.
+  // otherwise the row grid and the button hints would render thickened too.
   struct PaperbackScope {
     const GfxRenderer& renderer;
     ~PaperbackScope() { renderer.setPaperbackLook(false); }
   } paperbackScope{renderer};
-  const std::string offLabel = std::string(I18N.get(StrId::STR_PAPERBACK_LOOK)) + " " + I18N.get(StrId::STR_STATE_OFF);
-  const std::string onLabel = std::string(I18N.get(StrId::STR_PAPERBACK_LOOK)) + " " + I18N.get(StrId::STR_STATE_ON);
-  const int labelHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int labelRight = paneLeft + paneWidth - marginH;
-  renderer.drawText(UI_10_FONT_ID, labelRight - renderer.getTextWidth(UI_10_FONT_ID, offLabel.c_str()),
-                    cutY - labelHeight - 2, offLabel.c_str());
-  renderer.drawText(UI_10_FONT_ID, labelRight - renderer.getTextWidth(UI_10_FONT_ID, onLabel.c_str()), cutY + 3,
-                    onLabel.c_str());
-  renderer.setPaperbackLook(false);
 
-  // --- top of the page: first lines, drawn down from the top margin ---
-  const int topTextTop = top + topBarHeight + marginTop;
-  int topLineCount = 0;
-  {
-    int y = topTextTop;
-    for (const auto& entry : layout.lines) {
-      y += entry.gapBefore;
-      if (y + lineH > cutY - labelHeight - 4) break;
-      entry.line->render(renderer, fontId, textLeft, y);
-      y += lineAdvance;
-      topLineCount++;
-    }
-    if (SETTINGS.debugBorders && y > topTextTop) renderer.drawRect(textLeft, topTextTop, textWidth, cutY - topTextTop);
-  }
-
-  // --- bottom of the page: last lines, sitting on the bottom margin ---
+  // First paragraph with the smear, second without it. No labels at the seam: the
+  // paragraph gap is the seam, and a label would cost a line of the passage being judged.
+  const int textTop = top + topBarHeight + SETTINGS.screenMarginTop;
+  const int textLimit = top + height;
+  int y = textTop;
+  int drawn = 0;
   renderer.setPaperbackLook(true);
-  const int bottomTextLimit = top + height - bottomBarHeight - marginBottom;
-  const int bottomSpace = bottomTextLimit - (cutY + 1);
-  if (bottomSpace >= lineH) {
-    const int fits = bottomSpace / lineAdvance;
-    // Never redraw a line the top strip already showed: with a short sample the two ends
-    // would otherwise overlap and the page would read as if it repeated itself.
-    const int available = static_cast<int>(layout.lines.size()) - topLineCount;
-    const int count = std::min(fits, available);
-    if (count > 0) {
-      const int firstIndex = static_cast<int>(layout.lines.size()) - count;
-      int y = bottomTextLimit - count * lineAdvance;
-      const int bottomTextTop = y;
-      for (int i = firstIndex; i < static_cast<int>(layout.lines.size()); i++) {
-        layout.lines[i].line->render(renderer, fontId, textLeft, y);
-        y += lineAdvance;
-      }
-      if (SETTINGS.debugBorders) renderer.drawRect(textLeft, bottomTextTop, textWidth, bottomTextLimit - bottomTextTop);
-    }
+  for (const auto& entry : layout.lines) {
+    if (drawn == layout.secondParagraphLine) renderer.setPaperbackLook(false);
+    y += entry.gapBefore;
+    if (y + lineH > textLimit) break;
+    entry.line->render(renderer, fontId, textLeft, y);
+    y += lineAdvance;
+    drawn++;
   }
+  renderer.setPaperbackLook(false);
+  if (SETTINGS.debugBorders && y > textTop) renderer.drawRect(textLeft, textTop, textWidth, y - textTop);
 }
 
 }  // namespace textsettings

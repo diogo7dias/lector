@@ -11,6 +11,7 @@
 #include "components/OptionPopup.h"
 #include "components/themes/BaseTheme.h"
 #include "components/RowSlider.h"
+#include "components/SettingsGrid.h"
 #include "util/ButtonNavigator.h"
 #include "util/HoldRepeat.h"
 
@@ -37,27 +38,25 @@ class TextSettingsActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  // Every row the screen can show, in list order. Section markers are rows too: they draw
-  // as heading bands and are skipped by navigation, so one enum drives the whole list.
+  // Every cell the screen can show, in grid order. Cells are laid out two to a row, so
+  // the order below is also the pairing: Font sits beside Size, Line Spacing beside Extra
+  // Spacing, and so on. Three cells come and go and the grid reflows around them.
   enum class Row : uint8_t {
-    SectionType,
     Font,
     Size,
-    SectionSpacing,
+    PaperbackLook,
     LineSpacing,
     ExtraSpacing,
     ParagraphSpacing,
     Alignment,
     IndentMode,
     IndentPercent,  // only in Custom % mode
-    SectionMargins,
     HorizontalMargin,  // labelled "Margin" in All Sides, where it stands for every side
     MarginLink,
     VerticalMargin,  // shown while top and bottom are linked
     TopMargin,       // replaces VerticalMargin when they are not
     BottomMargin,
     DynamicMargins,
-    SectionReadingAids,
     FocusReading,
     GuideDots,
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
@@ -68,8 +67,8 @@ class TextSettingsActivity final : public Activity {
     DebugBorders,
   };
 
-  // What Confirm does on a row, and therefore what the button hint says.
-  enum class RowKind : uint8_t { Section, Toggle, Picker, Number, FontList };
+  // What Confirm does on a cell, and therefore what the button hint says.
+  enum class RowKind : uint8_t { Toggle, Picker, Number, FontList };
 
   // The screen is either walking the list or showing the font picker full screen. The
   // picker is a mode rather than its own activity so it can hand focus straight back to
@@ -106,7 +105,7 @@ class TextSettingsActivity final : public Activity {
   void rebuildSizeList();
   void openSizePicker();
 
-  // Vertical layout of the preview and list panes. Shared by render() (to draw) and
+  // Vertical layout of the preview and grid panes. Shared by render() (to draw) and
   // loop() (to hit-test touch) so the two cannot drift.
   struct PaneGeometry {
     int previewTop;
@@ -116,9 +115,13 @@ class TextSettingsActivity final : public Activity {
   };
   PaneGeometry paneGeometry() const;
 
-  // Navigation moves between selectable rows only; section bands are stepped over.
-  void moveSelection(int direction);
-  int firstSelectableRow() const;
+  // The grid the last render() drew, so loop() hit-tests exactly what is on screen.
+  settings_grid::Layout gridLayout() const;
+  void drawCell(const settings_grid::Rect& rect, Row row, bool selected);
+
+  // Up and Down move a whole grid row and keep the column; Left and Right move one cell.
+  // While a numeric cell is armed, Up and Down move its value instead.
+  void moveSelection(int deltaRows, int deltaCells);
 
   struct FontEntry {
     std::string name;
@@ -143,7 +146,7 @@ class TextSettingsActivity final : public Activity {
 
   Mode mode_ = Mode::List;
   int selectedIndex_ = 0;  // index into visibleRows()
-  int scrollOffset_ = 0;
+  int scrollRow_ = 0;      // first grid row drawn
   int fontPickerIndex_ = 0;
   int fontPickerScroll_ = 0;
 

@@ -1,0 +1,171 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>lector — Reader Settings layouts (X4 Pro, 480x800)</title>
+<style>
+  * { box-sizing:border-box; }
+  body { margin:0; padding:26px; background:#e9e7e2; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#222; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:#666; margin:0 0 20px; }
+  .grid { display:flex; gap:22px; align-items:flex-start; }
+  .col { width:480px; }
+  .col h2 { font-size:16px; margin:0 0 2px; }
+  .col p.note { margin:0 0 10px; color:#555; font-size:13px; min-height:112px; }
+  .dev { position:relative; width:480px; height:800px; background:#fff; border:1px solid #bbb;
+         box-shadow:0 2px 10px rgba(0,0,0,.25); overflow:hidden; }
+  .abs { position:absolute; }
+  .t { font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; white-space:nowrap; }
+  .s { font:14px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; white-space:nowrap; }
+  .hdr { background:#111; color:#fff; display:flex; align-items:center; justify-content:center;
+         font:17px/1 "DejaVu Sans",Verdana,sans-serif; }
+  .band { background:#111; color:#fff; display:flex; align-items:center; padding-left:14px;
+          font:14px/1 "DejaVu Sans",Verdana,sans-serif; letter-spacing:1px; }
+  .row { display:flex; align-items:center; justify-content:space-between; padding:0 16px;
+         font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; border-bottom:1px solid #ddd; }
+  .row.sel { background:#111; color:#fff; }
+  .box { border:1px solid #111; display:flex; align-items:center; justify-content:center;
+         font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; background:#fff; text-align:center; }
+  .box.on { background:#111; color:#fff; }
+  .tab { border:1px solid #111; border-bottom:none; display:flex; align-items:center; justify-content:center;
+         font:14px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; background:#fff; }
+  .tab.on { background:#111; color:#fff; }
+  .prev { border:1px solid #ccc; padding:12px 16px; font:16px/22px Georgia,serif; color:#111; overflow:hidden; }
+  .hint { border-top:1px solid #111; display:flex; align-items:center; justify-content:space-around;
+          font:13px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; }
+  .cell { border:1px solid #111; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .cell .k { font:13px/1 "DejaVu Sans",Verdana,sans-serif; color:#444; }
+  .cell .v { font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; margin-top:5px; }
+  .cap { font-size:12px; color:#777; margin-top:6px; }
+</style>
+<h1>lector — Reader Settings, in a book (X4 Pro, 480 x 800, 1:1)</h1>
+<p class="sub">A is what ships today. B, C and D are the alternatives. All four keep the live preview: it is the reason this screen is not just the Settings list.</p>
+<div class="grid" id="grid"></div>
+<script>
+const W = 480, H = 800;
+const PREVIEW = `Cherry's lip quivered. Maybe it wasn't so bad to have Alternates, if only so she wouldn't die alone. <i>But how did Uncle break down the door?</i> she thought. She wondered if this was it, and if she was in the midst of a full-on psychotic break.`;
+
+const abs = (x,y,w,h,cls,inner,style='') =>
+  `<div class="abs ${cls}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;${style}">${inner}</div>`;
+
+const SECTIONS = {
+  'TYPE':        [['Font','ChareInk'],['Size','14']],
+  'SPACING':     [['Line Spacing','100'],['Extra Spacing','On'],['Paragraph Spacing','0'],
+                  ['Alignment','Justified'],['First Line Indent','Custom %'],['Indent %','8']],
+  'MARGINS':     [['Margin','17'],['Link Margins','All Sides'],['Vertical Margin','20'],
+                  ['Dynamic Margins','Off']],
+  'READING AIDS':[['Bionic Reading','Off'],['Guide Dots','On'],['Hidden Dots','Off'],
+                  ['Hyphenation','On'],['Embedded Text Style','Allow'],['Embedded Layout Style','Allow'],
+                  ['Anti-aliasing','On']],
+};
+const FLAT = Object.entries(SECTIONS);
+
+function chrome(inner, previewH) {
+  let h = abs(0,0,W,44,'hdr','Reader Settings');
+  h += abs(12,52,W-24,previewH,'prev',PREVIEW);
+  h += inner;
+  h += abs(0,H-40,W,40,'hint','<span>Back</span><span>Confirm</span><span>Home</span>');
+  return `<div class="dev">${h}</div>`;
+}
+
+/* A — today: one scrolling list under the preview */
+function today() {
+  const previewH = 320, top = 52 + previewH + 10, RH = 40, BAND = 28;
+  let y = top, h = '';
+  let sel = true;
+  for (const [name, rows] of FLAT) {
+    if (y > H - 40 - BAND) break;
+    h += abs(0, y, W, BAND, 'band', name); y += BAND;
+    for (const [k,v] of rows) {
+      if (y > H - 40 - RH) break;
+      h += abs(0, y, W, RH, 'row' + (sel ? ' sel' : ''), `<span>${k}</span><span>${v}</span>`);
+      sel = false;
+      y += RH;
+    }
+  }
+  // scrollbar
+  h += abs(W-5, top, 3, H-40-top, '', '', 'background:#ddd');
+  h += abs(W-5, top, 3, 120, '', '', 'background:#111');
+  return chrome(h, previewH);
+}
+
+/* B — section hub: two columns of buttons, tap opens one section */
+function hub() {
+  const previewH = 300, top = 52 + previewH + 14, BH = 74, GAP = 12, BW = (W - 24 - GAP)/2;
+  let h = '', y = top;
+  const names = Object.keys(SECTIONS);
+  names.forEach((n, i) => {
+    const col = i % 2, row = (i/2)|0;
+    const count = SECTIONS[n].length;
+    h += abs(12 + col*(BW+GAP), y + row*(BH+GAP), BW, BH, 'box',
+             `<div><div>${n[0] + n.slice(1).toLowerCase()}</div><div class="s" style="margin-top:6px;color:#555">${count} settings</div></div>`);
+  });
+  y += 2*(BH+GAP) + 10;
+  h += abs(12, y, W-24, BH, 'box', '<div><div>Status Bar</div><div class="s" style="margin-top:6px;color:#555">layout and items</div></div>');
+  y += BH + 10;
+  h += abs(12, y, W-24, 54, 'box', 'Reset this book to global');
+  return chrome(h, previewH);
+}
+
+/* B2 — the section a hub button opens */
+function hubInner() {
+  const previewH = 300, top = 52 + previewH + 14, RH = 46;
+  let h = abs(0, top - 32, W, 28, 'band', 'SPACING'), y = top;
+  SECTIONS['SPACING'].forEach(([k,v], i) => {
+    h += abs(0, y, W, RH, 'row' + (i === 0 ? ' sel' : ''), `<span>${k}</span><span>${v}</span>`);
+    y += RH;
+  });
+  return chrome(h, previewH);
+}
+
+/* C — tab strip: one tap switches section, no Back */
+function tabs() {
+  const previewH = 300, tabY = 52 + previewH + 12, TH = 38, RH = 46;
+  const names = Object.keys(SECTIONS);
+  const short = ['Type','Spacing','Margins','Aids'];
+  const TW = (W - 24) / names.length;
+  let h = '';
+  short.forEach((n, i) => {
+    h += abs(12 + i*TW, tabY, TW, TH, 'tab' + (i === 1 ? ' on' : ''), n);
+  });
+  h += abs(12, tabY + TH, W-24, 2, '', '', 'background:#111');
+  let y = tabY + TH + 8;
+  SECTIONS['SPACING'].forEach(([k,v], i) => {
+    h += abs(0, y, W, RH, 'row' + (i === 0 ? ' sel' : ''), `<span>${k}</span><span>${v}</span>`);
+    y += RH;
+  });
+  return chrome(h, previewH);
+}
+
+/* D — value grid: every setting as a cell, two per row */
+function cells() {
+  const previewH = 260, top = 52 + previewH + 12, CH = 62, GAP = 8, CW = (W - 24 - GAP)/2;
+  const all = FLAT.flatMap(([, rows]) => rows);
+  let h = '', y = top;
+  all.forEach(([k,v], i) => {
+    const col = i % 2, row = (i/2)|0;
+    const cy = y + row*(CH+GAP);
+    if (cy + CH > H - 40) return;
+    h += abs(12 + col*(CW+GAP), cy, CW, CH, 'cell' + (i === 0 ? ' on' : ''),
+             `<span class="k">${k}</span><span class="v">${v}</span>`);
+  });
+  h += abs(W-5, top, 3, H-40-top, '', '', 'background:#ddd');
+  h += abs(W-5, top, 3, 200, '', '', 'background:#111');
+  return chrome(h, previewH);
+}
+
+const cols = [
+  ['A — today',
+   'Preview at 320 px, then one list carrying all four sections and their 19 to 22 rows. About 8 rows fit, so Margins and Reading Aids are always below the fold. Reaching Anti-aliasing from the top is roughly 20 presses, or several flick scrolls.',
+   today()],
+  ['B — section hub (your idea)',
+   'Four buttons, two columns, each naming a section and how many settings it holds, plus the Status Bar screen and a reset. Tapping one shows only that section, which always fits without scrolling. Costs a Back to change section, so comparing a margin against a spacing is two taps each way. Second panel below shows what a button opens.',
+   hub() + '<div class="cap" style="margin:10px 0 4px">what the Spacing button opens</div>' + hubInner()],
+  ['C — tab strip (recommended)',
+   'Same four groups, but as a tab strip that stays on screen. One tap moves between sections, no Back, and the preview never leaves. Every section fits under its tabs without scrolling. Costs 38 px of preview against the hub, and the tab labels have to be short.',
+   tabs()],
+  ['D — value grid',
+   'No sections. Every setting is a cell showing its name and current value, two per row. Twice the density, so about 14 of 22 are on screen and the scroll is halved rather than removed. Best if you want to see everything at once, worst for finding one thing by name.',
+   cells()],
+];
+document.getElementById('grid').innerHTML = cols.map(([t,n,d]) =>
+  `<div class="col"><h2>${t}</h2><p class="note">${n}</p>${d}</div>`).join('');
+</script>
