@@ -45,14 +45,19 @@ struct PreviewLine {
 struct PreviewLayout {
   std::vector<PreviewLine> lines;
   PreviewKey key;
+  // Where the second sample paragraph starts. The pane draws the first paragraph with the
+  // Paperback Look smear and the second without it, so the choice is judged on two
+  // passages side by side rather than by toggling the setting and remembering.
+  int secondParagraphLine = 0;
 };
 
 // Draws the sample page through the reader engine.
 //
-// The pane is a SPLIT SLICE of a real page: the top of the page (its top margin, whatever
-// the status bar puts up there, the first lines) then a dashed cut, then the bottom of the
-// page (last lines, bottom margin, bottom status bar). Both vertical margins are therefore
-// on screen at their true pixel size, which a single continuous slice could never show.
+// The pane is the TOP of a real page: its status bar, its top margin, then the sample
+// text running down from it. It was a split slice with a dashed cut through it, which put
+// both vertical margins on screen at true size; the cut and its labels cost more of the
+// pane than the bottom margin was worth, so the bottom margin is now judged from the
+// number rather than from the picture.
 //
 // The pane spans the full screen width with no padding of its own, so the horizontal
 // margin is drawn at exactly the value the page will use.

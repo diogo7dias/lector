@@ -1,0 +1,152 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>lector — light panel spacing pass (X4 Pro, 480x800)</title>
+<style>
+  body { margin:0; padding:28px; background:#e9e7e2; font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif; color:#222; }
+  h1 { font-size:19px; margin:0 0 4px; }
+  .sub { color:#666; margin:0 0 22px; }
+  .grid { display:flex; gap:26px; flex-wrap:wrap; align-items:flex-start; }
+  .col { width:480px; }
+  .col h2 { font-size:16px; margin:0 0 2px; }
+  .col p.note { margin:0 0 10px; color:#555; font-size:13px; min-height:74px; }
+  .dev { position:relative; width:480px; height:560px; background:#fff; overflow:hidden;
+         box-shadow:0 2px 10px rgba(0,0,0,.25); border:1px solid #bbb; }
+  .page { position:absolute; inset:0; padding:14px 16px; font:17px/25px Georgia,serif; color:#111; }
+  .stipple { position:absolute; left:0; right:0; bottom:0;
+    background-image:repeating-linear-gradient(0deg,#000 0 1px,transparent 1px 2px),
+                     repeating-linear-gradient(90deg,#000 0 1px,transparent 1px 2px);
+    background-size:2px 2px; opacity:.5; mix-blend-mode:multiply; }
+  .band { position:absolute; left:0; top:0; width:480px; background:#fff; border-bottom:2px solid #111; }
+  .abs { position:absolute; }
+  .t { font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; white-space:nowrap; }
+  .bar { border:1px solid #111; background:#fff; }
+  .fill { position:absolute; left:0; top:0; bottom:0; background:#111; }
+  .btn { border:1px solid #111; display:flex; align-items:center; justify-content:center;
+         font:17px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; background:#fff; }
+  .btn.on { background:#111; color:#fff; }
+  .step { border:1px solid #111; display:flex; align-items:center; justify-content:center;
+          font:21px/1 "DejaVu Sans",Verdana,sans-serif; color:#111; background:#fff; }
+  .cap { font-size:12px; color:#777; margin-top:6px; }
+  svg { display:block; }
+</style>
+<h1>lector — top-edge light panel, spacing pass (X4 Pro, 480 x 800)</h1>
+<p class="sub">Panel drawn 1:1 over a real page. A is kit 31, exactly what the photo shows. B is the proposal.</p>
+<div class="grid" id="grid"></div>
+<script>
+const PAGE = `Daisy followed.
+&nbsp;&nbsp;&nbsp;Cherry's lip quivered. Maybe it wasn't so bad to
+have Alternates, if only so she wouldn't die alone. But how did
+Uncle break down the door? she thought. She wondered if this was
+it, and if she was in the midst of a full-on psychotic break.`;
+
+const W = 480;
+function device(h, inner) {
+  return `<div class="dev">
+    <div class="page">${PAGE.replace(/\n/g,'<br>')}</div>
+    <div class="stipple" style="top:${h}px"></div>
+    <div class="band" style="height:${h}px">${inner}</div></div>`;
+}
+const box = (x,y,w,h,label,cls='btn',on=false) =>
+  `<div class="abs ${cls}${on?' on':''}" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">${label}</div>`;
+const bar = (x,y,w,h,pct) => `<div class="abs bar" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px">
+    <div class="fill" style="width:${(w-2)*pct/100}px"></div></div>`;
+// text vertically centred in a box of height h
+const tc = (x,y,w,h,s,align='center') =>
+  `<div class="abs" style="left:${x}px;top:${y}px;width:${w}px;height:${h}px;display:flex;align-items:center;justify-content:${align==='center'?'center':align==='right'?'flex-end':'flex-start'}">
+     <span class="t">${s}</span></div>`;
+
+// Lucide-style 24 px glyphs, stroked 2 px — the same weight the existing icons carry.
+const SUN = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"
+  stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>`;
+const THERMO = `<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#111" stroke-width="2"
+  stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>`;
+const icon = (x,y,h,svg) => `<div class="abs" style="left:${x}px;top:${y}px;height:${h}px;display:flex;align-items:center">${svg}</div>`;
+
+/* ---------- A: kit 31, as photographed ---------- */
+function kit31() {
+  const SIDE=12, PAD=6, GAP=8, RH=44, SW=64, SGAP=10, TRACK=16;
+  let y = PAD, h = '';
+  h += box(SIDE, y, W-SIDE*2, RH, 'Frontlight&nbsp;&nbsp;OFF'); y += RH + GAP;
+  const barX = SIDE+SW+SGAP, barW = W - SIDE*2 - (SW+SGAP)*2;
+  const row = (label, val, withBar) => {
+    let s = box(SIDE, y, SW, RH, '&minus;', 'step') + box(W-SIDE-SW, y, SW, RH, '+', 'step');
+    s += `<div class="abs t" style="left:${barX}px;top:${y+1}px;width:${barW}px;text-align:center">${label}</div>`;
+    if (withBar) s += bar(barX, y + RH - TRACK - PAD, barW, TRACK, val);
+    y += RH + GAP;
+    return s;
+  };
+  h += row('Brightness 46', 46, true);
+  h += row('Warmth 44', 44, true);
+  h += row('Text Size 14', 0, false);
+  const bh = 35, bw = (W - SIDE*2 - 10)/2;
+  [['Refresh Screen','Rotate'],['Status Bar','Reader Settings']].forEach((pair,r) => {
+    h += box(SIDE, y, bw, bh, pair[0]) + box(SIDE+bw+10, y, bw, bh, pair[1]);
+    y += bh + (r===0 ? 10 : 0);
+  });
+  y += bh === 0 ? 0 : GAP;
+  h += `<div class="abs" style="left:${SIDE}px;top:${y-3}px;width:${W-SIDE*2}px;height:1px;background:#111"></div>`;
+  h += tc(SIDE, y, W-SIDE*2, 25, 'Battery 99%', 'left') + tc(SIDE, y, W-SIDE*2, 25, '116 GB free', 'right');
+  y += 25;
+  return device(y + PAD + 2, h);
+}
+
+/* ---------- B: proposal ---------- */
+function proposal() {
+  const SIDE=20, PAD=20, GAP=12, RH=48, SW=56, SGAP=10, TRACK=22, VALW=44, VGAP=8, STEPGAP=18;
+  let y = PAD, h = '';
+  h += box(SIDE, y, W-SIDE*2, 52, 'Frontlight&nbsp;&nbsp;OFF'); y += 52 + GAP;
+
+  const ICONW = 30;
+  const stepsW = SW*2 + 8;
+  const barX = SIDE + ICONW + SGAP;
+  // The number belongs to the bar, not to the steppers: tight against the track, well
+  // clear of the two buttons.
+  const barW = W - SIDE - stepsW - STEPGAP - VALW - VGAP - barX;
+  const sliderRow = (svg, val) => {
+    let s = icon(SIDE, y, RH, svg);
+    s += bar(barX, y + (RH-TRACK)/2, barW, TRACK, val);
+    s += tc(barX + barW + VGAP, y, VALW, RH, String(val), 'left');
+    const sx = W - SIDE - stepsW;
+    s += box(sx, y + (RH-40)/2, SW, 40, '&minus;', 'step') + box(sx + SW + 8, y + (RH-40)/2, SW, 40, '+', 'step');
+    y += RH + GAP;
+    return s;
+  };
+  h += sliderRow(SUN, 46);
+  h += sliderRow(THERMO, 44);
+
+  // aux row: no icon, no track — label and value centred between the steppers
+  {
+    // Same stepper column as the sliders, so the three rows read as one control block.
+    const sx = W - SIDE - stepsW;
+    h += tc(SIDE, y, sx - SIDE - SGAP, RH, 'Text Size 14');
+    h += box(sx, y + (RH-40)/2, SW, 40, '&minus;', 'step');
+    h += box(sx + SW + 8, y + (RH-40)/2, SW, 40, '+', 'step');
+    y += RH + GAP;
+  }
+
+  const bh = 44, bw = (W - SIDE*2 - GAP)/2;
+  [['Refresh Screen','Rotate'],['Status Bar','Reader Settings']].forEach((pair,r) => {
+    h += box(SIDE, y, bw, bh, pair[0]) + box(SIDE+bw+GAP, y, bw, bh, pair[1]);
+    y += bh + (r===0 ? GAP : 0);
+  });
+  y += GAP;
+  // Four facts on one line at UI_8 rather than two lines at UI_10: it is a readout, and it
+  // should not weigh as much as the controls above it.
+  h += `<div class="abs" style="left:${SIDE}px;top:${y}px;width:${W-SIDE*2}px;height:24px;display:flex;
+        align-items:center;justify-content:space-between;font:14px/1 'DejaVu Sans',Verdana,sans-serif;color:#111">
+        <span>99%</span><span>412 books</span><span>1208 images</span><span>116 GB free</span></div>`;
+  y += 24;
+  return device(y + 14 + 2, h);
+}
+
+const cols = [
+  ['A — kit 31, on the device now',
+   'Side margin 12 px, row gap 8 px. The label sits one pixel below the top of its row and the track sits six above the bottom, so the two collide; Text Size has no track, so its label stays pinned to the top of an otherwise empty 44 px row and reads as unaligned. Band 333 px.',
+   kit31()],
+  ['B — proposal',
+   'Top margin matches the sides at 20 px. Brightness and Warmth become icon, track, number, then minus and plus — the number sits 8 px off the track and 18 px off the steppers, so it reads as the bar\'s value rather than the buttons\' label. Everything centred in its row, rows 48 px, buttons 44 px, gutters 12 px. The rule above the readout is gone; the readout drops to UI_8 and carries four facts. Band 435 px in a book, 491 px outside one.',
+   proposal()],
+];
+document.getElementById('grid').innerHTML = cols.map(([t,n,d]) =>
+  `<div class="col"><h2>${t}</h2><p class="note">${n}</p>${d}<div class="cap">panel 1:1 &middot; page below stippled</div></div>`).join('');
+</script>

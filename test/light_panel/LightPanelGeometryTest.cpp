@@ -10,14 +10,19 @@ constexpr int kLineHeight = 25;
 using light_panel::Hit;
 using light_panel::Row;
 
+constexpr int kReadoutLineHeight = 20;
+
 light_panel::Layout inBook() {
-  return light_panel::forScreen(kScreenWidth, kLineHeight, /*hasWarmth=*/true, /*hasAux=*/true, /*actionCount=*/4);
+  return light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true, /*hasAux=*/true,
+                                /*actionCount=*/4);
 }
 light_panel::Layout outOfBook() {
-  return light_panel::forScreen(kScreenWidth, kLineHeight, /*hasWarmth=*/true, /*hasAux=*/true, /*actionCount=*/6);
+  return light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true, /*hasAux=*/true,
+                                /*actionCount=*/6);
 }
 light_panel::Layout plain() {
-  return light_panel::forScreen(kScreenWidth, kLineHeight, /*hasWarmth=*/false, /*hasAux=*/false, /*actionCount=*/4);
+  return light_panel::forScreen(kScreenWidth, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/false, /*hasAux=*/false,
+                                /*actionCount=*/4);
 }
 
 int centerX(const light_panel::Rect& rect) { return rect.x + rect.width / 2; }
@@ -30,7 +35,7 @@ TEST(LightPanelGeometry, ThePanelIsABandAcrossTheTopOfTheScreen) {
   EXPECT_EQ(layout.width, kScreenWidth);
   // A band, not a screen: it has to leave the page it is drawn over readable. Half of an
   // 800 px panel is the ceiling; the six-action form is the tallest one built.
-  EXPECT_LT(outOfBook().height, 400);
+  EXPECT_LT(outOfBook().height, 520);
 }
 
 TEST(LightPanelGeometry, TheToggleIsOneButtonAcrossTheFullWidth) {
@@ -40,34 +45,58 @@ TEST(LightPanelGeometry, TheToggleIsOneButtonAcrossTheFullWidth) {
   EXPECT_GE(layout.toggle.height, light_panel::kStepRowHeight);
 }
 
+// The band reached the panel's physical top edge while its sides were inset 20 px, which
+// read as the toggle being pushed up against the crop.
+TEST(LightPanelGeometry, TheGapAboveTheToggleMatchesTheSideMargin) {
+  EXPECT_EQ(inBook().toggle.y, light_panel::kSidePad);
+}
+
 TEST(LightPanelGeometry, EveryStepRowSharesOneColumnLayout) {
   const auto layout = inBook();
   for (const auto* row : {&layout.brightness, &layout.warmth, &layout.aux}) {
-    EXPECT_EQ(row->minus.x, light_panel::kSidePad);
+    // Both steppers live at the right end, in one column shared by every row.
+    EXPECT_EQ(row->minus.x, layout.brightness.minus.x);
+    EXPECT_EQ(row->plus.x, row->minus.x + row->minus.width + light_panel::kStepGap);
     EXPECT_EQ(row->minus.width, row->plus.width);
     EXPECT_EQ(row->plus.x + row->plus.width, kScreenWidth - light_panel::kSidePad);
-    EXPECT_EQ(row->minus.y, row->y);
-    EXPECT_EQ(row->plus.y, row->y);
-    EXPECT_GE(row->minus.height, light_panel::kStepRowHeight);
+    EXPECT_EQ(row->minus.y, row->plus.y);
+    // Centred in the row rather than filling it: the row is the touch target, the box is
+    // what is drawn.
+    EXPECT_GT(row->minus.y, row->y);
+    EXPECT_LT(row->minus.y + row->minus.height, row->y + row->height);
   }
 }
 
-TEST(LightPanelGeometry, TheTrackSitsBetweenTheTwoSteppersAndIsThickEnoughToDrag) {
+TEST(LightPanelGeometry, ASliderRowReadsIconThenTrackThenNumberThenSteppers) {
   const auto layout = inBook();
-  const auto& bar = layout.brightness.bar;
-  EXPECT_GE(bar.x, layout.brightness.minus.x + layout.brightness.minus.width);
-  EXPECT_LE(bar.x + bar.width, layout.brightness.plus.x);
-  EXPECT_GE(bar.height, 16);
-  EXPECT_EQ(layout.warmth.bar.x, bar.x);
-  EXPECT_EQ(layout.warmth.bar.width, bar.width);
+  const auto& row = layout.brightness;
+  EXPECT_EQ(row.icon.x, light_panel::kSidePad);
+  EXPECT_GE(row.bar.x, row.icon.x + row.icon.width);
+  EXPECT_GE(row.value.x, row.bar.x + row.bar.width);
+  EXPECT_LE(row.value.x + row.value.width, row.minus.x);
+  EXPECT_GE(row.bar.height, light_panel::kTrackHeight);
+  EXPECT_EQ(layout.warmth.bar.x, row.bar.x);
+  EXPECT_EQ(layout.warmth.bar.width, row.bar.width);
 }
 
-TEST(LightPanelGeometry, TheAuxRowHasSteppersButNoTrack) {
+// The number belongs to the track it reports, not to the two buttons beside it.
+TEST(LightPanelGeometry, TheNumberSitsCloserToTheTrackThanToTheSteppers) {
+  const auto& row = inBook().brightness;
+  const int toTrack = row.value.x - (row.bar.x + row.bar.width);
+  const int toSteppers = row.minus.x - (row.value.x + row.value.width);
+  EXPECT_LT(toTrack, toSteppers);
+}
+
+TEST(LightPanelGeometry, TheAuxRowHasSteppersButNoTrackOrIcon) {
   // Text Size in a book, Sort outside one: both step through values that no bar can show.
   const auto layout = inBook();
   EXPECT_TRUE(layout.hasAux);
   EXPECT_GT(layout.aux.minus.width, 0);
   EXPECT_EQ(layout.aux.bar.width, 0);
+  EXPECT_EQ(layout.aux.icon.width, 0);
+  // Its label takes the whole run up to the steppers, which sit in the sliders' column.
+  EXPECT_EQ(layout.aux.value.x, light_panel::kSidePad);
+  EXPECT_EQ(layout.aux.minus.x, layout.brightness.minus.x);
 }
 
 TEST(LightPanelGeometry, AWarmthlessBoardLosesTheRowRatherThanKeepingItEmpty) {
@@ -107,6 +136,8 @@ TEST(LightPanelGeometry, TheReadoutLineIsTheLastThingInTheBand) {
   const auto& last = layout.actions[layout.actionCount - 1];
   EXPECT_GE(layout.readout.y, last.y + last.height);
   EXPECT_EQ(layout.readout.width, kScreenWidth - light_panel::kSidePad * 2);
+  // Set from the readout's own smaller font, not from the font the controls use.
+  EXPECT_EQ(layout.readout.height, kReadoutLineHeight);
 }
 
 // --- Hit testing ---
@@ -177,7 +208,8 @@ TEST(LightPanelGeometry, TheBarEndsAreTheEndsOfTheRange) {
 }
 
 TEST(LightPanelGeometry, ANarrowScreenNarrowsTheSteppersRatherThanLosingTheTrack) {
-  const auto layout = light_panel::forScreen(240, kLineHeight, /*hasWarmth=*/true, /*hasAux=*/true, /*actionCount=*/4);
+  const auto layout = light_panel::forScreen(240, kLineHeight, kReadoutLineHeight, /*hasWarmth=*/true,
+                                             /*hasAux=*/true, /*actionCount=*/4);
   EXPECT_GE(layout.brightness.bar.width, light_panel::kMinBarWidth);
   EXPECT_GT(layout.brightness.minus.width, 0);
   EXPECT_LE(layout.brightness.plus.x + layout.brightness.plus.width, 240 - light_panel::kSidePad);

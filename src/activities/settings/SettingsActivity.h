@@ -9,6 +9,7 @@
 #include "CrossPointSettings.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
+#include "components/SettingsGrid.h"
 #include "components/ValueBarPopup.h"
 #include "util/ButtonNavigator.h"
 
@@ -199,11 +200,16 @@ struct SettingInfo {
 class SettingsActivity final : public Activity {
   ButtonNavigator buttonNavigator;
 
+  // The screen is either the category hub or one category's grid. 121 settings in one
+  // flat list is 61 grid rows; split four ways, a category is one or two screens, and the
+  // hub is what says which four there are now that the headings are gone.
+  enum class Mode : uint8_t { Hub, Category };
+  Mode mode = Mode::Hub;
+  int selectedCategory = 0;
   int selectedSettingIndex = 0;
   int settingsCount = 0;
 
-  // Every setting, in one flat list: the four categories concatenated in display
-  // order, each already carrying its section headings.
+  // The cells the grid is drawing: one category's settings, its group headings dropped.
   std::vector<SettingInfo> settings;
   // Per-category scratch, kept as members so a rebuild reuses their capacity rather
   // than allocating four vectors of SettingInfo on every toggle.
@@ -211,7 +217,9 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> readerSettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
-  // isHeader per row, kept alongside the list for settings_nav.
+  // isHeader per cell. Always false now that headings are dropped when a category is
+  // taken; kept because the settings list still marks them and a future span-aware grid
+  // would want them.
   std::vector<bool> headerFlags;
 
   bool preserveQuickResumeTimeoutOn = false;
@@ -223,9 +231,9 @@ class SettingsActivity final : public Activity {
   // back. Same component TextSettingsActivity already uses for the margin rows.
   ValueBarPopup valueBar;
 
-  // Window start for the settings list, owned here so it survives between frames.
-  // Reset whenever the list underneath it changes identity (re-entry).
-  int listScrollOffset = 0;
+  // First grid row drawn, owned here so it survives between frames. Reset whenever the
+  // grid underneath it changes identity (a different category, or re-entry).
+  int scrollRow = 0;
 
   void toggleCurrentSetting();
   // Puts the cursor back on a landable row after a rebuild that may have added or
@@ -240,6 +248,16 @@ class SettingsActivity final : public Activity {
    */
   void shareCredentials();
   void rebuildSettingsList();
+  // The active category's rows, with its group headings dropped: a cell names itself, and
+  // a heading band would cost a whole grid row to repeat what the order already says.
+  void selectCategory(int index);
+  std::vector<SettingInfo>& categoryRows(int index);
+  StrId categoryName(int index) const;
+  std::string settingValueText(const SettingInfo& setting) const;
+  settings_grid::Layout gridLayout() const;
+  Rect gridPane() const;
+  void drawCell(const settings_grid::Rect& rect, const std::string& name, const std::string& value, bool selected);
+  void moveSelection(int deltaRows, int deltaCells);
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:

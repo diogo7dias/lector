@@ -94,7 +94,7 @@ void TextSettingsActivity::onEnter() {
   rebuildSizeList();
   currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
   fontPickerIndex_ = currentFamilyIndex_;
-  selectedIndex_ = firstSelectableRow();
+  selectedIndex_ = 0;
 
   requestUpdate();
 }
@@ -139,11 +139,6 @@ TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
 
 TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
   switch (row) {
-    case Row::SectionType:
-    case Row::SectionSpacing:
-    case Row::SectionMargins:
-    case Row::SectionReadingAids:
-      return RowKind::Section;
     case Row::Font:
       return RowKind::FontList;
     case Row::Size:
@@ -166,15 +161,22 @@ TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
 }
 
 std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const {
+  // Grid order, two cells to a row, so consecutive pairs are settings you judge together.
+  // The section headings the list used to carry are gone: a cell shows its own name, and
+  // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
   rows.reserve(24);
-  rows.push_back(Row::SectionType);
+
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
 
-  rows.push_back(Row::SectionSpacing);
+  // The two that change how the ink itself sits on the page.
+  rows.push_back(Row::PaperbackLook);
+  rows.push_back(Row::AntiAliasing);
+
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
+
   rows.push_back(Row::Alignment);
   rows.push_back(Row::IndentMode);
   // The custom-% value only applies in Custom% mode; in Book mode the indent comes from
@@ -183,8 +185,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
     rows.push_back(Row::IndentPercent);
   }
 
-  rows.push_back(Row::SectionMargins);
-  // All Sides: the horizontal row is every side, so it is the only margin row, and
+  // All Sides: the horizontal cell is every side, so it is the only margin cell, and
   // Dynamic Margins is not offered at all — it would compute a horizontal margin of its
   // own and leave left/right disagreeing with top/bottom.
   rows.push_back(Row::HorizontalMargin);
@@ -203,33 +204,28 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
       break;
   }
 
-  rows.push_back(Row::SectionReadingAids);
+  rows.push_back(Row::Hyphenation);
   rows.push_back(Row::FocusReading);
+
   rows.push_back(Row::GuideDots);
   // Hidden Dots only says anything about a page that is already drawing guide dots.
   if (SETTINGS.guideDotsEnabled) rows.push_back(Row::HiddenDots);
-  rows.push_back(Row::Hyphenation);
+
   rows.push_back(Row::EmbeddedTextStyle);
   rows.push_back(Row::EmbeddedLayoutStyle);
-  rows.push_back(Row::AntiAliasing);
+
   rows.push_back(Row::DebugBorders);
   return rows;
 }
 
 StrId TextSettingsActivity::rowNameId(const Row row) const {
   switch (row) {
-    case Row::SectionType:
-      return StrId::STR_SECTION_TYPE;
-    case Row::SectionSpacing:
-      return StrId::STR_SECTION_SPACING;
-    case Row::SectionMargins:
-      return StrId::STR_SECTION_MARGINS;
-    case Row::SectionReadingAids:
-      return StrId::STR_SECTION_READING_AIDS;
     case Row::Font:
       return StrId::STR_FONT;
     case Row::Size:
       return StrId::STR_SIZE;
+    case Row::PaperbackLook:
+      return StrId::STR_PAPERBACK_LOOK;
     case Row::LineSpacing:
       return StrId::STR_LINE_SPACING;
     case Row::ExtraSpacing:
@@ -411,6 +407,8 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
       return onOff(SETTINGS.embeddedLayoutStyle);
     case Row::AntiAliasing:
       return onOff(SETTINGS.textAntiAliasing);
+    case Row::PaperbackLook:
+      return onOff(SETTINGS.paperbackLookBody);
     case Row::DebugBorders:
       return onOff(SETTINGS.debugBorders);
     default:
@@ -420,27 +418,22 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
   return "";
 }
 
-int TextSettingsActivity::firstSelectableRow() const {
-  const auto rows = visibleRows();
-  for (int i = 0; i < static_cast<int>(rows.size()); i++) {
-    if (kindOf(rows[i]) != RowKind::Section) return i;
-  }
-  return 0;
-}
-
-// Section bands are drawn but never landed on: one step past a band lands on the first row
-// under it, and the ring wraps end to end like every other list on the device.
-void TextSettingsActivity::moveSelection(const int direction) {
+// Up and Down move a whole grid row so the column is kept; Left and Right move one cell,
+// which is what makes the second column reachable. Clamped rather than wrapped: a wrap at
+// the end of a settings screen reads as a jump rather than as a step.
+void TextSettingsActivity::moveSelection(const int deltaRows, const int deltaCells) {
   const auto rows = visibleRows();
   const int count = static_cast<int>(rows.size());
   if (count == 0) return;
-  int index = selectedIndex_;
-  for (int guard = 0; guard < count; guard++) {
-    index = direction > 0 ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
-    if (kindOf(rows[index]) != RowKind::Section) break;
-  }
-  selectedIndex_ = index;
+  selectedIndex_ = settings_grid::step(selectedIndex_, count, deltaRows, deltaCells);
+  scrollRow_ = settings_grid::scrollToShow(gridLayout(), selectedIndex_);
   requestUpdate();
+}
+
+settings_grid::Layout TextSettingsActivity::gridLayout() const {
+  const auto geo = paneGeometry();
+  return settings_grid::forPane(renderer.getScreenWidth(), geo.listHeight, static_cast<int>(visibleRows().size()),
+                                scrollRow_);
 }
 
 void TextSettingsActivity::openSizePicker() {
@@ -454,8 +447,6 @@ void TextSettingsActivity::openSizePicker() {
 
 void TextSettingsActivity::activateRow(const Row row) {
   switch (kindOf(row)) {
-    case RowKind::Section:
-      return;
     case RowKind::FontList:
       mode_ = Mode::FontPicker;
       fontPickerIndex_ = currentFamilyIndex_;
@@ -540,6 +531,9 @@ void TextSettingsActivity::activateRow(const Row row) {
       break;
     case Row::AntiAliasing:
       SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
+      break;
+    case Row::PaperbackLook:
+      SETTINGS.paperbackLookBody = !SETTINGS.paperbackLookBody;
       break;
     case Row::DebugBorders:
       SETTINGS.debugBorders = !SETTINGS.debugBorders;
@@ -693,8 +687,57 @@ void TextSettingsActivity::loop() {
     return;
   }
 
-  buttonNavigator_.onNextStep([this] { moveSelection(1); });
-  buttonNavigator_.onPreviousStep([this] { moveSelection(-1); });
+  // A tap picks the cell it landed on and acts on it in one go, the same bargain the
+  // lists make: the selection moving first is what the paint after the action shows.
+  {
+    int tx = 0;
+    int ty = 0;
+    if (mappedInput.wasScreenTouchDown(tx, ty)) {
+      const auto rows = visibleRows();
+      const auto layout = gridLayout();
+      const auto geo = paneGeometry();
+      for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
+        const auto rect = settings_grid::cellAt(layout, geo.listTop, i);
+        if (rect.width == 0) continue;
+        if (tx < rect.x || tx >= rect.x + rect.width || ty < rect.y || ty >= rect.y + rect.height) continue;
+        selectedIndex_ = i;
+        activateRow(rows[i]);
+        requestUpdate();
+        return;
+      }
+    }
+  }
+
+  buttonNavigator_.onNextStep([this] { moveSelection(1, 0); });
+  buttonNavigator_.onPreviousStep([this] { moveSelection(-1, 0); });
+  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { moveSelection(0, -1); });
+  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { moveSelection(0, 1); });
+}
+
+// One cell: its name in the small font over its value in the reading font, both centred.
+// Stacked rather than spread left and right, which is the whole reason two fit side by
+// side where one row used to sit.
+void TextSettingsActivity::drawCell(const settings_grid::Rect& rect, const Row row, const bool selected) {
+  if (selected) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
+  const bool ink = !selected;
+
+  const std::string name = I18N.get(rowNameId(row));
+  const std::string value = rowValueText(row);
+  const int nameHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  const int valueHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  // Both lines as one block, centred in the cell, so a value-less cell does not sit high.
+  const int blockTop = rect.y + (rect.height - nameHeight - valueHeight) / 2;
+
+  const auto centred = [&](const int fontId, const std::string& text, const int y) {
+    if (text.empty()) return;
+    const int width = renderer.getTextWidth(fontId, text.c_str());
+    renderer.drawText(fontId, rect.x + (rect.width - width) / 2, y, text.c_str(), ink);
+  };
+  centred(SMALL_FONT_ID, name, blockTop);
+  // The armed cell wears its value in brackets, the one bit of state the selection fill
+  // cannot carry on its own.
+  centred(UI_10_FONT_ID, editing_ && selected ? "[ " + value + " ]" : value, blockTop + nameHeight);
 }
 
 void TextSettingsActivity::render(RenderLock&&) {
@@ -722,36 +765,23 @@ void TextSettingsActivity::render(RenderLock&&) {
   textsettings::renderPreview(renderer, previewLayout_, geo.previewTop, geo.previewHeight);
 
   const auto rows = visibleRows();
-  GUI.drawList(
-      renderer, Rect{0, geo.listTop, pageWidth, geo.listHeight}, static_cast<int>(rows.size()), selectedIndex_,
-      [this, &rows](int index) { return std::string(I18N.get(rowNameId(rows[index]))); }, nullptr, nullptr,
-      [this, &rows](int index) {
-        // The armed row wears its value in brackets, the one bit of state the black
-        // selection bar cannot carry on its own.
-        const std::string value = rowValueText(rows[index]);
-        if (editing_ && index == selectedIndex_) return "[ " + value + " ]";
-        return value;
-      },
-      true, nullptr, UI_10_FONT_ID, [&rows](int index) { return kindOf(rows[index]) == RowKind::Section; },
-      &scrollOffset_);
+  const auto layout = gridLayout();
+  for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
+    const auto rect = settings_grid::cellAt(layout, geo.listTop, i);
+    if (rect.width == 0) continue;
+    drawCell(rect, rows[i], i == selectedIndex_);
+  }
 
-  // The armed numeric row gets a drag track between its label and its number. The
-  // row rects come from the draw that just ran (row_hit), so the track cannot land
-  // anywhere but on the row the list actually painted.
+  // The armed numeric cell gets a drag track across its bottom edge, inside the cell it
+  // belongs to rather than between two columns of text: the grid has no such gap.
   sliderBar_ = {};
   if (editing_ && selectedIndex_ < static_cast<int>(rows.size()) && kindOf(rows[selectedIndex_]) == RowKind::Number) {
-    const auto& painted = row_hit::lastRows();
-    for (int i = 0; i < painted.count; ++i) {
-      const auto& entry = painted.entries[i];
-      if (entry.item != selectedIndex_) continue;
-
-      const std::string label = I18N.get(rowNameId(rows[selectedIndex_]));
-      const std::string value = "[ " + rowValueText(rows[selectedIndex_]) + " ]";
-      const int labelEnd = entry.x + metrics_.contentSidePadding + renderer.getTextWidth(UI_10_FONT_ID, label.c_str());
-      const int valueStart =
-          entry.x + entry.width - metrics_.contentSidePadding - renderer.getTextWidth(UI_10_FONT_ID, value.c_str());
-      sliderBar_ = row_slider::barBetween(labelEnd, valueStart, entry.y, entry.height);
-      break;
+    const auto rect = settings_grid::cellAt(layout, geo.listTop, selectedIndex_);
+    if (rect.width > 0) {
+      constexpr int kTrackHeight = 8;
+      constexpr int kTrackInset = 10;
+      sliderBar_ = row_slider::Bar{rect.x + kTrackInset, rect.y + rect.height - kTrackHeight - 6,
+                                   rect.width - kTrackInset * 2, kTrackHeight};
     }
   }
   if (sliderBar_.width > 0) {
@@ -759,8 +789,8 @@ void TextSettingsActivity::render(RenderLock&&) {
     numberRange(rows[selectedIndex_], minValue, maxValue);
     const uint8_t* field = numberField(rows[selectedIndex_]);
     const int filled = row_slider::filledWidth(sliderBar_, field ? *field : minValue, minValue, maxValue);
-    // The armed row is the selected one and the selection fills it black, so the
-    // track is drawn in white (state false).
+    // The armed cell is the selected one and the selection fills it black, so the track
+    // is drawn in white.
     constexpr bool trackInk = false;
     sliderOnDarkRow_ = true;
     // Track outline, then the filled part solid: an outline alone is hard to read at

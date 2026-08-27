@@ -1,7 +1,6 @@
 #include "ActivityManager.h"
 
 #include <FontCacheManager.h>
-#include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <PerfLog.h>
@@ -9,8 +8,6 @@
 #include <esp_random.h>
 
 #include <algorithm>
-#include <cstring>
-#include <string_view>
 
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
@@ -18,7 +15,6 @@
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
-#include "components/BusyBanner.h"
 #include "components/RowHitTest.h"
 #include "dev/LockLabActivity.h"
 #include "home/CrashActivity.h"
@@ -28,7 +24,6 @@
 #include "reader/ReaderActivity.h"
 #include "settings/OpdsServerListActivity.h"
 #include "settings/SettingsActivity.h"
-#include "util/BusyTick.h"
 #include "util/DebugTrace.h"
 #include "util/FullScreenMessageActivity.h"
 #include "util/OrientationCycle.h"
@@ -65,70 +60,25 @@ constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
     CrossPointSettings::LP_MENU_CONTINUE_READING, CrossPointSettings::LP_MENU_RANDOM_BOOK,
     CrossPointSettings::LP_MENU_SEARCH, CrossPointSettings::LP_MENU_SETTINGS};
 
-// One book chosen at random from the card, or empty when there are none.
-//
-// A reservoir sample over a bounded walk: the whole point is one press and one book, and
-// building a list of every book on the card first would cost the memory and the time that
-// the file browser already spends when you want to choose for yourself. Caps exist because
-// this runs on the loop task with a busy banner over it, not because a bigger card is
-// wrong — a card past the cap simply picks from the first 4000 books it meets.
-constexpr int RANDOM_BOOK_MAX_DEPTH = 4;
-constexpr uint32_t RANDOM_BOOK_MAX_BOOKS = 4000;
-// The walk is bounded by what it reads, not only by what it finds: a folder of ten
-// thousand images holds no books at all, and without this the book cap would never
-// be reached while the card was read from end to end.
-constexpr uint32_t RANDOM_BOOK_MAX_SCANNED = 20000;
-
-struct RandomBookScan {
-  uint32_t books = 0;
-  uint32_t scanned = 0;
-  std::string picked;
-
-  bool exhausted() const { return books >= RANDOM_BOOK_MAX_BOOKS || scanned >= RANDOM_BOOK_MAX_SCANNED; }
-};
-
-void walkForRandomBook(const std::string& path, const int depth, RandomBookScan& scan) {
-  if (depth > RANDOM_BOOK_MAX_DEPTH || scan.exhausted()) return;
-  auto dir = Storage.open(path.c_str());
-  if (!dir || !dir.isDirectory()) return;
-  dir.rewindDirectory();
-
-  char name[256];
-  for (auto entry = dir.openNextFile(); entry; entry = dir.openNextFile()) {
-    if (scan.exhausted()) break;
-    // Blocks the loop task, so let the busy banner appear and keep the watchdog fed.
-    if ((++scan.scanned & 0x3F) == 0) busy::tick();
-    entry.getName(name, sizeof(name));
-    if (name[0] == '.' || strcmp(name, "System Volume Information") == 0) continue;
-
-    const std::string child = path == "/" ? std::string("/") + name : path + "/" + name;
-    if (entry.isDirectory()) {
-      // The wallpaper folders hold thousands of images and no books.
-      if (child == "/sleep" || child == "/sleep pause") continue;
-      entry.close();
-      walkForRandomBook(child, depth + 1, scan);
-      continue;
-    }
-    const std::string_view filename{name};
-    if (!FsHelpers::hasEpubExtension(filename) && !FsHelpers::hasXtcExtension(filename) &&
-        !FsHelpers::hasTxtExtension(filename) && !FsHelpers::hasMarkdownExtension(filename)) {
-      continue;
-    }
-    // Reservoir sampling: the nth book seen replaces the pick with probability 1/n, which
-    // leaves every book equally likely without knowing how many there are.
-    ++scan.books;
-    if (esp_random() % scan.books == 0) scan.picked = child;
-  }
-  dir.close();
-}
-
 }  // namespace
 
+// One of the books on the home screen, chosen at random, or empty when the list is.
+//
+// The recents list, not the card: the panel is a place you reach mid-page, and a walk of
+// every folder on a full card is seconds of work under a busy banner. These are also the
+// books the home screen already offers, so the button shuffles what you can see rather
+// than surfacing something you last opened two years ago.
 std::string ActivityManager::randomBookPath() {
-  BusyBanner banner(renderer, tr(STR_BUSY_READING_FOLDER));
-  RandomBookScan scan;
-  walkForRandomBook("/", 0, scan);
-  return std::move(scan.picked);
+  const auto& books = RECENT_BOOKS.getBooks();
+  // Missing files are skipped rather than picked and then refused: a card that lost one
+  // book would otherwise make the button dead one press in thirteen.
+  std::vector<const std::string*> present;
+  present.reserve(books.size());
+  for (const auto& book : books) {
+    if (Storage.exists(book.path.c_str())) present.push_back(&book.path);
+  }
+  if (present.empty()) return {};
+  return *present[esp_random() % present.size()];
 }
 
 void ActivityManager::setSleepAction(std::function<void()> onSleep) {
@@ -526,7 +476,9 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       goHome(HomeMenuItem::FILE_BROWSER);
       return true;
     case CrossPointSettings::LP_MENU_SETTINGS:
-      goHome(HomeMenuItem::SETTINGS_MENU);
+      // The screen itself, not Home with the Settings row picked: goHome only moves the
+      // selection, which left the button looking like it had done nothing.
+      goToSettings();
       return true;
     case CrossPointSettings::LP_MENU_LIGHT_PANEL:
       if (!Frontlight.present() || lightPanel.isActive()) {
