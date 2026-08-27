@@ -4,6 +4,8 @@
 #include <HalStorage.h>
 #include <PerfLog.h>
 
+#include "CrossPointSettings.h"
+
 #include <cstdarg>
 #include <cstdio>
 
@@ -24,6 +26,10 @@ namespace debug_trace {
 
 void begin() {
   if (traceFile.isOpen()) return;
+  // Behind the same switch PerfLogSink uses. A trace line is a card write, and the
+  // busiest call site fires once per touch contact: on by default that is a write per
+  // tap for the whole life of the card, to answer a question nobody is asking.
+  if (!SETTINGS.showTimings) return;
   if (!Storage.ready()) return;
   char path[24];
   for (int session = 1; session <= kMaxSessions; ++session) {

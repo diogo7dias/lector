@@ -14,9 +14,10 @@
 // files). Flushed per line, so a device that sleeps mid-session still leaves the trace
 // behind.
 //
-// Always compiled, always on: the calls are rare (a gesture, a bound action, a panel
-// opening) and a card write of a few dozen bytes costs about a millisecond. Nothing here
-// runs per frame or per pixel.
+// Always compiled, off unless the "Performance timings" setting is on — the same switch
+// PerfLogSink answers to. The busiest call site fires once per touch contact, so leaving
+// it on by default would be a card write per tap forever. With the setting off, begin()
+// returns before opening anything and every note() call returns on its first line.
 namespace debug_trace {
 
 // Opens this boot's file. Call once, after Storage.begin() has succeeded.
