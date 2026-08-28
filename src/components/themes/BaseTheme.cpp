@@ -105,11 +105,13 @@ void drawMoreIndicator(const GfxRenderer& renderer, int count, StrId formatKey, 
   std::snprintf(buf, sizeof(buf), I18N.get(formatKey), count);
   const int textW = renderer.getTextWidth(UI_10_FONT_ID, buf);
   const int badgeW = textW + 24;
-  const int badgeH = rowLineHeight + 6;
+  // One pixel of ink above and below the line, like every other chip: the badge used to
+  // carry three on each side, which read as a slab rather than a label.
+  const int badgeH = rowLineHeight + 2;
   const int badgeX = centerX + (centerW - badgeW) / 2;
   renderer.fillRect(badgeX, y, badgeW, badgeH);
   const int textX = badgeX + (badgeW - textW) / 2;
-  renderer.drawText(UI_10_FONT_ID, textX, y + 3, buf, false);
+  renderer.drawText(UI_10_FONT_ID, textX, y + 1, buf, false);
 }
 
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
@@ -213,7 +215,7 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
 }
 
 void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const bool showPercentage,
-                                const bool onBlack) const {
+                                 const bool onBlack) const {
   // Right aligned: percentage on left, icon on right (UI headers)
   // rect.x is already positioned for the icon (drawHeader calculated it)
   const uint16_t percentage = powerManager.getBatteryPercentage();
@@ -592,6 +594,25 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   }
 }
 
+// Where the title sits inside the header rect, and therefore what the band has to
+// cover. Shared by the fill and by the draw below so the two cannot drift.
+static constexpr int headerTitleOffset = 5;
+
+// The band starts at the edge of the drawable area rather than at the rect the caller
+// reserved: every caller offsets that rect by topPadding, which is chrome padding for
+// the rows, not a margin the header is meant to leave white.
+int BaseTheme::headerBandTop(const Rect rect) {
+  const int top = rect.y - UITheme::getInstance().getMetrics().topPadding;
+  return top > 0 ? top : 0;
+}
+
+// Down to one pixel under the title, so the ink ends with the text.
+int BaseTheme::headerBandHeight(const GfxRenderer& renderer, const Rect rect) {
+  const int bottom = rect.y + headerTitleOffset + renderer.getLineHeight(UI_10_FONT_ID) + 1;
+  const int height = bottom - headerBandTop(rect);
+  return height > 0 ? height : 0;
+}
+
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
   // A titled header is one solid black row, battery cluster included: the brackets alone
   // read as just another line of text next to the rows under them. Filling the whole row
@@ -599,7 +620,11 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // here — a partial clear used to leave fragments of the previous percentage behind.
   const bool inverted = title != nullptr && title[0] != '\0';
   if (inverted) {
-    renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
+    // The band runs from the panel edge to one pixel under the title, not over the
+    // rect the caller reserved: the top padding above it read as a white stripe along
+    // the edge, and the rest of the 45 px reserve read as a slab of ink under the text.
+    // The reserve itself is unchanged, so nothing below the header moves.
+    renderer.fillRect(rect.x, headerBandTop(rect), rect.width, headerBandHeight(renderer, rect), true);
   } else {
     // Untitled band (the home screen). Nothing to invert, so only the cluster is cleared.
     // Both the width and the height come from the cluster's own metrics: a hardcoded box
@@ -627,7 +652,8 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, decoratedTitle.c_str(),
                                                  rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
                                                  EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), false, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + headerTitleOffset, truncatedTitle.c_str(), false,
+                              EpdFontFamily::REGULAR);
   }
 
   if (subtitle) {

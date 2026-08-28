@@ -776,7 +776,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     const bool toggleSelected = cursorMode && togglePos;
 
     if (toggleSelected) {
-      renderer.fillRect(toggleX - 2, toggleY, toggleWidth + 5, lineHeight + 3, true);
+      // Hugs the label on all four sides, one pixel out.
+      renderer.fillRect(toggleX - 1, toggleY - 1, toggleWidth + 2, lineHeight + 2, true);
       renderer.drawText(UI_12_FONT_ID, toggleX, toggleY, toggleLabel, false);
     } else {
       renderer.drawText(UI_12_FONT_ID, toggleX, toggleY, toggleLabel, true);

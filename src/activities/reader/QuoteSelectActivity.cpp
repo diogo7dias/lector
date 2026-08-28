@@ -399,7 +399,9 @@ void QuoteSelectActivity::drawRangeHighlight() const {
       minX = std::min<int>(minX, words[j].x);
       maxX = std::max<int>(maxX, words[j].x + words[j].width);
     }
-    renderer.fillRect(minX - 2, y - 2, (maxX - minX) + 4, lineHeight + 4, true);
+    // One pixel of ink around the words, no more: the highlight marks the passage, it
+    // does not band the line.
+    renderer.fillRect(minX - 1, y - 1, (maxX - minX) + 2, lineHeight + 2, true);
     for (int k = i; k <= j; k++) {
       renderer.drawText(fontId, words[k].x, words[k].y, words[k].text, false, words[k].style);
     }
@@ -432,7 +434,7 @@ void QuoteSelectActivity::render(RenderLock&&) {
   if (!words.empty()) {
     if (phase == Phase::SelectStart) {
       const WordBox& w = words[cursor];
-      renderer.fillRect(w.x - 2, w.y - 2, w.width + 4, lineHeight + 4, true);
+      renderer.fillRect(w.x - 1, w.y - 1, w.width + 2, lineHeight + 2, true);
       renderer.drawText(fontId, w.x, w.y, w.text, false, w.style);
     } else {
       drawRangeHighlight();

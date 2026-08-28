@@ -232,8 +232,7 @@ class BaseTheme {
                        int fontId = UI_10_FONT_ID) const;  // Left aligned (reader mode)
   // Right aligned (UI headers). onBlack draws the cluster knocked out, for the inverted
   // header band drawHeader paints behind it.
-  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
-                        bool onBlack = false) const;
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true, bool onBlack = false) const;
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage, bool ink = true) const;
   // Where the four hint slots are this frame: 106 px legend boxes on a button board,
   // four full-width columns on a touch board. Shared by the draw and the tap test.
@@ -279,6 +278,11 @@ class BaseTheme {
                         // the cursor hold still as it moves. drawList writes the clamped offset
                         // back, so the caller never has to correct it (see ListScrollPolicy.h).
                         int* scrollOffset = nullptr) const;
+  // Geometry of the filled title band: flush with the top of the drawable area, ending
+  // one pixel under the title. Exposed so a theme overriding drawHeader keeps the shape.
+  static int headerBandTop(Rect rect);
+  static int headerBandHeight(const GfxRenderer& renderer, Rect rect);
+
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
                           const char* subtitle = nullptr) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
