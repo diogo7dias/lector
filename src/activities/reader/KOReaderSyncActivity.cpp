@@ -133,6 +133,11 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   }
   requestUpdate(true);
 
+  // Keep the station fully awake for the short sync transaction: modem sleep can
+  // introduce multi-second network stalls that surface as HTTP timeouts. WiFi is torn
+  // down when this activity exits. Upstream #3233.
+  WiFi.setSleep(false);
+
   // Sync time with NTP before making API requests
   syncTimeWithNTP();
 
