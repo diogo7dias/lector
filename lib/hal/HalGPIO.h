@@ -118,6 +118,11 @@ class HalGPIO {
   // Check if USB is connected
   bool isUsbConnected() const;
 
+  // Whether a cold boot with no USB detected can be trusted to mean a held
+  // power button (a button-energized rail plus reliable USB detection). When
+  // false, cold boots always proceed to a normal boot.
+  bool coldBootImpliesPowerButton() const;
+
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;
 
