@@ -42,14 +42,14 @@ class UiListActivity : public Activity, protected UiAppHost {
   // wantsTouchLongPress constructor flag (rows must also carry InputLongPress).
   virtual void onRowLongPress(int index) {}
   // The selection/viewport state the loop, sync, and row dispatch operate on.
-  // Default is the single `nav` member; UiTabListActivity redirects it to the
-  // active tab's per-tab state.
+  // Default (and only current) storage is the single `nav` member; the hook
+  // exists so a screen with more than one viewport can redirect it.
   virtual freeink::ui::ListNav& activeNav() { return nav; }
   // Bounds-checked ACTION_ROW dispatch. Default: selection follows the tapped
-  // row, then long-press/activate. UiTabListActivity remaps row -> ring.
+  // row, then long-press/activate.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
   // The button-navigation tail of loop(): release steps the selection, hold
-  // jumps by page. UiTabListActivity replaces it with the ring walk.
+  // jumps by page. The reader menu replaces it with a heading-aware walk.
   virtual void navigateButtons();
   // First hook in loop(); return true when the pass is consumed (popups, extra
   // buttons, gestures). Runs before the base button handling.

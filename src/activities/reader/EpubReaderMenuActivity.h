@@ -6,11 +6,11 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/Activity.h"
+#include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
 #include "util/ButtonNavigator.h"
 
-class EpubReaderMenuActivity final : public Activity {
+class EpubReaderMenuActivity final : public UiListActivity {
  public:
   // Menu actions available from the reader menu.
   enum class MenuAction {
@@ -69,8 +69,23 @@ class EpubReaderMenuActivity final : public Activity {
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override { return static_cast<int>(items.size()); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  // The book block above the list is chrome, not rows: title, author, chapter and
+  // progress. buildScreen reserves chromeHeight() for it so the two cannot drift.
+  void drawChrome() override;
+  // Popup input, and the Confirm hold that runs the bound menu function. Both own the
+  // pass before the base looks at Back, Confirm or the selection.
+  bool handleCustomInput() override;
+  // Back closes on the press; Confirm activates on press or release depending on
+  // whether a menu hold function is bound. Neither matches the base defaults.
+  bool handleButtons() override;
+  // A press steps past headings; a hold jumps to the next section instead of repeating.
+  void navigateButtons() override;
+  bool drawOverlay() override;
 
  private:
   struct MenuItem {
@@ -121,19 +136,26 @@ class EpubReaderMenuActivity final : public Activity {
   // Index of the first landable row of the section named by SETTINGS.bookMenuTab, or 0.
   int firstRowOfPreferredSection() const;
   void closeCancelled();
+  // Height of the book block drawChrome() paints, measured from the screen top: the
+  // header band, the wrapped title, and whichever of author / chapter / progress apply.
+  int chromeHeight() const;
+  // The wrapped title lines, laid out once per pass and used by both chromeHeight()
+  // and drawChrome().
+  std::vector<std::string> titleLines() const;
+  // The value column text for a row, or nullptr when the row carries no value.
+  const char* rowValue(int index) const;
+
+  // Row values own nothing; the labels come from I18N and the values from fixed label
+  // tables, so the ListItems can borrow both.
+  std::vector<freeink::ui::ListItem> rows;
 
   // Fixed menu layout: one flat list of headings and rows, built once. Only the cursor
   // and the scroll window move after that.
   std::vector<MenuItem> items;
 
-  int selectedIndex = 0;
-  // Owned by this activity and handed to drawList, which slides it by the least amount
-  // that keeps the cursor visible and writes the clamped value back.
-  int listScrollOffset = 0;
   // The section the menu opened on, kept so the constructor's choice survives onEnter.
   Tab preferredTab = Tab::Navigate;
 
-  ButtonNavigator buttonNavigator;
   OptionPopup optionPopup;
   // True while the button press that closed the popup is still held; its release
   // must not fall through to the menu's own Back/Confirm handlers.

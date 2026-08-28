@@ -12,6 +12,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 EpubReaderMenuActivity::EpubReaderMenuActivity(
     GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
     const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
@@ -19,7 +21,7 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const uint8_t paragraphNumbering, const uint8_t paragraphNumberSize, const uint8_t paperbackBody,
     const uint8_t paperbackStatus, const uint8_t statusBar, const uint8_t progressBar, const bool hasSleepWallpaper,
     const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
-    : Activity("EpubReaderMenu", renderer, mappedInput),
+    : UiListActivity("EpubReaderMenu", renderer, mappedInput),
       items(flatten(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar,
                               hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes))),
       title(title),
@@ -260,7 +262,7 @@ void EpubReaderMenuActivity::syncProgressBarRow() {
     // row being removed and does not move. Clamped anyway: a position past the end would
     // index off the vector on the next render.
     const int last = static_cast<int>(items.size()) - 1;
-    if (selectedIndex > last) selectedIndex = std::max(0, last);
+    if (nav.selected > last) nav.selected = std::max(0, last);
   }
 }
 
@@ -285,15 +287,22 @@ void EpubReaderMenuActivity::jumpSection(const bool forward) {
   // Walk to the next heading in that direction, then land on the row under it. Parking
   // the window on the heading keeps the section's name on screen, so a jump reads as
   // arriving somewhere rather than as the list sliding by an arbitrary amount.
-  int index = selectedIndex;
+  int index = nav.selected;
   for (int guard = 0; guard < count; ++guard) {
     index = forward ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
-    if (isHeaderRow(index)) {
-      listScrollOffset = std::max(0, index);
-      selectedIndex = stepPastHeaders(index, 1);
-      requestUpdate();
-      return;
+    if (!isHeaderRow(index)) continue;
+    {
+      // The render task reads nav mid-build, so selection and viewport move together
+      // under one lock. Parking top ON the heading is the point of the jump, so the
+      // follow-on-build that would re-derive it is switched off for this move.
+      RenderLock lock(*this);
+      nav.selected = stepPastHeaders(index, 1);
+      nav.top = std::max(0, index);
+      nav.followOnBuild = false;
+      nav.followPending = false;
     }
+    requestUpdate();
+    return;
   }
 }
 
@@ -308,15 +317,26 @@ int EpubReaderMenuActivity::firstRowOfPreferredSection() const {
 }
 
 void EpubReaderMenuActivity::onEnter() {
-  Activity::onEnter();
-  // Opens on the first row of the section the user chose in Settings, with that
-  // section's heading at the top of the window so the list reads from its name down.
-  selectedIndex = firstRowOfPreferredSection();
-  listScrollOffset = std::max(0, selectedIndex - 1);
+  // The base resets the selection, so the opening row is chosen after it: the first row
+  // of the section the user picked in Settings. The viewport is parked on that section's
+  // heading, so the list reads from its name down rather than from an arbitrary row.
+  UiListActivity::onEnter();
+  const int first = firstRowOfPreferredSection();
+  {
+    // Written under the lock: the base already asked for the first paint, so the render
+    // task may be reading nav by now.
+    RenderLock lock(*this);
+    nav.selected = first;
+    nav.top = std::max(0, first - 1);
+    nav.followOnBuild = false;
+  }
   requestUpdate();
 }
 
-void EpubReaderMenuActivity::onExit() { Activity::onExit(); }
+void EpubReaderMenuActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+}
 
 void EpubReaderMenuActivity::closeCancelled() {
   ActivityResult result;
@@ -334,23 +354,23 @@ void EpubReaderMenuActivity::closeCancelled() {
   finish();
 }
 
-void EpubReaderMenuActivity::loop() {
+bool EpubReaderMenuActivity::handleCustomInput() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
     // The popup acts on button press; if that input closed it, the trailing
     // release must be swallowed below (Back would close the menu, Confirm
     // would re-activate the selected item).
     popupClosing = !optionPopup.isActive();
-    return;
+    return true;
   }
   if (popupClosing) {
     if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
         mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return;  // closing press still held
+      return true;  // closing press still held
     }
     popupClosing = false;
     if (mappedInput.wasReleased(MappedInputManager::Button::Back) ||
         mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
-      return;  // swallow the release that closed the popup
+      return true;  // swallow the release that closed the popup
     }
   }
 
@@ -377,113 +397,21 @@ void EpubReaderMenuActivity::loop() {
       if (millis() - confirmHoldStart >= ReaderUtils::BOOKMARK_HOLD_MS) {
         firedHoldFunction = SETTINGS.menuHoldFunction;
         closeCancelled();
-        return;
+        return true;
       }
     } else if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
       confirmHoldStart = 0;
     }
   }
+  return false;
+}
 
+bool EpubReaderMenuActivity::handleButtons() {
   // Back closes the menu and carries no hold, so it goes on the press.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     closeCancelled();
-    return;
+    return true;
   }
-
-  auto activateSelected = [this] {
-    // Headings are never selectable, so anything landed on here is a real row.
-    if (selectedIndex < 0 || selectedIndex >= static_cast<int>(items.size()) || isHeaderRow(selectedIndex)) return;
-    const auto selectedAction = items[selectedIndex].action;
-    if (selectedAction == MenuAction::ROTATE_SCREEN) {
-      optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
-                       pendingOrientation, [this](int idx) {
-                         pendingOrientation = idx;
-                         requestUpdate();
-                       });
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
-      // Cycle Off / Per Chapter in place; applied by the reader on exit.
-      selectedParagraphNumbering = (selectedParagraphNumbering + 1) % CrossPointSettings::PARAGRAPH_NUMBERING_COUNT;
-      requestUpdate();
-      return;
-    }
-
-    if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
-      // Cycle Small / Double in place; applied by the reader on exit, like the row above.
-      selectedParagraphNumberSize = (selectedParagraphNumberSize + 1) % CrossPointSettings::PARAGRAPH_NUMBER_SIZE_COUNT;
-      requestUpdate();
-      return;
-    }
-
-    // Paperback Look toggles: flip in place (like the rows above) and keep the menu
-    // open so the ON/OFF label updates like a checkbox; the reader applies them on exit.
-    if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
-      selectedPaperbackBody = selectedPaperbackBody ? 0 : 1;
-      requestUpdate();
-      return;
-    }
-    if (selectedAction == MenuAction::TOGGLE_PAPERBACK_STATUS) {
-      selectedPaperbackStatus = selectedPaperbackStatus ? 0 : 1;
-      requestUpdate();
-      return;
-    }
-    if (selectedAction == MenuAction::TOGGLE_STATUS_BAR) {
-      selectedStatusBar = selectedStatusBar ? 0 : 1;
-      // The Progress Bar row belongs to the OFF state, so it arrives and leaves with
-      // this toggle rather than waiting for the menu to be reopened.
-      syncProgressBarRow();
-      requestUpdate();
-      return;
-    }
-    if (selectedAction == MenuAction::TOGGLE_PROGRESS_BAR) {
-      // Cycle Off / Slim / Medium / Fat in place; the reader applies it on exit.
-      selectedProgressBar = (selectedProgressBar + 1) % CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT;
-      requestUpdate();
-      return;
-    }
-
-    // Favouriting is handed to the reader like every other action, and the reader queues
-    // the card work rather than waiting for it. Nothing happens here, deliberately: an
-    // in-place label flip costs a menu redraw, and leaving the menu already costs a page
-    // repaint, so doing both pays two panel refreshes for one press. Falling straight
-    // through pays one. The row label is right the next time the menu opens because the
-    // reader moves APP_STATE to the new name before it returns.
-
-    setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedParagraphNumbering,
-                         selectedParagraphNumberSize, selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar,
-                         selectedProgressBar, firedHoldFunction});
-    finish();
-  };
-
-  // A tap on a row selects and activates it in one go, the same as the Settings list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < static_cast<int>(items.size()) &&
-      !isHeaderRow(tappedRow)) {
-    selectedIndex = tappedRow;
-    activateSelected();
-    return;
-  }
-
-  // Handle navigation. One flat list of headings and rows, walked exactly the way the
-  // Settings list is: a press steps one row past any heading, and holding jumps to the
-  // next section instead of repeating — the fast travel the tab bar used to provide.
-  const int count = static_cast<int>(items.size());
-
-  buttonNavigator.onNextStep([this, count] {
-    selectedIndex = stepPastHeaders(ButtonNavigator::nextIndex(selectedIndex, count), 1);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousStep([this, count] {
-    selectedIndex = stepPastHeaders(ButtonNavigator::previousIndex(selectedIndex, count), -1);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this] { jumpSection(true); });
-  buttonNavigator.onPreviousContinuous([this] { jumpSection(false); });
 
   // With a function bound to the menu hold, Confirm carries two actions and cannot be
   // resolved until the button comes up. With nothing bound there is nothing to tell
@@ -491,33 +419,154 @@ void EpubReaderMenuActivity::loop() {
   const bool confirmHasHold = SETTINGS.menuHoldFunction != CrossPointSettings::LP_MENU_DISABLED;
   if (confirmHasHold ? mappedInput.wasReleased(MappedInputManager::Button::Confirm)
                      : mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    activateSelected();
+    activateIndex(nav.selected);
+    return true;
+  }
+  return false;
+}
+
+void EpubReaderMenuActivity::navigateButtons() {
+  // One flat list of headings and rows: a press steps one row past any heading, and
+  // holding jumps to the next section instead of repeating — the fast travel the tab
+  // bar used to provide.
+  const int count = static_cast<int>(items.size());
+
+  buttonNavigator.onNextStep(
+      [this, count] { moveSelectionTo(stepPastHeaders(ButtonNavigator::nextIndex(nav.selected, count), 1)); });
+  buttonNavigator.onPreviousStep(
+      [this, count] { moveSelectionTo(stepPastHeaders(ButtonNavigator::previousIndex(nav.selected, count), -1)); });
+  buttonNavigator.onNextContinuous([this] { jumpSection(true); });
+  buttonNavigator.onPreviousContinuous([this] { jumpSection(false); });
+}
+
+void EpubReaderMenuActivity::activateIndex(const int index) {
+  // Headings are never landable, so anything reaching this is a real row. A tap that
+  // hits one anyway is dropped rather than mapped onto a neighbour.
+  if (index < 0 || index >= static_cast<int>(items.size()) || isHeaderRow(index)) return;
+  app.clearTapFlash();
+  const auto selectedAction = items[index].action;
+  if (selectedAction == MenuAction::ROTATE_SCREEN) {
+    optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
+                     pendingOrientation, [this](int idx) {
+                       pendingOrientation = idx;
+                       requestUpdate();
+                     });
+    requestUpdate();
     return;
+  }
+
+  if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
+    // Cycle Off / Per Chapter in place; applied by the reader on exit.
+    selectedParagraphNumbering = (selectedParagraphNumbering + 1) % CrossPointSettings::PARAGRAPH_NUMBERING_COUNT;
+    requestUpdate();
+    return;
+  }
+
+  if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
+    // Cycle Small / Double in place; applied by the reader on exit, like the row above.
+    selectedParagraphNumberSize = (selectedParagraphNumberSize + 1) % CrossPointSettings::PARAGRAPH_NUMBER_SIZE_COUNT;
+    requestUpdate();
+    return;
+  }
+
+  // Paperback Look toggles: flip in place (like the rows above) and keep the menu
+  // open so the ON/OFF label updates like a checkbox; the reader applies them on exit.
+  if (selectedAction == MenuAction::TOGGLE_PAPERBACK_LOOK) {
+    selectedPaperbackBody = selectedPaperbackBody ? 0 : 1;
+    requestUpdate();
+    return;
+  }
+  if (selectedAction == MenuAction::TOGGLE_PAPERBACK_STATUS) {
+    selectedPaperbackStatus = selectedPaperbackStatus ? 0 : 1;
+    requestUpdate();
+    return;
+  }
+  if (selectedAction == MenuAction::TOGGLE_STATUS_BAR) {
+    selectedStatusBar = selectedStatusBar ? 0 : 1;
+    // The Progress Bar row belongs to the OFF state, so it arrives and leaves with
+    // this toggle rather than waiting for the menu to be reopened.
+    syncProgressBarRow();
+    requestUpdate();
+    return;
+  }
+  if (selectedAction == MenuAction::TOGGLE_PROGRESS_BAR) {
+    // Cycle Off / Slim / Medium / Fat in place; the reader applies it on exit.
+    selectedProgressBar = (selectedProgressBar + 1) % CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT;
+    requestUpdate();
+    return;
+  }
+
+  // Favouriting is handed to the reader like every other action, and the reader queues
+  // the card work rather than waiting for it. Nothing happens here, deliberately: an
+  // in-place label flip costs a menu redraw, and leaving the menu already costs a page
+  // repaint, so doing both pays two panel refreshes for one press. Falling straight
+  // through pays one. The row label is right the next time the menu opens because the
+  // reader moves APP_STATE to the new name before it returns.
+
+  setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedParagraphNumbering,
+                       selectedParagraphNumberSize, selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar,
+                       selectedProgressBar, firedHoldFunction});
+  finish();
+}
+
+const char* EpubReaderMenuActivity::rowValue(const int index) const {
+  switch (items[index].action) {
+    case MenuAction::ROTATE_SCREEN:
+      return I18N.get(orientationLabels[pendingOrientation]);
+    case MenuAction::TOGGLE_PARAGRAPH_NUMBERS:
+      return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
+    case MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE:
+      return I18N.get(paragraphNumSizeLabels[selectedParagraphNumberSize % paragraphNumSizeLabels.size()]);
+    case MenuAction::TOGGLE_PAPERBACK_LOOK:
+      return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    case MenuAction::TOGGLE_PAPERBACK_STATUS:
+      return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    case MenuAction::TOGGLE_STATUS_BAR:
+      return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
+    case MenuAction::TOGGLE_PROGRESS_BAR:
+      return I18N.get(progressBarLabels[selectedProgressBar % progressBarLabels.size()]);
+    default:
+      return nullptr;
   }
 }
 
-void EpubReaderMenuActivity::render(RenderLock&&) {
-  if (optionPopup.processRender(renderer, mappedInput)) return;
+std::vector<std::string> EpubReaderMenuActivity::titleLines() const {
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  // Reserve space on both sides symmetrically so the first line never runs under the
+  // battery cluster.
+  const int batteryReserve = BaseTheme::batteryClusterWidth(renderer) + 12;
+  const int titleMaxWidth = screen.width - 2 * batteryReserve;
+  return renderer.wrappedText(UI_10_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::REGULAR);
+}
 
-  renderer.clearScreen();
+int EpubReaderMenuActivity::chromeHeight() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int subLineHeight = renderer.getLineHeight(UI_10_FONT_ID) + 2;
 
-  auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
+  int y = screen.y + metrics.topPadding + 5;
+  y += static_cast<int>(titleLines().size()) * titleLineHeight;
+  y += 2;
+  if (!author.empty()) y += subLineHeight;
+  if (!chapterName.empty()) y += subLineHeight;
+  y += subLineHeight;  // the progress line, always drawn
+  return y + metrics.verticalSpacing;
+}
+
+void EpubReaderMenuActivity::drawChrome() {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
   // Battery cluster only (top-right); the title is drawn (wrapped) below so it can span
   // as many lines as it needs, followed by the author, chapter, and progress lines.
   GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight}, nullptr);
 
-  // Wrap the book title over multiple centered lines. Reserve space on both sides
-  // symmetrically so the first line never runs under the battery cluster.
-  const int batteryReserve = BaseTheme::batteryClusterWidth(renderer) + 12;
-  const int titleMaxWidth = screen.width - 2 * batteryReserve;
   // Same size and weight as the author and chapter lines below: at UI_12 bold the
   // title read as a heavy slab against the thin lines under it.
   const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto titleLines = renderer.wrappedText(UI_10_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::REGULAR);
   int y = screen.y + metrics.topPadding + 5;
-  for (const auto& line : titleLines) {
+  for (const auto& line : titleLines()) {
     renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), true, EpdFontFamily::REGULAR);
     y += titleLineHeight;
   }
@@ -551,42 +600,34 @@ void EpubReaderMenuActivity::render(RenderLock&&) {
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
   renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());
-  y += subLineHeight;
+}
 
-  const int contentTop = y + metrics.verticalSpacing;
-  const int contentHeight = screen.height - contentTop - metrics.verticalSpacing;
+void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  // The book block is painted by drawChrome(), so the list starts under it.
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(chromeHeight()), 0,
+                                      static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
 
-  // One list of headings and rows, scrolled rather than paged so the rows around the
-  // cursor hold still as it moves.
-  GUI.drawList(
-      renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, items.size(), selectedIndex,
-      [this](int index) { return I18N.get(items[index].labelId); }, nullptr, nullptr,
-      [this](int index) {
-        const auto value = items[index].action;
-        if (value == MenuAction::ROTATE_SCREEN) {
-          // Render current orientation value on the right edge of the content area.
-          return I18N.get(orientationLabels[pendingOrientation]);
-        } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUMBERS) {
-          // Render current paragraph-numbering mode on the right edge.
-          return I18N.get(paragraphNumLabels[selectedParagraphNumbering % paragraphNumLabels.size()]);
-        } else if (value == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
-          return I18N.get(paragraphNumSizeLabels[selectedParagraphNumberSize % paragraphNumSizeLabels.size()]);
-        } else if (value == MenuAction::TOGGLE_PAPERBACK_LOOK) {
-          return I18N.get(selectedPaperbackBody ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-        } else if (value == MenuAction::TOGGLE_PAPERBACK_STATUS) {
-          return I18N.get(selectedPaperbackStatus ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-        } else if (value == MenuAction::TOGGLE_STATUS_BAR) {
-          return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
-        } else if (value == MenuAction::TOGGLE_PROGRESS_BAR) {
-          return I18N.get(progressBarLabels[selectedProgressBar % progressBarLabels.size()]);
-        } else {
-          return "";
-        }
-      },
-      true, nullptr, UI_10_FONT_ID, [this](int index) { return items[index].isHeader; }, &listScrollOffset);
+  const int count = static_cast<int>(items.size());
+  rows.assign(static_cast<size_t>(count), fui::ListItem{});
+  for (int i = 0; i < count; ++i) {
+    rows[i].label = I18N.get(items[i].labelId);
+    rows[i].value = rowValue(i);
+    // Section headings: drawn as a heading band, never selected and never activated.
+    rows[i].isHeader = items[i].isHeader;
+    rows[i].enabled = !items[i].isHeader;
+    rows[i].actionValue = static_cast<int16_t>(i);
+  }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(count);
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
+}
 
-  renderer.displayBuffer();
+bool EpubReaderMenuActivity::drawOverlay() {
+  // Drawn over the finished list, so the popup reads as sitting on it.
+  return optionPopup.processRender(renderer, mappedInput);
 }
