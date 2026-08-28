@@ -105,11 +105,13 @@ void drawMoreIndicator(const GfxRenderer& renderer, int count, StrId formatKey, 
   std::snprintf(buf, sizeof(buf), I18N.get(formatKey), count);
   const int textW = renderer.getTextWidth(UI_10_FONT_ID, buf);
   const int badgeW = textW + 24;
-  const int badgeH = rowLineHeight + 6;
+  // One pixel of ink above and below the line, like every other chip: the badge used to
+  // carry three on each side, which read as a slab rather than a label.
+  const int badgeH = rowLineHeight + 2;
   const int badgeX = centerX + (centerW - badgeW) / 2;
   renderer.fillRect(badgeX, y, badgeW, badgeH);
   const int textX = badgeX + (badgeW - textW) / 2;
-  renderer.drawText(UI_10_FONT_ID, textX, y + 3, buf, false);
+  renderer.drawText(UI_10_FONT_ID, textX, y + 1, buf, false);
 }
 
 void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
