@@ -368,7 +368,7 @@ void SettingsActivity::rebuildSettingsList() {
                   // What is left of this group now the power button's own bindings moved into the
                   // Buttons screen: how long a wake hold is, and whether the footnote binding also
                   // walks back out.
-                  {StrId::STR_GRP_POWER_BUTTON, {StrId::STR_WAKE_HOLD, StrId::STR_PWR_BTN_FOOTNOTE_BACK}},
+                  {StrId::STR_GRP_POWER_BUTTON, {StrId::STR_PWR_BTN_FOOTNOTE_BACK}},
                   // Pop-up Items sits with the bindings, because it only configures what the
                   // pop-up those bindings open actually contains.
                   {StrId::STR_GRP_HOLD, {StrId::STR_LONG_PRESS_MENU, StrId::STR_MENU_HOLD, StrId::STR_POPUP_ITEMS}},
@@ -459,8 +459,8 @@ void SettingsActivity::loop() {
     if (mappedInput.wasScreenTouchDown(tx, ty)) {
       const auto pane = gridPane();
       const int count = mode == Mode::Hub ? kCategoryCount : settingsCount;
-      const auto layout = mode == Mode::Hub ? settings_grid::forPane(pane.width, pane.height, kCategoryCount, 0)
-                                            : gridLayout();
+      const auto layout =
+          mode == Mode::Hub ? settings_grid::forPane(pane.width, pane.height, kCategoryCount, 0) : gridLayout();
       for (int i = 0; i < count; ++i) {
         const auto rect = settings_grid::cellAt(layout, pane.y, i);
         if (rect.width == 0) continue;
@@ -505,7 +505,6 @@ void SettingsActivity::loop() {
   buttonNavigator.onPreviousStep([this] { moveSelection(-1, 0); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { moveSelection(0, -1); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { moveSelection(0, 1); });
-
 }
 
 void SettingsActivity::toggleCurrentSetting() {

@@ -241,7 +241,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // How long Power must be held to wake the device from deep sleep. Normal rejects a
   // pocket brush; Fast wakes on any press, which is what Short Power Button Click = Sleep
   // used to force on everyone who picked it (one setting, two behaviours).
-  enum WAKE_HOLD { WAKE_HOLD_NORMAL = 0, WAKE_HOLD_FAST = 1, WAKE_HOLD_COUNT };
 
   // The bindable actions, defined in util/BoundMenuActions.h and re-exported here so
   // every CrossPointSettings::LP_MENU_* call site keeps working. The list itself lives
@@ -460,7 +459,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Wake hold. Defaults to Normal, including for a settings file that predates this
   // setting and chose Sleep — fromJson carries those forward to Fast, so nobody's wake
   // gets slower without them asking (see the migration there).
-  uint8_t wakeHold = WAKE_HOLD_NORMAL;
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
@@ -828,11 +826,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // so the bound function would never run. A bound double click therefore wins, and
   // sleeping goes back to the normal hold.
   uint16_t getSleepHoldMs() const { return shortPressSleeps() ? 10 : 200; }
-  // Hold-to-wake threshold, its own setting since 0.24.2. HalGPIO::verifyPowerButtonWakeup
-  // returns as soon as the held time crosses this, so the wake happens under the finger
-  // with no release required; Fast skips the check altogether.
-  uint16_t getWakeHoldMs() const { return 200; }
-  bool wakeHoldIsFast() const { return wakeHold == WAKE_HOLD_FAST; }
   // True when Footnotes is on any of the power button's in-book gestures. Governs the
   // "Power returns from footnote" row, which only describes that binding.
   bool powerOpensFootnotes() const {

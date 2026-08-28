@@ -225,47 +225,27 @@ bool HalGPIO::isXteinkDevice() const {
          BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;
 }
 
-bool HalGPIO::verifyPowerButtonWakeup(uint16_t requiredDurationMs, bool shortPressAllowed) {
-  // Boards without a power button (or M5Paper's latch circuit) cannot verify a
-  // hold; treat the wake as valid. The X4 Pro joins them for a different reason:
-  // it wakes on any power-button press at all, so there is no hold to measure
-  // and requiring one would reject every legitimate wake.
-  if (BoardConfig::isX4Pro() || BoardConfig::ACTIVE.input.power < 0) {
+bool HalGPIO::verifyPowerButtonWakeup() {
+  // Boards whose power button is behind a PMIC (or that have none at all) cannot
+  // sample a hold; treat the wake as valid.
+  if (BoardConfig::isPaperMono() || BoardConfig::ACTIVE.input.power < 0) {
     return true;
   }
-#if defined(FREEINK_DEVICE_M5PAPER) && FREEINK_DEVICE_M5PAPER
-  return true;
-#endif
-  if (shortPressAllowed) {
-    // Fast path - no duration check needed
-    return true;
-  }
-  // TODO: Intermittent edge case remains: a single tap followed by another single tap
-  // can still power on the device. Tighten wake debounce/state handling here.
 
-  // Calibrate: subtract boot time already elapsed, assuming button held since boot.
-  const unsigned long calibration = millis();
-  const unsigned long calibratedDuration = (calibration < requiredDurationMs) ? (requiredDurationMs - calibration) : 1;
-
-  const auto start = millis();
+  // A real wake press is still down when setup() reaches here; a ghost edge from
+  // contact bounce is not. Sample the pin directly, let the debounce settle, then
+  // require the button to still be held. The old version instead waited out a
+  // configured hold, which cost that hold on every legitimate wake and could not
+  // tell a bounce from a press, so a tap followed by a tap still powered on.
+  constexpr unsigned long POWER_WAKE_STABILITY_MS = 10;
+  const bool heldAtFirstSample = inputMgr.isPowerButtonPhysicallyPressed();
+  const unsigned long sampleStart = millis();
   inputMgr.update();
-  // inputMgr.isPressed() may take up to ~500ms to return correct state
-  while (!inputMgr.isPressed(BTN_POWER) && millis() - start < 1000) {
-    delay(10);
+  while (millis() - sampleStart < POWER_WAKE_STABILITY_MS || inputMgr.isDebouncePending()) {
+    delay(1);
     inputMgr.update();
   }
-  if (inputMgr.isPressed(BTN_POWER)) {
-    do {
-      delay(10);
-      inputMgr.update();
-    } while (inputMgr.isPressed(BTN_POWER) && inputMgr.getPowerButtonHeldTime() < calibratedDuration);
-    if (inputMgr.getPowerButtonHeldTime() < calibratedDuration) {
-      return false;
-    }
-  } else {
-    return false;
-  }
-  return true;
+  return heldAtFirstSample && inputMgr.isPowerButtonPhysicallyPressed();
 }
 
 bool HalGPIO::isUsbConnected() const {

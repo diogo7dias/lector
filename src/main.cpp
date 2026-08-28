@@ -31,7 +31,6 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "PerfLogSink.h"
-#include "util/DebugTrace.h"
 #include "ReaderPresetStore.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
@@ -55,6 +54,7 @@
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
 #include "util/ButtonRouter.h"
+#include "util/DebugTrace.h"
 #include "util/DoubleClickDetector.h"
 #include "util/LowBatteryPolicy.h"
 #include "util/ScreenshotUtil.h"
@@ -625,9 +625,9 @@ void setup() {
   LOG_INF("SLP", "Wake reason %s", kWakeReasonNames[static_cast<int>(wakeupReason)]);
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
-      LOG_DBG("MAIN", "Verifying power button press duration");
-      if (!gpio.verifyPowerButtonWakeup(SETTINGS.getWakeHoldMs(), SETTINGS.wakeHoldIsFast())) {
-        LOG_INF("SLP", "Wake hold too short, back to sleep");
+      LOG_DBG("MAIN", "Verifying the power button is still held");
+      if (!gpio.verifyPowerButtonWakeup()) {
+        LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
         logFlush();
         powerManager.startDeepSleep(gpio);
       }
@@ -1341,8 +1341,8 @@ void loop() {
         fired = bindingRouter.onRelease(key, now);
       }
       if (!fired.valid) fired = bindingRouter.tick(key, now);
-      if (fired.valid) debug_trace::note("side key %u fired action %u replay=%d", key, fired.function,
-                                        fired.replayRawEdge ? 1 : 0);
+      if (fired.valid)
+        debug_trace::note("side key %u fired action %u replay=%d", key, fired.function, fired.replayRawEdge ? 1 : 0);
       if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
       // Edges stay hidden for as long as this key is intercepted, and are replayed only on
       // the pass the router rules the gesture the paging the key already did.
