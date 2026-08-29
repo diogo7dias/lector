@@ -224,17 +224,6 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
   // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
   wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
 
-  // Wake Hold arrived in 0.24.2. Before it, Short Power Button Click = Sleep also dropped
-  // the WAKE threshold to 10 ms, so anyone who chose Sleep already had a fast wake. A
-  // settings file written before this key existed therefore carries that forward rather
-  // than silently making their wake slower; every other file keeps the Normal default.
-  // 1 is the retired SHORT_PWRBTN::SLEEP; the field itself is gone, so the old key is
-  // read straight from the document.
-  if (!doc["wakeHold"].is<uint8_t>() && (doc["shortPwrBtn"] | (uint8_t)0) == 1) {
-    wakeHold = WAKE_HOLD_FAST;
-    needsResave = true;
-  }
-
   // Margins model, two changes deep. "verticalMarginsLinked" was an on/off switch over
   // the two vertical sides; it is now one of three link modes, so a file holding only the
   // old key keeps how its sides were edited. Older still is "uniformMargins", which meant

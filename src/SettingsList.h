@@ -495,10 +495,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "menuHoldFunction", StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions()));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_WAKE_HOLD, &CrossPointSettings::wakeHold,
-                                  {StrId::STR_WAKE_HOLD_NORMAL, StrId::STR_WAKE_HOLD_FAST}, "wakeHold",
-                                  StrId::STR_CAT_CONTROLS));
-
     v.push_back(SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &CrossPointSettings::pwrBtnFootnoteBack,
                                     "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS));
 
