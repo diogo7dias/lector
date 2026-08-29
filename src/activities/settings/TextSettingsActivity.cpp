@@ -688,11 +688,12 @@ void TextSettingsActivity::loop() {
   }
 
   // A tap picks the cell it landed on and acts on it in one go, the same bargain the
-  // lists make: the selection moving first is what the paint after the action shows.
+  // lists make: the selection moving first is what the paint after the action shows. The
+  // pick spends the contact, so the finger resting on the cell cannot act twice.
   {
     int tx = 0;
     int ty = 0;
-    if (mappedInput.wasScreenTouchDown(tx, ty)) {
+    if (mappedInput.takeScreenTouchDown(tx, ty)) {
       const auto rows = visibleRows();
       const auto layout = gridLayout();
       const auto geo = paneGeometry();

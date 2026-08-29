@@ -228,6 +228,14 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
   return true;
 }
 
+bool MappedInputManager::takeScreenTouchDown(int& x, int& y) {
+  if (!wasScreenTouchDown(x, y)) return false;
+  // The SDK's own remedy for a contact that has already been acted on: it drops the rest
+  // of this contact, so neither a later pass nor the lift can act again.
+  gpio.suppressTouchContact();
+  return true;
+}
+
 bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   // Live contact position while the finger is down (no tap-slop gate) — drag tracking.
   float nx = 0.0f;

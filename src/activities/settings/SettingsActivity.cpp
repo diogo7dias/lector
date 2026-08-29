@@ -457,11 +457,14 @@ void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
   if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  // A tap picks the cell it landed on and acts on it in one go.
+  // A tap picks the cell it landed on and acts on it in one go. The contact is spent by
+  // the pick (takeScreenTouchDown), or the finger still resting there on the next pass
+  // would act again — on the hub that meant opening a category and immediately toggling
+  // whatever setting the category grid drew under the same finger.
   {
     int tx = 0;
     int ty = 0;
-    if (mappedInput.wasScreenTouchDown(tx, ty)) {
+    if (mappedInput.takeScreenTouchDown(tx, ty)) {
       const auto pane = gridPane();
       const int count = mode == Mode::Hub ? kCategoryCount : settingsCount;
       const auto layout =

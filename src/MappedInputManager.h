@@ -51,6 +51,13 @@ class MappedInputManager {
   bool wasRowTapped(int& item) const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
+  // Same query, but the contact is spent by asking: it answers true once and the rest of
+  // the contact, including its lift, reaches nobody. A screen that acts on the touch-down
+  // itself must use this. wasScreenTouchDown() is level-triggered, so a finger still down
+  // on the next pass answers true again, and a screen that changed what its cells mean
+  // (a category opening, a value toggling) would act a second time on whatever now sits
+  // under the finger.
+  bool takeScreenTouchDown(int& x, int& y);
   bool isScreenTouchHeld(int& x, int& y) const;
   bool wasScreenLongPress(int& x, int& y) const;
   bool wasScreenTouchReleased() const;
