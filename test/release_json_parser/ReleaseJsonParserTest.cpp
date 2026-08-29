@@ -120,6 +120,72 @@ void feedChunked(ReleaseJsonParser& p, const char* json, size_t chunkSize) {
   }
 }
 
+
+// Per-device assets. The X4 Pro is an ESP32-S3; the release's plain
+// "firmware.bin" is the C3 build and would be refused by the chip-id gate, so
+// that build asks for its own asset name and falls back only when the release
+// does not carry one.
+
+const char* kTwoAssets = R"({
+  "tag_name": "lector-0.29.0",
+  "assets": [
+    {"name": "firmware.bin", "browser_download_url": "https://example.test/c3.bin", "size": 100},
+    {"name": "firmware-x4pro.bin", "browser_download_url": "https://example.test/s3.bin", "size": 200}
+  ]
+})";
+
+TEST(ReleaseJsonParser, PrefersTheDeviceSpecificAsset) {
+  ReleaseJsonParser parser;
+  parser.setPreferredAssetName("firmware-x4pro.bin");
+  parser.feed(kTwoAssets, strlen(kTwoAssets));
+
+  ASSERT_TRUE(parser.foundFirmware());
+  EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/s3.bin");
+  EXPECT_EQ(parser.getFirmwareSize(), 200u);
+}
+
+TEST(ReleaseJsonParser, PreferredAssetWinsWhateverTheOrder) {
+  const char* reversed = R"({
+    "tag_name": "lector-0.29.0",
+    "assets": [
+      {"name": "firmware-x4pro.bin", "browser_download_url": "https://example.test/s3.bin", "size": 200},
+      {"name": "firmware.bin", "browser_download_url": "https://example.test/c3.bin", "size": 100}
+    ]
+  })";
+  ReleaseJsonParser parser;
+  parser.setPreferredAssetName("firmware-x4pro.bin");
+  parser.feed(reversed, strlen(reversed));
+
+  ASSERT_TRUE(parser.foundFirmware());
+  EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/s3.bin");
+}
+
+TEST(ReleaseJsonParser, FallsBackToFirmwareBinWhenTheDeviceAssetIsAbsent) {
+  // This is what the OTA Unlocker serves: whatever firmware the user picked,
+  // always under the name firmware.bin. Refusing it would leave a locked device
+  // with no way off this firmware.
+  const char* onlyPlain = R"({
+    "tag_name": "lector-0.29.0",
+    "assets": [
+      {"name": "firmware.bin", "browser_download_url": "https://example.test/c3.bin", "size": 100}
+    ]
+  })";
+  ReleaseJsonParser parser;
+  parser.setPreferredAssetName("firmware-x4pro.bin");
+  parser.feed(onlyPlain, strlen(onlyPlain));
+
+  ASSERT_TRUE(parser.foundFirmware());
+  EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/c3.bin");
+}
+
+TEST(ReleaseJsonParser, WithoutAPreferenceTheDeviceAssetIsIgnored) {
+  ReleaseJsonParser parser;
+  parser.feed(kTwoAssets, strlen(kTwoAssets));
+
+  ASSERT_TRUE(parser.foundFirmware());
+  EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/c3.bin");
+}
+
 }  // namespace
 
 TEST(ReleaseJsonParser, RealisticPrettyPrinted) {

@@ -50,6 +50,34 @@ Result writeImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress, void
 // write does, since the readback streams the same number of bytes.
 Result verifyImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress = nullptr, void* ctx = nullptr);
 
+// Push-mode counterpart of writeImage, for an image that arrives from the
+// network: the caller cannot rewind an HTTP body, and the chunk boundaries are
+// the transport's, not ours. Same interleaved erase-ahead, same 64 KiB blocks.
+//
+// There is no readback pass here. The image is validated by reading it back out
+// of the partition afterwards (firmware_flash::validateFlashedImage), which
+// checks the bytes the bootloader will actually see and so covers a bad write
+// as well as a bad download.
+class StreamWriter {
+ public:
+  explicit StreamWriter(FlashTarget& dst) : dst_(dst) {}
+
+  // Append `len` bytes at the current offset, erasing ahead as needed.
+  Result write(const uint8_t* data, size_t len);
+
+  // Drop everything written so far and start again at offset 0. Used when a
+  // server ignores our Range header and replays the whole body, which would
+  // otherwise write a second copy of the image on top of the first.
+  void restart();
+
+  size_t written() const { return pos_; }
+
+ private:
+  FlashTarget& dst_;
+  size_t pos_ = 0;
+  size_t erasedUpto_ = 0;
+};
+
 // Byte offset of the mismatch reported by the last verifyImage() failure, for
 // logging. Undefined after a successful verify.
 size_t lastVerifyMismatchOffset();

@@ -15,7 +15,8 @@ void safeCopy(char* dst, size_t dstSize, const char* src, size_t srcLen) {
 
 ReleaseJsonParser::ReleaseJsonParser()
     : parser(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
-                           sOnArrayStart, sOnArrayEnd}) {
+                           sOnArrayStart, sOnArrayEnd}),
+      preferredAssetName(nullptr) {
   reset();
 }
 
@@ -33,7 +34,10 @@ void ReleaseJsonParser::reset() {
   currentAssetName[0] = '\0';
   currentAssetUrl[0] = '\0';
   currentAssetSize = 0;
+  preferredFound = false;
 }
+
+void ReleaseJsonParser::setPreferredAssetName(const char* name) { preferredAssetName = name; }
 
 void ReleaseJsonParser::feed(const char* data, size_t len) { parser.feed(data, len); }
 
@@ -44,10 +48,15 @@ const char* ReleaseJsonParser::getFirmwareUrl() const { return firmwareUrl; }
 size_t ReleaseJsonParser::getFirmwareSize() const { return firmwareSize; }
 
 void ReleaseJsonParser::commitAsset() {
-  if (strcmp(currentAssetName, "firmware.bin") == 0) {
+  const bool isPreferred = preferredAssetName != nullptr && strcmp(currentAssetName, preferredAssetName) == 0;
+  const bool isPlain = strcmp(currentAssetName, "firmware.bin") == 0;
+  // A preferred asset overwrites a plain one already taken; a plain one never
+  // overwrites a preferred one, whichever order the release lists them in.
+  if (isPreferred || (isPlain && !preferredFound)) {
     memcpy(firmwareUrl, currentAssetUrl, sizeof(firmwareUrl));
     firmwareSize = currentAssetSize;
     firmwareFound = true;
+    if (isPreferred) preferredFound = true;
   }
   currentAssetName[0] = '\0';
   currentAssetUrl[0] = '\0';

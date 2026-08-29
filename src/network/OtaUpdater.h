@@ -34,5 +34,16 @@ class OtaUpdater {
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
   OtaUpdaterError checkForUpdate();
-  OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr);
+
+  // True when the firmware itself would be fetched over TLS. The OTA Unlocker
+  // used to get off a USB-locked device serves the bytes over plain HTTP on its
+  // own bridge, which costs no heap; a plain GitHub release does not.
+  bool isDownloadSecure() const;
+
+  // `allowAnyVersion` installs whatever the server offers, including the same
+  // version or an older one, and including another firmware entirely. It is how
+  // a user leaves lector on a device whose USB flashing the vendor locked.
+  // Check for Updates leaves it false and still refuses anything not newer.
+  OtaUpdaterError installUpdate(ProgressCallback onProgress = nullptr, void* ctx = nullptr,
+                                bool allowAnyVersion = false);
 };

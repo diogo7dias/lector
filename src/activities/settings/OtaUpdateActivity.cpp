@@ -4,12 +4,14 @@
 #include <I18n.h>
 #include <WiFi.h>
 
+#include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
+#include "network/TlsScratchHeap.h"
 
 namespace {
 // Reuses the theme's Rect (components/themes/BaseTheme.h) rather than a local copy,
@@ -55,7 +57,10 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     return;
   }
 
-  if (!updater.isUpdateNewer()) {
+  // In install-other-firmware mode the version comparison is not asked: the
+  // server is expected to be offering something else entirely, usually stock or
+  // another fork, and refusing it is what traps the user here.
+  if (!allowAnyVersion && !updater.isUpdateNewer()) {
     LOG_DBG("OTA", "No new update available");
     {
       RenderLock lock(*this);
@@ -122,7 +127,9 @@ void OtaUpdateActivity::render(RenderLock&&) {
   if (state == CHECKING_FOR_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
   } else if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEW_UPDATE), true, EpdFontFamily::REGULAR);
+    renderer.drawCenteredText(UI_10_FONT_ID, top,
+                              allowAnyVersion ? tr(STR_INSTALL_OTHER_FIRMWARE_PROMPT) : tr(STR_NEW_UPDATE), true,
+                              EpdFontFamily::REGULAR);
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + metrics.verticalSpacing,
                       (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
     renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
@@ -158,7 +165,12 @@ void OtaUpdateActivity::render(RenderLock&&) {
         (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
   } else if (state == NO_UPDATE) {
     renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::REGULAR);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
+    // "Install anyway" is not a curiosity: on a device whose USB flashing the
+    // vendor locked, an update server offering this same version is the only
+    // route left to put another firmware on it.
+    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing,
+                              (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
+    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_INSTALL_ANYWAY), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   } else if (state == FAILED) {
     // REGULAR, not upstream's BOLD: every other state on this screen draws REGULAR here,
@@ -177,6 +189,17 @@ void OtaUpdateActivity::render(RenderLock&&) {
   renderer.displayBuffer();
 }
 
+const char* OtaUpdateActivity::detailFor(const OtaUpdater::OtaUpdaterError error) {
+  switch (error) {
+    case OtaUpdater::WRONG_DEVICE_ERROR:
+      return tr(STR_FIRMWARE_WRONG_DEVICE);
+    case OtaUpdater::OOM_ERROR:
+      return tr(STR_UPDATE_LOW_MEMORY);
+    default:
+      return nullptr;
+  }
+}
+
 void OtaUpdateActivity::runUpdateInstall() {
   LOG_DBG("OTA", "New update available, starting download...");
   {
@@ -184,20 +207,42 @@ void OtaUpdateActivity::runUpdateInstall() {
     state = UPDATE_IN_PROGRESS;
   }
   requestUpdateAndWait();
-  const auto res = updater.installUpdate(
+  // A TLS record buffer needs room the reader does not have with WiFi up, so the
+  // framebuffer's 48 KB are lent to wolfSSL for the transfer (see
+  // TlsScratchHeap.h). Nothing may draw while they are lent, so the progress bar
+  // holds at 0% for a secure download; the OTA Unlocker serves plain HTTP, where
+  // the bar animates as before.
+  const bool secure = updater.isDownloadSecure();
+  drawingSuspended = secure;
+  OtaUpdater::OtaUpdaterError res;
+  {
+    std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
+    std::unique_ptr<tls_scratch::Session> tlsScratch;
+    if (secure) {
+      loan = std::make_unique<GfxRenderer::FrameBufferLoan>(renderer);
+      tlsScratch = std::make_unique<tls_scratch::Session>();
+      if (!tlsScratch->active()) {
+        LOG_ERR("OTA", "Framebuffer not lent; the transfer runs on the heap alone");
+      }
+    }
+    res = updater.installUpdate(
       [](void* ctx) {
         // immediate=true notifies the render task directly. The default deferred path only
         // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
         // installUpdate() blocks this task.
-        static_cast<OtaUpdateActivity*>(ctx)->requestUpdate(true);
+        auto* self = static_cast<OtaUpdateActivity*>(ctx);
+        if (self->drawingSuspended) return;  // the framebuffer is lent to wolfSSL
+        self->requestUpdate(true);
       },
-      this);
+      this, allowAnyVersion);
+  }
+  drawingSuspended = false;
 
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update failed: %d", res);
     {
       RenderLock lock(*this);
-      failedDetail = res == OtaUpdater::WRONG_DEVICE_ERROR ? tr(STR_FIRMWARE_WRONG_DEVICE) : nullptr;
+      failedDetail = detailFor(res);
       state = FAILED;
     }
     requestUpdate();
@@ -239,6 +284,15 @@ void OtaUpdateActivity::loop() {
   }
 
   if (state == NO_UPDATE) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      allowAnyVersion = true;
+      {
+        RenderLock lock(*this);
+        state = WAITING_CONFIRMATION;
+      }
+      requestUpdate();
+      return;
+    }
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       finish();
     }

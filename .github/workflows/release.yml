@@ -247,10 +247,42 @@ jobs:
                   json.dump(data, fh, indent=2)
                   fh.write("\n")
           PY
+          # Catalog for the CrossPoint OTA Unlocker, the only route onto a device
+          # whose USB flashing the vendor locked. The tool reads a catalog over
+          # HTTPS and serves the firmware it points at to the reader, so this file
+          # is what makes lector installable on a locked X3/X4 at all. Schema and
+          # field names come from crosspoint-tools/unlocker-tool/INTEGRATION.md.
+          python3 - "$VERSION" "$NUM" "$BUILD_DIR/firmware.bin" <<'PY'
+          import hashlib, json, os, sys
+          from datetime import datetime, timezone
+
+          version, num, firmware = sys.argv[1], sys.argv[2], sys.argv[3]
+          data = open(firmware, "rb").read()
+          catalog = {
+              "schema_version": 1,
+              "releases": [
+                  {
+                      "id": f"lector-{num}",
+                      "channel": "stable",
+                      "name": version,
+                      "version": num,
+                      "released_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                      "notes": f"https://github.com/diogo7dias/lector/releases/tag/lector-{num}",
+                      "firmware_url": "https://diogo7dias.github.io/lector-xteink-firmware/flash/firmware/latest/firmware.bin",
+                      "firmware_sha256": hashlib.sha256(data).hexdigest(),
+                      "size": len(data),
+                      "supported_devices": ["x3", "x4"],
+                  }
+              ],
+          }
+          with open("site/flash/unlocker-catalog.json", "w") as fh:
+              json.dump(catalog, fh, indent=2)
+              fh.write("\n")
+          PY
           cd site
           git config user.name "lector-release-bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "flash/firmware/${FW_DIR}" "flash/${VERSION_FILE}"
+          git add "flash/firmware/${FW_DIR}" "flash/${VERSION_FILE}" flash/unlocker-catalog.json
           for m in $MANIFESTS; do git add "flash/$m"; done
           if git diff --cached --quiet; then
             echo "No firmware changes to publish."
