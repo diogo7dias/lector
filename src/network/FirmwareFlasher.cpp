@@ -12,6 +12,7 @@
 #include <memory>
 
 #include "FirmwareSwitchAudit.h"
+#include "FlashDiagnostics.h"
 #include "FlashWriteVerify.h"
 #include "OtaBootSwitch.h"
 
@@ -367,7 +368,12 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
             static_cast<unsigned>(lastVerifyMismatchOffset()));
     return verifyRes;
   }
-  if (!ota_boot::switchTo(dest)) {
+  // Written down before and after, because a device with no serial console can
+  // only tell us what happened here through a file on the card.
+  diagnosticsBeginAttempt(CROSSPOINT_VERSION, sdPath, source.size());
+  const bool switchOk = ota_boot::switchTo(dest);
+  diagnosticsEndAttempt(dest->address, dest->label, dest->subtype, switchOk);
+  if (!switchOk) {
     LOG_ERR("FLASH", "otadata switch failed");
     return Result::OTADATA_FAIL;
   }
@@ -430,7 +436,10 @@ Result StreamingInstall::commit() {
   // on the Arduino core never calls esp_ota_mark_app_valid_cancel_rollback(),
   // so its first boot would be rolled straight back into this one and the
   // device would look permanently stuck on lector. See OtaBootEntry.h.
-  if (!ota_boot::switchTo(impl_->dest)) {
+  diagnosticsBeginAttempt(CROSSPOINT_VERSION, nullptr, imageSize);
+  const bool switchOk = ota_boot::switchTo(impl_->dest);
+  diagnosticsEndAttempt(impl_->dest->address, impl_->dest->label, impl_->dest->subtype, switchOk);
+  if (!switchOk) {
     LOG_ERR("FLASH", "otadata switch failed");
     return Result::OTADATA_FAIL;
   }
