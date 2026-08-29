@@ -16,7 +16,8 @@ void safeCopy(char* dst, size_t dstSize, const char* src, size_t srcLen) {
 ReleaseJsonParser::ReleaseJsonParser()
     : parser(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
                            sOnArrayStart, sOnArrayEnd}),
-      preferredAssetName(nullptr) {
+      preferredAssetName(nullptr),
+      listMode(false) {
   reset();
 }
 
@@ -35,9 +36,12 @@ void ReleaseJsonParser::reset() {
   currentAssetUrl[0] = '\0';
   currentAssetSize = 0;
   preferredFound = false;
+  sealed = false;
 }
 
 void ReleaseJsonParser::setPreferredAssetName(const char* name) { preferredAssetName = name; }
+
+void ReleaseJsonParser::setListMode(const bool enabled) { listMode = enabled; }
 
 void ReleaseJsonParser::feed(const char* data, size_t len) { parser.feed(data, len); }
 
@@ -48,6 +52,14 @@ const char* ReleaseJsonParser::getFirmwareUrl() const { return firmwareUrl; }
 size_t ReleaseJsonParser::getFirmwareSize() const { return firmwareSize; }
 
 void ReleaseJsonParser::commitAsset() {
+  // In list mode everything after the first release is scenery: the fields are
+  // parsed as they stream past but must not overwrite what was taken.
+  if (sealed) {
+    currentAssetName[0] = '\0';
+    currentAssetUrl[0] = '\0';
+    currentAssetSize = 0;
+    return;
+  }
   const bool isPreferred = preferredAssetName != nullptr && strcmp(currentAssetName, preferredAssetName) == 0;
   const bool isPlain = strcmp(currentAssetName, "firmware.bin") == 0;
   // A preferred asset overwrites a plain one already taken; a plain one never
@@ -101,7 +113,7 @@ void ReleaseJsonParser::sOnString(void* ctx, const char* value, size_t len) {
 
   switch (self->lastKey) {
     case LastKey::TAG_NAME:
-      if (self->position == Position::TOP_LEVEL && self->depth == 1) {
+      if (self->position == Position::TOP_LEVEL && self->depth == 1 && !self->sealed) {
         safeCopy(self->tagName, sizeof(self->tagName), value, len);
         self->tagFound = true;
       }
@@ -164,6 +176,7 @@ void ReleaseJsonParser::sOnObjectEnd(void* ctx) {
   switch (self->position) {
     case Position::TOP_LEVEL:
       if (self->depth > 0) self->depth--;
+      if (self->listMode && self->depth == 0) self->sealed = true;
       break;
     case Position::IN_ASSET_OBJECT:
       self->assetDepth--;
@@ -185,6 +198,9 @@ void ReleaseJsonParser::sOnArrayStart(void* ctx) {
     case Position::TOP_LEVEL:
       if (self->lastKey == LastKey::ASSETS && self->depth == 1) {
         self->position = Position::IN_ASSETS_ARRAY;
+      } else if (self->listMode && self->depth == 0) {
+        // The releases array itself carries no depth: each release inside it
+        // then sits at depth 1, exactly where a single release object does.
       } else {
         self->depth++;
       }
@@ -205,6 +221,7 @@ void ReleaseJsonParser::sOnArrayEnd(void* ctx) {
   switch (self->position) {
     case Position::TOP_LEVEL:
       if (self->depth > 0) self->depth--;
+      if (self->listMode && self->depth == 0) self->sealed = true;
       break;
     case Position::IN_ASSETS_ARRAY:
       self->position = Position::TOP_LEVEL;

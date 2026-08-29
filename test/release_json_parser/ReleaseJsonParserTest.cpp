@@ -186,6 +186,67 @@ TEST(ReleaseJsonParser, WithoutAPreferenceTheDeviceAssetIsIgnored) {
   EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/c3.bin");
 }
 
+
+// List mode: GitHub's /releases returns an array, newest first, and unlike
+// /releases/latest it includes prereleases.
+
+const char* kReleaseList = R"([
+  {
+    "tag_name": "lector-0.29.0-rc2",
+    "prerelease": true,
+    "assets": [
+      {"name": "firmware.bin", "browser_download_url": "https://example.test/rc2.bin", "size": 4157712}
+    ]
+  },
+  {
+    "tag_name": "lector-0.28.0",
+    "prerelease": false,
+    "assets": [
+      {"name": "firmware.bin", "browser_download_url": "https://example.test/stable.bin", "size": 4000000}
+    ]
+  }
+])";
+
+TEST(ReleaseJsonParser, ListModeTakesTheFirstReleaseIncludingAPrerelease) {
+  ReleaseJsonParser parser;
+  parser.setListMode(true);
+  parser.feed(kReleaseList, strlen(kReleaseList));
+
+  ASSERT_TRUE(parser.foundTag());
+  EXPECT_STREQ(parser.getTagName(), "lector-0.29.0-rc2");
+  ASSERT_TRUE(parser.foundFirmware());
+  EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/rc2.bin");
+  EXPECT_EQ(parser.getFirmwareSize(), 4157712u);
+}
+
+TEST(ReleaseJsonParser, ListModeIgnoresEveryReleaseAfterTheFirst) {
+  ReleaseJsonParser parser;
+  parser.setListMode(true);
+  parser.feed(kReleaseList, strlen(kReleaseList));
+
+  // The second release must not overwrite the first, in either field.
+  EXPECT_STRNE(parser.getTagName(), "lector-0.28.0");
+  EXPECT_STRNE(parser.getFirmwareUrl(), "https://example.test/stable.bin");
+}
+
+TEST(ReleaseJsonParser, ListModeSurvivesByteByByteFeeding) {
+  ReleaseJsonParser parser;
+  parser.setListMode(true);
+  for (const char* p = kReleaseList; *p; ++p) parser.feed(p, 1);
+
+  ASSERT_TRUE(parser.foundFirmware());
+  EXPECT_STREQ(parser.getTagName(), "lector-0.29.0-rc2");
+  EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/rc2.bin");
+}
+
+TEST(ReleaseJsonParser, SingleReleaseParsingIsUnchangedWithoutListMode) {
+  ReleaseJsonParser parser;
+  parser.feed(kRealisticPretty, strlen(kRealisticPretty));
+
+  EXPECT_TRUE(parser.foundTag());
+  EXPECT_TRUE(parser.foundFirmware());
+}
+
 }  // namespace
 
 TEST(ReleaseJsonParser, RealisticPrettyPrinted) {

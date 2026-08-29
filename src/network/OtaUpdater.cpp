@@ -25,6 +25,12 @@ namespace {
 // release-candidate and experimental tag is published as one.
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/diogo7dias/lector/releases/latest";
 
+// The full list, newest first, prereleases included. Only Install Other
+// Firmware asks for this: on a reader whose USB flashing the vendor locked, a
+// prerelease may be the only build that can rescue it, and /releases/latest
+// hides prereleases by design.
+constexpr char releaseListUrl[] = "https://api.github.com/repos/diogo7dias/lector/releases?per_page=1";
+
 // A TLS session with WiFi up needs room the reader does not always have. Below
 // this, wolfSSL fails mid-handshake and retries for a minute with a few hundred
 // bytes free, which reads as a hang; refuse the attempt and say so instead.
@@ -34,7 +40,7 @@ constexpr int MIN_HEAP_FOR_TLS = 30000;
 bool isHttps(const std::string& url) { return url.rfind("https://", 0) == 0; }
 }  // namespace
 
-OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
+OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrereleases) {
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
   if (ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
@@ -56,7 +62,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   // what the OTA Unlocker always serves.
   releaseParser.setPreferredAssetName("firmware-x4pro.bin");
 #endif
-  const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
+  releaseParser.setListMode(includePrereleases);
+  const bool ok = HttpDownloader::fetchUrl(includePrereleases ? releaseListUrl : latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
     releaseParser.feed(reinterpret_cast<const char*>(data), len);
     return true;
   });

@@ -47,7 +47,10 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   }
   requestUpdateAndWait();
 
-  const auto res = updater.checkForUpdate();
+  // Install Other Firmware also looks at prereleases: it exists for a reader
+  // that must get off this firmware, and refusing a build for its channel is
+  // the same trap as refusing it for its version.
+  const auto res = updater.checkForUpdate(allowAnyVersion);
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update check failed: %d", res);
     {

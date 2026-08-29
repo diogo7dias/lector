@@ -33,7 +33,9 @@ class OtaUpdater {
   OtaUpdater() = default;
   bool isUpdateNewer() const;
   const std::string& getLatestVersion() const;
-  OtaUpdaterError checkForUpdate();
+  // `includePrereleases` asks GitHub for the release list rather than the
+  // latest stable release, and takes the newest entry whatever its channel.
+  OtaUpdaterError checkForUpdate(bool includePrereleases = false);
 
   // True when the firmware itself would be fetched over TLS. The OTA Unlocker
   // used to get off a USB-locked device serves the bytes over plain HTTP on its

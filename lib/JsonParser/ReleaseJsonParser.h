@@ -20,6 +20,13 @@ class ReleaseJsonParser {
   // every firmware under the name firmware.bin, and that is the only route onto
   // a device whose USB flashing the vendor locked.
   void setPreferredAssetName(const char* name);
+
+  // Parse a GitHub /releases response (an array of releases) instead of a
+  // single /releases/latest object, and keep only the first release in it.
+  // /releases/latest hides prereleases, which is right for Check for updates
+  // and wrong for Install Other Firmware: on a USB-locked reader a prerelease
+  // may be the only build that can rescue it.
+  void setListMode(bool enabled);
   void feed(const char* data, size_t len);
 
   bool foundTag() const;
@@ -71,6 +78,8 @@ class ReleaseJsonParser {
 
   const char* preferredAssetName;
   bool preferredFound;
+  bool listMode;
+  bool sealed;  // in list mode, the first release is parsed and the rest ignored
 
   char currentAssetName[32];
   char currentAssetUrl[512];

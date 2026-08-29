@@ -5,7 +5,9 @@
 - **The recovery chord works with no SD card mounted.** Holding the chord at boot when the card was missing or unreadable ended at "SD card error", which on a locked device is the last route out gone. It now asks for a card and keeps trying, so one inserted at that point still reaches the firmware picker.
 
 ## Added
+- **A flash diagnostics file.** Every firmware install writes `lector-flash-diagnostics.txt` to the card: the partition table, which slot is running, both boot records before and after the switch, and which slot actually came up on the next boot. A reader whose USB flashing is locked gives no serial console, so this file is the only way to see why an install that says **Complete** comes back on the old firmware.
 - **Settings > System > Install Other Firmware.** Installs whatever the update server offers, whatever its version and whichever firmware it is. This is the deliberate escape hatch; **Check for updates** still installs only newer stable releases of Lector. The same choice is offered on the "no update available" screen.
+- **Install Other Firmware also sees prereleases.** It reads the full release list rather than the latest stable release. Check for updates is unchanged and still offers stable releases only.
 - **Per-device update assets.** The X4 Pro asks for `firmware-x4pro.bin` and falls back to `firmware.bin`.
 
 ## Changed
