@@ -46,6 +46,33 @@ Result writeImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress, void
   return Result::OK;
 }
 
+Result StreamWriter::write(const uint8_t* data, size_t len) {
+  if (pos_ + len > dst_.size()) return Result::TOO_LARGE;
+
+  size_t offset = 0;
+  while (offset < len) {
+    if (pos_ >= erasedUpto_) {
+      size_t eraseLen = std::min<size_t>(BLK, dst_.size() - pos_);
+      eraseLen = (eraseLen + SEC - 1) & ~(SEC - 1);
+      eraseLen = std::min<size_t>(eraseLen, dst_.size() - pos_);
+      if (!dst_.erase(pos_, eraseLen)) return Result::ERASE_FAIL;
+      erasedUpto_ = pos_ + eraseLen;
+    }
+    // Never write past the erased frontier in one call, or the tail of a large
+    // chunk would land in a block that has not been erased yet.
+    const size_t take = std::min(len - offset, erasedUpto_ - pos_);
+    if (!dst_.write(pos_, data + offset, take)) return Result::WRITE_FAIL;
+    pos_ += take;
+    offset += take;
+  }
+  return Result::OK;
+}
+
+void StreamWriter::restart() {
+  pos_ = 0;
+  erasedUpto_ = 0;
+}
+
 Result verifyImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress, void* ctx) {
   const size_t imageSize = src.size();
   if (imageSize > dst.size()) return Result::TOO_LARGE;

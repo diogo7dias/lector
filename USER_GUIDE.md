@@ -926,7 +926,7 @@ when you are done; it writes to the card while it is on.
 - **Clean Up Storage** — removes cached data for books that are no longer on the card. Books
   keep their progress.
 - **Clear Reading Cache**.
-- **Check for updates** and **SD Card Firmware Update** — see
+- **Check for updates**, **Install Other Firmware** and **SD Card Firmware Update** — see
   [section 13](#13-updating-the-firmware).
 
 ---
@@ -949,8 +949,33 @@ before the device is told to boot it, so a bad write is reported as **Firmware c
 nothing changed** instead of restarting into the old firmware as though it had worked.
 
 If the device will not boot far enough to reach Settings, hold **Volume Up** together with
-**Power** at boot. That goes straight to the SD card firmware update screen, which is the way
-back on devices where USB flashing is locked down.
+**Power** at boot (**Volume Down** on the X4 Pro, whose Volume Up pin doubles as the chip's
+boot-strap pin). That goes straight to the SD card firmware update screen. If no card is
+mounted, the screen asks for one and keeps trying, so a card swapped in at that point still
+gets you there.
+
+### Leaving Lector
+
+Some Xteink X3 and X4 units are sold with USB flashing disabled in the factory, mostly ones
+bought through Chinese retailers. On a locked unit there is no serial fallback, so these are
+the ways off this firmware, safest first:
+
+1. **SD card.** Put the other firmware's `.bin` on the card and use **Settings > System > SD
+   Card Firmware Update**. Stock, CrossPoint, CrossInk and INX images all install this way.
+   Lector points the bootloader at the new image with rollback left disabled, so the new
+   firmware stays after its first boot rather than being sent back here.
+2. **Recovery chord.** Same thing when Lector will not start: **Volume Up + Power** at boot
+   (**Volume Down + Power** on the X4 Pro).
+3. **Over Wi-Fi, with the OTA Unlocker.** The
+   [CrossPoint OTA Unlocker](https://crosspointreader.com/#unlock-tool) turns a computer into
+   a Wi-Fi hotspot that answers the reader's own update check with a firmware you choose. On
+   the reader, use **Settings > System > Install Other Firmware**: unlike **Check for
+   updates**, it installs whatever the server offers, including the same version, an older
+   one, or a different firmware entirely.
+4. **Last resort:** an SPI flash clip, wiring straight to the flash chip. See
+   [docs/fix-bricked-xteink.md](docs/fix-bricked-xteink.md).
+
+The X4 Pro is not supported by the OTA Unlocker; use routes 1 and 2 there.
 
 ---
 
@@ -958,7 +983,11 @@ back on devices where USB flashing is locked down.
 
 **The device is stuck in a bootloop.** Press and release **Reset**, then hold **Back** and
 **Power** to boot to the Home screen. If that does not work, hold **Volume Up** and **Power**
-at boot to reach the SD card firmware update screen.
+at boot (**Volume Down** on the X4 Pro) to reach the SD card firmware update screen.
+
+**This device cannot be flashed over USB.** Some units ship with USB flashing disabled from
+the factory. See *Leaving Lector* in [section 13](#13-updating-the-firmware) for the routes
+that still work.
 
 **Something is broken after a settings or cache change.** Delete the `.crosspoint` folder on
 the card, or just the parts of it that matter: `settings.json`, `state.json`, or the `epub_*`

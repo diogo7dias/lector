@@ -390,6 +390,44 @@ void enterDeepSleep(bool fromTimeout = false) {
   powerManager.startDeepSleep(gpio);
 }
 
+// Recovery firmware chord: a side button held together with the power button at
+// boot. BTN_UP everywhere except the X4 Pro, whose BTN_UP sits on GPIO0, the
+// boot-strap pin: holding that at boot drops the chip into the ROM bootloader
+// instead of into our firmware, so the chord uses BTN_DOWN there.
+//
+// `inputStartedMs` is when gpio.begin() ran; the settle window is measured from
+// there, not from the call, so the work done in between counts towards it.
+//
+// TWO AGREEING SAMPLES, not one. The buttons are a resistor ladder read as a
+// voltage on a single analog input, and the panel rails come up on the same
+// supply. A single nudged sample must not be able to strand a wake in the
+// recovery picker: that screen deliberately has no way back to the reader, so a
+// false positive costs a power cycle. Two samples at least 5 ms apart is what
+// HalGPIO's own debounce requires to commit a press.
+//
+// None of that ladder reasoning applies to the X4 Pro: its side buttons are
+// plain debounced digital inputs that read true almost immediately, so the
+// settle window is 20 ms there instead of 500.
+bool recoveryChordHeld(const unsigned long inputStartedMs) {
+  const bool isX4Pro = BoardConfig::isX4Pro();
+  const unsigned long inputSettleMs = isX4Pro ? 20 : 500;
+  const uint8_t chordButton = isX4Pro ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
+  const auto chordConfirmed = [chordButton] {
+    gpio.update();
+    if (!gpio.isPressed(chordButton)) return false;
+    delay(6);
+    gpio.update();
+    return gpio.isPressed(chordButton);
+  };
+  // The loop stops the moment the chord is confirmed: once the answer is yes,
+  // waiting longer cannot change it.
+  while (millis() - inputStartedMs < inputSettleMs) {
+    if (chordConfirmed()) return true;
+    delay(10);
+  }
+  return chordConfirmed();
+}
+
 void setupDisplayAndFonts(bool seamless = false) {
   display.begin(seamless);
   renderer.begin();
@@ -533,11 +571,38 @@ void setup() {
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
+  bool sdRecoveryChord = false;
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
     setupDisplayAndFonts(isSilentReboot);
-    activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
-    return;
+    // The firmware picker lives on the SD card, so a card that will not mount
+    // used to end the boot right here -- on a device whose USB flashing the
+    // vendor locked, that is the last way off this firmware gone. When the
+    // recovery chord is held, keep asking for the card instead of giving up.
+    sdRecoveryChord = gpio.getWakeupReason() == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
+    if (!sdRecoveryChord) {
+      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
+      return;
+    }
+    activityManager.goToFullScreenMessage("Insert an SD card with firmware.bin", EpdFontFamily::REGULAR);
+    // Five minutes of retries, not forever: a reader left in a drawer with the
+    // chord stuck down should end up asleep rather than polling the card slot
+    // until the battery is flat.
+    constexpr unsigned long SD_RETRY_WINDOW_MS = 5UL * 60UL * 1000UL;
+    const unsigned long retryStartedMs = millis();
+    bool mounted = false;
+    while (millis() - retryStartedMs < SD_RETRY_WINDOW_MS) {
+      delay(1000);
+      if (Storage.begin()) {
+        mounted = true;
+        break;
+      }
+    }
+    if (!mounted) {
+      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
+      return;
+    }
+    LOG_INF("MAIN", "SD card mounted on retry; entering recovery firmware mode");
   }
 
   WakeTiming::mark(WakeTiming::Stage::SdReady);
@@ -721,10 +786,10 @@ void setup() {
   }
 
   // Recovery firmware mode: hold a side button together with the power button at boot to skip
-  // directly to the SD-card firmware update screen. Useful on devices where USB flashing has
-  // been locked down (e.g. recent X3 firmware). BTN_UP everywhere except the X4 Pro, whose
-  // BTN_UP sits on GPIO0, the boot-strap pin: holding that at boot drops the chip into the ROM
-  // bootloader instead of into our firmware, so the chord uses BTN_DOWN there.
+  // directly to the SD-card firmware update screen. This is the way back on a device whose USB
+  // flashing the vendor locked, so it must stay reachable on every boot path -- including the
+  // one where the card failed to mount, which is why it may already have been answered above
+  // (sdRecoveryChord).
   //
   // This runs AFTER the panel is up, not before. The check waits out a fixed window
   // measured from gpio.begin(), and everything that happens inside that window is free:
@@ -732,55 +797,12 @@ void setup() {
   // does too. Before the move it ran after the window and cost its 138 ms (X3) or 50 ms
   // (X4) on top; now the window absorbs it and what is left to wait for shrinks by the
   // same amount.
-  bool recoveryFirmwareMode = false;
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton) {
-    // Refresh the cached button state until the ADC button ladder has settled — isPressed()
-    // needs ~half a second after the ladder comes up, per the HalGPIO contract.
-    //
-    // The deadline runs from gpio.begin(), not from here. It used to be a flat 500 ms
-    // measured from this point, which meant the settle window began only after the card
-    // mount and the settings load had already given the ladder a few hundred milliseconds
-    // of their own. Every wake therefore paid the full half second twice over, once
-    // implicitly and once on the clock, and a measured X3 wake spent 550 ms of ~2400 ms
-    // inside this loop. Anchoring to when the ladder actually started keeps the settle
-    // window the same length in absolute terms and stops charging for it a second time.
-    //
-    // TWO AGREEING SAMPLES, not one. The buttons are a resistor ladder read as a voltage
-    // on a single analog input, and the panel rails now come up before this point, which
-    // puts extra load on the same supply. A single nudged sample must not be able to
-    // strand a wake in the recovery picker: that screen deliberately has no way back to
-    // the reader, so a false positive costs a power cycle. Two samples at least 5 ms
-    // apart is what HalGPIO's own debounce requires to commit a press, so this asks the
-    // ladder for exactly the confidence it is specified to give.
-    //
-    // The loop still stops the moment UP is confirmed: once the answer is yes, waiting
-    // longer cannot change it.
-    //
-    // None of that ladder reasoning applies to the X4 Pro: its side buttons are plain
-    // debounced digital inputs that read true almost immediately, so the settle window is
-    // 20 ms there instead of 500. The two-sample confirm stays either way; on a digital
-    // input it costs one extra 6 ms read and rules out a single nudged sample all the same.
-    const bool isX4Pro = BoardConfig::isX4Pro();
-    const unsigned long inputSettleMs = isX4Pro ? 20 : 500;
-    const uint8_t chordButton = isX4Pro ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
-    const auto chordConfirmed = [chordButton] {
-      gpio.update();
-      if (!gpio.isPressed(chordButton)) return false;
-      delay(6);
-      gpio.update();
-      return gpio.isPressed(chordButton);
-    };
-    while (millis() - inputStartedMs < inputSettleMs) {
-      if (chordConfirmed()) {
-        recoveryFirmwareMode = true;
-        break;
-      }
-      delay(10);
-    }
-    if (!recoveryFirmwareMode && chordConfirmed()) recoveryFirmwareMode = true;
-    if (recoveryFirmwareMode)
-      LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", isX4Pro ? "DOWN" : "UP");
+  bool recoveryFirmwareMode = sdRecoveryChord;
+  if (!recoveryFirmwareMode && wakeupReason == HalGPIO::WakeupReason::PowerButton) {
+    recoveryFirmwareMode = recoveryChordHeld(inputStartedMs);
   }
+  if (recoveryFirmwareMode)
+    LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", BoardConfig::isX4Pro() ? "DOWN" : "UP");
 
   WakeTiming::mark(WakeTiming::Stage::InputSettled);
 

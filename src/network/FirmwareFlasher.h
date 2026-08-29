@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 
 // Flash a firmware image from an SD-card path into the next OTA app
 // partition, then switch otadata so the X3/X4 stock bootloader picks it up
@@ -9,8 +10,10 @@
 // esp_partition_write + ota_boot::switchTo (no Arduino Update class, no
 // esp_image_verify — those reject our patched image on X4 silicon).
 //
-// Both the SD update activity and the OTA path land here. OTA first
-// downloads the firmware to an SD-card cache file, then calls this.
+// Both the SD update activity and the OTA path land here. The SD path streams
+// from a file (flashFromSdPath); the OTA path streams from the network
+// (StreamingInstall), because an HTTP body cannot be rewound and there is
+// nowhere on the device to spool 6 MB other than the destination partition.
 
 namespace firmware_flash {
 
@@ -69,6 +72,45 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
 // lookup). Streams the file in CHUNK-sized reads; the file is rewound on
 // success so the caller can immediately reread it for flashing.
 Result validateImageFile(const char* sdPath, size_t partitionSize);
+
+struct ByteSource;
+
+// Same integrity check as validateImageFile, over any rewindable stream.
+Result validateImageStream(ByteSource& src, size_t partitionSize);
+
+// Installs an image that arrives in chunks the caller does not control, e.g.
+// an OTA download. Bytes land in the next OTA app partition as they come;
+// commit() validates them where they landed and only then switches otadata.
+//
+// commit() switches via ota_boot::switchTo, which leaves the bootloader's
+// rollback disarmed, so a firmware that never calls
+// esp_ota_mark_app_valid_cancel_rollback() (stock Xteink, CrossPoint,
+// CrossInk, INX -- anything not built on the Arduino core) survives its first
+// boot instead of being rolled straight back into lector.
+class StreamingInstall {
+ public:
+  StreamingInstall();
+  ~StreamingInstall();
+  StreamingInstall(const StreamingInstall&) = delete;
+  StreamingInstall& operator=(const StreamingInstall&) = delete;
+
+  // Resolve the destination partition. NO_PARTITION when there is none.
+  Result begin();
+  // Append the next chunk of the image.
+  Result feed(const uint8_t* data, size_t len);
+  // Discard everything written and start over at offset 0, for a server that
+  // ignored a Range request and replayed the body.
+  void restart();
+  // Validate what is in flash, then hand the device to it on the next boot.
+  Result commit();
+
+  size_t written() const;
+  size_t capacity() const;
+
+ private:
+  struct Impl;
+  std::unique_ptr<Impl> impl_;
+};
 
 const char* resultName(Result r);
 

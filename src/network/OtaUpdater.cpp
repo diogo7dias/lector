@@ -7,7 +7,6 @@
 #include "HttpDownloader.h"
 #include <Logging.h>
 #include <ReleaseJsonParser.h>
-#include <esp_ota_ops.h>
 // clang-format on
 
 #include <algorithm>
@@ -25,10 +24,24 @@ namespace {
 // Only stable releases are returned here — /releases/latest skips prereleases, and every
 // release-candidate and experimental tag is published as one.
 constexpr char latestReleaseUrl[] = "https://api.github.com/repos/diogo7dias/lector/releases/latest";
+
+// A TLS session with WiFi up needs room the reader does not always have. Below
+// this, wolfSSL fails mid-handshake and retries for a minute with a few hundred
+// bytes free, which reads as a hang; refuse the attempt and say so instead.
+// Same threshold the font download uses (FontDownloadActivity.h).
+constexpr int MIN_HEAP_FOR_TLS = 30000;
+
+bool isHttps(const std::string& url) { return url.rfind("https://", 0) == 0; }
 }  // namespace
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
+
+  if (ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
+    LOG_ERR("OTA", "Only %u bytes free, need %d for a secure connection",
+            static_cast<unsigned>(ESP.getFreeHeap()), MIN_HEAP_FOR_TLS);
+    return OOM_ERROR;
+  }
 
   // Stream the ~32KB release JSON straight into the parser as it arrives.
   // Buffering the whole body in a std::string would add a growing allocation
@@ -36,6 +49,13 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate() {
   // OOM there aborts. fetchUrl handles the verified-https GET, redirects, and
   // User-Agent (see HttpDownloader).
   ReleaseJsonParser releaseParser;
+#ifdef FREEINK_DEVICE_X4PRO
+  // The X4 Pro is an ESP32-S3; the release's plain firmware.bin is the C3 build
+  // and the chip-id gate would refuse it. Ask for the S3 asset by name, and fall
+  // back to firmware.bin when the release does not carry one -- which is also
+  // what the OTA Unlocker always serves.
+  releaseParser.setPreferredAssetName("firmware-x4pro.bin");
+#endif
   const bool ok = HttpDownloader::fetchUrl(latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
     releaseParser.feed(reinterpret_cast<const char*>(data), len);
     return true;
@@ -81,9 +101,25 @@ bool OtaUpdater::isUpdateNewer() const {
 
 const std::string& OtaUpdater::getLatestVersion() const { return latestVersion; }
 
-OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx) {
-  if (!isUpdateNewer()) {
+bool OtaUpdater::isDownloadSecure() const { return isHttps(otaUrl); }
+
+OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgress, void* ctx,
+                                                      const bool allowAnyVersion) {
+  // allowAnyVersion is the escape hatch for a device whose USB flashing the
+  // vendor locked: the only way off this firmware is an update server, and the
+  // firmware it offers is usually not "newer" than what is running -- it is
+  // stock, or another fork, or this same version again. Refusing those leaves
+  // the user stuck on lector with no way out, so the deliberate "install other
+  // firmware" flow skips the comparison. Check for Updates still does not.
+  if (!updateAvailable || otaUrl.empty()) return NO_UPDATE;
+  if (!allowAnyVersion && !isUpdateNewer()) {
     return UPDATE_OLDER_ERROR;
+  }
+
+  if (isHttps(otaUrl) && ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
+    LOG_ERR("OTA", "Only %u bytes free, need %d for a secure connection", static_cast<unsigned>(ESP.getFreeHeap()),
+            MIN_HEAP_FOR_TLS);
+    return OOM_ERROR;
   }
 
   // esp_https_ota is hardwired to esp-tls/mbedTLS, whose precompiled build on this
@@ -91,16 +127,16 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   // ourselves and stream the firmware through HttpDownloader, which runs over
   // wolfSSL when FREEINK_NET_WOLFSSL is set, reusing its redirect handling for the
   // GitHub -> CDN hop.
-  const esp_partition_t* updatePartition = esp_ota_get_next_update_partition(nullptr);
-  if (!updatePartition) {
-    LOG_ERR("OTA", "No OTA partition available");
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  esp_ota_handle_t otaHandle = 0;
-  esp_err_t esp_err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle);
-  if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_ota_begin failed: %s", esp_err_to_name(esp_err));
+  //
+  // The bytes go through firmware_flash::StreamingInstall, the same raw
+  // partition write the SD-card update uses, rather than esp_ota_*: esp_ota_end
+  // runs esp_image_verify, which rejects images this device runs perfectly
+  // (see FirmwareFlasher.h), and esp_ota_set_boot_partition arms a rollback
+  // that sends any non-Arduino firmware straight back here on its first boot.
+  firmware_flash::StreamingInstall installer;
+  const firmware_flash::Result beginRes = installer.begin();
+  if (beginRes != firmware_flash::Result::OK) {
+    LOG_ERR("OTA", "install begin failed: %s", firmware_flash::resultName(beginRes));
     return INTERNAL_UPDATE_ERROR;
   }
 
@@ -119,9 +155,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   size_t hdrLen = 0;
 
   // A 5 MB image over a marginal link drops often enough that one attempt is not
-  // a fair test. esp_ota_write appends, so an attempt that stopped at 80% keeps
-  // its 80% and the next one asks the server for the rest; only a link failure
-  // is worth another go (see OtaRetryPolicy.h).
+  // a fair test. The partition keeps what was already written, so an attempt
+  // that stopped at 80% keeps its 80% and the next one asks the server for the
+  // rest; only a link failure is worth another go (see OtaRetryPolicy.h).
   for (int attempt = 1; attempt <= ota_retry::MAX_ATTEMPTS; ++attempt) {
     bool wrongChip = false;
     bool flashOk = true;
@@ -146,7 +182,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
               }
             }
           }
-          if (esp_ota_write(otaHandle, data, len) != ESP_OK) {
+          if (installer.feed(data, len) != firmware_flash::Result::OK) {
             flashOk = false;
             return false;  // abort the transfer
           }
@@ -182,13 +218,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     // holds the image twice over from here on. Start it again rather than write
     // a second copy onto the first.
     if (replayedFromStart) {
-      esp_ota_abort(otaHandle);
-      otaHandle = 0;
-      esp_err = esp_ota_begin(updatePartition, OTA_SIZE_UNKNOWN, &otaHandle);
-      if (esp_err != ESP_OK) {
-        LOG_ERR("OTA", "esp_ota_begin failed on restart: %s", esp_err_to_name(esp_err));
-        return INTERNAL_UPDATE_ERROR;
-      }
+      installer.restart();
       processedSize = 0;
       lastReportedPct = -1;
       hdrLen = 0;
@@ -201,24 +231,20 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   if (!installed) {
     if (failure == ota_retry::Failure::WRONG_CHIP) {
       LOG_ERR("OTA", "Firmware install aborted: wrong device");
-      esp_ota_abort(otaHandle);
       return WRONG_DEVICE_ERROR;
     }
     LOG_ERR("OTA", "Firmware install failed (%s)",
             failure == ota_retry::Failure::FLASH_WRITE ? "flash write" : "download");
-    esp_ota_abort(otaHandle);
     return failure == ota_retry::Failure::FLASH_WRITE ? INTERNAL_UPDATE_ERROR : HTTP_ERROR;
   }
 
-  esp_err = esp_ota_end(otaHandle);  // verifies the written image
-  if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_ota_end failed: %s", esp_err_to_name(esp_err));
-    return INTERNAL_UPDATE_ERROR;
-  }
-
-  esp_err = esp_ota_set_boot_partition(updatePartition);
-  if (esp_err != ESP_OK) {
-    LOG_ERR("OTA", "esp_ota_set_boot_partition failed: %s", esp_err_to_name(esp_err));
+  // Validates the image where it landed, then points otadata at it with the
+  // rollback left disarmed.
+  const firmware_flash::Result commitRes = installer.commit();
+  if (commitRes != firmware_flash::Result::OK) {
+    LOG_ERR("OTA", "commit failed: %s", firmware_flash::resultName(commitRes));
+    if (commitRes == firmware_flash::Result::BAD_CHIP) return WRONG_DEVICE_ERROR;
+    if (commitRes == firmware_flash::Result::OOM) return OOM_ERROR;
     return INTERNAL_UPDATE_ERROR;
   }
 

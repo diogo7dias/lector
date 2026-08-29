@@ -6,6 +6,13 @@ This guide covers installing CrossPoint on an Xteink that's bricked, or stuck on
 
 If your device isn't USB-locked, flash it over USB instead — it's safer and much less invasive. What follows should only be a last resort.
 
+Try these first, in this order, even on a USB-locked device:
+
+1. If the device still boots Lector, **Settings > System > SD Card Firmware Update**, or **Settings > System > Install Other Firmware** over Wi-Fi with the [CrossPoint OTA Unlocker](https://crosspointreader.com/#unlock-tool).
+2. If it does not boot far enough for Settings, hold **Volume Up + Power** at boot (**Volume Down + Power** on the X4 Pro) to reach the SD card firmware picker directly. It asks for a card if none is mounted.
+
+Only when neither of those reaches the device does the flash clip below become the answer.
+
 *Example: a device stuck on Biscuit firmware, unresponsive to a normal USB flash.*
 
 ![biscuit](./images/spiflash/stuck_on_biscuit.jpg)

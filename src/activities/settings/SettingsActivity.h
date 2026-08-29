@@ -26,6 +26,7 @@ enum class SettingAction {
   CleanStorage,
   ShuffleWallpapers,
   CheckForUpdates,
+  InstallOtherFirmware,
   SdFirmwareUpdate,
   Language,
   DownloadFonts,

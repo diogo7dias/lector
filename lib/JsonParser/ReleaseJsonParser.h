@@ -13,6 +13,13 @@ class ReleaseJsonParser {
   ReleaseJsonParser& operator=(const ReleaseJsonParser&) = delete;
 
   void reset();
+
+  // Asset name this device wants, e.g. "firmware-x4pro.bin". When the release
+  // carries it, it wins over the plain "firmware.bin"; when it does not, the
+  // plain name is still taken. The fallback matters: the OTA Unlocker serves
+  // every firmware under the name firmware.bin, and that is the only route onto
+  // a device whose USB flashing the vendor locked.
+  void setPreferredAssetName(const char* name);
   void feed(const char* data, size_t len);
 
   bool foundTag() const;
@@ -61,6 +68,9 @@ class ReleaseJsonParser {
   size_t firmwareSize;
   bool tagFound;
   bool firmwareFound;
+
+  const char* preferredAssetName;
+  bool preferredFound;
 
   char currentAssetName[32];
   char currentAssetUrl[512];

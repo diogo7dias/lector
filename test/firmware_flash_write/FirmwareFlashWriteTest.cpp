@@ -144,6 +144,60 @@ TEST(FirmwareFlashWrite, ProgressReachesTotal) {
   EXPECT_GT(seen.calls, 1);
 }
 
+
+// StreamWriter: the same erase-ahead write, but push-mode, for an image that
+// arrives from the network in chunks the caller does not control and cannot
+// rewind.
+
+TEST(FirmwareStreamWriter, WritesAChunkedImageIdenticallyToWriteImage) {
+  const std::vector<uint8_t> image = makeImage(200 * 1024 + 77);
+  FakeFlash flash(kPartition);
+  std::fill(flash.cells.begin(), flash.cells.end(), 0x00);  // worst case: all bits already cleared
+  firmware_flash::StreamWriter writer(flash);
+
+  // Chunk sizes a TLS transport actually hands over: unaligned and varying.
+  size_t pos = 0;
+  for (size_t chunk = 1000; pos < image.size(); chunk = chunk == 1000 ? 2048 : 1000) {
+    const size_t take = std::min(chunk, image.size() - pos);
+    ASSERT_EQ(writer.write(image.data() + pos, take), Result::OK);
+    pos += take;
+  }
+
+  EXPECT_EQ(writer.written(), image.size());
+  EXPECT_TRUE(std::equal(image.begin(), image.end(), flash.cells.begin()));
+}
+
+TEST(FirmwareStreamWriter, RestartRewritesFromZeroWithoutStackingTwoCopies) {
+  const std::vector<uint8_t> image = makeImage(100 * 1024);
+  FakeFlash flash(kPartition);
+  firmware_flash::StreamWriter writer(flash);
+
+  // A server that ignores our Range header replays the body from byte 0.
+  ASSERT_EQ(writer.write(image.data(), 70 * 1024), Result::OK);
+  writer.restart();
+  ASSERT_EQ(writer.write(image.data(), image.size()), Result::OK);
+
+  EXPECT_EQ(writer.written(), image.size());
+  EXPECT_TRUE(std::equal(image.begin(), image.end(), flash.cells.begin()));
+}
+
+TEST(FirmwareStreamWriter, RefusesToRunPastThePartition) {
+  FakeFlash flash(64 * 1024);
+  firmware_flash::StreamWriter writer(flash);
+  const std::vector<uint8_t> image = makeImage(64 * 1024 + 1);
+
+  EXPECT_EQ(writer.write(image.data(), image.size()), Result::TOO_LARGE);
+}
+
+TEST(FirmwareStreamWriter, ReportsWriteFailure) {
+  FakeFlash flash(kPartition);
+  flash.failWriteAt = 32 * 1024;
+  firmware_flash::StreamWriter writer(flash);
+  const std::vector<uint8_t> image = makeImage(100 * 1024);
+
+  EXPECT_EQ(writer.write(image.data(), image.size()), Result::WRITE_FAIL);
+}
+
 }  // namespace
 
 #include "FirmwareSwitchAuditLine.h"
