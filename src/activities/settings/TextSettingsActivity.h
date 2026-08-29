@@ -9,9 +9,9 @@
 #include "TextSettingsPreview.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
-#include "components/themes/BaseTheme.h"
-#include "components/RowSlider.h"
 #include "components/SettingsGrid.h"
+#include "components/SliderBand.h"
+#include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 #include "util/HoldRepeat.h"
 
@@ -25,8 +25,6 @@
 // judged against.
 // Auto-repeat timing for an armed numeric row. Deliberately faster than ButtonNavigator's
 // list defaults: these ranges run to 150, so a list-speed hold would never finish.
-constexpr uint16_t EDIT_REPEAT_INTERVAL_MS = 120;
-constexpr uint16_t EDIT_REPEAT_START_MS = 350;
 
 class TextSettingsActivity final : public Activity {
  public:
@@ -50,7 +48,7 @@ class TextSettingsActivity final : public Activity {
     ParagraphSpacing,
     Alignment,
     IndentMode,
-    IndentPercent,  // only in Custom % mode
+    IndentPercent,     // only in Custom % mode
     HorizontalMargin,  // labelled "Margin" in All Sides, where it stands for every side
     MarginLink,
     VerticalMargin,  // shown while top and bottom are linked
@@ -84,18 +82,10 @@ class TextSettingsActivity final : public Activity {
   // Numeric rows share one editing path; these give it the field and its range.
   uint8_t* numberField(Row row) const;
   void numberRange(Row row, int& minValue, int& maxValue) const;
-  // Drag track for the armed numeric row: drawn by render(), hit-tested by loop().
-  // Zero width whenever no row is armed or the row has no space for a track, which
-  // is also what makes a touch fall through to ordinary list handling.
   void setEditedValue(int value);
-  row_slider::Bar sliderBar_{};
-  // The armed row is painted over by the solid selection style, so the track is
-  // drawn white there and black on the styles that leave the row on paper.
-  bool sliderOnDarkRow_ = false;
   void applyNumber(Row row, int value);
 
   void activateRow(Row row);
-  void stepEditedValue(int delta);
   void leaveEdit();
 
   void applyFamily(int listIndex);
@@ -136,10 +126,10 @@ class TextSettingsActivity final : public Activity {
 
   const SdCardFontRegistry* registry_;
   ButtonNavigator buttonNavigator_;
-  // The armed row gets its own navigator: list navigation wants the slow default, while a
-  // held value has a whole range to cross. Same feel as ValueBarPopup's numeric rows.
-  ButtonNavigator editNavigator_{EDIT_REPEAT_INTERVAL_MS, EDIT_REPEAT_START_MS};
   OptionPopup optionPopup_;
+  // The armed number's control: it takes the header's place, so the preview under it
+  // keeps showing what the value does while the value moves.
+  SliderBand valueBand_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;
   textsettings::PreviewLayout previewLayout_;  // cached preview line layout; relaid only on setting/geometry change
@@ -154,9 +144,6 @@ class TextSettingsActivity final : public Activity {
   // not queue one full e-ink pass per step.
   bool editing_ = false;
   uint32_t pendingRedrawAt_ = 0;
-  // Repeats fired by the current hold, feeding holdRepeatStep()'s fine-to-coarse ramp.
-  // Reset by every press and release so a new hold starts fine again.
-  unsigned editRepeatIndex_ = 0;
   // An edited number is written once the value stops moving, not on every button press.
   // See commitSettings() in the .cpp for why.
   bool settingsDirty_ = false;

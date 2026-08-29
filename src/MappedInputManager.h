@@ -58,6 +58,10 @@ class MappedInputManager {
   // (a category opening, a value toggling) would act a second time on whatever now sits
   // under the finger.
   bool takeScreenTouchDown(int& x, int& y);
+  // Drops the rest of the current contact, lift included. For a screen that acted on a
+  // touch it did not spend by asking (a control that has to keep the contact alive for a
+  // drag, and only then decides the touch was a button press instead).
+  void spendTouchContact();
   bool isScreenTouchHeld(int& x, int& y) const;
   bool wasScreenLongPress(int& x, int& y) const;
   bool wasScreenTouchReleased() const;
@@ -137,7 +141,8 @@ class MappedInputManager {
   //
   // A key the router does not intercept is never touched, which is why nobody who leaves
   // the bindings alone can feel this.
-  void setSideKeyOverride(uint8_t hardware, bool suppressEdges, bool suppressHeld, bool injectPress, bool injectRelease);
+  void setSideKeyOverride(uint8_t hardware, bool suppressEdges, bool suppressHeld, bool injectPress,
+                          bool injectRelease);
   // The Home key reports taps, not edges, so it needs only hiding and replaying.
   void setHomeKeyOverride(const bool suppress, const bool inject) {
     homeKeySuppressed = suppress;

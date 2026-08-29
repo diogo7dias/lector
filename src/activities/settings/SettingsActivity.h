@@ -10,7 +10,7 @@
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
 #include "components/SettingsGrid.h"
-#include "components/ValueBarPopup.h"
+#include "components/SliderBand.h"
 #include "util/ButtonNavigator.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
@@ -230,7 +230,7 @@ class SettingsActivity final : public Activity {
   // Numeric rows open a slider instead of stepping by one per press. Stepping meant up to
   // 57 presses to cross the Reading Idle Limit range, and wrapping past the maximum to get
   // back. Same component TextSettingsActivity already uses for the margin rows.
-  ValueBarPopup valueBar;
+  SliderBand valueBand;
 
   // First grid row drawn, owned here so it survives between frames. Reset whenever the
   // grid underneath it changes identity (a different category, or re-entry).

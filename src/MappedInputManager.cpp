@@ -1,6 +1,7 @@
 #include "MappedInputManager.h"
 
 #include <GfxRenderer.h>
+#include <PerfLog.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -9,8 +10,6 @@
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
-#include <PerfLog.h>
-
 #include "util/DebugTrace.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
@@ -230,11 +229,13 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
 
 bool MappedInputManager::takeScreenTouchDown(int& x, int& y) {
   if (!wasScreenTouchDown(x, y)) return false;
-  // The SDK's own remedy for a contact that has already been acted on: it drops the rest
-  // of this contact, so neither a later pass nor the lift can act again.
-  gpio.suppressTouchContact();
+  spendTouchContact();
   return true;
 }
+
+// The SDK's own remedy for a contact that has already been acted on: it drops the rest of
+// this contact, so neither a later pass nor the lift can act again.
+void MappedInputManager::spendTouchContact() { gpio.suppressTouchContact(); }
 
 bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   // Live contact position while the finger is down (no tap-slop gate) — drag tracking.

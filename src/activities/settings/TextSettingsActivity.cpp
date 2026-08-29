@@ -452,11 +452,21 @@ void TextSettingsActivity::activateRow(const Row row) {
       fontPickerIndex_ = currentFamilyIndex_;
       requestUpdate();
       return;
-    case RowKind::Number:
+    case RowKind::Number: {
+      int minValue = 0;
+      int maxValue = 0;
+      numberRange(row, minValue, maxValue);
+      const uint8_t* field = numberField(row);
       editing_ = true;
-      editRepeatIndex_ = 0;
+      const auto& metrics = UITheme::getInstance().getMetrics();
+      valueBand_.show(
+          renderer, I18N.get(rowNameId(row)),
+          slider_band::headerBandRect(renderer.getScreenWidth(), metrics.topPadding, metrics.headerHeight), minValue,
+          maxValue, /*smallStep=*/1, /*largeStep=*/5, field ? *field : minValue,
+          [this](const int chosen) { setEditedValue(chosen); }, [this] { leaveEdit(); });
       requestUpdate();
       return;
+    }
     case RowKind::Picker:
       switch (row) {
         case Row::Size:
@@ -545,26 +555,6 @@ void TextSettingsActivity::activateRow(const Row row) {
   requestUpdate();
 }
 
-void TextSettingsActivity::stepEditedValue(const int delta) {
-  const auto rows = visibleRows();
-  if (selectedIndex_ >= static_cast<int>(rows.size())) return;
-  const Row row = rows[selectedIndex_];
-  const uint8_t* field = numberField(row);
-  if (!field) return;
-
-  int minValue = 0, maxValue = 0;
-  numberRange(row, minValue, maxValue);
-  const int next = std::clamp(static_cast<int>(*field) + delta, minValue, maxValue);
-  if (next == *field) return;
-  applyNumber(row, next);
-  // The row itself must follow the button immediately; the preview catches up once the
-  // value stops moving.
-  const uint32_t now = millis();
-  pendingRedrawAt_ = now + EDIT_REDRAW_DEBOUNCE_MS;
-  pendingSaveAt_ = now + EDIT_SAVE_DEBOUNCE_MS;
-  requestUpdate();
-}
-
 void TextSettingsActivity::setEditedValue(const int value) {
   const auto rows = visibleRows();
   if (selectedIndex_ >= static_cast<int>(rows.size())) return;
@@ -577,8 +567,8 @@ void TextSettingsActivity::setEditedValue(const int value) {
   const int next = std::clamp(value, minValue, maxValue);
   if (next == *field) return;
   applyNumber(row, next);
-  // Same debounce as the buttons: the row follows the finger, the preview and the
-  // write wait for the drag to settle.
+  // The band and the cell follow the finger; the preview and the write wait for the value
+  // to settle, so a drag across the whole range costs one preview pass and one write.
   const uint32_t now = millis();
   pendingRedrawAt_ = now + EDIT_REDRAW_DEBOUNCE_MS;
   pendingSaveAt_ = now + EDIT_SAVE_DEBOUNCE_MS;
@@ -588,13 +578,15 @@ void TextSettingsActivity::setEditedValue(const int value) {
 void TextSettingsActivity::leaveEdit() {
   editing_ = false;
   pendingRedrawAt_ = 0;
-  editRepeatIndex_ = 0;
   commitSettings();
   requestUpdate();
 }
 
 void TextSettingsActivity::loop() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
+  // An armed number owns input the same way, buttons included: nothing behind the band
+  // moves while it is up.
+  if (valueBand_.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   if (mode_ == Mode::FontPicker) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -633,57 +625,13 @@ void TextSettingsActivity::loop() {
   if (pendingSaveAt_ != 0 && millis() >= pendingSaveAt_) commitSettings();
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    if (editing_) {
-      leaveEdit();
-      return;
-    }
     finish();
     return;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (editing_) {
-      leaveEdit();
-      return;
-    }
     const auto rows = visibleRows();
     if (selectedIndex_ < static_cast<int>(rows.size())) activateRow(rows[selectedIndex_]);
-    return;
-  }
-
-  if (editing_ && sliderBar_.width > 0) {
-    // Drag the track: the value follows the finger. Only while a row is armed, so an
-    // ordinary swipe over the list still scrolls it.
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.isScreenTouchHeld(tx, ty) || mappedInput.wasScreenTouchDown(tx, ty)) {
-      constexpr int kTouchSlack = 12;
-      if (ty >= sliderBar_.y - kTouchSlack && ty <= sliderBar_.y + sliderBar_.height + kTouchSlack) {
-        const auto rows = visibleRows();
-        if (selectedIndex_ < static_cast<int>(rows.size())) {
-          int minValue = 0, maxValue = 0;
-          numberRange(rows[selectedIndex_], minValue, maxValue);
-          setEditedValue(row_slider::valueForX(sliderBar_, tx, minValue, maxValue, 1));
-        }
-        return;
-      }
-    }
-  }
-
-  if (editing_) {
-    // A press always moves exactly one, whichever way; the ramp belongs to the hold, and a
-    // tap must stay a nudge. Either press also restarts the ramp, so reversing direction
-    // mid-hold does not inherit the coarse step it built up going the other way.
-    editNavigator_.onNextStep([this] {
-      editRepeatIndex_ = 0;
-      stepEditedValue(1);
-    });
-    editNavigator_.onPreviousStep([this] {
-      editRepeatIndex_ = 0;
-      stepEditedValue(-1);
-    });
-    editNavigator_.onNextContinuous([this] { stepEditedValue(holdRepeatStep(editRepeatIndex_++)); });
-    editNavigator_.onPreviousContinuous([this] { stepEditedValue(-holdRepeatStep(editRepeatIndex_++)); });
     return;
   }
 
@@ -760,7 +708,13 @@ void TextSettingsActivity::render(RenderLock&&) {
     return;
   }
 
-  GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_TEXT_SETTINGS));
+  // An armed number takes the header's place. The preview and the grid keep their rows,
+  // so the passage stays where the eye left it while the value moves.
+  if (valueBand_.isActive()) {
+    valueBand_.render(renderer);
+  } else {
+    GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_TEXT_SETTINGS));
+  }
 
   const auto geo = paneGeometry();
   textsettings::renderPreview(renderer, previewLayout_, geo.previewTop, geo.previewHeight);
@@ -771,33 +725,6 @@ void TextSettingsActivity::render(RenderLock&&) {
     const auto rect = settings_grid::cellAt(layout, geo.listTop, i);
     if (rect.width == 0) continue;
     drawCell(rect, rows[i], i == selectedIndex_);
-  }
-
-  // The armed numeric cell gets a drag track across its bottom edge, inside the cell it
-  // belongs to rather than between two columns of text: the grid has no such gap.
-  sliderBar_ = {};
-  if (editing_ && selectedIndex_ < static_cast<int>(rows.size()) && kindOf(rows[selectedIndex_]) == RowKind::Number) {
-    const auto rect = settings_grid::cellAt(layout, geo.listTop, selectedIndex_);
-    if (rect.width > 0) {
-      constexpr int kTrackHeight = 8;
-      constexpr int kTrackInset = 10;
-      sliderBar_ = row_slider::Bar{rect.x + kTrackInset, rect.y + rect.height - kTrackHeight - 6,
-                                   rect.width - kTrackInset * 2, kTrackHeight};
-    }
-  }
-  if (sliderBar_.width > 0) {
-    int minValue = 0, maxValue = 0;
-    numberRange(rows[selectedIndex_], minValue, maxValue);
-    const uint8_t* field = numberField(rows[selectedIndex_]);
-    const int filled = row_slider::filledWidth(sliderBar_, field ? *field : minValue, minValue, maxValue);
-    // The armed cell is the selected one and the selection fills it black, so the track
-    // is drawn in white.
-    constexpr bool trackInk = false;
-    sliderOnDarkRow_ = true;
-    // Track outline, then the filled part solid: an outline alone is hard to read at
-    // e-ink pitch, a solid bar alone loses where the range ends.
-    renderer.drawRect(sliderBar_.x, sliderBar_.y, sliderBar_.width, sliderBar_.height, trackInk);
-    if (filled > 0) renderer.fillRect(sliderBar_.x, sliderBar_.y, filled, sliderBar_.height, trackInk);
   }
 
   const char* confirmLabel = tr(STR_SELECT);
@@ -816,7 +743,10 @@ void TextSettingsActivity::render(RenderLock&&) {
     }
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, upLabel, downLabel);
+  // Back closes the band rather than the screen while a value is armed, and the hint has
+  // to say so or it reads as a way out of Text Settings.
+  const auto labels =
+      mappedInput.mapLabels(editing_ ? tr(STR_DONE_EDIT) : tr(STR_BACK), confirmLabel, upLabel, downLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

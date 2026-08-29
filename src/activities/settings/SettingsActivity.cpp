@@ -455,7 +455,7 @@ void SettingsActivity::onExit() {
 
 void SettingsActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-  if (valueBar.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+  if (valueBand.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   // A tap picks the cell it landed on and acts on it in one go. The contact is spent by
   // the pick (takeScreenTouchDown), or the finger still resting there on the next pass
@@ -607,19 +607,28 @@ void SettingsActivity::toggleCurrentSetting() {
     // only be set to a multiple of five cannot be set to the value between them, and a
     // brightness or a margin is exactly where that one unit is worth having. The side
     // buttons carry the setting's own step (five, where it has one) so a wide range is
-    // still crossed in a few presses. Back cancels, which stepping in place could not
-    // offer.
+    // still crossed in a few presses. The band applies every step as it happens, so there
+    // is nothing to cancel: what the device is doing IS the value.
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
-    valueBar.show(setting.nameId, setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
-                  std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr),
-                  setting.nameId, [this, valuePtr](const int chosen) {
-                    SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
-                    applyFrontlightSetting(valuePtr);
-                    SETTINGS.saveToFile();
-                    rebuildSettingsList();
-                    restoreCursorAfterRebuild();
-                  });
+    valueBand.show(
+        renderer, I18N.get(setting.nameId),
+        slider_band::headerBandRect(renderer.getScreenWidth(), UITheme::getInstance().getMetrics().topPadding,
+                                    UITheme::getInstance().getMetrics().headerHeight),
+        setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
+        std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr),
+        [this, valuePtr](const int chosen) {
+          // Live: a frontlight or a margin is judged on the device, not on the number.
+          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
+          applyFrontlightSetting(valuePtr);
+        },
+        [this] {
+          // One write when the band closes, not one per step: the value moved
+          // through every number between the two ends on the way here.
+          SETTINGS.saveToFile();
+          rebuildSettingsList();
+          restoreCursorAfterRebuild();
+        });
     requestUpdate();
     return;
   } else if (setting.type == SettingType::STRING) {
@@ -700,8 +709,8 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::InstallOtherFirmware:
-        startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput, /*installOtherFirmware=*/true),
-                               resultHandler);
+        startActivityForResult(
+            std::make_unique<OtaUpdateActivity>(renderer, mappedInput, /*installOtherFirmware=*/true), resultHandler);
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
@@ -853,7 +862,6 @@ void SettingsActivity::openSleepTimeoutPicker() {
 
 void SettingsActivity::render(RenderLock&&) {
   if (optionPopup.processRender(renderer, mappedInput)) return;
-  if (valueBar.processRender(renderer, mappedInput)) return;
 
   renderer.clearScreen();
 
@@ -862,9 +870,15 @@ void SettingsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory)),
-                 mode == Mode::Hub ? CROSSPOINT_VERSION : nullptr);
+  // An armed number takes the header's place: the grid under it keeps its position, so the
+  // row being changed stays where the finger left it.
+  if (valueBand.isActive()) {
+    valueBand.render(renderer);
+  } else {
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
+                   mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory)),
+                   mode == Mode::Hub ? CROSSPOINT_VERSION : nullptr);
+  }
 
   if (mode == Mode::Hub) {
     const auto pane = gridPane();
@@ -893,7 +907,11 @@ void SettingsActivity::render(RenderLock&&) {
                               settings[selectedSettingIndex].nameId == StrId::STR_TIME_TO_SLEEP;
   const auto confirmLabel = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // An armed band owns the four keys: the side pair carries its large step, so the hints
+  // have to say so or the labels would point at a list that is not listening.
+  const auto labels = valueBand.isActive()
+                          ? mappedInput.mapLabels(tr(STR_DONE_EDIT), tr(STR_DONE_EDIT), "-", "+")
+                          : mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen
