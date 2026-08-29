@@ -326,9 +326,15 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   // Resolve destination first so we can size-check during validation. The full image-integrity
   // pass below verifies header, segment table, XOR checksum and SHA256 trailer end-to-end before
   // we touch otadata, so a truncated/corrupted .bin can never become the next boot target.
+  // Opened before anything can fail: a device with no serial console gives us
+  // nothing else, and "no next-update partition" is exactly the case where the
+  // partition table dump is the answer.
+  diagnosticsBeginAttempt(CROSSPOINT_VERSION, sdPath, 0);
+
   const esp_partition_t* dest = esp_ota_get_next_update_partition(nullptr);
   if (!dest) {
     LOG_ERR("FLASH", "no next-update partition");
+    diagnosticsFailAttempt("partition lookup", resultName(Result::NO_PARTITION));
     return Result::NO_PARTITION;
   }
 
@@ -340,6 +346,7 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
     const Result validateRes = validateImageFile(sdPath, dest->size);
     if (validateRes != Result::OK) {
       LOG_ERR("FLASH", "image validation failed: %s", resultName(validateRes));
+      diagnosticsFailAttempt("validate", resultName(validateRes));
       return validateRes;
     }
   }
@@ -347,6 +354,7 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   SdFileSource source;
   if (!source.open(sdPath)) {
     LOG_ERR("FLASH", "open failed: %s", sdPath);
+    diagnosticsFailAttempt("open", resultName(Result::OPEN_FAIL));
     return Result::OPEN_FAIL;
   }
   PartitionTarget target(dest);
@@ -356,6 +364,7 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   const Result writeRes = writeImage(source, target, onProgress, ctx);
   if (writeRes != Result::OK) {
     LOG_ERR("FLASH", "write failed: %s", resultName(writeRes));
+    diagnosticsFailAttempt("write", resultName(writeRes));
     return writeRes;
   }
 
@@ -366,11 +375,9 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   if (verifyRes != Result::OK) {
     LOG_ERR("FLASH", "readback failed: %s (offset %u)", resultName(verifyRes),
             static_cast<unsigned>(lastVerifyMismatchOffset()));
+    diagnosticsFailAttempt("readback", resultName(verifyRes));
     return verifyRes;
   }
-  // Written down before and after, because a device with no serial console can
-  // only tell us what happened here through a file on the card.
-  diagnosticsBeginAttempt(CROSSPOINT_VERSION, sdPath, source.size());
   const bool switchOk = ota_boot::switchTo(dest);
   diagnosticsEndAttempt(dest->address, dest->label, dest->subtype, switchOk);
   if (!switchOk) {
@@ -429,6 +436,8 @@ Result StreamingInstall::commit() {
   const Result validateRes = validateFlashedImage(impl_->dest, imageSize);
   if (validateRes != Result::OK) {
     LOG_ERR("FLASH", "flashed image invalid: %s", resultName(validateRes));
+    diagnosticsBeginAttempt(CROSSPOINT_VERSION, nullptr, imageSize);
+    diagnosticsFailAttempt("validate", resultName(validateRes));
     return validateRes;
   }
   // ota_boot::switchTo, not esp_ota_set_boot_partition: the latter marks the

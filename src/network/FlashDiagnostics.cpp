@@ -103,6 +103,10 @@ void diagnosticsBeginAttempt(const char* version, const char* imagePath, const s
   append(out);
 }
 
+void diagnosticsFailAttempt(const char* stage, const char* result) {
+  append(line("  FAILED at %s: %s\n", stage ? stage : "?", result ? result : "?"));
+}
+
 void diagnosticsEndAttempt(const uint32_t destAddress, const char* destLabel, const uint8_t destSubtype,
                            const bool switchOk) {
   const uint32_t destOtaIdx = static_cast<uint32_t>(destSubtype) - static_cast<uint32_t>(ESP_PARTITION_SUBTYPE_APP_OTA_0);

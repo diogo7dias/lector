@@ -192,7 +192,10 @@ void SdFirmwareUpdateActivity::performUpdate() {
       // the device still boots the firmware it is running now.
       errorMessage = tr(STR_FIRMWARE_VERIFY_FAILED);
     } else {
-      errorMessage = tr(STR_FIRMWARE_WRITE_FAILED);
+      // The code goes on screen: on a USB-locked reader a photo of this screen
+      // is often the only report we get, and "write failed" alone covers
+      // everything from a missing OTA slot to a bad erase.
+      errorMessage = std::string(tr(STR_FIRMWARE_WRITE_FAILED)) + " (" + firmware_flash::resultName(result) + ")";
     }
     RenderLock lock(*this);
     state = State::FAILED;

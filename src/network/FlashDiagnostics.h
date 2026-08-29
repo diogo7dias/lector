@@ -23,6 +23,11 @@ namespace firmware_flash {
 // over-the-air install.
 void diagnosticsBeginAttempt(const char* version, const char* imagePath, size_t imageSize);
 
+// Called when an install attempt ends before the boot record is touched, so a
+// failure leaves a record too. `stage` names where it stopped ("validate",
+// "write", "readback"); `result` is firmware_flash::resultName of the failure.
+void diagnosticsFailAttempt(const char* stage, const char* result);
+
 // Called after ota_boot::switchTo, with whether it reported success. The
 // destination is passed as plain values so this header stays free of ESP
 // types.
