@@ -191,30 +191,14 @@ const char* ReaderPresetsActivity::noteText() const {
   return nullptr;
 }
 
-int ReaderPresetsActivity::noteHeight() const {
-  if (noteText() == nullptr) return 0;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  return 20 + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
-}
-
-void ReaderPresetsActivity::drawChrome() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_READING_THEMES));
-
-  const char* note = noteText();
-  if (note == nullptr) return;
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, note);
+ListChrome ReaderPresetsActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = tr(STR_READING_THEMES);
+  chrome.note = noteText();
+  return chrome;
 }
 
 void ReaderPresetsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  // The note is drawn with the chrome, so the list starts below it.
-  screen.setContentMargin(fui::Insets{
-      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + noteHeight()), 0,
-      static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const int count = rowCount();
   if (count <= 0) return;
 

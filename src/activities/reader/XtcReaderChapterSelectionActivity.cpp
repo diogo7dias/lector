@@ -34,11 +34,6 @@ int XtcReaderChapterSelectionActivity::listCount() const {
 }
 
 void XtcReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   if (listCount() == 0) {
     screen.centeredText(tr(STR_NO_CHAPTERS));
     return;

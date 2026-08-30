@@ -31,11 +31,6 @@ int NetworkModeSelectionActivity::listCount() const { return MENU_ITEM_COUNT; }
 const char* NetworkModeSelectionActivity::headerTitle() const { return tr(STR_FILE_TRANSFER); }
 
 void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   rows.assign(MENU_ITEM_COUNT, fui::ListItem{});
   for (int i = 0; i < MENU_ITEM_COUNT; ++i) {
     rows[i].label = I18N.get(MENU_ITEMS[i]);

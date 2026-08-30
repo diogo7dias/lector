@@ -75,8 +75,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   // The book block above the list is chrome, not rows: title, author, chapter and
-  // progress. buildScreen reserves chromeHeight() for it so the two cannot drift.
-  void drawChrome() override;
+  // progress. The base reserves the band it paints, so the two cannot drift.
+  ListChrome chrome() const override;
   // Popup input, and the Confirm hold that runs the bound menu function. Both own the
   // pass before the base looks at Back, Confirm or the selection.
   bool handleCustomInput() override;
@@ -136,12 +136,12 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // Index of the first landable row of the section named by SETTINGS.bookMenuTab, or 0.
   int firstRowOfPreferredSection() const;
   void closeCancelled();
-  // Height of the book block drawChrome() paints, measured from the screen top: the
-  // header band, the wrapped title, and whichever of author / chapter / progress apply.
-  int chromeHeight() const;
-  // The wrapped title lines, laid out once per pass and used by both chromeHeight()
-  // and drawChrome().
+  // The wrapped title lines. The book block itself is chrome() headerLines, so
+  // the base reserves exactly what it draws.
   std::vector<std::string> titleLines() const;
+  // The block's strings, held so the ListChrome can borrow them. Mutable because
+  // chrome() is const: rebuilding the block changes nothing about the screen.
+  mutable std::vector<std::string> headerBlock;
   // The value column text for a row, or nullptr when the row carries no value.
   const char* rowValue(int index) const;
 

@@ -137,11 +137,6 @@ void DictionaryHistoryActivity::onBackButton() {
 }
 
 void DictionaryHistoryActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const auto& words = DICT_HISTORY.getWords();
   if (words.empty()) {
     screen.centeredText(tr(STR_NO_LOOKUPS));

@@ -26,9 +26,8 @@ class OpdsSettingsActivity final : public UiListActivity {
   int listCount() const override { return getMenuItemCount(); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
-  const char* headerTitle() const override;
   // The header carries a hint line under it, which the base chrome does not offer.
-  void drawChrome() override;
+  ListChrome chrome() const override;
   bool drawOverlay() override;
 
  private:

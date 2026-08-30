@@ -43,7 +43,6 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   bool handleCustomInput() override;
   bool handleButtons() override;
   void onBackButton() override;
-  const char* headerTitle() const override;
-  void drawFooter() override;
+  ListChrome chrome() const override;
   bool drawOverlay() override;
 };

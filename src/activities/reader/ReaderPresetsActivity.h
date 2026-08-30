@@ -28,7 +28,7 @@ class ReaderPresetsActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   const char* headerTitle() const override;
-  void drawChrome() override;
+  ListChrome chrome() const override;
   // The theme actions popup owns the pass while it is up, and paints over the
   // finished list.
   bool handleCustomInput() override;
@@ -61,7 +61,6 @@ class ReaderPresetsActivity final : public UiListActivity {
   void clampSelector();
   // The status line above the list, or nullptr when there is nothing to say.
   const char* noteText() const;
-  int noteHeight() const;
 
   // Row labels own their strings; the ListItems borrow them.
   std::vector<std::string> labels;

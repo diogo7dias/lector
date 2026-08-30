@@ -539,59 +539,20 @@ std::vector<std::string> EpubReaderMenuActivity::titleLines() const {
   return renderer.wrappedText(UI_10_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::REGULAR);
 }
 
-int EpubReaderMenuActivity::chromeHeight() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int subLineHeight = renderer.getLineHeight(UI_10_FONT_ID) + 2;
-
-  int y = screen.y + metrics.topPadding + 5;
-  y += static_cast<int>(titleLines().size()) * titleLineHeight;
-  y += 2;
-  if (!author.empty()) y += subLineHeight;
-  if (!chapterName.empty()) y += subLineHeight;
-  y += subLineHeight;  // the progress line, always drawn
-  return y + metrics.verticalSpacing;
-}
-
-void EpubReaderMenuActivity::drawChrome() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
+ListChrome EpubReaderMenuActivity::chrome() const {
   const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
 
-  // Battery cluster only (top-right); the title is drawn (wrapped) below so it can span
-  // as many lines as it needs, followed by the author, chapter, and progress lines.
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight}, nullptr);
-
-  // Same size and weight as the author and chapter lines below: at UI_12 bold the
-  // title read as a heavy slab against the thin lines under it.
-  const int titleLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  int y = screen.y + metrics.topPadding + 5;
-  for (const auto& line : titleLines()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), true, EpdFontFamily::REGULAR);
-    y += titleLineHeight;
-  }
-  y += 2;
-
-  const int subLineHeight = renderer.getLineHeight(UI_10_FONT_ID) + 2;
-
-  // "by {author}" — centered, only when an author is known.
+  headerBlock.clear();
+  for (const std::string& line : titleLines()) headerBlock.push_back(line);
+  // "by {author}", only when an author is known.
   if (!author.empty()) {
     const std::string byLine = std::string(tr(STR_BY_PREFIX)) + author;
-    const std::string truncatedByLine =
-        renderer.truncatedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40, EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, y, truncatedByLine.c_str());
-    y += subLineHeight;
+    headerBlock.push_back(renderer.truncatedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40));
   }
-
-  // Current chapter name — centered.
   if (!chapterName.empty()) {
-    const std::string truncatedChapter =
-        renderer.truncatedText(UI_10_FONT_ID, chapterName.c_str(), screen.width - 40, EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, y, truncatedChapter.c_str());
-    y += subLineHeight;
+    headerBlock.push_back(renderer.truncatedText(UI_10_FONT_ID, chapterName.c_str(), screen.width - 40));
   }
-
-  // Progress summary — centered: "Pages: <page>/<pages>  |  Book: <pct>%". Both halves
+  // Progress summary: "Pages: <page>/<pages>  |  Book: <pct>%". Both halves
   // carry a label so neither reads as a bare number.
   std::string progressLine;
   if (totalPages > 0) {
@@ -599,15 +560,19 @@ void EpubReaderMenuActivity::drawChrome() {
         std::string(tr(STR_PAGES_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + "  |  ";
   }
   progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  renderer.drawCenteredText(UI_10_FONT_ID, y, progressLine.c_str());
+  headerBlock.push_back(progressLine);
+
+  ListChrome chrome;
+  // The band carries the battery cluster only: the book's own name is one of
+  // the lines under it, where it can wrap.
+  chrome.title = "";
+  for (size_t i = 0; i < headerBlock.size() && i < ListChrome::MAX_HEADER_LINES; ++i) {
+    chrome.headerLines[i] = headerBlock[i].c_str();
+  }
+  return chrome;
 }
 
 void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  // The book block is painted by drawChrome(), so the list starts under it.
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(chromeHeight()), 0,
-                                      static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const int count = static_cast<int>(items.size());
   rows.assign(static_cast<size_t>(count), fui::ListItem{});
   for (int i = 0; i < count; ++i) {

@@ -206,20 +206,15 @@ bool ButtonBindingsActivity::handleCustomInput() {
 
 bool ButtonBindingsActivity::drawOverlay() { return actionPopup.processRender(renderer, mappedInput); }
 
-void ButtonBindingsActivity::drawChrome() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const char* title = view == View::Bindings && selectedButton < static_cast<int>(buttons.size())
-                          ? buttonLabel(buttons[selectedButton])
-                          : tr(STR_BUTTONS);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, title);
+ListChrome ButtonBindingsActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = view == View::Bindings && selectedButton < static_cast<int>(buttons.size())
+                     ? buttonLabel(buttons[selectedButton])
+                     : tr(STR_BUTTONS);
+  return chrome;
 }
 
 void ButtonBindingsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const int count = listCount();
   if (count <= 0) return;
   labels.assign(static_cast<size_t>(count), std::string());

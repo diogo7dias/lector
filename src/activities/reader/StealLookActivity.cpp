@@ -41,12 +41,7 @@ void StealLookActivity::onExit() {
 const char* StealLookActivity::headerTitle() const { return tr(STR_STEAL_LOOK); }
 
 void StealLookActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
   // The base paints the header and the button hints itself, outside the app.
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   if (candidates.empty()) {
     screen.centeredText(tr(STR_STEAL_LOOK_NONE));
     return;

@@ -5,6 +5,7 @@
 #include <string>
 
 #include "activities/UiListActivity.h"
+#include "components/OptionPopup.h"
 
 // Reader status bar configuration activity (v2 per-item model). Each text item is
 // parked at one of six anchors (or Off) via a small in-place position picker; the
@@ -32,12 +33,10 @@ class StatusBarSettingsActivity final : public UiListActivity {
   // The item ids that apply to this device (clock is X3-only), in display order.
   std::vector<int> visibleItems;
 
-  // In-place anchor picker overlay. When active, up/down move pickerIndex over the
-  // seven anchor choices (Off, TL, TC, TR, BL, BC, BR) and Confirm commits it to
-  // *pickerTarget; Back cancels.
-  bool pickerActive = false;
-  int pickerIndex = 0;
-  uint8_t* pickerTarget = nullptr;
+  // The anchor picker: the seven choices (Off, TL, TC, TR, BL, BC, BR) as the
+  // shared popup, so it looks like every other choice in the firmware instead of
+  // like a box this screen drew for itself.
+  OptionPopup anchorPopup;
 
   void handleSelection(int index);
   // Rebuilds the display list. Two items are conditional: the clock (X3 RTC only) and
@@ -46,7 +45,6 @@ class StatusBarSettingsActivity final : public UiListActivity {
   void rebuildVisibleItems();
   // Returns the SETTINGS anchor field for a position item, or nullptr for non-anchor items.
   uint8_t* anchorFieldFor(int itemId) const;
-  void renderPicker();
   // The value column text for one item id.
   std::string rowValue(int id) const;
 

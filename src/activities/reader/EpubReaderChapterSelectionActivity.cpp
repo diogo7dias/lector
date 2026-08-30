@@ -73,11 +73,6 @@ std::string EpubReaderChapterSelectionActivity::tocLabelAt(const int index) cons
 }
 
 void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const int total = listCount();
   if (total <= 0) return;
 

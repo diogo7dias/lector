@@ -38,8 +38,6 @@ void EpubReaderBookmarksActivity::onExit() {
 
 int EpubReaderBookmarksActivity::listCount() const { return static_cast<int>(bookmarks.size()); }
 
-const char* EpubReaderBookmarksActivity::headerTitle() const { return tr(STR_BOOKMARKS); }
-
 void EpubReaderBookmarksActivity::refreshRows(const bool portrait) {
   const int count = listCount();
   subtitles.assign(count, std::string());
@@ -66,11 +64,6 @@ void EpubReaderBookmarksActivity::refreshRows(const bool portrait) {
 }
 
 void EpubReaderBookmarksActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   if (bookmarks.empty()) {
     screen.centeredText(tr(STR_NO_BOOKMARKS));
     return;
@@ -176,17 +169,16 @@ void EpubReaderBookmarksActivity::onBackButton() {
   finish();
 }
 
-void EpubReaderBookmarksActivity::drawFooter() {
-  const char* confirmLabel = bookmarks.empty() ? "" : tr(STR_SELECT);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  if (bookmarks.empty()) return;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int lineHeight = renderer.getLineHeight(uiScaleSpec().smallFontId);
-  GUI.drawHelpText(renderer,
-                   Rect{0, renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight,
-                        renderer.getScreenWidth(), lineHeight},
-                   tr(STR_HOLD_OPEN_TO_DELETE));
+ListChrome EpubReaderBookmarksActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = tr(STR_BOOKMARKS);
+  if (bookmarks.empty()) {
+    // Nothing to open and nothing to delete, so neither is offered.
+    chrome.confirmHint = "";
+    return chrome;
+  }
+  chrome.footnote = tr(STR_HOLD_OPEN_TO_DELETE);
+  return chrome;
 }
 
 bool EpubReaderBookmarksActivity::drawOverlay() { return confirmPopup.processRender(renderer, mappedInput); }
