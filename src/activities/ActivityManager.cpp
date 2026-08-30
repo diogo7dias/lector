@@ -221,6 +221,13 @@ void ActivityManager::loop() {
     currentActivity->loop();
   }
 
+  // A screen change ends the press that caused it. Screens disagree on which edge acts
+  // (SettingsActivity opens on the press, UiListActivity activates a row on the release),
+  // so without this the lift of the press that opened a screen fires again on the screen
+  // it opened: Settings jumped into KOReader Sync and straight on into the Username
+  // keyboard, on one press.
+  if (pendingAction != PendingAction::None) mappedInput.suppressHeldButtonRelease();
+
   while (pendingAction != PendingAction::None) {
     if (pendingAction == PendingAction::Pop) {
       RenderLock lock;

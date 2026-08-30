@@ -657,10 +657,23 @@ void TextSettingsActivity::loop() {
     }
   }
 
-  buttonNavigator_.onNextStep([this] { moveSelection(1, 0); });
-  buttonNavigator_.onPreviousStep([this] { moveSelection(-1, 0); });
-  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { moveSelection(0, -1); });
-  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { moveSelection(0, 1); });
+  // Same split as the settings grid: side pair walks rows, front pair walks cells, and a
+  // front press is not also counted as a row step. See SettingsActivity::loop().
+  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
+  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
+  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
+  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
+
+  switch (mappedInput.wasListScrollSwipe()) {
+    case list_swipe::Scroll::PageDown:
+      moveSelection(1, 0);
+      break;
+    case list_swipe::Scroll::PageUp:
+      moveSelection(-1, 0);
+      break;
+    default:
+      break;
+  }
 }
 
 // One cell: its name in the small font over its value in the reading font, both centred.
@@ -730,12 +743,16 @@ void TextSettingsActivity::render(RenderLock&&) {
   const char* confirmLabel = tr(STR_SELECT);
   const char* upLabel = tr(STR_DIR_UP);
   const char* downLabel = tr(STR_DIR_DOWN);
+  const char* leftLabel = tr(STR_DIR_LEFT);
+  const char* rightLabel = tr(STR_DIR_RIGHT);
   if (selectedIndex_ < static_cast<int>(rows.size())) {
     const RowKind kind = kindOf(rows[selectedIndex_]);
     if (editing_) {
       confirmLabel = tr(STR_DONE_EDIT);
       upLabel = "-";
       downLabel = "+";
+      leftLabel = "-";
+      rightLabel = "+";
     } else if (kind == RowKind::Toggle) {
       confirmLabel = tr(STR_TOGGLE);
     } else if (kind == RowKind::Number) {
@@ -745,8 +762,8 @@ void TextSettingsActivity::render(RenderLock&&) {
 
   // Back closes the band rather than the screen while a value is armed, and the hint has
   // to say so or it reads as a way out of Text Settings.
-  const auto labels =
-      mappedInput.mapLabels(editing_ ? tr(STR_DONE_EDIT) : tr(STR_BACK), confirmLabel, upLabel, downLabel);
+  const auto labels = mappedInput.mapDirectionalLabels(editing_ ? tr(STR_DONE_EDIT) : tr(STR_BACK), confirmLabel,
+                                                       leftLabel, rightLabel, upLabel, downLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   renderer.displayBuffer();

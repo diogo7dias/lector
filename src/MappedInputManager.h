@@ -3,6 +3,7 @@
 #include <HalGPIO.h>
 
 #include "ListSwipeGesture.h"
+#include "util/ReleaseGate.h"
 
 class GfxRenderer;
 
@@ -36,7 +37,17 @@ class MappedInputManager {
 
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
-  void update() const { gpio.update(); }
+  void update() const {
+    gpio.update();
+    // After the poll and before anything queries the buttons: the gate has to see this
+    // pass's edges to decide whether the release it is waiting for has gone by.
+    releaseGate.tick(isAnyPressed(), gpio.wasAnyReleased());
+  }
+
+  // Swallow the release of whatever button is held right now. A screen that acted on the
+  // press and opened another screen calls this, so the lift cannot act again on what it
+  // opened. Button counterpart of the touch path's takeScreenTouchDown().
+  void suppressHeldButtonRelease() const { releaseGate.arm(isAnyPressed()); }
 
   // True while any physical button is down.
   bool isAnyPressed() const;
@@ -177,6 +188,9 @@ class MappedInputManager {
   // A tap on the hint band stands for one button press, not one per query: cleared as soon
   // as the tap event is gone, so the next tap is heard again.
   mutable bool hintTapUsed = false;
+
+  // See suppressHeldButtonRelease().
+  mutable input_gate::ReleaseGate releaseGate;
 
   // Top-edge pull-down state (see wasMenuGesture). The SDK's swipe is a flick: under
   // 700 ms, over 60 px. A hand pulling a panel down from the edge is slower than that far

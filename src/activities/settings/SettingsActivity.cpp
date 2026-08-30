@@ -509,10 +509,32 @@ void SettingsActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextStep([this] { moveSelection(1, 0); });
-  buttonNavigator.onPreviousStep([this] { moveSelection(-1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { moveSelection(0, -1); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { moveSelection(0, 1); });
+  // Rows on the side pair, cells on the front pair, and each press counted once.
+  // NavNext is "side Down OR front Right" and NavPrevious is "side Up OR front Left"
+  // (MappedInputManager::mapButton), so wiring the rows through onNextStep/onPreviousStep
+  // made one press of a front button step a row and then a cell in the same pass: three
+  // cells at a time, which on a two-column grid reads as a diagonal jump, and nothing at
+  // all from the first cell because the clamp swallowed it.
+  //
+  // ScreenUp/ScreenDown/ScreenLeft/ScreenRight rather than the raw buttons so a rotated
+  // screen keeps moving the way the hints under it say it does.
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
+
+  // A swipe scrolls the grid by a row. Handled here because it used to ride on the
+  // Next/Previous bindings this screen no longer uses.
+  switch (mappedInput.wasListScrollSwipe()) {
+    case list_swipe::Scroll::PageDown:
+      moveSelection(1, 0);
+      break;
+    case list_swipe::Scroll::PageUp:
+      moveSelection(-1, 0);
+      break;
+    default:
+      break;
+  }
 }
 
 void SettingsActivity::toggleCurrentSetting() {
@@ -911,7 +933,8 @@ void SettingsActivity::render(RenderLock&&) {
   // have to say so or the labels would point at a list that is not listening.
   const auto labels = valueBand.isActive()
                           ? mappedInput.mapLabels(tr(STR_DONE_EDIT), tr(STR_DONE_EDIT), "-", "+")
-                          : mappedInput.mapLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+                          : mappedInput.mapDirectionalLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT),
+                                                              tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // Always use standard refresh for settings screen
