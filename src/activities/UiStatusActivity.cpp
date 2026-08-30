@@ -542,8 +542,9 @@ void UiStatusActivity::render(RenderLock&&) {
   if (view.title) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int pageWidth = renderer.getScreenWidth();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, view.title,
-                   view.headerRight ? view.headerRight : "");
+    const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+    GUI.drawHeader(renderer, headerRect, view.title, view.headerRight ? view.headerRight : "");
+    drawHeaderExtras(headerRect);
     if (view.subtitleLeft) {
       const int bandTop = metrics.topPadding + metrics.headerHeight;
       GUI.drawSubHeader(renderer, Rect{0, bandTop, pageWidth, metrics.tabBarHeight}, view.subtitleLeft,

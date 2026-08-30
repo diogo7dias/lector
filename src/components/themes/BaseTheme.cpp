@@ -1597,6 +1597,33 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
 }
 
+void BaseTheme::drawPathBar(const GfxRenderer& renderer, const Rect rect, const char* path) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  renderer.drawLine(rect.x, rect.y, rect.x + rect.width - 1, rect.y, metrics.pathBarThickness, true);
+  if (path == nullptr || path[0] == '\0') return;
+
+  const int textY = rect.y + metrics.verticalSpacing / 2;
+  const int maxWidth = rect.width - metrics.contentSidePadding * 2;
+  if (renderer.getTextWidth(SMALL_FONT_ID, path) <= maxWidth) {
+    renderer.drawText(SMALL_FONT_ID, rect.x + metrics.contentSidePadding, textY, path);
+    return;
+  }
+
+  // Left-truncate: the folder being looked at matters, the root it hangs off
+  // does not.
+  const char ellipsis[] = "\xe2\x80\xa6";  // UTF-8 ellipsis
+  const int available = maxWidth - renderer.getTextWidth(SMALL_FONT_ID, ellipsis);
+  const char* tail = path;
+  while (*tail) {
+    if (renderer.getTextWidth(SMALL_FONT_ID, tail) <= available) break;
+    ++tail;
+    while (*tail && (static_cast<unsigned char>(*tail) & 0xC0) == 0x80) ++tail;  // skip continuation bytes
+  }
+  char buffer[256];
+  snprintf(buffer, sizeof(buffer), "%s%s", ellipsis, tail);
+  renderer.drawText(SMALL_FONT_ID, rect.x + metrics.contentSidePadding, textY, buffer);
+}
+
 void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
                               int contentStartX, int contentWidth) const {
   const auto& metrics = UITheme::getInstance().getMetrics();

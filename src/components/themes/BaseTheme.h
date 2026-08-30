@@ -128,6 +128,9 @@ struct ThemeMetrics {
   int textFieldNormalThickness;
   int textFieldCursorThickness;
   int textFieldLineEndOffset;
+
+  // Rule above the file browser's path line.
+  int pathBarThickness;
 };
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
@@ -214,7 +217,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0};
+                                 .textFieldLineEndOffset = 0,
+                                 .pathBarThickness = 3};
 }
 
 class BaseTheme {
@@ -339,6 +343,11 @@ class BaseTheme {
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
   void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const;
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
+  // Foot-of-screen path bar: a rule, then the path in the small face,
+  // left-truncated so the deepest folder is the part that survives. The file
+  // browser drew this itself, which put a rule thickness and a truncation rule
+  // outside the theme.
+  virtual void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual bool showsFileIcons() const { return false; }

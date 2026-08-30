@@ -805,7 +805,7 @@ void FileBrowserActivity::render(RenderLock&&) {
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
   if (totalRowCount() == 0) {
     const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + 20, emptyMsg);
+    GUI.drawHelpText(renderer, Rect{0, contentTop + 20, pageWidth, contentHeight}, emptyMsg);
   } else {
     // Wrapping list: a long book title spills onto extra lines instead of being cut off
     // with an ellipsis. Rows therefore vary in height, so the visible range comes back from
@@ -820,36 +820,16 @@ void FileBrowserActivity::render(RenderLock&&) {
     // A search that matched nothing still shows its two rows, so say so rather than
     // leaving the user staring at an empty list wondering if the search ran.
     if (searchActive() && filtered.empty()) {
-      renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, contentTop + contentHeight / 2,
-                        tr(STR_NO_FILES_FOUND));
+      GUI.drawHelpText(renderer, Rect{0, contentTop + contentHeight / 2, pageWidth, contentHeight},
+                       tr(STR_NO_FILES_FOUND));
     }
   }
 
-  // Full path display
+  // Where in the card the listing is coming from, along the foot of the screen.
   {
     const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
     const int separatorY = pathY - metrics.verticalSpacing / 2;
-    renderer.drawLine(0, separatorY, pageWidth - 1, separatorY, 3, true);
-    const int pathMaxWidth = pageWidth - metrics.contentSidePadding * 2;
-    // Left-truncate so the deepest directory is always visible
-    const char* pathStr = basepath.c_str();
-    const char* pathDisplay = pathStr;
-    char leftTruncBuf[256];
-    if (renderer.getTextWidth(SMALL_FONT_ID, pathStr) > pathMaxWidth) {
-      const char ellipsis[] = "\xe2\x80\xa6";  // UTF-8 ellipsis (…)
-      const int ellipsisWidth = renderer.getTextWidth(SMALL_FONT_ID, ellipsis);
-      const int available = pathMaxWidth - ellipsisWidth;
-      // Walk forward from the start until the suffix fits, skipping UTF-8 continuation bytes
-      const char* p = pathStr;
-      while (*p) {
-        if (renderer.getTextWidth(SMALL_FONT_ID, p) <= available) break;
-        ++p;
-        while (*p && (static_cast<unsigned char>(*p) & 0xC0) == 0x80) ++p;
-      }
-      snprintf(leftTruncBuf, sizeof(leftTruncBuf), "%s%s", ellipsis, p);
-      pathDisplay = leftTruncBuf;
-    }
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, pathY, pathDisplay);
+    GUI.drawPathBar(renderer, Rect{0, separatorY, pageWidth, pathReserved}, basepath.c_str());
   }
 
   // Help text

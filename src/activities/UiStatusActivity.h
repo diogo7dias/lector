@@ -161,6 +161,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   virtual bool handleCustomInput() { return false; }
   // Drawn after the hints, for a legacy pop-up that owns the frame. Returning
   // true means the overlay published the buffer itself.
+  // Drawn straight after the header band, for a screen with a mark of its own
+  // there (the OPDS browser's search glyph). The band's rect is passed so the
+  // mark follows the theme's header height.
+  virtual void drawHeaderExtras(const Rect& headerRect) {}
   virtual bool drawOverlay() { return false; }
   // Called once the page is on the panel, for a screen that tracks what the
   // panel is showing (a full pass is owed when the screen changes wholesale,
