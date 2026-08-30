@@ -17,6 +17,7 @@
 #include "TextSettingsPreview.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
+#include "activities/settings/FontPickerActivity.h"
 #include "fontIds.h"
 #include "util/MarginLink.h"
 
@@ -71,10 +72,10 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                            const SdCardFontRegistry* registry)
-    : Activity("TextSettings", renderer, mappedInput), registry_(registry) {}
+    : UiGridActivity("TextSettings", renderer, mappedInput), registry_(registry) {}
 
 void TextSettingsActivity::onEnter() {
-  Activity::onEnter();
+  UiGridActivity::onEnter();
 
   metrics_ = UITheme::getInstance().getMetrics();
   afterHeader = metrics_.topPadding + metrics_.headerHeight + metrics_.verticalSpacing;
@@ -93,8 +94,7 @@ void TextSettingsActivity::onEnter() {
 
   rebuildSizeList();
   currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
-  fontPickerIndex_ = currentFamilyIndex_;
-  selectedIndex_ = 0;
+  setSelected(0);
 
   requestUpdate();
 }
@@ -129,12 +129,15 @@ void TextSettingsActivity::rebuildSizeList() {
   }
 }
 
-TextSettingsActivity::PaneGeometry TextSettingsActivity::paneGeometry() const {
-  const int previewTop = afterHeader;
-  const int previewHeight = std::min(PREVIEW_HEIGHT, usableHeight * PREVIEW_MAX_PERCENT / 100);
-  const int listTop = previewTop + previewHeight + metrics_.verticalSpacing;
-  const int listHeight = usableHeight - previewHeight - metrics_.verticalSpacing;
-  return {previewTop, previewHeight, listTop, listHeight};
+// The preview band above the grid; the base reserves it and hands its rect back.
+int TextSettingsActivity::reservedHeight() const {
+  return std::min(PREVIEW_HEIGHT, usableHeight * PREVIEW_MAX_PERCENT / 100) + metrics_.verticalSpacing;
+}
+
+void TextSettingsActivity::drawReserved(const Rect& rect) {
+  // The preview is a real page rendered by the reader engine, so it stays a raw
+  // painter; the base only decides where it goes.
+  textsettings::renderPreview(renderer, previewLayout_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
 TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
@@ -421,19 +424,27 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
 // Up and Down move a whole grid row so the column is kept; Left and Right move one cell,
 // which is what makes the second column reachable. Clamped rather than wrapped: a wrap at
 // the end of a settings screen reads as a jump rather than as a step.
-void TextSettingsActivity::moveSelection(const int deltaRows, const int deltaCells) {
+int TextSettingsActivity::cellCount() const { return static_cast<int>(visibleRows().size()); }
+
+const char* TextSettingsActivity::cellName(const int index) const {
   const auto rows = visibleRows();
-  const int count = static_cast<int>(rows.size());
-  if (count == 0) return;
-  selectedIndex_ = settings_grid::step(selectedIndex_, count, deltaRows, deltaCells);
-  scrollRow_ = settings_grid::scrollToShow(gridLayout(), selectedIndex_);
-  requestUpdate();
+  if (index < 0 || index >= static_cast<int>(rows.size())) return nullptr;
+  cellNameScratch_ = I18N.get(rowNameId(rows[index]));
+  return cellNameScratch_.c_str();
 }
 
-settings_grid::Layout TextSettingsActivity::gridLayout() const {
-  const auto geo = paneGeometry();
-  return settings_grid::forPane(renderer.getScreenWidth(), geo.listHeight, static_cast<int>(visibleRows().size()),
-                                scrollRow_);
+const char* TextSettingsActivity::cellValue(const int index) const {
+  const auto rows = visibleRows();
+  if (index < 0 || index >= static_cast<int>(rows.size())) return nullptr;
+  cellValueScratch_ = rowValueText(rows[index]);
+  return cellValueScratch_.c_str();
+}
+
+void TextSettingsActivity::activateCell(const int index) {
+  const auto rows = visibleRows();
+  if (index < 0 || index >= static_cast<int>(rows.size())) return;
+  activateRow(rows[index]);
+  requestUpdate();
 }
 
 void TextSettingsActivity::openSizePicker() {
@@ -447,11 +458,25 @@ void TextSettingsActivity::openSizePicker() {
 
 void TextSettingsActivity::activateRow(const Row row) {
   switch (kindOf(row)) {
-    case RowKind::FontList:
-      mode_ = Mode::FontPicker;
-      fontPickerIndex_ = currentFamilyIndex_;
+    case RowKind::FontList: {
+      std::vector<std::string> names;
+      names.reserve(fonts_.size());
+      for (const auto& font : fonts_) names.push_back(font.name);
+      startActivityForResult(
+          std::make_unique<FontPickerActivity>(renderer, mappedInput, std::move(names), currentFamilyIndex_),
+          [this](const ActivityResult& result) {
+            const auto* chosen = std::get_if<IntervalResult>(&result.data);
+            // applyFamily persists on every path out of itself: relying on a
+            // later save loses the change when this screen is left by the home
+            // key or by a sleep.
+            if (chosen != nullptr && static_cast<int>(chosen->value) != currentFamilyIndex_) {
+              applyFamily(static_cast<int>(chosen->value));
+            }
+            requestUpdate();
+          });
       requestUpdate();
       return;
+    }
     case RowKind::Number: {
       int minValue = 0;
       int maxValue = 0;
@@ -459,12 +484,9 @@ void TextSettingsActivity::activateRow(const Row row) {
       const uint8_t* field = numberField(row);
       editing_ = true;
       const auto& metrics = UITheme::getInstance().getMetrics();
-      valueBand_.show(
-          renderer, I18N.get(rowNameId(row)),
-          slider_band::headerBandRect(renderer.getScreenWidth(), metrics.topPadding, metrics.headerHeight), minValue,
-          maxValue, /*smallStep=*/1, /*largeStep=*/5, field ? *field : minValue,
-          [this](const int chosen) { setEditedValue(chosen); }, [this] { leaveEdit(); });
-      requestUpdate();
+      armValueBand(I18N.get(rowNameId(row)), minValue, maxValue, /*smallStep=*/1, /*largeStep=*/5,
+                   field ? *field : minValue, [this](const int chosen) { setEditedValue(chosen); },
+                   [this] { leaveEdit(); });
       return;
     }
     case RowKind::Picker:
@@ -557,8 +579,8 @@ void TextSettingsActivity::activateRow(const Row row) {
 
 void TextSettingsActivity::setEditedValue(const int value) {
   const auto rows = visibleRows();
-  if (selectedIndex_ >= static_cast<int>(rows.size())) return;
-  const Row row = rows[selectedIndex_];
+  if (selected() >= static_cast<int>(rows.size())) return;
+  const Row row = rows[selected()];
   const uint8_t* field = numberField(row);
   if (!field) return;
 
@@ -582,192 +604,54 @@ void TextSettingsActivity::leaveEdit() {
   requestUpdate();
 }
 
-void TextSettingsActivity::loop() {
-  if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return;  // picker owns input while open
-  // An armed number owns input the same way, buttons included: nothing behind the band
-  // moves while it is up.
-  if (valueBand_.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-
-  if (mode_ == Mode::FontPicker) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      mode_ = Mode::List;
-      requestUpdate();
-      return;
-    }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      // applyFamily() persists on every path out of itself: the parent's result callback
-      // only runs on a normal finish(), so relying on it loses the change when this
-      // screen is left via the home gesture/key or a sleep.
-      if (fontPickerIndex_ != currentFamilyIndex_) applyFamily(fontPickerIndex_);
-      mode_ = Mode::List;
-      requestUpdate();
-      return;
-    }
-    const int fontCount = static_cast<int>(fonts_.size());
-    buttonNavigator_.onNextStep([this, fontCount] {
-      fontPickerIndex_ = ButtonNavigator::nextIndex(fontPickerIndex_, fontCount);
-      requestUpdate();
-    });
-    buttonNavigator_.onPreviousStep([this, fontCount] {
-      fontPickerIndex_ = ButtonNavigator::previousIndex(fontPickerIndex_, fontCount);
-      requestUpdate();
-    });
-    return;
-  }
+bool TextSettingsActivity::handleCustomInput() {
+  if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return true;  // picker owns input
 
   // A debounced preview redraw that came due while the value sat still.
   if (pendingRedrawAt_ != 0 && millis() >= pendingRedrawAt_) {
     pendingRedrawAt_ = 0;
     requestUpdate();
   }
-
   // The value has stopped moving: write it once.
   if (pendingSaveAt_ != 0 && millis() >= pendingSaveAt_) commitSettings();
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    const auto rows = visibleRows();
-    if (selectedIndex_ < static_cast<int>(rows.size())) activateRow(rows[selectedIndex_]);
-    return;
-  }
-
-  // A tap picks the cell it landed on and acts on it in one go, the same bargain the
-  // lists make: the selection moving first is what the paint after the action shows. The
-  // pick spends the contact, so the finger resting on the cell cannot act twice.
-  {
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.takeScreenTouchDown(tx, ty)) {
-      const auto rows = visibleRows();
-      const auto layout = gridLayout();
-      const auto geo = paneGeometry();
-      for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
-        const auto rect = settings_grid::cellAt(layout, geo.listTop, i);
-        if (rect.width == 0) continue;
-        if (tx < rect.x || tx >= rect.x + rect.width || ty < rect.y || ty >= rect.y + rect.height) continue;
-        selectedIndex_ = i;
-        activateRow(rows[i]);
-        requestUpdate();
-        return;
-      }
-    }
-  }
-
-  // Same split as the settings grid: side pair walks rows, front pair walks cells, and a
-  // front press is not also counted as a row step. See SettingsActivity::loop().
-  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
-  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
-  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
-  buttonNavigator_.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
-
-  switch (mappedInput.wasListScrollSwipe()) {
-    case list_swipe::Scroll::PageDown:
-      moveSelection(1, 0);
-      break;
-    case list_swipe::Scroll::PageUp:
-      moveSelection(-1, 0);
-      break;
-    default:
-      break;
-  }
+  return false;
 }
 
-// One cell: its name in the small font over its value in the reading font, both centred.
-// Stacked rather than spread left and right, which is the whole reason two fit side by
-// side where one row used to sit.
-void TextSettingsActivity::drawCell(const settings_grid::Rect& rect, const Row row, const bool selected) {
-  if (selected) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
-  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
-  const bool ink = !selected;
+void TextSettingsActivity::onBackButton() { finish(); }
 
-  const std::string name = I18N.get(rowNameId(row));
-  const std::string value = rowValueText(row);
-  const int nameHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int valueHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  // Both lines as one block, centred in the cell, so a value-less cell does not sit high.
-  const int blockTop = rect.y + (rect.height - nameHeight - valueHeight) / 2;
+bool TextSettingsActivity::drawOverlay() { return optionPopup_.processRender(renderer, mappedInput); }
 
-  const auto centred = [&](const int fontId, const std::string& text, const int y) {
-    if (text.empty()) return;
-    const int width = renderer.getTextWidth(fontId, text.c_str());
-    renderer.drawText(fontId, rect.x + (rect.width - width) / 2, y, text.c_str(), ink);
-  };
-  centred(SMALL_FONT_ID, name, blockTop);
-  // The armed cell wears its value in brackets, the one bit of state the selection fill
-  // cannot carry on its own.
-  centred(UI_10_FONT_ID, editing_ && selected ? "[ " + value + " ]" : value, blockTop + nameHeight);
-}
-
-void TextSettingsActivity::render(RenderLock&&) {
-  if (optionPopup_.processRender(renderer, mappedInput)) return;  // picker draws over everything
-
-  renderer.clearScreen();
-  const auto pageWidth = renderer.getScreenWidth();
-
-  if (mode_ == Mode::FontPicker) {
-    GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_FONT));
-    GUI.drawList(
-        renderer, Rect{0, afterHeader, pageWidth, usableHeight}, static_cast<int>(fonts_.size()), fontPickerIndex_,
-        [this](int index) { return fonts_[index].name; }, nullptr, nullptr,
-        [this](int index) -> std::string { return index == currentFamilyIndex_ ? tr(STR_SELECTED) : ""; }, true,
-        nullptr, UI_10_FONT_ID, nullptr, &fontPickerScroll_);
-    const auto pickerLabels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, pickerLabels.btn1, pickerLabels.btn2, pickerLabels.btn3, pickerLabels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
-
-  // An armed number takes the header's place. The preview and the grid keep their rows,
-  // so the passage stays where the eye left it while the value moves.
-  if (valueBand_.isActive()) {
-    valueBand_.render(renderer);
-  } else {
-    GUI.drawHeader(renderer, Rect{0, metrics_.topPadding, pageWidth, metrics_.headerHeight}, tr(STR_TEXT_SETTINGS));
-  }
-
-  const auto geo = paneGeometry();
-  textsettings::renderPreview(renderer, previewLayout_, geo.previewTop, geo.previewHeight);
-
-  const auto rows = visibleRows();
-  const auto layout = gridLayout();
-  for (int i = 0; i < static_cast<int>(rows.size()); ++i) {
-    const auto rect = settings_grid::cellAt(layout, geo.listTop, i);
-    if (rect.width == 0) continue;
-    drawCell(rect, rows[i], i == selectedIndex_);
-  }
+ListChrome TextSettingsActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = tr(STR_TEXT_SETTINGS);
 
   const char* confirmLabel = tr(STR_SELECT);
-  const char* upLabel = tr(STR_DIR_UP);
-  const char* downLabel = tr(STR_DIR_DOWN);
-  const char* leftLabel = tr(STR_DIR_LEFT);
-  const char* rightLabel = tr(STR_DIR_RIGHT);
-  if (selectedIndex_ < static_cast<int>(rows.size())) {
-    const RowKind kind = kindOf(rows[selectedIndex_]);
-    if (editing_) {
-      confirmLabel = tr(STR_DONE_EDIT);
-      upLabel = "-";
-      downLabel = "+";
-      leftLabel = "-";
-      rightLabel = "+";
-    } else if (kind == RowKind::Toggle) {
+  const auto rows = visibleRows();
+  if (selected() < static_cast<int>(rows.size())) {
+    const RowKind kind = kindOf(rows[selected()]);
+    if (kind == RowKind::Toggle) {
       confirmLabel = tr(STR_TOGGLE);
     } else if (kind == RowKind::Number) {
       confirmLabel = tr(STR_ADJUST);
     }
   }
 
-  // Back closes the band rather than the screen while a value is armed, and the hint has
-  // to say so or it reads as a way out of Text Settings.
-  const auto labels = mappedInput.mapDirectionalLabels(editing_ ? tr(STR_DONE_EDIT) : tr(STR_BACK), confirmLabel,
-                                                       leftLabel, rightLabel, upLabel, downLabel);
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+  // Back closes the band rather than the screen while a value is armed, and the
+  // hint has to say so or it reads as a way out of Text Settings.
+  if (editing_) {
+    chrome.backHint = tr(STR_DONE_EDIT);
+    chrome.confirmHint = tr(STR_DONE_EDIT);
+    chrome.thirdHint = "-";
+    chrome.fourthHint = "+";
+    return chrome;
+  }
+  chrome.confirmHint = confirmLabel;
+  chrome.thirdHint = tr(STR_DIR_UP);
+  chrome.fourthHint = tr(STR_DIR_DOWN);
+  return chrome;
 }
+
+
 
 // Font switching runs on the main task from loop(), which deliberately holds no
 // RenderLock. ensureLoaded() deletes the resident SdCardFont before loading the next one,

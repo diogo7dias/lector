@@ -71,12 +71,16 @@ TEST(TouchActOnceAudit, ActingScreensSpendTheContact) {
   }
 }
 
-TEST(TouchActOnceAudit, TheGridsPickWithTheSpendingQuery) {
-  int picks = 0;
+TEST(TouchActOnceAudit, TheGridsLetRoutingPickForThem) {
+  // Both grids moved onto UiGridActivity, where a tap is dispatched once by the
+  // interaction table the paint published. A grid asking the input manager for a
+  // touch itself is a grid that has grown a second, unspent hit test again.
   for (const Line& line : sourceLines()) {
     if (isComment(line.text)) continue;
-    if (contains(line.text, "takeScreenTouchDown")) ++picks;
+    for (const char* query : {"wasScreenTouchDown", "takeScreenTouchDown", "isScreenTouchHeld"}) {
+      EXPECT_FALSE(contains(line.text, query))
+          << line.path << ":" << line.number << " asks for " << query
+          << " itself. UiGridActivity routes the touch and dispatches the cell once.";
+    }
   }
-  // One per settings grid: the hub-and-category grid and the text settings grid.
-  EXPECT_EQ(picks, 2);
 }
