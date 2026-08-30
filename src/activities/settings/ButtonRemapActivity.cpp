@@ -18,7 +18,7 @@ constexpr unsigned long kErrorDisplayMs = 1500;
 }  // namespace
 
 void ButtonRemapActivity::onEnter() {
-  Activity::onEnter();
+  UiListActivity::onEnter();
 
   // Start with all roles unassigned to avoid duplicate blocking.
   currentStep = 0;
@@ -31,15 +31,20 @@ void ButtonRemapActivity::onEnter() {
   requestUpdate();
 }
 
-void ButtonRemapActivity::onExit() { Activity::onExit(); }
+void ButtonRemapActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+}
 
-void ButtonRemapActivity::loop() {
+int ButtonRemapActivity::listCount() const { return kRoleCount; }
+
+bool ButtonRemapActivity::handleCustomInput() {
   // Clear any temporary warning after its timeout.
   if (errorUntil > 0 && millis() > errorUntil) {
     errorMessage.clear();
     errorUntil = 0;
     requestUpdate();
-    return;
+    return true;
   }
 
   // Side buttons:
@@ -53,13 +58,13 @@ void ButtonRemapActivity::loop() {
     SETTINGS.frontButtonRight = CrossPointSettings::FRONT_HW_RIGHT;
     SETTINGS.saveToFile();
     finish();
-    return;
+    return true;
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
     // Exit without changing settings.
     finish();
-    return;
+    return true;
   }
 
   {
@@ -70,14 +75,14 @@ void ButtonRemapActivity::loop() {
     // Wait for a front button press to assign to the current role.
     const int pressedButton = mappedInput.getPressedFrontButton();
     if (pressedButton < 0) {
-      return;
+      return true;
     }
 
     // Update temporary mapping and advance the remap step.
     // Only accept the press if this hardware button isn't already assigned elsewhere.
     if (!validateUnassigned(static_cast<uint8_t>(pressedButton))) {
       requestUpdate();
-      return;
+      return true;
     }
     tempMapping[currentStep] = static_cast<uint8_t>(pressedButton);
     currentStep++;
@@ -87,66 +92,58 @@ void ButtonRemapActivity::loop() {
       applyTempMapping();
       SETTINGS.saveToFile();
       finish();
-      return;
+      return true;
     }
 
     requestUpdate();
   }
+  // Every pass belongs to the remap: the base must never move a selection with a
+  // button whose meaning is exactly what this screen is asking about.
+  return true;
 }
 
-void ButtonRemapActivity::render(RenderLock&&) {
-  const auto labelForHardware = [&](uint8_t hardwareIndex) -> const char* {
+ListChrome ButtonRemapActivity::chrome() const {
+  const auto labelForHardware = [this](const uint8_t hardwareIndex) -> const char* {
     for (uint8_t i = 0; i < kRoleCount; i++) {
-      if (tempMapping[i] == hardwareIndex) {
-        return getRoleName(i);
-      }
+      if (tempMapping[i] == hardwareIndex) return getRoleName(i);
     }
     return "-";
   };
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+  ListChrome chrome;
+  chrome.title = tr(STR_REMAP_FRONT_BUTTONS);
+  chrome.subHeader = tr(STR_REMAP_PROMPT);
+  // The duplicate warning sits under the rows rather than over them, so the list
+  // the user is answering stays readable while it is up.
+  if (!errorMessage.empty()) chrome.note = errorMessage.c_str();
+  chrome.footnotes[0] = tr(STR_REMAP_RESET_HINT);
+  chrome.footnotes[1] = tr(STR_REMAP_CANCEL_HINT);
+  // The hints are a live preview of the mapping being built, in the on-device
+  // front button order: Back, Confirm, Left, Right.
+  chrome.backHint = labelForHardware(CrossPointSettings::FRONT_HW_BACK);
+  chrome.confirmHint = labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM);
+  chrome.thirdHint = labelForHardware(CrossPointSettings::FRONT_HW_LEFT);
+  chrome.fourthHint = labelForHardware(CrossPointSettings::FRONT_HW_RIGHT);
+  return chrome;
+}
 
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_REMAP_FRONT_BUTTONS));
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                    tr(STR_REMAP_PROMPT));
-
-  int topOffset = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing;
-  int contentHeight = pageHeight - topOffset - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  GUI.drawList(
-      renderer, Rect{0, topOffset, pageWidth, contentHeight}, kRoleCount, currentStep,
-      [&](int index) { return getRoleName(static_cast<uint8_t>(index)); }, nullptr, nullptr,
-      [&](int index) {
-        uint8_t assignedButton = tempMapping[static_cast<uint8_t>(index)];
-        return (assignedButton == kUnassigned) ? tr(STR_UNASSIGNED) : getHardwareName(assignedButton);
-      },
-      true);
-
-  // Temporary warning banner for duplicates.
-  if (!errorMessage.empty()) {
-    GUI.drawHelpText(renderer,
-                     Rect{0, pageHeight - metrics.buttonHintsHeight - metrics.contentSidePadding - 15, pageWidth, 20},
-                     errorMessage.c_str());
+void ButtonRemapActivity::buildScreen(UiScreen& screen) {
+  rows.assign(kRoleCount, freeink::ui::ListItem{});
+  for (uint8_t i = 0; i < kRoleCount; i++) {
+    rows[i].label = getRoleName(i);
+    rows[i].value = tempMapping[i] == kUnassigned ? tr(STR_UNASSIGNED) : getHardwareName(tempMapping[i]);
+    rows[i].actionValue = static_cast<int16_t>(i);
   }
 
-  // Provide side button actions at the bottom of the screen (split across two lines).
-  GUI.drawHelpText(renderer,
-                   Rect{0, topOffset + 4 * metrics.listRowHeight + 4 * metrics.verticalSpacing, pageWidth, 20},
-                   tr(STR_REMAP_RESET_HINT));
-  GUI.drawHelpText(renderer,
-                   Rect{0, topOffset + 4 * metrics.listRowHeight + 5 * metrics.verticalSpacing + 20, pageWidth, 20},
-                   tr(STR_REMAP_CANCEL_HINT));
-
-  // Live preview of logical labels under front buttons.
-  // This mirrors the on-device front button order: Back, Confirm, Left, Right.
-  GUI.drawButtonHints(renderer, labelForHardware(CrossPointSettings::FRONT_HW_BACK),
-                      labelForHardware(CrossPointSettings::FRONT_HW_CONFIRM),
-                      labelForHardware(CrossPointSettings::FRONT_HW_LEFT),
-                      labelForHardware(CrossPointSettings::FRONT_HW_RIGHT));
-  renderer.displayBuffer();
+  freeink::ui::ListProps props{};
+  props.items = rows.data();
+  props.count = kRoleCount;
+  props.action = ACTION_ROW;
+  // The step being asked about is the selection; nothing else can move it.
+  nav.selected = currentStep;
+  nav.follow(kRoleCount);
+  syncListViewport(screen, props);
+  screen.list(props);
 }
 
 void ButtonRemapActivity::applyTempMapping() {

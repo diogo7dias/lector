@@ -25,7 +25,9 @@ list_chrome::Content contentFor(const ListChrome& chrome) {
   content.hasSubHeader = present(chrome.subHeader);
   content.headerLines = headerLineCount(chrome);
   content.noteLines = present(chrome.note) ? 1 : 0;
-  content.hasFootnote = present(chrome.footnote);
+  for (const char* line : chrome.footnotes) {
+    if (present(line)) ++content.footnoteLines;
+  }
   return content;
 }
 
@@ -77,8 +79,12 @@ void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome) {
 void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput,
                           const ListChrome& chrome) {
   const list_chrome::Bands bands = listChromeBands(renderer, chrome);
-  if (present(chrome.footnote)) {
-    GUI.drawHelpText(renderer, toRect(bands.footnote), chrome.footnote);
+  const int lineHeight = renderer.getLineHeight(uiScaleSpec().smallFontId);
+  int y = bands.footnote.y;
+  for (const char* line : chrome.footnotes) {
+    if (!present(line)) continue;
+    GUI.drawHelpText(renderer, Rect{0, y, renderer.getScreenWidth(), lineHeight}, line);
+    y += lineHeight;
   }
   const char* back = chrome.backHint != nullptr ? chrome.backHint : tr(STR_BACK);
   const char* confirm = chrome.confirmHint != nullptr ? chrome.confirmHint : tr(STR_SELECT);

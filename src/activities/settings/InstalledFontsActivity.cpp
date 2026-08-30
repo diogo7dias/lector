@@ -188,7 +188,7 @@ ListChrome InstalledFontsActivity::chrome() const {
   chrome.confirmHint = hasRows ? tr(STR_SELECT) : "";
   chrome.thirdHint = hasRows ? tr(STR_DIR_UP) : "";
   chrome.fourthHint = hasRows ? tr(STR_DIR_DOWN) : "";
-  if (!errorMessage.empty()) chrome.footnote = errorMessage.c_str();
+  if (!errorMessage.empty()) chrome.footnotes[0] = errorMessage.c_str();
   return chrome;
 }
 

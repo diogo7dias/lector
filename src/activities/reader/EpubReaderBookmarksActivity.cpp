@@ -177,7 +177,7 @@ ListChrome EpubReaderBookmarksActivity::chrome() const {
     chrome.confirmHint = "";
     return chrome;
   }
-  chrome.footnote = tr(STR_HOLD_OPEN_TO_DELETE);
+  chrome.footnotes[0] = tr(STR_HOLD_OPEN_TO_DELETE);
   return chrome;
 }
 

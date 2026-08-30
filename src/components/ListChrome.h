@@ -31,9 +31,11 @@ struct ListChrome {
   std::array<const char*, MAX_HEADER_LINES> headerLines{};
   // A left-aligned note under everything above, in the small face.
   const char* note = nullptr;
-  // A line above the button hints, for something true of the whole list rather
-  // than of the selection.
-  const char* footnote = nullptr;
+  // Lines above the button hints, for something true of the whole list rather
+  // than of the selection: what a hold does, what the side buttons do, or a
+  // warning the screen wants under the rows instead of over them.
+  static constexpr int MAX_FOOTNOTES = 2;
+  std::array<const char*, MAX_FOOTNOTES> footnotes{};
   // Button hints. nullptr takes the default for that slot; an empty string
   // leaves it blank, which is how a screen says that button does nothing.
   const char* backHint = nullptr;

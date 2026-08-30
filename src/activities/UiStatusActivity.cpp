@@ -192,7 +192,8 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
       view.showSlider ? static_cast<int16_t>(lineHeight + theme.spaceMd + sliderControl) : 0;
 
   const status_stack::Content content{lineCount, qrSize, qrLineCount, sliderHeight, view.showProgress};
-  int16_t y = static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, content));
+  int16_t y = view.linesAtTop ? body.y
+                              : static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, content));
 
   // The band leads: its caption already carries the readout, so the lines under
   // it are the ones explaining what moves it.

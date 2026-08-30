@@ -69,9 +69,17 @@ TEST(ListChromeLayout, ANoteSitsUnderEverythingAboveIt) {
   EXPECT_EQ(bands.contentTop, bands.note.y + 20 + 10);
 }
 
+TEST(ListChromeLayout, TwoFootnotesCostTwoLines) {
+  auto content = titleOnly();
+  content.footnoteLines = 2;
+  const auto bands = list_chrome::bandsFor(metrics(), content);
+  EXPECT_EQ(bands.footnote.y, 400 - 40 - 40);
+  EXPECT_EQ(bands.footnote.height, 40);
+}
+
 TEST(ListChromeLayout, AFootnoteEatsIntoTheBodyNotIntoTheHints) {
   auto content = titleOnly();
-  content.hasFootnote = true;
+  content.footnoteLines = 1;
   const auto bands = list_chrome::bandsFor(metrics(), content);
   EXPECT_EQ(bands.footnote.y, 400 - 40 - 20);
   EXPECT_EQ(bands.footnote.height, 20);
@@ -81,7 +89,7 @@ TEST(ListChromeLayout, AFootnoteEatsIntoTheBodyNotIntoTheHints) {
 TEST(ListChromeLayout, TheInsetsAreTheSameNumbersSeenFromTheOtherEnd) {
   auto content = titleOnly();
   content.hasSubHeader = true;
-  content.hasFootnote = true;
+  content.footnoteLines = 1;
   const auto m = metrics();
   const auto bands = list_chrome::bandsFor(m, content);
   EXPECT_EQ(list_chrome::topInsetFor(m, content), bands.contentTop);
@@ -106,7 +114,7 @@ TEST(ListChromeLayout, MoreChromeThanPanelLeavesAnEmptyBodyNotAnInsideOutOne) {
   auto content = titleOnly();
   content.hasSubHeader = true;
   content.headerLines = 4;
-  content.hasFootnote = true;
+  content.footnoteLines = 1;
   const auto bands = list_chrome::bandsFor(m, content);
   EXPECT_GE(bands.contentBottom, bands.contentTop);
 }

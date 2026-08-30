@@ -3,19 +3,31 @@
 #include <functional>
 #include <string>
 
-#include "activities/Activity.h"
+#include <vector>
 
-class ButtonRemapActivity final : public Activity {
+#include "activities/UiListActivity.h"
+
+// Assigns the four front buttons one role at a time: whichever button is pressed
+// takes the role the list is standing on. Every button belongs to the remap while
+// it is up, so this screen consumes the whole input pass and the base's own
+// navigation never runs.
+class ButtonRemapActivity final : public UiListActivity {
  public:
   explicit ButtonRemapActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("ButtonRemap", renderer, mappedInput) {}
+      : UiListActivity("ButtonRemap", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override;
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override {}
+  bool handleCustomInput() override;
+  ListChrome chrome() const override;
 
  private:
+  std::vector<freeink::ui::ListItem> rows;
   // Rendering task state.
 
   // Index of the logical role currently awaiting input.

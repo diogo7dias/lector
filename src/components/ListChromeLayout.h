@@ -36,8 +36,8 @@ struct Content {
   bool hasHeader = false;
   bool hasSubHeader = false;
   int headerLines = 0;  // centred lines under the title band
-  int noteLines = 0;    // left-aligned lines under everything above
-  bool hasFootnote = false;
+  int noteLines = 0;      // left-aligned lines under everything above
+  int footnoteLines = 0;  // lines between the body and the button hints
 };
 
 struct Bands {
@@ -76,9 +76,10 @@ inline Bands bandsFor(const Metrics& metrics, const Content& content) {
   bands.contentTop = y + metrics.spacing;
 
   int bottom = metrics.screenHeight - metrics.hintsHeight;
-  if (content.hasFootnote) {
-    bottom -= metrics.lineHeight;
-    bands.footnote = Rect{0, bottom, metrics.screenWidth, metrics.lineHeight};
+  if (content.footnoteLines > 0) {
+    const int height = content.footnoteLines * metrics.lineHeight;
+    bottom -= height;
+    bands.footnote = Rect{0, bottom, metrics.screenWidth, height};
   }
   bands.contentBottom = bottom - metrics.spacing;
   // A screen with more chrome than panel keeps an empty content band rather

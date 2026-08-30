@@ -261,7 +261,7 @@ ListChrome QuotesViewerActivity::chrome() const {
   chrome.title = headerText.c_str();
   // Nothing to open: the middle button only deletes, and only on a hold.
   chrome.confirmHint = "";
-  if (!quotes.empty()) chrome.footnote = tr(STR_HOLD_TO_DELETE);
+  if (!quotes.empty()) chrome.footnotes[0] = tr(STR_HOLD_TO_DELETE);
   return chrome;
 }
 

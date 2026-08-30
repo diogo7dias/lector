@@ -90,6 +90,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     const char* subtitleLeft = nullptr;
     const char* subtitleRight = nullptr;
     std::array<const char*, MAX_LINES> lines{};
+    // Lines at the top of the body rather than centred in it, for a screen whose
+    // own popup sits in the middle: text centred under a centred popup is text
+    // nobody can read.
+    bool linesAtTop = false;
     std::array<Section, MAX_SECTIONS> sections{};
     // Drawn over the bar, for a transfer that can say what it is moving.
     const char* progressLabel = nullptr;
