@@ -1,5 +1,7 @@
 #include "BaseTheme.h"
 
+#include "components/icons/skull12.h"
+
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalGPIO.h>
@@ -1595,6 +1597,48 @@ void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char*
   auto truncatedLabel =
       renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
   renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
+}
+
+void BaseTheme::drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+  // topPadding already carries the X4's physical top-edge crop, so anchoring to it
+  // keeps both of these on screen on either board without a per-site inset.
+  const int textY = metrics.topPadding + 5;
+
+  // Firmware version at the left edge, which is where the old Lector home carried it.
+  const int versionX = metrics.contentSidePadding;
+  const int versionWidth = version != nullptr ? renderer.getTextWidth(UI_10_FONT_ID, version) : 0;
+  if (version != nullptr) renderer.drawText(UI_10_FONT_ID, versionX, textY, version);
+
+  // Clock to the left of the battery cluster. Only boards with an RTC report
+  // available, so this simply does not draw where there is no clock to read.
+  // Placed against the same cluster width drawHeader reserves, so the gap stays put
+  // whatever the UI font measures.
+  int rightEdge = pageWidth - BaseTheme::batteryClusterWidth(renderer) - 12;
+  if (clock != nullptr) {
+    rightEdge -= renderer.getTextWidth(UI_10_FONT_ID, clock);
+    renderer.drawText(UI_10_FONT_ID, rightEdge, textY, clock);
+  }
+
+  // Skull on the screen's own centre line, NOT centred in the gap between the
+  // version and the clock. Centring in the gap moves the skull whenever the version
+  // string or the clock changes width, which reads as drift; the screen's midpoint
+  // does not move, so the skull sits in the same place on every build.
+  const int skullX = (pageWidth - Skull12Icon.w) / 2;
+  // Sit the skull's centre of mass on the text's own vertical middle, so it lines
+  // up with the version string rather than with the invisible line box.
+  const int textCenterY = textY + renderer.getTextHeight(UI_10_FONT_ID) / 2;
+  const int skullY = textCenterY - Skull12Icon.opticalCenterY;
+
+  // The only reason to skip it: a version string or clock long enough to reach the
+  // middle. Overlapping glyphs would be worse than no skull.
+  constexpr int skullMinAir = 4;
+  const bool clearOfText =
+      skullX - skullMinAir >= versionX + versionWidth && skullX + Skull12Icon.w + skullMinAir <= rightEdge;
+  if (clearOfText) {
+    renderer.drawIcon(Skull12Icon.bits, skullX, skullY, Skull12Icon.w);
+  }
 }
 
 void BaseTheme::drawPathBar(const GfxRenderer& renderer, const Rect rect, const char* path) const {

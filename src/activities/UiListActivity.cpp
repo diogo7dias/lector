@@ -181,5 +181,5 @@ void UiListActivity::render(RenderLock&&) {
   }
   drawFooter();
   if (drawOverlay()) return;
-  renderer.displayBuffer();
+  renderer.displayBuffer(refreshMode());
 }

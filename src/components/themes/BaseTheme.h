@@ -348,6 +348,11 @@ class BaseTheme {
   // browser drew this itself, which put a rule thickness and a truncation rule
   // outside the theme.
   virtual void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
+  // The home header band's own contents: the firmware version at the left edge,
+  // the clock against the battery cluster, and the skull on the screen's centre
+  // line. nullptr for either string leaves that part out, which is what a board
+  // with no RTC does with the clock.
+  virtual void drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
   virtual bool showsFileIcons() const { return false; }

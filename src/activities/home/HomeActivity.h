@@ -69,7 +69,6 @@ class HomeActivity final : public Activity {
   int menuRowCount() const;
   // Selector index of the resettable "pages read" tile in the header.
   // Header extras: the pages tile and, on boards with an RTC, the clock.
-  void drawHomeHeaderExtras() const;
   void loadRecentBooks(int maxBooks);
   // Opens the Reading Stats screen for recentBooks[0], read straight off the card. Only
   // called with a non-empty recentBooks.

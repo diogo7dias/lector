@@ -15,6 +15,8 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 
+namespace fui = freeink::ui;
+
 namespace {
 constexpr unsigned long ENTER_DELETE_MODE_MS = 700;
 // Headroom demanded on top of the file bytes before the whole sidecar is pulled in:
@@ -22,6 +24,9 @@ constexpr unsigned long ENTER_DELETE_MODE_MS = 700;
 constexpr size_t LOAD_HEAP_HEADROOM = 8 * 1024;
 // Share of the row width the chapter tag may claim on a row's first line.
 constexpr int CHAPTER_TAG_WIDTH_DIVISOR = 4;
+// Lines a quote may spill over before it is cut. Long enough for a paragraph,
+// short enough that one quote cannot fill the screen on its own.
+constexpr uint8_t MAX_QUOTE_LINES = 8;
 }  // namespace
 
 // ── Parsing ─────────────────────────────────────────────────────────────────
@@ -163,154 +168,134 @@ bool QuotesViewerActivity::saveQuotes() const {
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
 void QuotesViewerActivity::onEnter() {
-  Activity::onEnter();
+  UiListActivity::onEnter();
   bookTitle = deriveBookTitle(filePath);
   loadQuotes();
-  selectorIndex = 0;
-  scrollOffset = 0;
   LOG_DBG("QV", "Loaded %d quotes from %s", static_cast<int>(quotes.size()), filePath.c_str());
   requestUpdate();
 }
 
-void QuotesViewerActivity::onExit() { Activity::onExit(); }
+void QuotesViewerActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
+  chapterTags.clear();
+}
 
 // ── Delete ──────────────────────────────────────────────────────────────────
 
-void QuotesViewerActivity::confirmDeleteSelected() {
-  if (selectorIndex < 0 || selectorIndex >= static_cast<int>(quotes.size())) return;
+void QuotesViewerActivity::confirmDelete(const int index) {
+  if (index < 0 || index >= listCount()) return;
   // ConfirmationActivity truncates the body to one line, which is enough to tell the
   // user which quote is about to go.
   startActivityForResult(
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, std::string(tr(STR_CONFIRM_DELETE_QUOTE)),
-                                             quotes[selectorIndex].text),
-      [this](const ActivityResult& result) {
-        if (!result.isCancelled) deleteSelected();
+                                             quotes[index].text),
+      [this, index](const ActivityResult& result) {
+        if (!result.isCancelled) deleteQuote(index);
         requestUpdate();
       });
 }
 
-void QuotesViewerActivity::deleteSelected() {
-  if (selectorIndex < 0 || selectorIndex >= static_cast<int>(quotes.size())) return;
-  quotes.erase(quotes.begin() + selectorIndex);
+void QuotesViewerActivity::deleteQuote(const int index) {
+  if (index < 0 || index >= listCount()) return;
+  {
+    // The published rows borrow strings from `quotes` and `chapterTags`; erasing
+    // under the lock keeps the render task from reading a freed one.
+    RenderLock lock(*this);
+    quotes.erase(quotes.begin() + index);
+    rows.clear();
+    chapterTags.clear();
+    closeRouting();
+  }
   if (!saveQuotes()) {
     // The card is authoritative; leaving RAM ahead of it would show a quote as gone
     // that is still in the file.
     GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
+    RenderLock lock(*this);
     loadQuotes();
+    rows.clear();
+    chapterTags.clear();
+    closeRouting();
   }
-  const int total = static_cast<int>(quotes.size());
-  selectorIndex = std::clamp(selectorIndex, 0, std::max(0, total - 1));
-  scrollOffset = std::clamp(scrollOffset, 0, selectorIndex);
+  moveSelectionTo(std::clamp(nav.selected, 0, std::max(0, listCount() - 1)));
 }
 
 // ── Input ───────────────────────────────────────────────────────────────────
 
-void QuotesViewerActivity::loop() {
+bool QuotesViewerActivity::handleButtons() {
   if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) confirmHoldConsumed = false;
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
-    return;
+    onBackButton();
+    return true;
   }
 
-  const int totalItems = static_cast<int>(quotes.size());
-  if (totalItems == 0) return;
-
-  // Hold Confirm to delete the selected quote.
-  if (!confirmHoldConsumed && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+  // Hold Confirm to delete the selected quote. A Confirm still held from the
+  // screen that opened this one must not read as a fresh hold.
+  if (!confirmHoldConsumed && listCount() > 0 && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
       mappedInput.getHeldTime() > ENTER_DELETE_MODE_MS) {
     confirmHoldConsumed = true;
-    confirmDeleteSelected();
+    confirmDelete(nav.selected);
+    return true;
+  }
+  // No plain Confirm action: a quote is read where it sits, so the only thing
+  // the middle button does here is the hold above.
+  return false;
+}
+
+void QuotesViewerActivity::onRowLongPress(const int index) { confirmDelete(index); }
+
+void QuotesViewerActivity::onBackButton() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
+}
+
+// ── Screen ──────────────────────────────────────────────────────────────────
+
+ListChrome QuotesViewerActivity::chrome() const {
+  // Header: book name plus how many quotes it holds.
+  headerText = bookTitle + "  (" + std::to_string(quotes.size()) + ")";
+  ListChrome chrome;
+  chrome.title = headerText.c_str();
+  // Nothing to open: the middle button only deletes, and only on a hold.
+  chrome.confirmHint = "";
+  if (!quotes.empty()) chrome.footnote = tr(STR_HOLD_TO_DELETE);
+  return chrome;
+}
+
+void QuotesViewerActivity::buildScreen(UiScreen& screen) {
+  const int count = listCount();
+  if (count == 0) {
+    screen.centeredText(tr(STR_NO_QUOTES));
     return;
   }
 
-  // Rows have variable heights, so a fixed items-per-page is meaningless: the page
-  // jump steps by however many rows the last draw actually fit on screen.
-  const int pageItems = std::max(1, lastVisibleIdx - firstVisibleIdx + 1);
-
-  // Keep the selection inside the drawn window. Moving past the bottom nudges the
-  // offset by one and lets the draw settle the rest; jumping above the top snaps the
-  // offset to the selection (which also covers the wrap from the first row to the last).
-  auto followSelection = [this, totalItems] {
-    if (selectorIndex > lastVisibleIdx) {
-      scrollOffset = std::min(scrollOffset + 1, totalItems - 1);
+  const int chapterMaxWidth = std::max(1, renderer.getScreenWidth() / CHAPTER_TAG_WIDTH_DIVISOR);
+  chapterTags.assign(static_cast<size_t>(count), std::string());
+  rows.assign(static_cast<size_t>(count), fui::ListItem{});
+  for (int i = 0; i < count; ++i) {
+    rows[i].label = quotes[i].text.c_str();
+    if (!quotes[i].chapter.empty()) {
+      chapterTags[i] = renderer.truncatedText(UI_10_FONT_ID, quotes[i].chapter.c_str(), chapterMaxWidth,
+                                              EpdFontFamily::REGULAR);
+      rows[i].value = chapterTags[i].c_str();
     }
-    if (selectorIndex < firstVisibleIdx) {
-      scrollOffset = selectorIndex;
-    }
-    scrollOffset = std::clamp(scrollOffset, 0, std::max(0, totalItems - 1));
-  };
-
-  buttonNavigator.onNextPress([this, totalItems, followSelection] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    followSelection();
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousPress([this, totalItems, followSelection] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    followSelection();
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this, totalItems, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    followSelection();
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    followSelection();
-    requestUpdate();
-  });
-}
-
-// ── Render ──────────────────────────────────────────────────────────────────
-
-void QuotesViewerActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-
-  // Header: book name plus how many quotes it holds.
-  const std::string header = bookTitle + "  (" + std::to_string(quotes.size()) + ")";
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 header.c_str());
-
-  const int helpLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int helpY = screen.y + screen.height - helpLineHeight - metrics.verticalSpacing;
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentHeight = std::max(0, helpY - metrics.verticalSpacing - contentTop);
-
-  if (quotes.empty()) {
-    GUI.drawHelpText(renderer, Rect{screen.x, contentTop + contentHeight / 2, screen.width, helpLineHeight},
-                     tr(STR_NO_QUOTES));
-  } else {
-    // Quotes are free-form sentences, not labels: drawList would ellipsise each one to a
-    // single row and hide the part the user saved it for. drawWrappedList spills a quote
-    // over as many lines as it needs and reports the visible range back for scrolling.
-    // The chapter rides along as the right-aligned value on the row's first line.
-    const int chapterMaxWidth = std::max(1, screen.width / CHAPTER_TAG_WIDTH_DIVISOR);
-    const ListVisibility vis = GUI.drawWrappedList(
-        renderer, Rect{screen.x, contentTop, screen.width, contentHeight}, static_cast<int>(quotes.size()),
-        selectorIndex, scrollOffset, [this](int index) { return quotes[index].text; },
-        [this, chapterMaxWidth](int index) {
-          const auto& chapter = quotes[index].chapter;
-          if (chapter.empty()) return std::string();
-          // UI_10 to match the font drawWrappedList measures and draws the value with.
-          return renderer.truncatedText(UI_10_FONT_ID, chapter.c_str(), chapterMaxWidth, EpdFontFamily::REGULAR);
-        });
-    firstVisibleIdx = vis.firstVisible;
-    lastVisibleIdx = vis.lastVisible;
-    scrollOffset = vis.firstVisible;
-
-    GUI.drawHelpText(renderer, Rect{screen.x, helpY, screen.width, helpLineHeight}, tr(STR_HOLD_TO_DELETE));
+    rows[i].actionValue = static_cast<int16_t>(i);
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(rows.size());
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch | fui::InputLongPress;
+  // Quotes are free-form sentences, not labels: a single-line row would ellipsise
+  // each one and hide the part it was saved for. The SDK's list grows a row by the
+  // lines its label actually uses, and reports the layout back so the viewport
+  // follows a selection whose row is taller than the estimate.
+  props.labelText = screen.theme().bodyText;
+  props.labelText.maxLines = MAX_QUOTE_LINES;
+  syncListViewport(screen, props);
+  screen.list(props);
 }

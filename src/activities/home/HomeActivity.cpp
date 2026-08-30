@@ -246,7 +246,13 @@ void HomeActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
-  drawHomeHeaderExtras();
+  // The version, the clock and the skull that sit in the header band; the theme
+  // places all three, so a restyle reaches them like everything else.
+  char timeBuf[9];
+  const bool hasClock = halClock.isAvailable() &&
+                        halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ,
+                                            SETTINGS.clockFormat == 1);
+  GUI.drawHomeHeaderExtras(renderer, CROSSPOINT_VERSION, hasClock ? timeBuf : nullptr);
 
   // In-progress books as a list: each book's full title + its author wrapped over
   // as many lines as it needs, with an inline [NN%] black-background badge, and
@@ -347,50 +353,6 @@ void HomeActivity::render(RenderLock&&) {
   }
 }
 
-void HomeActivity::drawHomeHeaderExtras() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  // topPadding already carries the X4's physical top-edge crop, so anchoring to it
-  // keeps both of these on screen on either board without a per-site inset.
-  const int textY = metrics.topPadding + 5;
-
-  // Firmware version at the left edge, which is where the old Lector home carried it.
-  const int versionX = metrics.contentSidePadding;
-  const int versionWidth = renderer.getTextWidth(UI_10_FONT_ID, CROSSPOINT_VERSION);
-  renderer.drawText(UI_10_FONT_ID, versionX, textY, CROSSPOINT_VERSION);
-
-  // Clock to the left of the battery cluster. Only boards with an RTC report
-  // available, so this simply does not draw where there is no clock to read.
-  // Placed against the same cluster width drawHeader reserves, so the gap stays put
-  // whatever the UI font measures.
-  int rightEdge = pageWidth - BaseTheme::batteryClusterWidth(renderer) - 12;
-  char timeBuf[9];
-  if (halClock.isAvailable() &&
-      halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-    const int clockWidth = renderer.getTextWidth(UI_10_FONT_ID, timeBuf);
-    rightEdge -= clockWidth;
-    renderer.drawText(UI_10_FONT_ID, rightEdge, textY, timeBuf);
-  }
-
-  // Skull on the screen's own centre line, NOT centred in the gap between the
-  // version and the clock. Centring in the gap moves the skull whenever the version
-  // string or the clock changes width, which reads as drift; the screen's midpoint
-  // does not move, so the skull sits in the same place on every build.
-  const int skullX = (pageWidth - Skull12Icon.w) / 2;
-  // Sit the skull's centre of mass on the text's own vertical middle, so it lines
-  // up with the version string rather than with the invisible line box.
-  const int textCenterY = textY + renderer.getTextHeight(UI_10_FONT_ID) / 2;
-  const int skullY = textCenterY - Skull12Icon.opticalCenterY;
-
-  // The only reason to skip it: a version string or clock long enough to reach the
-  // middle. Overlapping glyphs would be worse than no skull.
-  constexpr int skullMinAir = 4;
-  const bool clearOfText =
-      skullX - skullMinAir >= versionX + versionWidth && skullX + Skull12Icon.w + skullMinAir <= rightEdge;
-  if (clearOfText) {
-    renderer.drawIcon(Skull12Icon.bits, skullX, skullY, Skull12Icon.w);
-  }
-}
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 

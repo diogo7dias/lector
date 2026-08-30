@@ -79,6 +79,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   // the overlay refreshed the display itself (GUI.drawPopup does) so the base
   // does not push a second refresh behind it.
   virtual bool drawOverlay() { return false; }
+  // The waveform this pass is pushed with. A screen commonly reached from ones
+  // that only ever paint FAST arrives with the panel already carrying ghosts and
+  // asks for one FULL pass; everything else stays on the default.
+  virtual HalDisplay::RefreshMode refreshMode() { return HalDisplay::FAST_REFRESH; }
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
