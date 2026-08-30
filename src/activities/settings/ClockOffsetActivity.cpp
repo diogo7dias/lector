@@ -9,6 +9,7 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/ListChrome.h"
 #include "components/OffsetFieldRow.h"
 #include "components/UITheme.h"
 
@@ -257,13 +258,12 @@ void ClockOffsetActivity::buildScreen(UiScreen& screen) {
 void ClockOffsetActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_CLOCK_UTC_OFFSET));
+  ListChrome chrome;
+  chrome.title = tr(STR_CLOCK_UTC_OFFSET);
+  chrome.confirmHint = tr(STR_NEXT_FIELD);
+  drawListChromeTop(renderer, chrome);
   renderUi();
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEXT_FIELD), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  drawListChromeBottom(renderer, mappedInput, chrome);
 
   renderer.displayBuffer();
 }

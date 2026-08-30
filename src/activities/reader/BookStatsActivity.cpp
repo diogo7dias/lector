@@ -12,6 +12,7 @@
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/StatsDashboardLayout.h"
+#include "components/ListChrome.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "reading_stats/ReadingStatsClock.h"
@@ -375,14 +376,13 @@ void BookStatsActivity::buildScreen(UiScreen& screen) {
 
 void BookStatsActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const char* pageTitle = page_ == Page::CurrentBook ? tr(STR_STATS_CURRENT_BOOK) : tr(STR_STATS_ALL_BOOKS);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, pageTitle);
+  ListChrome chrome;
+  chrome.title = page_ == Page::CurrentBook ? tr(STR_STATS_CURRENT_BOOK) : tr(STR_STATS_ALL_BOOKS);
+  chrome.confirmHint = tr(STR_STATS_RESET);
+  chrome.thirdHint = page_ == Page::CurrentBook ? "" : tr(STR_STATS_BOOK);
+  chrome.fourthHint = page_ == Page::CurrentBook ? tr(STR_STATS_MORE) : "";
+  drawListChromeTop(renderer, chrome);
   renderUi();
-
-  const auto labels = page_ == Page::CurrentBook
-                          ? mappedInput.mapLabels(tr(STR_BACK), tr(STR_STATS_RESET), "", tr(STR_STATS_MORE))
-                          : mappedInput.mapLabels(tr(STR_BACK), tr(STR_STATS_RESET), tr(STR_STATS_BOOK), "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  drawListChromeBottom(renderer, mappedInput, chrome);
   renderer.displayBuffer();
 }
