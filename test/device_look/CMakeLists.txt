@@ -3,7 +3,7 @@ add_executable(DeviceLookAuditTest
 )
 
 target_compile_definitions(DeviceLookAuditTest PRIVATE
-  TOUCH_SHAPE_SOURCES="${REPO_ROOT}/src/activities/UiStatusActivity.cpp|${REPO_ROOT}/src/activities/UiGridActivity.cpp"
+  TOUCH_SHAPE_SOURCES="${REPO_ROOT}/src/activities/UiStatusActivity.cpp|${REPO_ROOT}/src/activities/UiGridActivity.cpp|${REPO_ROOT}/src/activities/settings/ClockOffsetActivity.cpp"
 )
 
 target_link_libraries(DeviceLookAuditTest PRIVATE

@@ -228,6 +228,24 @@ void ClockOffsetActivity::buildScreen(UiScreen& screen) {
                                 static_cast<int16_t>(row.colon.width), static_cast<int16_t>(row.colon.height)},
               ":", centred);
 
+  // Only the X4 Pro has a touch panel; a field there is a button to tap, and it
+  // is filled when it is the one being changed. The keys-only boards keep the
+  // pair of outlined fields they always had, the active one greyed and double
+  // ruled rather than reversed.
+  freeink::ui::StyleSet fieldStyles = theme.button;
+  if (!mappedInput.hasTouch()) {
+    fieldStyles = freeink::ui::defaultButtonStyles();
+    fieldStyles.normal.background = freeink::ui::Paint::solid(freeink::ui::Color::White);
+    fieldStyles.normal.foreground = freeink::ui::Paint::solid(freeink::ui::Color::Black);
+    fieldStyles.normal.border = freeink::ui::Paint::solid(freeink::ui::Color::Black);
+    fieldStyles.normal.borderWidth = 1;
+    fieldStyles.selected = fieldStyles.normal;
+    fieldStyles.selected.background = freeink::ui::Paint::dither(freeink::ui::Color::LightGray);
+    fieldStyles.selected.borderWidth = 2;
+    fieldStyles.focused = fieldStyles.selected;
+    fieldStyles.active = fieldStyles.selected;
+  }
+
   const auto field = [&](const offset_field_row::Rect& rect, const char* text, const Field which) {
     freeink::ui::ButtonProps props;
     props.label = text;
@@ -235,7 +253,7 @@ void ClockOffsetActivity::buildScreen(UiScreen& screen) {
     props.value = static_cast<int16_t>(which);
     props.state = activeField == which ? freeink::ui::StateSelected : freeink::ui::StateNormal;
     props.text = theme.bodyText;
-    props.styles = theme.button;
+    props.styles = fieldStyles;
     props.radius = static_cast<uint8_t>(theme.controlRadius);
     props.minTouchSize = screen.frame().device().minTouchSize;
     screen.button(props, freeink::ui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y),
