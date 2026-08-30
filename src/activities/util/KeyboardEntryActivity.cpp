@@ -500,6 +500,8 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 }
 
 void KeyboardEntryActivity::loop() {
+  if (routeKeyTouch()) return;
+
   if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     upHeld = true;
     upLongHandled = false;
@@ -649,6 +651,46 @@ void KeyboardEntryActivity::loop() {
   }
 }
 
+// A tap or a long press on a key. The SDK's keyboard router owns the timing: it
+// fires the long press at the threshold while the finger is still down, because
+// waiting for the release reads as a dead key next to a one-second panel
+// refresh, and it dispatches the key the press landed on when the release
+// drifts off it, which fingers on e-paper do.
+bool KeyboardEntryActivity::routeKeyTouch() {
+  if (!mappedInput.hasTouch() || !interactionsReady.load()) return false;
+
+  int px = 0;
+  int py = 0;
+  const bool pressedDown = mappedInput.wasScreenTouchDown(px, py);
+  int tx = 0;
+  int ty = 0;
+  const bool tapped = mappedInput.wasScreenTapped(tx, ty);
+  int hx = 0;
+  int hy = 0;
+  const bool inContact = pressedDown || mappedInput.isScreenTouchHeld(hx, hy);
+  if (!pressedDown && !tapped && !inContact) return false;
+
+  const auto result = touchRouter.update(interactions, pressedDown, static_cast<int16_t>(px), static_cast<int16_t>(py),
+                                         tapped, static_cast<int16_t>(tx), static_cast<int16_t>(ty), inContact,
+                                         static_cast<uint32_t>(millis()));
+  if (result.activeChanged) requestUpdate();
+  if (!result.event) return result.activeChanged;
+  if (result.event.action != ACTION_KEY) return false;
+
+  // A touched key becomes the selection too, so the keys and the buttons agree
+  // about where the cursor is when the reader goes back to them.
+  const fui::KeyboardLayout& layout = currentLayout();
+  fui::KeyboardNavigator cursor;
+  cursor.reset(static_cast<int16_t>(selRow), static_cast<int16_t>(selCol));
+  if (cursor.syncToValue(layout, result.event.value)) {
+    selRow = cursor.row();
+    selCol = cursor.col();
+  }
+  cursorMode = false;
+  if (activateValue(result.event.value, result.event.longPress)) requestUpdate();
+  return true;
+}
+
 void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -662,6 +704,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // frame's constructor clears the interaction table, so the routing gate has
   // to close before it is built, not later when the keys are drawn.
   interactionsReady = false;
+  // The loop task routes against the last published table while this one is
+  // rebuilt here, so the rebuild goes into the other generation.
+  interactions.beginPublishCycle();
   fui::GfxRendererTarget target(renderer);
   target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
   target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
@@ -930,6 +975,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int hintsTop = renderer.getScreenHeight() - metrics.buttonHintsHeight;
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, hintsTop - (kbRect.y + kbRect.height)));
   fui::keyboard(frame, kbRect, props);
+  interactions.publish();
   interactionsReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));

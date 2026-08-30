@@ -190,9 +190,30 @@ class MappedInputManager {
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
                          bool hasSubtitle) const;
   void rememberTouchHeldTime() const;
-  // A tap on the hint band stands for one button press, not one per query: cleared as soon
-  // as the tap event is gone, so the next tap is heard again.
+
+ public:
+  // Drops a synthetic hint-band release that has not been delivered yet. Called on
+  // every screen entry: the release belongs to the screen that handled the press,
+  // and an orphan one would act on whatever the new screen has selected.
+  void clearHintTap() {
+    hintTapUsed = false;
+    hintPendingRelease = -1;
+  }
+
+ private:
+  // A tap on the hint band stands for a whole button stroke, not for one event: the
+  // press is answered on the frame the tap lands, and the release on the next frame,
+  // because that is what a physical key does and what every hold-aware button on top
+  // of one expects. Delivering both in a single frame let whichever query the caller
+  // wrote first eat the tap, and a screen reading press and release together (the
+  // file browser's Open, which also holds) then saw half a stroke and did nothing.
   mutable bool hintTapUsed = false;
+  // The hardware id whose synthetic release is still owed, or -1, and when the
+  // press that owes it landed. A screen that never asks for the release must not
+  // leave one lying about for the next thing that does, so it expires.
+  mutable int hintPendingRelease = -1;
+  mutable unsigned long hintPendingReleaseAt = 0;
+  static constexpr unsigned long HINT_TAP_RELEASE_WINDOW_MS = 500;
 
   // See suppressHeldButtonRelease().
   mutable input_gate::ReleaseGate releaseGate;

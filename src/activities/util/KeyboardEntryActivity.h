@@ -78,6 +78,8 @@ class KeyboardEntryActivity : public Activity {
   // Tap/hold routing (threshold long-press, release swallow, slide re-arm)
   // lives in the SDK; loop() feeds it the level-triggered touch state.
   freeink::ui::TouchHoldRouter touchRouter;
+  /** Routes a contact against the keys the last render published. */
+  bool routeKeyTouch();
 
   // loop() runs on the main task while render() rebuilds the interaction
   // table on the render task; routing against a half-built table would read

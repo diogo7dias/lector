@@ -98,3 +98,24 @@ TEST(HoldButton, WithoutAHoldActionTheShortOneFiresOnThePress) {
   EXPECT_EQ(Fired::Short, t.updatePressOnly(/*wasPressedNow=*/true));
   EXPECT_EQ(Fired::None, t.updatePressOnly(/*wasPressedNow=*/false));
 }
+
+// The hint band on a touch device stands in for the front buttons, and it has to
+// deliver a whole stroke: the press on the frame the tap lands and the release on
+// the next. Both halves in one frame is what a physical key never does, and it
+// left this tracker with a release it was not armed for, so a tapped "Open" in
+// the file browser did nothing at all.
+TEST(HoldButton, ATapDeliveredAsPressThenReleaseIsAShortPress) {
+  hold_button::Tracker tracker;
+  EXPECT_EQ(tracker.update(true, false, false, 0, 700), hold_button::Fired::None);
+  EXPECT_EQ(tracker.update(false, false, true, 0, 700), hold_button::Fired::Short);
+}
+
+TEST(HoldButton, ATapThatOnlyEverPressesFiresNothing) {
+  // The shape the bug had: the synthesized tap answered whichever of the two
+  // queries the caller wrote first and was spent, so the tracker was armed by a
+  // press whose release never arrived and the button read as dead.
+  hold_button::Tracker tracker;
+  EXPECT_EQ(tracker.update(true, false, false, 0, 700), hold_button::Fired::None);
+  EXPECT_EQ(tracker.update(false, false, false, 0, 700), hold_button::Fired::None);
+  EXPECT_EQ(tracker.update(false, false, false, 0, 700), hold_button::Fired::None);
+}

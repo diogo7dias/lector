@@ -76,11 +76,21 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       if (heldQuery ? override.suppressHeld : override.suppressEdges) return false;
     }
     if ((gpio.*fn)(hw)) return true;
+    // The synthetic release, owed from the frame the tap landed on. Delivered only
+    // once the tap event itself is gone, so press and release never share a frame.
+    if (releaseQuery && tapped < 0 && hintPendingRelease == static_cast<int>(hw)) {
+      const bool expired = millis() - hintPendingReleaseAt > HINT_TAP_RELEASE_WINDOW_MS;
+      hintPendingRelease = -1;
+      if (!expired) return true;
+      return false;
+    }
     if (tapped < 0 || hw != tapped) return false;
-    // Spend the tap here. Without this a single tap answers both wasPressed() and
-    // wasReleased() in the same frame, which a physical key never does — it presses on one
-    // frame and releases on a later one — and an activity that watches both would act twice.
+    // Only the press half is answered on this frame; asking again for the same tap
+    // gets nothing, so one tap is one press.
+    if (releaseQuery) return false;
     hintTapUsed = true;
+    hintPendingRelease = static_cast<int>(hw);
+    hintPendingReleaseAt = millis();
     return true;
   };
 
