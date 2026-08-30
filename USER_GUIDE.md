@@ -854,7 +854,10 @@ Session**, **Pages to Paragraph**. Alongside them:
   Fat), **Floating Bar** and **Bar Outline**.
 - **Progress Bar** — Off, Slim, Medium or Fat, for when the status bar itself is off.
 - **XTC Status Bar** — Hide, Bottom or Top, for XTC books.
-- **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**.
+- **Clock UTC Offset**, **Clock Format** (24-hour or 12-hour) and **Clock Synced**. The offset
+  picker has three fields, sign, hours and minutes: Confirm moves between them and the direction
+  keys change the one being edited, or tap a field to move to it and tap it again to step it. The
+  time the offset produces is shown under the fields.
 
 ### 12.3 Controls
 
