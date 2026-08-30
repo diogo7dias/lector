@@ -34,7 +34,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static constexpr freeink::ui::ActionId ACTION_CHOICE = 3;
   // A row of the scrolling list shape.
   static constexpr freeink::ui::ActionId ACTION_LIST = 4;
-  static constexpr freeink::ui::ActionId ACTION_USER = 5;
+  // One id for the whole slider row: a drag arrives with dragPermille set, a
+  // step button with its delta in the event's value.
+  static constexpr freeink::ui::ActionId ACTION_SLIDER = 5;
+  static constexpr freeink::ui::ActionId ACTION_USER = 6;
 
   // At most four lines, which is what the wordiest screen (the clear-cache
   // warning) needs. The first is the headline and is drawn in the body face;
@@ -100,6 +103,16 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     bool showSignal = false;
     bool signalConnected = false;
     int signalBars = 0;
+    // A slider band under the first line, for a screen whose whole job is
+    // picking one number (go-to-percent, every interval). The caption carries
+    // the label on the left and the readout on the right; the lines after the
+    // first sit under the band, which is where the step hints belong.
+    bool showSlider = false;
+    const char* sliderLabel = nullptr;
+    const char* sliderValueText = nullptr;
+    int sliderValue = 0;
+    int sliderMin = 0;
+    int sliderMax = 100;
     // A bar under the lines. Left off, the lines centre on their own.
     bool showProgress = false;
     int progressValue = 0;
@@ -193,6 +206,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // side that is further along). Clamped again at build time.
   void setChoiceIndex(int index) { choiceIndex_ = index < 0 ? 0 : index; }
   virtual void onChoiceActivated(int index) {}
+  // The slider moved: `value` is already inside [sliderMin, sliderMax].
+  virtual void onSliderChanged(int value) {}
+  // What the on-screen minus and plus buttons move by. The keys keep their own
+  // small and large steps; this is only the touch pair.
+  virtual int sliderStep() const { return 1; }
 
   void buildScreen(UiScreen& screen);
 
@@ -206,6 +224,7 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // above them cannot run underneath. Sets choiceCount_.
   void buildChoiceBand(UiScreen& screen, const StatusView& view);
   void buildList(UiScreen& screen, const StatusView& view);
+  void buildSlider(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
   // Selection and viewport for the list shape, plus the repeat behaviour that
   // steps a row on a press and a page on a hold.
   freeink::ui::ListNav listNav_;
@@ -244,4 +263,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static void cancelTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void choiceTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void listTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void sliderTrampoline(const freeink::ui::ActionEvent& event, void* user);
+
+  // Set by the last build: a screen with a capsule needs the held contact
+  // routed every frame, which no other shape wants.
+  bool hasSlider_ = false;
 };

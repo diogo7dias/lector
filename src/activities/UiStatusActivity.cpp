@@ -8,6 +8,7 @@
 #include "MappedInputManager.h"
 #include "components/ComparisonLayout.h"
 #include "components/SignalMeter.h"
+#include "components/SliderField.h"
 #include "components/StatusStack.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -29,6 +30,7 @@ void UiStatusActivity::onEnter() {
   app.on(ACTION_CANCEL, &UiStatusActivity::cancelTrampoline, this);
   app.on(ACTION_CHOICE, &UiStatusActivity::choiceTrampoline, this);
   app.on(ACTION_LIST, &UiStatusActivity::listTrampoline, this);
+  app.on(ACTION_SLIDER, &UiStatusActivity::sliderTrampoline, this);
   app.setScreen(&UiStatusActivity::screenTrampoline, this);
   requestUpdate();
 }
@@ -59,6 +61,19 @@ void UiStatusActivity::listTrampoline(const fui::ActionEvent& event, void* user)
   self->onListActivated(event.value);
 }
 
+// A drag reports where along the track the finger is; a step button reports how
+// far to move. Both land on the same handler, clamped by the view's own range.
+void UiStatusActivity::sliderTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<UiStatusActivity*>(user);
+  const StatusView view = self->statusView();
+  if (!view.showSlider) return;
+  const slider_field::Range range{view.sliderMin, view.sliderMax};
+  const int next = event.dragPermille >= 0 ? slider_field::valueForPermille(event.dragPermille, range)
+                                           : slider_field::clamp(view.sliderValue + event.value, range);
+  if (next == view.sliderValue) return;
+  self->onSliderChanged(next);
+}
+
 void UiStatusActivity::setListSelectionLocked(const int index) {
   listNav_.selected = index;
   listNav_.follow(listCount_);
@@ -77,6 +92,7 @@ void UiStatusActivity::setListSelection(const int index) {
 void UiStatusActivity::buildScreen(UiScreen& screen) {
   const StatusView view = statusView();
   qrPlacements_ = {};
+  hasSlider_ = view.showSlider;
 
   // The header (and its sub-header) are painted outside the app, same as every
   // list screen, so the body starts under whichever of them was drawn.
@@ -169,15 +185,31 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
     // capped by the body rather than by the shared default.
     qrSize = static_cast<int16_t>(std::min({view.qrSize, static_cast<int>(body.width), static_cast<int>(body.height)}));
   }
-  const status_stack::Content content{lineCount, qrSize, qrLineCount, view.showProgress};
+  // The band is finger-sized whatever the theme's row height is: a capsule you
+  // drag is not a row you tap.
+  const int16_t sliderControl = view.showSlider ? std::max(theme.rowHeight, theme.minTouchSize) : 0;
+  const int16_t sliderHeight =
+      view.showSlider ? static_cast<int16_t>(lineHeight + theme.spaceMd + sliderControl) : 0;
+
+  const status_stack::Content content{lineCount, qrSize, qrLineCount, sliderHeight, view.showProgress};
   int16_t y = static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, content));
+
+  // The band leads: its caption already carries the readout, so the lines under
+  // it are the ones explaining what moves it.
+  if (view.showSlider) {
+    buildSlider(screen, view, fui::Rect{body.x, y, body.width, sliderHeight});
+    y = static_cast<int16_t>(y + sliderHeight + gap * 2);
+  }
 
   int placed = 0;
   for (size_t i = 0; i < MAX_LINES; ++i) {
     if (view.lines[i] == nullptr || view.lines[i][0] == '\0') continue;
-    fui::TextStyle style = placed == 0 ? theme.bodyText : theme.smallText;
+    // With a band above them the lines are all captions to it, so none of them
+    // takes the headline face.
+    const bool headline = placed == 0 && !view.showSlider;
+    fui::TextStyle style = headline ? theme.bodyText : theme.smallText;
     style.align = fui::TextAlign::Center;
-    const int16_t height = placed == 0 ? headlineHeight : lineHeight;
+    const int16_t height = headline ? headlineHeight : lineHeight;
     if (placed > 0) y = static_cast<int16_t>(y + gap);
     target.text(fui::Rect{body.x, y, body.width, height}, view.lines[i], style);
     y = static_cast<int16_t>(y + height);
@@ -208,6 +240,24 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
                  fui::Rect{static_cast<int16_t>(body.x + (body.width - width) / 2), static_cast<int16_t>(y + gap * 2),
                            width, kProgressHeight});
   }
+}
+
+// The band itself: the SDK's slider row, so the capsule, the two step buttons
+// and their radius all come from the theme rather than from arithmetic here.
+void UiStatusActivity::buildSlider(UiScreen& screen, const StatusView& view, const fui::Rect& rect) {
+  const auto& theme = screen.theme();
+  fui::SliderRowProps props;
+  props.label = view.sliderLabel;
+  props.value = view.sliderValueText;
+  props.sliderValue = view.sliderValue - view.sliderMin;
+  props.max = view.sliderMax > view.sliderMin ? view.sliderMax - view.sliderMin : 1;
+  props.sliderAction = ACTION_SLIDER;
+  props.decrement = ACTION_SLIDER;
+  props.increment = ACTION_SLIDER;
+  props.decrementValue = static_cast<int16_t>(-sliderStep());
+  props.incrementValue = static_cast<int16_t>(sliderStep());
+  props.buttonRadius = static_cast<uint8_t>(theme.controlRadius);
+  fui::sliderRow(screen.frame(), rect, props);
 }
 
 void UiStatusActivity::buildSections(UiScreen& screen, const StatusView& view) {
@@ -508,7 +558,7 @@ void UiStatusActivity::loop() {
 
   // The screen's own buttons, when it drew any: the interaction table the last
   // render published is what a tap is measured against.
-  const auto route = UiAppHost::routeTouch(mappedInput);
+  const auto route = UiAppHost::routeTouch(mappedInput, /*withLongPress=*/false, /*routeHeld=*/hasSlider_);
   if (route.routed && app.invalidated()) requestUpdate();
   if (route) return;
 
