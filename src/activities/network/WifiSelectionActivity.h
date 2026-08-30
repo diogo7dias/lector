@@ -7,11 +7,8 @@
 #include <vector>
 
 #include "WifiSession.h"
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiStatusActivity.h"
 
-struct Rect;
-struct ThemeMetrics;
 struct WifiCredential;
 
 // Structure to hold WiFi network information
@@ -48,12 +45,15 @@ enum class WifiSelectionState {
  *
  * The onComplete callback receives true if connected successfully, false if cancelled.
  */
-class WifiSelectionActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
-
+class WifiSelectionActivity final : public UiStatusActivity {
   WifiSelectionState state = WifiSelectionState::SCANNING;
-  size_t selectedNetworkIndex = 0;
   std::vector<WifiNetworkInfo> networks;
+  // The rows and the strings behind them: statusView() only hands out pointers,
+  // so both outlive it. Rebuilt with the network view.
+  std::vector<freeink::ui::ListItem> rows;
+  std::vector<std::string> rowLabels;
+  std::vector<std::string> rowValues;
+  void refreshRows();
   // Number of real (scanned) networks, excluding the synthetic hidden-network entry
   size_t realNetworkCount = 0;
 
@@ -69,6 +69,13 @@ class WifiSelectionActivity final : public Activity {
 
   // Cached MAC address string for display
   std::string cachedMacAddress;
+  // Header count and the two message lines the connect screens show, held for
+  // the same reason as the rows.
+  std::string networkCountLine;
+  std::string ssidLine;
+  std::string ipLine;
+  void refreshHeaderCount();
+  void refreshConnectionLines();
 
   // Whether to attempt auto-connect on entry
   const bool allowAutoConnect;
@@ -82,17 +89,6 @@ class WifiSelectionActivity final : public Activity {
   // A join was started and its outcome has not been handed to the session yet.
   bool joinPending = false;
 
-  // Save/forget prompt selection (0 = Yes, 1 = No)
-  int savePromptSelection = 0;
-  int forgetPromptSelection = 0;
-
-  void renderNetworkList(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderPasswordEntry(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderConnecting(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderConnected(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderSavePrompt(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderConnectionFailed(const Rect* screen, const ThemeMetrics* metrics) const;
-  void renderForgetPrompt(const Rect* screen, const ThemeMetrics* metrics) const;
 
   /** Hands the session everything the radio has to say, then runs what it asks for. */
   void pumpSession();
@@ -106,7 +102,8 @@ class WifiSelectionActivity final : public Activity {
 
   void startWifiScan();
   void beginJoin(const std::string& ssid, const std::string& password);
-  void handleNetworkListInput();
+  /** Left forgets a saved network, Right rescans; true when one of them acted. */
+  bool handleListSideButtons();
   void promptHiddenSsid();
   void promptPasswordEntry();
   std::string getSignalStrengthIndicator(int32_t rssi) const;
@@ -115,9 +112,15 @@ class WifiSelectionActivity final : public Activity {
 
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true)
-      : Activity("WifiSelection", renderer, mappedInput), allowAutoConnect(autoConnect) {}
+      : UiStatusActivity("WifiSelection", renderer, mappedInput), allowAutoConnect(autoConnect) {}
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onListActivated(int index) override;
+  void onChoiceActivated(int index) override;
+  void onBackButton() override;
+  void onConfirmButton() override;
 };

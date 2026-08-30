@@ -26,6 +26,7 @@ void UiStatusActivity::onEnter() {
   app.on(ACTION_ACCEPT, &UiStatusActivity::acceptTrampoline, this);
   app.on(ACTION_CANCEL, &UiStatusActivity::cancelTrampoline, this);
   app.on(ACTION_CHOICE, &UiStatusActivity::choiceTrampoline, this);
+  app.on(ACTION_LIST, &UiStatusActivity::listTrampoline, this);
   app.setScreen(&UiStatusActivity::screenTrampoline, this);
   requestUpdate();
 }
@@ -49,6 +50,24 @@ void UiStatusActivity::choiceTrampoline(const fui::ActionEvent& event, void* use
   self->onChoiceActivated(event.value);
 }
 
+void UiStatusActivity::listTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<UiStatusActivity*>(user);
+  if (event.value < 0 || event.value >= self->listCount_) return;
+  self->listNav_.selected = event.value;
+  self->onListActivated(event.value);
+}
+
+void UiStatusActivity::setListSelection(const int index) {
+  {
+    // The render task reads the nav mid-build; a press landing during a render
+    // would otherwise tear the selection against the viewport.
+    RenderLock lock(*this);
+    listNav_.selected = index;
+    listNav_.follow(listCount_);
+  }
+  requestUpdate();
+}
+
 void UiStatusActivity::buildScreen(UiScreen& screen) {
   const StatusView view = statusView();
   qrPlacements_ = {};
@@ -67,6 +86,12 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   buildActions(screen, view);
 
   buildChoiceBand(screen, view);
+
+  if (view.listItems != nullptr && view.listCount > 0) {
+    buildList(screen, view);
+    return;
+  }
+  listCount_ = 0;
 
   if (view.comparison[0].label != nullptr) {
     buildComparison(screen, view);
@@ -310,6 +335,39 @@ void UiStatusActivity::buildChoiceBand(UiScreen& screen, const StatusView& view)
   screen.spacer(static_cast<int16_t>(gap * 2), fui::LayoutAnchor::Bottom);
 }
 
+void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
+  const auto& theme = screen.theme();
+  auto& target = screen.frame().target();
+  listCount_ = view.listCount;
+  if (listNav_.selected >= listCount_) listNav_.selected = listCount_ - 1;
+  if (listNav_.selected < 0) listNav_.selected = 0;
+
+  if (view.listNote != nullptr && view.listNote[0] != '\0') {
+    // Taken first, so the list is measured for the room actually left.
+    const int16_t noteHeight = target.lineHeight(theme.smallText.font);
+    const fui::Rect note = screen.takeBottom(noteHeight, theme.spaceSm);
+    fui::TextStyle style = theme.smallText;
+    style.align = fui::TextAlign::Center;
+    target.text(note, view.listNote, style);
+  }
+
+  fui::ListProps props;
+  props.items = view.listItems;
+  props.count = static_cast<uint16_t>(listCount_);
+  props.action = ACTION_LIST;
+
+  int16_t rowHeight = theme.rowHeight;
+  if (!mappedInput.hasTouch()) {
+    // Same as UiListActivity: button-only hardware keeps the denser per-theme
+    // row so a scan fits as many networks per screen as it did before.
+    const auto& metrics = UITheme::getInstance().getMetrics();
+    rowHeight = static_cast<int16_t>(view.listHasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
+    props.rowHeight = rowHeight;
+  }
+  listNav_.syncToProps(screen.body(), rowHeight, theme.listRowGap, listCount_, props);
+  screen.list(props);
+}
+
 void UiStatusActivity::buildComparison(UiScreen& screen, const StatusView& view) {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
@@ -414,6 +472,25 @@ bool UiStatusActivity::moveChoice(const int delta) {
   return true;
 }
 
+bool UiStatusActivity::navigateList() {
+  if (listCount_ <= 0) return false;
+  bool moved = false;
+  const auto step = [&](const int index) {
+    setListSelection(index);
+    moved = true;
+  };
+  listButtons_.onNextRelease([&] { step(ButtonNavigator::nextIndex(listNav_.selected, listCount_)); });
+  listButtons_.onPreviousRelease([&] { step(ButtonNavigator::previousIndex(listNav_.selected, listCount_)); });
+  // Page by the rows the last build actually drew, not by a fixed-height
+  // estimate: with a wrapped label the estimate overshoots and the rows between
+  // pages would never be shown.
+  listButtons_.onNextContinuous(
+      [&] { step(ButtonNavigator::nextPageIndex(listNav_.selected, listCount_, listNav_.pageRows())); });
+  listButtons_.onPreviousContinuous(
+      [&] { step(ButtonNavigator::previousPageIndex(listNav_.selected, listCount_, listNav_.pageRows())); });
+  return moved;
+}
+
 void UiStatusActivity::loop() {
   if (handleCustomInput()) return;
 
@@ -442,6 +519,10 @@ void UiStatusActivity::loop() {
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (listCount_ > 0) {
+      onListActivated(listNav_.selected);
+      return;
+    }
     if (choiceCount_ > 0) {
       onChoiceActivated(choiceIndex_);
       return;
@@ -449,6 +530,8 @@ void UiStatusActivity::loop() {
     onConfirmButton();
     return;
   }
+
+  navigateList();
 }
 
 void UiStatusActivity::render(RenderLock&&) {
@@ -459,7 +542,8 @@ void UiStatusActivity::render(RenderLock&&) {
   if (view.title) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int pageWidth = renderer.getScreenWidth();
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, view.title);
+    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, view.title,
+                   view.headerRight ? view.headerRight : "");
     if (view.subtitleLeft) {
       const int bandTop = metrics.topPadding + metrics.headerHeight;
       GUI.drawSubHeader(renderer, Rect{0, bandTop, pageWidth, metrics.tabBarHeight}, view.subtitleLeft,
@@ -475,10 +559,12 @@ void UiStatusActivity::render(RenderLock&&) {
   // they go, and they land in the same buffer the app just drew into.
   drawQrCodes();
 
-  const auto labels = mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK),
-                                            view.confirmHint ? view.confirmHint : "", "", "");
+  const auto labels =
+      mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK), view.confirmHint ? view.confirmHint : "",
+                            view.thirdHint ? view.thirdHint : "", view.fourthHint ? view.fourthHint : "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   if (drawOverlay()) return;
   renderer.displayBuffer(view.refresh);
+  afterRender();
 }

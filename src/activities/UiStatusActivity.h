@@ -6,6 +6,7 @@
 
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
+#include "util/ButtonNavigator.h"
 #include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
 
 // Base for the screens that report on something rather than list it: a clear, a
@@ -31,7 +32,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static constexpr freeink::ui::ActionId ACTION_CANCEL = 2;
   // A row of the comparison shape's choice list.
   static constexpr freeink::ui::ActionId ACTION_CHOICE = 3;
-  static constexpr freeink::ui::ActionId ACTION_USER = 4;
+  // A row of the scrolling list shape.
+  static constexpr freeink::ui::ActionId ACTION_LIST = 4;
+  static constexpr freeink::ui::ActionId ACTION_USER = 5;
 
   // At most four lines, which is what the wordiest screen (the clear-cache
   // warning) needs. The first is the headline and is drawn in the body face;
@@ -77,6 +80,8 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // exactly as it found it.
     bool hidden = false;
     const char* title = nullptr;  // header band; nullptr draws no header
+    // Right of the title, for a count the screen keeps ("12 networks").
+    const char* headerRight = nullptr;
     // Sub-header band under the title, for the network a screen is reachable
     // on. Left is the name, right the address.
     const char* subtitleLeft = nullptr;
@@ -103,6 +108,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // working screen says no button does anything yet.
     const char* backHint = nullptr;     // nullptr = "Back"
     const char* confirmHint = nullptr;  // nullptr = blank
+    // The other two buttons, for a screen that binds them (the Wi-Fi picker
+    // forgets a network and rescans). Blank unless set.
+    const char* thirdHint = nullptr;
+    const char* fourthHint = nullptr;
     // On-screen buttons across the foot of the body, for a choice a touch
     // reader should not have to find on the hint band. They are the same two
     // answers the keys give: the left one calls onBackButton(), the right one
@@ -123,6 +132,15 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // with plain centred lines.
     const char* const* choiceList = nullptr;
     int choiceListCount = 0;
+    // A scrolling list filling the body, for a screen that is a list in one
+    // state and a message in the others: the Wi-Fi picker and the font
+    // browser, which is why neither could live on UiListActivity. The rows are
+    // the subclass's, since the view is a temporary.
+    const freeink::ui::ListItem* listItems = nullptr;
+    int listCount = 0;
+    bool listHasSubtitle = false;
+    // A line under the list, for the legend the Wi-Fi picker prints.
+    const char* listNote = nullptr;
     // A screen that is nearly all QR asks for a full pass: a differential
     // waveform leaves the old pattern as speckle under a dense block of black.
     HalDisplay::RefreshMode refresh = HalDisplay::FAST_REFRESH;
@@ -144,10 +162,21 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // Drawn after the hints, for a legacy pop-up that owns the frame. Returning
   // true means the overlay published the buffer itself.
   virtual bool drawOverlay() { return false; }
+  // Called once the page is on the panel, for a screen that tracks what the
+  // panel is showing (a full pass is owed when the screen changes wholesale,
+  // and not owed for the tick of a progress bar).
+  virtual void afterRender() {}
 
   // The comparison shape's selected choice, and what a press on it does. The
   // base owns the index so both sync screens navigate identically; a subclass
   // only says what taking each answer means.
+  // The scrolling list's selection, and what activating a row does. The base
+  // owns the selection and the viewport, so a screen only says what its rows
+  // are and what choosing one means.
+  int listSelection() const { return listNav_.selected; }
+  void setListSelection(int index);
+  virtual void onListActivated(int index) {}
+
   int choiceIndex() const { return choiceIndex_; }
   // Opening choice, for a screen that knows which answer is the likely one (the
   // side that is further along). Clamped again at build time.
@@ -165,6 +194,13 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // The answers, taken from the bottom of the body so whichever shape is drawn
   // above them cannot run underneath. Sets choiceCount_.
   void buildChoiceBand(UiScreen& screen, const StatusView& view);
+  void buildList(UiScreen& screen, const StatusView& view);
+  // Selection and viewport for the list shape, plus the repeat behaviour that
+  // steps a row on a press and a page on a hold.
+  freeink::ui::ListNav listNav_;
+  ButtonNavigator listButtons_;
+  int listCount_ = 0;
+  bool navigateList();
   // Choices the last build drew, so the loop task can step the selection
   // without rebuilding the view. Zero until the first render, which is also
   // when there is nothing on screen to step through.
@@ -196,4 +232,5 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static void acceptTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void cancelTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void choiceTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void listTrampoline(const freeink::ui::ActionEvent& event, void* user);
 };
