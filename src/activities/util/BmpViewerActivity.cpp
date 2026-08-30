@@ -19,6 +19,13 @@
 #include "util/FavoriteImage.h"
 
 namespace {
+// The one line an error state gets, in the theme's own help face: these screens
+// are an image and nothing else, so the message is all the chrome they have.
+int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(SMALL_FONT_ID); }
+}  // namespace
+
+
+namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
 constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
 constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
@@ -131,7 +138,8 @@ void BmpViewerActivity::onEnter() {
       drawHints();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     } else {
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
+                       tr(STR_FILE_OPEN_FAILED));
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -183,7 +191,8 @@ void BmpViewerActivity::onEnter() {
     } else {
       // Handle file parsing error
       renderer.clearScreen();
-      renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_INVALID_BMP_FILE));
+      GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
+                       tr(STR_INVALID_BMP_FILE));
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -193,7 +202,8 @@ void BmpViewerActivity::onEnter() {
   } else {
     // Handle file open error
     renderer.clearScreen();
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
+    GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
+                       tr(STR_FILE_OPEN_FAILED));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
