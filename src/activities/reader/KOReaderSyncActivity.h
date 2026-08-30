@@ -7,7 +7,7 @@
 
 #include "KOReaderSyncClient.h"
 #include "ProgressMapper.h"
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 
 /**
  * Activity for syncing reading progress with KOReader sync server.
@@ -19,13 +19,13 @@
  * 4. Show comparison and options (Apply/Upload)
  * 5. Apply or upload progress
  */
-class KOReaderSyncActivity final : public Activity {
+class KOReaderSyncActivity final : public UiStatusActivity {
  public:
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 int currentSpineIndex, int currentPage, int totalPagesInSpine,
                                 SavedProgressPosition localKoPos, std::string localChapterName,
                                 std::optional<uint16_t> currentParagraphIndex = std::nullopt)
-      : Activity("KOReaderSync", renderer, mappedInput),
+      : UiStatusActivity("KOReaderSync", renderer, mappedInput),
         epubPath(epubPath),
         currentSpineIndex(currentSpineIndex),
         currentPage(currentPage),
@@ -38,9 +38,14 @@ class KOReaderSyncActivity final : public Activity {
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   bool preventAutoSleep() override { return state == CONNECTING || state == SYNCING || state == UPLOADING; }
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onBackButton() override;
+  void onConfirmButton() override;
+  void onChoiceActivated(int index) override;
 
  private:
   enum State {
@@ -76,8 +81,14 @@ class KOReaderSyncActivity final : public Activity {
   // Local progress as KOReader format (pre-computed before Epub was released)
   SavedProgressPosition localProgress;
 
-  // Selection in result screen (0=Apply, 1=Upload)
-  int selectedOption = 0;
+  // The comparison screen's own text, built once the remote position is mapped:
+  // statusView() only hands out pointers, so the strings have to outlive it.
+  std::string remoteChapterLine;
+  std::string remotePageLine;
+  std::string remoteDeviceLine;
+  std::string localChapterLine;
+  std::string localPageLine;
+  void prepareComparison();
 
   // Timed return for successful smart-sync terminal states.
   unsigned long autoReturnAt = 0;

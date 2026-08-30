@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "components/ComparisonLayout.h"
 #include "components/SignalMeter.h"
 #include "components/StatusStack.h"
 #include "components/UITheme.h"
@@ -23,6 +24,7 @@ void UiStatusActivity::onEnter() {
   resetUi();
   app.on(ACTION_ACCEPT, &UiStatusActivity::acceptTrampoline, this);
   app.on(ACTION_CANCEL, &UiStatusActivity::cancelTrampoline, this);
+  app.on(ACTION_CHOICE, &UiStatusActivity::choiceTrampoline, this);
   app.setScreen(&UiStatusActivity::screenTrampoline, this);
   requestUpdate();
 }
@@ -37,6 +39,13 @@ void UiStatusActivity::acceptTrampoline(const fui::ActionEvent&, void* user) {
 
 void UiStatusActivity::cancelTrampoline(const fui::ActionEvent&, void* user) {
   static_cast<UiStatusActivity*>(user)->onBackButton();
+}
+
+void UiStatusActivity::choiceTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<UiStatusActivity*>(user);
+  if (event.value < 0 || event.value >= self->choiceCount_) return;
+  self->choiceIndex_ = event.value;
+  self->onChoiceActivated(event.value);
 }
 
 void UiStatusActivity::buildScreen(UiScreen& screen) {
@@ -56,6 +65,12 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   // buttons stand in.
   buildActions(screen, view);
 
+  buildChoiceBand(screen, view);
+
+  if (view.comparison[0].label != nullptr) {
+    buildComparison(screen, view);
+    return;
+  }
   if (view.sections[0].heading != nullptr) {
     buildSections(screen, view);
     return;
@@ -218,6 +233,116 @@ void UiStatusActivity::buildSections(UiScreen& screen, const StatusView& view) {
   }
 }
 
+void UiStatusActivity::buildChoiceBand(UiScreen& screen, const StatusView& view) {
+  // A fixed pair (take theirs / send mine) or a list the screen owns (the
+  // readers it found): both end up as the same rows, selected by the same
+  // index, dispatched through the same action.
+  const char* const* labels = view.choices[0] != nullptr ? view.choices.data() : view.choiceList;
+  const int offered = view.choices[0] != nullptr ? static_cast<int>(MAX_CHOICES) : view.choiceListCount;
+
+  int count = 0;
+  for (int i = 0; i < offered && count < static_cast<int>(MAX_LIST_CHOICES); ++i) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    ++count;
+  }
+  choiceCount_ = count;
+  if (choiceIndex_ >= count) choiceIndex_ = count > 0 ? count - 1 : 0;
+  if (count == 0) return;
+
+  const auto& theme = screen.theme();
+  const int16_t gap = theme.listRowGap > 0 ? theme.listRowGap : 4;
+  const int16_t rowHeight = theme.rowHeight;
+
+  // Rows are copied into a buffer that outlives the build: FreeInkUI keeps the
+  // interaction table pointing at what was drawn.
+  for (int i = 0, placed = 0; i < offered && placed < count; ++i) {
+    if (labels[i] == nullptr || labels[i][0] == '\0') continue;
+    choiceItems_[placed] = fui::ListItem{};
+    choiceItems_[placed].label = labels[i];
+    choiceItems_[placed].actionValue = static_cast<int16_t>(placed);
+    ++placed;
+  }
+
+  // Never more than half the body: a long list of readers still leaves the
+  // headline that says what the list is for on screen.
+  const int16_t bodyHeight = screen.body().height;
+  int visible = count;
+  const int16_t maxBand = static_cast<int16_t>(bodyHeight / 2);
+  while (visible > 1 && rowHeight * visible + gap * (visible - 1) > maxBand) --visible;
+
+  // Scroll only as far as it takes to keep the selection on screen.
+  int top = 0;
+  if (choiceIndex_ >= visible) top = choiceIndex_ - visible + 1;
+
+  const int16_t band = static_cast<int16_t>(rowHeight * visible + gap * (visible - 1));
+  fui::ListProps props;
+  props.items = choiceItems_.data();
+  props.count = static_cast<uint16_t>(count);
+  props.selectedIndex = static_cast<int16_t>(choiceIndex_);
+  props.topIndex = static_cast<uint16_t>(top);
+  props.action = ACTION_CHOICE;
+  props.rowHeight = rowHeight;
+  props.rowGap = gap;
+  // list() takes the band itself; the spacer after it is the air between the
+  // answers and whatever the screen draws above them.
+  screen.list(props, band, fui::LayoutAnchor::Bottom);
+  screen.spacer(static_cast<int16_t>(gap * 2), fui::LayoutAnchor::Bottom);
+}
+
+void UiStatusActivity::buildComparison(UiScreen& screen, const StatusView& view) {
+  const auto& theme = screen.theme();
+  auto& target = screen.frame().target();
+
+  const int16_t headlineHeight = target.lineHeight(theme.bodyText.font);
+  const int16_t lineHeight = target.lineHeight(theme.smallText.font);
+  const int16_t gap = theme.listRowGap > 0 ? theme.listRowGap : 4;
+
+  comparison_layout::Content content;
+  content.hasHeadline = view.comparisonHeadline != nullptr && view.comparisonHeadline[0] != '\0';
+  content.hasRelation = view.comparisonRelation != nullptr && view.comparisonRelation[0] != '\0';
+  for (size_t side = 0; side < view.comparison.size(); ++side) {
+    for (const char* line : view.comparison[side].lines) {
+      if (line != nullptr && line[0] != '\0') ++content.sideLines[side];
+    }
+  }
+  const comparison_layout::Metrics stack{headlineHeight, headlineHeight, lineHeight, gap};
+
+  const fui::Rect body = screen.body();
+  int16_t y = static_cast<int16_t>(comparison_layout::topFor(stack, body.y, body.height, content));
+
+  if (content.hasHeadline) {
+    fui::TextStyle style = theme.bodyText;
+    style.align = fui::TextAlign::Center;
+    target.text(fui::Rect{body.x, y, body.width, headlineHeight}, view.comparisonHeadline, style);
+    y = static_cast<int16_t>(y + headlineHeight);
+  }
+
+  for (size_t side = 0; side < view.comparison.size(); ++side) {
+    const ComparisonSide& block = view.comparison[side];
+    if (block.label == nullptr || block.label[0] == '\0') continue;
+    if (y > body.y) y = static_cast<int16_t>(y + gap * 2);
+    fui::TextStyle label = theme.bodyText;
+    label.align = fui::TextAlign::Left;
+    target.text(fui::Rect{body.x, y, body.width, headlineHeight}, block.label, label);
+    y = static_cast<int16_t>(y + headlineHeight);
+    for (const char* line : block.lines) {
+      if (line == nullptr || line[0] == '\0') continue;
+      y = static_cast<int16_t>(y + gap);
+      fui::TextStyle style = theme.smallText;
+      style.align = fui::TextAlign::Left;
+      target.text(fui::Rect{body.x, y, body.width, lineHeight}, line, style);
+      y = static_cast<int16_t>(y + lineHeight);
+    }
+  }
+
+  if (content.hasRelation) {
+    y = static_cast<int16_t>(y + gap * 2);
+    fui::TextStyle style = theme.smallText;
+    style.align = fui::TextAlign::Left;
+    target.text(fui::Rect{body.x, y, body.width, lineHeight}, view.comparisonRelation, style);
+  }
+}
+
 void UiStatusActivity::placeQr(const size_t index, const Rect& rect, const char* payload) {
   if (index >= MAX_SECTIONS || payload == nullptr) return;
   qrPlacements_[index] = QrPlacement{rect, payload};
@@ -259,6 +384,15 @@ void UiStatusActivity::drawProgress(UiScreen& screen, const StatusView& view, co
   fui::progressBar(screen.frame(), rect, bar);
 }
 
+bool UiStatusActivity::moveChoice(const int delta) {
+  if (choiceCount_ < 2) return false;
+  int next = choiceIndex_ + delta;
+  while (next < 0) next += choiceCount_;
+  choiceIndex_ = next % choiceCount_;
+  requestUpdate();
+  return true;
+}
+
 void UiStatusActivity::loop() {
   if (handleCustomInput()) return;
 
@@ -268,11 +402,29 @@ void UiStatusActivity::loop() {
   if (route.routed && app.invalidated()) requestUpdate();
   if (route) return;
 
+  // Any direction steps between the answers: with two of them there is no
+  // meaningful difference between next and previous, and both readers reach for
+  // whichever key is under the thumb.
+  if (choiceCount_ > 1) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+      if (moveChoice(-1)) return;
+    }
+    if (mappedInput.wasPressed(MappedInputManager::Button::Down) ||
+        mappedInput.wasPressed(MappedInputManager::Button::Right)) {
+      if (moveChoice(1)) return;
+    }
+  }
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBackButton();
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    if (choiceCount_ > 0) {
+      onChoiceActivated(choiceIndex_);
+      return;
+    }
     onConfirmButton();
     return;
   }

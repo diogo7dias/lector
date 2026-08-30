@@ -12,10 +12,7 @@
 #include <string>
 #include <vector>
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
-
-struct Rect;
+#include "activities/UiStatusActivity.h"
 
 /**
  * Sends files between two readers over ESP-NOW, with no WiFi network, server,
@@ -32,7 +29,7 @@ struct Rect;
  * the SDK's freeink::nearby library. All three are covered by host tests; only
  * what is here needs two devices to exercise.
  */
-class NearbyFileTransferActivity final : public Activity {
+class NearbyFileTransferActivity final : public UiStatusActivity {
  public:
   enum class Mode : uint8_t { Send, Receive };
 
@@ -63,14 +60,19 @@ class NearbyFileTransferActivity final : public Activity {
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   // A transfer stops the moment this screen sleeps, which would strand the other
   // reader waiting on chunks that never come.
   bool preventAutoSleep() override { return true; }
   // Chunks arrive as fast as the radio and the card allow; a loop delay here
   // would throttle the whole transfer.
   bool skipLoopDelay() override;
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onBackButton() override;
+  void onConfirmButton() override;
+  void onChoiceActivated(int index) override;
 
  private:
   void pumpRadio();
@@ -113,14 +115,13 @@ class NearbyFileTransferActivity final : public Activity {
   /** What the file on its way over is called on screen: a family, or a filename. */
   std::string sendLabel() const;
 
-  /** Wrapping area for a line of explanation under a heading. */
-  Rect detailBounds(const Rect& screen, int top) const;
-
-  void renderSearching(const Rect& screen, int top) const;
-  void renderPeerList(const Rect& screen, int top) const;
-  void renderOfferPrompt(const Rect& screen, int top) const;
-  void renderProgress(const Rect& screen, int top) const;
-  void renderMessage(const Rect& screen, int top, const char* message, const char* detail) const;
+  /** Rebuilds the row labels for the readers discovered so far; true when they changed. */
+  bool refreshPeerLabels();
+  /** Rebuilds the lines the offer prompt and the progress screen show. */
+  void refreshOfferLines();
+  void refreshProgressLines();
+  /** The line naming what a finished transfer left on the card. */
+  void refreshDoneLine();
 
   Mode mode;
   // Sending: one book, or every face of one font family, in order.
@@ -155,10 +156,15 @@ class NearbyFileTransferActivity final : public Activity {
   std::array<uint8_t, 6> chosenPeerMac = {};
   bool hasChosenPeer = false;
 
-  ButtonNavigator buttonNavigator;
-  int selectedPeer = 0;
-  // Receiver's prompt: 0 accepts, 1 declines.
-  int offerChoice = 0;
+  // The screens' own text. statusView() only hands out pointers, so every line
+  // it names has to outlive it.
+  std::vector<std::string> peerLabels;
+  std::vector<const char*> peerRows;
+  std::string offerLine;
+  std::string offerFromLine;
+  std::string progressName;
+  std::string progressBatchLine;
+  std::string doneLine;
 
   bool radioFailed = false;
   bool sourceUnreadable = false;
@@ -169,8 +175,6 @@ class NearbyFileTransferActivity final : public Activity {
   unsigned long lastProgressDrawMs = 0;
   int lastDrawnPercent = -1;
   static constexpr unsigned long PROGRESS_REDRAW_INTERVAL_MS = 1200;
-  /** Lines a wrapped explanation may take before it is cut. */
-  static constexpr int DETAIL_MAX_LINES = 3;
 
   nearby_file::TransferState renderedState = nearby_file::TransferState::LISTENING;
   size_t renderedPeerCount = 0;

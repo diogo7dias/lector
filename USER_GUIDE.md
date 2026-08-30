@@ -499,6 +499,9 @@ Two Lector devices can pass a file directly, with no network in between.
    or use the same row in the in-book menu's Device tab to send the open book.
 3. The receiving device asks before accepting, and reports the name and size.
 
+The list of readers found, and the accept/decline question, are chosen with the direction keys
+and Select, or by tapping the row on a device with a touch screen.
+
 A font family goes over the same way, from **Settings > Reader > Installed Fonts > Send font**.
 The faces of the family are sent one after another and the receiving device asks once, naming
 the family, how many sizes it holds and the total size. The family installs into `/.fonts/` and
@@ -540,7 +543,8 @@ Catalogs can also be managed from the web interface at `http://<device-ip>/setti
 
 The fastest way to move a position between two Lector devices. Open the same book on both,
 then pick **Nearby Sync** from the in-book menu's Device tab on each. The devices find each
-other and show both pages, so you can **Take their page** or **Send my page**.
+other and show both pages, so you can **Take their page** or **Send my page**, chosen with the
+direction keys and Select or by tapping the row.
 
 The screen says what happened: both on the same page, they are further ahead, moved to their
 page, and so on. It also says when the other reader has a different book open, when nothing

@@ -7,10 +7,8 @@
 
 #include "NearbyPositionSession.h"
 #include "ProgressMapper.h"
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 #include "network/EspNowLink.h"
-
-struct Rect;
 
 /**
  * Nearby Position Sync: trade a reading position with another reader a few
@@ -26,7 +24,7 @@ struct Rect;
  * nearby_position::SyncSession, and the wire format in NearbyPositionProtocol,
  * both of which are covered by host tests.
  */
-class NearbyPositionSyncActivity final : public Activity {
+class NearbyPositionSyncActivity final : public UiStatusActivity {
  public:
   explicit NearbyPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                       const std::string& epubPath, int currentSpineIndex, int currentPage,
@@ -36,16 +34,22 @@ class NearbyPositionSyncActivity final : public Activity {
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   // The radio is only up while this screen is, so sleeping mid-sync would strand
   // the other reader waiting on a peer that stopped answering.
   bool preventAutoSleep() override { return true; }
   bool isReaderActivity() const override { return true; }
 
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onBackButton() override;
+  void onConfirmButton() override;
+  void onChoiceActivated(int index) override;
+
  private:
-  // Which of the two choices the comparison screen has highlighted.
-  enum class Choice : uint8_t { TAKE_THEIRS = 0, SEND_MINE = 1 };
+  // Which of the two choices the comparison screen offers, in the order the
+  // base lists them.
+  enum Choice : int { TAKE_THEIRS = 0, SEND_MINE = 1 };
 
   void pumpRadio();
   void runSessionActions();
@@ -63,12 +67,8 @@ class NearbyPositionSyncActivity final : public Activity {
    */
   void ensureEpubLoaded();
 
-  /** Wrapping area for a line of explanation under a heading. */
-  Rect detailBounds(const Rect& screen, int top) const;
-
-  void renderSearching(const Rect& screen, int top) const;
-  void renderComparison(const Rect& screen, int top);
-  void renderMessage(const Rect& screen, int top, const char* message, const char* detail) const;
+  /** Builds the comparison screen's own text, once the peer position is mapped. */
+  void prepareComparison();
   /** Chapter title for a spine index, falling back to "Section N". */
   std::string chapterNameFor(int spineIndex) const;
 
@@ -84,7 +84,16 @@ class NearbyPositionSyncActivity final : public Activity {
 
   EspNowLink link;
   nearby_position::SyncSession session;
-  Choice choice = Choice::TAKE_THEIRS;
+
+  // statusView() only hands out pointers, so the comparison's lines have to
+  // outlive it.
+  std::string peerChapterLine;
+  std::string peerPageLine;
+  std::string peerDeviceLine;
+  std::string localChapterLine;
+  std::string localPageLine;
+  /** Peer name the lines were built from, so a late NAME packet rebuilds them. */
+  std::string renderedPeerName;
 
   // Set once the peer's position has been mapped onto this device's layout, so
   // the comparison screen can name their chapter and page in local terms.
@@ -97,10 +106,8 @@ class NearbyPositionSyncActivity final : public Activity {
   // repaints an e-ink panel when something actually changed.
   nearby_position::SyncState renderedState = nearby_position::SyncState::SEARCHING;
   bool renderedPeerPosition = false;
-  Choice renderedChoice = Choice::TAKE_THEIRS;
+  int renderedChoice = TAKE_THEIRS;
 
   unsigned long autoReturnAt = 0;
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1400;
-  /** Lines a wrapped explanation may take before it is cut. */
-  static constexpr int DETAIL_MAX_LINES = 3;
 };

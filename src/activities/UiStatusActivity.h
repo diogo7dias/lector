@@ -29,7 +29,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // at ACTION_USER.
   static constexpr freeink::ui::ActionId ACTION_ACCEPT = 1;
   static constexpr freeink::ui::ActionId ACTION_CANCEL = 2;
-  static constexpr freeink::ui::ActionId ACTION_USER = 3;
+  // A row of the comparison shape's choice list.
+  static constexpr freeink::ui::ActionId ACTION_CHOICE = 3;
+  static constexpr freeink::ui::ActionId ACTION_USER = 4;
 
   // At most four lines, which is what the wordiest screen (the clear-cache
   // warning) needs. The first is the headline and is drawn in the body face;
@@ -42,6 +44,15 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // heading.
   static constexpr size_t MAX_SECTIONS = 3;
 
+  // The two sync screens compare a position held here with one held elsewhere,
+  // then offer the same two answers: take theirs, or send ours. Detail lines
+  // per side: the chapter, the page, and the device the other one came from.
+  static constexpr size_t MAX_SIDE_LINES = 3;
+  static constexpr size_t MAX_CHOICES = 2;
+  // A data-driven list of answers (the readers found nearby) is bounded here;
+  // ESP-NOW discovery never lists more than a handful at once.
+  static constexpr size_t MAX_LIST_CHOICES = 8;
+
   struct Section {
     const char* heading = nullptr;  // bold, in the body face
     std::array<const char*, MAX_LINES> lines{};
@@ -49,6 +60,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // instead of under it. This is what a phone is pointed at, so it is part of
     // the section rather than a separate block.
     const char* qrPayload = nullptr;
+  };
+
+  struct ComparisonSide {
+    const char* label = nullptr;  // bold, in the body face
+    std::array<const char*, MAX_SIDE_LINES> lines{};
   };
 
   struct StatusView {
@@ -88,6 +104,20 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // onConfirmButton().
     const char* cancelLabel = nullptr;
     const char* acceptLabel = nullptr;
+    // Comparison shape: a headline, the two sides, a line naming which is
+    // ahead, and the choices as a list at the foot of the body. It wins over
+    // both other shapes when the first side carries a label.
+    const char* comparisonHeadline = nullptr;
+    std::array<ComparisonSide, 2> comparison{};
+    const char* comparisonRelation = nullptr;
+    std::array<const char*, MAX_CHOICES> choices{};
+    // Answers that are data rather than a fixed pair (the readers found
+    // nearby). Points at storage the subclass owns: the view itself is a
+    // temporary, so it cannot carry the strings. Used when `choices` is empty,
+    // and it needs no comparison above it — a screen can pair a list of answers
+    // with plain centred lines.
+    const char* const* choiceList = nullptr;
+    int choiceListCount = 0;
     // A screen that is nearly all QR asks for a full pass: a differential
     // waveform leaves the old pattern as speckle under a dense block of black.
     HalDisplay::RefreshMode refresh = HalDisplay::FAST_REFRESH;
@@ -110,6 +140,15 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // true means the overlay published the buffer itself.
   virtual bool drawOverlay() { return false; }
 
+  // The comparison shape's selected choice, and what a press on it does. The
+  // base owns the index so both sync screens navigate identically; a subclass
+  // only says what taking each answer means.
+  int choiceIndex() const { return choiceIndex_; }
+  // Opening choice, for a screen that knows which answer is the likely one (the
+  // side that is further along). Clamped again at build time.
+  void setChoiceIndex(int index) { choiceIndex_ = index < 0 ? 0 : index; }
+  virtual void onChoiceActivated(int index) {}
+
   void buildScreen(UiScreen& screen);
 
  private:
@@ -117,6 +156,19 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // left-aligned sections for one that gives instructions.
   void buildCentredLines(UiScreen& screen, const StatusView& view);
   void buildSections(UiScreen& screen, const StatusView& view);
+  void buildComparison(UiScreen& screen, const StatusView& view);
+  // The answers, taken from the bottom of the body so whichever shape is drawn
+  // above them cannot run underneath. Sets choiceCount_.
+  void buildChoiceBand(UiScreen& screen, const StatusView& view);
+  // Choices the last build drew, so the loop task can step the selection
+  // without rebuilding the view. Zero until the first render, which is also
+  // when there is nothing on screen to step through.
+  int choiceCount_ = 0;
+  // The rows the last build drew. They outlive the build because FreeInkUI's
+  // interaction table points at them.
+  std::array<freeink::ui::ListItem, MAX_LIST_CHOICES> choiceItems_{};
+  int choiceIndex_ = 0;
+  bool moveChoice(int delta);
   // QR codes are bitmaps rather than FreeInkUI elements, so the body layout
   // records where they go and render() paints them into the same buffer once
   // the app has drawn the text around them. Cleared at the start of every
@@ -138,4 +190,5 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static void screenTrampoline(UiScreen& screen, void* user);
   static void acceptTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void cancelTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void choiceTrampoline(const freeink::ui::ActionEvent& event, void* user);
 };
