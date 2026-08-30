@@ -32,9 +32,27 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // the rest are the smaller face under it.
   static constexpr size_t MAX_LINES = 4;
 
+  // Screens that explain rather than report ("do this on your computer, then
+  // this") are a stack of left-aligned sections instead of centred lines. A
+  // view carries one shape or the other: sections win when the first one has a
+  // heading.
+  static constexpr size_t MAX_SECTIONS = 3;
+
+  struct Section {
+    const char* heading = nullptr;  // bold, in the body face
+    std::array<const char*, MAX_LINES> lines{};
+  };
+
   struct StatusView {
     const char* title = nullptr;  // header band; nullptr draws no header
+    // Sub-header band under the title, for the network a screen is reachable
+    // on. Left is the name, right the address.
+    const char* subtitleLeft = nullptr;
+    const char* subtitleRight = nullptr;
     std::array<const char*, MAX_LINES> lines{};
+    std::array<Section, MAX_SECTIONS> sections{};
+    // Drawn over the bar, for a transfer that can say what it is moving.
+    const char* progressLabel = nullptr;
     // A bar under the lines. Left off, the lines centre on their own.
     bool showProgress = false;
     int progressValue = 0;
@@ -63,6 +81,13 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   virtual bool drawOverlay() { return false; }
 
   void buildScreen(UiScreen& screen);
+
+ private:
+  // The two body shapes. Centred lines for a screen that reports on itself;
+  // left-aligned sections for one that gives instructions.
+  void buildCentredLines(UiScreen& screen, const StatusView& view);
+  void buildSections(UiScreen& screen, const StatusView& view);
+  static void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
 
  private:
   static void screenTrampoline(UiScreen& screen, void* user);

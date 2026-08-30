@@ -3,7 +3,7 @@ add_executable(StatusScreenAuditTest
 )
 
 target_compile_definitions(StatusScreenAuditTest PRIVATE
-  STATUS_SCREEN_SOURCES="${REPO_ROOT}/src/activities/settings/ClearCacheActivity.cpp|${REPO_ROOT}/src/activities/settings/CleanStorageActivity.cpp|${REPO_ROOT}/src/activities/settings/ClockSyncActivity.cpp|${REPO_ROOT}/src/activities/settings/KOReaderAuthActivity.cpp"
+  STATUS_SCREEN_SOURCES="${REPO_ROOT}/src/activities/settings/ClearCacheActivity.cpp|${REPO_ROOT}/src/activities/settings/CleanStorageActivity.cpp|${REPO_ROOT}/src/activities/settings/ClockSyncActivity.cpp|${REPO_ROOT}/src/activities/settings/KOReaderAuthActivity.cpp|${REPO_ROOT}/src/activities/network/CalibreConnectActivity.cpp"
 )
 
 target_link_libraries(StatusScreenAuditTest PRIVATE

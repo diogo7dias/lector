@@ -4,7 +4,7 @@
 #include <memory>
 #include <string>
 
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 #include "network/CrossPointWebServer.h"
 
 enum class CalibreConnectState { WIFI_SELECTION, SERVER_STARTING, SERVER_RUNNING, ERROR };
@@ -13,7 +13,7 @@ enum class CalibreConnectState { WIFI_SELECTION, SERVER_STARTING, SERVER_RUNNING
  * CalibreConnectActivity starts the file transfer server in STA mode,
  * but renders Calibre-specific instructions instead of the web transfer UI.
  */
-class CalibreConnectActivity final : public Activity {
+class CalibreConnectActivity final : public UiStatusActivity {
   CalibreConnectState state = CalibreConnectState::WIFI_SELECTION;
 
   std::unique_ptr<CrossPointWebServer> webServer;
@@ -28,7 +28,10 @@ class CalibreConnectActivity final : public Activity {
   unsigned long lastProcessedCompleteAt = 0;  // Track which server value we've already processed
   bool exitRequested = false;
 
-  void renderServerRunning() const;
+  // Built when the server comes up (the address never changes while it runs) and
+  // when a transfer moves, because both carry values no translation can hold.
+  std::string ipLine;
+  std::string transferLine;
 
   void onWifiSelectionComplete(bool connected);
   void startWebServer();
@@ -36,11 +39,13 @@ class CalibreConnectActivity final : public Activity {
 
  public:
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("CalibreConnect", renderer, mappedInput) {}
+      : UiStatusActivity("CalibreConnect", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
   bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
 };

@@ -18,7 +18,7 @@ constexpr const char* HOSTNAME = "crosspoint";
 }  // namespace
 
 void CalibreConnectActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   requestUpdate();
   state = CalibreConnectState::WIFI_SELECTION;
@@ -96,6 +96,7 @@ void CalibreConnectActivity::startWebServer() {
 
   if (webServer->isRunning()) {
     state = CalibreConnectState::SERVER_RUNNING;
+    ipLine = std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP;
     requestUpdate();
   } else {
     state = CalibreConnectState::ERROR;
@@ -110,7 +111,7 @@ void CalibreConnectActivity::stopWebServer() {
   }
 }
 
-void CalibreConnectActivity::loop() {
+bool CalibreConnectActivity::handleCustomInput() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     exitRequested = true;
   }
@@ -169,75 +170,59 @@ void CalibreConnectActivity::loop() {
       changed = true;
     }
     if (changed) {
+      // One line for whichever the status section is showing: the book coming
+      // in, or the one that just landed.
+      if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
+        transferLine = tr(STR_CALIBRE_RECEIVING);
+        if (!currentUploadName.empty()) transferLine += ": " + currentUploadName;
+      } else if (lastCompleteAt > 0) {
+        transferLine = std::string(tr(STR_CALIBRE_RECEIVED)) + lastCompleteName;
+      } else {
+        transferLine.clear();
+      }
       requestUpdate();
     }
   }
 
   if (exitRequested) {
     finish();
-    return;
+    return true;
   }
+  return false;
 }
 
-void CalibreConnectActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CALIBRE_WIRELESS));
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (pageHeight - height) / 2;
-
-  if (state == CalibreConnectState::SERVER_STARTING) {
-    renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CALIBRE_STARTING));
-  } else if (state == CalibreConnectState::ERROR) {
-    renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CONNECTION_FAILED), true, EpdFontFamily::REGULAR);
-  } else if (state == CalibreConnectState::SERVER_RUNNING) {
-    GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                      connectedSSID.c_str(), (std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP).c_str());
-
-    int y = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 4;
-    const auto heightText12 = renderer.getTextHeight(UI_12_FONT_ID);
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_SETUP), true,
-                      EpdFontFamily::REGULAR);
-    y += heightText12 + metrics.verticalSpacing * 2;
-
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_INSTRUCTION_1));
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height, tr(STR_CALIBRE_INSTRUCTION_2));
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height * 2, tr(STR_CALIBRE_INSTRUCTION_3));
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y + height * 3, tr(STR_CALIBRE_INSTRUCTION_4));
-
-    y += height * 3 + metrics.verticalSpacing * 4;
-    renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, y, tr(STR_CALIBRE_STATUS), true,
-                      EpdFontFamily::REGULAR);
-    y += heightText12 + metrics.verticalSpacing * 2;
-
-    if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
-      std::string label = tr(STR_CALIBRE_RECEIVING);
-      if (!currentUploadName.empty()) {
-        label += ": " + currentUploadName;
-        label = renderer.truncatedText(SMALL_FONT_ID, label.c_str(), pageWidth - metrics.contentSidePadding * 2,
-                                       EpdFontFamily::REGULAR);
+UiStatusActivity::StatusView CalibreConnectActivity::statusView() const {
+  StatusView view;
+  view.title = tr(STR_CALIBRE_WIRELESS);
+  switch (state) {
+    case CalibreConnectState::SERVER_STARTING:
+      view.lines = {tr(STR_CALIBRE_STARTING), nullptr, nullptr, nullptr};
+      break;
+    case CalibreConnectState::ERROR:
+      view.lines = {tr(STR_CONNECTION_FAILED), nullptr, nullptr, nullptr};
+      break;
+    case CalibreConnectState::SERVER_RUNNING:
+      view.subtitleLeft = connectedSSID.c_str();
+      view.subtitleRight = ipLine.c_str();
+      view.sections[0] = Section{tr(STR_CALIBRE_SETUP),
+                                 {tr(STR_CALIBRE_INSTRUCTION_1), tr(STR_CALIBRE_INSTRUCTION_2),
+                                  tr(STR_CALIBRE_INSTRUCTION_3), tr(STR_CALIBRE_INSTRUCTION_4)}};
+      view.sections[1] = Section{tr(STR_CALIBRE_STATUS), {}};
+      if (lastProgressTotal > 0 && lastProgressReceived <= lastProgressTotal) {
+        view.progressLabel = transferLine.c_str();
+        view.showProgress = true;
+        view.progressValue = static_cast<int>(lastProgressReceived);
+        view.progressMax = static_cast<int>(lastProgressTotal);
+      } else if (lastCompleteAt > 0 && (millis() - lastCompleteAt) < 6000) {
+        // The last book landed: its name holds the status section on its own
+        // for six seconds, with no bar under it.
+        view.sections[1].lines[0] = transferLine.c_str();
       }
-      renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, label.c_str());
-      GUI.drawProgressBar(renderer,
-                          Rect{metrics.contentSidePadding, y + height + metrics.verticalSpacing,
-                               pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
-                          lastProgressReceived, lastProgressTotal);
-      y += height + metrics.verticalSpacing * 2 + metrics.progressBarHeight;
-    }
-
-    if (lastCompleteAt > 0 && (millis() - lastCompleteAt) < 6000) {
-      std::string msg = std::string(tr(STR_CALIBRE_RECEIVED)) + lastCompleteName;
-      msg = renderer.truncatedText(SMALL_FONT_ID, msg.c_str(), pageWidth - metrics.contentSidePadding * 2,
-                                   EpdFontFamily::REGULAR);
-      renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding, y, msg.c_str());
-    }
-
-    const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      view.backHint = tr(STR_EXIT);
+      break;
+    case CalibreConnectState::WIFI_SELECTION:
+      // The WiFi picker is a separate activity and owns the screen.
+      break;
   }
-  renderer.displayBuffer();
+  return view;
 }
