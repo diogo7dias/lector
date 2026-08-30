@@ -1,6 +1,7 @@
 #include "MappedInputManager.h"
 
 #include <GfxRenderer.h>
+#include <PerfLog.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -9,8 +10,6 @@
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
-#include <PerfLog.h>
-
 #include "util/DebugTrace.h"
 
 bool MappedInputManager::isNavDirectionSwapped() const {
@@ -227,6 +226,16 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
   renderer.tapToLogical(nx, ny, x, y);
   return true;
 }
+
+bool MappedInputManager::takeScreenTouchDown(int& x, int& y) {
+  if (!wasScreenTouchDown(x, y)) return false;
+  spendTouchContact();
+  return true;
+}
+
+// The SDK's own remedy for a contact that has already been acted on: it drops the rest of
+// this contact, so neither a later pass nor the lift can act again.
+void MappedInputManager::spendTouchContact() { gpio.suppressTouchContact(); }
 
 bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   // Live contact position while the finger is down (no tap-slop gate) — drag tracking.
@@ -498,6 +507,10 @@ bool MappedInputManager::wasPressed(const Button button) const {
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
+  // A release that belongs to a press already acted on reaches nobody: see
+  // suppressHeldButtonRelease(). The back gesture is a touch event with no press behind
+  // it, so it is checked after the gate rather than before.
+  if (releaseGate.swallowsRelease()) return false;
   if (button == Button::Back && wasBackGesture()) return true;
   // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
   // back for one window and then replays it here, so every consumer keeps its existing code.

@@ -787,10 +787,13 @@ belongs to, so the rows here appear in the same order as on the device.
 **Reading Aids**, under a live preview. The preview is a split slice of a real page: the top
 of the page, a dashed cut, then the bottom of the page, so both vertical margins and the
 status bar are on screen at their true size while you tune them. Numeric rows are edited in
-place — Select arms the row, Up and Down move the value, and the preview follows — so nothing
-ever covers the page you are judging. Holding Up or Down repeats: one per step at first,
-then five per step once the hold passes about a second, so a wide range does not cost a
-hundred presses.
+the band across the top: Select arms the number and the header turns into a slider with a
+minus at one end and a plus at the other. Touch anywhere along the track to jump straight
+to that value, or drag along it and the value follows your finger. Left and Right move one
+step, the side buttons move five, and the preview under the band follows, so nothing ever
+covers the page you are judging. Back or Select puts the band away; there is nothing to
+confirm, because every change has already been applied. Sleep timeout, frontlight and the
+other numbers in Settings use the same band.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
 - **Size**.

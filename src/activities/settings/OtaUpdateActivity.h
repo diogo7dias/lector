@@ -1,11 +1,12 @@
 #pragma once
 
 #include <memory>
+#include <string>
 
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 #include "network/OtaUpdater.h"
 
-class OtaUpdateActivity : public Activity {
+class OtaUpdateActivity : public UiStatusActivity {
   enum State {
     WIFI_SELECTION,
     CHECKING_FOR_UPDATE,
@@ -17,7 +18,8 @@ class OtaUpdateActivity : public Activity {
     SHUTTING_DOWN
   };
 
-  // Can't initialize this to 0 or the first render doesn't happen
+  // Out of range on purpose: the first progress callback must always be let
+  // through, and every real percent is 0 to 100.
   static constexpr unsigned int UNINITIALIZED_PERCENTAGE = 111;
 
   State state = WIFI_SELECTION;
@@ -36,6 +38,11 @@ class OtaUpdateActivity : public Activity {
   // Points into the i18n string table (flash-resident, so no lifetime concern);
   // nullptr means no extra detail.
   const char* failedDetail = nullptr;
+  // "Current version: x" / "New version: y" / "4096 / 1200000", all built when
+  // the state that shows them is entered or when the transfer moves.
+  std::string currentVersionLine;
+  std::string newVersionLine;
+  std::string bytesLine;
 
   void onWifiSelectionComplete(bool success);
   // Maps an updater error onto the optional detail line under "Update failed".
@@ -45,11 +52,15 @@ class OtaUpdateActivity : public Activity {
  public:
   explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                              const bool installOtherFirmware = false)
-      : Activity("OtaUpdate", renderer, mappedInput), allowAnyVersion(installOtherFirmware), updater() {}
+      : UiStatusActivity("OtaUpdate", renderer, mappedInput), allowAnyVersion(installOtherFirmware), updater() {}
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
   bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onConfirmButton() override;
+  void onBackButton() override;
 };

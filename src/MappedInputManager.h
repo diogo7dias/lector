@@ -3,6 +3,7 @@
 #include <HalGPIO.h>
 
 #include "ListSwipeGesture.h"
+#include "util/ReleaseGate.h"
 
 class GfxRenderer;
 
@@ -36,7 +37,17 @@ class MappedInputManager {
 
   MappedInputManager(HalGPIO& gpio, const GfxRenderer& renderer) : gpio(gpio), renderer(renderer) {}
 
-  void update() const { gpio.update(); }
+  void update() const {
+    gpio.update();
+    // After the poll and before anything queries the buttons: the gate has to see this
+    // pass's edges to decide whether the release it is waiting for has gone by.
+    releaseGate.tick(isAnyPressed(), gpio.wasAnyReleased());
+  }
+
+  // Swallow the release of whatever button is held right now. A screen that acted on the
+  // press and opened another screen calls this, so the lift cannot act again on what it
+  // opened. Button counterpart of the touch path's takeScreenTouchDown().
+  void suppressHeldButtonRelease() const { releaseGate.arm(isAnyPressed()); }
 
   // True while any physical button is down.
   bool isAnyPressed() const;
@@ -51,6 +62,17 @@ class MappedInputManager {
   bool wasRowTapped(int& item) const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
+  // Same query, but the contact is spent by asking: it answers true once and the rest of
+  // the contact, including its lift, reaches nobody. A screen that acts on the touch-down
+  // itself must use this. wasScreenTouchDown() is level-triggered, so a finger still down
+  // on the next pass answers true again, and a screen that changed what its cells mean
+  // (a category opening, a value toggling) would act a second time on whatever now sits
+  // under the finger.
+  bool takeScreenTouchDown(int& x, int& y);
+  // Drops the rest of the current contact, lift included. For a screen that acted on a
+  // touch it did not spend by asking (a control that has to keep the contact alive for a
+  // drag, and only then decides the touch was a button press instead).
+  void spendTouchContact();
   bool isScreenTouchHeld(int& x, int& y) const;
   bool wasScreenLongPress(int& x, int& y) const;
   bool wasScreenTouchReleased() const;
@@ -130,7 +152,8 @@ class MappedInputManager {
   //
   // A key the router does not intercept is never touched, which is why nobody who leaves
   // the bindings alone can feel this.
-  void setSideKeyOverride(uint8_t hardware, bool suppressEdges, bool suppressHeld, bool injectPress, bool injectRelease);
+  void setSideKeyOverride(uint8_t hardware, bool suppressEdges, bool suppressHeld, bool injectPress,
+                          bool injectRelease);
   // The Home key reports taps, not edges, so it needs only hiding and replaying.
   void setHomeKeyOverride(const bool suppress, const bool inject) {
     homeKeySuppressed = suppress;
@@ -165,6 +188,9 @@ class MappedInputManager {
   // A tap on the hint band stands for one button press, not one per query: cleared as soon
   // as the tap event is gone, so the next tap is heard again.
   mutable bool hintTapUsed = false;
+
+  // See suppressHeldButtonRelease().
+  mutable input_gate::ReleaseGate releaseGate;
 
   // Top-edge pull-down state (see wasMenuGesture). The SDK's swipe is a flick: under
   // 700 ms, over 60 px. A hand pulling a panel down from the edge is slower than that far

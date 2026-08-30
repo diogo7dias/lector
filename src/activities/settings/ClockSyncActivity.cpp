@@ -16,7 +16,7 @@
 #include "fontIds.h"
 
 void ClockSyncActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
   state = SYNCING;
   syncedTime[0] = '\0';
 
@@ -79,66 +79,41 @@ void ClockSyncActivity::runSync() {
   char buf[9];
   if (halClock.formatTime(buf, sizeof(buf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
     snprintf(syncedTime, sizeof(syncedTime), "%s", buf);
+    // Sized for the label in any language: STR_CURRENT_TIME is 26 bytes in
+    // Russian (UTF-8 Cyrillic is 2 bytes per letter) versus 13 in English,
+    // plus a separator and up to "08:56 PM".
+    snprintf(syncedLine, sizeof(syncedLine), "%s %s", tr(STR_CURRENT_TIME), syncedTime);
   }
   state = SUCCESS;
   requestUpdate();
 }
 
-void ClockSyncActivity::loop() {
-  if (state == SYNCING) {
-    // First-tick: render the "Syncing..." screen, then perform the (blocking) sync.
-    // requestUpdateAndWait below forces the render before we block on WiFi.
-    requestUpdateAndWait();
-    runSync();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    finish();
-  }
+bool ClockSyncActivity::handleCustomInput() {
+  if (state != SYNCING) return false;
+  // First tick paints "Syncing...", then the blocking sync runs: without the
+  // wait the screen would still show whatever came before it.
+  requestUpdateAndWait();
+  runSync();
+  return true;
 }
 
-void ClockSyncActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_SYNC));
-
-  const int midY = pageHeight / 2;
-
+UiStatusActivity::StatusView ClockSyncActivity::statusView() const {
+  StatusView view;
+  view.title = tr(STR_CLOCK_SYNC);
   switch (state) {
     case SYNCING:
-      renderer.drawCenteredText(UI_10_FONT_ID, midY, tr(STR_CLOCK_SYNCING));
+      view.lines = {tr(STR_CLOCK_SYNCING), nullptr, nullptr, nullptr};
+      view.backHint = "";
       break;
-    case SUCCESS: {
-      renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_OK), true, EpdFontFamily::REGULAR);
-      if (syncedTime[0] != '\0') {
-        // Sized for the label in any language: STR_CURRENT_TIME is 26 bytes in
-        // Russian (UTF-8 Cyrillic is 2 bytes per letter) versus 13 in English,
-        // plus a separator and up to "08:56 PM".
-        char line[64];
-        snprintf(line, sizeof(line), "%s %s", tr(STR_CURRENT_TIME), syncedTime);
-        renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, line);
-      }
+    case SUCCESS:
+      view.lines = {tr(STR_CLOCK_SYNC_OK), syncedLine[0] ? syncedLine : nullptr, nullptr, nullptr};
       break;
-    }
     case NO_WIFI:
-      renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_NO_WIFI), true, EpdFontFamily::REGULAR);
-      renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CLOCK_SYNC_NO_WIFI_HINT));
+      view.lines = {tr(STR_CLOCK_SYNC_NO_WIFI), tr(STR_CLOCK_SYNC_NO_WIFI_HINT), nullptr, nullptr};
       break;
     case FAILED:
-      renderer.drawCenteredText(UI_10_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_FAIL), true, EpdFontFamily::REGULAR);
-      renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CHECK_SERIAL_OUTPUT));
+      view.lines = {tr(STR_CLOCK_SYNC_FAIL), tr(STR_CHECK_SERIAL_OUTPUT), nullptr, nullptr};
       break;
   }
-
-  if (state != SYNCING) {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
-
-  renderer.displayBuffer();
+  return view;
 }

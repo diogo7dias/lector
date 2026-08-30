@@ -7,11 +7,13 @@
 #include <utility>
 
 #include "activities/Activity.h"
+#include "components/StatsDashboardLayout.h"
+#include "components/UiAppHost.h"
 #include "reading_stats/ReadingStats.h"
 
 struct Rect;
 
-class BookStatsActivity final : public Activity {
+class BookStatsActivity final : public Activity, protected UiAppHost {
  public:
   using ResetHandler = std::function<bool(bool resetAll, reading_stats::ReadingStatsData& bookStats,
                                           reading_stats::ReadingStatsData& globalStats)>;
@@ -27,11 +29,20 @@ class BookStatsActivity final : public Activity {
  private:
   enum class Page : uint8_t { CurrentBook, AllBooks };
 
-  void drawCurrentBook(const Rect& screen, int contentTop, int contentBottom);
-  void drawAllBooks(const Rect& screen, int contentTop, int contentBottom);
-  void drawMetricGrid(const Rect& area, const std::array<std::pair<std::string, const char*>, 6>& metrics);
-  void drawTimeOfDayChart(const Rect& area, const reading_stats::ReadingStatsData& stats);
-  void drawWeekdayChart(const Rect& area, const reading_stats::ReadingStatsData& stats);
+  // Six values, each with the word for what it counts. Built per page, then
+  // handed to the grid as FreeInkUI metric cards.
+  using MetricRow = std::pair<std::string, const char*>;
+
+  void buildScreen(UiScreen& screen);
+  static void screenTrampoline(UiScreen& screen, void* user);
+  void buildCurrentBook(UiScreen& screen);
+  void buildAllBooks(UiScreen& screen);
+  void buildMetricGrid(UiScreen& screen, const stats_dashboard::Rect& area, const std::array<MetricRow, 6>& metrics);
+  void buildDateCards(UiScreen& screen, const stats_dashboard::Rect& area);
+  void buildTimeOfDayChart(UiScreen& screen, const stats_dashboard::Rect& area,
+                           const reading_stats::ReadingStatsData& stats);
+  void buildWeekdayChart(UiScreen& screen, const stats_dashboard::Rect& area,
+                         const reading_stats::ReadingStatsData& stats);
   void confirmReset();
 
   std::string title_;

@@ -24,7 +24,7 @@
 
 // The light panel: a band pulled down from the top edge holding the frontlight's controls
 // and the actions that make sense where you are. Drawn over whatever is on screen without
-// clearing it, the same way OptionPopup and ValueBarPopup are, so the page you were
+// clearing it, the same way OptionPopup and SliderBand are, so the page you were
 // reading is still there to judge the light against — which is the whole reason to reach
 // for it mid-page.
 //

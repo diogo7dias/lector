@@ -5,7 +5,7 @@
 #include <string>
 
 #include "NetworkModeSelectionActivity.h"
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 #include "network/CrossPointWebServer.h"
 
 // Web server activity states
@@ -27,7 +27,7 @@ enum class WebServerActivityState {
  * - Handles client requests in its loop() function
  * - Cleans up the server and shuts down WiFi on exit
  */
-class CrossPointWebServerActivity final : public Activity {
+class CrossPointWebServerActivity final : public UiStatusActivity {
   WebServerActivityState state = WebServerActivityState::MODE_SELECTION;
 
   // Network mode
@@ -52,8 +52,12 @@ class CrossPointWebServerActivity final : public Activity {
   // Cached signal-strength bracket (0..4) for the WiFi indicator.
   int lastWifiBars = 0;
 
-  void renderServerRunning() const;
-  void renderWifiIndicator(int subHeaderTop) const;
+  // Everything the running screen shows that carries a value: built when the
+  // server comes up, because none of it changes while it runs.
+  std::string wifiQrPayload;   // the WIFI: config a phone joins the hotspot with
+  std::string urlQrPayload;    // the address the code opens
+  std::string hostnameLine;    // that address, written out
+  std::string ipFallbackLine;  // and the raw IP, for a phone that cannot resolve it
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);
@@ -62,11 +66,13 @@ class CrossPointWebServerActivity final : public Activity {
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("CrossPointWebServer", renderer, mappedInput) {}
+      : UiStatusActivity("CrossPointWebServer", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }
   bool preventAutoSleep() override { return webServer && webServer->isRunning(); }
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
 };

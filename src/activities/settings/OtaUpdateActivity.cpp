@@ -13,25 +13,6 @@
 #include "network/OtaUpdater.h"
 #include "network/TlsScratchHeap.h"
 
-namespace {
-// Reuses the theme's Rect (components/themes/BaseTheme.h) rather than a local copy,
-// which the fork's UITheme already puts in scope here.
-struct OtaActionRects {
-  Rect cancel;
-  Rect update;
-};
-
-OtaActionRects getOtaActionRects(const GfxRenderer& renderer) {
-  const int top = renderer.getScreenHeight() - 80;
-  const int width = renderer.getScreenWidth() / 2;
-  return {Rect{0, top, width, 80}, Rect{width, top, renderer.getScreenWidth() - width, 80}};
-}
-
-bool contains(const Rect& rect, const int x, const int y) {
-  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
-}
-}  // namespace
-
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
@@ -63,6 +44,9 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   // In install-other-firmware mode the version comparison is not asked: the
   // server is expected to be offering something else entirely, usually stock or
   // another fork, and refusing it is what traps the user here.
+  newVersionLine = std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion();
+  currentVersionLine = std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION;
+
   if (!allowAnyVersion && !updater.isUpdateNewer()) {
     LOG_DBG("OTA", "No new update available");
     {
@@ -79,7 +63,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 }
 
 void OtaUpdateActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   // Turn on WiFi immediately
   LOG_DBG("OTA", "Turning on WiFi...");
@@ -105,91 +89,84 @@ void OtaUpdateActivity::onExit() {
   }
 }
 
-void OtaUpdateActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_UPDATE));
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (pageHeight - height) / 2;
-
-  float updaterProgress = 0;
-  if (state == UPDATE_IN_PROGRESS) {
-    LOG_DBG("OTA", "Update progress: %d / %d", updater.getProcessedSize(), updater.getTotalSize());
-    updaterProgress = static_cast<float>(updater.getProcessedSize()) / static_cast<float>(updater.getTotalSize());
-    // Only update every 2% at the most
-    if (static_cast<int>(updaterProgress * 50) == lastUpdaterPercentage / 2) {
-      return;
-    }
-    lastUpdaterPercentage = static_cast<int>(updaterProgress * 100);
+UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
+  StatusView view;
+  view.title = tr(STR_UPDATE);
+  switch (state) {
+    case CHECKING_FOR_UPDATE:
+      view.lines = {tr(STR_CHECKING_UPDATE), nullptr, nullptr, nullptr};
+      view.backHint = "";
+      break;
+    case WAITING_CONFIRMATION:
+      view.lines = {allowAnyVersion ? tr(STR_INSTALL_OTHER_FIRMWARE_PROMPT) : tr(STR_NEW_UPDATE),
+                    currentVersionLine.c_str(), newVersionLine.c_str(), nullptr};
+      // The two answers, on screen as well as on the keys: this screen used to
+      // draw a pair of labels that no touch was ever routed to.
+      view.cancelLabel = tr(STR_CANCEL);
+      view.acceptLabel = tr(STR_UPDATE);
+      view.backHint = tr(STR_CANCEL);
+      view.confirmHint = tr(STR_UPDATE);
+      break;
+    case UPDATE_IN_PROGRESS:
+      view.lines = {tr(STR_UPDATING), nullptr, nullptr, nullptr};
+      view.showProgress = true;
+      view.progressValue = static_cast<int>(updater.getProcessedSize());
+      view.progressMax = static_cast<int>(updater.getTotalSize());
+      view.progressLabel = bytesLine.c_str();
+      view.backHint = "";
+      break;
+    case NO_UPDATE:
+      // "Install anyway" is not a curiosity: on a device whose USB flashing the
+      // vendor locked, an update server offering this same version is the only
+      // route left to put another firmware on it.
+      view.lines = {tr(STR_NO_UPDATE), newVersionLine.c_str(), nullptr, nullptr};
+      view.cancelLabel = tr(STR_BACK);
+      view.acceptLabel = tr(STR_INSTALL_ANYWAY);
+      view.confirmHint = tr(STR_INSTALL_ANYWAY);
+      break;
+    case FAILED:
+      view.lines = {tr(STR_UPDATE_FAILED), failedDetail, nullptr, nullptr};
+      break;
+    case FINISHED:
+      view.lines = {tr(STR_UPDATE_COMPLETE), tr(STR_POWER_ON_HINT), nullptr, nullptr};
+      view.backHint = "";
+      break;
+    case WIFI_SELECTION:
+    case SHUTTING_DOWN:
+      // The WiFi picker owns the screen, and a restarting device has nothing to
+      // say.
+      view.hidden = true;
+      break;
   }
+  return view;
+}
 
-  if (state == CHECKING_FOR_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_CHECKING_UPDATE));
-  } else if (state == WAITING_CONFIRMATION) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top,
-                              allowAnyVersion ? tr(STR_INSTALL_OTHER_FIRMWARE_PROMPT) : tr(STR_NEW_UPDATE), true,
-                              EpdFontFamily::REGULAR);
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height + metrics.verticalSpacing,
-                      (std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION).c_str());
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, top + height * 2 + metrics.verticalSpacing * 2,
-                      (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
-
-    if (mappedInput.hasTouch()) {
-      const auto actionRects = getOtaActionRects(renderer);
-      const int cancelTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_CANCEL));
-      renderer.drawText(UI_10_FONT_ID, actionRects.cancel.x + (actionRects.cancel.width - cancelTextWidth) / 2,
-                        actionRects.cancel.y + 28, tr(STR_CANCEL));
-      const int updateTextWidth = renderer.getTextWidth(UI_10_FONT_ID, tr(STR_UPDATE));
-      renderer.drawText(UI_10_FONT_ID, actionRects.update.x + (actionRects.update.width - updateTextWidth) / 2,
-                        actionRects.update.y + 28, tr(STR_UPDATE));
-    }
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_UPDATE), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state == UPDATE_IN_PROGRESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATING));
-
-    int y = top + height + metrics.verticalSpacing;
-    GUI.drawProgressBar(
-        renderer,
-        Rect{metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
-        static_cast<int>(updaterProgress * 100), 100);
-
-    y += metrics.progressBarHeight + metrics.verticalSpacing;
-    // Percent label is drawn by BaseTheme::drawProgressBar; this slot is left intentionally empty
-    // so the bytes line below stays at the same Y it was at when the activity drew its own percent.
-    y += height + metrics.verticalSpacing;
-    renderer.drawCenteredText(
-        UI_10_FONT_ID, y,
-        (std::to_string(updater.getProcessedSize()) + " / " + std::to_string(updater.getTotalSize())).c_str());
-  } else if (state == NO_UPDATE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NO_UPDATE), true, EpdFontFamily::REGULAR);
-    // "Install anyway" is not a curiosity: on a device whose USB flashing the
-    // vendor locked, an update server offering this same version is the only
-    // route left to put another firmware on it.
-    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing,
-                              (std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion()).c_str());
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_INSTALL_ANYWAY), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state == FAILED) {
-    // REGULAR, not upstream's BOLD: every other state on this screen draws REGULAR here,
-    // and this fork keeps that consistent. The detail line below is the actual change.
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::REGULAR);
-    if (failedDetail != nullptr) {
-      renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, failedDetail);
-    }
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state == FINISHED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, top + height + metrics.verticalSpacing, tr(STR_POWER_ON_HINT));
+bool OtaUpdateActivity::handleCustomInput() {
+  if (state == SHUTTING_DOWN) {
+    ESP.restart();
+    return true;
   }
+  // Every other state answers on the two buttons alone.
+  return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS || state == WIFI_SELECTION;
+}
 
-  renderer.displayBuffer();
+void OtaUpdateActivity::onConfirmButton() {
+  if (state == WAITING_CONFIRMATION) {
+    runUpdateInstall();
+    return;
+  }
+  if (state == NO_UPDATE) {
+    allowAnyVersion = true;
+    {
+      RenderLock lock(*this);
+      state = WAITING_CONFIRMATION;
+    }
+    requestUpdate();
+  }
+}
+
+void OtaUpdateActivity::onBackButton() {
+  if (state == WAITING_CONFIRMATION || state == FAILED || state == NO_UPDATE) finish();
 }
 
 const char* OtaUpdateActivity::detailFor(const OtaUpdater::OtaUpdaterError error) {
@@ -229,15 +206,27 @@ void OtaUpdateActivity::runUpdateInstall() {
       }
     }
     res = updater.installUpdate(
-      [](void* ctx) {
-        // immediate=true notifies the render task directly. The default deferred path only
-        // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
-        // installUpdate() blocks this task.
-        auto* self = static_cast<OtaUpdateActivity*>(ctx);
-        if (self->drawingSuspended) return;  // the framebuffer is lent to wolfSSL
-        self->requestUpdate(true);
-      },
-      this, allowAnyVersion);
+        [](void* ctx) {
+          // immediate=true notifies the render task directly. The default deferred path only
+          // sets a flag consumed at the end of ActivityManager::loop(), which never runs while
+          // installUpdate() blocks this task.
+          auto* self = static_cast<OtaUpdateActivity*>(ctx);
+          if (self->drawingSuspended) return;  // the framebuffer is lent to wolfSSL
+          // The throttle lives here, not in the paint: at two percent a step a
+          // 4 MB image costs 50 e-ink passes instead of one per chunk. render()
+          // used to return early to do this, which meant a repaint asked for by
+          // anything else was dropped too.
+          const int total = self->updater.getTotalSize();
+          if (total <= 0) return;
+          const unsigned int percent = static_cast<unsigned int>((self->updater.getProcessedSize() * 100) / total);
+          if (self->lastUpdaterPercentage != UNINITIALIZED_PERCENTAGE && percent < self->lastUpdaterPercentage + 2) {
+            return;
+          }
+          self->lastUpdaterPercentage = percent;
+          self->bytesLine = std::to_string(self->updater.getProcessedSize()) + " / " + std::to_string(total);
+          self->requestUpdate(true);
+        },
+        this, allowAnyVersion);
   }
   drawingSuspended = false;
 
@@ -262,47 +251,5 @@ void OtaUpdateActivity::runUpdateInstall() {
   {
     RenderLock lock(*this);
     state = SHUTTING_DOWN;
-  }
-}
-
-void OtaUpdateActivity::loop() {
-  if (state == WAITING_CONFIRMATION) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      runUpdateInstall();
-      return;
-    }
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finish();
-    }
-
-    return;
-  }
-
-  if (state == FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finish();
-    }
-    return;
-  }
-
-  if (state == NO_UPDATE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      allowAnyVersion = true;
-      {
-        RenderLock lock(*this);
-        state = WAITING_CONFIRMATION;
-      }
-      requestUpdate();
-      return;
-    }
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finish();
-    }
-    return;
-  }
-
-  if (state == SHUTTING_DOWN) {
-    ESP.restart();
   }
 }

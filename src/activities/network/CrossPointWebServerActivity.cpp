@@ -18,7 +18,6 @@
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/QrUtils.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -28,8 +27,6 @@ constexpr const char* AP_PASSWORD = nullptr;  // Open network for ease of use
 constexpr const char* AP_HOSTNAME = "crosspoint";
 constexpr uint8_t AP_CHANNEL = 1;
 constexpr uint8_t AP_MAX_CONNECTIONS = 4;
-constexpr int QR_CODE_WIDTH = 198;
-constexpr int QR_CODE_HEIGHT = 198;
 
 // DNS server for captive portal (redirects all DNS queries to our IP)
 DNSServer* dnsServer = nullptr;
@@ -64,7 +61,7 @@ int barsForRssi(int rssi, int currentBars) {
 }  // namespace
 
 void CrossPointWebServerActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   LOG_DBG("WEBACT", "Free heap at onEnter: %d bytes", ESP.getFreeHeap());
 
@@ -290,6 +287,20 @@ void CrossPointWebServerActivity::startWebServer() {
     LOG_DBG("WEBACT", "Web server started successfully");
     lastWifiBars = isApMode ? 0 : barsForRssi(WiFi.RSSI(), 0);
 
+    // The addresses are fixed for as long as the server runs, so they are built
+    // here rather than on every repaint.
+    // The hotspot code follows the WiFi network config spec:
+    // https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
+    wifiQrPayload = std::string("WIFI:T:nopass;S:") + connectedSSID + ";;";
+    hostnameLine = std::string("http://") + AP_HOSTNAME + ".local/";
+    if (isApMode) {
+      urlQrPayload = hostnameLine;
+      ipFallbackLine = std::string(tr(STR_OR_HTTP_PREFIX)) + connectedIP + "/";
+    } else {
+      urlQrPayload = "http://" + connectedIP + "/";
+      ipFallbackLine = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
+    }
+
     // Force an immediate render since we're transitioning from a subactivity
     // that had its own rendering task. We need to make sure our display is shown.
     requestUpdate();
@@ -301,7 +312,7 @@ void CrossPointWebServerActivity::startWebServer() {
   }
 }
 
-void CrossPointWebServerActivity::loop() {
+bool CrossPointWebServerActivity::handleCustomInput() {
   // Handle different states
   if (state == WebServerActivityState::SERVER_RUNNING) {
     // Handle DNS requests for captive portal (AP mode only)
@@ -330,7 +341,7 @@ void CrossPointWebServerActivity::loop() {
             LOG_DBG("WEBACT", "WiFi unavailable for >%lu s; returning to network selection", WIFI_ABANDON_MS / 1000UL);
             state = WebServerActivityState::SHUTTING_DOWN;
             onGoHome();
-            return;
+            return true;
           }
         } else {
           if (consecutiveDisconnects > 0) {
@@ -384,7 +395,7 @@ void CrossPointWebServerActivity::loop() {
           // Check for exit button inside loop for responsiveness
           if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
             onGoHome();
-            return;
+            return true;
           }
         }
       }
@@ -394,148 +405,52 @@ void CrossPointWebServerActivity::loop() {
     // Handle exit on Back button (also check outside loop)
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       onGoHome();
-      return;
+      return true;
     }
   }
+  // Every other state belongs to a subactivity, which is listening for itself.
+  return true;
 }
 
-void CrossPointWebServerActivity::render(RenderLock&&) {
-  // Only render our own UI when server is running
-  // Subactivities handle their own rendering
-  if (state == WebServerActivityState::SERVER_RUNNING || state == WebServerActivityState::AP_STARTING) {
-    renderer.clearScreen();
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    const auto pageWidth = renderer.getScreenWidth();
-    const auto pageHeight = renderer.getScreenHeight();
-
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                   isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER), nullptr);
-
-    if (state == WebServerActivityState::SERVER_RUNNING) {
-      GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                        connectedSSID.c_str());
-      renderServerRunning();
-    } else {
-      const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-      const auto top = (pageHeight - height) / 2;
-      renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_STARTING_HOTSPOT));
-    }
-    // This screen is nearly all QR code, and a differential waveform will not clear a
-    // dense block of black: the old pattern stays as speckle under the new one, which is
-    // what made the transfer screen unreadable. It repaints only on entry, on a state
-    // change and when the signal bar moves, so paying for a cleanup pass every time costs
-    // nothing anyone is waiting on.
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+UiStatusActivity::StatusView CrossPointWebServerActivity::statusView() const {
+  StatusView view;
+  if (state != WebServerActivityState::SERVER_RUNNING && state != WebServerActivityState::AP_STARTING) {
+    // The mode picker and the WiFi picker are their own activities and own the
+    // screen while they are up.
+    view.hidden = true;
+    return view;
   }
-}
 
-void CrossPointWebServerActivity::renderServerRunning() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
+  view.title = isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER);
+  // Nearly all QR: a differential waveform leaves the old pattern as speckle
+  // under a dense block of black, which is what made this screen unreadable.
+  view.refresh = HalDisplay::HALF_REFRESH;
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                 isApMode ? tr(STR_HOTSPOT_MODE) : tr(STR_FILE_TRANSFER), nullptr);
-  GUI.drawSubHeader(renderer, Rect{0, metrics.topPadding + metrics.headerHeight, pageWidth, metrics.tabBarHeight},
-                    connectedSSID.c_str());
+  if (state == WebServerActivityState::AP_STARTING) {
+    view.lines = {tr(STR_STARTING_HOTSPOT), nullptr, nullptr, nullptr};
+    return view;
+  }
 
+  view.subtitleLeft = connectedSSID.c_str();
+  view.backHint = tr(STR_EXIT);
   if (!isApMode) {
-    renderWifiIndicator(metrics.topPadding + metrics.headerHeight);
+    view.showSignal = true;
+    view.signalConnected = (WiFi.status() == WL_CONNECTED) && consecutiveDisconnects == 0;
+    view.signalBars = lastWifiBars;
   }
 
-  int startY = metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing * 2;
-  int height10 = renderer.getLineHeight(UI_10_FONT_ID);
   if (isApMode) {
-    // AP mode display
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_CONNECT_WIFI_HINT), true,
-                      EpdFontFamily::REGULAR);
-    startY += height10 + metrics.verticalSpacing * 2;
-
-    // Show QR code for Wifi
-    // follows spec at https://github.com/zxing/zxing/wiki/Barcode-Contents#wi-fi-network-config-android-ios-11
-    const std::string wifiConfig = std::string("WIFI:T:nopass;S:") + connectedSSID + ";;";
-    const Rect qrBoundsWifi(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
-    QrUtils::drawQrCode(renderer, qrBoundsWifi, wifiConfig);
-
-    // Show network name
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
-                      connectedSSID.c_str());
-
-    startY += QR_CODE_HEIGHT + 2 * metrics.verticalSpacing;
-
-    // Show primary URL (hostname)
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, startY, tr(STR_OPEN_URL_HINT), true,
-                      EpdFontFamily::REGULAR);
-    startY += height10 + metrics.verticalSpacing * 2;
-
-    std::string hostnameUrl = std::string("http://") + AP_HOSTNAME + ".local/";
-    std::string ipUrl = tr(STR_OR_HTTP_PREFIX) + connectedIP + "/";
-
-    // Show QR code for URL
-    const Rect qrBoundsUrl(metrics.contentSidePadding, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
-    QrUtils::drawQrCode(renderer, qrBoundsUrl, hostnameUrl);
-
-    // Show IP address as fallback
-    renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 80,
-                      hostnameUrl.c_str());
-    renderer.drawText(SMALL_FONT_ID, metrics.contentSidePadding + QR_CODE_WIDTH + metrics.verticalSpacing, startY + 100,
-                      ipUrl.c_str());
-  } else {
-    startY += metrics.verticalSpacing * 2;
-
-    // STA mode display (original behavior)
-    // std::string ipInfo = "IP Address: " + connectedIP;
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_OPEN_URL_HINT), true, EpdFontFamily::REGULAR);
-    startY += height10;
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, tr(STR_SCAN_QR_HINT), true, EpdFontFamily::REGULAR);
-    startY += height10 + metrics.verticalSpacing * 2;
-
-    // Show QR code for URL
-    std::string webInfo = "http://" + connectedIP + "/";
-    const Rect qrBounds((pageWidth - QR_CODE_WIDTH) / 2, startY, QR_CODE_WIDTH, QR_CODE_HEIGHT);
-    QrUtils::drawQrCode(renderer, qrBounds, webInfo);
-    startY += QR_CODE_HEIGHT + metrics.verticalSpacing * 2;
-
-    // Show web server URL prominently
-    renderer.drawCenteredText(UI_10_FONT_ID, startY, webInfo.c_str(), true);
-    startY += height10 + 5;
-
-    // Also show hostname URL
-    std::string hostnameUrl = std::string(tr(STR_OR_HTTP_PREFIX)) + AP_HOSTNAME + ".local/";
-    renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
+    // Two codes, one to join the hotspot and one to open the page on it, each
+    // with the thing it encodes written beside it.
+    view.sections[0] = Section{tr(STR_CONNECT_WIFI_HINT), {connectedSSID.c_str()}, wifiQrPayload.c_str()};
+    view.sections[1] =
+        Section{tr(STR_OPEN_URL_HINT), {hostnameLine.c_str(), ipFallbackLine.c_str()}, urlQrPayload.c_str()};
+    return view;
   }
 
-  const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-}
-
-void CrossPointWebServerActivity::renderWifiIndicator(int subHeaderTop) const {
-  constexpr int BAR_COUNT = 4;
-  constexpr int BAR_WIDTH = 4;
-  constexpr int BAR_GAP = 2;
-  constexpr int ICON_HEIGHT = 14;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int iconWidth = BAR_COUNT * BAR_WIDTH + (BAR_COUNT - 1) * BAR_GAP;
-  const int iconRight = renderer.getScreenWidth() - metrics.contentSidePadding;
-  const int iconLeft = iconRight - iconWidth;
-  const int iconBottom = subHeaderTop + metrics.tabBarHeight - metrics.verticalSpacing;
-
-  const bool wifiUp = (WiFi.status() == WL_CONNECTED) && (consecutiveDisconnects == 0);
-  if (wifiUp) {
-    for (int i = 0; i < BAR_COUNT; i++) {
-      const int barHeight = (i + 1) * ICON_HEIGHT / BAR_COUNT;
-      const int x = iconLeft + i * (BAR_WIDTH + BAR_GAP);
-      const int y = iconBottom - barHeight;
-      if (i < lastWifiBars) {
-        renderer.fillRect(x, y, BAR_WIDTH, barHeight, true);
-      } else {
-        renderer.drawRect(x, y, BAR_WIDTH, barHeight, true);
-      }
-    }
-  } else {
-    const int xSize = ICON_HEIGHT;
-    const int x0 = iconRight - xSize;
-    const int y0 = iconBottom - xSize;
-    renderer.drawLine(x0, y0, x0 + xSize, y0 + xSize, 2, true);
-    renderer.drawLine(x0, y0 + xSize, x0 + xSize, y0, 2, true);
-  }
+  // On a joined network there is only the page to open, so it centres.
+  view.lines = {tr(STR_OPEN_URL_HINT), tr(STR_SCAN_QR_HINT), nullptr, nullptr};
+  view.qrPayload = urlQrPayload.c_str();
+  view.qrLines = {urlQrPayload.c_str(), ipFallbackLine.c_str(), nullptr, nullptr};
+  return view;
 }

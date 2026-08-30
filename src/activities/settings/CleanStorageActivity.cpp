@@ -12,7 +12,7 @@
 #include "util/BookCacheUtils.h"
 
 void CleanStorageActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   state = WARNING;
   const char* options[] = {tr(STR_CANCEL), tr(STR_CLEAN_BUTTON)};
@@ -28,62 +28,46 @@ void CleanStorageActivity::onEnter() {
 
 void CleanStorageActivity::onExit() { Activity::onExit(); }
 
-void CleanStorageActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLEAN_STORAGE));
-
-  if (state == WARNING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_CLEAN_STORAGE_WARNING_1), true,
-                              EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, tr(STR_CLEAN_STORAGE_WARNING_2), true,
-                              EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 30, tr(STR_CLEAN_STORAGE_WARNING_3), true);
-
-    if (confirmPopup.processRender(renderer, mappedInput)) return;
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CLEAN_BUTTON), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
+UiStatusActivity::StatusView CleanStorageActivity::statusView() const {
+  StatusView view;
+  view.title = tr(STR_CLEAN_STORAGE);
+  switch (state) {
+    case WARNING:
+      view.lines = {tr(STR_CLEAN_STORAGE_WARNING_1), tr(STR_CLEAN_STORAGE_WARNING_2), tr(STR_CLEAN_STORAGE_WARNING_3),
+                    nullptr};
+      view.backHint = tr(STR_CANCEL);
+      view.confirmHint = tr(STR_CLEAN_BUTTON);
+      break;
+    case CLEANING:
+      view.lines = {tr(STR_CLEANING_STORAGE), nullptr, nullptr, nullptr};
+      view.backHint = "";
+      break;
+    case SUCCESS:
+      view.lines = {tr(STR_STORAGE_CLEANED), resultLine.c_str(), nullptr, nullptr};
+      break;
+    case FAILED:
+      view.lines = {tr(STR_CLEAN_STORAGE_FAILED), tr(STR_CHECK_SERIAL_OUTPUT), nullptr, nullptr};
+      break;
   }
+  return view;
+}
 
-  if (state == CLEANING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_CLEANING_STORAGE));
-    renderer.displayBuffer();
-    return;
-  }
+bool CleanStorageActivity::handleCustomInput() {
+  if (state == WARNING) return confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+  return state == CLEANING;
+}
 
-  if (state == SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_STORAGE_CLEANED), true,
-                              EpdFontFamily::REGULAR);
-    std::string resultText = std::to_string(removedCount) + " " + std::string(tr(STR_ITEMS_REMOVED)) + ", " +
-                             std::to_string(keptCount) + " " + std::string(tr(STR_ITEMS_KEPT));
-    if (failedCount > 0) {
-      resultText += ", " + std::to_string(failedCount) + " " + std::string(tr(STR_FAILED_LOWER));
-    }
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, resultText.c_str());
+bool CleanStorageActivity::drawOverlay() {
+  return state == WARNING && confirmPopup.processRender(renderer, mappedInput);
+}
 
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
+void CleanStorageActivity::onConfirmButton() {
+  if (state == WARNING) beginClean();
+}
 
-  if (state == FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_CLEAN_STORAGE_FAILED), true,
-                              EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, tr(STR_CHECK_SERIAL_OUTPUT));
-
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
+void CleanStorageActivity::onBackButton() {
+  if (state == CLEANING) return;
+  goBack();
 }
 
 void CleanStorageActivity::beginClean() {
@@ -109,29 +93,9 @@ void CleanStorageActivity::cleanStorage() {
     return;
   }
 
+  resultLine = std::to_string(removedCount) + " " + std::string(tr(STR_ITEMS_REMOVED)) + ", " +
+               std::to_string(keptCount) + " " + std::string(tr(STR_ITEMS_KEPT));
+  if (failedCount > 0) resultLine += ", " + std::to_string(failedCount) + " " + std::string(tr(STR_FAILED_LOWER));
   state = SUCCESS;
   requestUpdate();
-}
-
-void CleanStorageActivity::loop() {
-  if (state == WARNING) {
-    if (confirmPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      beginClean();
-    }
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      LOG_DBG("CLEAN_STORAGE", "User cancelled");
-      goBack();
-    }
-    return;
-  }
-
-  if (state == SUCCESS || state == FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      goBack();
-    }
-    return;
-  }
 }

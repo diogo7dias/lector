@@ -11,10 +11,13 @@
 
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "components/StatsDashboardLayout.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
+#include "components/UiAppHelpers.h"
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsPresentation.h"
+
+namespace fui = freeink::ui;
 
 using reading_stats::ReadingStatsData;
 
@@ -55,9 +58,26 @@ bool datesAreUnavailable(const ReadingStatsData& stats) {
   return !reading_stats::hasDatedActivity(stats) && !halClock.hasDate();
 }
 
-void drawNoClockNotice(GfxRenderer& renderer, const Rect& area) {
-  const std::string notice = renderer.truncatedText(SMALL_FONT_ID, tr(STR_STATS_NO_CLOCK), area.width);
-  renderer.drawCenteredText(SMALL_FONT_ID, area.y + std::max(0, area.height / 2 - 4), notice.c_str());
+fui::Rect toFui(const stats_dashboard::Rect& rect) {
+  return fui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
+                   static_cast<int16_t>(rect.height)};
+}
+
+// A boxed value with its word under it, the shape every number on this screen
+// is written in.
+void card(UiAppHost::UiScreen& screen, const stats_dashboard::Rect& rect, const char* value, const char* label) {
+  fui::MetricCardProps props;
+  props.value = value;
+  props.caption = label;
+  props.valueText = screen.theme().bodyText;
+  props.captionText = screen.theme().smallText;
+  props.styles = screen.theme().button;
+  fui::metricCard(screen.frame(), toFui(rect), props);
+}
+
+void centred(UiAppHost::UiScreen& screen, const stats_dashboard::Rect& rect, const char* text, fui::TextStyle style) {
+  style.align = fui::TextAlign::Center;
+  screen.frame().target().text(toFui(rect), text, style);
 }
 
 }  // namespace
@@ -67,6 +87,7 @@ BookStatsActivity::BookStatsActivity(GfxRenderer& renderer, MappedInputManager& 
                                      const uint8_t progressPercent, const uint32_t estimatedTimeLeftSeconds,
                                      ResetHandler resetHandler)
     : Activity("BookStats", renderer, mappedInput),
+      UiAppHost(renderer),
       title_(std::move(title)),
       bookStats_(bookStats),
       globalStats_(globalStats),
@@ -77,7 +98,13 @@ BookStatsActivity::BookStatsActivity(GfxRenderer& renderer, MappedInputManager& 
 void BookStatsActivity::onEnter() {
   Activity::onEnter();
   page_ = Page::CurrentBook;
+  resetUi();
+  app.setScreen(&BookStatsActivity::screenTrampoline, this);
   requestUpdate();
+}
+
+void BookStatsActivity::screenTrampoline(UiScreen& screen, void* user) {
+  static_cast<BookStatsActivity*>(user)->buildScreen(screen);
 }
 
 void BookStatsActivity::loop() {
@@ -129,113 +156,86 @@ void BookStatsActivity::confirmReset() {
                          });
 }
 
-void BookStatsActivity::drawMetricGrid(const Rect& area,
-                                       const std::array<std::pair<std::string, const char*>, 6>& metrics) {
-  const int columns = 3;
-  const int rows = 2;
-  const int cellW = area.width / columns;
-  const int cellH = area.height / rows;
+void BookStatsActivity::buildMetricGrid(UiScreen& screen, const stats_dashboard::Rect& area,
+                                        const std::array<MetricRow, 6>& metrics) {
+  constexpr int kColumns = 3;
+  constexpr int kRows = 2;
   for (int index = 0; index < static_cast<int>(metrics.size()); ++index) {
-    const int column = index % columns;
-    const int row = index / columns;
-    const Rect cell{area.x + column * cellW, area.y + row * cellH,
-                    column == columns - 1 ? area.width - column * cellW : cellW,
-                    row == rows - 1 ? area.height - row * cellH : cellH};
-    renderer.drawRect(cell.x, cell.y, cell.width, cell.height);
-    const std::string value =
-        renderer.truncatedText(UI_12_FONT_ID, metrics[index].first.c_str(), cell.width - 6, EpdFontFamily::BOLD);
-    const int valueX = reading_stats::centeredTextX(
-        cell.x, cell.width, renderer.getTextWidth(UI_12_FONT_ID, value.c_str(), EpdFontFamily::BOLD));
-    renderer.drawText(UI_12_FONT_ID, valueX, cell.y + 5, value.c_str(), true, EpdFontFamily::BOLD);
-    const std::string label = renderer.truncatedText(SMALL_FONT_ID, metrics[index].second, cell.width - 4);
-    const int labelX =
-        reading_stats::centeredTextX(cell.x, cell.width, renderer.getTextWidth(SMALL_FONT_ID, label.c_str()));
-    renderer.drawText(SMALL_FONT_ID, labelX, cell.y + cellH / 2 + 4, label.c_str());
+    card(screen, stats_dashboard::metricCell(area, index, kColumns, kRows), metrics[index].first.c_str(),
+         metrics[index].second);
   }
 }
 
-void BookStatsActivity::drawTimeOfDayChart(const Rect& area, const ReadingStatsData& stats) {
-  renderer.drawText(UI_10_FONT_ID, area.x, area.y, tr(STR_STATS_TIME_OF_DAY), true, EpdFontFamily::BOLD);
+void BookStatsActivity::buildTimeOfDayChart(UiScreen& screen, const stats_dashboard::Rect& area,
+                                            const ReadingStatsData& stats) {
+  auto& target = screen.frame().target();
+  const auto& theme = screen.theme();
+  const int headingHeight = target.lineHeight(theme.bodyText.font);
+  fui::TextStyle heading = theme.bodyText;
+  heading.align = fui::TextAlign::Left;
+  target.text(toFui(stats_dashboard::Rect{area.x, area.y, area.width, headingHeight}), tr(STR_STATS_TIME_OF_DAY),
+              heading);
+
   const std::array<const char*, 4> labels = {tr(STR_STATS_MORNING), tr(STR_STATS_AFTERNOON), tr(STR_STATS_EVENING),
                                              tr(STR_STATS_NIGHT)};
-  const int top = area.y + renderer.getLineHeight(UI_10_FONT_ID) + 2;
-  const int rowH = std::max(8, (area.height - (top - area.y)) / 4);
-  int widestLabel = 0;
-  for (const char* label : labels) widestLabel = std::max(widestLabel, renderer.getTextWidth(SMALL_FONT_ID, label));
-  const int labelW = reading_stats::chartLabelColumnWidth(area.width, widestLabel);
+  const stats_dashboard::Rect rows{area.x, area.y + headingHeight + 2, area.width, area.height - headingHeight - 2};
+  const int rowHeight = stats_dashboard::barRowHeight(rows.height, static_cast<int>(labels.size()));
+  int widest = 0;
+  // Measured through the target, so the column follows whatever face the theme
+  // gives the small text rather than a font this screen names for itself.
+  for (const char* label : labels) {
+    widest = std::max<int>(widest, target.measureText(theme.smallText.font, label, theme.smallText).width);
+  }
+  const int labelWidth = reading_stats::chartLabelColumnWidth(rows.width, widest);
   const uint32_t maxValue = maximum(stats.timeOfDaySeconds);
-  for (int index = 0; index < 4; ++index) {
-    const int y = top + index * rowH;
-    const std::string label = renderer.truncatedText(SMALL_FONT_ID, labels[index], std::max(1, labelW - 4));
-    renderer.drawText(SMALL_FONT_ID, area.x, y, label.c_str());
-    const int barX = area.x + labelW;
-    const int barW = area.width - labelW;
-    renderer.drawRect(barX, y + 2, barW, std::max(4, rowH - 5));
-    if (maxValue > 0 && stats.timeOfDaySeconds[index] > 0) {
-      const int fill =
-          std::max(1, static_cast<int>(static_cast<uint64_t>(barW) * stats.timeOfDaySeconds[index] / maxValue));
-      renderer.fillRect(barX, y + 2, fill, std::max(4, rowH - 5), true);
+
+  for (int index = 0; index < static_cast<int>(labels.size()); ++index) {
+    const auto row = stats_dashboard::barRow(rows, index, static_cast<int>(labels.size()), labelWidth, rowHeight);
+    fui::TextStyle label = theme.smallText;
+    label.align = fui::TextAlign::Left;
+    target.text(toFui(row.label), labels[index], label);
+    const stats_dashboard::Rect track{row.track.x, row.track.y + 2, row.track.width, std::max(4, rowHeight - 5)};
+    target.stroke(toFui(track), fui::Paint::solid(fui::Color::Black), 1);
+    const int fill = stats_dashboard::fillFor(track.width, stats.timeOfDaySeconds[index], maxValue);
+    if (fill > 0) {
+      target.fill(toFui(stats_dashboard::Rect{track.x, track.y, fill, track.height}),
+                  fui::Paint::solid(fui::Color::Black));
     }
   }
 }
 
-void BookStatsActivity::drawWeekdayChart(const Rect& area, const ReadingStatsData& stats) {
-  renderer.drawText(UI_10_FONT_ID, area.x, area.y, tr(STR_STATS_DAY_OF_WEEK), true, EpdFontFamily::BOLD);
+void BookStatsActivity::buildWeekdayChart(UiScreen& screen, const stats_dashboard::Rect& area,
+                                          const ReadingStatsData& stats) {
+  auto& target = screen.frame().target();
+  const auto& theme = screen.theme();
+  const int headingHeight = target.lineHeight(theme.bodyText.font);
+  fui::TextStyle heading = theme.bodyText;
+  heading.align = fui::TextAlign::Left;
+  target.text(toFui(stats_dashboard::Rect{area.x, area.y, area.width, headingHeight}), tr(STR_STATS_DAY_OF_WEEK),
+              heading);
+
   const std::array<const char*, 7> labels = {tr(STR_STATS_MON), tr(STR_STATS_TUE), tr(STR_STATS_WED), tr(STR_STATS_THU),
                                              tr(STR_STATS_FRI), tr(STR_STATS_SAT), tr(STR_STATS_SUN)};
-  const int top = area.y + renderer.getLineHeight(UI_10_FONT_ID) + 2;
-  const int labelH = renderer.getLineHeight(SMALL_FONT_ID);
-  const int chartH = std::max(8, area.height - (top - area.y) - labelH);
-  const int slotW = area.width / 7;
+  const int labelHeight = target.lineHeight(theme.smallText.font);
+  const stats_dashboard::Rect plot{area.x, area.y + headingHeight + 2, area.width,
+                                   std::max(8, area.height - headingHeight - 2 - labelHeight)};
   const uint32_t maxValue = maximum(stats.dayOfWeekSeconds);
-  for (int index = 0; index < 7; ++index) {
-    const int barW = std::max(3, slotW / 2);
-    const int x = area.x + index * slotW + (slotW - barW) / 2;
-    const int fillH =
-        maxValue == 0 ? 0 : static_cast<int>(static_cast<uint64_t>(chartH) * stats.dayOfWeekSeconds[index] / maxValue);
-    renderer.drawRect(x, top, barW, chartH);
-    if (fillH > 0) renderer.fillRect(x, top + chartH - fillH, barW, fillH, true);
-    const int labelX = area.x + index * slotW + (slotW - renderer.getTextWidth(SMALL_FONT_ID, labels[index])) / 2;
-    renderer.drawText(SMALL_FONT_ID, labelX, top + chartH + 1, labels[index]);
+
+  for (int index = 0; index < static_cast<int>(labels.size()); ++index) {
+    const auto column = stats_dashboard::chartColumn(plot, index, static_cast<int>(labels.size()), plot.height);
+    target.stroke(toFui(column), fui::Paint::solid(fui::Color::Black), 1);
+    const int fill = stats_dashboard::fillFor(plot.height, stats.dayOfWeekSeconds[index], maxValue);
+    if (fill > 0) {
+      target.fill(toFui(stats_dashboard::Rect{column.x, column.y + plot.height - fill, column.width, fill}),
+                  fui::Paint::solid(fui::Color::Black));
+    }
+    const auto slot = stats_dashboard::chartColumnSlot(plot, index, static_cast<int>(labels.size()));
+    centred(screen, stats_dashboard::Rect{slot.x, plot.y + plot.height + 1, slot.width, labelHeight}, labels[index],
+            theme.smallText);
   }
 }
 
-void BookStatsActivity::drawCurrentBook(const Rect& screen, const int contentTop, const int contentBottom) {
-  int y = contentTop;
-  const std::string visibleTitle =
-      renderer.truncatedText(UI_10_FONT_ID, title_.c_str(), screen.width - 16, EpdFontFamily::BOLD);
-  renderer.drawCenteredText(UI_10_FONT_ID, y, visibleTitle.c_str(), true, EpdFontFamily::BOLD);
-  y += renderer.getLineHeight(UI_10_FONT_ID) + 3;
-
-  char progress[16];
-  snprintf(progress, sizeof(progress), "%u%%", static_cast<unsigned>(progressPercent_));
-  renderer.drawText(SMALL_FONT_ID, screen.x, y, tr(STR_STATS_PROGRESS));
-  renderer.drawText(SMALL_FONT_ID, screen.x + screen.width - renderer.getTextWidth(SMALL_FONT_ID, progress), y,
-                    progress);
-  y += renderer.getLineHeight(SMALL_FONT_ID) + 2;
-  renderer.drawRect(screen.x, y, screen.width, 10);
-  renderer.fillRect(screen.x, y, screen.width * progressPercent_ / 100, 10, true);
-  y += 15;
-
-  const uint32_t averageSession =
-      bookStats_.totalSessions == 0 ? 0 : bookStats_.totalReadingSeconds / bookStats_.totalSessions;
-  const std::array<std::pair<std::string, const char*>, 6> values = {{
-      {std::to_string(bookStats_.totalSessions), tr(STR_STATS_SESSIONS)},
-      {reading_stats::formatDuration(bookStats_.totalReadingSeconds), tr(STR_STATS_READING_TIME)},
-      {std::to_string(bookStats_.totalPagesTurned), tr(STR_STATS_PAGES_TURNED)},
-      {reading_stats::formatDuration(averageSession), tr(STR_STATS_AVG_SESSION)},
-      {formatRate(bookStats_), tr(STR_STATS_PAGES_PER_MIN)},
-      {reading_stats::formatDuration(estimatedTimeLeftSeconds_), tr(STR_STATS_TIME_LEFT)},
-  }};
-  const int gridH = std::min(130, std::max(86, (contentBottom - y) / 3));
-  drawMetricGrid(Rect{screen.x, y, screen.width, gridH}, values);
-  y += gridH + 5;
-
-  if (datesAreUnavailable(bookStats_)) {
-    drawNoClockNotice(renderer, Rect{screen.x, y, screen.width, contentBottom - y});
-    return;
-  }
-
+void BookStatsActivity::buildDateCards(UiScreen& screen, const stats_dashboard::Rect& area) {
   const auto now = reading_stats::currentLocalDateTime();
   const uint32_t endDay =
       bookStats_.completed
@@ -243,43 +243,88 @@ void BookStatsActivity::drawCurrentBook(const Rect& screen, const int contentTop
           : (now.valid ? reading_stats::estimateFinishDay(now.dayIndex, bookStats_.startDay,
                                                           bookStats_.totalReadingSeconds, estimatedTimeLeftSeconds_)
                        : 0);
-  const int dateH = renderer.getLineHeight(UI_10_FONT_ID) + renderer.getLineHeight(SMALL_FONT_ID) + 5;
-  const int halfW = screen.width / 2;
-  const std::string startDate = formatDate(bookStats_.startDay);
-  const std::string endDate = formatDate(endDay);
-  const char* endLabel = bookStats_.completed ? tr(STR_STATS_FINISHED) : tr(STR_STATS_EST_FINISH);
-  renderer.drawRect(screen.x, y, halfW, dateH);
-  renderer.drawRect(screen.x + halfW, y, screen.width - halfW, dateH);
-  renderer.drawText(UI_10_FONT_ID,
-                    reading_stats::centeredTextX(
-                        screen.x, halfW, renderer.getTextWidth(UI_10_FONT_ID, startDate.c_str(), EpdFontFamily::BOLD)),
-                    y + 2, startDate.c_str(), true, EpdFontFamily::BOLD);
-  renderer.drawText(
-      SMALL_FONT_ID,
-      reading_stats::centeredTextX(screen.x, halfW, renderer.getTextWidth(SMALL_FONT_ID, tr(STR_STATS_STARTED))),
-      y + renderer.getLineHeight(UI_10_FONT_ID), tr(STR_STATS_STARTED));
-  renderer.drawText(
-      UI_10_FONT_ID,
-      reading_stats::centeredTextX(screen.x + halfW, screen.width - halfW,
-                                   renderer.getTextWidth(UI_10_FONT_ID, endDate.c_str(), EpdFontFamily::BOLD)),
-      y + 2, endDate.c_str(), true, EpdFontFamily::BOLD);
-  renderer.drawText(SMALL_FONT_ID,
-                    reading_stats::centeredTextX(screen.x + halfW, screen.width - halfW,
-                                                 renderer.getTextWidth(SMALL_FONT_ID, endLabel)),
-                    y + renderer.getLineHeight(UI_10_FONT_ID), endLabel);
-  y += dateH + 4;
-
-  const int remaining = contentBottom - y;
-  const int chartH = remaining / 2;
-  drawTimeOfDayChart(Rect{screen.x, y, screen.width, chartH}, bookStats_);
-  drawWeekdayChart(Rect{screen.x, y + chartH, screen.width, remaining - chartH}, bookStats_);
+  const int half = area.width / 2;
+  card(screen, stats_dashboard::Rect{area.x, area.y, half, area.height}, formatDate(bookStats_.startDay).c_str(),
+       tr(STR_STATS_STARTED));
+  card(screen, stats_dashboard::Rect{area.x + half, area.y, area.width - half, area.height}, formatDate(endDay).c_str(),
+       bookStats_.completed ? tr(STR_STATS_FINISHED) : tr(STR_STATS_EST_FINISH));
 }
 
-void BookStatsActivity::drawAllBooks(const Rect& screen, const int contentTop, const int contentBottom) {
-  int y = contentTop;
+void BookStatsActivity::buildCurrentBook(UiScreen& screen) {
+  auto& target = screen.frame().target();
+  const auto& theme = screen.theme();
+  const fui::Rect body = screen.body();
+  const int lineHeight = target.lineHeight(theme.bodyText.font);
+  const int smallHeight = target.lineHeight(theme.smallText.font);
+
+  int y = body.y;
+  fui::TextStyle titleStyle = theme.bodyText;
+  titleStyle.bold = true;
+  centred(screen, stats_dashboard::Rect{body.x, y, body.width, lineHeight}, title_.c_str(), titleStyle);
+  y += lineHeight + 3;
+
+  // The book's own progress, as a word on the left and a number on the right
+  // over the bar they both describe.
+  char percent[16];
+  snprintf(percent, sizeof(percent), "%u%%", static_cast<unsigned>(progressPercent_));
+  fui::TextStyle left = theme.smallText;
+  left.align = fui::TextAlign::Left;
+  fui::TextStyle right = theme.smallText;
+  right.align = fui::TextAlign::Right;
+  target.text(toFui(stats_dashboard::Rect{body.x, y, body.width, smallHeight}), tr(STR_STATS_PROGRESS), left);
+  target.text(toFui(stats_dashboard::Rect{body.x, y, body.width, smallHeight}), percent, right);
+  y += smallHeight + 2;
+
+  fui::ProgressBarProps bar;
+  bar.value = progressPercent_;
+  bar.max = 100;
+  bar.border = fui::Paint::solid(fui::Color::Black);
+  bar.borderWidth = 1;
+  fui::progressBar(screen.frame(), fui::Rect{body.x, static_cast<int16_t>(y), body.width, 10}, bar);
+  y += 15;
+
+  const uint32_t averageSession =
+      bookStats_.totalSessions == 0 ? 0 : bookStats_.totalReadingSeconds / bookStats_.totalSessions;
+  const std::array<MetricRow, 6> values = {{
+      {std::to_string(bookStats_.totalSessions), tr(STR_STATS_SESSIONS)},
+      {reading_stats::formatDuration(bookStats_.totalReadingSeconds), tr(STR_STATS_READING_TIME)},
+      {std::to_string(bookStats_.totalPagesTurned), tr(STR_STATS_PAGES_TURNED)},
+      {reading_stats::formatDuration(averageSession), tr(STR_STATS_AVG_SESSION)},
+      {formatRate(bookStats_), tr(STR_STATS_PAGES_PER_MIN)},
+      {reading_stats::formatDuration(estimatedTimeLeftSeconds_), tr(STR_STATS_TIME_LEFT)},
+  }};
+  const int bottom = body.y + body.height;
+  const int gridHeight = std::min(130, std::max(86, (bottom - y) / 3));
+  buildMetricGrid(screen, stats_dashboard::Rect{body.x, y, body.width, gridHeight}, values);
+  y += gridHeight + 5;
+
+  if (datesAreUnavailable(bookStats_)) {
+    centred(screen, stats_dashboard::Rect{body.x, y + std::max(0, (bottom - y) / 2 - 4), body.width, smallHeight},
+            tr(STR_STATS_NO_CLOCK), theme.smallText);
+    return;
+  }
+
+  const int dateHeight = lineHeight + smallHeight + 5;
+  buildDateCards(screen, stats_dashboard::Rect{body.x, y, body.width, dateHeight});
+  y += dateHeight + 4;
+
+  const int remaining = bottom - y;
+  const int chartHeight = remaining / 2;
+  buildTimeOfDayChart(screen, stats_dashboard::Rect{body.x, y, body.width, chartHeight}, bookStats_);
+  buildWeekdayChart(screen, stats_dashboard::Rect{body.x, y + chartHeight, body.width, remaining - chartHeight},
+                    bookStats_);
+}
+
+void BookStatsActivity::buildAllBooks(UiScreen& screen) {
+  const auto& theme = screen.theme();
+  const fui::Rect body = screen.body();
+  const int lineHeight = screen.frame().target().lineHeight(theme.bodyText.font);
+  const int smallHeight = screen.frame().target().lineHeight(theme.smallText.font);
+
+  int y = body.y;
   const uint32_t averageSession =
       globalStats_.totalSessions == 0 ? 0 : globalStats_.totalReadingSeconds / globalStats_.totalSessions;
-  const std::array<std::pair<std::string, const char*>, 6> values = {{
+  const std::array<MetricRow, 6> values = {{
       {std::to_string(globalStats_.totalSessions), tr(STR_STATS_SESSIONS)},
       {reading_stats::formatDuration(globalStats_.totalReadingSeconds), tr(STR_STATS_READING_TIME)},
       {std::to_string(globalStats_.totalPagesTurned), tr(STR_STATS_PAGES_TURNED)},
@@ -287,12 +332,14 @@ void BookStatsActivity::drawAllBooks(const Rect& screen, const int contentTop, c
       {formatRate(globalStats_), tr(STR_STATS_PAGES_PER_MIN)},
       {std::to_string(globalStats_.completedBooks), tr(STR_STATS_COMPLETED)},
   }};
-  const int gridH = std::min(150, std::max(92, (contentBottom - y) / 3));
-  drawMetricGrid(Rect{screen.x, y, screen.width, gridH}, values);
-  y += gridH + 4;
+  const int bottom = body.y + body.height;
+  const int gridHeight = std::min(150, std::max(92, (bottom - y) / 3));
+  buildMetricGrid(screen, stats_dashboard::Rect{body.x, y, body.width, gridHeight}, values);
+  y += gridHeight + 4;
 
   if (datesAreUnavailable(globalStats_)) {
-    drawNoClockNotice(renderer, Rect{screen.x, y, screen.width, contentBottom - y});
+    centred(screen, stats_dashboard::Rect{body.x, y + std::max(0, (bottom - y) / 2 - 4), body.width, smallHeight},
+            tr(STR_STATS_NO_CLOCK), theme.smallText);
     return;
   }
 
@@ -302,38 +349,40 @@ void BookStatsActivity::drawAllBooks(const Rect& screen, const int contentTop, c
   snprintf(streak, sizeof(streak), "%s: %u | %s: %u", tr(STR_STATS_STREAK),
            static_cast<unsigned>(globalStats_.currentStreak(today)), tr(STR_STATS_BEST),
            static_cast<unsigned>(globalStats_.longestReadingStreak));
-  renderer.drawCenteredText(UI_10_FONT_ID, y, streak, true, EpdFontFamily::BOLD);
-  y += renderer.getLineHeight(UI_10_FONT_ID) + 3;
+  fui::TextStyle streakStyle = theme.bodyText;
+  streakStyle.bold = true;
+  centred(screen, stats_dashboard::Rect{body.x, y, body.width, lineHeight}, streak, streakStyle);
+  y += lineHeight + 3;
 
-  const int remaining = contentBottom - y;
-  const int chartH = remaining / 2;
-  drawTimeOfDayChart(Rect{screen.x, y, screen.width, chartH}, globalStats_);
-  drawWeekdayChart(Rect{screen.x, y + chartH, screen.width, remaining - chartH}, globalStats_);
+  const int remaining = bottom - y;
+  const int chartHeight = remaining / 2;
+  buildTimeOfDayChart(screen, stats_dashboard::Rect{body.x, y, body.width, chartHeight}, globalStats_);
+  buildWeekdayChart(screen, stats_dashboard::Rect{body.x, y + chartHeight, body.width, remaining - chartHeight},
+                    globalStats_);
+}
+
+void BookStatsActivity::buildScreen(UiScreen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  screen.setContentMargin(fui::Insets{
+      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), STATS_SIDE_MARGIN,
+      static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), STATS_SIDE_MARGIN});
+  if (page_ == Page::CurrentBook) {
+    buildCurrentBook(screen);
+    return;
+  }
+  buildAllBooks(screen);
 }
 
 void BookStatsActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  auto& theme = UITheme::getInstance();
-  const auto& metrics = theme.getMetrics();
-  const Rect screen = theme.getScreenSafeArea(renderer, true, false);
+  const auto& metrics = UITheme::getInstance().getMetrics();
   const char* pageTitle = page_ == Page::CurrentBook ? tr(STR_STATS_CURRENT_BOOK) : tr(STR_STATS_ALL_BOOKS);
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 pageTitle);
-  const int contentTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int contentBottom = screen.y + screen.height - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  const auto horizontal = reading_stats::insetHorizontal(screen.x, screen.width, STATS_SIDE_MARGIN);
-  const Rect statsContent{horizontal.x, screen.y, horizontal.width, screen.height};
-  if (page_ == Page::CurrentBook) {
-    drawCurrentBook(statsContent, contentTop, contentBottom);
-  } else {
-    drawAllBooks(statsContent, contentTop, contentBottom);
-  }
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, pageTitle);
+  renderUi();
 
   const auto labels = page_ == Page::CurrentBook
                           ? mappedInput.mapLabels(tr(STR_BACK), tr(STR_STATS_RESET), "", tr(STR_STATS_MORE))
                           : mappedInput.mapLabels(tr(STR_BACK), tr(STR_STATS_RESET), tr(STR_STATS_BOOK), "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  // MenuNav in the fork this came from resolved to a FAST_REFRESH, which is what
-  // displayBuffer() defaults to here.
   renderer.displayBuffer();
 }
