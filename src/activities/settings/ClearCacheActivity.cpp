@@ -61,9 +61,7 @@ bool ClearCacheActivity::handleCustomInput() {
   return state == CLEARING;
 }
 
-bool ClearCacheActivity::drawOverlay() {
-  return state == WARNING && confirmPopup.processRender(renderer, mappedInput);
-}
+bool ClearCacheActivity::drawOverlay() { return state == WARNING && confirmPopup.processRender(renderer, mappedInput); }
 
 void ClearCacheActivity::onConfirmButton() {
   if (state == WARNING) beginClear();

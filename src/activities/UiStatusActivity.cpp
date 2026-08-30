@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "components/StatusStack.h"
 #include "components/UITheme.h"
 
 namespace fui = freeink::ui;
@@ -40,20 +41,16 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   const int16_t gap = theme.listRowGap > 0 ? theme.listRowGap : 4;
   constexpr int16_t kProgressHeight = 6;
 
-  int16_t stackHeight = 0;
-  int drawn = 0;
+  int lineCount = 0;
   for (size_t i = 0; i < MAX_LINES; ++i) {
-    if (view.lines[i] == nullptr || view.lines[i][0] == '\0') continue;
-    stackHeight = static_cast<int16_t>(stackHeight + (drawn == 0 ? headlineHeight : lineHeight) + (drawn ? gap : 0));
-    ++drawn;
+    if (view.lines[i] != nullptr && view.lines[i][0] != '\0') ++lineCount;
   }
-  if (view.showProgress) stackHeight = static_cast<int16_t>(stackHeight + gap * 2 + kProgressHeight);
 
+  const status_stack::Metrics stack{headlineHeight, lineHeight, gap, view.showProgress ? kProgressHeight : 0};
   // The whole stack is centred as one block, so a two-line state and a
   // four-line state sit on the same middle rather than drifting up the screen.
   const fui::Rect body = screen.body();
-  int16_t y = static_cast<int16_t>(body.y + (body.height - stackHeight) / 2);
-  if (y < body.y) y = body.y;
+  int16_t y = static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, lineCount, view.showProgress));
 
   int placed = 0;
   for (size_t i = 0; i < MAX_LINES; ++i) {

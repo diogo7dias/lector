@@ -1,21 +1,28 @@
 #pragma once
 
-#include "activities/Activity.h"
+#include <string>
+
+#include "activities/UiStatusActivity.h"
 #include "components/OptionPopup.h"
 
 // Removes the cache directories of books that are no longer on the card, leaving
 // every present book's cache (and therefore its reading progress) untouched.
 // This is the safe counterpart of ClearCacheActivity, which wipes ALL caches.
-class CleanStorageActivity final : public Activity {
+class CleanStorageActivity final : public UiStatusActivity {
  public:
   explicit CleanStorageActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("CleanStorage", renderer, mappedInput) {}
+      : UiStatusActivity("CleanStorage", renderer, mappedInput) {}
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
   bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
-  void render(RenderLock&&) override;
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  bool drawOverlay() override;
+  void onConfirmButton() override;
+  void onBackButton() override;
 
  private:
   enum State { WARNING, CLEANING, SUCCESS, FAILED };
@@ -27,6 +34,8 @@ class CleanStorageActivity final : public Activity {
   int removedCount = 0;
   int keptCount = 0;
   int failedCount = 0;
+  // Counted, so it is built when the sweep ends rather than translated.
+  std::string resultLine;
   OptionPopup confirmPopup;
   void beginClean();
   void cleanStorage();
