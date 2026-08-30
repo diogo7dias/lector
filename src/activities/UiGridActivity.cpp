@@ -8,6 +8,7 @@
 
 #include "ListSwipeGesture.h"
 #include "MappedInputManager.h"
+#include "components/PlainSliderBand.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 
@@ -129,6 +130,13 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   props.value = static_cast<int16_t>(index);
   props.state = selected ? fui::StateChecked : fui::StateNormal;
   props.styles = theme.button;
+  if (!mappedInput.hasTouch()) {
+    // The keys-only grid always outlined its cells; only the touch grid reads
+    // them as buttons.
+    props.styles = fui::defaultButtonStyles();
+    props.styles.normal.border = fui::Paint::solid(fui::Color::Black);
+    props.styles.normal.borderWidth = 1;
+  }
   props.radius = static_cast<uint8_t>(theme.controlRadius);
   props.minTouchSize = screen.frame().device().minTouchSize;
   screen.button(props, box);
@@ -153,20 +161,36 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   }
 }
 
-// The armed number, in the header's place. A slider row rather than a header, so
-// the capsule and the two step buttons come from the theme and a drag arrives
-// through the same interaction table as every tap.
+// The armed number, in the header's place. On the touch board that is a slider
+// row, so the capsule and the two step buttons come from the theme and a drag
+// arrives through the same interaction table as every tap; on the keys-only
+// boards it is the filled band with a plain bar that it has always been.
 void UiGridActivity::buildValueBand(UiScreen& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto& theme = screen.theme();
   char valueText[16];
   snprintf(valueText, sizeof(valueText), "%d", valueBand.value());
 
+  // The band spans the header's own rect, so nothing below it moves when a value
+  // is armed.
+  const int16_t height = static_cast<int16_t>(metrics.headerHeight + metrics.verticalSpacing + theme.rowHeight);
+  const fui::Rect rect{0, static_cast<int16_t>(metrics.topPadding), static_cast<int16_t>(renderer.getScreenWidth()),
+                       height};
+  const int span = valueBand.maxValue() > valueBand.minValue() ? valueBand.maxValue() - valueBand.minValue() : 1;
+
+  if (!mappedInput.hasTouch()) {
+    // Keys-only boards get the filled band they always had: the name and its
+    // readout in reverse over a plain bar, no capsule and no step buttons.
+    plain_slider_band::draw(screen, rect, valueBand.name().c_str(), valueText, valueBand.value() - valueBand.minValue(),
+                            span, /*inverted=*/true);
+    return;
+  }
+
   fui::SliderRowProps props;
   props.label = valueBand.name().c_str();
   props.value = valueText;
   props.sliderValue = valueBand.value() - valueBand.minValue();
-  props.max = valueBand.maxValue() > valueBand.minValue() ? valueBand.maxValue() - valueBand.minValue() : 1;
+  props.max = span;
   props.sliderAction = ACTION_SLIDER;
   props.decrement = ACTION_SLIDER;
   props.increment = ACTION_SLIDER;
@@ -176,13 +200,7 @@ void UiGridActivity::buildValueBand(UiScreen& screen) {
   props.labelText = theme.smallText;
   props.valueText = theme.smallText;
 
-  // The band spans the header's own rect, so nothing below it moves when a value
-  // is armed.
-  const int16_t height =
-      static_cast<int16_t>(metrics.headerHeight + metrics.verticalSpacing + theme.rowHeight);
-  fui::sliderRow(screen.frame(), fui::Rect{0, static_cast<int16_t>(metrics.topPadding),
-                                           static_cast<int16_t>(renderer.getScreenWidth()), height},
-                 props);
+  fui::sliderRow(screen.frame(), rect, props);
 }
 
 void UiGridActivity::loop() {

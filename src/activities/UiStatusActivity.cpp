@@ -7,6 +7,7 @@
 
 #include "MappedInputManager.h"
 #include "components/ComparisonLayout.h"
+#include "components/PlainSliderBand.h"
 #include "components/SignalMeter.h"
 #include "components/SliderField.h"
 #include "components/StatusStack.h"
@@ -247,6 +248,13 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
 // and their radius all come from the theme rather than from arithmetic here.
 void UiStatusActivity::buildSlider(UiScreen& screen, const StatusView& view, const fui::Rect& rect) {
   const auto& theme = screen.theme();
+  if (!mappedInput.hasTouch()) {
+    // Keys-only boards keep the plain bar; there is nothing to drag or tap.
+    plain_slider_band::draw(screen, rect, view.sliderLabel, view.sliderValueText, view.sliderValue - view.sliderMin,
+                            view.sliderMax > view.sliderMin ? view.sliderMax - view.sliderMin : 1,
+                            /*inverted=*/false);
+    return;
+  }
   fui::SliderRowProps props;
   props.label = view.sliderLabel;
   props.value = view.sliderValueText;
