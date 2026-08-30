@@ -3,17 +3,18 @@
 
 #include <string>
 
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 
-class QrDisplayActivity final : public Activity {
+// A payload as a code, filling the panel: the only thing this screen does is
+// give a phone something to point at, so the square takes the whole body.
+class QrDisplayActivity final : public UiStatusActivity {
  public:
   explicit QrDisplayActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& textPayload)
-      : Activity("QrDisplay", renderer, mappedInput), textPayload(textPayload) {}
+      : UiStatusActivity("QrDisplay", renderer, mappedInput), textPayload(textPayload) {}
 
-  void onEnter() override;
-  void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+ protected:
+  StatusView statusView() const override;
+  void onConfirmButton() override { finish(); }
 
  private:
   std::string textPayload;

@@ -141,6 +141,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     bool listHasSubtitle = false;
     // A line under the list, for the legend the Wi-Fi picker prints.
     const char* listNote = nullptr;
+    // The centred code's side, when the default 198 px is not what the screen
+    // wants. A screen whose whole point is the code (Display QR) asks for the
+    // largest square its body holds; 0 keeps the default.
+    int qrSize = 0;
     // A screen that is nearly all QR asks for a full pass: a differential
     // waveform leaves the old pattern as speckle under a dense block of black.
     HalDisplay::RefreshMode refresh = HalDisplay::FAST_REFRESH;

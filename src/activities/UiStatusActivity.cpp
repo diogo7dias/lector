@@ -3,6 +3,8 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include <algorithm>
+
 #include "MappedInputManager.h"
 #include "components/ComparisonLayout.h"
 #include "components/SignalMeter.h"
@@ -155,13 +157,19 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
   for (size_t i = 0; i < MAX_LINES; ++i) {
     if (view.qrLines[i] != nullptr && view.qrLines[i][0] != '\0') ++qrLineCount;
   }
-  const int16_t qrSize = view.qrPayload != nullptr && view.qrPayload[0] != '\0' ? kQrSize : 0;
+  const bool hasQr = view.qrPayload != nullptr && view.qrPayload[0] != '\0';
+  int16_t qrSize = hasQr ? kQrSize : 0;
 
   const status_stack::Metrics stack{headlineHeight, lineHeight, gap, view.showProgress ? kProgressHeight : 0};
-  const status_stack::Content content{lineCount, qrSize, qrLineCount, view.showProgress};
   // The whole stack is centred as one block, so a two-line state and a
   // four-line state sit on the same middle rather than drifting up the screen.
   const fui::Rect body = screen.body();
+  if (hasQr && view.qrSize > 0) {
+    // A code the reader scans wants every pixel it can have, so the square is
+    // capped by the body rather than by the shared default.
+    qrSize = static_cast<int16_t>(std::min({view.qrSize, static_cast<int>(body.width), static_cast<int>(body.height)}));
+  }
+  const status_stack::Content content{lineCount, qrSize, qrLineCount, view.showProgress};
   int16_t y = static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, content));
 
   int placed = 0;
