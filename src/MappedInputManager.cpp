@@ -186,6 +186,11 @@ int MappedInputManager::tappedHintHardware() const {
   return kSlotHardware[slot];
 }
 
+bool MappedInputManager::isInHintBand(const int x, const int y) const {
+  const hint_band::Painted& painted = hint_band::lastPainted();
+  return painted.valid && hint_band::tappedSlot(painted.band, x, y, painted.labelled) >= 0;
+}
+
 bool MappedInputManager::wasRowTapped(int& item) const {
   if (!gpio.hasTouch()) return false;
   int x = 0;
@@ -194,8 +199,7 @@ bool MappedInputManager::wasRowTapped(int& item) const {
   // A tap that lands in the hint band belongs to that button, not to a row, even when a
   // list's rect runs under the band. Tested on geometry alone, so it holds whether or not
   // the band's own press has already been spent this frame.
-  const hint_band::Painted& painted = hint_band::lastPainted();
-  if (painted.valid && hint_band::tappedSlot(painted.band, x, y, painted.labelled) >= 0) return false;
+  if (isInHintBand(x, y)) return false;
   const int hit = row_hit::lastRows().itemAt(x, y);
   if (hit == row_hit::kNoItem) return false;
   item = hit;

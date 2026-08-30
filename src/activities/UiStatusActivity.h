@@ -179,6 +179,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // are and what choosing one means.
   int listSelection() const { return listNav_.selected; }
   void setListSelection(int index);
+  // Same, for a caller already holding the render lock: the lock is a plain
+  // mutex, so taking it twice on one task hangs the reader.
+  void setListSelectionLocked(int index);
   virtual void onListActivated(int index) {}
 
   int choiceIndex() const { return choiceIndex_; }

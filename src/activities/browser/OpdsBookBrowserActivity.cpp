@@ -131,6 +131,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
   const bool feedTruncated = parser.truncated();
+  // The vector the rows will point into is built before the lock below; nothing
+  // draws from it until that lock publishes the rows with it.
   entries = std::move(parser).getEntries();
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
@@ -144,19 +146,25 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
-  refreshRows();
-  setListSelection(0);
-  state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
-  if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
+  {
+    // One lock over the whole swap: the rows, the selection they are indexed by
+    // and the state that says to draw them all have to change together, or the
+    // render task can paint a row list against the wrong feed.
+    RenderLock lock(*this);
+    refreshRows();
+    setListSelectionLocked(0);
+    state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
+    if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
+  }
   requestUpdate();
 }
 
 void OpdsBookBrowserActivity::releaseEntries() {
+  // Under the render lock: the rows the render task is walking point into these
+  // two vectors, so freeing them from this task mid-paint reads freed memory.
+  RenderLock lock(*this);
   std::vector<OpdsEntry>().swap(entries);
-  // The rows point into the entries, and every path that releases them can
-  // reach a paint before the next feed lands.
   rows.clear();
-  rowLabels.clear();
 }
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
@@ -352,23 +360,22 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
 // --- Rows and screen ---
 
 void OpdsBookBrowserActivity::refreshRows() {
-  rowLabels.clear();
-  rows.clear();
-  rowLabels.reserve(entries.size());
-  for (const OpdsEntry& entry : entries) {
-    // A feed mixes places to go with books to take: the arrow says which is
-    // which, and a book carries its author on the same line.
-    std::string label = entry.type == OpdsEntryType::NAVIGATION ? "> " + entry.title : entry.title;
-    if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) label += " - " + entry.author;
-    rowLabels.push_back(std::move(label));
-  }
-
-  // Second pass: the strings must stop moving before their addresses are taken.
-  rows.resize(rowLabels.size());
-  for (size_t i = 0; i < rowLabels.size(); ++i) {
+  // The rows borrow the feed's own strings rather than copying them: a large
+  // catalogue already costs what its titles cost, and a second copy of every
+  // title and author is heap this device does not have with WiFi and TLS up.
+  rows.resize(entries.size());
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const OpdsEntry& entry = entries[i];
     rows[i] = freeink::ui::ListItem{};
-    rows[i].label = rowLabels[i].c_str();
+    rows[i].label = entry.title.c_str();
     rows[i].actionValue = static_cast<int16_t>(i);
+    // A feed mixes places to go with books to take. The arrow marks the first,
+    // and a book carries its author under the title.
+    if (entry.type == OpdsEntryType::NAVIGATION) {
+      rows[i].value = ">";
+    } else if (!entry.author.empty()) {
+      rows[i].subtitle = entry.author.c_str();
+    }
   }
 }
 
@@ -407,8 +414,15 @@ UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
       }
       view.listItems = rows.data();
       view.listCount = static_cast<int>(rows.size());
-      view.confirmHint =
-          entries[listSelection()].type == OpdsEntryType::BOOK ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+      view.listHasSubtitle = true;
+      // The selection is clamped when the list is built, which is after this
+      // runs: on the first paint of a shorter feed it can still name a row that
+      // is no longer there.
+      {
+        const size_t selected = static_cast<size_t>(listSelection());
+        const bool isBook = selected < entries.size() && entries[selected].type == OpdsEntryType::BOOK;
+        view.confirmHint = isBook ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+      }
       // The search sits on the same button the list pages up with, and only on
       // the first row, which is where the reader lands when a feed opens.
       view.thirdHint = !searchTemplate.empty() && listSelection() == 0 ? tr(STR_SEARCH) : tr(STR_DIR_UP);

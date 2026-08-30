@@ -57,13 +57,17 @@ void UiStatusActivity::listTrampoline(const fui::ActionEvent& event, void* user)
   self->onListActivated(event.value);
 }
 
+void UiStatusActivity::setListSelectionLocked(const int index) {
+  listNav_.selected = index;
+  listNav_.follow(listCount_);
+}
+
 void UiStatusActivity::setListSelection(const int index) {
   {
     // The render task reads the nav mid-build; a press landing during a render
     // would otherwise tear the selection against the viewport.
     RenderLock lock(*this);
-    listNav_.selected = index;
-    listNav_.follow(listCount_);
+    setListSelectionLocked(index);
   }
   requestUpdate();
 }

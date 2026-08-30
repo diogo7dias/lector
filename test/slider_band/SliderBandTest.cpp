@@ -109,12 +109,18 @@ TEST(SliderBandFill, AValueOutsideTheRangeIsHeldAtTheEnds) {
   EXPECT_EQ(slider_band::fillWidthFor(layout, 900, 80, 200), layout.track.width);
 }
 
-TEST(SliderBandGeometry, TheHeaderBandCoversTheTitleAndItsPadding) {
+TEST(SliderBandGeometry, TheHeaderBandStartsBelowTheTopPadding) {
+  // Not at row 0: on a panel mounted behind a bezel the first rows are covered,
+  // which is what the top padding exists to clear. A band drawn from 0 puts its
+  // own title under the frame.
   const auto rect = slider_band::headerBandRect(kScreenWidth, 14, 45);
   EXPECT_EQ(rect.x, 0);
-  EXPECT_EQ(rect.y, 0);
+  EXPECT_EQ(rect.y, 14);
   EXPECT_EQ(rect.width, kScreenWidth);
-  EXPECT_EQ(rect.height, 59);
+  EXPECT_EQ(rect.height, 45);
   const auto layout = slider_band::forBand(rect.x, rect.y, rect.width, rect.height, kTextLineHeight);
   EXPECT_TRUE(layout.valid);
+  // Everything it draws sits inside the band, so nothing lands in the padding.
+  EXPECT_GE(layout.text.y, rect.y);
+  EXPECT_LE(layout.track.y + layout.track.height, rect.y + rect.height);
 }

@@ -59,11 +59,12 @@ inline Layout forBand(const int bandX, const int bandY, const int bandWidth, con
   return layout;
 }
 
-// The strip a screen's header actually paints: from the top of the panel down through the
-// header's own reserve. Screens hand this to SliderBand so an armed value covers the title
-// exactly, with nothing below it moving.
+// The strip a screen's header actually paints. It starts at the top padding, not at the
+// panel's first row: on a device whose glass sits behind a bezel those rows are covered,
+// and a band drawn from 0 puts its own title under the frame. Screens hand this to
+// SliderBand so an armed value covers the title exactly, with nothing below it moving.
 inline Rect headerBandRect(const int screenWidth, const int topPadding, const int headerHeight) {
-  return Rect{0, 0, screenWidth, topPadding + headerHeight};
+  return Rect{0, topPadding, screenWidth, headerHeight};
 }
 
 inline bool contains(const Rect& rect, const int x, const int y) {

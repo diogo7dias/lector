@@ -16,12 +16,17 @@
 
 class FileBrowserActivity final : public Activity {
  public:
-  // Books = standard reader browser; PickFirmware = filter to .bin only and return path via ActivityResult.
-  enum class Mode { Books, PickFirmware };
+  // Books = standard reader browser; PickFirmware = filter to .bin only and return path via
+  // ActivityResult; PickFolder = folders only, returning the folder the reader stops in, which
+  // is how a book is moved into one.
+  enum class Mode { Books, PickFirmware, PickFolder };
 
  private:
   // Deletion
   bool removeDirFile(const std::string& fullPath);
+  /** Opens the folder picker and moves `fullPath` into whatever it comes back with. */
+  void promptMoveToFolder(const std::string& fullPath);
+  void onMoveDestinationResult(const std::string& fullPath, const ActivityResult& result);
   // Opens the delete confirmation for one entry.
   void confirmDelete(const std::string& fullPath);
 

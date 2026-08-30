@@ -60,6 +60,11 @@ class MappedInputManager {
   // The list item a tap landed on, out of the rows the last list draw painted. False when
   // the tap was somewhere else, when nothing tappable was drawn, or on a button-only board.
   bool wasRowTapped(int& item) const;
+  // True when a logical point sits in the button-hint band. A tap there belongs
+  // to the button painted under it, so a screen that also routes taps of its own
+  // (every FreeInkUI screen) has to leave it alone, or the row under the band
+  // eats the press.
+  bool isInHintBand(int x, int y) const;
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   // Same query, but the contact is spent by asking: it answers true once and the rest of

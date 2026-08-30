@@ -33,10 +33,9 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
 
  private:
   BrowserState state = BrowserState::LOADING;
-  // The rows and the strings behind them: statusView() only hands out pointers,
-  // so both outlive it. Rebuilt with every feed.
+  // The rows borrow the entries' strings, so they are rebuilt whenever the feed
+  // is, and cleared whenever it is released.
   std::vector<freeink::ui::ListItem> rows;
-  std::vector<std::string> rowLabels;
   void refreshRows();
   std::vector<OpdsEntry> entries;
   std::vector<std::string> navigationHistory;

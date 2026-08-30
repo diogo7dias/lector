@@ -22,6 +22,7 @@
 #include "fontIds.h"
 #include "util/BookBadgeLabel.h"
 #include "util/BookCacheUtils.h"
+#include "util/BookFiling.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
 #include "util/BrowserRowFile.h"
@@ -109,7 +110,10 @@ void FileBrowserActivity::loadFiles() {
       if (gatherKeys && !pushSortKey(UINT32_MAX)) gatherKeys = false;
     } else {
       std::string_view filename{fileNameBuffer.get()};
-      if (mode == Mode::PickFirmware) {
+      if (mode == Mode::PickFolder) {
+        // Folders only: the picker exists to name a destination, and a file in the
+        // list would only be a row that cannot be chosen.
+      } else if (mode == Mode::PickFirmware) {
         // Firmware picker: only show .bin files.
         if (FsHelpers::checkFileExtension(filename, ".bin")) {
           if (!files.push(filename)) break;
@@ -594,12 +598,22 @@ void FileBrowserActivity::loop() {
 
       // A folder cannot be sent, so its hold still goes straight to the delete
       // confirmation rather than opening a pop-up with one usable row.
-      if (!isDirectory && nearby_file::isAcceptedFilename(entry)) {
-        static constexpr StrId actions[] = {StrId::STR_NEARBY_SEND_FILE, StrId::STR_DELETE};
-        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, 2, 0, [this, fullPath](const int choice) {
-          if (choice == 0) {
+      if (!isDirectory) {
+        // A folder is not sent anywhere and is not moved from here, so its hold goes
+        // straight to the delete confirmation rather than opening a pop-up.
+        const bool sendable = nearby_file::isAcceptedFilename(entry);
+        StrId actions[3];
+        int count = 0;
+        if (sendable) actions[count++] = StrId::STR_NEARBY_SEND_FILE;
+        actions[count++] = StrId::STR_MOVE_TO_FOLDER;
+        actions[count++] = StrId::STR_DELETE;
+        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, sendable](const int choice) {
+          const int adjusted = sendable ? choice : choice + 1;
+          if (adjusted == 0) {
             activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
                 renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
+          } else if (adjusted == 1) {
+            promptMoveToFolder(fullPath);
           } else {
             confirmDelete(fullPath);
           }
@@ -631,6 +645,16 @@ void FileBrowserActivity::loop() {
     }
     return;
   };
+
+  // The folder picker answers with the folder it is standing in, on the button whose
+  // label says so.
+  if (mode == Mode::PickFolder && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    ActivityResult res{FilePathResult{basepath}};
+    res.isCancelled = false;
+    setResult(std::move(res));
+    finish();
+    return;
+  }
 
   // A tapped row opens straight away, exactly as a short press on it would: the wrapped
   // list records the rect of each row it paints, so a two-line title answers over both
@@ -698,8 +722,8 @@ void FileBrowserActivity::loop() {
         }
 
         requestUpdate();
-      } else if (mode == Mode::PickFirmware) {
-        // Firmware picker at root: cancel back to caller instead of going home.
+      } else if (mode == Mode::PickFirmware || mode == Mode::PickFolder) {
+        // A picker at root: cancel back to the caller instead of going home.
         ActivityResult res;
         res.isCancelled = true;
         setResult(std::move(res));
@@ -786,9 +810,10 @@ void FileBrowserActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   std::string folderName =
-      (mode == Mode::PickFirmware)
-          ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
-          : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
+      (mode == Mode::PickFirmware)   ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
+      : (mode == Mode::PickFolder)   ? std::string(tr(STR_MOVE_TO_FOLDER))
+                                     : ((basepath == "/") ? std::string(tr(STR_SD_CARD))
+                                                          : basepath.substr(basepath.rfind('/') + 1));
   // A folder too big to list in full must say so. Showing a silently short listing
   // would read as missing files.
   if (files.truncated()) {
@@ -846,8 +871,12 @@ void FileBrowserActivity::render(RenderLock&&) {
       listEmpty ? ""
                 : (rowKindAt(selectedRow) != RowKind::Entry ? tr(STR_SELECT)
                                                             : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN)));
-  const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
-                                            listEmpty ? "" : tr(STR_DIR_DOWN));
+  const auto labels =
+      mode == Mode::PickFolder
+          ? mappedInput.mapLabels(backLabel, listEmpty ? "" : tr(STR_OPEN), tr(STR_MOVE_HERE),
+                                  listEmpty ? "" : tr(STR_DIR_DOWN))
+          : mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
+                                  listEmpty ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // The browser is commonly reached straight from screens that paint only in FAST
@@ -860,6 +889,51 @@ void FileBrowserActivity::render(RenderLock&&) {
   } else {
     renderer.displayBuffer();
   }
+}
+
+void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
+  startActivityForResult(
+      std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", Mode::PickFolder),
+      [this, fullPath](const ActivityResult& result) { onMoveDestinationResult(fullPath, result); });
+}
+
+void FileBrowserActivity::onMoveDestinationResult(const std::string& fullPath, const ActivityResult& result) {
+  pendingFullRefresh = true;
+  if (result.isCancelled) {
+    requestUpdate();
+    return;
+  }
+  const auto* destination = std::get_if<FilePathResult>(&result.data);
+  if (!destination) {
+    requestUpdate();
+    return;
+  }
+
+  std::string folder = destination->path;
+  if (folder.empty()) folder = "/";
+  // Strip the trailing slash: the filing helper composes the path itself, and the
+  // root is spelt as the empty folder there.
+  while (folder.size() > 1 && folder.back() == '/') folder.pop_back();
+  const std::string folderArg = folder == "/" ? std::string(bookfiling::ROOT_FOLDER) : folder;
+
+  const std::string sourceFolder = fullPath.substr(0, fullPath.find_last_of('/'));
+  if ((sourceFolder.empty() ? "/" : sourceFolder) == folder) {
+    // Already in that folder: a rename onto itself is not a move.
+    requestUpdate();
+    return;
+  }
+
+  {
+    // Same race as the delete path: the listing changes under the render task.
+    RenderLock lock(*this);
+    // One helper does the whole move: the file, its cache directory, its recents
+    // entry and the resume pointer, which are all keyed by the old path.
+    const std::string target = bookfiling::buildFolderDestination(fullPath, folderArg.c_str());
+    bookfiling::moveBookToFolder(fullPath, target);
+    loadFiles();
+    if (selectorIndex >= static_cast<size_t>(totalRowCount())) selectorIndex = 0;
+  }
+  requestUpdate();
 }
 
 size_t FileBrowserActivity::findEntryRow(const std::string& name) const {
