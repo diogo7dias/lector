@@ -7,6 +7,7 @@
 #include "components/ComparisonLayout.h"
 #include "components/SignalMeter.h"
 #include "components/StatusStack.h"
+#include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "util/QrUtils.h"
 
@@ -71,7 +72,7 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
     buildComparison(screen, view);
     return;
   }
-  if (view.sections[0].heading != nullptr) {
+  if (view.sections[0].heading != nullptr || view.sections[0].paragraph != nullptr) {
     buildSections(screen, view);
     return;
   }
@@ -188,12 +189,32 @@ void UiStatusActivity::buildSections(UiScreen& screen, const StatusView& view) {
 
   for (size_t s = 0; s < MAX_SECTIONS; ++s) {
     const Section& section = view.sections[s];
-    if (section.heading == nullptr || section.heading[0] == '\0') continue;
+    const bool hasHeading = section.heading != nullptr && section.heading[0] != '\0';
+    const bool hasParagraph = section.paragraph != nullptr && section.paragraph[0] != '\0';
+    if (!hasHeading && !hasParagraph) continue;
     if (y > body.y) y = static_cast<int16_t>(y + gap * 2);
-    fui::TextStyle heading = theme.bodyText;
-    heading.align = fui::TextAlign::Left;
-    target.text(fui::Rect{body.x, y, body.width, headingHeight}, section.heading, heading);
-    y = static_cast<int16_t>(y + headingHeight + gap);
+    if (hasHeading) {
+      fui::TextStyle heading = theme.bodyText;
+      heading.align = fui::TextAlign::Left;
+      target.text(fui::Rect{body.x, y, body.width, headingHeight}, section.heading, heading);
+      y = static_cast<int16_t>(y + headingHeight + gap);
+    }
+
+    if (hasParagraph) {
+      // The block is measured with the same wrap the target draws with, so the
+      // next section starts under the last line rather than under a reserved
+      // worst case.
+      const uint8_t maxLines = static_cast<uint8_t>(section.paragraphMaxLines > 0 ? section.paragraphMaxLines : 1);
+      const int drawn = static_cast<int>(
+          renderer.wrappedText(uiScaleSpec().smallFontId, section.paragraph, body.width, maxLines).size());
+      const int16_t height = static_cast<int16_t>(lineHeight * (drawn > 0 ? drawn : 1));
+      fui::TextStyle style = theme.smallText;
+      style.align = fui::TextAlign::Left;
+      style.maxLines = maxLines;
+      target.text(fui::Rect{body.x, y, body.width, height}, section.paragraph, style);
+      y = static_cast<int16_t>(y + height);
+      continue;
+    }
 
     // With a code, the section's lines stand beside it rather than under it: the
     // address is what the code says, so the two belong on one row.

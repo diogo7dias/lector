@@ -56,6 +56,11 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   struct Section {
     const char* heading = nullptr;  // bold, in the body face
     std::array<const char*, MAX_LINES> lines{};
+    // A block of prose the base wraps to the section's width, for a screen
+    // whose text is a report rather than a set of prepared lines (the crash
+    // reason, and the sentence explaining it). Used instead of `lines`.
+    const char* paragraph = nullptr;
+    int paragraphMaxLines = 4;
     // A QR square drawn at the left of the section, with the lines beside it
     // instead of under it. This is what a phone is pointed at, so it is part of
     // the section rather than a separate block.
