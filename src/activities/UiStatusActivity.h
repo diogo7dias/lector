@@ -3,7 +3,10 @@
 #include <array>
 
 #include "activities/Activity.h"
+#include <HalDisplay.h>
+
 #include "components/UiAppHost.h"
+#include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
 
 // Base for the screens that report on something rather than list it: a clear, a
 // sweep, a sync, a firmware write. Every one of them is the same shape — a
@@ -41,9 +44,16 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   struct Section {
     const char* heading = nullptr;  // bold, in the body face
     std::array<const char*, MAX_LINES> lines{};
+    // A QR square drawn at the left of the section, with the lines beside it
+    // instead of under it. This is what a phone is pointed at, so it is part of
+    // the section rather than a separate block.
+    const char* qrPayload = nullptr;
   };
 
   struct StatusView {
+    // A state whose screen belongs to a subactivity: the base leaves the buffer
+    // exactly as it found it.
+    bool hidden = false;
     const char* title = nullptr;  // header band; nullptr draws no header
     // Sub-header band under the title, for the network a screen is reachable
     // on. Left is the name, right the address.
@@ -53,6 +63,16 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     std::array<Section, MAX_SECTIONS> sections{};
     // Drawn over the bar, for a transfer that can say what it is moving.
     const char* progressLabel = nullptr;
+    // Centred shape only: a code under the lines, with its own lines (the
+    // address it carries) under that.
+    const char* qrPayload = nullptr;
+    std::array<const char*, MAX_LINES> qrLines{};
+    // Link strength at the right of the sub-header band. Off unless the screen
+    // sets showSignal; bars run 0 to 4, and a screen with no link asks for the
+    // cross by leaving connected false.
+    bool showSignal = false;
+    bool signalConnected = false;
+    int signalBars = 0;
     // A bar under the lines. Left off, the lines centre on their own.
     bool showProgress = false;
     int progressValue = 0;
@@ -61,6 +81,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // working screen says no button does anything yet.
     const char* backHint = nullptr;     // nullptr = "Back"
     const char* confirmHint = nullptr;  // nullptr = blank
+    // A screen that is nearly all QR asks for a full pass: a differential
+    // waveform leaves the old pattern as speckle under a dense block of black.
+    HalDisplay::RefreshMode refresh = HalDisplay::FAST_REFRESH;
   };
 
   UiStatusActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
@@ -87,8 +110,21 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // left-aligned sections for one that gives instructions.
   void buildCentredLines(UiScreen& screen, const StatusView& view);
   void buildSections(UiScreen& screen, const StatusView& view);
+  // QR codes are bitmaps rather than FreeInkUI elements, so the body layout
+  // records where they go and render() paints them into the same buffer once
+  // the app has drawn the text around them. Cleared at the start of every
+  // build, so a state without a code never inherits the last one's square.
+  struct QrPlacement {
+    Rect rect{};
+    const char* payload = nullptr;
+  };
+  std::array<QrPlacement, MAX_SECTIONS> qrPlacements_{};
+  void placeQr(size_t index, const Rect& rect, const char* payload);
+  void drawQrCodes() const;
+  // Link strength at the right of the sub-header band, or a cross when the link
+  // is down.
+  void drawSignal(const StatusView& view, int bandRight, int bandBottom) const;
   static void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
 
- private:
   static void screenTrampoline(UiScreen& screen, void* user);
 };

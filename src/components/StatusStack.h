@@ -14,24 +14,38 @@ struct Metrics {
   int progressHeight = 0;  // 0 when the screen shows no bar
 };
 
-// The block's own height: the lines, the gaps between them, and the bar with a
-// double gap above it when there is one.
-inline int heightFor(const Metrics& metrics, const int lineCount, const bool showProgress) {
-  if (lineCount <= 0 && !showProgress) return 0;
+// What the block is made of, in drawing order: the lines, then a QR square with
+// its own lines under it, then the bar.
+struct Content {
+  int lineCount = 0;
+  int qrSize = 0;       // the square's side; 0 when the screen shows no code
+  int qrLineCount = 0;  // lines under the code (the address it encodes)
+  bool showProgress = false;
+};
+
+// The block's own height: every part, with a gap between lines and a double gap
+// before the code and before the bar, which are the two things that need air.
+inline int heightFor(const Metrics& metrics, const Content& content) {
   int height = 0;
-  for (int i = 0; i < lineCount; ++i) {
+  for (int i = 0; i < content.lineCount; ++i) {
     height += i == 0 ? metrics.headlineHeight : metrics.lineHeight;
     if (i > 0) height += metrics.gap;
   }
-  if (showProgress) height += metrics.gap * 2 + metrics.progressHeight;
+  if (content.qrSize > 0) {
+    if (height > 0) height += metrics.gap * 2;
+    height += content.qrSize;
+  }
+  for (int i = 0; i < content.qrLineCount; ++i) {
+    height += metrics.gap + metrics.lineHeight;
+  }
+  if (content.showProgress) height += metrics.gap * 2 + metrics.progressHeight;
   return height;
 }
 
 // The block's top, centred in the body. A block taller than the body starts at
 // the top of it rather than above it, so the headline is never cut off.
-inline int topFor(const Metrics& metrics, const int bodyY, const int bodyHeight, const int lineCount,
-                  const bool showProgress) {
-  const int height = heightFor(metrics, lineCount, showProgress);
+inline int topFor(const Metrics& metrics, const int bodyY, const int bodyHeight, const Content& content) {
+  const int height = heightFor(metrics, content);
   const int top = bodyY + (bodyHeight - height) / 2;
   return top < bodyY ? bodyY : top;
 }
