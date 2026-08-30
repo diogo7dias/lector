@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "activities/Activity.h"
+#include "components/KeyboardFieldLayout.h"
 #include "util/ButtonNavigator.h"
 
 enum class InputType { Text, Password, Url };
@@ -91,6 +92,9 @@ class KeyboardEntryActivity : public Activity {
   void onComplete(std::string text);
   void onCancel();
   bool cursorPositionFromPoint(int x, int y, size_t& position) const;
+  // The field's margins and its toggle reserve, read by both the paint and the
+  // tap test so the two cannot disagree about where the field is.
+  keyboard_field::Metrics fieldMetrics() const;
   std::string displayTextForCurrentState() const;
   // Advance of s[start, end) measured in place by temporarily null-terminating
   // at `end` — avoids a substr temporary per measurement.
