@@ -15,7 +15,7 @@
 #include "network/FirmwareFlasher.h"
 
 void SdFirmwareUpdateActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
   // Build-identity marker — confirms which firmware build owns the SD update flow.
   LOG_INF("FW", "SdFirmwareUpdateActivity build=%s %s recovery=%d", __DATE__, __TIME__, recoveryMode ? 1 : 0);
   state = State::PICKING;
@@ -157,8 +157,11 @@ void SdFirmwareUpdateActivity::performUpdate() {
     auto* self = static_cast<SdFirmwareUpdateActivity*>(ctx);
     self->writtenBytes = written;
     self->firmwareSize = total;
-    // immediate=true: wake the render task directly. We're in a tight sync
-    // loop so the main loop won't drain the requestedUpdate flag for us.
+    // Once per percent, and here rather than in the paint: a render that
+    // returned early to throttle itself also dropped repaints asked for by
+    // anything else. immediate=true wakes the render task directly, because
+    // this is a tight sync loop and the main loop will not drain the flag.
+    if (!self->percentAdvanced()) return;
     self->requestUpdate(true);
   };
 
@@ -172,6 +175,7 @@ void SdFirmwareUpdateActivity::performUpdate() {
     }
     self->writtenBytes = checked;
     self->firmwareSize = total;
+    if (!self->percentAdvanced()) return;
     self->requestUpdate(true);
   };
 
@@ -213,78 +217,65 @@ void SdFirmwareUpdateActivity::performUpdate() {
   ESP.restart();
 }
 
-void SdFirmwareUpdateActivity::loop() {
-  if (state == State::FAILED) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+bool SdFirmwareUpdateActivity::percentAdvanced() {
+  const unsigned int percent = firmwareSize > 0 ? static_cast<unsigned int>((writtenBytes * 100) / firmwareSize) : 0;
+  if (percent == lastRenderedPercent) return false;
+  lastRenderedPercent = percent;
+  return true;
+}
+
+UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
+  StatusView view;
+  view.title = recoveryMode ? tr(STR_RECOVERY_MODE) : tr(STR_SD_FIRMWARE_UPDATE);
+  switch (state) {
+    case State::VALIDATING:
+      view.lines = {tr(STR_VALIDATING_FIRMWARE), nullptr, nullptr, nullptr};
+      view.backHint = "";
+      break;
+    case State::UPDATING:
+    case State::VERIFYING:
+      // The readback pass says so rather than leaving the write bar parked at
+      // 100% while it runs.
+      view.lines = {state == State::VERIFYING ? tr(STR_FIRMWARE_CHECKING) : tr(STR_UPDATING),
+                    tr(STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF), nullptr, nullptr};
+      view.showProgress = true;
+      view.progressValue = static_cast<int>(writtenBytes);
+      view.progressMax = firmwareSize > 0 ? static_cast<int>(firmwareSize) : 1;
+      view.backHint = "";
+      break;
+    case State::SUCCESS:
+      view.lines = {tr(STR_UPDATE_COMPLETE), tr(STR_RESTARTING_HINT), nullptr, nullptr};
+      view.backHint = "";
+      break;
+    case State::FAILED:
+      view.lines = {tr(STR_UPDATE_FAILED), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr, nullptr};
+      break;
+    case State::PICKING:
+    case State::CONFIRMING:
+      // The picker and the confirmation are their own activities. In recovery
+      // mode there is a hint behind them, because that is the whole screen a
+      // reader booting into recovery sees first.
       if (recoveryMode) {
-        // Go back to picker so user can try a different .bin
-        state = State::PICKING;
-        launchPicker();
-        return;
+        view.lines = {tr(STR_RECOVERY_MODE_HINT), nullptr, nullptr, nullptr};
+        view.backHint = "";
+      } else {
+        view.hidden = true;
       }
-      finish();
-    }
+      break;
   }
+  return view;
 }
 
-void SdFirmwareUpdateActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
-
-  const char* headerText = recoveryMode ? tr(STR_RECOVERY_MODE) : tr(STR_SD_FIRMWARE_UPDATE);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, headerText);
-
-  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (pageHeight - lineHeight) / 2;
-
-  if (state == State::VALIDATING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_VALIDATING_FIRMWARE));
-  } else if (state == State::UPDATING || state == State::VERIFYING) {
-    // Throttle redraws to once per percent.
-    const unsigned int pct = firmwareSize > 0 ? static_cast<unsigned int>((writtenBytes * 100) / firmwareSize) : 0;
-    if (pct == lastRenderedPercent) {
-      return;
-    }
-    lastRenderedPercent = pct;
-
-    renderer.drawCenteredText(UI_10_FONT_ID, top,
-                              state == State::VERIFYING ? tr(STR_FIRMWARE_CHECKING) : tr(STR_UPDATING), true,
-                              EpdFontFamily::REGULAR);
-
-    int y = top + lineHeight + metrics.verticalSpacing;
-    GUI.drawProgressBar(
-        renderer,
-        Rect{metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
-        static_cast<int>(pct), 100);
-    y += metrics.progressBarHeight + metrics.verticalSpacing;
-    // Percent label is drawn by BaseTheme::drawProgressBar; this slot is left intentionally empty
-    // so the do-not-power-off line below stays at the same Y as before.
-    y += lineHeight + metrics.verticalSpacing;
-    renderer.drawCenteredText(UI_10_FONT_ID, y, tr(STR_FIRMWARE_UPDATE_DO_NOT_POWER_OFF));
-  } else if (state == State::SUCCESS) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_COMPLETE), true, EpdFontFamily::REGULAR);
-    const int hintY = top + lineHeight + metrics.verticalSpacing;
-    const Rect hintBounds{metrics.contentSidePadding, hintY, pageWidth - metrics.contentSidePadding * 2,
-                          pageHeight - hintY};
-    UITheme::drawCenteredWrappedText(renderer, hintBounds, UI_10_FONT_ID, tr(STR_RESTARTING_HINT), 3, true,
-                                     EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
-  } else if (state == State::FAILED) {
-    renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_UPDATE_FAILED), true, EpdFontFamily::REGULAR);
-    if (!errorMessage.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, top + lineHeight + metrics.verticalSpacing, errorMessage.c_str());
-    }
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else {
-    // PICKING / CONFIRMING: a sub-activity is on top, nothing to draw.
-    if (recoveryMode) {
-      renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_RECOVERY_MODE_HINT));
-    }
+// Either button leaves a failure: in recovery mode back to the picker, because
+// a reader with no other way in has to be able to try a different image.
+void SdFirmwareUpdateActivity::onBackButton() {
+  if (state != State::FAILED) return;
+  if (recoveryMode) {
+    state = State::PICKING;
+    launchPicker();
+    return;
   }
-
-  renderer.displayBuffer();
+  finish();
 }
+
+void SdFirmwareUpdateActivity::onConfirmButton() { onBackButton(); }

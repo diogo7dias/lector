@@ -1,10 +1,10 @@
 #pragma once
 
+#include <HalDisplay.h>
+
 #include <array>
 
 #include "activities/Activity.h"
-#include <HalDisplay.h>
-
 #include "components/UiAppHost.h"
 #include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
 
@@ -27,8 +27,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
  protected:
   // The on-screen button, when a subclass offers one. Subclass actions start
   // at ACTION_USER.
-  static constexpr freeink::ui::ActionId ACTION_PRIMARY = 1;
-  static constexpr freeink::ui::ActionId ACTION_USER = 2;
+  static constexpr freeink::ui::ActionId ACTION_ACCEPT = 1;
+  static constexpr freeink::ui::ActionId ACTION_CANCEL = 2;
+  static constexpr freeink::ui::ActionId ACTION_USER = 3;
 
   // At most four lines, which is what the wordiest screen (the clear-cache
   // warning) needs. The first is the headline and is drawn in the body face;
@@ -81,6 +82,12 @@ class UiStatusActivity : public Activity, protected UiAppHost {
     // working screen says no button does anything yet.
     const char* backHint = nullptr;     // nullptr = "Back"
     const char* confirmHint = nullptr;  // nullptr = blank
+    // On-screen buttons across the foot of the body, for a choice a touch
+    // reader should not have to find on the hint band. They are the same two
+    // answers the keys give: the left one calls onBackButton(), the right one
+    // onConfirmButton().
+    const char* cancelLabel = nullptr;
+    const char* acceptLabel = nullptr;
     // A screen that is nearly all QR asks for a full pass: a differential
     // waveform leaves the old pattern as speckle under a dense block of black.
     HalDisplay::RefreshMode refresh = HalDisplay::FAST_REFRESH;
@@ -126,5 +133,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   void drawSignal(const StatusView& view, int bandRight, int bandBottom) const;
   static void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
 
+  void buildActions(UiScreen& screen, const StatusView& view);
+
   static void screenTrampoline(UiScreen& screen, void* user);
+  static void acceptTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  static void cancelTrampoline(const freeink::ui::ActionEvent& event, void* user);
 };

@@ -21,12 +21,22 @@ UiStatusActivity::UiStatusActivity(const char* name, GfxRenderer& renderer, Mapp
 void UiStatusActivity::onEnter() {
   Activity::onEnter();
   resetUi();
+  app.on(ACTION_ACCEPT, &UiStatusActivity::acceptTrampoline, this);
+  app.on(ACTION_CANCEL, &UiStatusActivity::cancelTrampoline, this);
   app.setScreen(&UiStatusActivity::screenTrampoline, this);
   requestUpdate();
 }
 
 void UiStatusActivity::screenTrampoline(UiScreen& screen, void* user) {
   static_cast<UiStatusActivity*>(user)->buildScreen(screen);
+}
+
+void UiStatusActivity::acceptTrampoline(const fui::ActionEvent&, void* user) {
+  static_cast<UiStatusActivity*>(user)->onConfirmButton();
+}
+
+void UiStatusActivity::cancelTrampoline(const fui::ActionEvent&, void* user) {
+  static_cast<UiStatusActivity*>(user)->onBackButton();
 }
 
 void UiStatusActivity::buildScreen(UiScreen& screen) {
@@ -42,11 +52,44 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
                                       static_cast<int16_t>(metrics.buttonHintsHeight),
                                       static_cast<int16_t>(metrics.contentSidePadding)});
 
+  // Taken from the bottom first, so neither shape lays text into the band the
+  // buttons stand in.
+  buildActions(screen, view);
+
   if (view.sections[0].heading != nullptr) {
     buildSections(screen, view);
     return;
   }
   buildCentredLines(screen, view);
+}
+
+void UiStatusActivity::buildActions(UiScreen& screen, const StatusView& view) {
+  const bool hasCancel = view.cancelLabel != nullptr && view.cancelLabel[0] != '\0';
+  const bool hasAccept = view.acceptLabel != nullptr && view.acceptLabel[0] != '\0';
+  if (!hasCancel && !hasAccept) return;
+
+  const auto& theme = screen.theme();
+  const int16_t height = static_cast<int16_t>(theme.rowHeight + theme.spaceSm * 2);
+  const fui::Rect band = screen.takeBottom(height, theme.spaceSm);
+  const int16_t gap = theme.spaceSm;
+  const int16_t width = hasCancel && hasAccept ? static_cast<int16_t>((band.width - gap) / 2) : band.width;
+
+  fui::ButtonProps props;
+  props.text = theme.bodyText;
+  props.styles = theme.button;
+  props.minTouchSize = screen.frame().device().minTouchSize;
+  props.radius = static_cast<uint8_t>(theme.controlRadius);
+  if (hasCancel) {
+    props.label = view.cancelLabel;
+    props.action = ACTION_CANCEL;
+    screen.button(props, fui::Rect{band.x, band.y, width, band.height});
+  }
+  if (hasAccept) {
+    props.label = view.acceptLabel;
+    props.action = ACTION_ACCEPT;
+    const int16_t x = hasCancel ? static_cast<int16_t>(band.x + band.width - width) : band.x;
+    screen.button(props, fui::Rect{x, band.y, width, band.height});
+  }
 }
 
 void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& view) {
@@ -218,6 +261,12 @@ void UiStatusActivity::drawProgress(UiScreen& screen, const StatusView& view, co
 
 void UiStatusActivity::loop() {
   if (handleCustomInput()) return;
+
+  // The screen's own buttons, when it drew any: the interaction table the last
+  // render published is what a tap is measured against.
+  const auto route = UiAppHost::routeTouch(mappedInput);
+  if (route.routed && app.invalidated()) requestUpdate();
+  if (route) return;
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBackButton();
