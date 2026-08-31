@@ -104,6 +104,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 58
+
+Closing a child block no longer reapplies its parent's vertical margins and padding.
+The binary layout is unchanged; changed paragraph spacing requires cached pages to rebuild.
+
 ### Version 57
 
 Justification now distributes the integer-division remainder across eligible gaps.
@@ -209,7 +214,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 53
+#define EXPECTED_VERSION 58
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256

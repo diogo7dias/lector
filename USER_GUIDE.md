@@ -839,6 +839,7 @@ other numbers in Settings use the same band.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Hyphenation**.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
+  When a nested block ends, the enclosing block's top and bottom spacing is not added again.
 - **Text Anti-Aliasing** — smoother edges, slightly slower page turns.
 - **Debug Layout Borders** — draws the layout boxes; a diagnostic, not a reading feature.
 
