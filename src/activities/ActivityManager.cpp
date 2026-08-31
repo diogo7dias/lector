@@ -3,18 +3,22 @@
 #include <FontCacheManager.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
+#include <I18n.h>
 #include <PerfLog.h>
 #include <PerfStats.h>
 #include <esp_random.h>
 
 #include <algorithm>
+#include <optional>
 
+#include "ActivityBusyLabel.h"
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
+#include "components/BusyBanner.h"
 #include "components/RowHitTest.h"
 #include "dev/LockLabActivity.h"
 #include "home/CrashActivity.h"
@@ -50,15 +54,14 @@ StrId bookOrderLabel(const uint8_t order) {
 // sets; the rest is what you would want where you are. In a book that is the two things
 // about this book you change most; outside one it is getting back into a book, or finding
 // a different one.
-constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH,
-                                       CrossPointSettings::LP_MENU_ROTATE,
+constexpr uint8_t IN_BOOK_ACTIONS[] = {CrossPointSettings::LP_MENU_FORCE_REFRESH, CrossPointSettings::LP_MENU_ROTATE,
                                        CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR,
                                        CrossPointSettings::LP_MENU_READER_SETTINGS};
 
 constexpr uint8_t OUT_OF_BOOK_ACTIONS[] = {
-    CrossPointSettings::LP_MENU_FORCE_REFRESH, CrossPointSettings::LP_MENU_ROTATE,
+    CrossPointSettings::LP_MENU_FORCE_REFRESH,    CrossPointSettings::LP_MENU_ROTATE,
     CrossPointSettings::LP_MENU_CONTINUE_READING, CrossPointSettings::LP_MENU_RANDOM_BOOK,
-    CrossPointSettings::LP_MENU_SEARCH, CrossPointSettings::LP_MENU_SETTINGS};
+    CrossPointSettings::LP_MENU_SEARCH,           CrossPointSettings::LP_MENU_SETTINGS};
 
 }  // namespace
 
@@ -100,7 +103,8 @@ void ActivityManager::buildLightPanelContext(light_panel::Context& context) {
 
   const bool inBook = isBookContext();
   const uint8_t* actions = inBook ? IN_BOOK_ACTIONS : OUT_OF_BOOK_ACTIONS;
-  const int count = inBook ? static_cast<int>(std::size(IN_BOOK_ACTIONS)) : static_cast<int>(std::size(OUT_OF_BOOK_ACTIONS));
+  const int count =
+      inBook ? static_cast<int>(std::size(IN_BOOK_ACTIONS)) : static_cast<int>(std::size(OUT_OF_BOOK_ACTIONS));
   context.actionCount = std::min(count, light_panel::kMaxActions);
   for (int i = 0; i < context.actionCount; ++i) context.actions[i] = actions[i];
 }
@@ -228,6 +232,19 @@ void ActivityManager::loop() {
   // keyboard, on one press.
   if (pendingAction != PendingAction::None) mappedInput.suppressHeldButtonRelease();
 
+  // One strip for the whole transition, armed and not drawn. A screen change that
+  // completes quickly costs nothing; one that spends its time in onExit(), in a
+  // constructor or in onEnter() gets the strip the moment it drags past the
+  // banner's delay, which is the only way the user learns the press was taken.
+  // Screens with their own slow steps still nest their own banners underneath.
+  std::optional<BusyBanner> transitionBanner;
+  if (pendingAction != PendingAction::None) {
+    const std::string& destination = pendingTransitionName();
+    if (activity_busy::wantsBanner(destination)) {
+      transitionBanner.emplace(renderer, I18n::getInstance().get(activity_busy::labelFor(destination)));
+    }
+  }
+
   while (pendingAction != PendingAction::None) {
     if (pendingAction == PendingAction::Pop) {
       RenderLock lock;
@@ -316,6 +333,13 @@ void ActivityManager::loop() {
       xTaskNotify(renderTaskHandle, 1, eIncrement);
     }
   }
+}
+
+const std::string& ActivityManager::pendingTransitionName() const {
+  static const std::string kHome = "Home";
+  if (pendingActivity) return pendingActivity->name;
+  if (!stackActivities.empty()) return stackActivities.back()->name;
+  return kHome;
 }
 
 void ActivityManager::exitActivity(const RenderLock& lock) {

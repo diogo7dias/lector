@@ -17,6 +17,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BusyTick.h"
 
 namespace fui = freeink::ui;
 
@@ -77,6 +78,7 @@ void InstalledFontsActivity::loadFamilies() {
     // is opened here. It is a handful of files per family and the screen is
     // already waiting on the card scan.
     for (const auto& face : info.files) {
+      busy::tick();
       family.facePaths.push_back(face.path);
       HalFile file;
       // No file.close(): DESTRUCTOR_CLOSES_FILE=1 closes it at the end of the
