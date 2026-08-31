@@ -9,8 +9,9 @@
 
 #include "CrossPointSettings.h"
 #include "MappedInputManager.h"
+#include "components/ListChrome.h"
+#include "components/OffsetFieldRow.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 
 namespace {
 constexpr uint8_t MAX_POS_HOURS = 14;
@@ -48,9 +49,55 @@ void decodeOffset(uint8_t biased, uint8_t& sign, uint8_t& hours, uint8_t& quarte
 
 void ClockOffsetActivity::onEnter() {
   Activity::onEnter();
+  resetUi();
+  app.on(ACTION_FIELD, &ClockOffsetActivity::fieldTrampoline, this);
+  app.setScreen(&ClockOffsetActivity::screenTrampoline, this);
   loadFromSettings();
   activeField = FIELD_HOURS;
+  refreshFieldText();
+  refreshPreview();
   requestUpdate();
+}
+
+void ClockOffsetActivity::screenTrampoline(UiScreen& screen, void* user) {
+  static_cast<ClockOffsetActivity*>(user)->buildScreen(screen);
+}
+
+void ClockOffsetActivity::fieldTrampoline(const freeink::ui::ActionEvent& event, void* user) {
+  static_cast<ClockOffsetActivity*>(user)->onFieldTapped(event.value);
+}
+
+// A tap moves the edit to the field it landed on; a tap on the field already
+// being edited steps it, so a touch alone can set the offset.
+void ClockOffsetActivity::onFieldTapped(const int field) {
+  if (field < 0 || field >= FIELD_COUNT) return;
+  if (activeField == static_cast<Field>(field)) {
+    adjustActiveField(+1);
+  } else {
+    activeField = static_cast<Field>(field);
+  }
+  refreshFieldText();
+  refreshPreview();
+  requestUpdate();
+}
+
+void ClockOffsetActivity::refreshFieldText() {
+  signText[0] = sign == 1 ? '-' : '+';
+  snprintf(hoursText, sizeof(hoursText), "%d", hours);
+  snprintf(minutesText, sizeof(minutesText), "%02d", minutesQuarter * MINUTES_PER_QUARTER);
+}
+
+void ClockOffsetActivity::refreshPreview() {
+  previewLine.clear();
+  if (!halClock.isAvailable()) return;
+  char timeBuf[9];
+  const uint8_t encoded = encodeOffset(sign, hours, minutesQuarter);
+  if (!halClock.formatTime(timeBuf, sizeof(timeBuf), encoded, SETTINGS.clockFormat == 1)) return;
+  // 24 bytes did not even hold the label itself once translated: STR_CURRENT_TIME
+  // is 26 bytes in Russian, 24 in Arabic and Ukrainian. See ClockSyncActivity.
+  char preview[64];
+  snprintf(preview, sizeof(preview), "%s %s", tr(STR_CURRENT_TIME), timeBuf);
+  previewLine = preview;
 }
 
 void ClockOffsetActivity::onExit() {
@@ -110,6 +157,10 @@ void ClockOffsetActivity::adjustActiveField(int delta) {
 }
 
 void ClockOffsetActivity::loop() {
+  const auto route = UiAppHost::routeTouch(mappedInput);
+  if (route.routed && app.invalidated()) requestUpdate();
+  if (route) return;
+
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     finish();
     return;
@@ -121,97 +172,116 @@ void ClockOffsetActivity::loop() {
     return;
   }
 
-  buttonNavigator.onNextStep([this] {
-    adjustActiveField(+1);
+  const auto step = [this](const int delta) {
+    adjustActiveField(delta);
+    refreshFieldText();
+    refreshPreview();
     requestUpdate();
-  });
-  buttonNavigator.onPreviousStep([this] {
-    adjustActiveField(-1);
-    requestUpdate();
-  });
-  buttonNavigator.onNextContinuous([this] {
-    adjustActiveField(+1);
-    requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this] {
-    adjustActiveField(-1);
-    requestUpdate();
-  });
+  };
+  buttonNavigator.onNextStep([&step] { step(+1); });
+  buttonNavigator.onPreviousStep([&step] { step(-1); });
+  buttonNavigator.onNextContinuous([&step] { step(+1); });
+  buttonNavigator.onPreviousContinuous([&step] { step(-1); });
+}
+
+void ClockOffsetActivity::buildScreen(UiScreen& screen) {
+  const auto& theme = screen.theme();
+  auto& target = screen.frame().target();
+  const auto& metrics = UITheme::getInstance().getMetrics();
+
+  screen.setContentMargin(freeink::ui::Insets{
+      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing),
+      static_cast<int16_t>(metrics.contentSidePadding), static_cast<int16_t>(metrics.buttonHintsHeight),
+      static_cast<int16_t>(metrics.contentSidePadding)});
+
+  freeink::ui::TextStyle bodyStyle = theme.bodyText;
+  bodyStyle.align = freeink::ui::TextAlign::Left;
+  const auto widthOf = [&](const char* text) { return target.measureText(bodyStyle.font, text, bodyStyle).width; };
+
+  // Each box is sized for the widest value it can hold, so stepping through the
+  // values never moves the row.
+  const int padding = theme.spaceMd;
+  offset_field_row::Widths widths;
+  widths.label = widthOf("UTC");
+  widths.sign = std::max(widthOf("+"), widthOf("-")) + padding * 2;
+  widths.hours = std::max(widthOf("14"), widthOf("12")) + padding * 2;
+  widths.colon = widthOf(":");
+  widths.minutes = std::max({widthOf("00"), widthOf("15"), widthOf("30"), widthOf("45")}) + padding * 2;
+  const offset_field_row::Gaps gaps{theme.spaceLg, theme.spaceMd, theme.spaceSm};
+
+  const freeink::ui::Rect body = screen.body();
+  const int16_t fieldHeight = std::max(theme.rowHeight, screen.frame().device().minTouchSize);
+  const int16_t lineHeight = target.lineHeight(theme.smallText.font);
+  // The row and its preview centre together, so the block does not sit high on
+  // the screen when the clock has nothing to preview.
+  const int blockHeight = fieldHeight + (previewLine.empty() ? 0 : theme.spaceLg + lineHeight);
+  const int16_t rowY = static_cast<int16_t>(body.y + std::max(0, (body.height - blockHeight) / 2));
+
+  const offset_field_row::Row row = offset_field_row::layout(widths, gaps, body.x, body.width, rowY, fieldHeight);
+
+  freeink::ui::TextStyle centred = bodyStyle;
+  centred.align = freeink::ui::TextAlign::Center;
+  target.text(freeink::ui::Rect{static_cast<int16_t>(row.label.x), static_cast<int16_t>(row.label.y),
+                                static_cast<int16_t>(row.label.width), static_cast<int16_t>(row.label.height)},
+              "UTC", centred);
+  target.text(freeink::ui::Rect{static_cast<int16_t>(row.colon.x), static_cast<int16_t>(row.colon.y),
+                                static_cast<int16_t>(row.colon.width), static_cast<int16_t>(row.colon.height)},
+              ":", centred);
+
+  // Only the X4 Pro has a touch panel; a field there is a button to tap, and it
+  // is filled when it is the one being changed. The keys-only boards keep the
+  // pair of outlined fields they always had, the active one greyed and double
+  // ruled rather than reversed.
+  freeink::ui::StyleSet fieldStyles = theme.button;
+  if (!mappedInput.hasTouch()) {
+    fieldStyles = freeink::ui::defaultButtonStyles();
+    fieldStyles.normal.background = freeink::ui::Paint::solid(freeink::ui::Color::White);
+    fieldStyles.normal.foreground = freeink::ui::Paint::solid(freeink::ui::Color::Black);
+    fieldStyles.normal.border = freeink::ui::Paint::solid(freeink::ui::Color::Black);
+    fieldStyles.normal.borderWidth = 1;
+    fieldStyles.selected = fieldStyles.normal;
+    fieldStyles.selected.background = freeink::ui::Paint::dither(freeink::ui::Color::LightGray);
+    fieldStyles.selected.borderWidth = 2;
+    fieldStyles.focused = fieldStyles.selected;
+    fieldStyles.active = fieldStyles.selected;
+  }
+
+  const auto field = [&](const offset_field_row::Rect& rect, const char* text, const Field which) {
+    freeink::ui::ButtonProps props;
+    props.label = text;
+    props.action = ACTION_FIELD;
+    props.value = static_cast<int16_t>(which);
+    props.state = activeField == which ? freeink::ui::StateSelected : freeink::ui::StateNormal;
+    props.text = theme.bodyText;
+    props.styles = fieldStyles;
+    props.radius = static_cast<uint8_t>(theme.controlRadius);
+    props.minTouchSize = screen.frame().device().minTouchSize;
+    screen.button(props, freeink::ui::Rect{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y),
+                                           static_cast<int16_t>(rect.width), static_cast<int16_t>(rect.height)});
+  };
+  field(row.sign, signText, FIELD_SIGN);
+  field(row.hours, hoursText, FIELD_HOURS);
+  field(row.minutes, minutesText, FIELD_MINUTES);
+
+  // The wall clock the offset produces, so it can be checked against a watch.
+  if (!previewLine.empty()) {
+    freeink::ui::TextStyle preview = theme.smallText;
+    preview.align = freeink::ui::TextAlign::Center;
+    target.text(freeink::ui::Rect{body.x, static_cast<int16_t>(rowY + fieldHeight + theme.spaceLg), body.width,
+                                  lineHeight},
+                previewLine.c_str(), preview);
+  }
 }
 
 void ClockOffsetActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_CLOCK_UTC_OFFSET));
-
-  const int centreY = pageHeight / 2 - 40;
-  auto widthOf = [&](const char* s) { return renderer.getTextWidth(UI_10_FONT_ID, s, EpdFontFamily::REGULAR); };
-  constexpr int fieldPaddingX = 6;
-  constexpr int labelGap = 16;
-  constexpr int fieldGap = 12;
-  constexpr int colonGap = 5;
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int fieldHeight = lineHeight + 2;
-
-  char signStr[2] = {sign == 1 ? '-' : '+', '\0'};
-  char hoursStr[8];
-  snprintf(hoursStr, sizeof(hoursStr), "%d", hours);
-  char minutesStr[8];
-  snprintf(minutesStr, sizeof(minutesStr), "%02d", minutesQuarter * MINUTES_PER_QUARTER);
-
-  const int labelWidth = widthOf("UTC");
-  const int signBoxW = std::max(widthOf("+"), widthOf("-")) + fieldPaddingX * 2;
-  const int hoursBoxW = std::max(widthOf("14"), widthOf("12")) + fieldPaddingX * 2;
-  const int colonWidth = widthOf(":");
-  const int minutesBoxW = std::max({widthOf("00"), widthOf("15"), widthOf("30"), widthOf("45")}) + fieldPaddingX * 2;
-  const int totalWidth =
-      labelWidth + labelGap + signBoxW + fieldGap + hoursBoxW + colonGap + colonWidth + colonGap + minutesBoxW;
-
-  int x = (pageWidth - totalWidth) / 2;
-  renderer.drawText(UI_10_FONT_ID, x, centreY, "UTC", true, EpdFontFamily::REGULAR);
-  x += labelWidth + labelGap;
-
-  auto drawField = [&](const char* text, const int boxX, const int boxWidth, const Field field) {
-    const bool selected = activeField == field;
-    renderer.fillRectDither(boxX, centreY, boxWidth, fieldHeight, selected ? Color::LightGray : Color::White);
-    renderer.drawRect(boxX, centreY, boxWidth, fieldHeight, true);
-    if (selected) {
-      renderer.drawRect(boxX + 1, centreY + 1, boxWidth - 2, fieldHeight - 2, true);
-    }
-    const int textX = boxX + (boxWidth - widthOf(text)) / 2;
-    renderer.drawText(UI_10_FONT_ID, textX, centreY, text, true, EpdFontFamily::REGULAR);
-  };
-
-  drawField(signStr, x, signBoxW, FIELD_SIGN);
-  x += signBoxW + fieldGap;
-
-  drawField(hoursStr, x, hoursBoxW, FIELD_HOURS);
-  x += hoursBoxW + colonGap;
-
-  renderer.drawText(UI_10_FONT_ID, x, centreY, ":", true, EpdFontFamily::REGULAR);
-  x += colonWidth + colonGap;
-
-  drawField(minutesStr, x, minutesBoxW, FIELD_MINUTES);
-
-  // Live preview of the resulting wall-clock time, so users can verify against a watch.
-  if (halClock.isAvailable()) {
-    char timeBuf[9];
-    const uint8_t encoded = encodeOffset(sign, hours, minutesQuarter);
-    if (halClock.formatTime(timeBuf, sizeof(timeBuf), encoded, SETTINGS.clockFormat == 1)) {
-      // 24 bytes did not even hold the label itself once translated: STR_CURRENT_TIME
-      // is 26 bytes in Russian, 24 in Arabic and Ukrainian. See ClockSyncActivity.
-      char preview[64];
-      snprintf(preview, sizeof(preview), "%s %s", tr(STR_CURRENT_TIME), timeBuf);
-      renderer.drawCenteredText(UI_10_FONT_ID, centreY + 60, preview);
-    }
-  }
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_NEXT_FIELD), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  ListChrome chrome;
+  chrome.title = tr(STR_CLOCK_UTC_OFFSET);
+  chrome.confirmHint = tr(STR_NEXT_FIELD);
+  drawListChromeTop(renderer, chrome);
+  renderUi();
+  drawListChromeBottom(renderer, mappedInput, chrome);
 
   renderer.displayBuffer();
 }

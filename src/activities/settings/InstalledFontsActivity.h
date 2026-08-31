@@ -33,8 +33,7 @@ class InstalledFontsActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
-  void drawChrome() override;
-  void drawFooter() override;
+  ListChrome chrome() const override;
 
  private:
   /** One installed family, with the figures the list shows beside its name. */

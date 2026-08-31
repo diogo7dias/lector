@@ -2,25 +2,31 @@
 #include <Xtc.h>
 
 #include <memory>
+#include <vector>
 
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiListActivity.h"
 
-class XtcReaderChapterSelectionActivity final : public Activity {
+class XtcReaderChapterSelectionActivity final : public UiListActivity {
   std::shared_ptr<Xtc> xtc;
-  ButtonNavigator buttonNavigator;
   uint32_t currentPage = 0;
-  int selectorIndex = 0;
 
-  int getPageItems() const;
+  // The rows; buildScreen only hands out pointers into the chapter list, so
+  // the labels themselves live in the Xtc.
+  std::vector<freeink::ui::ListItem> rows;
+
   int findChapterIndexForPage(uint32_t page) const;
 
  public:
   explicit XtcReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                              const std::shared_ptr<Xtc>& xtc, uint32_t currentPage)
-      : Activity("XtcReaderChapterSelection", renderer, mappedInput), xtc(xtc), currentPage(currentPage) {}
+      : UiListActivity("XtcReaderChapterSelection", renderer, mappedInput), xtc(xtc), currentPage(currentPage) {}
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int listCount() const override;
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  void onBackButton() override;
+  const char* headerTitle() const override { return tr(STR_SELECT_CHAPTER); }
 };

@@ -147,11 +147,6 @@ std::string KOReaderSettingsActivity::statusFor(const int index) const {
 }
 
 void KOReaderSettingsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   values.assign(MENU_ITEMS, std::string());
   rows.assign(MENU_ITEMS, fui::ListItem{});
   for (int i = 0; i < MENU_ITEMS; ++i) {

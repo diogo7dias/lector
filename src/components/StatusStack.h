@@ -14,12 +14,14 @@ struct Metrics {
   int progressHeight = 0;  // 0 when the screen shows no bar
 };
 
-// What the block is made of, in drawing order: the lines, then a QR square with
-// its own lines under it, then the bar.
+// What the block is made of: the first line, the slider band under it, the
+// lines after it, then a QR square with its own lines, then the bar. Only the
+// total matters here — the draw decides the order.
 struct Content {
   int lineCount = 0;
   int qrSize = 0;       // the square's side; 0 when the screen shows no code
   int qrLineCount = 0;  // lines under the code (the address it encodes)
+  int sliderHeight = 0;  // the slider band's height; 0 when the screen has none
   bool showProgress = false;
 };
 
@@ -38,6 +40,7 @@ inline int heightFor(const Metrics& metrics, const Content& content) {
   for (int i = 0; i < content.qrLineCount; ++i) {
     height += metrics.gap + metrics.lineHeight;
   }
+  if (content.sliderHeight > 0) height += metrics.gap * 2 + content.sliderHeight;
   if (content.showProgress) height += metrics.gap * 2 + metrics.progressHeight;
   return height;
 }

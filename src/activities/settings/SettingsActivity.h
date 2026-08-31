@@ -7,11 +7,8 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
-#include "activities/Activity.h"
+#include "activities/UiGridActivity.h"
 #include "components/OptionPopup.h"
-#include "components/SettingsGrid.h"
-#include "components/SliderBand.h"
-#include "util/ButtonNavigator.h"
 
 enum class SettingType { TOGGLE, ENUM, ACTION, VALUE, STRING };
 
@@ -198,8 +195,7 @@ struct SettingInfo {
   }
 };
 
-class SettingsActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
+class SettingsActivity final : public UiGridActivity {
 
   // The screen is either the category hub or one category's grid. 121 settings in one
   // flat list is 61 grid rows; split four ways, a category is one or two screens, and the
@@ -218,23 +214,16 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo> readerSettings;
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
-  // isHeader per cell. Always false now that headings are dropped when a category is
-  // taken; kept because the settings list still marks them and a future span-aware grid
-  // would want them.
-  std::vector<bool> headerFlags;
 
   bool preserveQuickResumeTimeoutOn = false;
   bool quickResumeTimeoutAutoEnabled = false;
 
   OptionPopup optionPopup;
-  // Numeric rows open a slider instead of stepping by one per press. Stepping meant up to
-  // 57 presses to cross the Reading Idle Limit range, and wrapping past the maximum to get
-  // back. Same component TextSettingsActivity already uses for the margin rows.
-  SliderBand valueBand;
 
-  // First grid row drawn, owned here so it survives between frames. Reset whenever the
-  // grid underneath it changes identity (a different category, or re-entry).
-  int scrollRow = 0;
+  // The two strings a cell is drawn from, rebuilt on demand: the base asks for
+  // them one cell at a time and draws each immediately.
+  mutable std::string cellNameScratch;
+  mutable std::string cellValueScratch;
 
   void toggleCurrentSetting();
   // Puts the cursor back on a landable row after a rebuild that may have added or
@@ -255,17 +244,21 @@ class SettingsActivity final : public Activity {
   std::vector<SettingInfo>& categoryRows(int index);
   StrId categoryName(int index) const;
   std::string settingValueText(const SettingInfo& setting) const;
-  settings_grid::Layout gridLayout() const;
-  Rect gridPane() const;
-  void drawCell(const settings_grid::Rect& rect, const std::string& name, const std::string& value, bool selected);
-  void moveSelection(int deltaRows, int deltaCells);
   void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Settings", renderer, mappedInput) {}
+      : UiGridActivity("Settings", renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  int cellCount() const override;
+  const char* cellName(int index) const override;
+  const char* cellValue(int index) const override;
+  void activateCell(int index) override;
+  ListChrome chrome() const override;
+  bool handleCustomInput() override;
+  void onBackButton() override;
+  bool drawOverlay() override;
 };

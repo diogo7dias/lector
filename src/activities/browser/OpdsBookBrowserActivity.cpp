@@ -25,27 +25,20 @@
 #include "util/UrlUtils.h"
 
 namespace {
-constexpr int PAGE_ITEMS = 23;
-constexpr int HEADER_Y = 15;
-constexpr int HEADER_X = 16;
 constexpr int SEARCH_ICON_SIZE = 24;
 constexpr int SEARCH_ICON_MARGIN = 14;
-constexpr int SEARCH_ICON_Y = 15;
 constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
 constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
 
-Rect searchIconRect(const GfxRenderer& renderer) {
-  return Rect{renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN, SEARCH_ICON_Y, SEARCH_ICON_SIZE + 8,
-              SEARCH_ICON_SIZE + 8};
+// The search glyph sits inside the header band, at its right edge.
+int searchIconX(const GfxRenderer& renderer) {
+  return renderer.getScreenWidth() - SEARCH_ICON_SIZE - SEARCH_ICON_MARGIN;
 }
 
-bool contains(const Rect& rect, const int x, const int y) {
-  return x >= rect.x && x < rect.x + rect.width && y >= rect.y && y < rect.y + rect.height;
-}
 }  // namespace
 
 void OpdsBookBrowserActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   // Browsing an OPDS catalogue is WiFi plus TLS plus a parse, on whatever heap
   // is left after a book's fonts are resident. Release the rebuildable SD font
@@ -63,7 +56,7 @@ void OpdsBookBrowserActivity::onEnter() {
   navigationHistory.clear();
   searchTemplate = "";
   currentPath = "";
-  selectorIndex = 0;
+  setListSelection(0);
   consumeConfirm = false;
   consumeBack = false;
   errorMessage.clear();
@@ -83,168 +76,6 @@ void OpdsBookBrowserActivity::onExit() {
     delay(30);
     silentRestart();
   }
-}
-
-void OpdsBookBrowserActivity::loop() {
-  if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) {
-    return;
-  }
-
-  if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    consumeConfirm = false;
-    return;
-  }
-  if (consumeBack && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    consumeBack = false;
-    return;
-  }
-
-  if (state == BrowserState::ERROR) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
-        state = BrowserState::LOADING;
-        statusMessage = tr(STR_LOADING);
-        requestUpdate();
-        fetchFeed(currentPath);
-      } else {
-        launchWifiSelection();
-      }
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      navigateBack();
-    }
-    return;
-  }
-
-  if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      state == BrowserState::CHECK_WIFI ? onGoHome() : navigateBack();
-    }
-    return;
-  }
-
-  if (state == BrowserState::DOWNLOADING) return;
-
-  if (state == BrowserState::BROWSING) {
-    auto activateSelected = [this] {
-      if (!entries.empty()) {
-        const auto& entry = entries[selectorIndex];
-        entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
-      }
-    };
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      activateSelected();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      navigateBack();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
-    }
-
-    if (!entries.empty()) {
-      buttonNavigator.onNextStep([this] {
-        selectorIndex = ButtonNavigator::nextIndex(selectorIndex, entries.size());
-        requestUpdate();
-      });
-      buttonNavigator.onPreviousStep([this] {
-        selectorIndex = ButtonNavigator::previousIndex(selectorIndex, entries.size());
-        requestUpdate();
-      });
-      buttonNavigator.onNextContinuous([this] {
-        selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
-      buttonNavigator.onPreviousContinuous([this] {
-        selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, entries.size(), PAGE_ITEMS);
-        requestUpdate();
-      });
-    }
-  }
-}
-
-void OpdsBookBrowserActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  // Show server name in header if available, otherwise generic title
-  const char* headerTitle = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
-  const int headerRightInset = searchTemplate.empty() ? HEADER_X : (SEARCH_ICON_SIZE + SEARCH_ICON_MARGIN * 2 + 8);
-  const auto clippedHeader = renderer.truncatedText(UI_12_FONT_ID, headerTitle, pageWidth - HEADER_X - headerRightInset,
-                                                    EpdFontFamily::REGULAR);
-  renderer.drawText(UI_12_FONT_ID, HEADER_X, HEADER_Y, clippedHeader.c_str(), true, EpdFontFamily::REGULAR);
-  if (!searchTemplate.empty()) {
-    const auto rect = searchIconRect(renderer);
-    renderer.drawIcon(Search24Icon.bits, rect.x + 4, rect.y + 4, Search24Icon.w);
-  }
-
-  if (state == BrowserState::CHECK_WIFI || state == BrowserState::LOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, statusMessage.c_str());
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    renderer.displayBuffer();
-    return;
-  }
-
-  if (state == BrowserState::ERROR) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 20, tr(STR_ERROR_MSG));
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 + 10, errorMessage.c_str());
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    presentFrame();
-    return;
-  }
-
-  if (state == BrowserState::DOWNLOADING) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 40, tr(STR_DOWNLOADING));
-    auto title = renderer.truncatedText(UI_10_FONT_ID, statusMessage.c_str(), pageWidth - 40);
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2 - 10, title.c_str());
-    if (downloadTotal > 0) {
-      GUI.drawProgressBar(renderer, Rect{50, pageHeight / 2 + 20, pageWidth - 100, 20}, downloadProgress,
-                          downloadTotal);
-    }
-    renderer.displayBuffer();
-    return;
-  }
-
-  const char* confirmLabel =
-      (!entries.empty() && entries[selectorIndex].type == OpdsEntryType::BOOK) ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
-  const char* searchLabel = (!searchTemplate.empty() && selectorIndex == 0) ? tr(STR_SEARCH) : tr(STR_DIR_UP);
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), confirmLabel, searchLabel, tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  if (entries.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_NO_ENTRIES));
-  } else {
-    const auto pageStartIndex = selectorIndex / PAGE_ITEMS * PAGE_ITEMS;
-    // The highlight is painted with the selected row, not ahead of the loop, because
-    // the bracket style has to know how wide that row's text came out.
-    bool inverted = true;
-
-    for (size_t i = pageStartIndex; i < entries.size() && i < static_cast<size_t>(pageStartIndex + PAGE_ITEMS); i++) {
-      const auto& entry = entries[i];
-      std::string displayText = (entry.type == OpdsEntryType::NAVIGATION) ? "> " + entry.title : entry.title;
-      if (entry.type == OpdsEntryType::BOOK && !entry.author.empty()) displayText += " - " + entry.author;
-      auto item = renderer.truncatedText(UI_10_FONT_ID, displayText.c_str(), pageWidth - 40);
-      const int rowY = 60 + static_cast<int>(i % PAGE_ITEMS) * 30;
-      const bool selected = i == static_cast<size_t>(selectorIndex);
-      if (selected) {
-        const Rect span(20, rowY, renderer.getTextWidth(UI_10_FONT_ID, item.c_str()),
-                        renderer.getLineHeight(UI_10_FONT_ID));
-        inverted = GUI.drawSelection(renderer, Rect(0, rowY - 2, pageWidth - 1, 30), &span, 1);
-      }
-      renderer.drawText(UI_10_FONT_ID, 20, rowY, item.c_str(), !selected || !inverted);
-    }
-  }
-  presentFrame();
-}
-
-void OpdsBookBrowserActivity::presentFrame() {
-  if (pendingFullRefresh) {
-    pendingFullRefresh = false;
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-    return;
-  }
-  renderer.displayBuffer();
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
@@ -300,6 +131,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const auto& nextUrl = parser.getNextPageUrl();
   const auto& prevUrl = parser.getPrevPageUrl();
   const bool feedTruncated = parser.truncated();
+  // The vector the rows will point into is built before the lock below; nothing
+  // draws from it until that lock publishes the rows with it.
   entries = std::move(parser).getEntries();
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
@@ -313,13 +146,26 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     LOG_INF("OPDS", "Feed truncated to fit memory");
   }
 
-  selectorIndex = 0;
-  state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
-  if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
+  {
+    // One lock over the whole swap: the rows, the selection they are indexed by
+    // and the state that says to draw them all have to change together, or the
+    // render task can paint a row list against the wrong feed.
+    RenderLock lock(*this);
+    refreshRows();
+    setListSelectionLocked(0);
+    state = entries.empty() ? BrowserState::ERROR : BrowserState::BROWSING;
+    if (entries.empty()) errorMessage = tr(STR_NO_ENTRIES);
+  }
   requestUpdate();
 }
 
-void OpdsBookBrowserActivity::releaseEntries() { std::vector<OpdsEntry>().swap(entries); }
+void OpdsBookBrowserActivity::releaseEntries() {
+  // Under the render lock: the rows the render task is walking point into these
+  // two vectors, so freeing them from this task mid-paint reads freed memory.
+  RenderLock lock(*this);
+  std::vector<OpdsEntry>().swap(entries);
+  rows.clear();
+}
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   navigationHistory.push_back(currentPath);
@@ -330,7 +176,7 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
   releaseEntries();
-  selectorIndex = 0;
+  setListSelection(0);
   requestUpdate(true);
   fetchFeed(currentPath);
 }
@@ -344,7 +190,7 @@ void OpdsBookBrowserActivity::navigateBack() {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
     releaseEntries();
-    selectorIndex = 0;
+    setListSelection(0);
     requestUpdate();
     fetchFeed(currentPath);
   }
@@ -353,6 +199,7 @@ void OpdsBookBrowserActivity::navigateBack() {
 void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
+  downloadTitle = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40);
   downloadProgress = downloadTotal = 0;
   requestUpdate(true);
 
@@ -472,7 +319,7 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
   releaseEntries();
-  selectorIndex = 0;
+  setListSelection(0);
   requestUpdate(true);
   fetchFeed(url);
 }
@@ -508,4 +355,145 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
     errorMessage = tr(STR_WIFI_CONN_FAILED);
     requestUpdate();
   }
+}
+
+// --- Rows and screen ---
+
+void OpdsBookBrowserActivity::refreshRows() {
+  // The rows borrow the feed's own strings rather than copying them: a large
+  // catalogue already costs what its titles cost, and a second copy of every
+  // title and author is heap this device does not have with WiFi and TLS up.
+  rows.resize(entries.size());
+  for (size_t i = 0; i < entries.size(); ++i) {
+    const OpdsEntry& entry = entries[i];
+    rows[i] = freeink::ui::ListItem{};
+    rows[i].label = entry.title.c_str();
+    rows[i].actionValue = static_cast<int16_t>(i);
+    // A feed mixes places to go with books to take. The arrow marks the first,
+    // and a book carries its author under the title.
+    if (entry.type == OpdsEntryType::NAVIGATION) {
+      rows[i].value = ">";
+    } else if (!entry.author.empty()) {
+      rows[i].subtitle = entry.author.c_str();
+    }
+  }
+}
+
+UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
+  StatusView view;
+  view.title = server.name.empty() ? tr(STR_OPDS_BROWSER) : server.name.c_str();
+  // The framebuffer comes back white from a TLS loan, and the download screen
+  // repaints in FAST on every step, so the frame after either owes a full pass.
+  if (pendingFullRefresh) view.refresh = HalDisplay::FULL_REFRESH;
+
+  switch (state) {
+    case BrowserState::WIFI_SELECTION:
+    case BrowserState::SEARCH_INPUT:
+      // The picker and the keyboard own the screen.
+      view.hidden = true;
+      break;
+    case BrowserState::CHECK_WIFI:
+    case BrowserState::LOADING:
+      view.lines = {statusMessage.c_str(), nullptr, nullptr, nullptr};
+      break;
+    case BrowserState::ERROR:
+      view.lines = {tr(STR_ERROR_MSG), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr, nullptr};
+      view.confirmHint = tr(STR_RETRY);
+      break;
+    case BrowserState::DOWNLOADING:
+      view.lines = {tr(STR_DOWNLOADING), downloadTitle.c_str(), nullptr, nullptr};
+      view.showProgress = downloadTotal > 0;
+      view.progressValue = static_cast<int>(downloadProgress);
+      view.progressMax = downloadTotal > 0 ? static_cast<int>(downloadTotal) : 1;
+      view.backHint = "";
+      break;
+    case BrowserState::BROWSING:
+      if (rows.empty()) {
+        view.lines = {tr(STR_NO_ENTRIES), nullptr, nullptr, nullptr};
+        break;
+      }
+      view.listItems = rows.data();
+      view.listCount = static_cast<int>(rows.size());
+      view.listHasSubtitle = true;
+      // The selection is clamped when the list is built, which is after this
+      // runs: on the first paint of a shorter feed it can still name a row that
+      // is no longer there.
+      {
+        const size_t selected = static_cast<size_t>(listSelection());
+        const bool isBook = selected < entries.size() && entries[selected].type == OpdsEntryType::BOOK;
+        view.confirmHint = isBook ? tr(STR_DOWNLOAD) : tr(STR_OPEN);
+      }
+      // The search sits on the same button the list pages up with, and only on
+      // the first row, which is where the reader lands when a feed opens.
+      view.thirdHint = !searchTemplate.empty() && listSelection() == 0 ? tr(STR_SEARCH) : tr(STR_DIR_UP);
+      view.fourthHint = tr(STR_DIR_DOWN);
+      break;
+  }
+  return view;
+}
+
+void OpdsBookBrowserActivity::drawHeaderExtras(const Rect& headerRect) {
+  if (searchTemplate.empty()) return;
+  renderer.drawIcon(Search24Icon.bits, searchIconX(renderer), headerRect.y + (headerRect.height - SEARCH_ICON_SIZE) / 2,
+                    Search24Icon.w);
+}
+
+void OpdsBookBrowserActivity::afterRender() { pendingFullRefresh = false; }
+
+// --- Input handling ---
+
+bool OpdsBookBrowserActivity::handleCustomInput() {
+  if (state == BrowserState::WIFI_SELECTION || state == BrowserState::SEARCH_INPUT) return true;
+
+  // A press that opened this screen must not also act on it.
+  if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+    consumeConfirm = false;
+    return true;
+  }
+  if (consumeBack && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    consumeBack = false;
+    return true;
+  }
+
+  // Nothing to answer while a feed or a book is in flight.
+  if (state == BrowserState::DOWNLOADING) return true;
+
+  if (state == BrowserState::BROWSING && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    if (!searchTemplate.empty() && listSelection() == 0) {
+      launchSearch();
+      return true;
+    }
+  }
+  return false;
+}
+
+void OpdsBookBrowserActivity::onListActivated(const int index) {
+  if (state != BrowserState::BROWSING || index < 0 || index >= static_cast<int>(entries.size())) return;
+  setListSelection(index);
+  // Copied before the call: navigating and downloading both release the list
+  // this entry lives in.
+  const OpdsEntry entry = entries[index];
+  entry.type == OpdsEntryType::BOOK ? downloadBook(entry) : navigateToEntry(entry);
+}
+
+void OpdsBookBrowserActivity::onBackButton() {
+  if (state == BrowserState::CHECK_WIFI) {
+    onGoHome();
+    return;
+  }
+  if (state == BrowserState::DOWNLOADING) return;
+  navigateBack();
+}
+
+void OpdsBookBrowserActivity::onConfirmButton() {
+  if (state != BrowserState::ERROR) return;
+  // A failure retries the feed, unless the link itself is what is missing.
+  if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
+    state = BrowserState::LOADING;
+    statusMessage = tr(STR_LOADING);
+    requestUpdate();
+    fetchFeed(currentPath);
+    return;
+  }
+  launchWifiSelection();
 }

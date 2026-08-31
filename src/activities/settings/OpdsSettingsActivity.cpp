@@ -55,18 +55,15 @@ void OpdsSettingsActivity::onExit() {
   subtitles.clear();
 }
 
-const char* OpdsSettingsActivity::headerTitle() const {
+ListChrome OpdsSettingsActivity::chrome() const {
+  ListChrome chrome;
   // Reuse STR_OPDS_BROWSER as the "edit existing server" title.
   // New server creation uses STR_ADD_SERVER.
-  return isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
-}
-
-void OpdsSettingsActivity::drawChrome() {
-  UiListActivity::drawChrome();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawSubHeader(renderer,
-                    Rect{0, metrics.topPadding + metrics.headerHeight, renderer.getScreenWidth(), metrics.tabBarHeight},
-                    tr(STR_CALIBRE_URL_HINT));
+  chrome.title = isNewServer ? tr(STR_ADD_SERVER) : tr(STR_OPDS_BROWSER);
+  // What the middle button does here is not obvious from the rows, so it gets
+  // its own band under the title.
+  chrome.subHeader = tr(STR_CALIBRE_URL_HINT);
+  return chrome;
 }
 
 bool OpdsSettingsActivity::drawOverlay() {
@@ -159,13 +156,6 @@ void OpdsSettingsActivity::activateIndex(const int index) {
 }
 
 void OpdsSettingsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  // The hint line drawChrome() paints sits between the header and the rows, so the top
-  // margin carries it too.
-  screen.setContentMargin(fui::Insets{
-      static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.tabBarHeight + metrics.verticalSpacing),
-      0, static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const int itemCount = getMenuItemCount();
   subtitles.assign(static_cast<size_t>(itemCount), std::string());
   rows.assign(static_cast<size_t>(itemCount), fui::ListItem{});

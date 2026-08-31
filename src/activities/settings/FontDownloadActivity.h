@@ -9,8 +9,7 @@
 
 #include "FontInstaller.h"
 #include "SdCardFont.h"
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiStatusActivity.h"
 
 // JSON schema version of the fonts.json manifest. The canonical version for
 // the build tooling lives in lib/EpdFont/scripts/cpfont_version.py. This
@@ -38,14 +37,12 @@
       FONTS_MANIFEST_VERSION) "-b" FONT_MANIFEST_URL_STRINGIFY(CPFONT_VERSION) "/fonts.json"
 #endif
 
-class FontDownloadActivity : public Activity {
+class FontDownloadActivity : public UiStatusActivity {
  public:
   explicit FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput);
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   bool preventAutoSleep() override {
     return state_ == LOADING_MANIFEST || state_ == DOWNLOADING ||
            // The download is synchronous and blocks the main loop until it
@@ -54,6 +51,14 @@ class FontDownloadActivity : public Activity {
            state_ == COMPLETE || state_ == ERROR;
   }
   bool skipLoopDelay() override { return true; }
+
+ protected:
+  StatusView statusView() const override;
+  void onListActivated(int index) override;
+  void onBackButton() override;
+  void onConfirmButton() override;
+  bool handleCustomInput() override;
+  void afterRender() override;
 
  private:
   enum State {
@@ -71,7 +76,18 @@ class FontDownloadActivity : public Activity {
 
   State state_ = WIFI_SELECTION;
   FontInstaller fontInstaller_;
-  ButtonNavigator buttonNavigator_;
+
+  // The rows, and the strings they point at: statusView() only hands out
+  // pointers, so both have to outlive it. Rebuilt whenever the manifest, an
+  // install or a delete changes what the list says.
+  std::vector<freeink::ui::ListItem> rows_;
+  std::vector<std::string> rowLabels_;
+  std::vector<std::string> rowValues_;
+  void refreshRows();
+  /** The lines the progress and result screens show. */
+  std::string statusLine_;
+  std::string retryLine_;
+  void refreshProgressLines();
 
   // Streams the manifest file left on the card by fetchAndParseManifest().
   bool parseManifest(FontManifestParser::FileRetention retention, const char* retainFor,
@@ -81,7 +97,6 @@ class FontDownloadActivity : public Activity {
   // Manifest data
   std::string baseUrl_;
   std::vector<ManifestFamily> families_;
-  int selectedIndex_ = 0;
 
   // Download progress
   size_t currentFileIndex_ = 0;

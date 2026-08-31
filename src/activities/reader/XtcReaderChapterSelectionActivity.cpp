@@ -3,162 +3,69 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
-#include <algorithm>
-
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 
-int XtcReaderChapterSelectionActivity::getPageItems() const {
-  constexpr int lineHeight = 30;
+namespace fui = freeink::ui;
 
-  const int screenHeight = renderer.getScreenHeight();
-  const auto orientation = renderer.getOrientation();
-  // In inverted portrait, the hint row is drawn near the logical top.
-  // Reserve vertical space so the list starts below the hints.
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int startY = 60 + hintGutterHeight;
-  const int availableHeight = screenHeight - startY - lineHeight;
-  // Clamp to at least one item to prevent empty page math.
-  return std::max(1, availableHeight / lineHeight);
-}
-
-int XtcReaderChapterSelectionActivity::findChapterIndexForPage(uint32_t page) const {
-  if (!xtc) {
-    return 0;
-  }
-
+int XtcReaderChapterSelectionActivity::findChapterIndexForPage(const uint32_t page) const {
+  if (!xtc) return 0;
   const auto& chapters = xtc->getChapters();
   for (size_t i = 0; i < chapters.size(); i++) {
-    if (page >= chapters[i].startPage && page <= chapters[i].endPage) {
-      return static_cast<int>(i);
-    }
+    if (page >= chapters[i].startPage && page <= chapters[i].endPage) return static_cast<int>(i);
   }
   return 0;
 }
 
 void XtcReaderChapterSelectionActivity::onEnter() {
-  Activity::onEnter();
-
-  if (!xtc) {
-    return;
-  }
-
-  selectorIndex = findChapterIndexForPage(currentPage);
-
-  requestUpdate();
+  UiListActivity::onEnter();
+  if (!xtc) return;
+  // Opens on the chapter being read, not at the top.
+  moveSelectionTo(findChapterIndexForPage(currentPage));
 }
 
-void XtcReaderChapterSelectionActivity::onExit() { Activity::onExit(); }
-
-void XtcReaderChapterSelectionActivity::loop() {
-  const int pageItems = getPageItems();
-  const int totalItems = static_cast<int>(xtc->getChapters().size());
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
-    return;
-  }
-
-  auto selectChapter = [this] {
-    const auto& chapters = xtc->getChapters();
-    if (!chapters.empty() && selectorIndex >= 0 && selectorIndex < static_cast<int>(chapters.size())) {
-      setResult(PageResult{chapters[selectorIndex].startPage});
-      finish();
-    }
-  };
-
-  // A tap on a row selects and activates it, the same as every other list.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < totalItems) {
-    selectorIndex = tappedRow;
-    selectChapter();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    selectChapter();
-  }
-
-  buttonNavigator.onNextStep([this, totalItems] {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousStep([this, totalItems] {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, totalItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onNextContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::nextPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, totalItems, pageItems] {
-    selectorIndex = ButtonNavigator::previousPageIndex(selectorIndex, totalItems, pageItems);
-    requestUpdate();
-  });
+void XtcReaderChapterSelectionActivity::onExit() {
+  UiListActivity::onExit();
+  rows.clear();
 }
 
-void XtcReaderChapterSelectionActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+int XtcReaderChapterSelectionActivity::listCount() const {
+  return xtc ? static_cast<int>(xtc->getChapters().size()) : 0;
+}
 
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto orientation = renderer.getOrientation();
-  // Landscape orientation: reserve a horizontal gutter for button hints.
-  const bool isLandscapeCw = orientation == GfxRenderer::Orientation::LandscapeClockwise;
-  const bool isLandscapeCcw = orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  // Inverted portrait: reserve vertical space for hints at the top.
-  const bool isPortraitInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
-  const int hintGutterWidth = (isLandscapeCw || isLandscapeCcw) ? 30 : 0;
-  // Landscape CW places hints on the left edge; CCW keeps them on the right.
-  const int contentX = isLandscapeCw ? hintGutterWidth : 0;
-  const int contentWidth = pageWidth - hintGutterWidth;
-  const int hintGutterHeight = isPortraitInverted ? 50 : 0;
-  const int contentY = hintGutterHeight;
-  const int pageItems = getPageItems();
-  // Manual centering to honor content gutters.
-  const int titleX =
-      contentX +
-      (contentWidth - renderer.getTextWidth(UI_12_FONT_ID, tr(STR_SELECT_CHAPTER), EpdFontFamily::REGULAR)) / 2;
-  renderer.drawText(UI_12_FONT_ID, titleX, 15 + contentY, tr(STR_SELECT_CHAPTER), true, EpdFontFamily::REGULAR);
+void XtcReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
+  if (listCount() == 0) {
+    screen.centeredText(tr(STR_NO_CHAPTERS));
+    return;
+  }
 
   const auto& chapters = xtc->getChapters();
-  if (chapters.empty()) {
-    // Center the empty state within the gutter-safe content region.
-    const int emptyX = contentX + (contentWidth - renderer.getTextWidth(UI_10_FONT_ID, tr(STR_NO_CHAPTERS))) / 2;
-    renderer.drawText(UI_10_FONT_ID, emptyX, 120 + contentY, tr(STR_NO_CHAPTERS));
-    renderer.displayBuffer();
-    return;
+  rows.assign(chapters.size(), fui::ListItem{});
+  for (size_t i = 0; i < chapters.size(); ++i) {
+    rows[i].label = chapters[i].name.empty() ? tr(STR_UNNAMED) : chapters[i].name.c_str();
+    rows[i].actionValue = static_cast<int16_t>(i);
   }
 
-  const auto pageStartIndex = selectorIndex / pageItems * pageItems;
-  // The highlight is painted with the selected row, not ahead of the loop, because the
-  // bracket style has to know how wide that row's title came out.
-  bool inverted = true;
-  for (int i = pageStartIndex; i < static_cast<int>(chapters.size()) && i < pageStartIndex + pageItems; i++) {
-    const auto& chapter = chapters[i];
-    const char* title = chapter.name.empty() ? tr(STR_UNNAMED) : chapter.name.c_str();
-    const int rowY = 60 + contentY + (i % pageItems) * 30;
-    if (i == selectorIndex) {
-      const Rect span(contentX + 20, rowY, renderer.getTextWidth(UI_10_FONT_ID, title),
-                      renderer.getLineHeight(UI_10_FONT_ID));
-      // Highlight only the content area, not the hint gutters.
-      inverted = GUI.drawSelection(renderer, Rect(contentX, rowY - 2, contentWidth - 1, 30), &span, 1);
-    }
-    renderer.drawText(UI_10_FONT_ID, contentX + 20, rowY, title, i != selectorIndex || !inverted);
-  }
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(rows.size());
+  props.action = ACTION_ROW;
+  syncListViewport(screen, props);
+  screen.list(props);
+}
 
-  // Skip button hints in landscape CW mode (they overlap content)
-  if (renderer.getOrientation() != GfxRenderer::LandscapeClockwise) {
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  }
+void XtcReaderChapterSelectionActivity::activateIndex(const int index) {
+  if (!xtc) return;
+  const auto& chapters = xtc->getChapters();
+  if (index < 0 || index >= static_cast<int>(chapters.size())) return;
+  app.clearTapFlash();
+  setResult(PageResult{chapters[index].startPage});
+  finish();
+}
 
-  renderer.displayBuffer();
+void XtcReaderChapterSelectionActivity::onBackButton() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
 }

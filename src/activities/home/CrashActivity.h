@@ -1,13 +1,17 @@
 #pragma once
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 
-class CrashActivity final : public Activity {
+// What the reader shows after a panic: the sentence explaining what happened,
+// then the reason the firmware captured. Both are prose of unknown length, so
+// they are sections the base wraps rather than lines placed by hand.
+class CrashActivity final : public UiStatusActivity {
   std::string panicMessage;
 
  public:
   explicit CrashActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : Activity("Crash", renderer, mappedInput) {}
+      : UiStatusActivity("Crash", renderer, mappedInput) {}
   void onEnter() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  StatusView statusView() const override;
 };

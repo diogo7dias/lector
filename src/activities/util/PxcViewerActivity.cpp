@@ -22,6 +22,13 @@
 #include "util/FavoriteImage.h"
 
 namespace {
+// The one line an error state gets, in the theme's own help face: these screens
+// are an image and nothing else, so the message is all the chrome they have.
+int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(SMALL_FONT_ID); }
+}  // namespace
+
+
+namespace {
 
 // renderPxcSleepScreen's overlay hook is a bare function pointer with no context
 // parameter, so the live viewer reaches it through here. Only one viewer exists
@@ -104,7 +111,8 @@ void PxcViewerActivity::render() {
 
   const auto pageHeight = renderer.getScreenHeight();
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_PXC_WRONG_SIZE));
+  GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
+                   tr(STR_PXC_WRONG_SIZE));
   drawHints();
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }

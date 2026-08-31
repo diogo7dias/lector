@@ -1,27 +1,39 @@
 #pragma once
 
+#include <string>
+
 #include "MappedInputManager.h"
-#include "activities/Activity.h"
+#include "activities/UiStatusActivity.h"
 #include "util/ButtonNavigator.h"
 
-class EpubReaderPercentSelectionActivity final : public Activity {
+// Jump to a place in the book by percent. The value wraps rather than clamps:
+// a book has no end to run into, so going up from 99% reaches the front cover.
+class EpubReaderPercentSelectionActivity final : public UiStatusActivity {
  public:
-  // Slider-style percent selector for jumping within a book.
   explicit EpubReaderPercentSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                               const int initialPercent)
-      : Activity("EpubReaderPercentSelection", renderer, mappedInput), percent(initialPercent) {}
+      : UiStatusActivity("EpubReaderPercentSelection", renderer, mappedInput), percent(initialPercent) {}
 
   void onEnter() override;
-  void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onBackButton() override;
+  void onConfirmButton() override;
+  void onSliderChanged(int value) override;
+  int sliderStep() const override;
 
  private:
-  // Current percent value (0-100) shown on the slider.
   int percent = 0;
 
   ButtonNavigator buttonNavigator;
 
-  // Change the current percent by a delta and clamp within bounds.
+  // The strings the view hands out as pointers, so they outlive it.
+  std::string valueText;
+  std::string smallStepLine;
+  std::string largeStepLine;
+  void refreshText();
+
   void adjustPercent(int delta);
 };

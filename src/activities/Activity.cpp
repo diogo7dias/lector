@@ -14,6 +14,10 @@ void Activity::onEnter() {
   // Tags the refreshes that follow with the screen that caused them. PerfLog copies the
   // name: this activity is deleted on exit, so a stored pointer would dangle.
   PerfLog::setScreen(name.c_str());
+  // A hint-band tap presses on one frame and releases on the next. If the press
+  // brought this screen up, the release belongs to the screen that handled it, not
+  // to whatever this one has selected.
+  mappedInput.clearHintTap();
 }
 
 void Activity::onExit() { LOG_DBG("ACT", "Exiting activity: %s", name.c_str()); }

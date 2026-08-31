@@ -190,57 +190,34 @@ void SettingsActivity::selectCategory(const int index) {
     settings.push_back(row);
   }
   settingsCount = static_cast<int>(settings.size());
-  headerFlags.assign(static_cast<size_t>(settingsCount), false);
-  selectedSettingIndex = 0;
-  scrollRow = 0;
+  setSelected(0);
 }
 
-Rect SettingsActivity::gridPane() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int top = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const int height = renderer.getScreenHeight() - top - metrics.buttonHintsHeight - metrics.verticalSpacing;
-  return Rect{0, top, renderer.getScreenWidth(), height};
-}
+int SettingsActivity::cellCount() const { return mode == Mode::Hub ? kCategoryCount : settingsCount; }
 
-settings_grid::Layout SettingsActivity::gridLayout() const {
-  const auto pane = gridPane();
-  return settings_grid::forPane(pane.width, pane.height, settingsCount, scrollRow);
-}
-
-// One cell: its name in the small font over its value in the UI font, both centred.
-void SettingsActivity::drawCell(const settings_grid::Rect& rect, const std::string& name, const std::string& value,
-                                const bool selected) {
-  if (selected) renderer.fillRect(rect.x, rect.y, rect.width, rect.height, true);
-  renderer.drawRect(rect.x, rect.y, rect.width, rect.height, true);
-  const bool ink = !selected;
-
-  const int nameHeight = renderer.getLineHeight(SMALL_FONT_ID);
-  const int valueHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const int blockTop = rect.y + (rect.height - nameHeight - valueHeight) / 2;
-
-  const auto centred = [&](const int fontId, const std::string& text, const int y) {
-    if (text.empty()) return;
-    std::string shown = text;
-    // A long name or a long path has to give way to the cell rather than run out of it.
-    while (!shown.empty() && renderer.getTextWidth(fontId, shown.c_str()) > rect.width - 8) shown.pop_back();
-    const int width = renderer.getTextWidth(fontId, shown.c_str());
-    renderer.drawText(fontId, rect.x + (rect.width - width) / 2, y, shown.c_str(), ink);
-  };
-  centred(SMALL_FONT_ID, name, blockTop);
-  centred(UI_10_FONT_ID, value, blockTop + nameHeight);
-}
-
-// Up and Down move a whole grid row so the column is kept; Left and Right move one cell.
-void SettingsActivity::moveSelection(const int deltaRows, const int deltaCells) {
+const char* SettingsActivity::cellName(const int index) const {
   if (mode == Mode::Hub) {
-    selectedCategory = settings_grid::step(selectedCategory, kCategoryCount, deltaRows, deltaCells);
-    requestUpdate();
-    return;
+    if (index < 0 || index >= kCategoryCount) return nullptr;
+    cellNameScratch = I18N.get(categoryName(index));
+    return cellNameScratch.c_str();
   }
-  if (settingsCount == 0) return;
-  selectedSettingIndex = settings_grid::step(selectedSettingIndex, settingsCount, deltaRows, deltaCells);
-  scrollRow = settings_grid::scrollToShow(gridLayout(), selectedSettingIndex);
-  requestUpdate();
+  if (index < 0 || index >= settingsCount) return nullptr;
+  cellNameScratch = I18N.get(settings[index].nameId);
+  return cellNameScratch.c_str();
+}
+
+const char* SettingsActivity::cellValue(const int index) const {
+  if (mode == Mode::Hub) {
+    if (index < 0 || index >= kCategoryCount) return nullptr;
+    char count[24];
+    snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT),
+             static_cast<unsigned>(const_cast<SettingsActivity*>(this)->categoryRows(index).size()));
+    cellValueScratch = count;
+    return cellValueScratch.c_str();
+  }
+  if (index < 0 || index >= settingsCount) return nullptr;
+  cellValueScratch = settingValueText(settings[index]);
+  return cellValueScratch.c_str();
 }
 
 void SettingsActivity::rebuildSettingsList() {
@@ -416,13 +393,10 @@ void SettingsActivity::rebuildSettingsList() {
   }
 
   settingsCount = static_cast<int>(settings.size());
-  headerFlags.clear();
-  headerFlags.reserve(settings.size());
-  for (const auto& setting : settings) headerFlags.push_back(setting.isHeader);
 }
 
 void SettingsActivity::onEnter() {
-  Activity::onEnter();
+  UiGridActivity::onEnter();
 
   // Opening Settings rescans SD fonts and dictionaries before anything is drawn,
   // so on a loaded card this is a silent wait on the previous screen. Armed only
@@ -430,8 +404,6 @@ void SettingsActivity::onEnter() {
   // instant, and flashing a banner on every toggle would be worse than nothing.
   BusyBanner banner(renderer, tr(STR_BUSY_LOADING_SETTINGS));
 
-  selectedSettingIndex = 0;
-  scrollRow = 0;
   preserveQuickResumeTimeoutOn =
       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
   quickResumeTimeoutAutoEnabled = false;
@@ -442,6 +414,7 @@ void SettingsActivity::onEnter() {
   // the group headings live inside them.
   mode = Mode::Hub;
   selectedCategory = 0;
+  setSelected(0);
 
   // Trigger first update
   requestUpdate();
@@ -453,92 +426,63 @@ void SettingsActivity::onExit() {
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
 
-void SettingsActivity::loop() {
-  if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
-  if (valueBand.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+bool SettingsActivity::handleCustomInput() {
+  return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
+}
 
-  // A tap picks the cell it landed on and acts on it in one go. The contact is spent by
-  // the pick (takeScreenTouchDown), or the finger still resting there on the next pass
-  // would act again — on the hub that meant opening a category and immediately toggling
-  // whatever setting the category grid drew under the same finger.
-  {
-    int tx = 0;
-    int ty = 0;
-    if (mappedInput.takeScreenTouchDown(tx, ty)) {
-      const auto pane = gridPane();
-      const int count = mode == Mode::Hub ? kCategoryCount : settingsCount;
-      const auto layout =
-          mode == Mode::Hub ? settings_grid::forPane(pane.width, pane.height, kCategoryCount, 0) : gridLayout();
-      for (int i = 0; i < count; ++i) {
-        const auto rect = settings_grid::cellAt(layout, pane.y, i);
-        if (rect.width == 0) continue;
-        if (tx < rect.x || tx >= rect.x + rect.width || ty < rect.y || ty >= rect.y + rect.height) continue;
-        if (mode == Mode::Hub) {
-          selectCategory(i);
-          mode = Mode::Category;
-        } else {
-          selectedSettingIndex = i;
-          toggleCurrentSetting();
-        }
-        requestUpdate();
-        return;
-      }
-    }
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (mode == Mode::Hub) {
-      selectCategory(selectedCategory);
-      mode = Mode::Category;
-    } else {
-      toggleCurrentSetting();
-    }
+// A tap or Confirm on a hub cell opens that category; on a settings cell it acts
+// on the setting.
+void SettingsActivity::activateCell(const int index) {
+  if (mode == Mode::Hub) {
+    selectedCategory = index;
+    selectCategory(index);
+    mode = Mode::Category;
     requestUpdate();
     return;
   }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    // Back inside a category returns to the hub; from the hub it leaves the screen.
-    if (mode == Mode::Category) {
-      mode = Mode::Hub;
-      requestUpdate();
-      return;
-    }
-    SETTINGS.saveToFile();
-    onGoHome();
-    return;
-  }
-
-  // Rows on the side pair, cells on the front pair, and each press counted once.
-  // NavNext is "side Down OR front Right" and NavPrevious is "side Up OR front Left"
-  // (MappedInputManager::mapButton), so wiring the rows through onNextStep/onPreviousStep
-  // made one press of a front button step a row and then a cell in the same pass: three
-  // cells at a time, which on a two-column grid reads as a diagonal jump, and nothing at
-  // all from the first cell because the clamp swallowed it.
-  //
-  // ScreenUp/ScreenDown/ScreenLeft/ScreenRight rather than the raw buttons so a rotated
-  // screen keeps moving the way the hints under it say it does.
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
-
-  // A swipe scrolls the grid by a row. Handled here because it used to ride on the
-  // Next/Previous bindings this screen no longer uses.
-  switch (mappedInput.wasListScrollSwipe()) {
-    case list_swipe::Scroll::PageDown:
-      moveSelection(1, 0);
-      break;
-    case list_swipe::Scroll::PageUp:
-      moveSelection(-1, 0);
-      break;
-    default:
-      break;
-  }
+  toggleCurrentSetting();
+  requestUpdate();
 }
 
+void SettingsActivity::onBackButton() {
+  // Back inside a category returns to the hub; from the hub it leaves the screen.
+  if (mode == Mode::Category) {
+    mode = Mode::Hub;
+    setSelected(selectedCategory);
+    return;
+  }
+  SETTINGS.saveToFile();
+  onGoHome();
+}
+
+ListChrome SettingsActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory));
+  if (mode == Mode::Hub) chrome.headerRight = CROSSPOINT_VERSION;
+
+  const int index = selected();
+  const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&
+                              settings[index].nameId == StrId::STR_TIME_TO_SLEEP;
+  // An armed band owns the four keys: the side pair carries its large step, so
+  // the hints have to say so or the labels would point at a grid that is not
+  // listening.
+  if (valueBand.isActive()) {
+    chrome.backHint = tr(STR_DONE_EDIT);
+    chrome.confirmHint = tr(STR_DONE_EDIT);
+    chrome.thirdHint = "-";
+    chrome.fourthHint = "+";
+    return chrome;
+  }
+  chrome.confirmHint = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
+  chrome.thirdHint = tr(STR_DIR_UP);
+  chrome.fourthHint = tr(STR_DIR_DOWN);
+  return chrome;
+}
+
+bool SettingsActivity::drawOverlay() { return optionPopup.processRender(renderer, mappedInput); }
+
 void SettingsActivity::toggleCurrentSetting() {
-  const int selectedSetting = selectedSettingIndex;
+  const int selectedSetting = selected();
   if (selectedSetting < 0 || selectedSetting >= settingsCount) {
     return;
   }
@@ -633,11 +577,8 @@ void SettingsActivity::toggleCurrentSetting() {
     // is nothing to cancel: what the device is doing IS the value.
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
-    valueBand.show(
-        renderer, I18N.get(setting.nameId),
-        slider_band::headerBandRect(renderer.getScreenWidth(), UITheme::getInstance().getMetrics().topPadding,
-                                    UITheme::getInstance().getMetrics().headerHeight),
-        setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
+    armValueBand(
+        I18N.get(setting.nameId), setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
         std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr),
         [this, valuePtr](const int chosen) {
           // Live: a frontlight or a margin is judged on the device, not on the number.
@@ -793,12 +734,9 @@ void SettingsActivity::restoreCursorAfterRebuild() {
   // A change can also add or remove cells (Quick-return from footnotes, Pop-up Items),
   // which moves everything after it; the cursor is clamped rather than chased, since the
   // cell it was on may no longer exist.
-  const int wasSelected = selectedSettingIndex;
-  const int wasScroll = scrollRow;
+  const int wasSelected = selected();
   selectCategory(selectedCategory);
-  selectedSettingIndex = std::clamp(wasSelected, 0, std::max(0, settingsCount - 1));
-  scrollRow = settings_grid::scrollToShow(gridLayout(), selectedSettingIndex);
-  if (wasScroll == 0 && settingsCount == 0) scrollRow = 0;
+  setSelected(std::clamp(wasSelected, 0, std::max(0, settingsCount - 1)));
 }
 
 void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
@@ -839,8 +777,8 @@ void SettingsActivity::shareCredentials() {
   }
 
   if (bundle.empty()) {
+    // drawPopup pushes its own refresh, so the banner is already on the panel.
     GUI.drawPopup(renderer, tr(STR_NOTHING_TO_SHARE));
-    renderer.displayBuffer();
     delay(1200);
     requestUpdate(true);
     return;
@@ -882,61 +820,3 @@ void SettingsActivity::openSleepTimeoutPicker() {
       });
 }
 
-void SettingsActivity::render(RenderLock&&) {
-  if (optionPopup.processRender(renderer, mappedInput)) return;
-
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  const auto& metrics = UITheme::getInstance().getMetrics();
-
-  // An armed number takes the header's place: the grid under it keeps its position, so the
-  // row being changed stays where the finger left it.
-  if (valueBand.isActive()) {
-    valueBand.render(renderer);
-  } else {
-    GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight},
-                   mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory)),
-                   mode == Mode::Hub ? CROSSPOINT_VERSION : nullptr);
-  }
-
-  if (mode == Mode::Hub) {
-    const auto pane = gridPane();
-    const auto layout = settings_grid::forPane(pageWidth, pane.height, kCategoryCount, 0);
-    for (int i = 0; i < kCategoryCount; ++i) {
-      const auto rect = settings_grid::cellAt(layout, pane.y, i);
-      if (rect.width == 0) continue;
-      char count[24];
-      snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT),
-               static_cast<unsigned>(const_cast<SettingsActivity*>(this)->categoryRows(i).size()));
-      drawCell(rect, I18N.get(categoryName(i)), count, i == selectedCategory);
-    }
-  } else {
-    const auto pane = gridPane();
-    const auto layout = gridLayout();
-    for (int i = 0; i < settingsCount; ++i) {
-      const auto rect = settings_grid::cellAt(layout, pane.y, i);
-      if (rect.width == 0) continue;
-      drawCell(rect, I18N.get(settings[i].nameId), settingValueText(settings[i]), i == selectedSettingIndex);
-    }
-  }
-
-  // Draw help text
-  const bool onSleepTimeout = mode == Mode::Category && selectedSettingIndex >= 0 &&
-                              selectedSettingIndex < settingsCount &&
-                              settings[selectedSettingIndex].nameId == StrId::STR_TIME_TO_SLEEP;
-  const auto confirmLabel = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
-
-  // An armed band owns the four keys: the side pair carries its large step, so the hints
-  // have to say so or the labels would point at a list that is not listening.
-  const auto labels = valueBand.isActive()
-                          ? mappedInput.mapLabels(tr(STR_DONE_EDIT), tr(STR_DONE_EDIT), "-", "+")
-                          : mappedInput.mapDirectionalLabels(tr(STR_BACK), confirmLabel, tr(STR_DIR_LEFT),
-                                                              tr(STR_DIR_RIGHT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  // Always use standard refresh for settings screen
-  renderer.displayBuffer();
-}

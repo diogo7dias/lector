@@ -171,7 +171,14 @@ inline freeink::ui::InputSnapshot touchSnapshotFrom(const MappedInputManager& ma
                                                     const bool withLongPress = false) {
   int tx = 0;
   int ty = 0;
+  // A contact in the hint band belongs to the button painted there, whatever the
+  // screen drew under it. Without this an element whose rect runs into the band
+  // (a list's last row, the choice band) swallows the press and the four buttons
+  // stop answering on exactly the screens that have the most to press.
+  const auto inHintBand = [&mappedInput](const int x, const int y) { return mappedInput.isInHintBand(x, y); };
+
   if (withLongPress && mappedInput.wasScreenLongPress(tx, ty)) {
+    if (inHintBand(tx, ty)) return {};
     freeink::ui::InputSnapshot snap{};
     snap.touchReleased = true;
     snap.longPress = true;
@@ -183,17 +190,17 @@ inline freeink::ui::InputSnapshot touchSnapshotFrom(const MappedInputManager& ma
   freeink::ui::InputSnapshot snap{};
   // Live contact position: only InputDrag-masked elements (sliders) react, so
   // carrying it in every snapshot is free for ordinary screens.
-  if (mappedInput.isScreenTouchHeld(tx, ty)) {
+  if (mappedInput.isScreenTouchHeld(tx, ty) && !inHintBand(tx, ty)) {
     snap.touchHeld = true;
     snap.touchX = static_cast<int16_t>(tx);
     snap.touchY = static_cast<int16_t>(ty);
   }
-  if (mappedInput.wasScreenTouchDown(tx, ty)) {
+  if (mappedInput.wasScreenTouchDown(tx, ty) && !inHintBand(tx, ty)) {
     snap.touchPressed = true;
     snap.touchX = static_cast<int16_t>(tx);
     snap.touchY = static_cast<int16_t>(ty);
   }
-  if (mappedInput.wasScreenTapped(tx, ty)) {
+  if (mappedInput.wasScreenTapped(tx, ty) && !inHintBand(tx, ty)) {
     snap.touchReleased = true;
     snap.touchX = static_cast<int16_t>(tx);
     snap.touchY = static_cast<int16_t>(ty);

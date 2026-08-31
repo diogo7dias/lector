@@ -1,6 +1,7 @@
 #pragma once
 
 #include "activities/Activity.h"
+#include "components/ListChrome.h"
 #include "components/UiAppHost.h"
 #include "util/ButtonNavigator.h"
 
@@ -63,16 +64,25 @@ class UiListActivity : public Activity, protected UiAppHost {
   // font's coverage (native language names span Arabic, Hebrew and Cyrillic)
   // name a full-coverage font here instead of boxing out.
   virtual int listFontId() const { return -1; }
-  // Header band, drawn before the app renders. Default paints GUI.drawHeader
-  // with headerTitle(); override either for custom chrome.
+  // What the base paints around the body: the title band and the hints by
+  // default, plus whatever else the screen asks for (a counter, a sub-header, a
+  // header block, a note, a footnote). Screens override this instead of the
+  // paint, so their chrome keeps coming from the theme.
+  virtual ListChrome chrome() const;
+  // Shorthand for the common case: a title and nothing else.
   virtual const char* headerTitle() const { return nullptr; }
+  // The paint itself. Overriding these is the exception now; chrome() is the
+  // hook, and the base reserves the body from the same numbers it draws with.
   virtual void drawChrome();
-  // Button hints, drawn after the app renders. Default: Back/Select/Up/Down.
   virtual void drawFooter();
   // Drawn over the finished page, after the app and the hints. Return true when
   // the overlay refreshed the display itself (GUI.drawPopup does) so the base
   // does not push a second refresh behind it.
   virtual bool drawOverlay() { return false; }
+  // The waveform this pass is pushed with. A screen commonly reached from ones
+  // that only ever paint FAST arrives with the panel already carrying ghosts and
+  // asks for one FULL pass; everything else stays on the default.
+  virtual HalDisplay::RefreshMode refreshMode() { return HalDisplay::FAST_REFRESH; }
 
   // --- helpers ---------------------------------------------------------------
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
@@ -82,6 +92,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   // hardware the denser override below uses the theme's *-with-subtitle row
   // height instead of its single-line one (see syncListViewport()).
   void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
+  // The content margin chrome() leaves for the body. The base applies it before
+  // buildScreen runs, so a screen only calls this when it wants to carve the
+  // band up further.
+  freeink::ui::Insets chromeInsets() const;
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);
 

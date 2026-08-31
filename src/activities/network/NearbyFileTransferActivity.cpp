@@ -14,8 +14,6 @@
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "activities/ActivityManager.h"
-#include "components/UITheme.h"
-#include "fontIds.h"
 #include "OpdsServerStore.h"
 #include "WifiCredentialStore.h"
 #include "util/BookFilingNames.h"
@@ -38,7 +36,7 @@ constexpr const char* DESTINATION_FOLDER = bookfiling::ROOT_FOLDER;
 NearbyFileTransferActivity::NearbyFileTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                        const Mode mode, std::string sourcePath,
                                                        std::string returnToReaderPath)
-    : Activity("NearbyFileTransfer", renderer, mappedInput),
+    : UiStatusActivity("NearbyFileTransfer", renderer, mappedInput),
       mode(mode),
       returnToReaderPath(std::move(returnToReaderPath)) {
   if (!sourcePath.empty()) sourcePaths.push_back(std::move(sourcePath));
@@ -69,7 +67,7 @@ void NearbyFileTransferActivity::leave() {
 }
 
 void NearbyFileTransferActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   // The web server and this cannot hold the radio at the same time.
   if (WiFi.getMode() != WIFI_OFF) {
@@ -102,6 +100,9 @@ void NearbyFileTransferActivity::onEnter() {
 
   if (mode == Mode::Send) {
     session.beginSend(sourceName, sourceSize, millis());
+    // The searching screen names what is on its way, so the line exists before
+    // the first paint.
+    refreshProgressLines();
   } else {
     session.beginReceive(millis());
   }
@@ -560,70 +561,191 @@ void NearbyFileTransferActivity::runSessionActions() {
   }
 }
 
-void NearbyFileTransferActivity::loop() {
+bool NearbyFileTransferActivity::refreshPeerLabels() {
+  std::vector<std::string> next;
+  for (size_t index = 0; index < session.peerCount(); ++index) {
+    const std::string& name = session.peerAt(index).name;
+    // A reader answers the first broadcast before it has said what it is called,
+    // so the row starts as the model name and is replaced when the name lands.
+    next.push_back(name.empty() ? "Lector" : name);
+  }
+  if (next == peerLabels) return false;
+
+  peerLabels = std::move(next);
+  peerRows.clear();
+  // Two passes: the strings must stop moving before their addresses are taken.
+  peerRows.reserve(peerLabels.size());
+  for (const std::string& label : peerLabels) peerRows.push_back(label.c_str());
+  return true;
+}
+
+void NearbyFileTransferActivity::refreshOfferLines() {
+  char buffer[220];
+  const std::string family = nearby_file::familyNameFromFolder(pendingOffer.folder);
+  if (!family.empty()) {
+    // A family is one thing to the reader, so it is offered by name and by what
+    // the whole set costs rather than face by face.
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_OFFER_FORMAT), family.c_str(),
+                  static_cast<unsigned>(pendingOffer.groupCount),
+                  static_cast<unsigned>((pendingOffer.groupTotalBytes + 1023) / 1024));
+  } else {
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SIZE_FORMAT), session.offeredName().c_str(),
+                  static_cast<unsigned>((session.offeredSize() + 1023) / 1024));
+  }
+  offerLine = buffer;
+
+  if (!session.peerName().empty()) {
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FROM_FORMAT), session.peerName().c_str());
+    offerFromLine = buffer;
+  } else {
+    offerFromLine.clear();
+  }
+}
+
+void NearbyFileTransferActivity::refreshProgressLines() {
+  progressName = mode == Mode::Send ? sendLabel() : session.offeredName();
+
+  const unsigned batchCount = mode == Mode::Send ? sourcePaths.size() : group.fileCount();
+  const unsigned batchIndex = mode == Mode::Send ? sourceIndex + 1 : group.filesDone() + 1u;
+  if (batchCount > 1) {
+    char batch[48];
+    std::snprintf(batch, sizeof(batch), tr(STR_NEARBY_FILE_OF_FORMAT), batchIndex, batchCount);
+    progressBatchLine = batch;
+  } else {
+    progressBatchLine.clear();
+  }
+}
+
+void NearbyFileTransferActivity::refreshDoneLine() {
+  const std::string installedFamily =
+      mode == Mode::Receive ? nearby_file::familyNameFromFolder(pendingOffer.folder) : std::string();
+  char buffer[220];
+  if (!installedFamily.empty()) {
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_INSTALLED_FORMAT), installedFamily.c_str());
+    doneLine = buffer;
+  } else if (!credentialsMessage.empty()) {
+    doneLine = credentialsMessage;
+  } else if (mode == Mode::Receive && !destinationPath.empty()) {
+    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SAVED_AS_FORMAT),
+                  std::string(bookfiling::fileNameOf(destinationPath)).c_str());
+    doneLine = buffer;
+  } else {
+    doneLine.clear();
+  }
+}
+
+UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
+  StatusView view;
+  view.title = tr(STR_NEARBY_TRANSFER);
   if (radioFailed || sourceUnreadable) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      leave();
-    }
+    view.lines = {errorMessage.c_str(), nullptr, nullptr, nullptr};
+    return view;
+  }
+
+  switch (session.state()) {
+    case TransferState::DISCOVERING:
+    case TransferState::LISTENING:
+      view.lines = {mode == Mode::Send ? tr(STR_NEARBY_LOOKING_FOR_READERS) : tr(STR_NEARBY_WAITING_TO_RECEIVE),
+                    mode == Mode::Send ? progressName.c_str() : nullptr, nullptr, nullptr};
+      break;
+    case TransferState::PEERS_FOUND:
+      // The readers that answered, as the answers themselves: one row each,
+      // chosen with the same key or tap as any other list.
+      view.lines = {tr(STR_NEARBY_CHOOSE_READER), nullptr, nullptr, nullptr};
+      view.choiceList = peerRows.data();
+      view.choiceListCount = static_cast<int>(peerRows.size());
+      view.confirmHint = tr(STR_SELECT);
+      break;
+    case TransferState::OFFER_SENT:
+      view.lines = {tr(STR_NEARBY_SENDING_FILE), sourceName.c_str(), nullptr, nullptr};
+      break;
+    case TransferState::OFFER_PROMPT:
+      view.lines = {tr(STR_NEARBY_OFFER_QUESTION), offerLine.c_str(),
+                    offerFromLine.empty() ? nullptr : offerFromLine.c_str(), nullptr};
+      view.choices = {tr(STR_NEARBY_ACCEPT), tr(STR_NEARBY_DECLINE)};
+      view.confirmHint = tr(STR_SELECT);
+      break;
+    case TransferState::TRANSFERRING:
+    case TransferState::VERIFYING:
+      view.lines = {session.state() == TransferState::VERIFYING || outgoing.isOpen() ? tr(STR_NEARBY_SENDING_FILE)
+                                                                                     : tr(STR_NEARBY_RECEIVING_FILE),
+                    progressName.c_str(), progressBatchLine.empty() ? nullptr : progressBatchLine.c_str(), nullptr};
+      view.showProgress = true;
+      view.progressValue = session.progressPercent();
+      view.progressMax = 100;
+      view.backHint = tr(STR_CANCEL);
+      break;
+    case TransferState::DONE:
+      view.lines = {tr(STR_NEARBY_TRANSFER_DONE), doneLine.empty() ? nullptr : doneLine.c_str(), nullptr, nullptr};
+      break;
+    case TransferState::REJECTED:
+      view.lines = {errorMessage.empty() ? tr(STR_NEARBY_OFFER_DECLINED) : errorMessage.c_str(), nullptr, nullptr,
+                    nullptr};
+      break;
+    case TransferState::CANCELLED:
+      view.lines = {tr(STR_NEARBY_TRANSFER_CANCELLED), nullptr, nullptr, nullptr};
+      break;
+    case TransferState::FAILED:
+      view.lines = {tr(STR_NEARBY_TRANSFER_FAILED), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr,
+                    nullptr};
+      break;
+  }
+  return view;
+}
+
+void NearbyFileTransferActivity::onChoiceActivated(const int index) {
+  const TransferState state = session.state();
+  if (state == TransferState::PEERS_FOUND) {
+    if (index < 0 || index >= static_cast<int>(session.peerCount())) return;
+    chosenPeerMac = session.peerAt(index).mac;
+    hasChosenPeer = true;
+    session.choosePeer(chosenPeerMac, millis());
+    requestUpdate(true);
     return;
   }
+  if (state != TransferState::OFFER_PROMPT) return;
+  if (index == 0) {
+    acceptIncomingOffer();
+    return;
+  }
+  session.rejectOffer(millis());
+  runSessionActions();
+  requestUpdate(true);
+}
+
+// Back during a live transfer tells the other reader rather than just
+// vanishing, so it stops waiting instead of timing out.
+void NearbyFileTransferActivity::onBackButton() {
+  if (!radioFailed && !sourceUnreadable) {
+    session.cancel(millis());
+    runSessionActions();
+  }
+  leave();
+}
+
+// Confirm only leaves the two screens that have nothing to offer: a radio that
+// would not start, and a file that cannot be read.
+void NearbyFileTransferActivity::onConfirmButton() {
+  if (radioFailed || sourceUnreadable) leave();
+}
+
+bool NearbyFileTransferActivity::handleCustomInput() {
+  if (radioFailed || sourceUnreadable) return false;
 
   pumpRadio();
   runSessionActions();
 
   const TransferState state = session.state();
 
-  if (state == TransferState::PEERS_FOUND) {
-    const int peerCount = static_cast<int>(session.peerCount());
-    if (peerCount > 0) {
-      if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
-        selectedPeer = (selectedPeer - 1 + peerCount) % peerCount;
-        requestUpdate();
-      } else if (mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-        selectedPeer = (selectedPeer + 1) % peerCount;
-        requestUpdate();
-      } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-        chosenPeerMac = session.peerAt(selectedPeer).mac;
-        hasChosenPeer = true;
-        session.choosePeer(chosenPeerMac, millis());
-        requestUpdate(true);
-        return;
-      }
-    }
-  } else if (state == TransferState::OFFER_PROMPT) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Up) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Down)) {
-      offerChoice = offerChoice == 0 ? 1 : 0;
-      requestUpdate();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      if (offerChoice == 0) {
-        acceptIncomingOffer();
-      } else {
-        session.rejectOffer(millis());
-        runSessionActions();
-        requestUpdate(true);
-      }
-      return;
-    }
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    // Back during a live transfer tells the other reader rather than just
-    // vanishing, so it stops waiting instead of timing out.
-    session.cancel(millis());
-    runSessionActions();
-    leave();
-    return;
-  }
-
   if (state == TransferState::TRANSFERRING) {
     const int percent = session.progressPercent();
     if (percent != lastDrawnPercent && millis() - lastProgressDrawMs >= PROGRESS_REDRAW_INTERVAL_MS) {
       lastProgressDrawMs = millis();
+      lastDrawnPercent = percent;
+      refreshProgressLines();
       requestUpdate();
     }
-    return;
+    return false;
   }
 
   // A finished transfer closes its files immediately rather than at exit, so the
@@ -643,7 +765,7 @@ void NearbyFileTransferActivity::loop() {
     group.onFileDone(millis());
     if (group.expectsMore()) {
       awaitNextGroupFile();
-      return;
+      return false;
     }
     if (!createdFamilyPath.empty()) {
       // The family is whole: let the font list pick it up without a reboot.
@@ -654,7 +776,7 @@ void NearbyFileTransferActivity::loop() {
 
   if (state == TransferState::DONE && mode == Mode::Send && sourceIndex + 1 < sourcePaths.size()) {
     advanceToNextSource();
-    return;
+    return false;
   }
 
   if (state == TransferState::REJECTED || state == TransferState::CANCELLED || state == TransferState::FAILED) {
@@ -675,201 +797,24 @@ void NearbyFileTransferActivity::loop() {
   }
   if (autoReturnAt != 0 && millis() >= autoReturnAt) {
     leave();
-    return;
+    return true;
   }
 
-  if (state != renderedState || session.peerCount() != renderedPeerCount || selectedPeer != renderedSelection) {
+  // A reader that names itself after answering changes only its own row, which
+  // none of the counters below would notice.
+  const bool peersRenamed = state == TransferState::PEERS_FOUND && refreshPeerLabels();
+  if (peersRenamed) requestUpdate();
+
+  if (state != renderedState || session.peerCount() != renderedPeerCount || choiceIndex() != renderedSelection) {
+    // Whatever changed, its text is rebuilt before the paint that shows it.
+    if (state == TransferState::PEERS_FOUND) refreshPeerLabels();
+    if (state == TransferState::OFFER_PROMPT) refreshOfferLines();
+    if (state == TransferState::TRANSFERRING || state == TransferState::VERIFYING) refreshProgressLines();
+    if (state == TransferState::DONE) refreshDoneLine();
+    renderedState = state;
+    renderedPeerCount = session.peerCount();
+    renderedSelection = choiceIndex();
     requestUpdate();
   }
-}
-
-Rect NearbyFileTransferActivity::detailBounds(const Rect& screen, const int top) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int width = std::max(1, screen.width - metrics.contentSidePadding * 2);
-  // Inset by the side padding, then wrapped inside that width. A book file name
-  // is easily wider than this screen, and unwrapped centred text runs off both
-  // edges instead of breaking.
-  return Rect{screen.x + metrics.contentSidePadding, top, width,
-              renderer.getLineHeight(UI_10_FONT_ID) * DETAIL_MAX_LINES};
-}
-
-void NearbyFileTransferActivity::renderMessage(const Rect& screen, const int top, const char* message,
-                                               const char* detail) const {
-  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, message, true, EpdFontFamily::REGULAR);
-  if (detail && detail[0] != '\0') {
-    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, detail, DETAIL_MAX_LINES,
-                                     true, EpdFontFamily::REGULAR, UITheme::TextVerticalAlignment::TOP);
-  }
-}
-
-void NearbyFileTransferActivity::renderSearching(const Rect& screen, const int top) const {
-  const char* primary = mode == Mode::Send ? tr(STR_NEARBY_LOOKING_FOR_READERS) : tr(STR_NEARBY_WAITING_TO_RECEIVE);
-  UITheme::drawCenteredText(renderer, screen, UI_10_FONT_ID, top, primary, true, EpdFontFamily::REGULAR);
-  if (mode == Mode::Send) {
-    UITheme::drawCenteredWrappedText(renderer, detailBounds(screen, top + 40), UI_10_FONT_ID, sendLabel().c_str(),
-                                     DETAIL_MAX_LINES, true, EpdFontFamily::REGULAR,
-                                     UITheme::TextVerticalAlignment::TOP);
-  }
-}
-
-void NearbyFileTransferActivity::renderPeerList(const Rect& screen, const int top) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int left = screen.x + metrics.contentSidePadding;
-  constexpr int rowHeight = 30;
-
-  renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEARBY_CHOOSE_READER), true, EpdFontFamily::REGULAR);
-
-  for (size_t index = 0; index < session.peerCount(); index++) {
-    const int rowY = top + 40 + static_cast<int>(index) * rowHeight;
-    const bool selected = static_cast<int>(index) == selectedPeer;
-    const std::string& name = session.peerAt(index).name;
-    const char* label = name.empty() ? "Lector" : name.c_str();
-    bool inverted = false;
-    if (selected) {
-      const Rect span(left, rowY, renderer.getTextWidth(UI_10_FONT_ID, label), renderer.getLineHeight(UI_10_FONT_ID));
-      inverted = GUI.drawSelection(renderer, Rect(screen.x, rowY - 2, screen.width - 1, rowHeight), &span, 1);
-    }
-    renderer.drawText(UI_10_FONT_ID, left, rowY, label, !inverted);
-  }
-}
-
-void NearbyFileTransferActivity::renderOfferPrompt(const Rect& screen, const int top) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int left = screen.x + metrics.contentSidePadding;
-  constexpr int rowHeight = 30;
-
-  renderer.drawCenteredText(UI_10_FONT_ID, top, tr(STR_NEARBY_OFFER_QUESTION), true, EpdFontFamily::REGULAR);
-
-  char buffer[220];
-  const std::string family = nearby_file::familyNameFromFolder(pendingOffer.folder);
-  if (!family.empty()) {
-    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_OFFER_FORMAT), family.c_str(),
-                  static_cast<unsigned>(pendingOffer.groupCount),
-                  static_cast<unsigned>((pendingOffer.groupTotalBytes + 1023) / 1024));
-  } else {
-    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SIZE_FORMAT), session.offeredName().c_str(),
-                  static_cast<unsigned>((session.offeredSize() + 1023) / 1024));
-  }
-  renderer.drawText(UI_10_FONT_ID, left, top + 45, buffer);
-
-  if (!session.peerName().empty()) {
-    std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FROM_FORMAT), session.peerName().c_str());
-    renderer.drawText(UI_10_FONT_ID, left, top + 70, buffer);
-  }
-
-  const int optionY = top + 110;
-  if (offerChoice == 0) renderer.fillRect(screen.x, optionY - 2, screen.width - 1, rowHeight);
-  renderer.drawText(UI_10_FONT_ID, left, optionY, tr(STR_NEARBY_ACCEPT), offerChoice != 0);
-
-  if (offerChoice == 1) renderer.fillRect(screen.x, optionY + rowHeight - 2, screen.width - 1, rowHeight);
-  renderer.drawText(UI_10_FONT_ID, left, optionY + rowHeight, tr(STR_NEARBY_DECLINE), offerChoice != 1);
-}
-
-void NearbyFileTransferActivity::renderProgress(const Rect& screen, const int top) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int left = screen.x + metrics.contentSidePadding;
-
-  const char* title = session.state() == TransferState::VERIFYING || outgoing.isOpen() ? tr(STR_NEARBY_SENDING_FILE)
-                                                                                       : tr(STR_NEARBY_RECEIVING_FILE);
-  renderer.drawCenteredText(UI_10_FONT_ID, top, title, true, EpdFontFamily::REGULAR);
-
-  const std::string name = mode == Mode::Send ? sendLabel() : session.offeredName();
-  renderer.drawText(UI_10_FONT_ID, left, top + 45, name.c_str());
-
-  const unsigned batchCount = mode == Mode::Send ? sourcePaths.size() : group.fileCount();
-  const unsigned batchIndex = mode == Mode::Send ? sourceIndex + 1 : group.filesDone() + 1u;
-  if (batchCount > 1) {
-    char batch[48];
-    std::snprintf(batch, sizeof(batch), tr(STR_NEARBY_FILE_OF_FORMAT), batchIndex, batchCount);
-    renderer.drawText(UI_10_FONT_ID, left, top + 70, batch);
-  }
-
-  const int percent = session.progressPercent();
-  char buffer[32];
-  std::snprintf(buffer, sizeof(buffer), "%d%%", percent);
-  renderer.drawText(UI_10_FONT_ID, left, top + 75, buffer);
-
-  // A plain filled bar: an e-ink panel cannot animate, so the bar is the whole
-  // feedback and it only redraws on the progress timer.
-  const int barY = top + 105;
-  const int barWidth = screen.width - metrics.contentSidePadding * 2;
-  renderer.drawRect(left, barY, barWidth, 14);
-  const int filled = std::max(0, std::min(barWidth - 2, (barWidth - 2) * percent / 100));
-  if (filled > 0) renderer.fillRect(left + 1, barY + 1, filled, 12);
-}
-
-void NearbyFileTransferActivity::render(RenderLock&&) {
-  renderer.clearScreen();
-
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  GUI.drawHeader(renderer, Rect{screen.x, screen.y + metrics.topPadding, screen.width, metrics.headerHeight},
-                 tr(STR_NEARBY_TRANSFER));
-
-  const int centred = screen.y + screen.height / 2 - 40;
-  const int listTop = screen.y + metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-
-  const TransferState state = session.state();
-  renderedState = state;
-  renderedPeerCount = session.peerCount();
-  renderedSelection = selectedPeer;
-
-  bool showListHints = false;
-  if (radioFailed || sourceUnreadable) {
-    renderMessage(screen, centred, errorMessage.c_str(), "");
-  } else {
-    switch (state) {
-      case TransferState::DISCOVERING:
-      case TransferState::LISTENING:
-        renderSearching(screen, centred);
-        break;
-      case TransferState::PEERS_FOUND:
-        renderPeerList(screen, listTop);
-        showListHints = true;
-        break;
-      case TransferState::OFFER_SENT:
-        renderMessage(screen, centred, tr(STR_NEARBY_SENDING_FILE), sourceName.c_str());
-        break;
-      case TransferState::OFFER_PROMPT:
-        renderOfferPrompt(screen, listTop);
-        showListHints = true;
-        break;
-      case TransferState::TRANSFERRING:
-      case TransferState::VERIFYING:
-        renderProgress(screen, listTop);
-        break;
-      case TransferState::DONE: {
-        char buffer[220];
-        const std::string installedFamily =
-            mode == Mode::Receive ? nearby_file::familyNameFromFolder(pendingOffer.folder) : std::string();
-        if (!installedFamily.empty()) {
-          std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_FONT_INSTALLED_FORMAT), installedFamily.c_str());
-        } else if (!credentialsMessage.empty()) {
-          std::snprintf(buffer, sizeof(buffer), "%s", credentialsMessage.c_str());
-        } else if (mode == Mode::Receive && !destinationPath.empty()) {
-          std::snprintf(buffer, sizeof(buffer), tr(STR_NEARBY_SAVED_AS_FORMAT),
-                        std::string(bookfiling::fileNameOf(destinationPath)).c_str());
-        } else {
-          buffer[0] = '\0';
-        }
-        renderMessage(screen, centred, tr(STR_NEARBY_TRANSFER_DONE), buffer);
-        break;
-      }
-      case TransferState::REJECTED:
-        renderMessage(screen, centred, errorMessage.empty() ? tr(STR_NEARBY_OFFER_DECLINED) : errorMessage.c_str(), "");
-        break;
-      case TransferState::CANCELLED:
-        renderMessage(screen, centred, tr(STR_NEARBY_TRANSFER_CANCELLED), "");
-        break;
-      case TransferState::FAILED:
-        renderMessage(screen, centred, tr(STR_NEARBY_TRANSFER_FAILED), errorMessage.c_str());
-        break;
-    }
-  }
-
-  const auto labels = showListHints
-                          ? mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN))
-                          : mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  renderer.displayBuffer();
+  return false;
 }

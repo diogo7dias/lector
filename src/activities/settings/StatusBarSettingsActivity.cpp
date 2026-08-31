@@ -142,8 +142,6 @@ void StatusBarSettingsActivity::rebuildVisibleItems() {
 }
 
 void StatusBarSettingsActivity::onEnter() {
-  pickerActive = false;
-
   rebuildVisibleItems();
 
   // Clamp possibly-corrupt values so they index label arrays safely.
@@ -178,32 +176,9 @@ void StatusBarSettingsActivity::onExit() {
 }
 
 bool StatusBarSettingsActivity::handleCustomInput() {
-  // The anchor picker is a modal over the list: while it is up it takes Back, Confirm
-  // and both nav directions, and the list underneath sees none of them.
-  if (!pickerActive) return false;
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    pickerActive = false;
-    requestUpdate();
-    return true;
-  }
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (pickerTarget) *pickerTarget = static_cast<uint8_t>(pickerIndex);
-    SETTINGS.saveToFile();
-    pickerActive = false;
-    requestUpdate();
-    return true;
-  }
-  const auto step = [this](const int delta) {
-    pickerIndex = delta > 0 ? ButtonNavigator::nextIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT)
-                            : ButtonNavigator::previousIndex(pickerIndex, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-    requestUpdate();
-  };
-  buttonNavigator.onNextPress([step] { step(1); });
-  buttonNavigator.onPreviousPress([step] { step(-1); });
-  buttonNavigator.onNextContinuous([step] { step(1); });
-  buttonNavigator.onPreviousContinuous([step] { step(-1); });
-  return true;
+  // The anchor picker is a modal over the list: while it is up it takes every
+  // button, and the list underneath sees none of them.
+  return anchorPopup.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
 void StatusBarSettingsActivity::handleSelection(const int index) {
@@ -212,9 +187,14 @@ void StatusBarSettingsActivity::handleSelection(const int index) {
 
   // Position items open the anchor picker.
   if (uint8_t* field = anchorFieldFor(id)) {
-    pickerTarget = field;
-    pickerIndex = *field;
-    pickerActive = true;
+    anchorPopup.show(StrId::STR_POSITION, anchorNames, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT, *field,
+                     [this, field](const int choice) {
+                       if (choice >= 0 && choice < CrossPointSettings::STATUS_BAR_ANCHOR_COUNT) {
+                         *field = static_cast<uint8_t>(choice);
+                         SETTINGS.saveToFile();
+                       }
+                       requestUpdate();
+                     });
     return;
   }
 
@@ -265,35 +245,6 @@ void StatusBarSettingsActivity::activateIndex(const int index) {
   requestUpdate();
 }
 
-void StatusBarSettingsActivity::renderPicker() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int screenW = renderer.getScreenWidth();
-  const int screenH = renderer.getScreenHeight();
-  const int rowH = renderer.getLineHeight(UI_10_FONT_ID) + 6;
-  const int rows = CrossPointSettings::STATUS_BAR_ANCHOR_COUNT;  // 7
-  const int titleH = renderer.getLineHeight(UI_10_FONT_ID) + 8;
-  const int boxW = 200;
-  const int boxH = titleH + rows * rowH + 12;
-  const int boxX = (screenW - boxW) / 2;
-  const int boxY = (screenH - boxH) / 2;
-
-  renderer.fillRect(boxX, boxY, boxW, boxH, false);  // white
-  renderer.drawRect(boxX, boxY, boxW, boxH, 2, true);
-
-  UITheme::drawCenteredText(renderer, Rect{boxX, boxY, boxW, boxH}, UI_10_FONT_ID, boxY + 6, tr(STR_POSITION), true,
-                            EpdFontFamily::REGULAR);
-
-  int y = boxY + titleH + 4;
-  for (int i = 0; i < rows; i++) {
-    const bool sel = (i == pickerIndex);
-    if (sel) renderer.fillRect(boxX + 4, y - 2, boxW - 8, rowH, true);
-    UITheme::drawCenteredText(renderer, Rect{boxX, y, boxW, rowH}, UI_10_FONT_ID, y + 2, I18N.get(anchorNames[i]),
-                              !sel);
-    y += rowH;
-  }
-  (void)metrics;
-}
-
 // The value shown on the right of a row: an anchor in brackets for a position item,
 // otherwise whatever that row cycles through. Pulled out of the old drawList callback
 // unchanged, so the rows read exactly as they did.
@@ -331,11 +282,6 @@ std::string StatusBarSettingsActivity::rowValue(const int id) const {
 }
 
 void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   const int itemCount = static_cast<int>(visibleItems.size());
   subtitles.assign(static_cast<size_t>(itemCount), std::string());
   rows.assign(static_cast<size_t>(itemCount), fui::ListItem{});
@@ -356,10 +302,4 @@ void StatusBarSettingsActivity::buildScreen(UiScreen& screen) {
   screen.list(props);
 }
 
-bool StatusBarSettingsActivity::drawOverlay() {
-  if (!pickerActive) return false;
-  // Painted over the finished page; the base still pushes the refresh behind it, which
-  // is why this returns false rather than true.
-  renderPicker();
-  return false;
-}
+bool StatusBarSettingsActivity::drawOverlay() { return anchorPopup.processRender(renderer, mappedInput); }

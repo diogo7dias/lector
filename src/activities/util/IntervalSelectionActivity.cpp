@@ -1,121 +1,115 @@
 #include "IntervalSelectionActivity.h"
 
-#include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <I18n.h>
 
-#include <algorithm>
 #include <cstdio>
 #include <utility>
 
-#include "components/UITheme.h"
-#include "fontIds.h"
+#include "components/SliderField.h"
 
-int IntervalSelectionActivity::clampedValue(const int candidate) const {
-  return std::clamp(candidate, minValue, maxValue);
+namespace {
+
+// Whatever the caller's format string says, or a bare number when it named none.
+std::string formatValue(const StrId formatId, const int value) {
+  char text[32];
+  if (formatId != StrId::STR_NONE_OPT) {
+    snprintf(text, sizeof(text), I18N.get(formatId), static_cast<unsigned int>(value));
+  } else {
+    snprintf(text, sizeof(text), "%d", value);
+  }
+  return text;
 }
 
+// Built from separate label and value strings, rather than by splitting one
+// localized sentence, so the layout does not depend on translators preserving a
+// hidden separator.
+std::string stepLine(const StrId labelId, const StrId formatId, const int step) {
+  char line[64];
+  snprintf(line, sizeof(line), "%s %s", I18N.get(labelId), formatValue(formatId, step).c_str());
+  return line;
+}
+
+}  // namespace
+
 void IntervalSelectionActivity::onEnter() {
-  Activity::onEnter();
-  value = clampedValue(value);
+  UiStatusActivity::onEnter();
+  value = slider_field::clamp(value, slider_field::Range{minValue, maxValue});
+  // Neither hint changes; only the readout is rebuilt as the value moves.
+  smallStepLine = stepLine(StrId::STR_STEP_HINT_FRONT, valueFormatId, smallStep);
+  largeStepLine = stepLine(StrId::STR_STEP_HINT_SIDE, valueFormatId, largeStep);
+  refreshValueText();
   requestUpdate();
+}
+
+void IntervalSelectionActivity::refreshValueText() {
+  // A range whose top means "never" or "off" says so instead of showing the
+  // number that stands for it.
+  if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
+    valueText = I18N.get(maxBoundaryLabelId);
+    return;
+  }
+  valueText = formatValue(valueFormatId, value);
+}
+
+UiStatusActivity::StatusView IntervalSelectionActivity::statusView() const {
+  StatusView view;
+  view.title = I18N.get(titleId);
+  view.showSlider = true;
+  // No caption label: the header already says what this screen sets.
+  view.sliderValueText = valueText.c_str();
+  view.sliderValue = value;
+  view.sliderMin = minValue;
+  view.sliderMax = maxValue;
+  view.lines[0] = smallStepLine.c_str();
+  view.lines[1] = largeStepLine.c_str();
+  view.confirmHint = tr(STR_SELECT);
+  view.thirdHint = "-";
+  view.fourthHint = "+";
+  return view;
 }
 
 void IntervalSelectionActivity::adjustValue(const int delta) {
-  value = clampedValue(value + delta);
+  value = slider_field::step(value, slider_field::Range{minValue, maxValue}, delta, /*wrap=*/false);
+  refreshValueText();
   requestUpdate();
 }
 
-void IntervalSelectionActivity::drawStepHintLine(const int y, const StrId labelId, const int step) {
-  char stepText[24];
-  if (valueFormatId != StrId::STR_NONE_OPT) {
-    snprintf(stepText, sizeof(stepText), I18N.get(valueFormatId), static_cast<unsigned int>(step));
-  } else {
-    snprintf(stepText, sizeof(stepText), "%d", step);
-  }
-  char line[64];
-  snprintf(line, sizeof(line), "%s %s", I18N.get(labelId), stepText);
-  renderer.drawCenteredText(SMALL_FONT_ID, y, line, true);
+void IntervalSelectionActivity::onSliderChanged(const int next) {
+  value = slider_field::clamp(next, slider_field::Range{minValue, maxValue});
+  refreshValueText();
+  requestUpdate();
 }
 
-void IntervalSelectionActivity::loop() {
+bool IntervalSelectionActivity::handleCustomInput() {
+  // Opened from a hold, the release of that same hold must not count as the
+  // answer; swallow it and start listening after the button comes back up.
   if (ignoreConfirmRelease) {
     if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
       ignoreConfirmRelease = false;
-      return;
+      return true;
     }
     if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
       ignoreConfirmRelease = false;
     }
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    ActivityResult result;
-    result.isCancelled = true;
-    setResult(std::move(result));
-    finish();
-    return;
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    setResult(IntervalResult{static_cast<uint32_t>(value)});
-    finish();
-    return;
-  }
-
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { adjustValue(-smallStep); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { adjustValue(smallStep); });
-
-  // On X3 the side buttons sit on the left/right edges of the screen rather than as a vertical up/down
-  // rocker (X4), so BTN_UP is physically the left button and BTN_DOWN the right one. Flip the large-step
-  // direction there so the left button decreases and the right button increases, matching the layout.
-  const int upDelta = gpio.deviceIsX3() ? -largeStep : largeStep;
-  const int downDelta = gpio.deviceIsX3() ? largeStep : -largeStep;
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, upDelta] { adjustValue(upDelta); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down},
-                                       [this, downDelta] { adjustValue(downDelta); });
+  const auto side = slider_field::sideDeltas(gpio.deviceIsX3(), largeStep);
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this, side] { adjustValue(side.up); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this, side] { adjustValue(side.down); });
+  return false;
 }
 
-void IntervalSelectionActivity::render(RenderLock&&) {
-  renderer.clearScreen();
+void IntervalSelectionActivity::onBackButton() {
+  ActivityResult result;
+  result.isCancelled = true;
+  setResult(std::move(result));
+  finish();
+}
 
-  renderer.drawCenteredText(UI_12_FONT_ID, 15, I18N.get(titleId), true, EpdFontFamily::REGULAR);
-
-  char formattedValue[32];
-  if (maxBoundaryLabelId != StrId::STR_NONE_OPT && value == maxValue) {
-    snprintf(formattedValue, sizeof(formattedValue), "%s", I18N.get(maxBoundaryLabelId));
-  } else if (valueFormatId != StrId::STR_NONE_OPT) {
-    snprintf(formattedValue, sizeof(formattedValue), I18N.get(valueFormatId), static_cast<unsigned int>(value));
-  } else {
-    snprintf(formattedValue, sizeof(formattedValue), "%d", value);
-  }
-  renderer.drawCenteredText(UI_12_FONT_ID, 90, formattedValue, true, EpdFontFamily::REGULAR);
-
-  const int screenWidth = renderer.getScreenWidth();
-  const int barWidth = std::min(360, std::max(0, screenWidth - 40));
-  constexpr int barHeight = 16;
-  const int barX = std::max(0, (screenWidth - barWidth) / 2);
-  const int barY = 140;
-
-  renderer.drawRect(barX, barY, barWidth, barHeight);
-
-  const int range = std::max(1, maxValue - minValue);
-  const int fillWidth = (barWidth - 4) * (value - minValue) / range;
-  if (fillWidth > 0) {
-    renderer.fillRect(barX + 2, barY + 2, fillWidth, barHeight - 4);
-  }
-
-  const int knobX = std::max(barX + 2, barX + 2 + fillWidth - 2);
-  renderer.fillRect(knobX, barY - 4, 4, barHeight + 8, true);
-
-  // Two-line step hint: front buttons do the small step, side buttons the large step. Built from
-  // separate label + value strings (rather than splitting one localized sentence) so the layout
-  // doesn't depend on translators preserving a hidden separator.
-  drawStepHintLine(barY + 30, StrId::STR_STEP_HINT_FRONT, smallStep);
-  drawStepHintLine(barY + 52, StrId::STR_STEP_HINT_SIDE, largeStep);
-
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), "-", "+");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  renderer.displayBuffer();
+void IntervalSelectionActivity::onConfirmButton() {
+  setResult(IntervalResult{static_cast<uint32_t>(value)});
+  finish();
 }

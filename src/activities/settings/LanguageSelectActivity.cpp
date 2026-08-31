@@ -31,12 +31,7 @@ const char* LanguageSelectActivity::headerTitle() const { return tr(STR_LANGUAGE
 int LanguageSelectActivity::listFontId() const { return UBUNTU_10_FONT_ID; }
 
 void LanguageSelectActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
   // The base paints the header and the button hints itself, outside the app.
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   // Built on the render task, one screen at a time; the label pointers are
   // I18n statics, so the array only holds borrowed strings.
   static fui::ListItem items[totalItems];

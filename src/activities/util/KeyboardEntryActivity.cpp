@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "MappedInputManager.h"
+#include "components/KeyboardFieldLayout.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -389,30 +390,38 @@ int KeyboardEntryActivity::lineBreakEnd(std::string& s, const int start, const i
   return best;
 }
 
+keyboard_field::Metrics KeyboardEntryActivity::fieldMetrics() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  keyboard_field::Metrics field;
+  field.pageWidth = renderer.getScreenWidth();
+  field.sideHintsWidth = metrics.sideButtonHintsWidth;
+  field.reserveSideHints = gpio.deviceIsX3();
+  field.widthPercent = metrics.keyboardTextFieldWidthPercent;
+  if (inputType == InputType::Password) {
+    // The toggle keeps its own room whichever label it is showing, so the text
+    // does not reflow when the password is revealed.
+    const int toggleGap = 4;
+    field.toggleReserve = std::max(renderer.getTextWidth(UI_12_FONT_ID, "[abc]"),
+                                   renderer.getTextWidth(UI_12_FONT_ID, "[***]")) +
+                          toggleGap;
+  }
+  return field;
+}
+
 bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, size_t& position) const {
   // Key taps are the overwhelmingly common case; they land on the keyboard,
   // never the text field, so skip the wrap/measure work entirely.
   if (y >= keyboardRect().y) return false;
 
-  const int pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
+  const keyboard_field::Metrics field = fieldMetrics();
 
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int inputStartY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
-                          metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
+  const int inputStartY = keyboard_field::fieldTop(metrics.topPadding, metrics.headerHeight, metrics.verticalSpacing,
+                                                   metrics.keyboardVerticalOffset);
 
-  int availableWidth = pageWidth;
-  if (gpio.deviceIsX3()) {
-    availableWidth -= 2 * metrics.sideButtonHintsWidth;
-  }
-  const int effectiveMargin = (pageWidth - availableWidth * metrics.keyboardTextFieldWidthPercent / 100) / 2;
-  const int toggleGap = inputType == InputType::Password ? 4 : 0;
-  const int toggleReserve = inputType == InputType::Password ? std::max(renderer.getTextWidth(UI_12_FONT_ID, "[abc]"),
-                                                                        renderer.getTextWidth(UI_12_FONT_ID, "[***]")) +
-                                                                   toggleGap
-                                                             : 0;
-  const int textAreaWidth = pageWidth - 2 * effectiveMargin - toggleReserve;
-  const int maxLineWidth = textAreaWidth;
+  const int effectiveMargin = keyboard_field::marginFor(field);
+  const int maxLineWidth = keyboard_field::textWidthFor(field);
   const bool centerText = metrics.keyboardCenteredText;
   std::string displayText = displayTextForCurrentState();
 
@@ -426,7 +435,7 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
   while (true) {
     const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
     const int textWidth = measureRange(displayText, lineStartIdx, lineEndIdx);
-    const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
+    const int lineStartX = keyboard_field::lineStartX(field, textWidth, centerText);
     lastLineStartIdx = lineStartIdx;
     lastLineEndIdx = lineEndIdx;
     lastLineStartX = lineStartX;
@@ -466,7 +475,7 @@ bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, si
 
   const int underlineBottom = lineY + lineHeight + metrics.verticalSpacing + 8;
   if (y >= inputStartY - metrics.verticalSpacing && y < underlineBottom && x >= effectiveMargin &&
-      x < effectiveMargin + maxLineWidth + toggleReserve) {
+      x < effectiveMargin + maxLineWidth + field.toggleReserve) {
     position = x < lastLineStartX + lastLineWidth ? static_cast<size_t>(lastLineStartIdx)
                                                   : static_cast<size_t>(lastLineEndIdx);
     return true;
@@ -491,6 +500,8 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
 }
 
 void KeyboardEntryActivity::loop() {
+  if (routeKeyTouch()) return;
+
   if (!cursorMode && mappedInput.wasPressed(MappedInputManager::Button::Up)) {
     upHeld = true;
     upLongHandled = false;
@@ -640,6 +651,46 @@ void KeyboardEntryActivity::loop() {
   }
 }
 
+// A tap or a long press on a key. The SDK's keyboard router owns the timing: it
+// fires the long press at the threshold while the finger is still down, because
+// waiting for the release reads as a dead key next to a one-second panel
+// refresh, and it dispatches the key the press landed on when the release
+// drifts off it, which fingers on e-paper do.
+bool KeyboardEntryActivity::routeKeyTouch() {
+  if (!mappedInput.hasTouch() || !interactionsReady.load()) return false;
+
+  int px = 0;
+  int py = 0;
+  const bool pressedDown = mappedInput.wasScreenTouchDown(px, py);
+  int tx = 0;
+  int ty = 0;
+  const bool tapped = mappedInput.wasScreenTapped(tx, ty);
+  int hx = 0;
+  int hy = 0;
+  const bool inContact = pressedDown || mappedInput.isScreenTouchHeld(hx, hy);
+  if (!pressedDown && !tapped && !inContact) return false;
+
+  const auto result = touchRouter.update(interactions, pressedDown, static_cast<int16_t>(px), static_cast<int16_t>(py),
+                                         tapped, static_cast<int16_t>(tx), static_cast<int16_t>(ty), inContact,
+                                         static_cast<uint32_t>(millis()));
+  if (result.activeChanged) requestUpdate();
+  if (!result.event) return result.activeChanged;
+  if (result.event.action != ACTION_KEY) return false;
+
+  // A touched key becomes the selection too, so the keys and the buttons agree
+  // about where the cursor is when the reader goes back to them.
+  const fui::KeyboardLayout& layout = currentLayout();
+  fui::KeyboardNavigator cursor;
+  cursor.reset(static_cast<int16_t>(selRow), static_cast<int16_t>(selCol));
+  if (cursor.syncToValue(layout, result.event.value)) {
+    selRow = cursor.row();
+    selCol = cursor.col();
+  }
+  cursorMode = false;
+  if (activateValue(result.event.value, result.event.longPress)) requestUpdate();
+  return true;
+}
+
 void KeyboardEntryActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
@@ -648,26 +699,47 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
 
+  // The field draws through the same target the keyboard does, so its type and
+  // its ink come from the theme rather than from a font id named here. The
+  // frame's constructor clears the interaction table, so the routing gate has
+  // to close before it is built, not later when the keys are drawn.
+  interactionsReady = false;
+  // The loop task routes against the last published table while this one is
+  // rebuilt here, so the rebuild goes into the other generation.
+  interactions.beginPublishCycle();
+  fui::GfxRendererTarget target(renderer);
+  target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
+  target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
+  const fui::DeviceContext device = target.deviceContext();
+  const fui::InputSnapshot noInput{};
+  fui::Frame<48> frame(target, device, noInput, interactions);
+
+  fui::TextStyle fieldStyle;
+  fieldStyle.font = fui::GfxRendererTarget::FONT_BODY;
+  fui::TextStyle smallStyle;
+  smallStyle.font = fui::GfxRendererTarget::FONT_SMALL;
+  smallStyle.align = fui::TextAlign::Center;
+  const auto drawFieldText = [&](const int x, const int y, const char* content, const bool inverted = false) {
+    if (content == nullptr || content[0] == '\0') return;
+    fui::TextStyle style = fieldStyle;
+    style.inverted = inverted;
+    const int16_t width = target.measureText(style.font, content, style).width;
+    target.text(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(width + 1),
+                          static_cast<int16_t>(target.lineHeight(style.font))},
+                content, style);
+  };
+
   const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int inputStartY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing +
-                          metrics.verticalSpacing * 4 + metrics.keyboardVerticalOffset;
+  const int inputStartY = keyboard_field::fieldTop(metrics.topPadding, metrics.headerHeight, metrics.verticalSpacing,
+                                                   metrics.keyboardVerticalOffset);
   int inputHeight = 0;
 
   std::string displayText = displayTextForCurrentState();
 
   const bool isPassword = (inputType == InputType::Password);
-  int availableWidth = pageWidth;
-  if (gpio.deviceIsX3()) {
-    availableWidth -= 2 * metrics.sideButtonHintsWidth;
-  }
-  const int effectiveMargin = (pageWidth - availableWidth * metrics.keyboardTextFieldWidthPercent / 100) / 2;
-  const int toggleGap = isPassword ? 4 : 0;
-  const int toggleReserve = isPassword ? std::max(renderer.getTextWidth(UI_12_FONT_ID, "[abc]"),
-                                                  renderer.getTextWidth(UI_12_FONT_ID, "[***]")) +
-                                             toggleGap
-                                       : 0;
-  const int textAreaWidth = pageWidth - 2 * effectiveMargin - toggleReserve;
-  const int maxLineWidth = textAreaWidth;
+  const keyboard_field::Metrics field = fieldMetrics();
+  const int effectiveMargin = keyboard_field::marginFor(field);
+  const int maxLineWidth = keyboard_field::textWidthFor(field);
   const bool centerText = metrics.keyboardCenteredText;
 
   int cursorCharWidth = 6;
@@ -707,33 +779,29 @@ void KeyboardEntryActivity::render(RenderLock&&) {
               renderer.getTextAdvanceX(UI_12_FONT_ID, displayText.substr(cursorPos, 1).c_str(), EpdFontFamily::REGULAR);
           kernOffset = beforeAndCursorWidth - beforeWidth - charAdvance;
         }
-        if (centerText) {
-          cursorPixelX = effectiveMargin + (maxLineWidth - textWidth) / 2 + beforeWidth + kernOffset;
-        } else {
-          cursorPixelX = effectiveMargin + beforeWidth + kernOffset;
-        }
+        cursorPixelX = keyboard_field::lineStartX(field, textWidth, centerText) + beforeWidth + kernOffset;
         cursorLineY = inputStartY + inputHeight;
         cursorDrawn = true;
         isCursorLine = true;
       }
 
-      const int lineStartX = centerText ? effectiveMargin + (maxLineWidth - textWidth) / 2 : effectiveMargin;
+      const int lineStartX = keyboard_field::lineStartX(field, textWidth, centerText);
       if (isCursorLine && cursorMode && isPassword && !passwordVisible && !togglePos) {
         // Draw text in 3 parts to avoid block cursor overflowing onto next char.
         // displayText uses '*' for all chars; actual char may be wider than '*'.
         // Part 1: chars before cursor position
         const std::string part1 = displayText.substr(lineStartIdx, cursorPos - lineStartIdx);
-        renderer.drawText(UI_12_FONT_ID, lineStartX, inputStartY + inputHeight, part1.c_str());
+        drawFieldText(lineStartX, inputStartY + inputHeight, part1.c_str());
         // Part 2: skip cursor slot (block + actual char drawn later)
         // Part 3: chars after cursor position (skip char under cursor), starting at cursorPixelX + cursorCharWidth
         const int afterStart = static_cast<int>(cursorPos) + (cursorPos < text.length() ? 1 : 0);
         const int afterEnd = lineEndIdx;
         if (afterStart < afterEnd) {
           const std::string part3 = displayText.substr(afterStart, afterEnd - afterStart);
-          renderer.drawText(UI_12_FONT_ID, cursorPixelX + cursorCharWidth, inputStartY + inputHeight, part3.c_str());
+          drawFieldText(cursorPixelX + cursorCharWidth, inputStartY + inputHeight, part3.c_str());
         }
       } else {
-        renderer.drawText(UI_12_FONT_ID, lineStartX, inputStartY + inputHeight, lineText.c_str());
+        drawFieldText(lineStartX, inputStartY + inputHeight, lineText.c_str());
       }
       if (lineEndIdx == static_cast<int>(displayText.length())) {
         break;
@@ -749,40 +817,63 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   GUI.drawTextField(renderer, Rect{0, inputStartY, pageWidth, inputHeight}, fieldWidth, cursorMode, lineMargin,
                     pageWidth - 2 * lineMargin);
 
+  const auto fillRect = [&](const int x, const int y, const int w, const int h) {
+    target.fill(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(w),
+                          static_cast<int16_t>(h)},
+                fui::Paint::solid(fui::Color::Black));
+  };
+
   if (cursorMode && !togglePos && cursorPos <= displayText.length()) {
-    static constexpr int blockPadding = 1;
-    renderer.fillRect(cursorPixelX - blockPadding, cursorLineY, cursorCharWidth + blockPadding * 2, lineHeight, true);
+    const keyboard_field::Rect block = keyboard_field::blockCursor(cursorPixelX, cursorLineY, cursorCharWidth,
+                                                                   lineHeight);
+    fillRect(block.x, block.y, block.width, block.height);
     if (cursorPos < text.length()) {
+      // The character under the block is drawn in reverse, so the letter being
+      // edited is still readable inside it.
       const char buf[2] = {text[cursorPos], '\0'};
-      renderer.drawText(UI_12_FONT_ID, cursorPixelX, cursorLineY, buf, false);
+      drawFieldText(cursorPixelX, cursorLineY, buf, /*inverted=*/true);
     }
   } else if (cursorPos <= displayText.length()) {
+    // An I-beam: a stem with a serif at each end, so a cursor between two
+    // characters is not read as a thin letter.
     static constexpr int serifW = 3;
     const int cX = cursorPixelX;
     const int cY = cursorLineY;
     const int cBottom = cursorLineY + lineHeight - 1;
-    renderer.fillRect(cX, cY, 2, lineHeight, true);
-    renderer.drawLine(cX - serifW, cY, cX - 1, cY, 2, true);
-    renderer.drawLine(cX + 1, cY, cX + serifW, cY, 2, true);
-    renderer.drawLine(cX - serifW, cBottom, cX - 1, cBottom, 2, true);
-    renderer.drawLine(cX + 1, cBottom, cX + serifW, cBottom, 2, true);
+    const auto line = [&](const int x0, const int y0, const int x1, const int y1) {
+      target.line(fui::Point{static_cast<int16_t>(x0), static_cast<int16_t>(y0)},
+                  fui::Point{static_cast<int16_t>(x1), static_cast<int16_t>(y1)}, 2,
+                  fui::Paint::solid(fui::Color::Black));
+    };
+    fillRect(cX, cY, 2, lineHeight);
+    line(cX - serifW, cY, cX - 1, cY);
+    line(cX + 1, cY, cX + serifW, cY);
+    line(cX - serifW, cBottom, cX - 1, cBottom);
+    line(cX + 1, cBottom, cX + serifW, cBottom);
   }
 
   if (isPassword) {
     const char* toggleLabel = passwordVisible ? "[***]" : "[abc]";
     const int toggleWidth = renderer.getTextWidth(UI_12_FONT_ID, toggleLabel);
-    const int toggleX = pageWidth - effectiveMargin - toggleWidth;
+    const int toggleLeft = keyboard_field::toggleX(field, toggleWidth);
     const int toggleY = inputStartY + inputHeight;
     const bool toggleSelected = cursorMode && togglePos;
 
     if (toggleSelected) {
       // Hugs the label on all four sides, one pixel out.
-      renderer.fillRect(toggleX - 1, toggleY - 1, toggleWidth + 2, lineHeight + 2, true);
-      renderer.drawText(UI_12_FONT_ID, toggleX, toggleY, toggleLabel, false);
+      fillRect(toggleLeft - 1, toggleY - 1, toggleWidth + 2, lineHeight + 2);
+      drawFieldText(toggleLeft, toggleY, toggleLabel, /*inverted=*/true);
     } else {
-      renderer.drawText(UI_12_FONT_ID, toggleX, toggleY, toggleLabel, true);
+      drawFieldText(toggleLeft, toggleY, toggleLabel);
     }
   }
+
+  const auto drawCentredSmall = [&](const char* content, const int y) {
+    if (content == nullptr || content[0] == '\0') return;
+    target.text(fui::Rect{0, static_cast<int16_t>(y), static_cast<int16_t>(pageWidth),
+                          static_cast<int16_t>(target.lineHeight(smallStyle.font))},
+                content, smallStyle);
+  };
 
   if (hintVisible && !text.empty()) {
     const int hintLh = renderer.getLineHeight(SMALL_FONT_ID);
@@ -791,21 +882,19 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     if (cursorMode) {
       int hintLineY = hintY;
       if (inputType == InputType::Password && togglePos) {
-        renderer.drawCenteredText(
-            SMALL_FONT_ID, hintLineY,
-            passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD), true);
+        drawCentredSmall(
+            passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD), hintLineY);
         hintLineY += hintLh;
-        renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, tr(STR_KB_HINT_RETURN_CURSOR), true);
+        drawCentredSmall(tr(STR_KB_HINT_RETURN_CURSOR), hintLineY);
       } else {
-        renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, tr(STR_KB_HINT_MOVE_CURSOR), true);
+        drawCentredSmall(tr(STR_KB_HINT_MOVE_CURSOR), hintLineY);
         hintLineY += hintLh;
         if (inputType == InputType::Password) {
-          const char* passTip = passwordVisible ? tr(STR_KB_HINT_HIDE_PASSWORD) : tr(STR_KB_HINT_SHOW_PASSWORD);
-          renderer.drawCenteredText(SMALL_FONT_ID, hintLineY, passTip, true);
+          drawCentredSmall(passwordVisible ? tr(STR_KB_HINT_HIDE_PASSWORD) : tr(STR_KB_HINT_SHOW_PASSWORD), hintLineY);
         }
       }
     } else {
-      renderer.drawCenteredText(SMALL_FONT_ID, hintY, tr(STR_KB_HINT_EDIT_ENTRY), true);
+      drawCentredSmall(tr(STR_KB_HINT_EDIT_ENTRY), hintY);
     }
   }
 
@@ -813,7 +902,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const int tipsLh = renderer.getLineHeight(SMALL_FONT_ID);
   const int underlineBottom = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
-  auto drawTip = [&](const char* tip, int y) { renderer.drawCenteredText(SMALL_FONT_ID, y, tip, true); };
+  auto drawTip = [&](const char* tip, const int y) { drawCentredSmall(tip, y); };
 
   int tipCount = 0;
   if (cursorMode) {
@@ -865,14 +954,6 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   // The FreeInkUI keyboard draws the keys and registers their hit rects into
   // `interactions`; loop() routes touch snapshots against that table.
-  interactionsReady = false;
-  fui::GfxRendererTarget target(renderer);
-  target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
-  target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
-  const fui::DeviceContext device = target.deviceContext();
-  const fui::InputSnapshot noInput{};
-  fui::Frame<48> frame(target, device, noInput, interactions);
-
   fui::KeyboardProps props;
   const fui::KeyboardLayout& layout = currentLayout();
   props.layout = &layout;
@@ -894,6 +975,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const int hintsTop = renderer.getScreenHeight() - metrics.buttonHintsHeight;
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, hintsTop - (kbRect.y + kbRect.height)));
   fui::keyboard(frame, kbRect, props);
+  interactions.publish();
   interactionsReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));

@@ -31,12 +31,12 @@ constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
 }  // namespace
 
 FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : Activity("FontDownload", renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
+    : UiStatusActivity("FontDownload", renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
 
 // --- Lifecycle ---
 
 void FontDownloadActivity::onEnter() {
-  Activity::onEnter();
+  UiStatusActivity::onEnter();
 
   // Heap-critical transition, the same one CrossPointWebServerActivity and
   // CalibreConnectActivity already guard against: WiFi takes ~45 KB, and the
@@ -99,8 +99,9 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   {
     RenderLock lock(*this);
     state_ = FAMILY_LIST;
-    selectedIndex_ = 0;
   }
+  refreshRows();
+  setListSelection(0);
 }
 
 // --- Manifest fetching ---
@@ -452,6 +453,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       fileProgress_ = 0;
       fileTotal_ = file.size;
       lastDrawnProgressStep_ = -1;
+      refreshProgressLines();
     }
     requestUpdateAndWait();
 
@@ -629,6 +631,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
     fileProgress_ = 0;
     fileTotal_ = 0;
     retryAttempt_ = 0;
+    refreshProgressLines();
   }
   requestUpdateAndWait();
 
@@ -675,6 +678,11 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   // 48384. Releasing the list here hands that difference back. reloadFamilies()
   // rebuilds it from the copy still on the card once the files are in.
   std::vector<ManifestFamily>().swap(families_);
+  // The rows point into the list that was just released, and the failure paths
+  // below can reach the list screen again without rebuilding them.
+  rows_.clear();
+  rowLabels_.clear();
+  rowValues_.clear();
 
   bool ok = true;
   for (const auto& file : files) {
@@ -686,6 +694,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
       break;
     }
     currentFileIndex_++;
+    refreshProgressLines();
   }
 
   fontInstaller_.refreshRegistry();
@@ -702,7 +711,11 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
 
   // Rebuilt from the card, so installed and hasUpdate come back stamped from what
   // is actually there now rather than from what this function believes it wrote.
-  if (!reloadFamilies()) return false;
+  if (!reloadFamilies()) {
+    refreshRows();
+    return false;
+  }
+  refreshRows();
 
   if (!ok && cancelRequested_) {
     RenderLock lock(*this);
@@ -729,7 +742,7 @@ void FontDownloadActivity::downloadSingleFamily(const std::string& familyName) {
 }
 
 void FontDownloadActivity::promptDeleteSelectedFamily() {
-  const int pendingDeleteFamilyIndex = familyIndexFromList(selectedIndex_);
+  const int pendingDeleteFamilyIndex = familyIndexFromList(listSelection());
   if (pendingDeleteFamilyIndex < 0 || pendingDeleteFamilyIndex >= static_cast<int>(families_.size())) {
     return;
   }
@@ -747,7 +760,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
     return;
   }
 
-  auto& family = families_[familyIndexFromList(selectedIndex_)];
+  auto& family = families_[familyIndexFromList(listSelection())];
 
   if (fontInstaller_.deleteFamily(family.name) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
@@ -758,122 +771,22 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
     family.installed = false;
     family.hasUpdate = false;
   }
+  // The deleted family drops its "Installed" mark, and the Download-all row may
+  // appear now that something is missing again.
+  refreshRows();
 
   requestUpdate();
 }
 
 bool FontDownloadActivity::isSelectedFamilyDeletable() const {
-  if (isDownloadAllRow(selectedIndex_) || isUpdateAllRow(selectedIndex_)) return false;
-  if (selectedIndex_ < specialRowCount() || selectedIndex_ >= listItemCount()) return false;
-  const auto& family = families_[familyIndexFromList(selectedIndex_)];
+  if (isDownloadAllRow(listSelection()) || isUpdateAllRow(listSelection())) return false;
+  if (listSelection() < specialRowCount() || listSelection() >= listItemCount()) return false;
+  const auto& family = families_[familyIndexFromList(listSelection())];
   return family.installed && !family.hasUpdate;
 }
 
-// --- Input handling ---
 
-void FontDownloadActivity::loop() {
-  if (state_ == FAMILY_LIST) {
-    auto activateSelected = [this] {
-      if (families_.empty()) return;
-      if (isDownloadAllRow(selectedIndex_)) {
-        currentFileIndex_ = 0;
-        currentFileTotal_ = 0;
-        for (const auto& f : families_) {
-          if (!f.installed) currentFileTotal_ += f.fileCount;
-        }
-        downloadAll();
-      } else if (isUpdateAllRow(selectedIndex_)) {
-        currentFileIndex_ = 0;
-        currentFileTotal_ = 0;
-        for (const auto& f : families_) {
-          if (f.hasUpdate) currentFileTotal_ += f.fileCount;
-        }
-        updateAll();
-      } else {
-        const auto& family = families_[familyIndexFromList(selectedIndex_)];
-        if (!family.installed || family.hasUpdate) {
-          currentFileIndex_ = 0;
-          currentFileTotal_ = family.fileCount;
-          // Copied before the call: the list it points into is released mid-download.
-          downloadSingleFamily(std::string(family.name));
-        } else {
-          promptDeleteSelectedFamily();
-          return;
-        }
-      }
-      requestUpdateAndWait();
-    };
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      finish();
-      return;
-    }
-
-    const int listSize = listItemCount();
-    const int pageItems = UITheme::getNumberOfItemsPerPage(renderer, true, false, true, false);
-
-    buttonNavigator_.onNextStep([this, listSize] {
-      selectedIndex_ = ButtonNavigator::nextIndex(selectedIndex_, listSize);
-      requestUpdate();
-    });
-
-    buttonNavigator_.onPreviousStep([this, listSize] {
-      selectedIndex_ = ButtonNavigator::previousIndex(selectedIndex_, listSize);
-      requestUpdate();
-    });
-
-    buttonNavigator_.onNextContinuous([this, listSize, pageItems] {
-      selectedIndex_ = ButtonNavigator::nextPageIndex(selectedIndex_, listSize, pageItems);
-      requestUpdate();
-    });
-
-    buttonNavigator_.onPreviousContinuous([this, listSize, pageItems] {
-      selectedIndex_ = ButtonNavigator::previousPageIndex(selectedIndex_, listSize, pageItems);
-      requestUpdate();
-    });
-
-    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      activateSelected();
-      return;
-    }
-  } else if (state_ == COMPLETE) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      {
-        RenderLock lock(*this);
-        state_ = FAMILY_LIST;
-      }
-      requestUpdate();
-    }
-  } else if (state_ == ERROR) {
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      {
-        RenderLock lock(*this);
-        state_ = FAMILY_LIST;
-      }
-      requestUpdate();
-    } else if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      const auto retry = std::find_if(families_.begin(), families_.end(), [this](const ManifestFamily& f) {
-        return downloadingFamilyName_ == f.name;
-      });
-      if (retry != families_.end()) {
-        currentFileIndex_ = 0;
-        currentFileTotal_ = retry->fileCount;
-        downloadSingleFamily(downloadingFamilyName_);
-        requestUpdateAndWait();
-        return;
-      } else {
-        {
-          RenderLock lock(*this);
-          state_ = FAMILY_LIST;
-        }
-        requestUpdate();
-      }
-    }
-  }
-}
-
-// --- Rendering ---
+// --- Rows and lines ---
 
 std::string FontDownloadActivity::formatSize(size_t bytes) {
   char buf[32];
@@ -887,116 +800,186 @@ std::string FontDownloadActivity::formatSize(size_t bytes) {
   return buf;
 }
 
-void FontDownloadActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+void FontDownloadActivity::refreshRows() {
+  const int count = listItemCount();
+  rowLabels_.clear();
+  rowValues_.clear();
+  rows_.clear();
+  if (count <= 0) return;
 
-  renderer.clearScreen();
-
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_FONT_BROWSER));
-
-  const auto lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-  const auto centerY = (pageHeight - lineHeight) / 2;
-
-  if (state_ == LOADING_MANIFEST) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_LOADING_FONT_LIST));
-  } else if (state_ == FAMILY_LIST) {
-    if (families_.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_NO_FONTS_AVAILABLE));
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-    } else {
-      GUI.drawList(
-          renderer,
-          Rect{0, contentTop, pageWidth, pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing},
-          listItemCount(), selectedIndex_,
-          [this](int index) -> std::string {
-            if (isDownloadAllRow(index)) {
-              return std::string(tr(STR_DOWNLOAD_ALL)) + " (" + formatSize(totalDownloadSize()) + ")";
-            }
-            if (isUpdateAllRow(index)) {
-              return std::string(tr(STR_UPDATE_ALL)) + " (" + formatSize(totalUpdateSize()) + ")";
-            }
-            return families_[familyIndexFromList(index)].name;
-          },
-          [this](int index) -> std::string {
-            if (isDownloadAllRow(index) || isUpdateAllRow(index)) return "";
-            return families_[familyIndexFromList(index)].description;
-          },
-          nullptr,
-          [this](int index) -> std::string {
-            if (isDownloadAllRow(index) || isUpdateAllRow(index)) return "";
-            const auto& f = families_[familyIndexFromList(index)];
-            if (f.hasUpdate) return tr(STR_UPDATE_AVAILABLE);
-            if (f.installed) return tr(STR_INSTALLED);
-            return "";
-          },
-          true,
-          [this](int index) -> bool {
-            if (isDownloadAllRow(index) || isUpdateAllRow(index)) return false;
-            const auto& f = families_[familyIndexFromList(index)];
-            return f.installed && !f.hasUpdate;
-          });
-
-      const auto labels = mappedInput.mapLabels(tr(STR_BACK),
-                                                isSelectedFamilyDeletable()      ? tr(STR_DELETE)
-                                                : isUpdateAllRow(selectedIndex_) ? tr(STR_UPDATE)
-                                                                                 : tr(STR_DOWNLOAD),
-                                                tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  rowLabels_.reserve(count);
+  rowValues_.reserve(count);
+  for (int index = 0; index < count; ++index) {
+    if (isDownloadAllRow(index)) {
+      rowLabels_.push_back(std::string(tr(STR_DOWNLOAD_ALL)) + " (" + formatSize(totalDownloadSize()) + ")");
+      rowValues_.emplace_back();
+      continue;
     }
-  } else if (state_ == DOWNLOADING) {
-    // Above the status line, not below the bar: a retry is context for what is
-    // being downloaded, and it reads as that only when it comes first.
-    if (retryAttempt_ > 0) {
-      const std::string retryText =
-          std::string(tr(STR_RETRY)) + " " + std::to_string(retryAttempt_ + 1) + "/" + std::to_string(MAX_ATTEMPTS);
-      renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight * 2 - metrics.verticalSpacing, retryText.c_str());
+    if (isUpdateAllRow(index)) {
+      rowLabels_.push_back(std::string(tr(STR_UPDATE_ALL)) + " (" + formatSize(totalUpdateSize()) + ")");
+      rowValues_.emplace_back();
+      continue;
     }
-
-    std::string statusText = std::string(tr(STR_DOWNLOADING)) + " " + downloadingFamilyName_ + " (" +
-                             std::to_string(currentFileIndex_ + 1) + "/" + std::to_string(currentFileTotal_) + ")";
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, statusText.c_str());
-
-    float progress = 0;
-    if (fileTotal_ > 0) {
-      progress = static_cast<float>(fileProgress_) / static_cast<float>(fileTotal_);
-    }
-
-    int barY = centerY + metrics.verticalSpacing;
-    GUI.drawProgressBar(
-        renderer,
-        Rect{metrics.contentSidePadding, barY, pageWidth - metrics.contentSidePadding * 2, metrics.progressBarHeight},
-        static_cast<int>(progress * 100), 100);
-
-    const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state_ == COMPLETE) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY, tr(STR_FONT_INSTALLED), true, EpdFontFamily::REGULAR);
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-  } else if (state_ == ERROR) {
-    renderer.drawCenteredText(UI_10_FONT_ID, centerY - lineHeight, tr(STR_FONT_INSTALL_FAILED), true,
-                              EpdFontFamily::REGULAR);
-    if (!errorMessage_.empty()) {
-      renderer.drawCenteredText(UI_10_FONT_ID, centerY + metrics.verticalSpacing, errorMessage_.c_str());
-    }
-    const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_RETRY), "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    const auto& family = families_[familyIndexFromList(index)];
+    rowLabels_.push_back(family.name);
+    rowValues_.push_back(family.hasUpdate ? tr(STR_UPDATE_AVAILABLE) : family.installed ? tr(STR_INSTALLED) : "");
   }
 
-  // A differential pass leaves the previous screen showing through as grey residue,
-  // which is why the list used to sit under the progress bar for the whole download.
-  // The screen changes wholesale between states and at each new file, so those paints
-  // take a cleanup pass; the bar's own steps stay differential.
+  // Second pass: the strings must stop moving before their addresses are taken.
+  rows_.resize(count);
+  for (int index = 0; index < count; ++index) {
+    rows_[index] = freeink::ui::ListItem{};
+    rows_[index].label = rowLabels_[index].c_str();
+    rows_[index].actionValue = static_cast<int16_t>(index);
+    if (!rowValues_[index].empty()) rows_[index].value = rowValues_[index].c_str();
+    if (isDownloadAllRow(index) || isUpdateAllRow(index)) continue;
+    const auto& family = families_[familyIndexFromList(index)];
+    if (family.description[0] != '\0') rows_[index].subtitle = family.description;
+  }
+}
+
+void FontDownloadActivity::refreshProgressLines() {
+  statusLine_ = std::string(tr(STR_DOWNLOADING)) + " " + downloadingFamilyName_ + " (" +
+                std::to_string(currentFileIndex_ + 1) + "/" + std::to_string(currentFileTotal_) + ")";
+  // Above the status line rather than below the bar: a retry is context for
+  // what is being downloaded, and it reads as that only when it comes first.
+  retryLine_ = retryAttempt_ > 0 ? std::string(tr(STR_RETRY)) + " " + std::to_string(retryAttempt_ + 1) + "/" +
+                                       std::to_string(MAX_ATTEMPTS)
+                                 : std::string();
+}
+
+// --- Screen ---
+
+UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
+  StatusView view;
+  view.title = tr(STR_FONT_BROWSER);
+  // A differential pass leaves the previous screen showing through as grey
+  // residue, which is why the list used to sit under the progress bar for the
+  // whole download. The screen changes wholesale between states and at each new
+  // file, so those paints take a cleanup pass; the bar's own steps stay
+  // differential.
   const bool screenChanged = state_ != lastDisplayedState_ || downloadingFamilyIndex_ != lastDisplayedFamilyIndex_ ||
                              currentFileIndex_ != lastDisplayedFileIndex_ || retryAttempt_ != lastDisplayedRetry_;
+  view.refresh = screenChanged ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+
+  switch (state_) {
+    case WIFI_SELECTION:
+      // The picker owns the screen.
+      view.hidden = true;
+      break;
+    case LOADING_MANIFEST:
+      view.lines = {tr(STR_LOADING_FONT_LIST), nullptr, nullptr, nullptr};
+      view.backHint = "";
+      break;
+    case FAMILY_LIST:
+      if (rows_.empty()) {
+        view.lines = {tr(STR_NO_FONTS_AVAILABLE), nullptr, nullptr, nullptr};
+        break;
+      }
+      view.listItems = rows_.data();
+      view.listCount = static_cast<int>(rows_.size());
+      view.listHasSubtitle = true;
+      view.confirmHint = isSelectedFamilyDeletable()      ? tr(STR_DELETE)
+                         : isUpdateAllRow(listSelection()) ? tr(STR_UPDATE)
+                                                           : tr(STR_DOWNLOAD);
+      break;
+    case DOWNLOADING:
+      view.lines = {retryLine_.empty() ? statusLine_.c_str() : retryLine_.c_str(),
+                    retryLine_.empty() ? nullptr : statusLine_.c_str(), nullptr, nullptr};
+      view.showProgress = true;
+      view.progressValue = static_cast<int>(fileProgress_);
+      view.progressMax = fileTotal_ > 0 ? static_cast<int>(fileTotal_) : 1;
+      view.backHint = tr(STR_CANCEL);
+      break;
+    case COMPLETE:
+      view.lines = {tr(STR_FONT_INSTALLED), nullptr, nullptr, nullptr};
+      break;
+    case ERROR:
+      view.lines = {tr(STR_FONT_INSTALL_FAILED), errorMessage_.empty() ? nullptr : errorMessage_.c_str(), nullptr,
+                    nullptr};
+      view.confirmHint = tr(STR_RETRY);
+      break;
+  }
+  return view;
+}
+
+void FontDownloadActivity::afterRender() {
   lastDisplayedState_ = state_;
   lastDisplayedFamilyIndex_ = downloadingFamilyIndex_;
   lastDisplayedFileIndex_ = currentFileIndex_;
   lastDisplayedRetry_ = retryAttempt_;
+}
 
-  renderer.displayBuffer(screenChanged ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH);
+// --- Input handling ---
+
+void FontDownloadActivity::onListActivated(const int index) {
+  if (state_ != FAMILY_LIST || families_.empty()) return;
+  setListSelection(index);
+
+  if (isDownloadAllRow(index)) {
+    currentFileIndex_ = 0;
+    currentFileTotal_ = 0;
+    for (const auto& f : families_) {
+      if (!f.installed) currentFileTotal_ += f.fileCount;
+    }
+    downloadAll();
+  } else if (isUpdateAllRow(index)) {
+    currentFileIndex_ = 0;
+    currentFileTotal_ = 0;
+    for (const auto& f : families_) {
+      if (f.hasUpdate) currentFileTotal_ += f.fileCount;
+    }
+    updateAll();
+  } else {
+    const auto& family = families_[familyIndexFromList(index)];
+    if (!family.installed || family.hasUpdate) {
+      currentFileIndex_ = 0;
+      currentFileTotal_ = family.fileCount;
+      // Copied before the call: the list it points into is released mid-download.
+      downloadSingleFamily(std::string(family.name));
+    } else {
+      promptDeleteSelectedFamily();
+      return;
+    }
+  }
+  requestUpdateAndWait();
+}
+
+void FontDownloadActivity::onBackButton() {
+  // The result screens go back to the list; the list itself leaves.
+  if (state_ == COMPLETE || state_ == ERROR) {
+    {
+      RenderLock lock(*this);
+      state_ = FAMILY_LIST;
+    }
+    requestUpdate();
+    return;
+  }
+  finish();
+}
+
+void FontDownloadActivity::onConfirmButton() {
+  if (state_ == COMPLETE) {
+    onBackButton();
+    return;
+  }
+  if (state_ != ERROR) return;
+
+  // Retry the family that failed, when it is still one the manifest offers.
+  const auto retry = std::find_if(families_.begin(), families_.end(),
+                                  [this](const ManifestFamily& f) { return downloadingFamilyName_ == f.name; });
+  if (retry == families_.end()) {
+    onBackButton();
+    return;
+  }
+  currentFileIndex_ = 0;
+  currentFileTotal_ = retry->fileCount;
+  downloadSingleFamily(downloadingFamilyName_);
+  requestUpdateAndWait();
+}
+
+// Nothing on this screen answers while the manifest or a file is in flight: the
+// download blocks this task and polls for a cancel itself.
+bool FontDownloadActivity::handleCustomInput() {
+  return state_ == WIFI_SELECTION || state_ == LOADING_MANIFEST || state_ == DOWNLOADING;
 }

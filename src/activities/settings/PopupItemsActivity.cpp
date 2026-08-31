@@ -30,11 +30,6 @@ void PopupItemsActivity::onExit() {
 int PopupItemsActivity::listCount() const { return ITEM_COUNT; }
 
 void PopupItemsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   labels.assign(ITEM_COUNT, std::string());
   rows.assign(ITEM_COUNT, fui::ListItem{});
   for (int i = 0; i < ITEM_COUNT; ++i) {
@@ -75,16 +70,12 @@ void PopupItemsActivity::activateIndex(const int index) {
   requestUpdate();
 }
 
-void PopupItemsActivity::drawChrome() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  char counter[16];
-  snprintf(counter, sizeof(counter), "%u / %u", static_cast<unsigned>(SETTINGS.popupItemCount()),
+ListChrome PopupItemsActivity::chrome() const {
+  snprintf(counterText, sizeof(counterText), "%u / %u", static_cast<unsigned>(SETTINGS.popupItemCount()),
            static_cast<unsigned>(CrossPointSettings::POPUP_ITEM_MAX));
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight},
-                 tr(STR_POPUP_ITEMS), counter);
-}
-
-void PopupItemsActivity::drawFooter() {
-  const auto hints = mappedInput.mapLabels(tr(STR_BACK), tr(STR_TOGGLE), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
+  ListChrome chrome;
+  chrome.title = tr(STR_POPUP_ITEMS);
+  chrome.headerRight = counterText;
+  chrome.confirmHint = tr(STR_TOGGLE);
+  return chrome;
 }

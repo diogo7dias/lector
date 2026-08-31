@@ -6,39 +6,49 @@
 #include <vector>
 
 #include "OpdsServerStore.h"
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "activities/UiStatusActivity.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
  * Supports navigation through catalog hierarchy and downloading EPUBs.
  */
-class OpdsBookBrowserActivity final : public Activity {
+class OpdsBookBrowserActivity final : public UiStatusActivity {
  public:
   enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
-      : Activity("OpdsBookBrowser", renderer, mappedInput), buttonNavigator(), server(std::move(server)) {}
+      : UiStatusActivity("OpdsBookBrowser", renderer, mappedInput), server(std::move(server)) {}
 
   void onEnter() override;
   void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
+
+ protected:
+  StatusView statusView() const override;
+  bool handleCustomInput() override;
+  void onListActivated(int index) override;
+  void onBackButton() override;
+  void onConfirmButton() override;
+  void drawHeaderExtras(const Rect& headerRect) override;
+  void afterRender() override;
 
  private:
-  ButtonNavigator buttonNavigator;
   BrowserState state = BrowserState::LOADING;
+  // The rows borrow the entries' strings, so they are rebuilt whenever the feed
+  // is, and cleared whenever it is released.
+  std::vector<freeink::ui::ListItem> rows;
+  void refreshRows();
   std::vector<OpdsEntry> entries;
   std::vector<std::string> navigationHistory;
   std::string currentPath;
   std::string searchTemplate;
   bool consumeConfirm = false;
   bool consumeBack = false;  // Added missing member
+  /** The line the download screen names the book on. */
+  std::string downloadTitle;
   // Spend one FULL refresh on the frame that replaces the download screen. That
   // screen repaints on every progress step, all in FAST, so it leaves the panel
   // heavily ghosted.
   bool pendingFullRefresh = false;
-  int selectorIndex = 0;
   std::string errorMessage;
   std::string statusMessage;
   size_t downloadProgress = 0;
@@ -49,8 +59,6 @@ class OpdsBookBrowserActivity final : public Activity {
   void checkAndConnectWifi();
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
-  // Push the framebuffer, spending a FULL refresh if one is pending.
-  void presentFrame();
   void fetchFeed(const std::string& path);
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);

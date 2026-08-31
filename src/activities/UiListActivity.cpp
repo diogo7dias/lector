@@ -29,7 +29,16 @@ void UiListActivity::onEnter() {
 }
 
 void UiListActivity::screenTrampoline(UiScreen& screen, void* user) {
-  static_cast<UiListActivity*>(user)->buildScreen(screen);
+  auto* self = static_cast<UiListActivity*>(user);
+  // The body is reserved from the same bands the chrome paints, so a screen
+  // cannot draw a header the list then runs under. A screen wanting a different
+  // band still calls setContentMargin itself; this only sets the default.
+  const ListChrome chrome = self->chrome();
+  const list_chrome::Bands bands = listChromeBands(self->renderer, chrome);
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop), static_cast<int16_t>(chrome.sideInset),
+                                      static_cast<int16_t>(self->renderer.getScreenHeight() - bands.contentBottom),
+                                      static_cast<int16_t>(chrome.sideInset)});
+  self->buildScreen(screen);
 }
 
 void UiListActivity::rowActionTrampoline(const fui::ActionEvent& event, void* user) {
@@ -140,17 +149,21 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
   activeNav().syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, listCount(), props);
 }
 
-void UiListActivity::drawChrome() {
-  const char* title = headerTitle();
-  if (!title) return;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, title);
+ListChrome UiListActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = headerTitle();
+  return chrome;
 }
 
-void UiListActivity::drawFooter() {
-  const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+fui::Insets UiListActivity::chromeInsets() const {
+  const list_chrome::Bands bands = listChromeBands(renderer, chrome());
+  return fui::Insets{static_cast<int16_t>(bands.contentTop), 0,
+                     static_cast<int16_t>(renderer.getScreenHeight() - bands.contentBottom), 0};
 }
+
+void UiListActivity::drawChrome() { drawListChromeTop(renderer, chrome()); }
+
+void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, chrome()); }
 
 void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();
@@ -168,5 +181,5 @@ void UiListActivity::render(RenderLock&&) {
   }
   drawFooter();
   if (drawOverlay()) return;
-  renderer.displayBuffer();
+  renderer.displayBuffer(refreshMode());
 }

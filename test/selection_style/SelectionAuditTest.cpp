@@ -90,7 +90,8 @@ TEST(SelectionAudit, EverySelectionSurfaceCallsTheSharedPainter) {
   // drawList, drawWrappedList, drawButtonMenu, drawOptionPopup, the tab bar, the
   // bookmarks list, and the Continue Reading card, which marks itself in exactly two
   // places: the no-cover card fill and the single title-box site shared by a freshly
-  // rendered cover and a restored one, plus the three hand-rolled lists outside
-  // BaseTheme: the nearby peer list, the OPDS browser and the XTC chapter list.
-  EXPECT_GE(calls, 11);
+  // rendered cover and a restored one. Every hand-rolled list outside BaseTheme is
+  // gone now: the nearby peer list, the OPDS browser and the XTC chapter list all
+  // moved onto a FreeInkUI base, where the SDK marks the selection.
+  EXPECT_GE(calls, 8);
 }

@@ -178,34 +178,21 @@ void InstalledFontsActivity::onBackButton() {
   finish();
 }
 
-void InstalledFontsActivity::drawChrome() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
+ListChrome InstalledFontsActivity::chrome() const {
+  ListChrome chrome;
   // The actions view is headed by the family it is acting on, not by the screen name.
   const Family* family = selectedFamily();
-  const char* title = (view == View::Actions && family != nullptr) ? family->name.c_str() : tr(STR_INSTALLED_FONTS);
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, renderer.getScreenWidth(), metrics.headerHeight}, title);
-}
-
-void InstalledFontsActivity::drawFooter() {
+  chrome.title = (view == View::Actions && family != nullptr) ? family->name.c_str() : tr(STR_INSTALLED_FONTS);
   // With no fonts installed there is nothing to open and nothing to move between.
   const bool hasRows = listCount() > 0;
-  const auto hints = mappedInput.mapLabels(tr(STR_BACK), hasRows ? tr(STR_SELECT) : "", hasRows ? tr(STR_DIR_UP) : "",
-                                           hasRows ? tr(STR_DIR_DOWN) : "");
-  GUI.drawButtonHints(renderer, hints.btn1, hints.btn2, hints.btn3, hints.btn4);
-
-  if (errorMessage.empty()) return;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() - metrics.buttonHintsHeight - lineHeight,
-                            errorMessage.c_str());
+  chrome.confirmHint = hasRows ? tr(STR_SELECT) : "";
+  chrome.thirdHint = hasRows ? tr(STR_DIR_UP) : "";
+  chrome.fourthHint = hasRows ? tr(STR_DIR_DOWN) : "";
+  if (!errorMessage.empty()) chrome.footnotes[0] = errorMessage.c_str();
+  return chrome;
 }
 
 void InstalledFontsActivity::buildScreen(UiScreen& screen) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  screen.setContentMargin(
-      fui::Insets{static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing), 0,
-                  static_cast<int16_t>(metrics.buttonHintsHeight + metrics.verticalSpacing), 0});
-
   if (families.empty()) {
     screen.centeredText(tr(STR_NO_INSTALLED_FONTS));
     return;

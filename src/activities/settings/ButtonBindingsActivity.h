@@ -36,7 +36,7 @@ class ButtonBindingsActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void navigateButtons() override;
   void onBackButton() override;
-  void drawChrome() override;
+  ListChrome chrome() const override;
   bool handleCustomInput() override;
   bool drawOverlay() override;
 
