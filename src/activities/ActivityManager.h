@@ -62,6 +62,11 @@ class ActivityManager {
 
   void exitActivity(const RenderLock& lock);
 
+  // Name of the screen the queued transition is heading for, for the busy strip's
+  // label. A pop with an empty stack lands on Home, which is why this is not simply
+  // pendingActivity->name.
+  const std::string& pendingTransitionName() const;
+
   // Pending activity to be launched on next loop iteration
   std::unique_ptr<Activity> pendingActivity;
   enum class PendingAction { None, Push, Pop, Replace };

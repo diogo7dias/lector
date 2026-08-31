@@ -14,6 +14,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/BusyTick.h"
 
 namespace fui = freeink::ui;
 
@@ -78,6 +79,7 @@ void QuotesViewerActivity::loadQuotes() {
   //   [Chapter Title]\nquote text\n---\n\n
   size_t pos = 0;
   while (pos < buf.size()) {
+    busy::tick();
     // isRecordGap covers the page-break byte each entry now starts with, so the
     // header bracket is still what the scan lands on.
     while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
@@ -187,13 +189,12 @@ void QuotesViewerActivity::confirmDelete(const int index) {
   if (index < 0 || index >= listCount()) return;
   // ConfirmationActivity truncates the body to one line, which is enough to tell the
   // user which quote is about to go.
-  startActivityForResult(
-      std::make_unique<ConfirmationActivity>(renderer, mappedInput, std::string(tr(STR_CONFIRM_DELETE_QUOTE)),
-                                             quotes[index].text),
-      [this, index](const ActivityResult& result) {
-        if (!result.isCancelled) deleteQuote(index);
-        requestUpdate();
-      });
+  startActivityForResult(std::make_unique<ConfirmationActivity>(
+                             renderer, mappedInput, std::string(tr(STR_CONFIRM_DELETE_QUOTE)), quotes[index].text),
+                         [this, index](const ActivityResult& result) {
+                           if (!result.isCancelled) deleteQuote(index);
+                           requestUpdate();
+                         });
 }
 
 void QuotesViewerActivity::deleteQuote(const int index) {
@@ -278,8 +279,8 @@ void QuotesViewerActivity::buildScreen(UiScreen& screen) {
   for (int i = 0; i < count; ++i) {
     rows[i].label = quotes[i].text.c_str();
     if (!quotes[i].chapter.empty()) {
-      chapterTags[i] = renderer.truncatedText(UI_10_FONT_ID, quotes[i].chapter.c_str(), chapterMaxWidth,
-                                              EpdFontFamily::REGULAR);
+      chapterTags[i] =
+          renderer.truncatedText(UI_10_FONT_ID, quotes[i].chapter.c_str(), chapterMaxWidth, EpdFontFamily::REGULAR);
       rows[i].value = chapterTags[i].c_str();
     }
     rows[i].actionValue = static_cast<int16_t>(i);

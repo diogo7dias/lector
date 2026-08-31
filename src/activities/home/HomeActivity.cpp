@@ -28,6 +28,7 @@
 #include "reading_stats/ReadingStatsStore.h"
 #include "reading_stats/SdStatsFiles.h"
 #include "util/BookCacheUtils.h"
+#include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 
 int HomeActivity::menuRowCount() const {
@@ -53,6 +54,10 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
     if (recentBooks.size() >= maxBooks) {
       break;
     }
+
+    // One SD stat per book, and a full store on a slow card is where a home press
+    // spends its seconds.
+    busy::tick();
 
     // Skip if file no longer exists
     if (RecentBooksStore::isMissing(book)) {
@@ -249,9 +254,9 @@ void HomeActivity::render(RenderLock&&) {
   // The version, the clock and the skull that sit in the header band; the theme
   // places all three, so a restyle reaches them like everything else.
   char timeBuf[9];
-  const bool hasClock = halClock.isAvailable() &&
-                        halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ,
-                                            SETTINGS.clockFormat == 1);
+  const bool hasClock =
+      halClock.isAvailable() &&
+      halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1);
   GUI.drawHomeHeaderExtras(renderer, CROSSPOINT_VERSION, hasClock ? timeBuf : nullptr);
 
   // In-progress books as a list: each book's full title + its author wrapped over
@@ -352,7 +357,6 @@ void HomeActivity::render(RenderLock&&) {
     renderer.displayBuffer();
   }
 }
-
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
