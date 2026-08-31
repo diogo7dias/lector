@@ -116,3 +116,59 @@ TEST(SettingsGrid, AnEmptyGridHasNothingToStepTo) {
 }
 
 }  // namespace
+
+// The keys-only Shape: one column of full-width rows at the theme's row height,
+// which is what the settings screens were through lector-0.28.0.
+namespace {
+
+settings_grid::Shape listShape() {
+  settings_grid::Shape shape;
+  shape.columns = 1;
+  shape.sidePad = 0;
+  shape.gap = 0;
+  shape.minCellHeight = 30;
+  shape.stretchToFill = false;
+  return shape;
+}
+
+settings_grid::Layout listLayoutFor(const int count, const int scrollRow = 0) {
+  return forPane(kPaneWidth, kPaneHeight, count, scrollRow, listShape());
+}
+
+}  // namespace
+
+TEST(SettingsGrid, OneColumnRowsTakeTheWholePaneWidth) {
+  const auto layout = listLayoutFor(22);
+  const auto first = cellAt(layout, kPaneTop, 0);
+  const auto second = cellAt(layout, kPaneTop, 1);
+  EXPECT_EQ(first.x, 0);
+  EXPECT_EQ(first.width, kPaneWidth);
+  EXPECT_EQ(first.y, kPaneTop);
+  EXPECT_EQ(second.y, kPaneTop + first.height);
+}
+
+TEST(SettingsGrid, AListKeepsItsRowHeightWhenEverythingFits) {
+  const auto layout = listLayoutFor(4);
+  EXPECT_EQ(layout.cellHeight, 30);
+  EXPECT_EQ(layout.visibleRows, 4);
+}
+
+TEST(SettingsGrid, AGridStillSpreadsItsRowsWhenEverythingFits) {
+  const auto layout = layoutFor(4);
+  EXPECT_GT(layout.cellHeight, settings_grid::kMinCellHeight);
+}
+
+TEST(SettingsGrid, OneColumnPutsEveryItemOnItsOwnRow) {
+  const auto layout = listLayoutFor(22);
+  EXPECT_EQ(layout.totalRows, 22);
+  EXPECT_EQ(settings_grid::scrollToShow(layout, 21), 21 - layout.visibleRows + 1);
+}
+
+TEST(SettingsGrid, OneColumnSteppingMovesOneItemPerRow) {
+  EXPECT_EQ(settings_grid::step(0, 22, 1, 0, /*columns=*/1), 1);
+  EXPECT_EQ(settings_grid::step(5, 22, -1, 0, /*columns=*/1), 4);
+  // Left and Right have nothing to reach sideways, so they move along the list.
+  EXPECT_EQ(settings_grid::step(5, 22, 0, 1, /*columns=*/1), 6);
+  EXPECT_EQ(settings_grid::step(0, 22, -1, 0, /*columns=*/1), 0);
+  EXPECT_EQ(settings_grid::step(21, 22, 1, 0, /*columns=*/1), 21);
+}

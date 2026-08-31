@@ -62,6 +62,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // The band the grid itself gets: the body minus whatever reservedHeight asked
   // for. Shared by the paint and the layout so the two cannot disagree.
   Rect gridPane() const;
+  settings_grid::Shape gridShape() const;
   settings_grid::Layout gridLayout() const;
   int selected() const { return selected_; }
   void setSelected(int index);
@@ -82,6 +83,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
  private:
   void buildScreen(UiScreen& screen);
   void buildCell(UiScreen& screen, int index, const settings_grid::Rect& rect);
+  void buildRow(UiScreen& screen, int index, const freeink::ui::Rect& box);
   void buildValueBand(UiScreen& screen);
   static void screenTrampoline(UiScreen& screen, void* user);
   static void cellTrampoline(const freeink::ui::ActionEvent& event, void* user);

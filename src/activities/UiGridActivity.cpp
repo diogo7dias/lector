@@ -39,9 +39,23 @@ Rect UiGridActivity::gridPane() const {
   return Rect{0, top, renderer.getScreenWidth(), height};
 }
 
+// Two thumb-sized columns where a thumb exists, one column of full-width rows where
+// only the four buttons do: the shape the settings screens had through lector-0.28.0.
+settings_grid::Shape UiGridActivity::gridShape() const {
+  if (mappedInput.hasTouch()) return settings_grid::Shape{};
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  settings_grid::Shape shape;
+  shape.columns = 1;
+  shape.sidePad = 0;
+  shape.gap = metrics.listRowGap;
+  shape.minCellHeight = metrics.listRowHeight;
+  shape.stretchToFill = false;
+  return shape;
+}
+
 settings_grid::Layout UiGridActivity::gridLayout() const {
   const Rect pane = gridPane();
-  return settings_grid::forPane(pane.width, pane.height, cellCount(), scrollRow_);
+  return settings_grid::forPane(pane.width, pane.height, cellCount(), scrollRow_, gridShape());
 }
 
 void UiGridActivity::setSelected(const int index) {
@@ -64,7 +78,7 @@ void UiGridActivity::clampSelection() {
 void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
   const int count = cellCount();
   if (count == 0) return;
-  setSelected(settings_grid::step(selected_, count, deltaRows, deltaCells));
+  setSelected(settings_grid::step(selected_, count, deltaRows, deltaCells, gridLayout().columns));
 }
 
 void UiGridActivity::armValueBand(const char* name, const int minValue, const int maxValue, const int smallStep,
@@ -125,6 +139,11 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   const fui::Rect box{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
                       static_cast<int16_t>(rect.height)};
 
+  if (!mappedInput.hasTouch()) {
+    buildRow(screen, index, box);
+    return;
+  }
+
   fui::ButtonProps props;
   props.action = ACTION_CELL;
   props.value = static_cast<int16_t>(index);
@@ -159,6 +178,40 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
     target.text(fui::Rect{line.x, static_cast<int16_t>(top + nameHeight), line.width, valueHeight}, cellValue(index),
                 value);
   }
+}
+
+// One row of the keys-only list: the name on the left, its value against the right
+// edge, the selected one reversed. The same two pieces of text the cell stacks, laid
+// out the way GUI.drawList laid them out before the grid.
+void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect& box) {
+  const auto& theme = screen.theme();
+  auto& target = screen.frame().target();
+  const bool selected = index == selected_;
+
+  fui::ButtonProps props;
+  props.action = ACTION_CELL;
+  props.value = static_cast<int16_t>(index);
+  props.state = selected ? fui::StateChecked : fui::StateNormal;
+  props.styles = fui::plainStyles();
+  props.styles.selected.background = fui::Paint::solid(fui::Color::Black);
+  props.styles.selected.foreground = fui::Paint::solid(fui::Color::White);
+  props.minTouchSize = 0;
+  screen.button(props, box);
+
+  const int16_t inset = theme.spaceSm;
+  const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
+  const fui::Rect line{static_cast<int16_t>(box.x + inset),
+                       static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
+                       static_cast<int16_t>(box.width - inset * 2), lineHeight};
+
+  fui::TextStyle name = theme.bodyText;
+  name.align = fui::TextAlign::Left;
+  name.inverted = selected;
+  fui::TextStyle value = theme.smallText;
+  value.align = fui::TextAlign::Right;
+  value.inverted = selected;
+  if (cellName(index) != nullptr) target.text(line, cellName(index), name);
+  if (cellValue(index) != nullptr) target.text(line, cellValue(index), value);
 }
 
 // The armed number, in the header's place. On the touch board that is a slider
