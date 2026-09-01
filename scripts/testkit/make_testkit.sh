@@ -15,14 +15,14 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-OUT_DIR="${1:-$HOME/testkit-www}"
+OUT_DIR="${1:-$HOME/tools/testkit-www}"
 # Overridable so a one-off kit can carry a different build: positional argument
 # first, then TESTKIT_ENV, so neither call style needs the script edited.
 ENV_NAME="${2:-${TESTKIT_ENV:-testkit}}"
 BUILD_DIR="$REPO_ROOT/.pio/build/$ENV_NAME"
 # Downloaded once by hand; see docs/testkit.md. Kept out of the repo because it
 # is a 13 MB prebuilt binary.
-ESPTOOL_SRC="${ESPTOOL_MACOS_ARM64:-$HOME/testkit-tools/esptool-macos-arm64}"
+ESPTOOL_SRC="${ESPTOOL_MACOS_ARM64:-$HOME/tools/testkit-tools/esptool-macos-arm64}"
 
 cd "$REPO_ROOT"
 
