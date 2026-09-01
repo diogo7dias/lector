@@ -106,7 +106,8 @@ namespace {
 // v56: balance full text pages vertically; cached y positions change, binary layout does not.
 // v57: distribute every justification pixel; cached x positions change, binary layout does not.
 // v58: closing a child block no longer reapplies the parent's vertical margins/padding (#3221).
-constexpr uint8_t SECTION_FILE_VERSION = 58;
+// v59: inline direction changes no longer replace the paragraph's base direction (#3198).
+constexpr uint8_t SECTION_FILE_VERSION = 59;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

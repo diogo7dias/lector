@@ -104,6 +104,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 59
+
+Inline direction changes no longer replace the paragraph's base direction.
+Cached alignment and word positions change; the binary layout is unchanged.
+
 ### Version 58
 
 Closing a child block no longer reapplies its parent's vertical margins and padding.
@@ -214,7 +219,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 58
+#define EXPECTED_VERSION 59
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
