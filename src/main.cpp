@@ -1150,7 +1150,12 @@ void loop() {
   static unsigned long lastMemPrint = 0;
 
   gpio.setSharedConfirmPowerShortPressEmitsPower(SETTINGS.shortPressSleeps());
-  gpio.update();
+  // The mapped manager, not the raw gpio: update() polls the keys AND ticks the release
+  // gate (see MappedInputManager::update). The gate is armed by every screen change made
+  // while a key is held (ActivityManager's suppressHeldButtonRelease), and only tick()
+  // opens it again — polling the raw HAL here left it armed forever, so every
+  // wasReleased() in the firmware went dead and Back could never leave a book.
+  mappedInputManager.update();
 
   // Cleared here, once, so that every early return below (the screenshot combo, the sleep
   // paths) leaves the power release ungated. The double-click block further down is the
