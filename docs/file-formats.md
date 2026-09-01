@@ -104,6 +104,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 60
+
+Already-shaped Arabic presentation forms bypass font ligature substitution.
+Text measurements and line breaks can change; the binary layout is unchanged.
+
 ### Version 59
 
 Inline direction changes no longer replace the paragraph's base direction.
@@ -219,7 +224,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 59
+#define EXPECTED_VERSION 60
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256

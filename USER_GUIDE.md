@@ -832,6 +832,7 @@ other numbers in Settings use the same band.
   underline, superscript and subscript, writing direction, and passages the book marks as
   hidden. Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.
   An inline passage in another writing direction keeps the enclosing paragraph's base direction.
+  Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
 - **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,
   first-line indent, margins, padding and image sizes. **Paragraph Alignment: Book's Style**
   and **First Line Indent: Book** both read the book's CSS, so they need this on.
