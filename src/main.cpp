@@ -238,16 +238,17 @@ static void saveSleepFrameBuffer() {
 
 // How long the wake/unlock banners are guaranteed to stay readable. A floor on the
 // banner paint, not a sleep: the next activity's own work usually outlasts it, and only
-// a wake that would have covered the banners sooner ever waits here.
+// a wake that would have covered the banners sooner ever waits.
 constexpr uint32_t UNLOCK_BANNER_MIN_VISIBLE_MS = 800;
 static uint32_t unlockBannersShownAt = 0;
 
-// Holds the wake until the banners have had their floor. Safe to call when they were
-// never drawn: unlockBannersShownAt stays 0 and this returns immediately.
-static void waitForUnlockBannerFloor() {
+// Arms the floor on the renderer instead of blocking here: the next panel push (the
+// reader's or home's first paint) waits out whatever is left of it, so the book open,
+// section load and page layout run UNDER the floor rather than after it. Safe to call
+// when the banners were never drawn: unlockBannersShownAt stays 0 and nothing is armed.
+static void armUnlockBannerFloor() {
   if (unlockBannersShownAt == 0) return;
-  const uint32_t elapsed = millis() - unlockBannersShownAt;
-  if (elapsed < UNLOCK_BANNER_MIN_VISIBLE_MS) delay(UNLOCK_BANNER_MIN_VISIBLE_MS - elapsed);
+  renderer.holdNextDisplayUntil(unlockBannersShownAt + UNLOCK_BANNER_MIN_VISIBLE_MS);
 }
 
 static bool loadSleepFrameBuffer() {
@@ -999,9 +1000,9 @@ void setup() {
     APP_STATE.saveToFile();
   }
 
-  // The banners have had the panel to themselves up to here; hold them for their floor
-  // before the activity below paints over them.
-  waitForUnlockBannerFloor();
+  // The banners keep the panel until their floor; the activity below builds itself in
+  // the meantime and its first push is what waits.
+  armUnlockBannerFloor();
 
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
