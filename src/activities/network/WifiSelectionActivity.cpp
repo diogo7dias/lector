@@ -520,8 +520,8 @@ void WifiSelectionActivity::refreshHeaderCount() {
 }
 
 void WifiSelectionActivity::refreshConnectionLines() {
-  ssidLine = std::string(state == WifiSelectionState::CONNECTING ? tr(STR_TO_PREFIX) : tr(STR_NETWORK_PREFIX)) +
-             selectedSSID;
+  ssidLine =
+      std::string(state == WifiSelectionState::CONNECTING ? tr(STR_TO_PREFIX) : tr(STR_NETWORK_PREFIX)) + selectedSSID;
   ipLine = std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP;
 }
 
@@ -565,10 +565,10 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
       view.listNote = tr(STR_NETWORK_LEGEND);
       view.confirmHint = tr(STR_CONNECT);
       // Left forgets, right rescans, the same two the list has always bound.
-      view.thirdHint = listSelection() < static_cast<int>(realNetworkCount) &&
-                               networks[listSelection()].hasSavedPassword
-                           ? tr(STR_FORGET_BUTTON)
-                           : "";
+      view.thirdHint =
+          listSelection() < static_cast<int>(realNetworkCount) && networks[listSelection()].hasSavedPassword
+              ? tr(STR_FORGET_BUTTON)
+              : "";
       view.fourthHint = tr(STR_RETRY);
       break;
     case WifiSelectionState::CONNECTED:
@@ -590,6 +590,9 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
     case WifiSelectionState::CONNECTION_FAILED:
       view.lines = {tr(STR_CONNECTION_FAILED), connectionError.c_str(), nullptr, nullptr};
       view.confirmHint = tr(STR_DONE);
+      // A stored password that no longer opens the door is the one failure worth
+      // a way out of here (#114); a typed one is simply retyped from the list.
+      view.thirdHint = session.failedNetworkHasCredential() ? tr(STR_FORGET_BUTTON) : "";
       break;
   }
   return view;
@@ -647,6 +650,16 @@ bool WifiSelectionActivity::handleCustomInput() {
     return false;  // the base owns the two answers
   }
 
+  if (state == WifiSelectionState::CONNECTION_FAILED && session.failedNetworkHasCredential() &&
+      mappedInput.wasPressed(MappedInputManager::Button::Left)) {
+    forgetPromptForFailedJoin = true;
+    refreshConnectionLines();
+    state = WifiSelectionState::FORGET_PROMPT;
+    setChoiceIndex(0);  // Default to "Cancel"
+    requestUpdate();
+    return true;
+  }
+
   pollRadio();
   pumpSession();
   return false;
@@ -677,8 +690,16 @@ void WifiSelectionActivity::onChoiceActivated(const int index) {
   }
   if (state != WifiSelectionState::FORGET_PROMPT) return;
   state = WifiSelectionState::NETWORK_LIST;
+  const bool fromFailedJoin = forgetPromptForFailedJoin;
+  forgetPromptForFailedJoin = false;
   if (index == 1) {
-    session.forgetNetwork(listSelection(), millis());
+    if (fromFailedJoin) {
+      session.forgetFailedNetwork(millis());
+    } else {
+      session.forgetNetwork(listSelection(), millis());
+    }
+  } else if (fromFailedJoin) {
+    session.dismissFailure(millis());
   } else {
     session.rescan(millis());
   }
@@ -695,7 +716,12 @@ void WifiSelectionActivity::onBackButton() {
     case WifiSelectionState::FORGET_PROMPT:
       // Keep the network, go back to the list.
       state = WifiSelectionState::NETWORK_LIST;
-      session.rescan(millis());
+      if (forgetPromptForFailedJoin) {
+        forgetPromptForFailedJoin = false;
+        session.dismissFailure(millis());
+      } else {
+        session.rescan(millis());
+      }
       pumpSession();
       return;
     case WifiSelectionState::SCANNING:

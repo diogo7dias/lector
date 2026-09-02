@@ -120,6 +120,18 @@ class WifiSession {
   /** The reader acknowledged a failed join. */
   void dismissFailure(uint32_t nowMs);
 
+  /**
+   * True after a failed join of a network whose password is stored: the one case
+   * where forgetting is worth offering. A typed password has nothing to forget.
+   */
+  bool failedNetworkHasCredential() const;
+
+  /**
+   * The reader chose to drop the stored password behind a failed join. The
+   * reader asks; a failure alone never forgets (see dismissFailure).
+   */
+  void forgetFailedNetwork(uint32_t nowMs);
+
   /** The reader left the screen. */
   void cancel(uint32_t nowMs);
 

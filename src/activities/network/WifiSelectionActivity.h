@@ -88,7 +88,9 @@ class WifiSelectionActivity final : public UiStatusActivity {
   bool scanPending = false;
   // A join was started and its outcome has not been handed to the session yet.
   bool joinPending = false;
-
+  // The forget prompt was opened from a failed join, not from the list: the
+  // answer goes to the failed network, and Cancel returns to the list, not a rescan.
+  bool forgetPromptForFailedJoin = false;
 
   /** Hands the session everything the radio has to say, then runs what it asks for. */
   void pumpSession();

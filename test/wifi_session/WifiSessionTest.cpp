@@ -403,3 +403,54 @@ TEST(WifiSessionHidden, UsesTheStoredPasswordForAKnownHiddenNetwork) {
 }
 
 }  // namespace
+
+TEST(WifiSessionForget, TheReaderCanForgetTheCredentialBehindAFailedJoin) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.allowAutoConnect = false;
+  startup.savedSsids = {"cafe"};
+  session.begin(startup, 1000);
+  drain(session, 1000);
+  const std::vector<Network> found = {seen("cafe", -40)};
+  session.onScanResults(found.data(), found.size(), 2000);
+  drain(session, 2000);
+  session.selectNetwork(0, 3000);
+  drain(session, 3000);
+  session.onJoinFailed(4000);
+  drain(session, 4000);
+  ASSERT_TRUE(session.failedNetworkHasCredential());
+
+  session.forgetFailedNetwork(5000);
+
+  const std::vector<wifi_session::Action> actions = drain(session, 5000);
+  ASSERT_EQ(actions.size(), 2u);
+  EXPECT_EQ(actions[0].kind, wifi_session::ActionKind::FORGET_CREDENTIAL);
+  EXPECT_EQ(actions[0].ssid, "cafe");
+  EXPECT_EQ(actions[1].kind, wifi_session::ActionKind::START_SCAN);
+  EXPECT_EQ(session.state(), wifi_session::State::SCANNING);
+  EXPECT_FALSE(session.failedNetworkHasCredential());
+  ASSERT_EQ(session.networks().size(), 1u);
+  EXPECT_FALSE(session.networks()[0].hasSavedPassword);
+}
+
+TEST(WifiSessionForget, AFailedJoinWithATypedPasswordOffersNothingToForget) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.allowAutoConnect = false;
+  session.begin(startup, 1000);
+  drain(session, 1000);
+  const std::vector<Network> found = {seen("cafe", -40)};
+  session.onScanResults(found.data(), found.size(), 2000);
+  drain(session, 2000);
+  session.selectNetwork(0, 3000);
+  drain(session, 3000);
+  session.onPasswordEntered(3500);
+  drain(session, 3500);
+  session.onJoinFailed(4000);
+  drain(session, 4000);
+
+  EXPECT_FALSE(session.failedNetworkHasCredential());
+  session.forgetFailedNetwork(5000);
+  EXPECT_TRUE(drain(session, 5000).empty());
+  EXPECT_EQ(session.state(), wifi_session::State::FAILED);
+}

@@ -125,6 +125,7 @@ void WifiSession::onJoinFailed(const uint32_t nowMs) {
 }
 
 void WifiSession::joinOrAskForPassword(const std::string& ssid, const bool hasSavedPassword, const bool isEncrypted) {
+  typedPasswordPending_ = false;  // a fresh pick; whatever was typed for the last one no longer applies
   if (isEncrypted && !hasSavedPassword) {
     activeSsid_ = ssid;
     typedPasswordPending_ = true;
@@ -201,6 +202,30 @@ void WifiSession::dismissFailure(const uint32_t nowMs) {
   // password, and offering to delete the credential every time trains the reader
   // to throw away a working password over a passing failure.
   state_ = State::NETWORK_LIST;
+}
+
+bool WifiSession::failedNetworkHasCredential() const {
+  return state_ == State::FAILED && !typedPasswordPending_ && isSaved(activeSsid_.c_str());
+}
+
+void WifiSession::forgetFailedNetwork(const uint32_t nowMs) {
+  if (!failedNetworkHasCredential()) {
+    return;
+  }
+  clockMs_ = nowMs;
+  queue(ActionKind::FORGET_CREDENTIAL, activeSsid_);
+  for (auto it = startup_.savedSsids.begin(); it != startup_.savedSsids.end(); ++it) {
+    if (*it == activeSsid_) {
+      startup_.savedSsids.erase(it);
+      break;
+    }
+  }
+  for (Network& network : networks_) {
+    if (activeSsid_ == network.ssid) {
+      network.hasSavedPassword = false;
+    }
+  }
+  startScan(nowMs);
 }
 
 void WifiSession::cancel(const uint32_t nowMs) {
