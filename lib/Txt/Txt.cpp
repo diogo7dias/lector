@@ -143,6 +143,7 @@ bool Txt::generateCoverBmp() const {
 
     if (!success) {
       LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
+      coverBmp.close();  // the handle must be released before the path is removed
       Storage.remove(getCoverBmpPath().c_str());
     } else {
       LOG_DBG("TXT", "Generated BMP from JPG cover image");
