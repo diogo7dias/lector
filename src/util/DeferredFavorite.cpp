@@ -12,6 +12,7 @@
 
 #include "CrossPointState.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "util/BusyTick.h"
 #include "util/FavoriteQueueChain.h"
 
 namespace DeferredFavorite {
@@ -221,6 +222,9 @@ bool waitForIdle(const uint32_t timeoutMs) {
       LOG_ERR("DFAV", "Timed out waiting for the favorite worker");
       return false;
     }
+    // Same heartbeat the other blocking waits feed: a caller that armed a BusyBanner gets
+    // the strip once the renames drag, and nothing happens when none is armed.
+    busy::tick();
     vTaskDelay(pdMS_TO_TICKS(kIdlePollMs));
   }
   return true;
