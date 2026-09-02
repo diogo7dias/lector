@@ -62,4 +62,3 @@ binary correctly serves both. Only the X4 Pro needs its own image.
 - X4 Pro fast-waveform retune: black depth needs a measured pick, not a derived one.
 - Wake behaviour from `#3191`.
 - Upstream catchup PRs `#3247`, `#3252`, `#3245`.
-- Revoke App Store Connect key `GACC2P4ZW5`, exposed in a transcript.
