@@ -502,6 +502,9 @@ void XtcReaderActivity::renderPage() {
 }
 
 void XtcReaderActivity::saveProgress() const {
+  // render() also runs for popups and status-bar refreshes; only a moved page is
+  // worth the several FAT operations writeAtomic costs (SPIFFS/SD write throttling).
+  if (currentPage == lastSavedPage) return;
   uint8_t data[4];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
@@ -509,7 +512,9 @@ void XtcReaderActivity::saveProgress() const {
   data[3] = (currentPage >> 24) & 0xFF;
   if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
     LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
+    return;
   }
+  lastSavedPage = currentPage;
 }
 
 void XtcReaderActivity::loadProgress() {

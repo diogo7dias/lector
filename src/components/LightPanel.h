@@ -16,9 +16,9 @@
 #include "LightPanelGeometry.h"
 #include "MappedInputManager.h"
 #include "fontIds.h"
-#include "util/BoundMenuLabels.h"
 #include "icons/sun24.h"
 #include "icons/thermometer24.h"
+#include "util/BoundMenuLabels.h"
 #include "util/ButtonNavigator.h"
 #include "util/DebugTrace.h"
 
@@ -269,8 +269,7 @@ class LightPanel {
 
   // A framed box with its label centred. Filled while pressed, and the text is knocked out
   // of the fill rather than drawn over it.
-  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label,
-               const bool filled) const {
+  void drawBox(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* label, const bool filled) const {
     const int y = rect.y + topInset_;
     if (filled) renderer.fillRect(rect.x, y, rect.width, rect.height, true);
     renderer.drawRect(rect.x, y, rect.width, rect.height, true);
@@ -319,8 +318,7 @@ class LightPanel {
   void drawCentered(const GfxRenderer& renderer, const light_panel::Rect& rect, const char* text,
                     const bool center) const {
     const int textY = rect.y + topInset_ + (rect.height - renderer.getLineHeight(banner::FONT_ID)) / 2;
-    const int textX =
-        center ? rect.x + (rect.width - renderer.getTextWidth(banner::FONT_ID, text)) / 2 : rect.x;
+    const int textX = center ? rect.x + (rect.width - renderer.getTextWidth(banner::FONT_ID, text)) / 2 : rect.x;
     renderer.drawText(banner::FONT_ID, textX, textY, text, true);
   }
 
@@ -358,10 +356,15 @@ class LightPanel {
 
   void close(const std::function<void()>& requestUpdate) {
     active_ = false;
-    SETTINGS.frontlightOn = on_ ? 1 : 0;
-    SETTINGS.frontlightBrightness = brightness_;
-    SETTINGS.frontlightWarmth = warmth_;
-    SETTINGS.saveToFile();
+    const uint8_t on = on_ ? 1 : 0;
+    // A panel opened and closed unchanged costs no settings write (write throttling).
+    if (SETTINGS.frontlightOn != on || SETTINGS.frontlightBrightness != brightness_ ||
+        SETTINGS.frontlightWarmth != warmth_) {
+      SETTINGS.frontlightOn = on;
+      SETTINGS.frontlightBrightness = brightness_;
+      SETTINGS.frontlightWarmth = warmth_;
+      SETTINGS.saveToFile();
+    }
     requestUpdate();
   }
 

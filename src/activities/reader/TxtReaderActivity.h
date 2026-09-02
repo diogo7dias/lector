@@ -74,6 +74,8 @@ class TxtReaderActivity final : public Activity {
   void savePageIndexCache() const;
   void saveProgress() const;
   void loadProgress();
+  // Page last written to progress.bin; saveProgress skips a write for an unmoved page.
+  mutable int lastSavedPage = -1;
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,
