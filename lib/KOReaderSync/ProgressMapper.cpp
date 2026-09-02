@@ -145,12 +145,12 @@ static constexpr int MAX_XPATH_DEPTH = 16;
 // Example input: "/body/DocFragment[1]/body/div[1]/ul/li[4]/text()[1].51"
 // Fills steps with: {div,1}, {ul,1}, {li,4}
 int parseXPathSteps(const std::string& xpath, XPathStep steps[MAX_XPATH_DEPTH]) {
-  static const char kBodyFrag[] = "/body/DocFragment[";
+  static constexpr char kBodyFrag[] = "/body/DocFragment[";
   const size_t fragPos = xpath.find(kBodyFrag);
   if (fragPos == std::string::npos) return 0;
   const size_t afterBracket = xpath.find(']', fragPos + strlen(kBodyFrag));
   if (afterBracket == std::string::npos) return 0;
-  static const char kBody[] = "/body/";
+  static constexpr char kBody[] = "/body/";
   if (xpath.compare(afterBracket + 1, strlen(kBody), kBody) != 0) return 0;
   size_t pos = afterBracket + 1 + strlen(kBody);
 
