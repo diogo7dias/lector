@@ -35,3 +35,4 @@ sdkconfig.sticky
 sdkconfig.gh_release*
 lib/EpdFont/scripts/sd-fonts.local.yaml
 lib/EpdFont/scripts/local_fonts/
+NEW-STRINGS.md

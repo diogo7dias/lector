@@ -85,6 +85,14 @@ uint16_t runningPartitionChipId() {
 }
 
 namespace {
+uint16_t g_lastImageChip = 0xFFFF;
+}  // namespace
+
+uint16_t lastImageChipId() { return g_lastImageChip; }
+
+void setLastImageChipId(uint16_t chipId) { g_lastImageChip = chipId; }
+
+namespace {
 // Stream `length` bytes from `file` starting at the current read offset, feeding them through
 // both the XOR-checksum and SHA256 accumulators. Used by validateImageStream so the whole image
 // is verified end-to-end without holding it in RAM (ESP32-C3 only has ~380 KB).
@@ -201,9 +209,11 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
   // the running slot's own chip_id (self-describing, no chip enumeration).
   uint16_t imageChip;
   std::memcpy(&imageChip, header + 12, sizeof(imageChip));
+  g_lastImageChip = imageChip;
   const uint16_t deviceChip = runningPartitionChipId();
   if (deviceChip != 0xFFFF && imageChip != deviceChip) {
-    LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+    LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X (%s) device=0x%04X (%s)", imageChip, chipName(imageChip),
+            deviceChip, chipName(deviceChip));
     return Result::BAD_CHIP;
   }
   const uint8_t segCount = header[1];
@@ -226,12 +236,12 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
     if (pos + SEG_HEADER_SIZE > fileSize) {
       LOG_ERR("FLASH", "validate: seg %u header overruns EOF at %u", i, static_cast<unsigned>(pos));
       mbedtls_sha256_free(&shaCtx);
-        return Result::BAD_SEGMENTS;
+      return Result::BAD_SEGMENTS;
     }
     uint8_t segHdr[SEG_HEADER_SIZE];
     if (file.read(segHdr, SEG_HEADER_SIZE) != static_cast<int>(SEG_HEADER_SIZE)) {
       mbedtls_sha256_free(&shaCtx);
-        return Result::READ_FAIL;
+      return Result::READ_FAIL;
     }
     mbedtls_sha256_update(&shaCtx, segHdr, SEG_HEADER_SIZE);
     pos += SEG_HEADER_SIZE;
@@ -242,13 +252,13 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
       LOG_ERR("FLASH", "validate: seg %u data overruns EOF (%u + %u > %u)", i, static_cast<unsigned>(pos),
               static_cast<unsigned>(dataLen), static_cast<unsigned>(fileSize));
       mbedtls_sha256_free(&shaCtx);
-        return Result::BAD_SEGMENTS;
+      return Result::BAD_SEGMENTS;
     }
 
     const Result feedRes = feedHashAndChecksum(file, dataLen, &xorAccum, &shaCtx, buf.get());
     if (feedRes != Result::OK) {
       mbedtls_sha256_free(&shaCtx);
-        return feedRes;
+      return feedRes;
     }
     pos += dataLen;
   }
@@ -256,12 +266,16 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
   // pad_end is the 16-byte aligned offset at which the checksum byte sits at pad_end - 1.
   const size_t padEnd = (pos + 16) & ~static_cast<size_t>(15);
   const size_t expectedTotal = padEnd + (hashAppended ? SHA_TRAILER : 0);
-  if (expectedTotal != fileSize) {
-    LOG_ERR("FLASH", "validate: size mismatch body+pad=%u sha=%u expected=%u actual=%u", static_cast<unsigned>(padEnd),
-            static_cast<unsigned>(hashAppended ? SHA_TRAILER : 0), static_cast<unsigned>(expectedTotal),
-            static_cast<unsigned>(fileSize));
+  if (fileSize < expectedTotal) {
+    LOG_ERR("FLASH", "validate: file truncated: body+pad=%u sha=%u expected=%u actual=%u",
+            static_cast<unsigned>(padEnd), static_cast<unsigned>(hashAppended ? SHA_TRAILER : 0),
+            static_cast<unsigned>(expectedTotal), static_cast<unsigned>(fileSize));
     mbedtls_sha256_free(&shaCtx);
     return Result::BAD_SIZE;
+  }
+  if (fileSize > expectedTotal) {
+    LOG_INF("FLASH", "validate: image has %u trailing bytes past expected %u",
+            static_cast<unsigned>(fileSize - expectedTotal), static_cast<unsigned>(expectedTotal));
   }
 
   // Read the padding bytes (which include the stored checksum at the last byte) into the SHA stream.
@@ -290,12 +304,12 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
     uint8_t stored[SHA_TRAILER];
     if (file.read(stored, SHA_TRAILER) != static_cast<int>(SHA_TRAILER)) {
       mbedtls_sha256_free(&shaCtx);
-        return Result::READ_FAIL;
+      return Result::READ_FAIL;
     }
     if (std::memcmp(computed, stored, SHA_TRAILER) != 0) {
       LOG_ERR("FLASH", "validate: SHA256 mismatch");
       mbedtls_sha256_free(&shaCtx);
-        return Result::BAD_SHA;
+      return Result::BAD_SHA;
     }
   }
 

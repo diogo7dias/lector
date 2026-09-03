@@ -12,6 +12,7 @@ constexpr const char* kNamespace = "fwswitch";
 constexpr const char* kKeyAddress = "addr";
 constexpr const char* kKeySize = "size";
 constexpr const char* kLogPath = "/lector-firmware-update.log";
+bool s_switchRolledBack = false;
 }  // namespace
 
 void recordPendingSwitch(uint32_t address, size_t imageSize) {
@@ -47,6 +48,7 @@ void auditPendingSwitch(const char* version) {
     return;
   }
 
+  s_switchRolledBack = true;
   const std::string line = formatSwitchFailedLine(version, intended, runningAddress, imageSize);
   LOG_ERR("FLASH", "%s", line.c_str());
 
@@ -56,5 +58,7 @@ void auditPendingSwitch(const char* version) {
   file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size());
   file.close();
 }
+
+bool didPreviousSwitchRollBack() { return s_switchRolledBack; }
 
 }  // namespace firmware_flash

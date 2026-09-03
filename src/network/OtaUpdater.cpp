@@ -44,8 +44,8 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrerele
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
   if (ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
-    LOG_ERR("OTA", "Only %u bytes free, need %d for a secure connection",
-            static_cast<unsigned>(ESP.getFreeHeap()), MIN_HEAP_FOR_TLS);
+    LOG_ERR("OTA", "Only %u bytes free, need %d for a secure connection", static_cast<unsigned>(ESP.getFreeHeap()),
+            MIN_HEAP_FOR_TLS);
     return OOM_ERROR;
   }
 
@@ -63,10 +63,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrerele
   releaseParser.setPreferredAssetName("firmware-x4pro.bin");
 #endif
   releaseParser.setListMode(includePrereleases);
-  const bool ok = HttpDownloader::fetchUrl(includePrereleases ? releaseListUrl : latestReleaseUrl, [&releaseParser](const uint8_t* data, size_t len) {
-    releaseParser.feed(reinterpret_cast<const char*>(data), len);
-    return true;
-  });
+  const bool ok = HttpDownloader::fetchUrl(includePrereleases ? releaseListUrl : latestReleaseUrl,
+                                           [&releaseParser](const uint8_t* data, size_t len) {
+                                             releaseParser.feed(reinterpret_cast<const char*>(data), len);
+                                             return true;
+                                           });
   if (!ok) {
     LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
@@ -181,9 +182,12 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
             if (hdrLen == sizeof(hdr)) {
               uint16_t imageChip;
               std::memcpy(&imageChip, hdr + 12, sizeof(imageChip));
+              lastImageChip = imageChip;
+              firmware_flash::setLastImageChipId(imageChip);
               const uint16_t deviceChip = firmware_flash::runningPartitionChipId();
               if (ota_retry::isWrongChip(imageChip, deviceChip)) {
-                LOG_ERR("OTA", "wrong chip: image=0x%04X device=0x%04X", imageChip, deviceChip);
+                LOG_ERR("OTA", "wrong chip: image=0x%04X (%s) device=0x%04X (%s)", imageChip,
+                        firmware_flash::chipName(imageChip), deviceChip, firmware_flash::chipName(deviceChip));
                 wrongChip = true;
                 return false;  // abort the transfer
               }
@@ -252,6 +256,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     LOG_ERR("OTA", "commit failed: %s", firmware_flash::resultName(commitRes));
     if (commitRes == firmware_flash::Result::BAD_CHIP) return WRONG_DEVICE_ERROR;
     if (commitRes == firmware_flash::Result::OOM) return OOM_ERROR;
+    if (commitRes == firmware_flash::Result::BAD_MAGIC || commitRes == firmware_flash::Result::BAD_CHECKSUM ||
+        commitRes == firmware_flash::Result::BAD_SHA || commitRes == firmware_flash::Result::BAD_SEGMENTS ||
+        commitRes == firmware_flash::Result::BAD_SIZE) {
+      return INVALID_IMAGE_ERROR;
+    }
     return INTERNAL_UPDATE_ERROR;
   }
 

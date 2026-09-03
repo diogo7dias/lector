@@ -54,6 +54,8 @@ class SdFirmwareUpdateActivity : public UiStatusActivity {
   // through, and every real percent is 0 to 100.
   unsigned int lastRenderedPercent = 101;
   std::string errorMessage;
+  std::string detailMessage;
+  std::string hintMessage;
 
   // True when the write has moved a whole percent since the last repaint.
   bool percentAdvanced();

@@ -9,6 +9,7 @@ class OtaUpdater {
   size_t otaSize = 0;
   size_t processedSize = 0;
   size_t totalSize = 0;
+  uint16_t lastImageChip = 0xFFFF;
 
  public:
   using ProgressCallback = void (*)(void* ctx);
@@ -22,6 +23,7 @@ class OtaUpdater {
     INTERNAL_UPDATE_ERROR,
     OOM_ERROR,
     WRONG_DEVICE_ERROR,
+    INVALID_IMAGE_ERROR,
   };
 
   size_t getOtaSize() const { return otaSize; }
@@ -29,6 +31,8 @@ class OtaUpdater {
   size_t getProcessedSize() const { return processedSize; }
 
   size_t getTotalSize() const { return totalSize; }
+
+  uint16_t getLastImageChip() const { return lastImageChip; }
 
   OtaUpdater() = default;
   bool isUpdateNewer() const;
