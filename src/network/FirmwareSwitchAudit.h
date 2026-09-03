@@ -26,4 +26,8 @@ void recordPendingSwitch(uint32_t address, size_t imageSize);
 // the SD card to be mounted.
 void auditPendingSwitch(const char* version);
 
+// Returns true if the bootloader rolled back the most recently attempted firmware
+// handover (the intended slot differed from the slot that actually booted).
+bool didPreviousSwitchRollBack();
+
 }  // namespace firmware_flash

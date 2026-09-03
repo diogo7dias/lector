@@ -144,7 +144,6 @@ TEST(FirmwareFlashWrite, ProgressReachesTotal) {
   EXPECT_GT(seen.calls, 1);
 }
 
-
 // StreamWriter: the same erase-ahead write, but push-mode, for an image that
 // arrives from the network in chunks the caller does not control and cannot
 // rewind.
@@ -218,6 +217,23 @@ TEST(FirmwareSwitchAudit, MissingVersionDoesNotProduceGarbage) {
   const std::string line = firmware_flash::formatSwitchFailedLine(nullptr, 0x650000, 0x010000, 1);
 
   EXPECT_EQ(line.rfind("?: ", 0), 0u);
+}
+
+}  // namespace
+
+#include "ChipIdNames.h"
+
+namespace {
+
+TEST(ChipIdNames, NamesKnownChipsAccurately) {
+  EXPECT_STREQ(firmware_flash::chipName(0x0005), "ESP32-C3");
+  EXPECT_STREQ(firmware_flash::chipName(0x0009), "ESP32-S3");
+  EXPECT_STREQ(firmware_flash::chipName(0x0000), "ESP32");
+  EXPECT_STREQ(firmware_flash::chipName(0x0002), "ESP32-S2");
+  EXPECT_STREQ(firmware_flash::chipName(0x000C), "ESP32-C2");
+  EXPECT_STREQ(firmware_flash::chipName(0x000D), "ESP32-C6");
+  EXPECT_STREQ(firmware_flash::chipName(0x0010), "ESP32-H2");
+  EXPECT_STREQ(firmware_flash::chipName(0x1234), "Unknown");
 }
 
 }  // namespace

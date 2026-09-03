@@ -38,6 +38,8 @@ class OtaUpdateActivity : public UiStatusActivity {
   // Points into the i18n string table (flash-resident, so no lifetime concern);
   // nullptr means no extra detail.
   const char* failedDetail = nullptr;
+  std::string failedExtra;
+  std::string failedHint;
   // "Current version: x" / "New version: y" / "4096 / 1200000", all built when
   // the state that shows them is entered or when the transfer moves.
   std::string currentVersionLine;

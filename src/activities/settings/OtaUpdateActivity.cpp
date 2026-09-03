@@ -10,6 +10,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/FirmwareFlasher.h"
 #include "network/OtaUpdater.h"
 #include "network/TlsScratchHeap.h"
 
@@ -125,10 +126,16 @@ UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
       view.confirmHint = tr(STR_INSTALL_ANYWAY);
       break;
     case FAILED:
-      view.lines = {tr(STR_UPDATE_FAILED), failedDetail, nullptr, nullptr};
+      view.lines = {tr(STR_UPDATE_FAILED), failedDetail, failedExtra.empty() ? nullptr : failedExtra.c_str(),
+                    failedHint.empty() ? nullptr : failedHint.c_str()};
       break;
     case FINISHED:
-      view.lines = {tr(STR_UPDATE_COMPLETE), tr(STR_POWER_ON_HINT), nullptr, nullptr};
+      view.lines = {
+          tr(STR_UPDATE_COMPLETE),
+          "Flashed ok; if it boots back into Lector,",
+          "update Lector first to 0.29.5 then",
+          "reflash the other firmware.",
+      };
       view.backHint = "";
       break;
     case WIFI_SELECTION:
@@ -173,8 +180,14 @@ const char* OtaUpdateActivity::detailFor(const OtaUpdater::OtaUpdaterError error
   switch (error) {
     case OtaUpdater::WRONG_DEVICE_ERROR:
       return tr(STR_FIRMWARE_WRONG_DEVICE);
+    case OtaUpdater::INVALID_IMAGE_ERROR:
+      return tr(STR_INVALID_FIRMWARE);
     case OtaUpdater::OOM_ERROR:
       return tr(STR_UPDATE_LOW_MEMORY);
+    case OtaUpdater::HTTP_ERROR:
+      return "Download failed";
+    case OtaUpdater::INTERNAL_UPDATE_ERROR:
+      return tr(STR_FIRMWARE_WRITE_FAILED);
     default:
       return nullptr;
   }
@@ -235,6 +248,17 @@ void OtaUpdateActivity::runUpdateInstall() {
     {
       RenderLock lock(*this);
       failedDetail = detailFor(res);
+      failedExtra.clear();
+      failedHint.clear();
+      if (res == OtaUpdater::WRONG_DEVICE_ERROR) {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "Image: %s, device: %s", firmware_flash::chipName(updater.getLastImageChip()),
+                      firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
+        failedExtra = buf;
+        failedHint = "Use firmware for this device's chip";
+      } else if (res == OtaUpdater::INVALID_IMAGE_ERROR) {
+        failedExtra = "Corrupt download: checksum mismatch";
+      }
       state = FAILED;
     }
     requestUpdate();
@@ -247,7 +271,7 @@ void OtaUpdateActivity::runUpdateInstall() {
   }
   requestUpdateAndWait();
   // Hold the completion screen briefly so the user sees it, then restart.
-  delay(3000);
+  delay(4000);
   {
     RenderLock lock(*this);
     state = SHUTTING_DOWN;

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <memory>
 
+#include "ChipIdNames.h"
+
 // Flash a firmware image from an SD-card path into the next OTA app
 // partition, then switch otadata so the X3/X4 stock bootloader picks it up
 // on next boot. Mirrors the web flasher: raw esp_partition_erase_range +
@@ -119,5 +121,10 @@ const char* resultName(Result r);
 // successfully, its chip_id is authoritative for the current CPU, so a
 // candidate image must match it to be safe to flash.
 uint16_t runningPartitionChipId();
+
+// Returns the chip_id of the candidate image from the most recent validation or
+// stream header inspect, or 0xFFFF if none.
+uint16_t lastImageChipId();
+void setLastImageChipId(uint16_t chipId);
 
 }  // namespace firmware_flash

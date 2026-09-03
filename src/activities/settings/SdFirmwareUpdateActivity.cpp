@@ -13,6 +13,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/FirmwareFlasher.h"
+#include "network/FirmwareSwitchAudit.h"
 
 void SdFirmwareUpdateActivity::onEnter() {
   UiStatusActivity::onEnter();
@@ -99,12 +100,37 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
   const auto vr = firmware_flash::validateImageFile(firmwarePath.c_str(), partitionLimit);
   if (vr != firmware_flash::Result::OK) {
     LOG_ERR("FW", "image validation failed: %s", firmware_flash::resultName(vr));
+    detailMessage.clear();
+    hintMessage.clear();
     if (vr == firmware_flash::Result::TOO_LARGE) {
       errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
+      detailMessage = "File exceeds partition limit";
     } else if (vr == firmware_flash::Result::TOO_SMALL) {
       errorMessage = tr(STR_FIRMWARE_TOO_SMALL);
+      detailMessage = "File is under 64 KB minimum";
     } else if (vr == firmware_flash::Result::BAD_CHIP) {
       errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+      char buf[64];
+      std::snprintf(buf, sizeof(buf), "Image: %s, device: %s",
+                    firmware_flash::chipName(firmware_flash::lastImageChipId()),
+                    firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
+      detailMessage = buf;
+      hintMessage = "Use firmware for this device's chip";
+    } else if (vr == firmware_flash::Result::BAD_MAGIC) {
+      errorMessage = tr(STR_INVALID_FIRMWARE);
+      detailMessage = "Not an ESP32 firmware image (bad magic)";
+    } else if (vr == firmware_flash::Result::BAD_CHECKSUM) {
+      errorMessage = tr(STR_INVALID_FIRMWARE);
+      detailMessage = "Corrupt image: checksum mismatch";
+    } else if (vr == firmware_flash::Result::BAD_SHA) {
+      errorMessage = tr(STR_INVALID_FIRMWARE);
+      detailMessage = "Corrupt image: SHA256 mismatch";
+    } else if (vr == firmware_flash::Result::BAD_SEGMENTS) {
+      errorMessage = tr(STR_INVALID_FIRMWARE);
+      detailMessage = "Corrupt image: invalid segment table";
+    } else if (vr == firmware_flash::Result::BAD_SIZE) {
+      errorMessage = tr(STR_INVALID_FIRMWARE);
+      detailMessage = "Corrupt image: file truncated";
     } else {
       errorMessage = tr(STR_INVALID_FIRMWARE);
     }
@@ -187,14 +213,24 @@ void SdFirmwareUpdateActivity::performUpdate() {
                                                       /*alreadyValidated=*/false, verifyCb);
   if (result != firmware_flash::Result::OK) {
     LOG_ERR("FW", "flash failed: %s", firmware_flash::resultName(result));
+    detailMessage.clear();
+    hintMessage.clear();
     // BAD_CHIP here is the TOCTOU re-validation catching a wrong-MCU image the
     // pre-confirmation pass missed (e.g. the SD card was swapped).
     if (result == firmware_flash::Result::BAD_CHIP) {
       errorMessage = tr(STR_FIRMWARE_WRONG_DEVICE);
+      char buf[64];
+      std::snprintf(buf, sizeof(buf), "Image: %s, device: %s",
+                    firmware_flash::chipName(firmware_flash::lastImageChipId()),
+                    firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
+      detailMessage = buf;
+      hintMessage = "Use firmware for this device's chip";
     } else if (result == firmware_flash::Result::VERIFY_FAIL) {
       // The bytes in flash do not match the file. otadata was left alone, so
       // the device still boots the firmware it is running now.
       errorMessage = tr(STR_FIRMWARE_VERIFY_FAILED);
+      detailMessage = "Flash write mismatch; bytes not saved";
+      hintMessage = "Check SD card or try again";
     } else {
       // The code goes on screen: on a USB-locked reader a photo of this screen
       // is often the only report we get, and "write failed" alone covers
@@ -213,7 +249,7 @@ void SdFirmwareUpdateActivity::performUpdate() {
     state = State::SUCCESS;
   }
   requestUpdateAndWait();
-  delay(1500);
+  delay(4000);
   ESP.restart();
 }
 
@@ -244,11 +280,21 @@ UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
       view.backHint = "";
       break;
     case State::SUCCESS:
-      view.lines = {tr(STR_UPDATE_COMPLETE), tr(STR_RESTARTING_HINT), nullptr, nullptr};
+      view.lines = {
+          tr(STR_UPDATE_COMPLETE),
+          "Flashed ok; if it boots back into Lector,",
+          "update Lector first to 0.29.5 then",
+          "reflash the other firmware.",
+      };
       view.backHint = "";
       break;
     case State::FAILED:
-      view.lines = {tr(STR_UPDATE_FAILED), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr, nullptr};
+      view.lines = {
+          tr(STR_UPDATE_FAILED),
+          errorMessage.empty() ? nullptr : errorMessage.c_str(),
+          detailMessage.empty() ? nullptr : detailMessage.c_str(),
+          hintMessage.empty() ? nullptr : hintMessage.c_str(),
+      };
       break;
     case State::PICKING:
     case State::CONFIRMING:
@@ -257,6 +303,14 @@ UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
       // reader booting into recovery sees first.
       if (recoveryMode) {
         view.lines = {tr(STR_RECOVERY_MODE_HINT), nullptr, nullptr, nullptr};
+        view.backHint = "";
+      } else if (firmware_flash::didPreviousSwitchRollBack()) {
+        view.lines = {
+            "Firmware rollback detected:",
+            "Previous flash booted back into Lector.",
+            "Update Lector to 0.29.5 first,",
+            "then reflash the other firmware.",
+        };
         view.backHint = "";
       } else {
         view.hidden = true;
