@@ -157,31 +157,40 @@ void ActivityManager::renderTaskLoop() {
     // where the main task deletes the activity between the null-check and render().
     RenderLock lock;
     if (currentActivity) {
-      HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
-      // Night mode inverts only the reading surfaces (appliesNightMode):
-      // resolving the output polarity here, per render, means menus, popups,
-      // and every other activity revert to normal automatically.
-      display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
-      // A tap answers to what is on screen now, so the row table starts empty on every
-      // paint and each list draw appends the rows it actually painted. Cleared here, the
-      // one place a paint begins, rather than inside the list draws — a screen that draws
-      // two lists (the home's books and its menu) would otherwise have the second wipe the
-      // first, and a screen that draws none would leave the previous screen's rows live.
-      if (lightPanel.isActive()) {
-        // Deliberately not re-rendering the activity: the panel is drawn over the page
-        // already in the framebuffer, which is what makes it a live preview of the light
-        // rather than a screen you leave the book for.
-        lightPanel.processRender(renderer);
+      if (!renderer.hasFrameBuffer()) {
+        LOG_DBG("ACT", "Skipping render: framebuffer is currently lent out");
+        requestedUpdate = true;
       } else {
-        row_hit::lastRows().begin();
-        currentActivity->render(std::move(lock));
+        HalPowerManager::Lock powerLock;  // Ensure we don't go into low-power mode while rendering
+        // Night mode inverts only the reading surfaces (appliesNightMode):
+        // resolving the output polarity here, per render, means menus, popups,
+        // and every other activity revert to normal automatically.
+        display.setInverted(SETTINGS.screenInverted != 0 && currentActivity->appliesNightMode());
+        // A tap answers to what is on screen now, so the row table starts empty on every
+        // paint and each list draw appends the rows it actually painted. Cleared here, the
+        // one place a paint begins, rather than inside the list draws — a screen that draws
+        // two lists (the home's books and its menu) would otherwise have the second wipe the
+        // first, and a screen that draws none would leave the previous screen's rows live.
+        if (lightPanel.isActive()) {
+          // Deliberately not re-rendering the activity: the panel is drawn over the page
+          // already in the framebuffer, which is what makes it a live preview of the light
+          // rather than a screen you leave the book for.
+          lightPanel.processRender(renderer);
+        } else {
+          row_hit::lastRows().begin();
+          currentActivity->render(std::move(lock));
+        }
       }
     }
     // Notify any task blocked in requestUpdateAndWait() that the render is done.
     TaskHandle_t waiter = nullptr;
     taskENTER_CRITICAL(&activityManagerSpinlock);
-    waiter = waitingTaskHandle;
-    waitingTaskHandle = nullptr;
+    renderPassCompleted++;
+    if (waitingTaskHandle && renderPassCompleted >= waitingTargetPass) {
+      waiter = waitingTaskHandle;
+      waitingTaskHandle = nullptr;
+      waitingTargetPass = 0;
+    }
     taskEXIT_CRITICAL(&activityManagerSpinlock);
     if (waiter) {
       xTaskNotify(waiter, 1, eIncrement);
@@ -559,8 +568,13 @@ void ActivityManager::requestUpdateAndWait() {
   bool isRenderTask = (currTaskHandler == renderTaskHandle);
   bool alreadyWaiting = (waitingTaskHandle != nullptr);
   bool holdingRenderLock = (mutexHolder == currTaskHandler);
+  // If the render task currently holds renderingMutex, it is mid-render of an OLD frame.
+  // We must wait for the next pass to complete.
+  bool renderTaskBusy = (mutexHolder == renderTaskHandle);
+  uint32_t targetPass = renderPassCompleted + (renderTaskBusy ? 2 : 1);
   if (!alreadyWaiting && !isRenderTask && !holdingRenderLock) {
     waitingTaskHandle = currTaskHandler;
+    waitingTargetPass = targetPass;
   }
   taskEXIT_CRITICAL(&activityManagerSpinlock);
 
@@ -577,7 +591,17 @@ void ActivityManager::requestUpdateAndWait() {
   // Tell the power manager the loop is parked here: it cannot poll input until the
   // render finishes, so the BUSY-wait slice hook should not yield to it meanwhile.
   powerManager.noteRenderWaitBegin();
-  ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+  while (true) {
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    taskENTER_CRITICAL(&activityManagerSpinlock);
+    bool done = (renderPassCompleted >= targetPass);
+    if (!done) {
+      waitingTaskHandle = currTaskHandler;
+      waitingTargetPass = targetPass;
+    }
+    taskEXIT_CRITICAL(&activityManagerSpinlock);
+    if (done) break;
+  }
   powerManager.noteRenderWaitEnd();
 }
 

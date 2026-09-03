@@ -80,6 +80,8 @@ class ActivityManager {
   // Set by requestUpdateAndWait(); read and cleared by the render task after render completes.
   // Note: only one waiting task is supported at a time
   TaskHandle_t waitingTaskHandle = nullptr;
+  uint32_t renderPassCompleted = 0;
+  uint32_t waitingTargetPass = 0;
 
   // Mutex to protect rendering operations from race conditions
   // Must only be used via RenderLock

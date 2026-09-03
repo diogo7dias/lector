@@ -177,7 +177,6 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
   statusMessage = tr(STR_LOADING);
   releaseEntries();
   setListSelection(0);
-  requestUpdate(true);
   fetchFeed(currentPath);
 }
 
@@ -201,7 +200,6 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   statusMessage = book.title;
   downloadTitle = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40);
   downloadProgress = downloadTotal = 0;
-  requestUpdate(true);
 
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
@@ -239,22 +237,22 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     GfxRenderer::FrameBufferLoan loan(renderer);
     const tls_scratch::Session tlsScratch;
     result = HttpDownloader::downloadToFile(
-      downloadUrl, filename,
-      [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
-        downloadProgress = downloaded;
-        downloadTotal = total;
-        const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
-        const unsigned long now = millis();
-        if (percent >= 100 || lastRenderedPercent < 0 ||
-            percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
-            now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
-          lastRenderedPercent = percent;
-          lastProgressUpdateMs = now;
-          // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
-          // loan ends. The counters still move, and the screen catches up after.
-        }
-      },
-      nullptr, server.username, server.password);
+        downloadUrl, filename,
+        [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
+          downloadProgress = downloaded;
+          downloadTotal = total;
+          const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
+          const unsigned long now = millis();
+          if (percent >= 100 || lastRenderedPercent < 0 ||
+              percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
+              now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
+            lastRenderedPercent = percent;
+            lastProgressUpdateMs = now;
+            // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
+            // loan ends. The counters still move, and the screen catches up after.
+          }
+        },
+        nullptr, server.username, server.password);
   }
 
   if (result == HttpDownloader::OK) {
@@ -320,7 +318,6 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
   statusMessage = tr(STR_LOADING);
   releaseEntries();
   setListSelection(0);
-  requestUpdate(true);
   fetchFeed(url);
 }
 
@@ -347,7 +344,6 @@ void OpdsBookBrowserActivity::onWifiSelectionComplete(const bool connected) {
   if (connected) {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
-    requestUpdate(true);
     fetchFeed(currentPath);
   } else {
     // Leave WiFi up; onExit's silent reboot handles teardown without fragmenting.
@@ -456,7 +452,7 @@ bool OpdsBookBrowserActivity::handleCustomInput() {
   }
 
   // Nothing to answer while a feed or a book is in flight.
-  if (state == BrowserState::DOWNLOADING) return true;
+  if (state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) return true;
 
   if (state == BrowserState::BROWSING && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     if (!searchTemplate.empty() && listSelection() == 0) {
@@ -477,11 +473,11 @@ void OpdsBookBrowserActivity::onListActivated(const int index) {
 }
 
 void OpdsBookBrowserActivity::onBackButton() {
+  if (state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) return;
   if (state == BrowserState::CHECK_WIFI) {
     onGoHome();
     return;
   }
-  if (state == BrowserState::DOWNLOADING) return;
   navigateBack();
 }
 

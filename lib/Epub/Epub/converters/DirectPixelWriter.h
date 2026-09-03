@@ -165,7 +165,7 @@ struct DirectPixelWriter {
         return;
     }
 
-    if (!draw) return;
+    if (!draw || !fb) return;
 
     const int phyX = rowPhyXBase + logicalX * phyXStepX;
     const int phyY = rowPhyYBase + logicalX * phyYStepX;

@@ -603,6 +603,15 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     rowY = static_cast<uint32_t>(phyY - _stripY0);
   }
 
+  if (target == nullptr) {
+    static uint32_t nullTargetLogged = 0;
+    if (nullTargetLogged < 10) {
+      ++nullTargetLogged;
+      LOG_ERR("GFX", "drawPixel called with null target");
+    }
+    return;
+  }
+
   // Calculate byte position and bit position
   const uint32_t byteIndex = rowY * panelWidthBytes + (phyX / 8);
   const uint8_t bitPosition = 7 - (phyX % 8);  // MSB first
@@ -654,6 +663,9 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
                            const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
   // cannot draw a NULL / empty string
   if (text == nullptr || *text == '\0') {
+    return;
+  }
+  if (!hasFrameBuffer() && !_stripActive) {
     return;
   }
 
@@ -1037,6 +1049,7 @@ void GfxRenderer::fillRectImpl(const int x, const int y, const int width, const 
 
   // Strip mode: clip Y range to the active band and redirect writes.
   uint8_t* target = getWriteTarget();
+  if (target == nullptr) return;
   const int originY = getWriteOriginY();
   const int writeRows = getWriteRows();
   phyY0 = std::max(phyY0, originY);
@@ -1656,10 +1669,12 @@ static unsigned long start_ms = 0;
 void GfxRenderer::clearScreen(const uint8_t color) const {
   start_ms = millis();
   if (_stripActive) {
+    if (_stripBuf == nullptr) return;
     // Clear only the active band's scratch, not the shared framebuffer.
     memset(_stripBuf, color, static_cast<size_t>(panelWidthBytes) * _stripRows);
     return;
   }
+  if (!hasFrameBuffer()) return;
   display.clearScreen(color);
 }
 
@@ -1697,6 +1712,7 @@ bool GfxRenderer::glyphIntersectsStrip(int x0, int y0, int x1, int y1) const {
 }
 
 void GfxRenderer::invertScreen() const {
+  if (!hasFrameBuffer()) return;
   for (uint32_t i = 0; i < frameBufferSize; i++) {
     frameBuffer[i] = ~frameBuffer[i];
   }
@@ -1706,7 +1722,7 @@ void GfxRenderer::invertScreen() const {
 // is not known until the panel has finished, and by then the frame describing it is
 // already ink. One frame behind is the honest form of the measurement, not a shortcut.
 void GfxRenderer::drawTimingOverlay() const {
-  if (!timingOverlayEnabled) return;
+  if (!timingOverlayEnabled || !hasFrameBuffer()) return;
   // Strip mode retargets drawing at a grayscale band's scratch buffer, where a corner
   // stamp would land in the middle of an image. Nothing to draw into here.
   if (_stripActive) return;
@@ -1734,6 +1750,10 @@ void GfxRenderer::reportOutOfRangePixels() const {
 }
 
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
+  if (!hasFrameBuffer()) {
+    LOG_ERR("GFX", "displayBuffer called with null framebuffer");
+    return;
+  }
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   reportOutOfRangePixels();
@@ -1742,15 +1762,19 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
 }
 
 void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) const {
+  if (!hasFrameBuffer()) {
+    LOG_ERR("GFX", "displayBufferAsync called with null framebuffer");
+    return;
+  }
   reportOutOfRangePixels();
   drawTimingOverlay();
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
     display.displayBuffer(refreshMode, fadingFix);
-    return;
+  } else {
+    display.displayBufferAsync(refreshMode);
   }
-  display.displayBufferAsync(refreshMode);
 }
 
 void GfxRenderer::waitRefreshComplete() const { display.waitRefreshComplete(); }
@@ -2290,9 +2314,15 @@ void GfxRenderer::preconditionGrayscale(int x, int y, int w, int h) const {
                                 static_cast<uint16_t>(x1 - x0 + 1), static_cast<uint16_t>(y1 - y0 + 1));
 }
 
-void GfxRenderer::copyGrayscaleLsbBuffers() const { display.copyGrayscaleLsbBuffers(frameBuffer); }
+void GfxRenderer::copyGrayscaleLsbBuffers() const {
+  if (!frameBuffer) return;
+  display.copyGrayscaleLsbBuffers(frameBuffer);
+}
 
-void GfxRenderer::copyGrayscaleMsbBuffers() const { display.copyGrayscaleMsbBuffers(frameBuffer); }
+void GfxRenderer::copyGrayscaleMsbBuffers() const {
+  if (!frameBuffer) return;
+  display.copyGrayscaleMsbBuffers(frameBuffer);
+}
 
 void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
 
@@ -2320,6 +2350,7 @@ void GfxRenderer::freeBwBufferChunks() {
  * Returns true if buffer was stored successfully, false if allocation failed.
  */
 bool GfxRenderer::storeBwBuffer() {
+  if (!frameBuffer) return false;
   // Allocate and copy each chunk
   for (size_t i = 0; i < bwBufferChunks.size(); i++) {
     // Check if any chunks are already allocated
@@ -2353,6 +2384,10 @@ bool GfxRenderer::storeBwBuffer() {
  * Uses chunked restoration to match chunked storage.
  */
 void GfxRenderer::restoreBwBuffer() {
+  if (!frameBuffer) {
+    freeBwBufferChunks();
+    return;
+  }
   // Check if all chunks are allocated
   bool missingChunks = false;
   for (const auto& bwBufferChunk : bwBufferChunks) {
