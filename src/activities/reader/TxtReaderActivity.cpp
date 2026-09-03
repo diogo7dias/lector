@@ -710,6 +710,9 @@ void TxtReaderActivity::renderStatusBar() const {
 }
 
 void TxtReaderActivity::saveProgress() const {
+  // render() also runs for popups and status-bar refreshes; only a moved page is
+  // worth the several FAT operations writeAtomic costs (SPIFFS/SD write throttling).
+  if (currentPage == lastSavedPage) return;
   uint8_t data[4];
   data[0] = currentPage & 0xFF;
   data[1] = (currentPage >> 8) & 0xFF;
@@ -717,7 +720,9 @@ void TxtReaderActivity::saveProgress() const {
   data[3] = 0;
   if (!ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data))) {
     LOG_ERR("TRS", "Failed to save progress: page %d", currentPage);
+    return;
   }
+  lastSavedPage = currentPage;
 }
 
 void TxtReaderActivity::loadProgress() {
