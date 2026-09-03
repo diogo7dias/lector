@@ -1,4 +1,4 @@
-#include "ListChrome.h"
+#include "components/ListChrome.h"
 
 #include <GfxRenderer.h>
 #include <I18n.h>
@@ -6,6 +6,7 @@
 #include "MappedInputManager.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/themes/BaseTheme.h"
 
 namespace {
 
@@ -23,6 +24,7 @@ list_chrome::Content contentFor(const ListChrome& chrome) {
   list_chrome::Content content;
   content.hasHeader = chrome.title != nullptr;
   content.hasSubHeader = present(chrome.subHeader);
+  content.hasTabBar = chrome.tabs != nullptr && !chrome.tabs->empty();
   content.headerLines = headerLineCount(chrome);
   content.noteLines = present(chrome.note) ? 1 : 0;
   for (const char* line : chrome.footnotes) {
@@ -71,13 +73,15 @@ void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome) {
     GUI.drawHelpText(renderer, Rect{0, y, renderer.getScreenWidth(), lineHeight}, line);
     y += lineHeight;
   }
+  if (chrome.tabs != nullptr && !chrome.tabs->empty()) {
+    GUI.drawTabBar(renderer, toRect(bands.tabBar), *chrome.tabs, chrome.tabsOnTabBar);
+  }
   if (present(chrome.note)) {
     GUI.drawHelpText(renderer, toRect(bands.note), chrome.note);
   }
 }
 
-void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput,
-                          const ListChrome& chrome) {
+void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput, const ListChrome& chrome) {
   const list_chrome::Bands bands = listChromeBands(renderer, chrome);
   const int lineHeight = renderer.getLineHeight(uiScaleSpec().smallFontId);
   int y = bands.footnote.y;

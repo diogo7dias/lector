@@ -195,6 +195,12 @@ void SettingsActivity::selectCategory(const int index) {
 
 int SettingsActivity::cellCount() const { return mode == Mode::Hub ? kCategoryCount : settingsCount; }
 
+bool SettingsActivity::cellIsHeader(const int index) const {
+  if (mode == Mode::Hub) return false;
+  if (index < 0 || index >= settingsCount) return false;
+  return settings[index].isHeader;
+}
+
 const char* SettingsActivity::cellName(const int index) const {
   if (mode == Mode::Hub) {
     if (index < 0 || index >= kCategoryCount) return nullptr;
@@ -216,6 +222,7 @@ const char* SettingsActivity::cellValue(const int index) const {
     return cellValueScratch.c_str();
   }
   if (index < 0 || index >= settingsCount) return nullptr;
+  if (settings[index].isHeader) return nullptr;
   cellValueScratch = settingValueText(settings[index]);
   return cellValueScratch.c_str();
 }
@@ -380,16 +387,23 @@ void SettingsActivity::rebuildSettingsList() {
       });
 
   settings.clear();
-  settings.reserve(displaySettings.size() + readerSettings.size() + controlsSettings.size() + systemSettings.size());
-  // Reader first, then Display, Controls, System: ordered by how often a row is actually
-  // reached for. Text size, fonts and the status bar are tuned while reading; the
-  // frontlight is next, which is why it leads Display; buttons and the system rows are
-  // set once and then left alone.
-  // Copied, never moved: selectCategory reads the four vectors again every time a
-  // category is opened or a change rebuilds the list. Moving out of them leaves each row
-  // with an empty valueGetter/stringGetter, and calling one of those aborts.
-  for (const auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
-    settings.insert(settings.end(), category->begin(), category->end());
+  settings.reserve(displaySettings.size() + readerSettings.size() + controlsSettings.size() + systemSettings.size() +
+                   4);
+  if (!mappedInput.hasTouch()) {
+    // 0.27 layout on keys-only boards: single flat list with category section headers
+    settings.push_back(SettingInfo::Header(StrId::STR_CAT_DISPLAY));
+    for (const auto& s : displaySettings) settings.push_back(s);
+    settings.push_back(SettingInfo::Header(StrId::STR_CAT_READER));
+    for (const auto& s : readerSettings) settings.push_back(s);
+    settings.push_back(SettingInfo::Header(StrId::STR_CAT_CONTROLS));
+    for (const auto& s : controlsSettings) settings.push_back(s);
+    settings.push_back(SettingInfo::Header(StrId::STR_CAT_SYSTEM));
+    for (const auto& s : systemSettings) settings.push_back(s);
+  } else {
+    // Touch layout: category hub and per-category screens
+    for (const auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
+      settings.insert(settings.end(), category->begin(), category->end());
+    }
   }
 
   settingsCount = static_cast<int>(settings.size());
@@ -410,11 +424,17 @@ void SettingsActivity::onEnter() {
   syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
 
   rebuildSettingsList();
-  // Opens on the hub: which four categories there are is the first thing to say now that
-  // the group headings live inside them.
-  mode = Mode::Hub;
-  selectedCategory = 0;
-  setSelected(0);
+  if (!mappedInput.hasTouch()) {
+    mode = Mode::Category;
+    selectedCategory = 0;
+    setSelected(0);
+  } else {
+    // Opens on the hub: which four categories there are is the first thing to say now that
+    // the group headings live inside them.
+    mode = Mode::Hub;
+    selectedCategory = 0;
+    setSelected(0);
+  }
 
   // Trigger first update
   requestUpdate();
@@ -445,8 +465,8 @@ void SettingsActivity::activateCell(const int index) {
 }
 
 void SettingsActivity::onBackButton() {
-  // Back inside a category returns to the hub; from the hub it leaves the screen.
-  if (mode == Mode::Category) {
+  // Back inside a category returns to the hub on touch boards; on keys-only boards it leaves the screen.
+  if (mappedInput.hasTouch() && mode == Mode::Category) {
     mode = Mode::Hub;
     setSelected(selectedCategory);
     return;
@@ -457,8 +477,13 @@ void SettingsActivity::onBackButton() {
 
 ListChrome SettingsActivity::chrome() const {
   ListChrome chrome;
-  chrome.title = mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory));
-  if (mode == Mode::Hub) chrome.headerRight = CROSSPOINT_VERSION;
+  if (!mappedInput.hasTouch()) {
+    chrome.title = tr(STR_SETTINGS_TITLE);
+    chrome.headerRight = CROSSPOINT_VERSION;
+  } else {
+    chrome.title = mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory));
+    if (mode == Mode::Hub) chrome.headerRight = CROSSPOINT_VERSION;
+  }
 
   const int index = selected();
   const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&
@@ -729,13 +754,12 @@ void SettingsActivity::toggleCurrentSetting() {
 }
 
 void SettingsActivity::restoreCursorAfterRebuild() {
-  // rebuildSettingsList refills the four category vectors, so the active category's cells
-  // have to be taken from them again or the grid would keep drawing the old ones.
-  // A change can also add or remove cells (Quick-return from footnotes, Pop-up Items),
-  // which moves everything after it; the cursor is clamped rather than chased, since the
-  // cell it was on may no longer exist.
   const int wasSelected = selected();
-  selectCategory(selectedCategory);
+  if (mappedInput.hasTouch()) {
+    // rebuildSettingsList refills the four category vectors, so the active category's cells
+    // have to be taken from them again or the grid would keep drawing the old ones.
+    selectCategory(selectedCategory);
+  }
   setSelected(std::clamp(wasSelected, 0, std::max(0, settingsCount - 1)));
 }
 
@@ -819,4 +843,3 @@ void SettingsActivity::openSleepTimeoutPicker() {
         requestUpdate();
       });
 }
-

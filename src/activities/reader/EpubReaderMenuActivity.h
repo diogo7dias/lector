@@ -152,6 +152,12 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // Fixed menu layout: one flat list of headings and rows, built once. Only the cursor
   // and the scroll window move after that.
   std::vector<MenuItem> items;
+  std::vector<TabPage> pages;
+  size_t currentTabIdx = 0;
+  bool onTabBar = false;
+  mutable std::vector<struct TabInfo> tabInfos;
+  void updateTabInfos() const;
+  void selectTab(size_t index);
 
   // The section the menu opened on, kept so the constructor's choice survives onEnter.
   Tab preferredTab = Tab::Navigate;

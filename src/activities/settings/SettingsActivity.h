@@ -196,7 +196,6 @@ struct SettingInfo {
 };
 
 class SettingsActivity final : public UiGridActivity {
-
   // The screen is either the category hub or one category's grid. 121 settings in one
   // flat list is 61 grid rows; split four ways, a category is one or two screens, and the
   // hub is what says which four there are now that the headings are gone.
@@ -256,6 +255,7 @@ class SettingsActivity final : public UiGridActivity {
   int cellCount() const override;
   const char* cellName(int index) const override;
   const char* cellValue(int index) const override;
+  bool cellIsHeader(int index) const override;
   void activateCell(int index) override;
   ListChrome chrome() const override;
   bool handleCustomInput() override;

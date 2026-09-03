@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <vector>
 
 #include "ListChromeLayout.h"
 
@@ -45,6 +46,9 @@ struct ListChrome {
   // Side inset for the body. Lists usually run edge to edge; a screen with
   // prose in its rows asks for the theme's content padding.
   int sideInset = 0;
+  // Tab bar support (for reader menu on keys-only boards)
+  const std::vector<struct TabInfo>* tabs = nullptr;
+  bool tabsOnTabBar = false;
 };
 
 // The bands, measured from the live renderer and theme.
@@ -54,5 +58,4 @@ list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome
 void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome);
 
 // Paints the footnote and the button hints. Called after the app renders.
-void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput,
-                          const ListChrome& chrome);
+void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput, const ListChrome& chrome);

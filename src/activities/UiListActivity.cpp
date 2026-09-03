@@ -145,6 +145,7 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
     const auto& metrics = UITheme::getInstance().getMetrics();
     rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
     props.rowHeight = rowHeight;
+    props.scrollIndicator = false;
   }
   activeNav().syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, listCount(), props);
 }
@@ -165,6 +166,37 @@ void UiListActivity::drawChrome() { drawListChromeTop(renderer, chrome()); }
 
 void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, chrome()); }
 
+void UiListActivity::drawScrollArrows() {
+  const auto& n = activeNav();
+  const bool showUp = n.top > 0;
+  const bool showDown = n.top + n.pageRows() < listCount();
+  if (!showUp && !showDown) return;
+
+  const list_chrome::Bands bands = listChromeBands(renderer, chrome());
+  constexpr int indicatorWidth = 20;
+  constexpr int arrowSize = 6;
+  constexpr int margin = 15;
+  const int indicatorTop = bands.contentTop;
+  const int indicatorBottom = bands.contentBottom - arrowSize;
+  const int centerX = renderer.getScreenWidth() - margin - (indicatorWidth / 2);
+
+  if (showUp) {
+    for (int i = 0; i < arrowSize; ++i) {
+      const int lineWidth = 1 + i * 2;
+      const int startX = centerX - i;
+      renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
+    }
+  }
+  if (showDown) {
+    for (int i = 0; i < arrowSize; ++i) {
+      const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
+      const int startX = centerX - (arrowSize - 1 - i);
+      renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
+                        indicatorBottom - arrowSize + 1 + i);
+    }
+  }
+}
+
 void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();
   drawChrome();
@@ -178,6 +210,9 @@ void UiListActivity::render(RenderLock&&) {
     renderer.clearScreen();
     drawChrome();
     renderUi();
+  }
+  if (!mappedInput.hasTouch()) {
+    drawScrollArrows();
   }
   drawFooter();
   if (drawOverlay()) return;

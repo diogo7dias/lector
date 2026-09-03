@@ -59,12 +59,22 @@ settings_grid::Layout UiGridActivity::gridLayout() const {
 }
 
 void UiGridActivity::setSelected(const int index) {
+  const int count = cellCount();
+  int target = count > 0 ? std::clamp(index, 0, count - 1) : 0;
+  if (!mappedInput.hasTouch() && count > 0 && cellIsHeader(target)) {
+    for (int i = target; i < count; ++i) {
+      if (!cellIsHeader(i)) {
+        target = i;
+        break;
+      }
+    }
+  }
   {
     // The render task reads the selection and the scroll row mid-build; a press
     // landing during a render would otherwise tear one against the other.
     RenderLock lock(*this);
-    selected_ = index;
-    scrollRow_ = settings_grid::scrollToShow(gridLayout(), selected_);
+    selected_ = target;
+    scrollRow_ = count > 0 ? settings_grid::scrollToShow(gridLayout(), selected_) : 0;
   }
   requestUpdate();
 }
@@ -72,13 +82,30 @@ void UiGridActivity::setSelected(const int index) {
 void UiGridActivity::clampSelection() {
   const int count = cellCount();
   selected_ = count > 0 ? std::clamp(selected_, 0, count - 1) : 0;
+  if (!mappedInput.hasTouch() && count > 0 && cellIsHeader(selected_)) {
+    for (int i = selected_; i < count; ++i) {
+      if (!cellIsHeader(i)) {
+        selected_ = i;
+        break;
+      }
+    }
+  }
   scrollRow_ = count > 0 ? settings_grid::scrollToShow(gridLayout(), selected_) : 0;
 }
 
 void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
   const int count = cellCount();
   if (count == 0) return;
-  setSelected(settings_grid::step(selected_, count, deltaRows, deltaCells, gridLayout().columns));
+  int next = settings_grid::step(selected_, count, deltaRows, deltaCells, gridLayout().columns);
+  if (!mappedInput.hasTouch()) {
+    int guard = 0;
+    const int dir = (deltaRows > 0 || deltaCells > 0) ? 1 : -1;
+    while (cellIsHeader(next) && guard < count) {
+      next = settings_grid::step(next, count, dir, 0, gridLayout().columns);
+      ++guard;
+    }
+  }
+  setSelected(next);
 }
 
 void UiGridActivity::armValueBand(const char* name, const int minValue, const int maxValue, const int smallStep,
@@ -96,6 +123,7 @@ void UiGridActivity::screenTrampoline(UiScreen& screen, void* user) {
 void UiGridActivity::cellTrampoline(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<UiGridActivity*>(user);
   if (event.value < 0 || event.value >= self->cellCount()) return;
+  if (self->cellIsHeader(event.value)) return;
   self->selected_ = event.value;
   self->activateCell(event.value);
 }
@@ -186,6 +214,19 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
 void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect& box) {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
+
+  if (cellIsHeader(index)) {
+    // 0.27 section header look: solid black bar across row, centered text knocked out white
+    target.fill(box, fui::Paint::solid(fui::Color::Black));
+    fui::TextStyle heading = theme.bodyText;
+    heading.align = fui::TextAlign::Center;
+    heading.inverted = true;
+    const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
+    const fui::Rect line{box.x, static_cast<int16_t>(box.y + (box.height - lineHeight) / 2), box.width, lineHeight};
+    if (cellName(index) != nullptr) target.text(line, cellName(index), heading);
+    return;
+  }
+
   const bool selected = index == selected_;
 
   fui::ButtonProps props;
@@ -200,8 +241,7 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
 
   const int16_t inset = theme.spaceSm;
   const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
-  const fui::Rect line{static_cast<int16_t>(box.x + inset),
-                       static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
+  const fui::Rect line{static_cast<int16_t>(box.x + inset), static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
                        static_cast<int16_t>(box.width - inset * 2), lineHeight};
 
   fui::TextStyle name = theme.bodyText;
@@ -277,7 +317,7 @@ void UiGridActivity::loop() {
   if (route) return;
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (selected_ >= 0 && selected_ < cellCount()) activateCell(selected_);
+    if (selected_ >= 0 && selected_ < cellCount() && !cellIsHeader(selected_)) activateCell(selected_);
     return;
   }
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {

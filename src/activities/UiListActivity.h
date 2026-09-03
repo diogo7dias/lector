@@ -111,6 +111,7 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Named apart from UiAppHost::routeTouch so the host overload stays visible
   // (not name-hidden) to subclasses with extra touch surfaces.
   bool routeListTouch();
+  void drawScrollArrows();
 
   const bool wantsTouchLongPress;
 };

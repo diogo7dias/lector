@@ -35,7 +35,8 @@ struct Metrics {
 struct Content {
   bool hasHeader = false;
   bool hasSubHeader = false;
-  int headerLines = 0;  // centred lines under the title band
+  bool hasTabBar = false;
+  int headerLines = 0;    // centred lines under the title band
   int noteLines = 0;      // left-aligned lines under everything above
   int footnoteLines = 0;  // lines between the body and the button hints
 };
@@ -44,6 +45,7 @@ struct Bands {
   Rect header;
   Rect subHeader;
   Rect headerLines;
+  Rect tabBar;
   Rect note;
   Rect footnote;
   // What the list itself gets: the first row starts at contentTop, and the last
@@ -68,6 +70,10 @@ inline Bands bandsFor(const Metrics& metrics, const Content& content) {
     bands.headerLines = Rect{0, y, metrics.screenWidth, height};
     y += height;
   }
+  if (content.hasTabBar) {
+    bands.tabBar = Rect{0, y, metrics.screenWidth, metrics.subHeaderHeight};
+    y += metrics.subHeaderHeight;
+  }
   if (content.noteLines > 0) {
     const int height = content.noteLines * metrics.lineHeight;
     bands.note = Rect{0, y, metrics.screenWidth, height};
@@ -90,9 +96,7 @@ inline Bands bandsFor(const Metrics& metrics, const Content& content) {
 
 // The insets a screen's content margin needs, which is the same arithmetic seen
 // from the other end.
-inline int topInsetFor(const Metrics& metrics, const Content& content) {
-  return bandsFor(metrics, content).contentTop;
-}
+inline int topInsetFor(const Metrics& metrics, const Content& content) { return bandsFor(metrics, content).contentTop; }
 
 inline int bottomInsetFor(const Metrics& metrics, const Content& content) {
   const Bands bands = bandsFor(metrics, content);

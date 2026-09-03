@@ -1,7 +1,5 @@
 #include "BaseTheme.h"
 
-#include "components/icons/skull12.h"
-
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalGPIO.h>
@@ -28,6 +26,7 @@
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/skull12.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -477,23 +476,48 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
   // that there was more in that direction, never how much or how far in you were.
   const bool scrollable = showUpArrow || showDownArrow;
   if (scrollable) {
-    const list_scrollbar::Bar bar = list_scrollbar::forList(rect.y, rect.height, itemCount, windowStart, pageItems);
-    if (bar.visible) {
-      const int barX = list_scrollbar::trackX(rect.x, rect.width);
-      // Knocked out of whatever is behind it first: a heading bar or a selected row is
-      // solid black, and a black thumb on black is no indicator at all.
-      renderer.fillRect(barX - list_scrollbar::kOutlineWidth, bar.trackY - list_scrollbar::kOutlineWidth,
-                        list_scrollbar::kWidth + list_scrollbar::kOutlineWidth * 2,
-                        bar.trackHeight + list_scrollbar::kOutlineWidth * 2, false);
-      // The track is dithered, the thumb solid: on a one-bit panel that is the only way
-      // to show the thumb's position against the track it slides in.
-      renderer.fillRectDither(barX, bar.trackY, list_scrollbar::kWidth, bar.trackHeight, Color::LightGray);
-      renderer.fillRect(barX, bar.thumbY, list_scrollbar::kWidth, bar.thumbHeight);
+    if (gpio.hasTouch()) {
+      const list_scrollbar::Bar bar = list_scrollbar::forList(rect.y, rect.height, itemCount, windowStart, pageItems);
+      if (bar.visible) {
+        const int barX = list_scrollbar::trackX(rect.x, rect.width);
+        // Knocked out of whatever is behind it first: a heading bar or a selected row is
+        // solid black, and a black thumb on black is no indicator at all.
+        renderer.fillRect(barX - list_scrollbar::kOutlineWidth, bar.trackY - list_scrollbar::kOutlineWidth,
+                          list_scrollbar::kWidth + list_scrollbar::kOutlineWidth * 2,
+                          bar.trackHeight + list_scrollbar::kOutlineWidth * 2, false);
+        // The track is dithered, the thumb solid: on a one-bit panel that is the only way
+        // to show the thumb's position against the track it slides in.
+        renderer.fillRectDither(barX, bar.trackY, list_scrollbar::kWidth, bar.trackHeight, Color::LightGray);
+        renderer.fillRect(barX, bar.thumbY, list_scrollbar::kWidth, bar.thumbHeight);
+      }
+    } else {
+      constexpr int indicatorWidth = 20;
+      constexpr int arrowSize = 6;
+      constexpr int margin = 15;
+      const int indicatorTop = rect.y;
+      const int indicatorBottom = rect.y + rect.height - arrowSize;
+      const int centerX = rect.x + rect.width - margin - (indicatorWidth / 2);
+
+      if (showUpArrow) {
+        for (int i = 0; i < arrowSize; ++i) {
+          const int lineWidth = 1 + i * 2;
+          const int startX = centerX - i;
+          renderer.drawLine(startX, indicatorTop + i, startX + lineWidth - 1, indicatorTop + i);
+        }
+      }
+      if (showDownArrow) {
+        for (int i = 0; i < arrowSize; ++i) {
+          const int lineWidth = 1 + (arrowSize - 1 - i) * 2;
+          const int startX = centerX - (arrowSize - 1 - i);
+          renderer.drawLine(startX, indicatorBottom - arrowSize + 1 + i, startX + lineWidth - 1,
+                            indicatorBottom - arrowSize + 1 + i);
+        }
+      }
     }
   }
 
   // Rows stop short of the track when there is one, so a long value never runs under it.
-  int contentWidth = rect.width - (scrollable ? list_scrollbar::kReservedWidth : 5);
+  int contentWidth = rect.width - (scrollable && gpio.hasTouch() ? list_scrollbar::kReservedWidth : 5);
   // Only the solid style paints over the row, so only then does the row's own text
   // have to come out white. Resolved when the selected row is reached, because the
   // bracket style needs that row's label and value measured first.
@@ -512,17 +536,20 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
     // Section heading: a full-width filled band with the label knocked out of it, the same
     // shape the screen title band above the list has.
     if (rowIsHeader != nullptr && rowIsHeader(i)) {
-      // Bracketed like the screen title above it, for the same reason: the UI font has
-      // no bold face, so the brackets are what marks a line as a label rather than a row.
-      const std::string headingText = header_title::decorate(rowTitle(i).c_str());
-      const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
-      const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
-      const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
-      // The plate spans the whole row, matching the inverted header band at the top of the
-      // screen: a heading is a band, a selected row is a band, and the cursor is what tells
-      // them apart. A plate sized to the text read as a stray highlight instead.
-      renderer.fillRect(rect.x, itemY, rect.width, rowHeight, /*state=*/true);
-      renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
+      if (gpio.hasTouch()) {
+        const std::string headingText = header_title::decorate(rowTitle(i).c_str());
+        const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
+        const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
+        const int headingY = itemY + std::max(0, (rowHeight - renderer.getLineHeight(itemFontId)) / 2);
+        renderer.fillRect(rect.x, itemY, rect.width, rowHeight, /*state=*/true);
+        renderer.drawText(itemFontId, headingX, headingY, headingText.c_str(), /*black=*/false);
+      } else {
+        const std::string headingText = rowTitle(i);
+        renderer.fillRect(rect.x, itemY - 2, rect.width, rowHeight, /*state=*/true);
+        const int headingW = renderer.getTextWidth(itemFontId, headingText.c_str());
+        const int headingX = rect.x + std::max(0, (rect.width - headingW) / 2);
+        renderer.drawText(itemFontId, headingX, itemY, headingText.c_str(), /*black=*/false);
+      }
       continue;
     }
 
@@ -616,11 +643,9 @@ int BaseTheme::headerBandHeight(const GfxRenderer& renderer, const Rect rect) {
 }
 
 void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
-  // A titled header is one solid black row, battery cluster included: the brackets alone
-  // read as just another line of text next to the rows under them. Filling the whole row
-  // also clears the last battery reading, which is why no separate knock-out box is left
-  // here — a partial clear used to leave fragments of the previous percentage behind.
-  const bool inverted = title != nullptr && title[0] != '\0';
+  // On touch boards (X4 Pro), a titled header is an inverted black row with bracketed title.
+  // On keys-only boards (X3, X4), the header is white paper with plain title in black ink.
+  const bool inverted = gpio.hasTouch() && title != nullptr && title[0] != '\0';
   if (inverted) {
     // The band runs from the panel edge to one pixel under the title, not over the
     // rect the caller reserved: the top padding above it read as a white stripe along
@@ -628,9 +653,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     // The reserve itself is unchanged, so nothing below the header moves.
     renderer.fillRect(rect.x, headerBandTop(rect), rect.width, headerBandHeight(renderer, rect), true);
   } else {
-    // Untitled band (the home screen). Nothing to invert, so only the cluster is cleared.
-    // Both the width and the height come from the cluster's own metrics: a hardcoded box
-    // was narrower than the percentage text in the taller UI font.
+    // White background. Only the battery cluster area is cleared.
     const int clusterWidth = batteryClusterWidth(renderer);
     renderer.fillRect(rect.x + rect.width - clusterWidth, rect.y, clusterWidth,
                       renderer.getLineHeight(batteryPercentFontId) + 10, false);
@@ -647,15 +670,19 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
 
   if (title) {
     int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
-    // Same size as the rows under it and as the home screen's own text. A step larger
-    // read as bold next to everything else on the screen. The brackets are what marks it
-    // as the title instead: see components/HeaderTitle.h for why not bold.
-    const std::string decoratedTitle = header_title::decorate(title);
-    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, decoratedTitle.c_str(),
-                                                 rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
-                                                 EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + headerTitleOffset, truncatedTitle.c_str(), false,
-                              EpdFontFamily::REGULAR);
+    if (inverted) {
+      const std::string decoratedTitle = header_title::decorate(title);
+      auto truncatedTitle = renderer.truncatedText(
+          UI_10_FONT_ID, decoratedTitle.c_str(), rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
+          EpdFontFamily::REGULAR);
+      renderer.drawCenteredText(UI_10_FONT_ID, rect.y + headerTitleOffset, truncatedTitle.c_str(), false,
+                                EpdFontFamily::REGULAR);
+    } else {
+      auto truncatedTitle = renderer.truncatedText(
+          UI_10_FONT_ID, title, rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
+          EpdFontFamily::REGULAR);
+      renderer.drawCenteredText(UI_10_FONT_ID, rect.y + 5, truncatedTitle.c_str(), true, EpdFontFamily::REGULAR);
+    }
   }
 
   if (subtitle) {

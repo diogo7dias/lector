@@ -5,9 +5,9 @@
 #include "activities/Activity.h"
 #include "components/ListChrome.h"
 #include "components/SettingsGrid.h"
-#include "components/themes/BaseTheme.h"
 #include "components/SliderBand.h"
 #include "components/UiAppHost.h"
+#include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
 // Base for the two-column settings grids. UiAppHost owns the app-hosting
@@ -42,6 +42,8 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // render, so they come from the subclass's own storage.
   virtual const char* cellName(int index) const = 0;
   virtual const char* cellValue(int index) const = 0;
+  // Section heading hook: non-selectable solid black band with white centered text.
+  virtual bool cellIsHeader(int index) const { return false; }
   // Confirm on the selection, or a tap on a cell.
   virtual void activateCell(int index) = 0;
   // What the base paints around the grid. Default: the title from headerTitle().

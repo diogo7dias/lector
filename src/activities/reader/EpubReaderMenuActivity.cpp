@@ -22,8 +22,8 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const uint8_t paperbackStatus, const uint8_t statusBar, const uint8_t progressBar, const bool hasSleepWallpaper,
     const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
-      items(flatten(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar,
-                              hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes))),
+      pages(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar, hasSleepWallpaper,
+                      wallpaperFavorited, wallpaperPausable, hasQuotes)),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -37,10 +37,47 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       currentPage(currentPage),
       totalPages(totalPages),
       bookProgressPercent(bookProgressPercent) {
-  // The menu is one list, so the setting that used to pick a tab now picks the section
-  // the list opens on. A section with nothing to show is simply not in the list, and
-  // the lookup falls back to the first row.
   preferredTab = tabForSetting(SETTINGS.bookMenuTab);
+  if (!mappedInput.hasTouch()) {
+    // 0.27 tab order: Navigate, ThisBook, Look, Sleep, Device
+    std::vector<TabPage> ordered;
+    for (Tab t : {Tab::Navigate, Tab::ThisBook, Tab::Look, Tab::Sleep, Tab::Device}) {
+      for (const auto& p : pages) {
+        if (p.tab == t && !p.items.empty()) {
+          ordered.push_back(p);
+          break;
+        }
+      }
+    }
+    pages = std::move(ordered);
+    currentTabIdx = 0;
+    for (size_t i = 0; i < pages.size(); ++i) {
+      if (pages[i].tab == preferredTab) {
+        currentTabIdx = i;
+        break;
+      }
+    }
+    selectTab(currentTabIdx);
+  } else {
+    items = flatten(pages);
+  }
+}
+
+void EpubReaderMenuActivity::selectTab(const size_t index) {
+  if (pages.empty()) return;
+  currentTabIdx = index % pages.size();
+  items = pages[currentTabIdx].items;
+  updateTabInfos();
+  nav.selected = stepPastHeaders(0, 1);
+  nav.top = 0;
+}
+
+void EpubReaderMenuActivity::updateTabInfos() const {
+  tabInfos.clear();
+  tabInfos.reserve(pages.size());
+  for (size_t i = 0; i < pages.size(); ++i) {
+    tabInfos.push_back(TabInfo{I18N.get(pages[i].labelId), i == currentTabIdx});
+  }
 }
 
 // The heading each section is built with, so a lookup by label can find it again in
@@ -317,14 +354,14 @@ int EpubReaderMenuActivity::firstRowOfPreferredSection() const {
 }
 
 void EpubReaderMenuActivity::onEnter() {
-  // The base resets the selection, so the opening row is chosen after it: the first row
-  // of the section the user picked in Settings. The viewport is parked on that section's
-  // heading, so the list reads from its name down rather than from an arbitrary row.
   UiListActivity::onEnter();
-  const int first = firstRowOfPreferredSection();
-  {
-    // Written under the lock: the base already asked for the first paint, so the render
-    // task may be reading nav by now.
+  if (!mappedInput.hasTouch()) {
+    onTabBar = false;
+    nav.selected = stepPastHeaders(0, 1);
+    nav.top = 0;
+    nav.followOnBuild = false;
+  } else {
+    const int first = firstRowOfPreferredSection();
     RenderLock lock(*this);
     nav.selected = first;
     nav.top = std::max(0, first - 1);
@@ -413,6 +450,16 @@ bool EpubReaderMenuActivity::handleButtons() {
     return true;
   }
 
+  if (!mappedInput.hasTouch() && onTabBar) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      onTabBar = false;
+      nav.selected = stepPastHeaders(0, 1);
+      requestUpdate();
+      return true;
+    }
+    return false;
+  }
+
   // With a function bound to the menu hold, Confirm carries two actions and cannot be
   // resolved until the button comes up. With nothing bound there is nothing to tell
   // apart, so the row activates the instant Confirm goes down.
@@ -426,6 +473,54 @@ bool EpubReaderMenuActivity::handleButtons() {
 }
 
 void EpubReaderMenuActivity::navigateButtons() {
+  if (!mappedInput.hasTouch()) {
+    buttonNavigator.onNextStep([this] {
+      if (onTabBar) {
+        onTabBar = false;
+        nav.selected = stepPastHeaders(0, 1);
+        requestUpdate();
+        return;
+      }
+      const int count = static_cast<int>(items.size());
+      moveSelectionTo(stepPastHeaders(ButtonNavigator::nextIndex(nav.selected, count), 1));
+    });
+    buttonNavigator.onPreviousStep([this] {
+      if (onTabBar) return;
+      if (nav.selected <= stepPastHeaders(0, 1)) {
+        onTabBar = true;
+        requestUpdate();
+        return;
+      }
+      const int count = static_cast<int>(items.size());
+      moveSelectionTo(stepPastHeaders(ButtonNavigator::previousIndex(nav.selected, count), -1));
+    });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] {
+      if (!pages.empty()) {
+        selectTab((currentTabIdx + pages.size() - 1) % pages.size());
+        requestUpdate();
+      }
+    });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] {
+      if (!pages.empty()) {
+        selectTab((currentTabIdx + 1) % pages.size());
+        requestUpdate();
+      }
+    });
+    buttonNavigator.onNextContinuous([this] {
+      if (!pages.empty()) {
+        selectTab((currentTabIdx + 1) % pages.size());
+        requestUpdate();
+      }
+    });
+    buttonNavigator.onPreviousContinuous([this] {
+      if (!pages.empty()) {
+        selectTab((currentTabIdx + pages.size() - 1) % pages.size());
+        requestUpdate();
+      }
+    });
+    return;
+  }
+
   // One flat list of headings and rows: a press steps one row past any heading, and
   // holding jumps to the next section instead of repeating — the fast travel the tab
   // bar used to provide.
@@ -568,6 +663,11 @@ ListChrome EpubReaderMenuActivity::chrome() const {
   chrome.title = "";
   for (size_t i = 0; i < headerBlock.size() && i < ListChrome::MAX_HEADER_LINES; ++i) {
     chrome.headerLines[i] = headerBlock[i].c_str();
+  }
+  if (!mappedInput.hasTouch() && !pages.empty()) {
+    updateTabInfos();
+    chrome.tabs = &tabInfos;
+    chrome.tabsOnTabBar = onTabBar;
   }
   return chrome;
 }
