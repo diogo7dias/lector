@@ -37,8 +37,23 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
     LOG_DBG("OTA", "Update check failed: %d", res);
     {
       RenderLock lock(*this);
+      failedDetail = detailFor(res);
+      failedExtra.clear();
+      failedHint.clear();
+      if (res == OtaUpdater::HTTP_ERROR) {
+        failedExtra = "Server check failed";
+        failedHint = "Check Wi-Fi or update server";
+      } else if (res == OtaUpdater::OOM_ERROR) {
+        failedExtra = "Low memory for secure connection";
+        failedHint = "Restart reader and retry";
+      } else if (res == OtaUpdater::NO_UPDATE) {
+        failedExtra = "No firmware asset found in release";
+      } else if (res == OtaUpdater::JSON_PARSE_ERROR) {
+        failedExtra = "Unrecognized response from server";
+      }
       state = FAILED;
     }
+    requestUpdate();
     return;
   }
 
@@ -188,8 +203,14 @@ const char* OtaUpdateActivity::detailFor(const OtaUpdater::OtaUpdaterError error
       return "Download failed";
     case OtaUpdater::INTERNAL_UPDATE_ERROR:
       return tr(STR_FIRMWARE_WRITE_FAILED);
+    case OtaUpdater::JSON_PARSE_ERROR:
+      return "Invalid server response";
+    case OtaUpdater::NO_UPDATE:
+      return tr(STR_NO_UPDATE);
+    case OtaUpdater::UPDATE_OLDER_ERROR:
+      return "Update is not newer";
     default:
-      return nullptr;
+      return "Update check failed";
   }
 }
 
@@ -258,6 +279,9 @@ void OtaUpdateActivity::runUpdateInstall() {
         failedHint = "Use firmware for this device's chip";
       } else if (res == OtaUpdater::INVALID_IMAGE_ERROR) {
         failedExtra = "Corrupt download: checksum mismatch";
+      } else if (res == OtaUpdater::HTTP_ERROR) {
+        failedExtra = "Download failed or connection dropped";
+        failedHint = "Check Wi-Fi connection and retry";
       }
       state = FAILED;
     }
