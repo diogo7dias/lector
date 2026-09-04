@@ -89,7 +89,6 @@ class WifiSelectionActivity final : public UiStatusActivity {
   // A join was started and its outcome has not been handed to the session yet.
   bool joinPending = false;
 
-
   /** Hands the session everything the radio has to say, then runs what it asks for. */
   void pumpSession();
   void runAction(const wifi_session::Action& action);
@@ -111,7 +110,7 @@ class WifiSelectionActivity final : public UiStatusActivity {
   void onComplete(bool connected);
 
  public:
-  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = true)
+  explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = false)
       : UiStatusActivity("WifiSelection", renderer, mappedInput), allowAutoConnect(autoConnect) {}
   void onEnter() override;
   void onExit() override;

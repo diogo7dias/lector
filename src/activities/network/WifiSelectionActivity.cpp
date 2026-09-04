@@ -172,6 +172,7 @@ void WifiSelectionActivity::beginJoin(const std::string& ssid, const std::string
   selectedSSID = ssid;
   connectedIP.clear();
   connectionError.clear();
+  refreshConnectionLines();
   requestUpdate();
 
   WiFi.persistent(false);  // Credentials are managed by WifiCredentialStore; suppress SDK NVS auto-connect
@@ -301,7 +302,7 @@ void WifiSelectionActivity::syncStateFromSession() {
   if (next == WifiSelectionState::SAVE_PROMPT) setChoiceIndex(0);
   state = next;
   if (next == WifiSelectionState::CONNECTED || next == WifiSelectionState::SAVE_PROMPT ||
-      next == WifiSelectionState::CONNECTING) {
+      next == WifiSelectionState::CONNECTING || next == WifiSelectionState::AUTO_CONNECTING) {
     refreshConnectionLines();
   }
   requestUpdate();
@@ -520,8 +521,8 @@ void WifiSelectionActivity::refreshHeaderCount() {
 }
 
 void WifiSelectionActivity::refreshConnectionLines() {
-  ssidLine = std::string(state == WifiSelectionState::CONNECTING ? tr(STR_TO_PREFIX) : tr(STR_NETWORK_PREFIX)) +
-             selectedSSID;
+  ssidLine =
+      std::string(state == WifiSelectionState::CONNECTING ? tr(STR_TO_PREFIX) : tr(STR_NETWORK_PREFIX)) + selectedSSID;
   ipLine = std::string(tr(STR_IP_ADDRESS_PREFIX)) + connectedIP;
 }
 
@@ -565,10 +566,10 @@ UiStatusActivity::StatusView WifiSelectionActivity::statusView() const {
       view.listNote = tr(STR_NETWORK_LEGEND);
       view.confirmHint = tr(STR_CONNECT);
       // Left forgets, right rescans, the same two the list has always bound.
-      view.thirdHint = listSelection() < static_cast<int>(realNetworkCount) &&
-                               networks[listSelection()].hasSavedPassword
-                           ? tr(STR_FORGET_BUTTON)
-                           : "";
+      view.thirdHint =
+          listSelection() < static_cast<int>(realNetworkCount) && networks[listSelection()].hasSavedPassword
+              ? tr(STR_FORGET_BUTTON)
+              : "";
       view.fourthHint = tr(STR_RETRY);
       break;
     case WifiSelectionState::CONNECTED:
@@ -615,6 +616,15 @@ bool WifiSelectionActivity::handleListSideButtons() {
 }
 
 bool WifiSelectionActivity::handleCustomInput() {
+  if (state == WifiSelectionState::SCANNING || state == WifiSelectionState::AUTO_CONNECTING) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+      // The reader took over; stop trying saved networks behind their back.
+      session.showNetworkList(millis());
+      pumpSession();
+      return true;
+    }
+  }
+
   // Reached once the hidden-network SSID has been entered (and was non-empty).
   if (state == WifiSelectionState::HIDDEN_SSID_ENTRY) {
     state = WifiSelectionState::NETWORK_LIST;
