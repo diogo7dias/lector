@@ -402,4 +402,42 @@ TEST(WifiSessionHidden, UsesTheStoredPasswordForAKnownHiddenNetwork) {
   EXPECT_TRUE(actions[0].useSavedPassword);
 }
 
+TEST(WifiSessionStart, DoesNotAutoJoinWhenAutoConnectDisabled) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.allowAutoConnect = false;
+  startup.savedSsids = {"home", "cafe"};
+  startup.lastConnectedSsid = "cafe";
+  session.begin(startup, 1000);
+
+  const std::vector<wifi_session::Action> actions = drain(session, 1000);
+  ASSERT_EQ(actions.size(), 1u);
+  EXPECT_EQ(actions[0].kind, wifi_session::ActionKind::START_SCAN);
+  EXPECT_EQ(session.state(), wifi_session::State::SCANNING);
+}
+
+TEST(WifiSessionScan, DoesNotAutoJoinFromScanWhenAutoConnectDisabled) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.allowAutoConnect = false;
+  startup.savedSsids = {"home", "cafe"};
+  session.begin(startup, 1000);
+  drain(session, 1000);
+
+  const std::vector<Network> found = {seen("home", -50), seen("cafe", -40)};
+  session.onScanResults(found.data(), found.size(), 2000);
+
+  EXPECT_TRUE(drain(session, 2000).empty());
+  EXPECT_EQ(session.state(), wifi_session::State::NETWORK_LIST);
+  ASSERT_EQ(session.networks().size(), 2u);
+
+  // The reader can choose the second saved network instead of being forced into the first
+  session.selectNetwork(1, 3000);
+  const std::vector<wifi_session::Action> actions = drain(session, 3000);
+  ASSERT_EQ(actions.size(), 1u);
+  EXPECT_EQ(actions[0].kind, wifi_session::ActionKind::JOIN);
+  EXPECT_EQ(actions[0].ssid, "home");
+  EXPECT_TRUE(actions[0].useSavedPassword);
+}
+
 }  // namespace
