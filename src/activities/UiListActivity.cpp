@@ -133,6 +133,9 @@ void UiListActivity::navigateButtons() {
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
+  if (props.labelText.maxLines <= 1) {
+    props.labelText.maxLines = 2;
+  }
   int16_t rowHeight = screen.theme().rowHeight;
   if (!mappedInput.hasTouch()) {
     // Non-touch hardware (X3/X4) keeps the original, denser per-theme row

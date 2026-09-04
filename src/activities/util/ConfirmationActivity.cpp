@@ -18,7 +18,7 @@ void ConfirmationActivity::onEnter() {
     safeHeading = renderer.truncatedText(fontId, heading.c_str(), maxWidth, EpdFontFamily::REGULAR);
   }
   if (!body.empty()) {
-    safeBody = renderer.truncatedText(fontId, body.c_str(), maxWidth, EpdFontFamily::REGULAR);
+    safeBodyLines = renderer.wrappedText(fontId, body.c_str(), maxWidth, 3, EpdFontFamily::REGULAR);
   }
 
   const char* options[] = {I18N.get(StrId::STR_CANCEL), I18N.get(StrId::STR_CONFIRM)};
@@ -35,8 +35,15 @@ void ConfirmationActivity::onEnter() {
 UiStatusActivity::StatusView ConfirmationActivity::statusView() const {
   StatusView view;
   view.linesAtTop = true;
-  if (!safeHeading.empty()) view.lines[0] = safeHeading.c_str();
-  if (!safeBody.empty()) view.lines[safeHeading.empty() ? 0 : 1] = safeBody.c_str();
+  size_t lineIdx = 0;
+  if (!safeHeading.empty() && lineIdx < MAX_LINES) {
+    view.lines[lineIdx++] = safeHeading.c_str();
+  }
+  for (const auto& line : safeBodyLines) {
+    if (lineIdx < MAX_LINES) {
+      view.lines[lineIdx++] = line.c_str();
+    }
+  }
   // The popup carries both answers, so the hint band says nothing.
   view.backHint = "";
   return view;

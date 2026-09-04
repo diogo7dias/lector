@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <vector>
 
 #include "activities/UiStatusActivity.h"
 #include "components/OptionPopup.h"
@@ -24,10 +25,10 @@ class ConfirmationActivity : public UiStatusActivity {
   std::string heading;
   std::string body;
 
-  // Truncated to the panel width once on entry, so the paint hands out pointers
+  // Wrapped to the panel width once on entry, so the paint hands out pointers
   // to strings that are already the right length.
   std::string safeHeading;
-  std::string safeBody;
+  std::vector<std::string> safeBodyLines;
   OptionPopup confirmPopup;
 
   void cancel();

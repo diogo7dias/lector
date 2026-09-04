@@ -134,6 +134,16 @@ EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
 EpdFont cozette14RegularFont(&cozette_14_regular);
 EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
 
+#ifndef OMIT_FONTS
+// Departure Mono UI family — lector's UI chrome font for keys-only devices (X3/X4).
+// Monospace pixel font (Helena Zhang, SIL OFL). Native sizes: 11 = 11px em, 22 = 22px em (2x).
+EpdFont departureMono11RegularFont(&departure_mono_11_regular);
+EpdFontFamily departureMono11FontFamily(&departureMono11RegularFont, &departureMono11RegularFont);
+
+EpdFont departureMono22RegularFont(&departure_mono_22_regular);
+EpdFontFamily departureMono22FontFamily(&departureMono22RegularFont, &departureMono22RegularFont);
+#endif  // OMIT_FONTS
+
 // Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
 // family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
 // cmap) uses Cozette. Called at boot and on every in-app language change (declared
@@ -152,6 +162,18 @@ void bindUiFontsForLanguage(GfxRenderer& renderer) {
   renderer.removeFont(SMALL_FONT_ID);
   renderer.removeFont(UI_10_FONT_ID);
   renderer.removeFont(UI_12_FONT_ID);
+
+#if !FREEINK_DEVICE_X4PRO
+#ifndef OMIT_FONTS
+  if (!gpio.hasTouch()) {
+    renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : departureMono11FontFamily);
+    renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : departureMono11FontFamily);
+    renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : departureMono22FontFamily);
+    return;
+  }
+#endif  // OMIT_FONTS
+#endif  // !FREEINK_DEVICE_X4PRO
+
   renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
   renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
   renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
@@ -453,6 +475,10 @@ void setupDisplayAndFonts(bool seamless = false) {
   // language; the reader picks between them per book from ReaderPrefs.
   renderer.insertFont(PARA_NUM_FONT_ID, paragraphNumFontFamily);
   renderer.insertFont(PARA_NUM_2X_FONT_ID, paragraphNum2xFontFamily);
+#ifndef OMIT_FONTS
+  renderer.insertFont(DEPARTURE_MONO_11_FONT_ID, departureMono11FontFamily);
+  renderer.insertFont(DEPARTURE_MONO_22_FONT_ID, departureMono22FontFamily);
+#endif  // OMIT_FONTS
   // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
   // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);

@@ -163,6 +163,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   fui::TextStyle name = theme.smallText;
   name.align = fui::TextAlign::Center;
   name.inverted = selected;
+  name.maxLines = 2;
   fui::TextStyle value = theme.bodyText;
   value.align = fui::TextAlign::Center;
   value.inverted = selected;
@@ -200,18 +201,31 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
 
   const int16_t inset = theme.spaceSm;
   const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
-  const fui::Rect line{static_cast<int16_t>(box.x + inset),
-                       static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
-                       static_cast<int16_t>(box.width - inset * 2), lineHeight};
 
   fui::TextStyle name = theme.bodyText;
   name.align = fui::TextAlign::Left;
   name.inverted = selected;
+  name.maxLines = 2;
+
   fui::TextStyle value = theme.smallText;
   value.align = fui::TextAlign::Right;
   value.inverted = selected;
-  if (cellName(index) != nullptr) target.text(line, cellName(index), name);
-  if (cellValue(index) != nullptr) target.text(line, cellValue(index), value);
+
+  const char* valStr = cellValue(index);
+  int16_t valWidth = 0;
+  if (valStr != nullptr && valStr[0] != '\0') {
+    valWidth = static_cast<int16_t>(target.measureText(value.font, valStr, value).width);
+  }
+  const int16_t valGap = valWidth > 0 ? static_cast<int16_t>(theme.spaceSm) : 0;
+  const int16_t nameWidth = static_cast<int16_t>(box.width - inset * 2 - valWidth - valGap);
+
+  const fui::Rect nameRect{static_cast<int16_t>(box.x + inset), box.y, nameWidth, box.height};
+  const fui::Rect valueRect{static_cast<int16_t>(box.x + inset),
+                            static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
+                            static_cast<int16_t>(box.width - inset * 2), lineHeight};
+
+  if (cellName(index) != nullptr) target.text(nameRect, cellName(index), name);
+  if (valStr != nullptr) target.text(valueRect, valStr, value);
 }
 
 // The armed number, in the header's place. On the touch board that is a slider

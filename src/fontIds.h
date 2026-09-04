@@ -19,6 +19,10 @@
 // resampling. Nothing in between is offered because nothing in between is exact.
 #define PARA_NUM_FONT_ID (-558301807)
 #define PARA_NUM_2X_FONT_ID (-501125356)
+// Departure Mono: UI chrome font for keys-only devices (X3/X4).
+// Monospace pixel font (Helena Zhang, SIL OFL). Native 11px and 22px (2x).
+#define DEPARTURE_MONO_11_FONT_ID (-1093115474)
+#define DEPARTURE_MONO_22_FONT_ID (913317269)
 
 // Font ID 0 is reserved as the "not found" sentinel.
 // Guard against any hash accidentally producing 0.
@@ -30,6 +34,8 @@ static_assert(UBUNTU_12_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(SMALL_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(PARA_NUM_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(PARA_NUM_2X_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(DEPARTURE_MONO_11_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(DEPARTURE_MONO_22_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(PARA_NUM_FONT_ID != SMALL_FONT_ID, "Font ID collision");
 static_assert(PARA_NUM_2X_FONT_ID != SMALL_FONT_ID, "Font ID collision");
 static_assert(PARA_NUM_2X_FONT_ID != PARA_NUM_FONT_ID, "Font ID collision");

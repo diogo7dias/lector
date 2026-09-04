@@ -1,7 +1,5 @@
 #include "BaseTheme.h"
 
-#include "components/icons/skull12.h"
-
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalGPIO.h>
@@ -28,6 +26,7 @@
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
+#include "components/icons/skull12.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -542,14 +541,16 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     auto itemName = rowTitle(i);
     auto font = itemFontId;
-    auto item = renderer.truncatedText(font, itemName.c_str(), rowTextWidth);
+    const int fontLineH = renderer.getLineHeight(font);
+    const int maxItemLines = (rowSubtitle != nullptr) ? 1 : 2;
+    const auto itemLines = renderer.wrappedText(font, itemName.c_str(), rowTextWidth, maxItemLines);
 
     // Rows are finger-height on a touch board (listRowHeight rises from 40 px to 56),
     // so the text block is centred in the row rather than parked against its top edge,
     // which is what leaves the taller row looking top-heavy and half empty.
     const int subtitleOffset = 22;
     const int blockHeight = (rowSubtitle != nullptr) ? subtitleOffset + renderer.getLineHeight(SMALL_FONT_ID)
-                                                     : renderer.getLineHeight(font);
+                                                     : static_cast<int>(itemLines.size()) * fontLineH;
     const int textY = itemY + std::max(0, (rowHeight - blockHeight) / 2);
 
     // Where the value will land, needed here so the selection can bracket it before
@@ -560,8 +561,12 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
 
     if (i == selectedIndex) {
       const int titleX = rect.x + BaseMetrics::values.contentSidePadding;
+      int maxItemLineWidth = 0;
+      for (const auto& lineStr : itemLines) {
+        maxItemLineWidth = std::max(maxItemLineWidth, renderer.getTextWidth(font, lineStr.c_str()));
+      }
       const Rect spans[2] = {
-          Rect(titleX, textY, renderer.getTextWidth(font, item.c_str()), renderer.getLineHeight(font)),
+          Rect(titleX, textY, maxItemLineWidth, static_cast<int>(itemLines.size()) * fontLineH),
           Rect(valueX, valueY, valueTextWidth, renderer.getLineHeight(UI_10_FONT_ID)),
       };
       selectionInvertsText =
@@ -569,24 +574,37 @@ void BaseTheme::drawList(const GfxRenderer& renderer, Rect rect, int itemCount, 
                         spans, valueText.empty() ? 1 : 2);
     }
 
-    renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, textY, item.c_str(), drawnOnPaper(i));
+    int curLineY = textY;
+    for (const auto& lineStr : itemLines) {
+      renderer.drawText(font, rect.x + BaseMetrics::values.contentSidePadding, curLineY, lineStr.c_str(),
+                        drawnOnPaper(i));
+      curLineY += fontLineH;
+    }
 
     // Apply checkerboard dither to create gray text effect for dimmed items
     if (rowDimmed && rowDimmed(i) && drawnOnPaper(i)) {
-      const int titleWidth = renderer.getTextWidth(font, item.c_str());
-      const int lineH = renderer.getLineHeight(font);
+      int maxItemLineWidth = 0;
+      for (const auto& lineStr : itemLines) {
+        maxItemLineWidth = std::max(maxItemLineWidth, renderer.getTextWidth(font, lineStr.c_str()));
+      }
+      const int lineH = static_cast<int>(itemLines.size()) * fontLineH;
       const int tx = rect.x + BaseMetrics::values.contentSidePadding;
       for (int py = textY; py < textY + lineH; py++)
-        for (int px = tx; px < tx + titleWidth; px++)
+        for (int px = tx; px < tx + maxItemLineWidth; px++)
           if ((px + py) % 2 == 0) renderer.drawPixel(px, py, false);
     }
 
     if (rowSubtitle != nullptr) {
       std::string subtitleText = rowSubtitle(i);
       if (!subtitleText.empty()) {
-        auto subtitle = renderer.truncatedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth);
-        renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, textY + subtitleOffset,
-                          subtitle.c_str(), drawnOnPaper(i));
+        const auto subtitleLines = renderer.wrappedText(SMALL_FONT_ID, subtitleText.c_str(), rowTextWidth, 2);
+        const int subLh = renderer.getLineHeight(SMALL_FONT_ID);
+        int subY = textY + subtitleOffset;
+        for (const auto& subLine : subtitleLines) {
+          renderer.drawText(SMALL_FONT_ID, rect.x + BaseMetrics::values.contentSidePadding, subY, subLine.c_str(),
+                            drawnOnPaper(i));
+          subY += subLh;
+        }
       }
     }
 
@@ -620,13 +638,26 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // read as just another line of text next to the rows under them. Filling the whole row
   // also clears the last battery reading, which is why no separate knock-out box is left
   // here — a partial clear used to leave fragments of the previous percentage behind.
-  const bool inverted = title != nullptr && title[0] != '\0';
+  const int lh = renderer.getLineHeight(UI_10_FONT_ID);
+  std::vector<std::string> titleLines;
+  if (title && title[0] != '\0') {
+    const int batteryX = rect.x + rect.width - batteryRightPadding - BaseMetrics::values.batteryWidth;
+    const int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
+    const int maxTitleWidth = rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2;
+    const std::string decoratedTitle = header_title::decorate(title);
+    titleLines = renderer.wrappedText(UI_10_FONT_ID, decoratedTitle.c_str(), maxTitleWidth, 2, EpdFontFamily::REGULAR);
+  }
+
+  const bool inverted = !titleLines.empty();
   if (inverted) {
     // The band runs from the panel edge to one pixel under the title, not over the
     // rect the caller reserved: the top padding above it read as a white stripe along
     // the edge, and the rest of the 45 px reserve read as a slab of ink under the text.
     // The reserve itself is unchanged, so nothing below the header moves.
-    renderer.fillRect(rect.x, headerBandTop(rect), rect.width, headerBandHeight(renderer, rect), true);
+    const int bandLines = std::max(1, static_cast<int>(titleLines.size()));
+    const int bottom = rect.y + headerTitleOffset + bandLines * lh + 1;
+    const int bandH = std::max(0, bottom - headerBandTop(rect));
+    renderer.fillRect(rect.x, headerBandTop(rect), rect.width, bandH, true);
   } else {
     // Untitled band (the home screen). Nothing to invert, so only the cluster is cleared.
     // Both the width and the height come from the cluster's own metrics: a hardcoded box
@@ -645,17 +676,12 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                    Rect{batteryX, rect.y + 5, BaseMetrics::values.batteryWidth, BaseMetrics::values.batteryHeight},
                    showBatteryPercentage, /*onBlack=*/inverted);
 
-  if (title) {
-    int padding = rect.width - batteryX + BaseMetrics::values.batteryWidth;
-    // Same size as the rows under it and as the home screen's own text. A step larger
-    // read as bold next to everything else on the screen. The brackets are what marks it
-    // as the title instead: see components/HeaderTitle.h for why not bold.
-    const std::string decoratedTitle = header_title::decorate(title);
-    auto truncatedTitle = renderer.truncatedText(UI_10_FONT_ID, decoratedTitle.c_str(),
-                                                 rect.width - padding * 2 - BaseMetrics::values.contentSidePadding * 2,
-                                                 EpdFontFamily::REGULAR);
-    renderer.drawCenteredText(UI_10_FONT_ID, rect.y + headerTitleOffset, truncatedTitle.c_str(), false,
-                              EpdFontFamily::REGULAR);
+  if (!titleLines.empty()) {
+    int ty = rect.y + headerTitleOffset;
+    for (const auto& line : titleLines) {
+      renderer.drawCenteredText(UI_10_FONT_ID, ty, line.c_str(), false, EpdFontFamily::REGULAR);
+      ty += lh;
+    }
   }
 
   if (subtitle) {
@@ -668,11 +694,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
     // 792-row portrait screen, so the version ran into the Down hint. Derive it instead, and
     // keep a gap so descenders never touch the band either.
     constexpr int subtitleGap = 6;
-    int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
-    renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
-    const int subtitleY = renderer.getScreenHeight() - viewBottom -
-                          UITheme::getInstance().getMetrics().buttonHintsHeight -
-                          renderer.getLineHeight(SMALL_FONT_ID) - subtitleGap;
+    const int metricsButtonHintsHeight = UITheme::getInstance().getMetrics().buttonHintsHeight;
+    const int subtitleY =
+        renderer.getScreenHeight() - metricsButtonHintsHeight - renderer.getLineHeight(SMALL_FONT_ID) - subtitleGap;
     renderer.drawText(SMALL_FONT_ID,
                       rect.x + rect.width - BaseMetrics::values.contentSidePadding - truncatedSubtitleWidth, subtitleY,
                       truncatedSubtitle.c_str(), true);
@@ -693,9 +717,14 @@ void BaseTheme::drawSubHeader(const GfxRenderer& renderer, Rect rect, const char
     rightSpace += rightLabelWidth + 10;
   }
 
-  auto truncatedLabel = renderer.truncatedText(
-      UI_10_FONT_ID, label, rect.width - BaseMetrics::values.contentSidePadding - rightSpace, EpdFontFamily::REGULAR);
-  renderer.drawText(UI_10_FONT_ID, currentX, rect.y, truncatedLabel.c_str(), true, EpdFontFamily::REGULAR);
+  const int availLabelWidth = rect.width - BaseMetrics::values.contentSidePadding - rightSpace;
+  const auto labelLines = renderer.wrappedText(UI_10_FONT_ID, label, availLabelWidth, 2, EpdFontFamily::REGULAR);
+  const int subLh = renderer.getLineHeight(UI_10_FONT_ID);
+  int y = rect.y;
+  for (const auto& line : labelLines) {
+    renderer.drawText(UI_10_FONT_ID, currentX, y, line.c_str(), true, EpdFontFamily::REGULAR);
+    y += subLh;
+  }
 }
 
 // How far the focused-tab highlight bleeds past its label on each side. Shared by the
@@ -978,18 +1007,18 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
 
     auto lines = renderer.wrappedText(UI_12_FONT_ID, lastBookTitle.c_str(), bookWidth - 40, 3);
 
+    const auto authorLines = lastBookAuthor.empty()
+                                 ? std::vector<std::string>{}
+                                 : renderer.wrappedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40, 2);
+
     // Book title text
     int totalTextHeight = renderer.getLineHeight(UI_12_FONT_ID) * static_cast<int>(lines.size());
-    if (!lastBookAuthor.empty()) {
-      totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * 3 / 2;
+    if (!authorLines.empty()) {
+      totalTextHeight += renderer.getLineHeight(UI_10_FONT_ID) * (1 + static_cast<int>(authorLines.size()));
     }
 
     // Vertically center the title block within the card
     int titleYStart = bookY + (bookHeight - totalTextHeight) / 2;
-
-    const auto truncatedAuthor = lastBookAuthor.empty()
-                                     ? std::string{}
-                                     : renderer.truncatedText(UI_10_FONT_ID, lastBookAuthor.c_str(), bookWidth - 40);
 
     // If cover image was rendered, draw box behind title and author
     if (coverRendered) {
@@ -1002,8 +1031,8 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
           maxTextWidth = lineWidth;
         }
       }
-      if (!truncatedAuthor.empty()) {
-        const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, truncatedAuthor.c_str());
+      for (const auto& authorLine : authorLines) {
+        const int authorWidth = renderer.getTextWidth(UI_10_FONT_ID, authorLine.c_str());
         if (authorWidth > maxTextWidth) {
           maxTextWidth = authorWidth;
         }
@@ -1032,9 +1061,12 @@ void BaseTheme::drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std:
       titleYStart += renderer.getLineHeight(UI_12_FONT_ID);
     }
 
-    if (!truncatedAuthor.empty()) {
+    if (!authorLines.empty()) {
       titleYStart += renderer.getLineHeight(UI_10_FONT_ID) / 2;
-      renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, truncatedAuthor.c_str(), !cardInverted);
+      for (const auto& authorLine : authorLines) {
+        renderer.drawCenteredText(UI_10_FONT_ID, titleYStart, authorLine.c_str(), !cardInverted);
+        titleYStart += renderer.getLineHeight(UI_10_FONT_ID);
+      }
     }
 
     // "Continue Reading" label at the bottom
@@ -1593,10 +1625,16 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
 }
 
 void BaseTheme::drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const {
+  if (!label || label[0] == '\0') return;
   const auto& metrics = UITheme::getInstance().getMetrics();
-  auto truncatedLabel =
-      renderer.truncatedText(SMALL_FONT_ID, label, rect.width - metrics.contentSidePadding * 2, EpdFontFamily::REGULAR);
-  renderer.drawCenteredText(SMALL_FONT_ID, rect.y, truncatedLabel.c_str());
+  const int maxWidth = rect.width - metrics.contentSidePadding * 2;
+  const auto lines = renderer.wrappedText(SMALL_FONT_ID, label, maxWidth, 2, EpdFontFamily::REGULAR);
+  const int lh = renderer.getLineHeight(SMALL_FONT_ID);
+  int y = rect.y;
+  for (const auto& line : lines) {
+    renderer.drawCenteredText(SMALL_FONT_ID, y, line.c_str(), true, EpdFontFamily::REGULAR);
+    y += lh;
+  }
 }
 
 void BaseTheme::drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const {

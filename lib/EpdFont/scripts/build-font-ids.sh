@@ -62,3 +62,15 @@ ruby -rdigest -e 'puts [
   "./spleen_6x12_2x_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
+
+echo "#define DEPARTURE_MONO_11_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./departure_mono_11_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define DEPARTURE_MONO_22_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./departure_mono_22_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"

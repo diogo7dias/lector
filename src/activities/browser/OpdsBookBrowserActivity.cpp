@@ -198,7 +198,7 @@ void OpdsBookBrowserActivity::navigateBack() {
 void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   state = BrowserState::DOWNLOADING;
   statusMessage = book.title;
-  downloadTitle = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40);
+  downloadTitleLines = renderer.wrappedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40, 2);
   downloadProgress = downloadTotal = 0;
 
   // Build full download URL relative to the current feed, not the root server URL
@@ -397,7 +397,12 @@ UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
       view.confirmHint = tr(STR_RETRY);
       break;
     case BrowserState::DOWNLOADING:
-      view.lines = {tr(STR_DOWNLOADING), downloadTitle.c_str(), nullptr, nullptr};
+      view.lines = {
+          tr(STR_DOWNLOADING),
+          downloadTitleLines.empty() ? nullptr : downloadTitleLines[0].c_str(),
+          downloadTitleLines.size() > 1 ? downloadTitleLines[1].c_str() : nullptr,
+          nullptr,
+      };
       view.showProgress = downloadTotal > 0;
       view.progressValue = static_cast<int>(downloadProgress);
       view.progressMax = downloadTotal > 0 ? static_cast<int>(downloadTotal) : 1;

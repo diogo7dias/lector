@@ -547,10 +547,12 @@ ListChrome EpubReaderMenuActivity::chrome() const {
   // "by {author}", only when an author is known.
   if (!author.empty()) {
     const std::string byLine = std::string(tr(STR_BY_PREFIX)) + author;
-    headerBlock.push_back(renderer.truncatedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40));
+    const auto lines = renderer.wrappedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40, 2);
+    for (const auto& line : lines) headerBlock.push_back(line);
   }
   if (!chapterName.empty()) {
-    headerBlock.push_back(renderer.truncatedText(UI_10_FONT_ID, chapterName.c_str(), screen.width - 40));
+    const auto lines = renderer.wrappedText(UI_10_FONT_ID, chapterName.c_str(), screen.width - 40, 2);
+    for (const auto& line : lines) headerBlock.push_back(line);
   }
   // Progress summary: "Pages: <page>/<pages>  |  Book: <pct>%". Both halves
   // carry a label so neither reads as a bare number.

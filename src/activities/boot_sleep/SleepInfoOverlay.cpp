@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <vector>
 
 #include "CrossPointSettings.h"
 #include "fontIds.h"
@@ -36,10 +37,15 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corne
   const int maxBoxWidth = std::max(1, screenWidth - safeInset * 2);
   const int maxTextWidth = std::max(1, maxBoxWidth - paddingX * 2 - 2);
 
-  const std::string shown = renderer.truncatedText(UI_10_FONT_ID, text.c_str(), maxTextWidth);
-  const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, shown.c_str(), EpdFontFamily::REGULAR);
+  const std::vector<std::string> lines = renderer.wrappedText(UI_10_FONT_ID, text.c_str(), maxTextWidth, 2);
+  if (lines.empty()) return;
+
+  int textWidth = 0;
+  for (const auto& line : lines) {
+    textWidth = std::max(textWidth, renderer.getTextWidth(UI_10_FONT_ID, line.c_str(), EpdFontFamily::REGULAR));
+  }
   const int boxWidth = std::min(textWidth + paddingX * 2, maxBoxWidth);
-  const int boxHeight = textLineHeight + paddingY * 2;
+  const int boxHeight = static_cast<int>(lines.size()) * textLineHeight + paddingY * 2;
   const int boxX = corner == Corner::BottomRight ? std::max(safeInset, screenWidth - safeInset - boxWidth) : safeInset;
   const int boxY = std::max(safeInset, screenHeight - boxHeight - safeInset);
 
@@ -52,7 +58,10 @@ void drawLabel(const GfxRenderer& renderer, const std::string& text, const Corne
   renderer.fillRect(boxX, boxY, boxWidth, boxHeight, true);
   if (renderer.getRenderMode() == GfxRenderer::BW) {
     renderer.drawRect(boxX, boxY, boxWidth, boxHeight, 1, false);
-    renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY, shown.c_str(), false, EpdFontFamily::REGULAR);
+    for (size_t i = 0; i < lines.size(); ++i) {
+      renderer.drawText(UI_10_FONT_ID, boxX + paddingX, boxY + paddingY + static_cast<int>(i) * textLineHeight,
+                        lines[i].c_str(), false, EpdFontFamily::REGULAR);
+    }
   }
 }
 
