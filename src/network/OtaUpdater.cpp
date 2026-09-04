@@ -31,6 +31,12 @@ constexpr char latestReleaseUrl[] = "https://api.github.com/repos/diogo7dias/lec
 // hides prereleases by design.
 constexpr char releaseListUrl[] = "https://api.github.com/repos/diogo7dias/lector/releases?per_page=1";
 
+// Upstream CrossPoint releases endpoint, used as a fallback when checking for
+// foreign firmware or when connected to the CrossPoint OTA Unlocker (which spoofs
+// the upstream GitHub repository).
+constexpr char upstreamReleaseUrl[] =
+    "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
+
 // A TLS session with WiFi up needs room the reader does not always have. Below
 // this, wolfSSL fails mid-handshake and retries for a minute with a few hundred
 // bytes free, which reads as a hang; refuse the attempt and say so instead.
@@ -55,19 +61,43 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrerele
   // OOM there aborts. fetchUrl handles the verified-https GET, redirects, and
   // User-Agent (see HttpDownloader).
   ReleaseJsonParser releaseParser;
+
+  // Candidate URLs in priority order:
+  // 1. If includePrereleases (Install Other Firmware), try releaseListUrl first.
+  // 2. Try latestReleaseUrl (Lector's latest release).
+  // 3. Fall back to upstreamReleaseUrl (for CrossPoint OTA Unlocker / upstream repos).
+  const char* candidateUrls[3];
+  size_t numCandidates = 0;
+  if (includePrereleases) {
+    candidateUrls[numCandidates++] = releaseListUrl;
+    candidateUrls[numCandidates++] = latestReleaseUrl;
+    candidateUrls[numCandidates++] = upstreamReleaseUrl;
+  } else {
+    candidateUrls[numCandidates++] = latestReleaseUrl;
+    candidateUrls[numCandidates++] = upstreamReleaseUrl;
+  }
+
+  bool ok = false;
+  for (size_t i = 0; i < numCandidates; ++i) {
+    releaseParser.reset();
 #ifdef FREEINK_DEVICE_X4PRO
-  // The X4 Pro is an ESP32-S3; the release's plain firmware.bin is the C3 build
-  // and the chip-id gate would refuse it. Ask for the S3 asset by name, and fall
-  // back to firmware.bin when the release does not carry one -- which is also
-  // what the OTA Unlocker always serves.
-  releaseParser.setPreferredAssetName("firmware-x4pro.bin");
+    // The X4 Pro is an ESP32-S3; the release's plain firmware.bin is the C3 build
+    // and the chip-id gate would refuse it. Ask for the S3 asset by name, and fall
+    // back to firmware.bin when the release does not carry one -- which is also
+    // what the OTA Unlocker always serves.
+    releaseParser.setPreferredAssetName("firmware-x4pro.bin");
 #endif
-  releaseParser.setListMode(includePrereleases);
-  const bool ok = HttpDownloader::fetchUrl(includePrereleases ? releaseListUrl : latestReleaseUrl,
-                                           [&releaseParser](const uint8_t* data, size_t len) {
-                                             releaseParser.feed(reinterpret_cast<const char*>(data), len);
-                                             return true;
-                                           });
+    releaseParser.setListMode(includePrereleases && (candidateUrls[i] == releaseListUrl));
+    LOG_DBG("OTA", "Trying release check URL: %s", candidateUrls[i]);
+    ok = HttpDownloader::fetchUrl(candidateUrls[i], [&releaseParser](const uint8_t* data, size_t len) {
+      releaseParser.feed(reinterpret_cast<const char*>(data), len);
+      return true;
+    });
+    if (ok && releaseParser.foundTag() && releaseParser.foundFirmware()) {
+      break;
+    }
+  }
+
   if (!ok) {
     LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
