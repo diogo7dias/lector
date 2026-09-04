@@ -1500,10 +1500,27 @@ void CrossPointWebServer::handleGetSettings() const {
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  server->sendContent("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
+  constexpr size_t BATCH_CAPACITY = 1400;
+  auto batch = makeUniqueNoThrow<char[]>(BATCH_CAPACITY);
+  size_t batchLen = 0;
+  const auto flushBatch = [&] {
+    if (batchLen == 0) return;
+    server->sendContent(batch.get(), batchLen);
+    batchLen = 0;
+    yield();
+    resetTaskWatchdogIfSubscribed();
+  };
+
+  if (batch) {
+    batch[batchLen++] = '[';
+  } else {
+    LOG_ERR("WEB", "OOM: settings batch buffer; falling back to per-entry sends");
+    server->sendContent("[");
+  }
+
+  constexpr size_t outputSize = 1024;
+  char output[outputSize];
   bool seenFirst = false;
   JsonDocument doc;
 
@@ -1580,17 +1597,38 @@ void CrossPointWebServer::handleGetSettings() const {
       continue;
     }
 
-    if (seenFirst) {
-      server->sendContent(",");
+    const size_t prefixLen = seenFirst ? 1 : 0;
+    const size_t required = prefixLen + written;
+
+    if (batch) {
+      if (batchLen + required > BATCH_CAPACITY) flushBatch();
+      if (batchLen + required <= BATCH_CAPACITY) {
+        if (seenFirst) batch[batchLen++] = ',';
+        memcpy(batch.get() + batchLen, output, written);
+        batchLen += written;
+      } else {
+        if (seenFirst) server->sendContent(",");
+        server->sendContent(output, written);
+        yield();
+        resetTaskWatchdogIfSubscribed();
+      }
     } else {
-      seenFirst = true;
+      if (seenFirst) server->sendContent(",");
+      server->sendContent(output, written);
+      yield();
+      resetTaskWatchdogIfSubscribed();
     }
-    server->sendContent(output);
-    yield();                          // Yield to allow WiFi and other tasks to process during a slow send
-    resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
+    seenFirst = true;
   }
 
-  server->sendContent("]");
+  if (batch) {
+    if (batchLen + 1 > BATCH_CAPACITY) flushBatch();
+    batch[batchLen++] = ']';
+    flushBatch();
+  } else {
+    server->sendContent("]");
+  }
+
   server->sendContent("");
   LOG_DBG("WEB", "Served settings API");
 }
