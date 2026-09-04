@@ -702,15 +702,20 @@ void SleepActivity::renderSleepScreen() const {
   }
 
   // Show popup with reader orientation only when going to sleep from reader.
-  // Every face gets it, upstream's behaviour: a wallpaper lock takes longer than any
-  // other, so it is the one that most wants a progress note. It used to be skipped here
-  // because a full-screen clean was about to wipe it; that clean is gone.
-  if (APP_STATE.lastSleepFromReader) {
-    ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
-    renderer.setOrientation(GfxRenderer::Orientation::Portrait);
-  } else {
-    GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+  // The popup is one extra panel refresh per lock. Faces that read the card (wallpaper,
+  // cover, stats) can take seconds and want the note; the blank face and the default
+  // crest paint from flash within the same refresh budget as the popup itself, so on
+  // those the note would only make the lock slower.
+  const bool faceIsQuick = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK ||
+                           SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT;
+  if (!faceIsQuick) {
+    if (APP_STATE.lastSleepFromReader) {
+      ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+      renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+    } else {
+      GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
+    }
   }
   SleepTiming::mark("popup");
 
@@ -1056,7 +1061,6 @@ void SleepActivity::renderCustomSleepScreen() const {
     const auto renderChosen = [&](const std::string& name) {
       const auto filename = std::string(sleepDir) + "/" + name;
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
-      delay(100);
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
       if (hasPxcExtension(name)) {
         if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,

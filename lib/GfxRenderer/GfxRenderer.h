@@ -86,6 +86,8 @@ class GfxRenderer {
   // serial write. A few lines name the offender; the remainder are counted and summarised
   // once per buffer push. Mutable because the whole render path is const.
   static constexpr uint32_t kOutOfRangeLogLimit = 4;
+  mutable uint32_t holdDisplayUntilMs = 0;
+  void waitDisplayHold() const;
   mutable uint32_t outOfRangeLogged = 0;
   mutable uint32_t outOfRangeSuppressed = 0;
   // Emits the summary (if any) and rearms the limiter for the next frame.
@@ -225,6 +227,11 @@ class GfxRenderer {
   int getScreenWidth() const;
   int getScreenHeight() const;
   void tapToLogical(float nx, float ny, int& outX, int& outY) const;
+  // Holds the NEXT panel push (displayBuffer, displayBufferAsync or displayGrayscaleBase)
+  // until millis() reaches `ms`, then clears itself. A floor on how long the picture on
+  // the glass stays, not a sleep: whatever the caller draws in the meantime runs under
+  // the hold instead of after it. 0 disarms.
+  void holdNextDisplayUntil(uint32_t ms) const { holdDisplayUntilMs = ms; }
   void displayBuffer(HalDisplay::RefreshMode refreshMode = HalDisplay::FAST_REFRESH) const;
   // Non-blocking refresh: starts the waveform and returns so CPU work (e.g.
   // grayscale strip rendering) can overlap the panel's refresh time. The
