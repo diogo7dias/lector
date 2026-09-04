@@ -57,11 +57,11 @@ void UiListActivity::onRowAction(const fui::ActionEvent& event) {
 }
 
 bool UiListActivity::handleButtons() {
-  if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     onBackButton();
     return true;
   }
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     const int selected = activeNav().selected;
     if (selected >= 0 && selected < listCount()) activateIndex(selected);
     return true;

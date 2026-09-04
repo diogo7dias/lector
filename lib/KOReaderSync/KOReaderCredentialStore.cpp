@@ -16,6 +16,13 @@ constexpr char LEGACY_DEFAULT_SERVER_URL[] = "https://sync.koreader.rocks:443";
 
 // Bumped when a change to defaults would alter behavior for existing configs.
 constexpr uint8_t CONFIG_VERSION = 2;
+
+std::string trimWhitespace(const std::string& str) {
+  const auto first = str.find_first_not_of(" \t\r\n");
+  if (first == std::string::npos) return "";
+  const auto last = str.find_last_not_of(" \t\r\n");
+  return str.substr(first, (last - first + 1));
+}
 }  // namespace
 
 void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
@@ -29,7 +36,7 @@ void KOReaderCredentialStore::toJson(JsonDocument& doc) const {
 }
 
 bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
-  std::string user = doc["username"] | "";
+  std::string user = trimWhitespace(doc["username"] | "");
 
   bool needsResave = false;
   std::string pass = extractPassword(doc, needsResave);
@@ -80,9 +87,9 @@ bool KOReaderCredentialStore::fromJson(JsonVariantConst doc) {
 }
 
 void KOReaderCredentialStore::setCredentials(const std::string& user, const std::string& pass) {
-  username = user;
+  username = trimWhitespace(user);
   password = pass;
-  LOG_DBG("KRS", "Set credentials for user: %s", user.c_str());
+  LOG_DBG("KRS", "Set credentials for user: %s", username.c_str());
 }
 
 std::string KOReaderCredentialStore::getMd5Password() const {
@@ -109,8 +116,8 @@ void KOReaderCredentialStore::clearCredentials() {
 }
 
 void KOReaderCredentialStore::setServerUrl(const std::string& url) {
-  serverUrl = url;
-  LOG_DBG("KRS", "Set server URL: %s", url.empty() ? "(default)" : url.c_str());
+  serverUrl = trimWhitespace(url);
+  LOG_DBG("KRS", "Set server URL: %s", serverUrl.empty() ? "(default)" : serverUrl.c_str());
 }
 
 std::string KOReaderCredentialStore::getBaseUrl() const {
