@@ -23,7 +23,6 @@
 #include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
-#include "ReaderFontSizes.h"
 #include "CrossPointState.h"
 #include "DictionaryHistoryActivity.h"
 #include "DictionaryWordSelectActivity.h"
@@ -43,6 +42,7 @@
 #include "QuoteText.h"
 #include "QuoteUnderline.h"
 #include "QuotesViewerActivity.h"
+#include "ReaderFontSizes.h"
 #include "ReaderPresetStore.h"
 #include "ReaderPresetsActivity.h"
 #include "ReaderUtils.h"
@@ -2473,7 +2473,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
-    section = std::unique_ptr<Section>(new Section(epub, currentSpineIndex, renderer));
+    section = makeUniqueNoThrow<Section>(epub, currentSpineIndex, renderer);
+    if (!section) {
+      LOG_ERR("ERS", "OOM: Section");
+      return;
+    }
     // Fresh section, fresh chance: a failed lazy extension start in a previous
     // section must not suppress watermark-triggered rebuilds for this one.
     partialRebuildStartFailed = false;
