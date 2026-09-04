@@ -20,6 +20,7 @@
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/BookStatsActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
@@ -85,10 +86,18 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 void HomeActivity::onEnter() {
   Activity::onEnter();
   // Reaching home means the user has finished triaging wallpapers, so this is one of the
-  // moments queued favorite renames run. Fire-and-forget, and a no-op when the queue is
-  // empty, which is almost always. See DeferredFavorite.h for why they are not done on
-  // the press.
+  // moments queued favorite renames run. A no-op when the queue is empty, which is almost
+  // always. See DeferredFavorite.h for why they are not done on the press.
+  //
+  // Waited on, not fire-and-forget: the recent-books stats below queue behind the
+  // worker's directory scans on the storage mutex anyway, so home paints no sooner by
+  // letting the worker run alongside. Waiting here instead puts the wait behind a busy
+  // strip, which the silent mutex stall never showed.
   DeferredFavorite::flush();
+  if (!DeferredFavorite::isIdle()) {
+    BusyBanner banner(renderer, tr(STR_CHECKING_WALLPAPERS));
+    DeferredFavorite::waitForIdle(15000);
+  }
   DeferredFavorite::reconcile();
 
   hasOpdsServers = OPDS_STORE.hasServers();
