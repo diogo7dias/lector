@@ -29,6 +29,9 @@ void UiGridActivity::onEnter() {
 ListChrome UiGridActivity::chrome() const {
   ListChrome chrome;
   chrome.title = headerTitle();
+  const bool multiColumn = gridLayout().columns > 1;
+  chrome.thirdHint = multiColumn ? tr(STR_DIR_LEFT) : tr(STR_DIR_UP);
+  chrome.fourthHint = multiColumn ? tr(STR_DIR_RIGHT) : tr(STR_DIR_DOWN);
   return chrome;
 }
 
@@ -200,8 +203,7 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
 
   const int16_t inset = theme.spaceSm;
   const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
-  const fui::Rect line{static_cast<int16_t>(box.x + inset),
-                       static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
+  const fui::Rect line{static_cast<int16_t>(box.x + inset), static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
                        static_cast<int16_t>(box.width - inset * 2), lineHeight};
 
   fui::TextStyle name = theme.bodyText;
@@ -285,13 +287,19 @@ void UiGridActivity::loop() {
     return;
   }
 
-  // Rows on the side pair, cells on the front pair, and each press counted once.
+  // Rows on the side pair. Cells on the front pair for multi-column grids; on single-column
+  // lists, the front pair steps rows so the button hints (Up / Down) match the movement.
   // ScreenUp/ScreenDown/ScreenLeft/ScreenRight rather than the raw buttons, so a
   // rotated screen keeps moving the way the hints under it say it does.
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
+  if (gridLayout().columns > 1) {
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
+  } else {
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(-1, 0); });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(1, 0); });
+  }
 
   // A swipe scrolls the grid by a row.
   switch (mappedInput.wasListScrollSwipe()) {

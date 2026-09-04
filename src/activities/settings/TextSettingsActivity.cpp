@@ -15,9 +15,9 @@
 #include "ReaderFontSizes.h"
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
+#include "activities/settings/FontPickerActivity.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
-#include "activities/settings/FontPickerActivity.h"
 #include "fontIds.h"
 #include "util/MarginLink.h"
 
@@ -484,9 +484,9 @@ void TextSettingsActivity::activateRow(const Row row) {
       const uint8_t* field = numberField(row);
       editing_ = true;
       const auto& metrics = UITheme::getInstance().getMetrics();
-      armValueBand(I18N.get(rowNameId(row)), minValue, maxValue, /*smallStep=*/1, /*largeStep=*/5,
-                   field ? *field : minValue, [this](const int chosen) { setEditedValue(chosen); },
-                   [this] { leaveEdit(); });
+      armValueBand(
+          I18N.get(rowNameId(row)), minValue, maxValue, /*smallStep=*/1, /*largeStep=*/5, field ? *field : minValue,
+          [this](const int chosen) { setEditedValue(chosen); }, [this] { leaveEdit(); });
       return;
     }
     case RowKind::Picker:
@@ -645,13 +645,12 @@ ListChrome TextSettingsActivity::chrome() const {
     chrome.fourthHint = "+";
     return chrome;
   }
+  const bool multiColumn = gridLayout().columns > 1;
   chrome.confirmHint = confirmLabel;
-  chrome.thirdHint = tr(STR_DIR_UP);
-  chrome.fourthHint = tr(STR_DIR_DOWN);
+  chrome.thirdHint = multiColumn ? tr(STR_DIR_LEFT) : tr(STR_DIR_UP);
+  chrome.fourthHint = multiColumn ? tr(STR_DIR_RIGHT) : tr(STR_DIR_DOWN);
   return chrome;
 }
-
-
 
 // Font switching runs on the main task from loop(), which deliberately holds no
 // RenderLock. ensureLoaded() deletes the resident SdCardFont before loading the next one,

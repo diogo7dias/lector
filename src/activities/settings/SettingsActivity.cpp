@@ -473,9 +473,10 @@ ListChrome SettingsActivity::chrome() const {
     chrome.fourthHint = "+";
     return chrome;
   }
+  const bool multiColumn = gridLayout().columns > 1;
   chrome.confirmHint = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
-  chrome.thirdHint = tr(STR_DIR_UP);
-  chrome.fourthHint = tr(STR_DIR_DOWN);
+  chrome.thirdHint = multiColumn ? tr(STR_DIR_LEFT) : tr(STR_DIR_UP);
+  chrome.fourthHint = multiColumn ? tr(STR_DIR_RIGHT) : tr(STR_DIR_DOWN);
   return chrome;
 }
 
@@ -819,4 +820,3 @@ void SettingsActivity::openSleepTimeoutPicker() {
         requestUpdate();
       });
 }
-
