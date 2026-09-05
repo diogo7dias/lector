@@ -7,6 +7,7 @@
 
 #include "OpdsServerStore.h"
 #include "activities/UiStatusActivity.h"
+#include "network/opds/OpdsClient.h"
 
 /**
  * Activity for browsing and downloading books from an OPDS server.
@@ -14,7 +15,16 @@
  */
 class OpdsBookBrowserActivity final : public UiStatusActivity {
  public:
-  enum class BrowserState { CHECK_WIFI, WIFI_SELECTION, LOADING, BROWSING, DOWNLOADING, ERROR, SEARCH_INPUT };
+  enum class BrowserState {
+    CHECK_WIFI,
+    WIFI_SELECTION,
+    LOADING,
+    RECONNECTING,
+    BROWSING,
+    DOWNLOADING,
+    ERROR,
+    SEARCH_INPUT
+  };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
       : UiStatusActivity("OpdsBookBrowser", renderer, mappedInput), server(std::move(server)) {}
@@ -51,9 +61,13 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   bool pendingFullRefresh = false;
   std::string errorMessage;
   std::string statusMessage;
+  std::string reconnectDetail;
+  std::string reconnectAttempt;
+  bool cancelRequested = false;
   size_t downloadProgress = 0;
   size_t downloadTotal = 0;
 
+  opds::OpdsClient client;
   OpdsServer server;  // Copied at construction — safe even if the store changes during browsing
 
   void checkAndConnectWifi();

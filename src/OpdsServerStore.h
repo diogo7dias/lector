@@ -10,6 +10,7 @@ struct OpdsServer {
   std::string url;
   std::string username;
   std::string password;  // Plaintext in memory; obfuscated with hardware key on disk
+  bool keepFilename = false;  // Use server's Content-Disposition filename instead of generated
 };
 
 /**

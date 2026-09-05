@@ -6,6 +6,7 @@
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <OpdsStream.h>
 #include <WiFi.h>
 
@@ -59,6 +60,9 @@ void OpdsBookBrowserActivity::onEnter() {
   setListSelection(0);
   consumeConfirm = false;
   consumeBack = false;
+  cancelRequested = false;
+  reconnectDetail.clear();
+  reconnectAttempt.clear();
   errorMessage.clear();
   statusMessage = tr(STR_CHECKING_WIFI);
   requestUpdate();
@@ -67,6 +71,7 @@ void OpdsBookBrowserActivity::onEnter() {
 }
 
 void OpdsBookBrowserActivity::onExit() {
+  cancelRequested = true;
   Activity::onExit();
   entries.clear();
   navigationHistory.clear();
@@ -86,54 +91,102 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
-  std::string url = UrlUtils::buildUrl(server.url, path);
-  LOG_DBG("OPDS", "Fetching: %s", url.c_str());
-  OpdsParser parser;
-  bool fetched = false;
-  auto fetchError = HttpDownloader::OK;
-  int fetchStatus = 0;
-  {
-    OpdsParserStream stream{parser};
-    // Any paint already asked for has to land BEFORE the bytes are lent: the render
-    // task draws on its own, and the framebuffer is not there to draw into.
+  state = BrowserState::LOADING;
+  statusMessage = tr(STR_LOADING);
+  cancelRequested = false;
+  reconnectDetail.clear();
+  reconnectAttempt.clear();
+  setListSelection(0);
+  releaseEntries();
+  vTaskDelay(1);
+
+  opds::FeedResult result;
+  std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
+  std::unique_ptr<tls_scratch::Session> tlsScratch;
+
+  auto beforeAttempt = [this, &loan, &tlsScratch]() {
+    state = BrowserState::LOADING;
+    statusMessage = tr(STR_LOADING);
     requestUpdateAndWait();
-    // The framebuffer's 48 KB go to wolfSSL for the length of the fetch, the same
-    // loan the font download uses. A feed is read over TLS from a server that may
-    // well send 16 KB records, and the receive buffer for one of those does not fit
-    // in the heap WiFi leaves behind. Nothing draws while the bytes are lent, which
-    // costs nothing here: the panel already shows "Loading".
-    GfxRenderer::FrameBufferLoan loan(renderer);
-    const tls_scratch::Session tlsScratch;
-    fetched = HttpDownloader::fetchUrl(url, stream, server.username, server.password, &fetchError, &fetchStatus);
+    loan = makeUniqueNoThrow<GfxRenderer::FrameBufferLoan>(renderer);
+    tlsScratch = makeUniqueNoThrow<tls_scratch::Session>();
+  };
+
+  auto afterAttempt = [this, &loan, &tlsScratch]() {
+    tlsScratch.reset();
+    loan.reset();
+    pendingFullRefresh = true;
+  };
+
+  auto onReconnect = [this](const opds::ReconnectInfo& info) {
+    state = BrowserState::RECONNECTING;
+    char attemptBuf[64];
+    snprintf(attemptBuf, sizeof(attemptBuf), "%s (%d/%d)...", tr(STR_CONNECTING), info.attempt, info.maxAttempts);
+    reconnectDetail = info.reason ? info.reason : tr(STR_CONNECTING);
+    reconnectAttempt = attemptBuf;
+    requestUpdate();
+  };
+
+  auto pollCancel = [this]() -> bool {
+    mappedInput.update();
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested = true;
+      return true;
+    }
+    return cancelRequested;
+  };
+
+  const auto status =
+      client.fetchFeed(server, path, result, onReconnect, &cancelRequested, opds_retry::DEFAULT_TIMEOUT_MS,
+                       opds_retry::MAX_ATTEMPTS, beforeAttempt, afterAttempt, pollCancel);
+
+  if (status == opds::ClientStatus::ABORTED) {
+    if (!navigationHistory.empty()) {
+      navigateBack();
+    } else if (!entries.empty()) {
+      state = BrowserState::BROWSING;
+      requestUpdate();
+    } else {
+      state = BrowserState::ERROR;
+      errorMessage = tr(STR_CANCEL);
+      requestUpdate();
+    }
+    return;
   }
-  // The loan hands the framebuffer back white, so whatever comes next repaints in full.
-  pendingFullRefresh = true;
-  if (!fetched) {
-    LOG_ERR("OPDS", "Fetch failed (error %d, status %d, credentials %s): free %d bytes, largest block %d bytes",
-            fetchError, fetchStatus, server.username.empty() ? "none" : "sent", ESP.getFreeHeap(),
-            ESP.getMaxAllocHeap());
+
+  if (status == opds::ClientStatus::BAD_CREDENTIALS) {
     state = BrowserState::ERROR;
-    // 401 is the server answering, not the reader failing to reach it, and it has
-    // exactly one cure. Saying so beats a generic failure the reader cannot act on.
-    errorMessage = fetchStatus == 401 ? tr(STR_OPDS_BAD_CREDENTIALS) : tr(STR_FETCH_FEED_FAILED);
+    errorMessage = tr(STR_OPDS_BAD_CREDENTIALS);
     requestUpdate();
     return;
   }
 
-  if (!parser) {
+  if (status == opds::ClientStatus::HEAP_LOW) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_UPDATE_LOW_MEMORY);
+    requestUpdate();
+    return;
+  }
+
+  if (status == opds::ClientStatus::PARSE_FAILED) {
     state = BrowserState::ERROR;
     errorMessage = tr(STR_PARSE_FEED_FAILED);
     requestUpdate();
     return;
   }
 
-  searchTemplate = parser.getSearchTemplate();
-  const auto& nextUrl = parser.getNextPageUrl();
-  const auto& prevUrl = parser.getPrevPageUrl();
-  const bool feedTruncated = parser.truncated();
-  // The vector the rows will point into is built before the lock below; nothing
-  // draws from it until that lock publishes the rows with it.
-  entries = std::move(parser).getEntries();
+  if (status != opds::ClientStatus::OK && status != opds::ClientStatus::EMPTY) {
+    state = BrowserState::ERROR;
+    errorMessage = tr(STR_FETCH_FEED_FAILED);
+    requestUpdate();
+    return;
+  }
+
+  searchTemplate = std::move(result.searchTemplate);
+  const auto nextUrl = std::move(result.nextPageUrl);
+  const auto prevUrl = std::move(result.prevPageUrl);
+  const bool feedTruncated = result.truncated;
+  entries = std::move(result.entries);
 
   entries.reserve(entries.size() + (prevUrl.empty() ? 0 : 1) + (nextUrl.empty() ? 0 : 1));
   if (!prevUrl.empty()) {
@@ -147,9 +200,6 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   }
 
   {
-    // One lock over the whole swap: the rows, the selection they are indexed by
-    // and the state that says to draw them all have to change together, or the
-    // render task can paint a row list against the wrong feed.
     RenderLock lock(*this);
     refreshRows();
     setListSelectionLocked(0);
@@ -200,63 +250,74 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   statusMessage = book.title;
   downloadTitle = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40);
   downloadProgress = downloadTotal = 0;
-
-  // Build full download URL relative to the current feed, not the root server URL
-  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
-  std::string downloadUrl = UrlUtils::buildUrl(feedUrl, book.href);
-  // opdsDownloadFolder is already a null-terminated char[64]; use it directly —
-  // no std::string copy. exists()/mkdir() take const char*.
-  const char* folder = SETTINGS.opdsDownloadFolder;  // "" => SD root
-  bool haveFolder = folder[0] != '\0';
-  if (haveFolder && !Storage.exists(folder) && !Storage.mkdir(folder)) {
-    // exists()-guard first: mkdir's return-on-existing is unconfirmed, and every
-    // existing caller checks exists() before mkdir. On real failure, fall back
-    // to SD root so the download is never lost.
-    LOG_ERR("OPDS", "mkdir failed for %s, using SD root", folder);
-    haveFolder = false;
-  }
-
-  // downloadToFile() needs a std::string, and titles are unbounded (a fixed
-  // char[] would truncate). Cold path (a multi-second download follows), so one
-  // reserve'd, in-place-appended owning string is the right call.
-  std::string filename;
-  filename.reserve(96);
-  if (haveFolder) filename += folder;
-  filename += '/';
-  filename += opdsBookFilename(book.author, book.title, static_cast<OpdsFilenameFormat>(SETTINGS.opdsFilenameFormat));
-  LOG_DBG("OPDS", "Downloading: %s -> %s", downloadUrl.c_str(), filename.c_str());
+  cancelRequested = false;
+  reconnectDetail.clear();
+  reconnectAttempt.clear();
 
   int lastRenderedPercent = -1;
   unsigned long lastProgressUpdateMs = 0;
-  HttpDownloader::DownloadError result;
-  {
+
+  auto progressCb = [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
+    mappedInput.update();
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested = true;
+    }
+    downloadProgress = downloaded;
+    downloadTotal = total;
+    const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
+    const unsigned long now = millis();
+    if (percent >= 100 || lastRenderedPercent < 0 || percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
+        now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
+      lastRenderedPercent = percent;
+      lastProgressUpdateMs = now;
+      // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
+      // loan ends. The counters still move, and the screen catches up after.
+    }
+  };
+
+  std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
+  std::unique_ptr<tls_scratch::Session> tlsScratch;
+
+  auto beforeAttempt = [this, &loan, &tlsScratch]() {
+    state = BrowserState::DOWNLOADING;
     requestUpdateAndWait();
-    // Same loan as the feed fetch and the font download: a book arrives over TLS
-    // and the record buffer does not fit in what WiFi leaves. The progress bar
-    // holds at 0 for the transfer, which is the price of the file arriving at all.
-    GfxRenderer::FrameBufferLoan loan(renderer);
-    const tls_scratch::Session tlsScratch;
-    result = HttpDownloader::downloadToFile(
-        downloadUrl, filename,
-        [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
-          downloadProgress = downloaded;
-          downloadTotal = total;
-          const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
-          const unsigned long now = millis();
-          if (percent >= 100 || lastRenderedPercent < 0 ||
-              percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
-              now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
-            lastRenderedPercent = percent;
-            lastProgressUpdateMs = now;
-            // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
-            // loan ends. The counters still move, and the screen catches up after.
-          }
-        },
-        nullptr, server.username, server.password);
-  }
+    loan = makeUniqueNoThrow<GfxRenderer::FrameBufferLoan>(renderer);
+    tlsScratch = makeUniqueNoThrow<tls_scratch::Session>();
+  };
+
+  auto afterAttempt = [this, &loan, &tlsScratch]() {
+    tlsScratch.reset();
+    loan.reset();
+    pendingFullRefresh = true;
+  };
+
+  auto onReconnect = [this](const opds::ReconnectInfo& info) {
+    state = BrowserState::RECONNECTING;
+    char attemptBuf[64];
+    snprintf(attemptBuf, sizeof(attemptBuf), "%s (%d/%d)...", tr(STR_CONNECTING), info.attempt, info.maxAttempts);
+    reconnectDetail = info.reason ? info.reason : tr(STR_CONNECTING);
+    reconnectAttempt = attemptBuf;
+    requestUpdate();
+  };
+
+  auto pollCancel = [this]() -> bool {
+    mappedInput.update();
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested = true;
+      return true;
+    }
+    return cancelRequested;
+  };
+
+  std::string finalPath;
+  const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
+  const auto result = client.downloadBook(server, feedUrl, book, finalPath, progressCb, &cancelRequested, onReconnect,
+                                          opds_retry::DEFAULT_TIMEOUT_MS, opds_retry::MAX_ATTEMPTS, beforeAttempt,
+                                          afterAttempt, pollCancel);
 
   if (result == HttpDownloader::OK) {
-    clearBookCache(filename);
+    state = BrowserState::BROWSING;
+  } else if (result == HttpDownloader::ABORTED) {
     state = BrowserState::BROWSING;
   } else {
     LOG_ERR("OPDS", "Download failed (%d): free %d bytes, largest block %d bytes", static_cast<int>(result),
@@ -392,6 +453,11 @@ UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
     case BrowserState::LOADING:
       view.lines = {statusMessage.c_str(), nullptr, nullptr, nullptr};
       break;
+    case BrowserState::RECONNECTING:
+      view.lines = {reconnectAttempt.empty() ? tr(STR_CONNECTING) : reconnectAttempt.c_str(),
+                    reconnectDetail.empty() ? nullptr : reconnectDetail.c_str(), nullptr, nullptr};
+      view.backHint = tr(STR_CANCEL);
+      break;
     case BrowserState::ERROR:
       view.lines = {tr(STR_ERROR_MSG), errorMessage.empty() ? nullptr : errorMessage.c_str(), nullptr, nullptr};
       view.confirmHint = tr(STR_RETRY);
@@ -401,7 +467,7 @@ UiStatusActivity::StatusView OpdsBookBrowserActivity::statusView() const {
       view.showProgress = downloadTotal > 0;
       view.progressValue = static_cast<int>(downloadProgress);
       view.progressMax = downloadTotal > 0 ? static_cast<int>(downloadTotal) : 1;
-      view.backHint = "";
+      view.backHint = tr(STR_CANCEL);
       break;
     case BrowserState::BROWSING:
       if (rows.empty()) {
@@ -451,8 +517,14 @@ bool OpdsBookBrowserActivity::handleCustomInput() {
     return true;
   }
 
-  // Nothing to answer while a feed or a book is in flight.
-  if (state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) return true;
+  // Allow Back button to cancel during in-flight operations
+  if (state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+      cancelRequested = true;
+      return true;
+    }
+    return true;
+  }
 
   if (state == BrowserState::BROWSING && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
     if (!searchTemplate.empty() && listSelection() == 0) {
@@ -473,7 +545,10 @@ void OpdsBookBrowserActivity::onListActivated(const int index) {
 }
 
 void OpdsBookBrowserActivity::onBackButton() {
-  if (state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) return;
+  if (state == BrowserState::RECONNECTING || state == BrowserState::DOWNLOADING || state == BrowserState::LOADING) {
+    cancelRequested = true;
+    return;
+  }
   if (state == BrowserState::CHECK_WIFI) {
     onGoHome();
     return;

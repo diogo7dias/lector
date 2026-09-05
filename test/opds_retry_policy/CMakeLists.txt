@@ -1,0 +1,13 @@
+add_executable(opds_retry_policy_test
+  OpdsRetryPolicyTest.cpp
+)
+target_link_libraries(opds_retry_policy_test
+  PRIVATE
+    crosspoint_test_common
+    gtest_main
+)
+target_include_directories(opds_retry_policy_test
+  PRIVATE
+    ${REPO_ROOT}/src
+)
+gtest_discover_tests(opds_retry_policy_test)
