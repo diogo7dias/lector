@@ -9,8 +9,8 @@
 #include "SilentRestart.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 #include "network/FirmwareFlasher.h"
+#include "network/FirmwareSwitchAudit.h"
 #include "network/OtaUpdater.h"
 #include "network/TlsScratchHeap.h"
 
@@ -154,9 +154,21 @@ UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
       view.backHint = "";
       break;
     case WIFI_SELECTION:
+      if (firmware_flash::didPreviousSwitchRollBack()) {
+        view.lines = {
+            "Firmware rollback detected:",
+            "Previous flash booted back into Lector.",
+            "Update Lector to 0.29.5 first,",
+            "then reflash the other firmware.",
+        };
+        view.backHint = "";
+      } else {
+        // The WiFi picker owns the screen.
+        view.hidden = true;
+      }
+      break;
     case SHUTTING_DOWN:
-      // The WiFi picker owns the screen, and a restarting device has nothing to
-      // say.
+      // A restarting device has nothing to say.
       view.hidden = true;
       break;
   }

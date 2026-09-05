@@ -28,3 +28,14 @@ TEST(OtaBootEntry, TheNextSeqAlwaysOutranksTheActiveOne) {
   EXPECT_GT(nextSeqFor(4, 1, 2), 4u);
   EXPECT_GT(nextSeqFor(0, 0, 2), 0u);
 }
+
+TEST(OtaBootEntry, ReRollbackPreventedByWritingUndefinedState) {
+  // A failed attempt or foreign firmware must never leave an entry in
+  // ESP_OTA_IMG_NEW or ESP_OTA_IMG_PENDING_VERIFY, which would cause the
+  // bootloader to attempt rollback cycles. Writing kOtaImgUndefined ensures
+  // the bootloader treats the image as definitive without arming rollback.
+  const SelectEntry entry = makeSelectEntry(10, 0xABCDu);
+  EXPECT_NE(entry.ota_state, kOtaImgNew);
+  EXPECT_NE(entry.ota_state, kOtaImgPendingVerify);
+  EXPECT_EQ(entry.ota_state, kOtaImgUndefined);
+}
