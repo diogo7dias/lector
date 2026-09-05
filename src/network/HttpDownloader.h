@@ -23,11 +23,13 @@ class HttpDownloader {
     ABORTED,
   };
 
+  static constexpr uint32_t DEFAULT_TIMEOUT_MS = 60000;
+
   /**
    * Fetch text content from a URL with optional credentials.
    */
   static bool fetchUrl(const std::string& url, std::string& outContent, const std::string& username = "",
-                       const std::string& password = "");
+                       const std::string& password = "", uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
 
   /**
    * As above, streaming into `stream`. outError receives why a failed fetch
@@ -35,8 +37,8 @@ class HttpDownloader {
    * connection never got that far.
    */
   static bool fetchUrl(const std::string& url, Stream& stream, const std::string& username = "",
-                       const std::string& password = "", DownloadError* outError = nullptr,
-                       int* outStatus = nullptr);
+                       const std::string& password = "", DownloadError* outError = nullptr, int* outStatus = nullptr,
+                       uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
 
   /**
    * Stream the response body to onData as it arrives, without buffering it.
@@ -47,7 +49,8 @@ class HttpDownloader {
    * the start, which the caller must be able to take (see resumedFromStart).
    */
   static bool fetchUrl(const std::string& url, const DataCallback& onData, const std::string& username = "",
-                       const std::string& password = "", size_t rangeStart = 0, bool* resumedFromStart = nullptr);
+                       const std::string& password = "", size_t rangeStart = 0, bool* resumedFromStart = nullptr,
+                       uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
 
   /**
    * Download a file to the SD card with optional credentials.
@@ -72,5 +75,6 @@ class HttpDownloader {
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
-                                      bool allowResume = false, std::string* contentDisposition = nullptr);
+                                      bool allowResume = false, std::string* contentDisposition = nullptr,
+                                      uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
 };

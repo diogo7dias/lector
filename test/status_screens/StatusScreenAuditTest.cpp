@@ -55,8 +55,8 @@ bool isComment(const std::string& text) {
 TEST(StatusScreenAudit, NoStatusScreenDrawsForItself) {
   for (const Line& line : sourceLines()) {
     if (isComment(line.text)) continue;
-    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect",
-                             "renderer.drawRect", "GUI.drawHeader", "GUI.drawButtonHints", "renderer.displayBuffer"}) {
+    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect", "renderer.drawRect",
+                             "GUI.drawHeader", "GUI.drawButtonHints", "renderer.displayBuffer"}) {
       EXPECT_FALSE(contains(line.text, call))
           << line.path << ":" << line.number << " calls " << call
           << ". A UiStatusActivity screen returns a StatusView and lets the base draw it.";
@@ -73,4 +73,21 @@ TEST(StatusScreenAudit, EveryStatusScreenDescribesItself) {
     EXPECT_NE(body.str().find("StatusView"), std::string::npos)
         << path << " is listed as a status screen but never builds a StatusView.";
   }
+}
+
+TEST(StatusScreenAudit, FirmwareUpdateScreensCheckForRollback) {
+  int checked = 0;
+  for (const std::string& path : sourcePaths()) {
+    if (path.find("SdFirmwareUpdateActivity.cpp") != std::string::npos ||
+        path.find("OtaUpdateActivity.cpp") != std::string::npos) {
+      std::ifstream file(path);
+      ASSERT_TRUE(file.is_open()) << "cannot open " << path;
+      std::stringstream body;
+      body << file.rdbuf();
+      EXPECT_NE(body.str().find("didPreviousSwitchRollBack()"), std::string::npos)
+          << path << " must check didPreviousSwitchRollBack() to warn on rollback re-entry.";
+      checked++;
+    }
+  }
+  EXPECT_EQ(checked, 2);
 }
