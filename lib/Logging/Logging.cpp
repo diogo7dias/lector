@@ -5,8 +5,8 @@
 
 #include <string>
 
-#define MAX_ENTRY_LEN 256
-#define MAX_LOG_LINES 16
+#define MAX_ENTRY_LEN 160
+#define MAX_LOG_LINES 32
 
 // Simple ring buffer log, useful for error reporting when we encounter a crash
 RTC_NOINIT_ATTR char logMessages[MAX_LOG_LINES][MAX_ENTRY_LEN];

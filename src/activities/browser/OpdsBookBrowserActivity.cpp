@@ -86,6 +86,12 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
+  state = BrowserState::LOADING;
+  statusMessage = tr(STR_LOADING);
+  setListSelectionLocked(0);
+  releaseEntries();
+  vTaskDelay(1);
+
   std::string url = UrlUtils::buildUrl(server.url, path);
   LOG_DBG("OPDS", "Fetching: %s", url.c_str());
   OpdsParser parser;
@@ -163,8 +169,10 @@ void OpdsBookBrowserActivity::releaseEntries() {
   // Under the render lock: the rows the render task is walking point into these
   // two vectors, so freeing them from this task mid-paint reads freed memory.
   RenderLock lock(*this);
-  std::vector<OpdsEntry>().swap(entries);
+  entries.clear();
+  entries.shrink_to_fit();
   rows.clear();
+  rows.shrink_to_fit();
 }
 
 void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
@@ -175,8 +183,7 @@ void OpdsBookBrowserActivity::navigateToEntry(const OpdsEntry& entry) {
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
-  releaseEntries();
-  setListSelection(0);
+  setListSelectionLocked(0);
   fetchFeed(currentPath);
 }
 
@@ -188,9 +195,7 @@ void OpdsBookBrowserActivity::navigateBack() {
     navigationHistory.pop_back();
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
-    releaseEntries();
-    setListSelection(0);
-    requestUpdate();
+    setListSelectionLocked(0);
     fetchFeed(currentPath);
   }
 }
@@ -200,6 +205,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   statusMessage = book.title;
   downloadTitle = renderer.truncatedText(UI_10_FONT_ID, book.title.c_str(), renderer.getScreenWidth() - 40);
   downloadProgress = downloadTotal = 0;
+  releaseEntries();
+  vTaskDelay(1);
 
   // Build full download URL relative to the current feed, not the root server URL
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
@@ -316,8 +323,7 @@ void OpdsBookBrowserActivity::performSearch(const std::string& query) {
 
   state = BrowserState::LOADING;
   statusMessage = tr(STR_LOADING);
-  releaseEntries();
-  setListSelection(0);
+  setListSelectionLocked(0);
   fetchFeed(url);
 }
 
@@ -325,7 +331,6 @@ void OpdsBookBrowserActivity::checkAndConnectWifi() {
   if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
-    requestUpdate();
     fetchFeed(currentPath);
     return;
   }
@@ -465,7 +470,9 @@ bool OpdsBookBrowserActivity::handleCustomInput() {
 
 void OpdsBookBrowserActivity::onListActivated(const int index) {
   if (state != BrowserState::BROWSING || index < 0 || index >= static_cast<int>(entries.size())) return;
-  setListSelection(index);
+  state = BrowserState::LOADING;
+  statusMessage = tr(STR_LOADING);
+  setListSelectionLocked(index);
   // Copied before the call: navigating and downloading both release the list
   // this entry lives in.
   const OpdsEntry entry = entries[index];
@@ -487,7 +494,7 @@ void OpdsBookBrowserActivity::onConfirmButton() {
   if (WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0)) {
     state = BrowserState::LOADING;
     statusMessage = tr(STR_LOADING);
-    requestUpdate();
+    setListSelectionLocked(0);
     fetchFeed(currentPath);
     return;
   }

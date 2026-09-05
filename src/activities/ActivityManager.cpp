@@ -561,6 +561,8 @@ void ActivityManager::requestUpdateAndWait() {
     return;
   }
 
+  requestedUpdate = false;
+
   // Atomic section to perform checks
   taskENTER_CRITICAL(&activityManagerSpinlock);
   auto currTaskHandler = xTaskGetCurrentTaskHandle();
