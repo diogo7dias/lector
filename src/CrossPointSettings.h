@@ -302,12 +302,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // tightens its spacing when the rows would otherwise run off the panel.
   static constexpr uint8_t POPUP_ITEM_MAX = 32;
 
-  // UI Theme
-  // Lector ships a single UI theme (the CrossPoint "Classic" base, renamed). All
-  // lector UI/look customization lives in BaseTheme; the multi-theme picker was
-  // removed. Kept as an enum so uiTheme storage + UITheme::setTheme stay unchanged.
-  enum UI_THEME { LECTOR = 0 };
-
   // Image rendering in EPUB reader
   // Images are always drawn. PLACEHOLDER (alt text only) and SUPPRESS were retired
   // 2026-08-11 (Diogo) and the Settings row went with them.
@@ -625,8 +619,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // is always POPUP_ITEM_FUNCTIONS order and can never drift from the tick screen.
   // At most POPUP_ITEM_MAX bits are ever set; the tick screen enforces it.
   uint32_t popupItems = 0;
-  // UI Theme
-  uint8_t uiTheme = LECTOR;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Performance timings (1 = on). Switches on the refresh/wake instrumentation: the

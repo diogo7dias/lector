@@ -3,7 +3,6 @@
 #include <EpdFontFamily.h>
 
 #include <functional>
-#include <memory>
 
 #include "CrossPointSettings.h"
 #include "components/themes/BaseTheme.h"
@@ -19,13 +18,11 @@ class UITheme {
   static UITheme& getInstance() { return instance; }
 
   const ThemeMetrics& getMetrics() const;
-  const BaseTheme& getTheme() const { return *currentTheme; }
+  const BaseTheme& getTheme() const { return theme; }
   Rect getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints = false,
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
                                bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
-  void reload();
-  void setTheme(CrossPointSettings::UI_THEME type);
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getProgressBarHeight();
@@ -47,7 +44,7 @@ class UITheme {
 
  private:
   const ThemeMetrics* currentMetrics;
-  std::unique_ptr<BaseTheme> currentTheme;
+  BaseTheme theme;
   mutable ThemeMetrics adjustedMetrics;
   mutable bool metricsValid = false;
   mutable bool metricsForTouch = false;

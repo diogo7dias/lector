@@ -7,7 +7,6 @@
 #include <Logging.h>
 
 #include <algorithm>
-#include <memory>
 
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
@@ -18,24 +17,8 @@
 UITheme UITheme::instance;
 
 UITheme::UITheme() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
-}
-
-void UITheme::reload() {
-  auto themeType = static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme);
-  setTheme(themeType);
-}
-
-void UITheme::setTheme(CrossPointSettings::UI_THEME /*type*/) {
-  // Lector is the only theme (the CrossPoint base look, renamed from "Classic").
-  // Any persisted uiTheme value resolves here; a stale index from the removed
-  // multi-theme picker simply lands on Lector. All lector look changes go into
-  // BaseTheme / BaseMetrics.
-  LOG_DBG("UI", "Using Lector theme");
-  currentTheme = std::make_unique<BaseTheme>();
+  // Lector is the only look. All of it lives in BaseTheme / BaseMetrics.
   currentMetrics = &BaseMetrics::values;
-  metricsValid = false;
 }
 
 const ThemeMetrics& UITheme::getMetrics() const {

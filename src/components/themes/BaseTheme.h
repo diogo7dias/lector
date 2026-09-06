@@ -228,24 +228,24 @@ class BaseTheme {
   static constexpr int kEdgeBarBleedPx = 8;
 
  public:
-  virtual ~BaseTheme() = default;
+  ~BaseTheme() = default;
 
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
                        int fontId = UI_10_FONT_ID) const;  // Left aligned (reader mode)
   // Right aligned (UI headers). onBlack draws the cluster knocked out, for the inverted
   // header band drawHeader paints behind it.
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true, bool onBlack = false) const;
-  virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage, bool ink = true) const;
+  void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage, bool ink = true) const;
   // Where the four hint slots are this frame: 106 px legend boxes on a button board,
   // four full-width columns on a touch board. Shared by the draw and the tap test.
   hint_band::Band hintBand(const GfxRenderer& renderer) const;
-  virtual void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
-                               const char* btn4) const;
+  void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                       const char* btn4) const;
   // Shared by every theme's drawButtonHints(): centres a hint label in its box,
   // wrapping to two lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight, int singleLineYOffset);
-  virtual void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
+  void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
   // Paints the focused-row highlight in the style the user picked and returns true
   // when the row's own text has to be drawn white to stay legible. Every list, menu,
   // popup and tab goes through this rather than filling a rectangle itself, so one
@@ -259,80 +259,76 @@ class BaseTheme {
   // bracketed instead. The solid and caret styles ignore spans entirely.
   bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0) const;
 
-  virtual int getListRowStep(bool hasSubtitle) const;
-  virtual int getListPageItems(int contentHeight, bool hasSubtitle) const;
-  virtual void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                        const std::function<std::string(int index)>& rowTitle,
-                        const std::function<std::string(int index)>& rowSubtitle = nullptr,
-                        const std::function<UIIcon(int index)>& rowIcon = nullptr,
-                        const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
-                        const std::function<bool(int index)>& rowDimmed = nullptr, int itemFontId = UI_10_FONT_ID,
-                        // Rows for which this returns true are section headings: a label
-                        // with a rule running out to the right edge, never selectable and
-                        // never highlighted. They occupy a normal row slot, so paging and
-                        // the selection maths are unchanged. The caller is responsible for
-                        // skipping them when moving the selection.
-                        const std::function<bool(int index)>& rowIsHeader = nullptr,
-                        // Opt in to scrolling instead of paging. Left null, the list snaps its
-                        // window to whole pages as it always has. Pass a caller-owned offset
-                        // that survives between frames and the window instead slides by the
-                        // least amount that keeps the selected row visible, so the rows around
-                        // the cursor hold still as it moves. drawList writes the clamped offset
-                        // back, so the caller never has to correct it (see ListScrollPolicy.h).
-                        int* scrollOffset = nullptr) const;
+  int getListRowStep(bool hasSubtitle) const;
+  int getListPageItems(int contentHeight, bool hasSubtitle) const;
+  void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                const std::function<std::string(int index)>& rowTitle,
+                const std::function<std::string(int index)>& rowSubtitle = nullptr,
+                const std::function<UIIcon(int index)>& rowIcon = nullptr,
+                const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
+                const std::function<bool(int index)>& rowDimmed = nullptr, int itemFontId = UI_10_FONT_ID,
+                // Rows for which this returns true are section headings: a label
+                // with a rule running out to the right edge, never selectable and
+                // never highlighted. They occupy a normal row slot, so paging and
+                // the selection maths are unchanged. The caller is responsible for
+                // skipping them when moving the selection.
+                const std::function<bool(int index)>& rowIsHeader = nullptr,
+                // Opt in to scrolling instead of paging. Left null, the list snaps its
+                // window to whole pages as it always has. Pass a caller-owned offset
+                // that survives between frames and the window instead slides by the
+                // least amount that keeps the selected row visible, so the rows around
+                // the cursor hold still as it moves. drawList writes the clamped offset
+                // back, so the caller never has to correct it (see ListScrollPolicy.h).
+                int* scrollOffset = nullptr) const;
   // Geometry of the filled title band: flush with the top of the drawable area, ending
   // one pixel under the title. Exposed so a theme overriding drawHeader keeps the shape.
   static int headerBandTop(Rect rect);
   static int headerBandHeight(const GfxRenderer& renderer, Rect rect);
 
-  virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title,
-                          const char* subtitle = nullptr) const;
-  virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
-                             const char* rightLabel = nullptr) const;
-  virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
-                          bool selected) const;
-  virtual bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
-                                 int& index) const;
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr) const;
+  void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel = nullptr) const;
+  void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, bool selected) const;
+  bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
+                         int& index) const;
   // Home in-progress list: each book's full title + author initials wrapped across as
   // many lines as it needs, with an inline [NN%] black-background badge, the selected
   // row inverted, and "N more above/below" indicators when the list scrolls. Returns
   // the visible index range so the caller can keep the selected book on screen.
-  virtual ListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect,
-                                            const std::vector<RecentBook>& recentBooks, int selectorIndex,
-                                            int scrollOffset) const;
+  ListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
+                                    int selectorIndex, int scrollOffset) const;
   // Variable-height sibling of drawList: each row's title WRAPS over as many lines as it
   // needs instead of being ellipsised, so a long filename stays readable in full. rowValue
   // is optional and is drawn right-aligned on the row's first line, with its width reserved
   // there. Rows scroll rather than paginate, so the caller keeps a scrollOffset and feeds
   // back the returned visible range (see FileBrowserActivity).
-  virtual ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                                         int scrollOffset, const std::function<std::string(int index)>& rowTitle,
-                                         const std::function<std::string(int index)>& rowValue = nullptr,
-                                         // Drawn as a filled chip before the title on the row's first line, in
-                                         // the same style drawRecentBookList uses on the home screen: black on
-                                         // an unselected row, white on the inverted one. Return an empty
-                                         // string for a row that has no badge. The title wraps to the right of
-                                         // the chip and its continuation lines stay under the first line, not
-                                         // back at the left margin, so the text block keeps a straight edge.
-                                         const std::function<std::string(int index)>& rowBadge = nullptr) const;
+  ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
+                                 int scrollOffset, const std::function<std::string(int index)>& rowTitle,
+                                 const std::function<std::string(int index)>& rowValue = nullptr,
+                                 // Drawn as a filled chip before the title on the row's first line, in
+                                 // the same style drawRecentBookList uses on the home screen: black on
+                                 // an unselected row, white on the inverted one. Return an empty
+                                 // string for a row that has no badge. The title wraps to the right of
+                                 // the chip and its continuation lines stay under the first line, not
+                                 // back at the left margin, so the text block keeps a straight edge.
+                                 const std::function<std::string(int index)>& rowBadge = nullptr) const;
   // itemIndexBase is what a tapped tile reports as its item: the home screen's menu sits
   // below its book list in one selection space, so its first tile is item N, not item 0.
-  virtual void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                              const std::function<std::string(int index)>& buttonLabel,
-                              const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
+  void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
+                      const std::function<std::string(int index)>& buttonLabel,
+                      const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
   Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
-  virtual Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
+  Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   // leftAlign left-aligns the rows instead of centring them, so a caller whose labels carry
   // a status marker keeps that marker in a fixed column rather than letting it shunt each
   // label sideways. Text is 1-bit on this panel, so an unavailable row is marked in the
   // label the caller supplies, not by the painter. Defaults to the centred look every
   // other caller in the firmware uses.
-  virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                               int selectedIndex, bool leftAlign = false) const;
-  virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
+  void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
+                       int selectedIndex, bool leftAlign = false) const;
+  void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
@@ -342,15 +338,15 @@ class BaseTheme {
   // left-truncated so the deepest folder is the part that survives. The file
   // browser drew this itself, which put a rule thickness and a truncation rule
   // outside the theme.
-  virtual void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
+  void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
   // The home header band's own contents: the firmware version at the left edge,
   // the clock against the battery cluster, and the skull on the screen's centre
   // line. nullptr for either string leaves that part out, which is what a board
   // with no RTC does with the clock.
-  virtual void drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const;
-  virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
-                             int contentStartX = 0, int contentWidth = 0) const;
-  virtual bool showsFileIcons() const { return false; }
+  void drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const;
+  void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
+                     int contentStartX = 0, int contentWidth = 0) const;
+  bool showsFileIcons() const { return false; }
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;

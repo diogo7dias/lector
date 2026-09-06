@@ -658,7 +658,6 @@ void setup() {
   // to fill credentials into rather than typed out on a five-button keyboard.
   OPDS_STORE.seedBuiltInServers();
   READER_PRESETS.loadFromFile();
-  UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   WakeTiming::mark(WakeTiming::Stage::ConfigReady);
 
