@@ -77,9 +77,6 @@ class XtcParser {
   bool hasChapters() const { return m_hasChapters; }
   const std::vector<ChapterInfo>& getChapters();
 
-  // Validation
-  static bool isValidXtcFile(const char* filepath);
-
   // Error information
   XtcError getLastError() const { return m_lastError; }
 

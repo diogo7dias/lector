@@ -97,7 +97,6 @@ class HalGPIO {
   bool wasHomeKeyTapped() const;
   bool wasHomeKeyLongPressed() const;
   bool wasTouchTap(float& nx, float& ny) const;
-  bool wasTouchDown(float& nx, float& ny) const;
   bool isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const;
   bool wasTouchLongPress(float& nx, float& ny) const;
   bool wasTouchReleased() const;

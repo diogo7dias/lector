@@ -11,11 +11,9 @@ class ImageBlock final : public Block {
   ImageBlock(const std::string& imagePath, const std::string& srcPath, int16_t width, int16_t height);
   ~ImageBlock() override = default;
 
-  const std::string& getImagePath() const { return imagePath; }
   int16_t getWidth() const { return width; }
   int16_t getHeight() const { return height; }
 
-  bool imageExists() const;
   bool hasValidCache() const;
   bool needsDecode() const;
   void renderPlaceholder(GfxRenderer& renderer, int x, int y) const;

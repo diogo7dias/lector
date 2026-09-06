@@ -189,12 +189,6 @@ std::vector<WifiCredentialSummary> WifiCredentialStore::getCredentialSummaries()
   return summaries;
 }
 
-bool WifiCredentialStore::hasSavedCredential(const std::string& ssid) const {
-  std::lock_guard<std::mutex> lock(credentialMutex);
-  return find_if(credentials.begin(), credentials.end(),
-                 [&ssid](const WifiCredential& cred) { return cred.ssid == ssid; }) != credentials.end();
-}
-
 void WifiCredentialStore::setLastConnectedSsid(const std::string& ssid) {
   {
     std::lock_guard<std::mutex> lock(credentialMutex);
@@ -207,15 +201,6 @@ void WifiCredentialStore::setLastConnectedSsid(const std::string& ssid) {
 std::string WifiCredentialStore::getLastConnectedSsid() const {
   std::lock_guard<std::mutex> lock(credentialMutex);
   return lastConnectedSsid;
-}
-
-void WifiCredentialStore::clearLastConnectedSsid() {
-  {
-    std::lock_guard<std::mutex> lock(credentialMutex);
-    if (lastConnectedSsid.empty()) return;
-    lastConnectedSsid.clear();
-  }
-  saveToFile();
 }
 
 void WifiCredentialStore::clearAll() {

@@ -52,25 +52,6 @@ const ThemeMetrics& UITheme::getMetrics() const {
   return adjustedMetrics;
 }
 
-int UITheme::getNumberOfItemsPerPage(const GfxRenderer& renderer, bool hasHeader, bool hasTabBar, bool hasButtonHints,
-                                     bool hasSubtitle, int extraReservedHeight) {
-  const ThemeMetrics metrics = UITheme::getInstance().getMetrics();
-  auto orientation = renderer.getOrientation();
-  int reservedHeight = metrics.topPadding;
-  if (hasHeader) {
-    reservedHeight += metrics.headerHeight + metrics.verticalSpacing;
-  }
-  if (hasTabBar) {
-    reservedHeight += metrics.tabBarHeight;
-  }
-  if (hasButtonHints && orientation != GfxRenderer::Orientation::LandscapeClockwise &&
-      orientation != GfxRenderer::Orientation::LandscapeCounterClockwise) {
-    reservedHeight += metrics.verticalSpacing + metrics.buttonHintsHeight;
-  }
-  const int availableHeight = renderer.getScreenHeight() - reservedHeight - extraReservedHeight;
-  return UITheme::getInstance().getTheme().getListPageItems(availableHeight, hasSubtitle);
-}
-
 // Screen area excluding the button hints
 Rect UITheme::getScreenSafeArea(const GfxRenderer& renderer, bool hasFrontButtonHints, bool hasSideButtonHints) {
   auto orientation = renderer.getOrientation();
@@ -127,18 +108,6 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
     return Image;
   }
   return File;
-}
-
-// Legacy height helpers, now expressed over the v2 per-item model. Still used by
-// the EPUB auto-page-turn logic to decide whether a text lane exists (vs only a
-// progress bar / nothing) so it can reserve space for the countdown indicator.
-int UITheme::getStatusBarHeight() {
-  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const bool showText = SETTINGS.statusBarEnabled() &&
-                        (SETTINGS.sbBatteryPos || SETTINGS.sbClockPos || SETTINGS.sbTitlePos || SETTINGS.sbPagePos ||
-                         SETTINGS.sbBookPctPos || SETTINGS.sbChapterPctPos || SETTINGS.sbChapterNumPos ||
-                         SETTINGS.sbSessionPagesPos || SETTINGS.sbParaPagesPos);
-  return (showText ? metrics.statusBarVerticalMargin : 0) + getProgressBarHeight();
 }
 
 int UITheme::getProgressBarHeight() {
@@ -246,40 +215,4 @@ void UITheme::drawCenteredText(const GfxRenderer& renderer, Rect screen, int fon
                                bool black, EpdFontFamily::Style style) {
   const int x = screen.x + (screen.width - renderer.getTextWidth(fontId, text, style)) / 2;
   renderer.drawText(fontId, x, y, text, black, style);
-}
-
-void UITheme::drawCenteredWrappedText(const GfxRenderer& renderer, Rect bounds, int fontId, const char* text,
-                                      int maxLines, bool black, EpdFontFamily::Style style,
-                                      TextVerticalAlignment verticalAlignment) {
-  if (!text || *text == '\0' || bounds.width <= 0 || bounds.height <= 0 || maxLines <= 0) return;
-
-  const int lineHeight = renderer.getLineHeight(fontId);
-  if (lineHeight <= 0) return;
-
-  const int lineLimit = std::min(maxLines, bounds.height / lineHeight);
-  if (lineLimit <= 0) return;
-
-  const auto alignedTop = [&](const int textHeight) {
-    switch (verticalAlignment) {
-      case TextVerticalAlignment::CENTER:
-        return bounds.y + (bounds.height - textHeight) / 2;
-      case TextVerticalAlignment::BOTTOM:
-        return bounds.y + bounds.height - textHeight;
-      case TextVerticalAlignment::TOP:
-      default:
-        return bounds.y;
-    }
-  };
-
-  if (renderer.getTextWidth(fontId, text, style) <= bounds.width) {
-    drawCenteredText(renderer, bounds, fontId, alignedTop(lineHeight), text, black, style);
-    return;
-  }
-
-  const auto lines = renderer.wrappedText(fontId, text, bounds.width, lineLimit, style);
-  int y = alignedTop(static_cast<int>(lines.size()) * lineHeight);
-  for (const auto& line : lines) {
-    drawCenteredText(renderer, bounds, fontId, y, line.c_str(), black, style);
-    y += lineHeight;
-  }
 }

@@ -26,8 +26,6 @@ class OtaUpdater {
     INVALID_IMAGE_ERROR,
   };
 
-  size_t getOtaSize() const { return otaSize; }
-
   size_t getProcessedSize() const { return processedSize; }
 
   size_t getTotalSize() const { return totalSize; }

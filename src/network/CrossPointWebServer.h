@@ -83,9 +83,6 @@ class CrossPointWebServer {
     std::string error;
   };
 
-  // Get the port number
-  uint16_t getPort() const { return port; }
-
  private:
   std::unique_ptr<WebServer> server = nullptr;
   std::unique_ptr<WebSocketsServer> wsServer = nullptr;
@@ -103,7 +100,6 @@ class CrossPointWebServer {
 
   // File scanning
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;
-  String formatFileSize(size_t bytes) const;
   bool isEpubFile(const String& filename) const;
 
   // Request handlers

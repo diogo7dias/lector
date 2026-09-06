@@ -109,13 +109,6 @@ void CalibreConnectActivity::startWebServer() {
   }
 }
 
-void CalibreConnectActivity::stopWebServer() {
-  if (webServer) {
-    webServer->stop();
-    webServer.reset();
-  }
-}
-
 bool CalibreConnectActivity::handleCustomInput() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     exitRequested = true;

@@ -66,8 +66,6 @@ class UiAppHost {
   // Close the routing gate outside a render, e.g. when the data the
   // interaction table indexes is released mid-state. Reopens on renderUi().
   void closeRouting() { uiReady = false; }
-  bool routingReady() const { return uiReady.load(); }
-
   freeink::ui::GfxRendererTarget uiTarget;  // must precede `app`: the app holds a reference to it
   UiApp app;
 

@@ -230,8 +230,6 @@ class BaseTheme {
  public:
   virtual ~BaseTheme() = default;
 
-  // Component drawing methods
-  void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
                        int fontId = UI_10_FONT_ID) const;  // Left aligned (reader mode)
   // Right aligned (UI headers). onBlack draws the cluster knocked out, for the inverted
@@ -295,9 +293,6 @@ class BaseTheme {
                           bool selected) const;
   virtual bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
                                  int& index) const;
-  virtual void drawRecentBookCover(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
-                                   const int selectorIndex, bool& coverRendered, bool& coverBufferStored,
-                                   bool& bufferRestored, std::function<bool()> storeCoverBuffer) const;
   // Home in-progress list: each book's full title + author initials wrapped across as
   // many lines as it needs, with an inline [NN%] black-background badge, the selected
   // row inverted, and "N more above/below" indicators when the list scrolls. Returns

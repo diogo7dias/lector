@@ -87,11 +87,11 @@ TEST(SelectionAudit, EverySelectionSurfaceCallsTheSharedPainter) {
     if (contains(line, "BaseTheme::")) continue;  // the definition itself
     if (contains(line, "drawSelection(")) calls++;
   }
-  // drawList, drawWrappedList, drawButtonMenu, drawOptionPopup, the tab bar, the
-  // bookmarks list, and the Continue Reading card, which marks itself in exactly two
-  // places: the no-cover card fill and the single title-box site shared by a freshly
-  // rendered cover and a restored one. Every hand-rolled list outside BaseTheme is
-  // gone now: the nearby peer list, the OPDS browser and the XTC chapter list all
-  // moved onto a FreeInkUI base, where the SDK marks the selection.
-  EXPECT_GE(calls, 8);
+  // drawList, drawWrappedList, drawButtonMenu, drawOptionPopup, the tab bar and the
+  // bookmarks list. Every hand-rolled list outside BaseTheme is gone now: the nearby
+  // peer list, the OPDS browser and the XTC chapter list all moved onto a FreeInkUI
+  // base, where the SDK marks the selection. The count dropped by the two sites in
+  // drawRecentBookCover, an unused cover-card painter deleted in the complexity audit
+  // (the live home screen paints through drawRecentBookList).
+  EXPECT_GE(calls, 6);
 }

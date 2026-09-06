@@ -83,11 +83,6 @@ struct SettingInfo {
   std::function<std::string()> stringGetter;
   std::function<void(const std::string&)> stringSetter;
 
-  SettingInfo& withObfuscated() {
-    obfuscated = true;
-    return *this;
-  }
-
   SettingInfo& withTextSettings() {
     inTextSettings = true;
     return *this;
@@ -196,7 +191,6 @@ struct SettingInfo {
 };
 
 class SettingsActivity final : public UiGridActivity {
-
   // The screen is either the category hub or one category's grid. 121 settings in one
   // flat list is 61 grid rows; split four ways, a category is one or two screens, and the
   // hub is what says which four there are now that the headings are gone.

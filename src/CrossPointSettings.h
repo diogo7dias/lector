@@ -153,17 +153,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     ORIENTATION_COUNT
   };
 
-  // Front button layout options (legacy)
-  // Default: Back, Confirm, Left, Right
-  // Swapped: Left, Right, Back, Confirm
-  enum FRONT_BUTTON_LAYOUT {
-    BACK_CONFIRM_LEFT_RIGHT = 0,
-    LEFT_RIGHT_BACK_CONFIRM = 1,
-    LEFT_BACK_CONFIRM_RIGHT = 2,
-    BACK_CONFIRM_RIGHT_LEFT = 3,
-    FRONT_BUTTON_LAYOUT_COUNT
-  };
-
   // Front button hardware identifiers (for remapping)
   enum FRONT_BUTTON_HARDWARE {
     FRONT_HW_BACK = 0,
@@ -462,8 +451,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;
-  // Button layouts (front layout retained for migration only)
-  uint8_t frontButtonLayout = BACK_CONFIRM_LEFT_RIGHT;
+  // Button layouts
   uint8_t sideButtonLayout = PREV_NEXT;
   uint8_t frontButtonFollowOrientation = 0;
   // Front button remap (logical -> hardware)
@@ -985,7 +973,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // asking "what is global?" through fromGlobal() gets its own values handed back. Anything
   // that means the user's global settings -- Reset Reader Settings above all -- must ask here.
   ReaderPrefs trueGlobalReaderPrefs() const;
-  bool statusBarOverrideActive() const { return sbOverrideActive_; }
   bool statusBarEnabled() const { return sbEnabled != 0; }
 
   // ── Progress bars while the status bar is hidden ───────────────────────────

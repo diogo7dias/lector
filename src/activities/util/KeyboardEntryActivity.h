@@ -93,7 +93,6 @@ class KeyboardEntryActivity : public Activity {
 
   void onComplete(std::string text);
   void onCancel();
-  bool cursorPositionFromPoint(int x, int y, size_t& position) const;
   // The field's margins and its toggle reserve, read by both the paint and the
   // tap test so the two cannot disagree about where the field is.
   keyboard_field::Metrics fieldMetrics() const;
@@ -112,7 +111,6 @@ class KeyboardEntryActivity : public Activity {
   void clampSelection();
   void moveSelectionRow(int delta);
   void moveSelectionCol(int delta);
-  bool syncSelectionToValue(int16_t value);
   // Handles one key activation (by stable key id). Returns true when the
   // screen needs a repaint; OK/cancel finish the activity instead.
   bool activateValue(int16_t value, bool longPress);

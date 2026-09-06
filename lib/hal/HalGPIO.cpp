@@ -199,8 +199,6 @@ bool HalGPIO::wasHomeKeyLongPressed() const { return inputMgr.wasHomeKeyLongPres
 
 bool HalGPIO::wasTouchTap(float& nx, float& ny) const { return inputMgr.wasTouchTap(nx, ny); }
 
-bool HalGPIO::wasTouchDown(float& nx, float& ny) const { return inputMgr.wasTouchPressedAt(nx, ny); }
-
 bool HalGPIO::isTouchTapCandidate(float& nx, float& ny, unsigned long& heldMs) const {
   return inputMgr.isTouchTapCandidate(nx, ny, heldMs);
 }
