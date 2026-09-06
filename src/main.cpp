@@ -1238,18 +1238,6 @@ void loop() {
     screenshotComboActive = false;
   }
 
-#ifdef LECTOR_LOCK_LAB
-  // The Lock Lab's "Full lock" run. It goes through the ordinary sleep path rather than
-  // rendering in place, because a render in isolation skips the favourites reconcile, the
-  // index pick, the frame save and the WiFi teardown, and those are most of the ten
-  // seconds being measured.
-  if (locklab::takePendingFullLock()) {
-    LOG_INF("LAB", "Full lock requested");
-    enterDeepSleep();
-    return;
-  }
-#endif
-
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
     LOG_DBG("SLP", "Auto-sleep triggered after %lu ms of inactivity", sleepTimeoutMs);

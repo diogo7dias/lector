@@ -20,7 +20,6 @@
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/BusyBanner.h"
 #include "components/RowHitTest.h"
-#include "dev/LockLabActivity.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
 #include "home/HomeActivity.h"
@@ -378,10 +377,6 @@ void ActivityManager::goToFileTransfer() {
 }
 
 void ActivityManager::goToSettings() { replaceActivity(std::make_unique<SettingsActivity>(renderer, mappedInput)); }
-
-#ifdef LECTOR_LOCK_LAB_UI
-void ActivityManager::goToLockLab() { replaceActivity(std::make_unique<LockLabActivity>(renderer, mappedInput)); }
-#endif
 
 void ActivityManager::goToFileBrowser(std::string path) {
   replaceActivity(std::make_unique<FileBrowserActivity>(renderer, mappedInput, std::move(path)));
