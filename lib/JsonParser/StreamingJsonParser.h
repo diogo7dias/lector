@@ -3,6 +3,15 @@
 #include <cstddef>
 #include <cstdint>
 
+// Why this exists next to ArduinoJson, which the firmware already links.
+//
+// ArduinoJson deserializes by pulling from a buffer or a Stream; the HTTP layer here
+// pushes chunks into a sink (HttpDownloader::fetchUrl), so a swap would have to hold the
+// whole response in RAM. Measured against the real GitHub release payload this firmware
+// fetches (12,822 bytes): ArduinoJson with a filter keeping only tag_name and the asset's
+// name, URL and size peaks at 11,644 bytes of heap, plus the 12,822-byte payload it must
+// be handed = 24,466 bytes, and that grows with the release notes and the asset count.
+// This parser is 1,784 bytes of fixed state and never holds the payload at all.
 struct JsonCallbacks {
   void* ctx;
   void (*onKey)(void* ctx, const char* key, size_t len);
