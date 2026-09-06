@@ -12,6 +12,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/KOReaderSyncMessage.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
@@ -47,8 +48,7 @@ void KOReaderAuthActivity::performAuthentication() {
       statusMessage = mode == Mode::SIGN_UP ? tr(STR_ACCOUNT_CREATED) : tr(STR_AUTH_SUCCESS);
     } else {
       state = FAILED;
-      errorMessage =
-          result == KOReaderSyncClient::USER_EXISTS ? tr(STR_USERNAME_TAKEN) : KOReaderSyncClient::errorString(result);
+      errorMessage = koSyncErrorText(result);
     }
   }
   requestUpdate();

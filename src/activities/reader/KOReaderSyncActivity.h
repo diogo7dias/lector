@@ -100,6 +100,10 @@ class KOReaderSyncActivity final : public UiStatusActivity {
   // which makes WiFi.getMode() return WIFI_MODE_NULL.
   bool wifiActivated = false;
 
+  // True once a remote position replaced the local one, so the result screen
+  // names which of the two outcomes happened.
+  bool appliedRemote = false;
+
   void onWifiSelectionComplete(bool success);
   void performSync();
   void performUpload();
@@ -107,6 +111,6 @@ class KOReaderSyncActivity final : public UiStatusActivity {
   void markAutoReturn();
   void completeAlreadySynced();
   void ensureEpubLoaded();
-  void saveProgressAndReturn(int spineIndex, int page);
+  void applyRemoteProgress(int spineIndex, int page);
   void returnToReader();
 };
