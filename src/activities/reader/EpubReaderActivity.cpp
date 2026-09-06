@@ -106,17 +106,16 @@ struct ProgressRange {
   float end;
 };
 
-ProgressRange getPageProgressRange(const std::shared_ptr<Epub>& epub, const int spineIndex, const int page,
-                                   const int pageCount) {
+ProgressRange getPageProgressRange(Epub& epub, const int spineIndex, const int page, const int pageCount) {
   if (pageCount <= 1) {
-    return {epub->calculateProgress(spineIndex, 0.0f), epub->calculateProgress(spineIndex, 1.0f)};
+    return {epub.calculateProgress(spineIndex, 0.0f), epub.calculateProgress(spineIndex, 1.0f)};
   }
 
   const float step = 1.0f / static_cast<float>(pageCount - 1);
   const float anchor = std::clamp(static_cast<float>(page) * step, 0.0f, 1.0f);
   const float start = std::max(0.0f, anchor - (step * 0.5f));
   const float end = std::min(1.0f, anchor + (step * 0.5f));
-  return {epub->calculateProgress(spineIndex, start), epub->calculateProgress(spineIndex, end)};
+  return {epub.calculateProgress(spineIndex, start), epub.calculateProgress(spineIndex, end)};
 }
 
 bool bookmarkMatchesProgress(const BookmarkEntry& bookmark, const int spineIndex, const int page, const int pageCount,
@@ -536,7 +535,7 @@ void EpubReaderActivity::openQuoteGrab() {
       // The picker loads its own pages: a quote may run past this one, and it turns
       // pages itself while the reader stays suspended and its section stays alive.
       std::make_unique<QuoteSelectActivity>(renderer, mappedInput, section.get(), section->currentPage,
-                                            orientedMarginLeft, orientedMarginTop, epub, currentSpineIndex,
+                                            orientedMarginLeft, orientedMarginTop, *epub, currentSpineIndex,
                                             readerFontId),
       [this](const ActivityResult&) {
         loadQuoteAnchors();  // a fresh grab appended to the sidecar
@@ -1130,7 +1129,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (!cachedPageMatchesActiveSection && sync.hasSavedProgress) {
         const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
         CrossPointPosition fallback =
-            ProgressMapper::toCrossPoint(epub, {sync.xpath, sync.percentage}, renderer, currentSpineIndex, totalPages);
+            ProgressMapper::toCrossPoint(*epub, {sync.xpath, sync.percentage}, renderer, currentSpineIndex, totalPages);
         targetSpineIndex = fallback.spineIndex;
         targetPage = fallback.pageNumber;
       }
@@ -1174,7 +1173,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         section.reset();
       }
       startActivityForResult(
-          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, epub, path, spineIdx),
+          std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, path, spineIdx),
           [this](const ActivityResult& result) {
             if (!result.isCancelled) {
               const auto& chapterResult = std::get<ChapterResult>(result.data);
@@ -1494,7 +1493,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
     }
     case EpubReaderMenuActivity::MenuAction::BOOKMARKS: {
       startActivityForResult(
-          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, epub, epub->getPath()),
+          std::make_unique<EpubReaderBookmarksActivity>(renderer, mappedInput, *epub, epub->getPath()),
           progressChangeResultHandler);
       break;
     }
@@ -1580,7 +1579,7 @@ void EpubReaderActivity::launchNearbyPositionSync() {
   // the position travels as an xpath, so it must be resolved before the book is
   // released.
   CrossPointPosition localPos = getCurrentPosition();
-  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
+  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(*epub, localPos);
   const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
@@ -1623,7 +1622,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
 
   // Pre-compute local KO position and chapter name while Epub is still in RAM.
   CrossPointPosition localPos = getCurrentPosition();
-  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(epub, localPos);
+  SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(*epub, localPos);
   const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
   std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
@@ -2473,7 +2472,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   if (!section) {
     const auto filepath = epub->getSpineItem(currentSpineIndex).href;
     LOG_DBG("ERS", "Loading file: %s, index: %d", filepath.c_str(), currentSpineIndex);
-    section = makeUniqueNoThrow<Section>(epub, currentSpineIndex, renderer);
+    section = makeUniqueNoThrow<Section>(*epub, currentSpineIndex, renderer);
     if (!section) {
       LOG_ERR("ERS", "OOM: Section");
       return;
@@ -3495,8 +3494,8 @@ void EpubReaderActivity::addBookmark() {
     currentPage = section->currentPage;
   }
 
-  SavedProgressPosition progress = ProgressMapper::toSavedProgress(epub, getCurrentPosition());
-  const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, currentPage, pageCount);
+  SavedProgressPosition progress = ProgressMapper::toSavedProgress(*epub, getCurrentPosition());
+  const ProgressRange pageRange = getPageProgressRange(*epub, currentSpineIndex, currentPage, pageCount);
 
   const size_t bookmarkCountBeforeToggle = cachedBookmarks.size();
   cachedBookmarks.erase(std::remove_if(cachedBookmarks.begin(), cachedBookmarks.end(),
@@ -3548,7 +3547,7 @@ void EpubReaderActivity::updateBookmarkFlag() {
     return;
   }
   const int pageCount = section->estimatedTotalPages();
-  const ProgressRange pageRange = getPageProgressRange(epub, currentSpineIndex, section->currentPage, pageCount);
+  const ProgressRange pageRange = getPageProgressRange(*epub, currentSpineIndex, section->currentPage, pageCount);
   currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
     return bookmarkMatchesProgress(b, currentSpineIndex, section->currentPage, pageCount, pageRange);
   });

@@ -20,8 +20,6 @@ constexpr int ENTER_DELETE_MODE_MS = 700;
 void EpubReaderBookmarksActivity::onEnter() {
   UiListActivity::onEnter();
 
-  if (!epub) return;
-
   if (!BookmarkFile::load(epubPath, bookmarks)) {
     bookmarks.shrink_to_fit();
   }
@@ -44,8 +42,8 @@ void EpubReaderBookmarksActivity::refreshRows(const bool portrait) {
   rows.assign(count, fui::ListItem{});
   for (int i = 0; i < count; ++i) {
     const BookmarkEntry& bookmark = bookmarks[i];
-    const int tocIndex = epub ? epub->getTocIndexForSpineIndex(bookmark.computedSpineIndex) : -1;
-    const std::string tocTitle = (tocIndex >= 0) ? epub->getTocItem(tocIndex).title : tr(STR_UNNAMED);
+    const int tocIndex = epub.getTocIndexForSpineIndex(bookmark.computedSpineIndex);
+    const std::string tocTitle = (tocIndex >= 0) ? epub.getTocItem(tocIndex).title : tr(STR_UNNAMED);
     std::string subtitle =
         std::to_string(static_cast<int>(std::clamp(bookmark.percentage, 0.0f, 1.0f) * 100.0f + 0.5f)) + "% - ";
     if (bookmark.computedChapterPageCount > 0) {
@@ -93,7 +91,7 @@ void EpubReaderBookmarksActivity::openBookmark(const int index) {
   // hints below are stale. The reader validates the index.
   result.spineIndex = bookmark.computedSpineIndex;
   if (bookmark.computedChapterPageCount > 0 && bookmark.computedChapterProgress < bookmark.computedChapterPageCount &&
-      epub && bookmark.computedSpineIndex < epub->getSpineItemsCount()) {
+      bookmark.computedSpineIndex < epub.getSpineItemsCount()) {
     result.page = bookmark.computedChapterProgress;
     result.totalPages = bookmark.computedChapterPageCount;
   }

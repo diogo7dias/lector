@@ -520,13 +520,13 @@ class XPathProgressResolver final : public Print {
 };
 }  // namespace
 
-std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Epub>& epub, const int spineIndex,
+std::string ChapterXPathResolver::findXPathForParagraph(Epub& epub, const int spineIndex,
                                                         const uint16_t paragraphIndex) {
-  if (!epub || paragraphIndex == 0 || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+  if (paragraphIndex == 0 || spineIndex < 0 || spineIndex >= epub.getSpineItemsCount()) {
     return "";
   }
 
-  const auto href = epub->getSpineItem(spineIndex).href;
+  const auto href = epub.getSpineItem(spineIndex).href;
   if (href.empty()) {
     return "";
   }
@@ -537,7 +537,7 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
   }
 
   resolver.spineIndex = spineIndex;
-  if (!epub->readItemContentsToStream(href, resolver, 1024) || !resolver.finish()) {
+  if (!epub.readItemContentsToStream(href, resolver, 1024) || !resolver.finish()) {
     return "";
   }
 
@@ -550,13 +550,13 @@ std::string ChapterXPathResolver::findXPathForParagraph(const std::shared_ptr<Ep
   return "";
 }
 
-std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epub>& epub, const int spineIndex,
+std::string ChapterXPathResolver::findXPathForProgress(Epub& epub, const int spineIndex,
                                                        const float intraSpineProgress) {
-  if (!epub || spineIndex < 0 || spineIndex >= epub->getSpineItemsCount()) {
+  if (spineIndex < 0 || spineIndex >= epub.getSpineItemsCount()) {
     return "";
   }
 
-  const auto href = epub->getSpineItem(spineIndex).href;
+  const auto href = epub.getSpineItem(spineIndex).href;
   if (href.empty()) {
     return "";
   }
@@ -566,7 +566,7 @@ std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epu
   }
 
   ParagraphTextCounter counter;
-  if (!counter.ok() || !epub->readItemContentsToStream(href, counter, 1024) || !counter.finish()) {
+  if (!counter.ok() || !epub.readItemContentsToStream(href, counter, 1024) || !counter.finish()) {
     return "";
   }
 
@@ -585,7 +585,7 @@ std::string ChapterXPathResolver::findXPathForProgress(const std::shared_ptr<Epu
   }
 
   resolver.spineIndex = spineIndex;
-  if (!epub->readItemContentsToStream(href, resolver, 1024) || !resolver.finish()) {
+  if (!epub.readItemContentsToStream(href, resolver, 1024) || !resolver.finish()) {
     return "";
   }
 

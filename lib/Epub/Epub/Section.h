@@ -31,7 +31,7 @@ class Section {
   };
 
  private:
-  std::shared_ptr<Epub> epub;
+  Epub& epub;
   const int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
@@ -114,7 +114,7 @@ class Section {
 
   // Constructor and destructor are out-of-line: BuildContext holds a unique_ptr to the
   // forward-declared ChapterHtmlSlimParser, whose full definition is only visible in the .cpp.
-  explicit Section(const std::shared_ptr<Epub>& epub, int spineIndex, GfxRenderer& renderer);
+  explicit Section(Epub& epub, int spineIndex, GfxRenderer& renderer);
   ~Section();
   bool loadSectionFile(const ReaderRenderSpec& spec);
   bool clearCache() const;

@@ -52,7 +52,9 @@ class Epub;
 #define MAX_WORD_SIZE 200
 
 class ChapterHtmlSlimParser {
-  std::shared_ptr<Epub> epub;
+  // Null for HTML that is not a book page (the dictionary renderer), which is why this
+  // is a pointer rather than a reference.
+  Epub* epub;
   const std::string& filepath;
   GfxRenderer& renderer;
   std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)> completePageFn;
@@ -220,15 +222,14 @@ class ChapterHtmlSlimParser {
 
  public:
   explicit ChapterHtmlSlimParser(
-      std::shared_ptr<Epub> epub, const std::string& filepath, GfxRenderer& renderer, const int fontId,
-      const float lineCompression, const bool extraParagraphSpacing, const uint8_t paragraphSpacing,
-      const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
-      const bool hyphenationEnabled, const bool focusReadingEnabled, const uint8_t guideDotsMode,
-      const uint8_t firstLineIndentMode, const uint8_t firstLineIndentPercent,
+      Epub* epub, const std::string& filepath, GfxRenderer& renderer, const int fontId, const float lineCompression,
+      const bool extraParagraphSpacing, const uint8_t paragraphSpacing, const uint8_t paragraphAlignment,
+      const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,
+      const bool focusReadingEnabled, const uint8_t guideDotsMode, const uint8_t firstLineIndentMode,
+      const uint8_t firstLineIndentPercent,
       const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
       const bool embeddedTextStyle, const bool embeddedLayoutStyle, const std::string& contentBase,
-      const std::string& imageBasePath,
-      const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
+      const std::string& imageBasePath, const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
       const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),

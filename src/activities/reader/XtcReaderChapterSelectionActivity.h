@@ -7,7 +7,7 @@
 #include "activities/UiListActivity.h"
 
 class XtcReaderChapterSelectionActivity final : public UiListActivity {
-  std::shared_ptr<Xtc> xtc;
+  Xtc& xtc;
   uint32_t currentPage = 0;
 
   // The rows; buildScreen only hands out pointers into the chapter list, so
@@ -17,8 +17,8 @@ class XtcReaderChapterSelectionActivity final : public UiListActivity {
   int findChapterIndexForPage(uint32_t page) const;
 
  public:
-  explicit XtcReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                             const std::shared_ptr<Xtc>& xtc, uint32_t currentPage)
+  explicit XtcReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Xtc& xtc,
+                                             uint32_t currentPage)
       : UiListActivity("XtcReaderChapterSelection", renderer, mappedInput), xtc(xtc), currentPage(currentPage) {}
   void onEnter() override;
   void onExit() override;

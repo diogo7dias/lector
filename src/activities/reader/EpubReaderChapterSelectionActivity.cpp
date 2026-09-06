@@ -12,14 +12,12 @@
 
 namespace fui = freeink::ui;
 
-int EpubReaderChapterSelectionActivity::listCount() const { return epub ? epub->getTocItemsCount() : 0; }
+int EpubReaderChapterSelectionActivity::listCount() const { return epub.getTocItemsCount(); }
 
 const char* EpubReaderChapterSelectionActivity::headerTitle() const { return tr(STR_SELECT_CHAPTER); }
 
 void EpubReaderChapterSelectionActivity::onEnter() {
   UiListActivity::onEnter();
-
-  if (!epub) return;
 
   // The reader underneath still pins its page-render glyph arenas. clearCache() is
   // heap-adaptive: below the retention floor it frees them, which is what leaves this
@@ -29,7 +27,7 @@ void EpubReaderChapterSelectionActivity::onEnter() {
     fcm->clearCache();
   }
 
-  const int selected = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  const int selected = epub.getTocIndexForSpineIndex(currentSpineIndex);
   moveSelectionTo(selected == -1 ? 0 : selected);
 }
 
@@ -65,7 +63,7 @@ void EpubReaderChapterSelectionActivity::refreshTocWindow(const int start, const
 }
 
 std::string EpubReaderChapterSelectionActivity::tocLabelAt(const int index) const {
-  const auto item = epub->getTocItem(index);
+  const auto item = epub.getTocItem(index);
   // level 0 exists in malformed TOCs; (level - 1) * 2 would be negative and the indent
   // string would be asked for a nonsense length.
   const std::string indent(item.level > 0 ? (item.level - 1) * 2 : 0, ' ');
@@ -101,7 +99,7 @@ void EpubReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
 
 void EpubReaderChapterSelectionActivity::activateIndex(const int index) {
   app.clearTapFlash();
-  const auto tocItem = epub->getTocItem(index);
+  const auto tocItem = epub.getTocItem(index);
   if (tocItem.spineIndex == -1) {
     onBackButton();
     return;

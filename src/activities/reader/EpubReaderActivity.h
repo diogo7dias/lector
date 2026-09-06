@@ -21,7 +21,7 @@
 class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h>)
 
 class EpubReaderActivity final : public Activity {
-  std::shared_ptr<Epub> epub;
+  std::unique_ptr<Epub> epub;
   std::unique_ptr<Section> section = nullptr;
   // Per-book reader "look" settings. Loaded from <cachePath>/reader_override.bin on
   // enter if present (prefsCustom_ = true), else a snapshot of the global settings.

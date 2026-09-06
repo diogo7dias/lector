@@ -52,7 +52,7 @@ class ProgressMapper {
    * @param pos CrossPoint position
    * @return SavedProgress position
    */
-  static SavedProgressPosition toSavedProgress(const std::shared_ptr<Epub>& epub, const CrossPointPosition& pos);
+  static SavedProgressPosition toSavedProgress(Epub& epub, const CrossPointPosition& pos);
 
   /**
    * Convert SavedProgress position to CrossPoint format.
@@ -67,9 +67,9 @@ class ProgressMapper {
    * @param totalPagesInCurrentSpine Total pages in the current spine item (for density estimation)
    * @return CrossPoint position
    */
-  static CrossPointPosition toCrossPoint(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& savedPos,
-                                         GfxRenderer& renderer, int currentSpineIndex = -1,
-                                         int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
+  static CrossPointPosition toCrossPoint(Epub& epub, const SavedProgressPosition& savedPos, GfxRenderer& renderer,
+                                         int currentSpineIndex = -1, int totalPagesInCurrentSpine = 0,
+                                         int fallbackTotalPages = 0);
 
   /**
    * Convert a rich CrossPoint position (downloaded from a crosspoint-sync
@@ -84,9 +84,8 @@ class ProgressMapper {
    *         applied (spine out of range, no section cache) and the caller
    *         should fall back to toCrossPoint().
    */
-  static std::optional<CrossPointPosition> fromRichPosition(const std::shared_ptr<Epub>& epub,
-                                                            const KOReaderRichPosition& rich, GfxRenderer& renderer,
-                                                            bool xpathAlreadyTried = false);
+  static std::optional<CrossPointPosition> fromRichPosition(Epub& epub, const KOReaderRichPosition& rich,
+                                                            GfxRenderer& renderer, bool xpathAlreadyTried = false);
 
  private:
   /**
@@ -95,5 +94,5 @@ class ProgressMapper {
    * Produces a full ancestry path such as
    * /body/DocFragment[3]/body/p[42]/text().17.
    */
-  static std::string generateXPath(const std::shared_ptr<Epub>& epub, int spineIndex, float intraSpineProgress);
+  static std::string generateXPath(Epub& epub, int spineIndex, float intraSpineProgress);
 };

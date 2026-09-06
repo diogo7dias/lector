@@ -29,7 +29,7 @@
 class QuoteSelectActivity final : public Activity {
  public:
   QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section, int startPageNumber,
-                      int marginLeft, int marginTop, std::shared_ptr<Epub> epub, int spineIndex, int fontId);
+                      int marginLeft, int marginTop, Epub& epub, int spineIndex, int fontId);
 
   void onEnter() override;
   void loop() override;
@@ -79,7 +79,7 @@ class QuoteSelectActivity final : public Activity {
   std::unique_ptr<Page> page;
   const int marginLeft;
   const int marginTop;
-  std::shared_ptr<Epub> epub;
+  Epub& epub;
   const int spineIndex;
   const int fontId;
   int lineHeight = 0;

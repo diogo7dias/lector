@@ -26,7 +26,7 @@ class XtcReaderActivity final : public Activity {
   reading_stats::SdStatsFiles statsFiles;
   reading_stats::ReaderStatsSession statsSession{statsFiles};
   bool statsTrackingActive = false;
-  std::shared_ptr<Xtc> xtc;
+  std::unique_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;
   int pagesUntilFullRefresh = 0;
