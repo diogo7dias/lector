@@ -54,10 +54,23 @@ inline bool writeAtomic(const std::string& cachePath, const uint8_t* data, size_
   // canonical file first. The brief window where neither file exists reads as
   // "no saved progress" on next launch -- never a corrupt, unclearable file.
   Storage.remove(finalPath.c_str());
-  if (!Storage.rename(tmpPath.c_str(), finalPath.c_str())) {
-    LOG_ERR("PRG", "Failed to rename temp progress into place: %s", finalPath.c_str());
+  if (Storage.rename(tmpPath.c_str(), finalPath.c_str())) return true;
+
+  LOG_ERR("PRG", "Failed to rename temp progress into place: %s", finalPath.c_str());
+  // The old progress.bin is already gone, so leaving it here would lose the
+  // reader's place. Nothing is torn by writing the same bytes straight to the
+  // canonical path now: either they land whole, or there was no saved progress
+  // either way.
+  HalFile f;
+  if (!Storage.openFileForWrite("PRG", finalPath, f)) {
+    LOG_ERR("PRG", "Could not write progress directly either: %s", finalPath.c_str());
     return false;
   }
+  if (f.write(data, len) != len) {
+    LOG_ERR("PRG", "Short direct write saving progress to %s", finalPath.c_str());
+    return false;
+  }
+  f.flush();
   return true;
 }
 
