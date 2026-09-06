@@ -45,10 +45,6 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
-  // Timings overlay state (see setTimingOverlay). Two words on a single long-lived
-  // object; no allocation and nothing drawn while disabled.
-  bool timingOverlayEnabled = false;
-  int timingOverlayFontId = 0;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -138,7 +134,6 @@ class GfxRenderer {
   // Stamps the previous refresh's timing line into the framebuffer's top-left corner.
   // Called from the display paths, so every push carries it without each activity having
   // to remember to draw it.
-  void drawTimingOverlay() const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
@@ -200,16 +195,6 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
-
-  // Timings overlay: draws the PREVIOUS refresh's cost into the top-left corner of every
-  // frame this renderer pushes. The font id is passed in rather than looked up because
-  // the UI font ids live in src/ and this library must not reach into it. Pass
-  // enabled=false (the default) and nothing is drawn and nothing is measured on the
-  // draw path. See PerfStats.
-  void setTimingOverlay(bool enabled, int fontId) {
-    timingOverlayEnabled = enabled;
-    timingOverlayFontId = fontId;
-  }
 
   // Screen ops
   int getScreenWidth() const;
