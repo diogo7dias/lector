@@ -142,6 +142,13 @@ void Section::noteBuildFailure(const BuildFailure code) {
           lastFailureMaxAlloc_);
 }
 
+void Section::appendPageToLut(void* const ctx, std::unique_ptr<Page> page, const uint16_t paragraphIndex,
+                              const uint16_t listItemIndex, const uint32_t visibleTextOffset) {
+  auto* const build = static_cast<BuildContext*>(ctx);
+  build->lut.push_back(
+      {build->owner->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
+}
+
 uint32_t Section::onPageComplete(std::unique_ptr<Page> page) {
   if (!file) {
     LOG_ERR("SCT", "File not open for writing page %d", builtPageCount_);
@@ -330,9 +337,9 @@ bool Section::clearCache() const {
   return true;
 }
 
-bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+bool Section::createSectionFile(const ReaderRenderSpec& spec, const PopupFn popupFn, void* const popupCtx) {
   // One-shot build: start, then lay out the whole section in a single pass.
-  if (!startBuild(spec, popupFn)) {
+  if (!startBuild(spec, popupFn, popupCtx)) {
     return false;
   }
   if (!buildSomeMore(0)) {  // 0 = build to completion
@@ -341,7 +348,7 @@ bool Section::createSectionFile(const ReaderRenderSpec& spec, const std::functio
   return buildComplete_;
 }
 
-bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn) {
+bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, void* const popupCtx) {
   if (build_) {
     LOG_ERR("SCT", "startBuild called while a build is already active");
     return false;
@@ -492,17 +499,13 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const std::function<void(
   // captures the BuildContext pointer to append to its in-RAM LUT; build_ owns the
   // context for the parser's whole lifetime.
   BuildContext* ctxPtr = ctx.get();
+  ctxPtr->owner = this;
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       &epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphSpacing, spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
       spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode, spec.firstLineIndentPercent,
-      [this, ctxPtr](std::unique_ptr<Page> page, const uint16_t paragraphIndex, const uint16_t listItemIndex,
-                     const uint32_t visibleTextOffset) {
-        ctxPtr->lut.push_back(
-            {this->onPageComplete(std::move(page)), paragraphIndex, listItemIndex, visibleTextOffset});
-      },
-      spec.embeddedTextStyle, spec.embeddedLayoutStyle, ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering,
-      std::move(tocAnchors), popupFn, ctxPtr->cssParser);
+      &Section::appendPageToLut, ctxPtr, spec.embeddedTextStyle, spec.embeddedLayoutStyle, ctxPtr->contentBase,
+      ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors), popupFn, popupCtx, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     noteBuildFailure(BuildFailure::OomParser);

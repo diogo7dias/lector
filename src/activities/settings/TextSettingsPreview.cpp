@@ -58,11 +58,10 @@ void collectStatusBarSlots(bool top, std::string slots[3]) {
     uint8_t anchor;
     const char* text;
   } items[] = {
-      {SETTINGS.sbBatteryPos, SAMPLE_BATTERY},   {SETTINGS.sbClockPos, SAMPLE_CLOCK},
-      {SETTINGS.sbPagePos, SAMPLE_PAGE},         {SETTINGS.sbBookPctPos, SAMPLE_PERCENT},
+      {SETTINGS.sbBatteryPos, SAMPLE_BATTERY},    {SETTINGS.sbClockPos, SAMPLE_CLOCK},
+      {SETTINGS.sbPagePos, SAMPLE_PAGE},          {SETTINGS.sbBookPctPos, SAMPLE_PERCENT},
       {SETTINGS.sbChapterPctPos, SAMPLE_PERCENT}, {SETTINGS.sbChapterNumPos, "Ch 2/14"},
-      {SETTINGS.sbSessionPagesPos, "+8"},
-      {SETTINGS.sbParaPagesPos, ">P.0"},
+      {SETTINGS.sbSessionPagesPos, "+8"},         {SETTINGS.sbParaPagesPos, ">P.0"},
   };
   for (const auto& item : items) {
     if (item.anchor == CrossPointSettings::SB_ANCHOR_OFF) continue;
@@ -162,12 +161,19 @@ void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fon
   parsed.setHeading(heading);
   addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
-  bool first = true;
-  parsed.layoutAndExtractLines(renderer, fontId, static_cast<uint16_t>(textWidth),
-                               [&layout, &first, gapBefore](std::shared_ptr<TextBlock> line, uint32_t) {
-                                 layout.lines.push_back({std::move(line), first ? gapBefore : 0});
-                                 first = false;
-                               });
+  struct PreviewSink {
+    PreviewLayout& layout;
+    bool first;
+    int gapBefore;
+  } sink{layout, true, gapBefore};
+  parsed.layoutAndExtractLines(
+      renderer, fontId, static_cast<uint16_t>(textWidth),
+      [](void* const ctx, std::shared_ptr<TextBlock> line, uint32_t) {
+        auto& sink = *static_cast<PreviewSink*>(ctx);
+        sink.layout.lines.push_back({std::move(line), sink.first ? sink.gapBefore : 0});
+        sink.first = false;
+      },
+      &sink);
 }
 
 // Lay the whole sample page out: pretend chapter heading (only while Embedded Layout Style

@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "Epub/FootnoteEntry.h"
+#include "Epub/PageCallbacks.h"
 #include "Epub/ParsedText.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
@@ -57,9 +58,14 @@ class ChapterHtmlSlimParser {
   Epub* epub;
   const std::string& filepath;
   GfxRenderer& renderer;
-  std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)> completePageFn;
-  std::function<void()> popupFn;  // Popup callback
-  bool imagePopupFired = false;   // popupFn fired for the first image probe (single-shot)
+  // Function pointer plus context rather than std::function: the parser is built once per
+  // chapter on the OOM-sensitive render path, and each std::function costs a heap-allocated
+  // closure plus its own copy of the call machinery in flash.
+  PageCompleteFn completePageFn;
+  void* completePageCtx;
+  PopupFn popupFn;  // Popup callback, may be null
+  void* popupCtx;
+  bool imagePopupFired = false;  // popupFn fired for the first image probe (single-shot)
   int depth = 0;
   int skipUntilDepth = INT_MAX;
   int boldUntilDepth = INT_MAX;
@@ -226,11 +232,10 @@ class ChapterHtmlSlimParser {
       const bool extraParagraphSpacing, const uint8_t paragraphSpacing, const uint8_t paragraphAlignment,
       const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,
       const bool focusReadingEnabled, const uint8_t guideDotsMode, const uint8_t firstLineIndentMode,
-      const uint8_t firstLineIndentPercent,
-      const std::function<void(std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t)>& completePageFn,
+      const uint8_t firstLineIndentPercent, const PageCompleteFn completePageFn, void* const completePageCtx,
       const bool embeddedTextStyle, const bool embeddedLayoutStyle, const std::string& contentBase,
       const std::string& imageBasePath, const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
-      const std::function<void()>& popupFn = nullptr, const CssParser* cssParser = nullptr)
+      const PopupFn popupFn = nullptr, void* const popupCtx = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
@@ -248,7 +253,9 @@ class ChapterHtmlSlimParser {
         firstLineIndentMode(firstLineIndentMode),
         firstLineIndentPercent(firstLineIndentPercent),
         completePageFn(completePageFn),
+        completePageCtx(completePageCtx),
         popupFn(popupFn),
+        popupCtx(popupCtx),
         cssParser(cssParser),
         embeddedTextStyle(embeddedTextStyle),
         embeddedLayoutStyle(embeddedLayoutStyle),

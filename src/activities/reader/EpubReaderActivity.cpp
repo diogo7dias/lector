@@ -2533,16 +2533,17 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // ghost-cleanup path -- otherwise the "INDEXING" text ghosts under the rendered page.
         // No popup redraws while the framebuffer is lent to the build below;
         // the panel holds the popup displayed above (e-ink is persistent).
-        const auto popupFn = [this]() {
-          if (renderer.hasFrameBuffer()) GUI.drawPopup(renderer, tr(STR_INDEXING));
-          scheduleGhostCleanup();
+        const PopupFn popupFn = [](void* const ctx) {
+          auto* const self = static_cast<EpubReaderActivity*>(ctx);
+          if (self->renderer.hasFrameBuffer()) GUI.drawPopup(self->renderer, tr(STR_INDEXING));
+          self->scheduleGhostCleanup();
         };
         // Lend the framebuffer's 48 KB to the blocking full build; restored
         // (white) at scope exit, and the page render below redraws everything.
         // The strip scratch is dead weight during a build and competes with the arena it needs.
         releaseGrayscaleStripScratch();
         GfxRenderer::FrameBufferLoan loan(renderer);
-        if (!section->createSectionFile(renderSpec, popupFn)) {
+        if (!section->createSectionFile(renderSpec, popupFn, this)) {
           LOG_ERR("ERS", "Failed to persist page data to SD");
           const auto failure = section->lastFailure();
           const auto failHeap = section->lastFailureFreeHeap();
@@ -2615,10 +2616,20 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           releaseGrayscaleStripScratch();
           auto loan = makeUniqueNoThrow<GfxRenderer::FrameBufferLoan>(renderer);
           {
-            started = section->startBuild(renderSpec, [this, &loan] {
-              loan.reset();
-              showBuildPopup();
-            });
+            // The popup drops the framebuffer loan before drawing, so both the activity and
+            // the loan travel to the callback as one context.
+            struct PopupContext {
+              EpubReaderActivity* self;
+              std::unique_ptr<GfxRenderer::FrameBufferLoan>* loan;
+            } popupContext{this, &loan};
+            started = section->startBuild(
+                renderSpec,
+                [](void* const ctx) {
+                  auto* const popup = static_cast<PopupContext*>(ctx);
+                  popup->loan->reset();
+                  popup->self->showBuildPopup();
+                },
+                &popupContext);
           }
           if (!started) {
             loan.reset();  // restore before anything draws
