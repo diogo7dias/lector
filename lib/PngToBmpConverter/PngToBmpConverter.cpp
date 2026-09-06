@@ -1,5 +1,6 @@
 #include "PngToBmpConverter.h"
 
+#include <BmpWriter.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <InflateStream.h>
@@ -11,35 +12,6 @@
 #include <cstring>
 
 #include "BitmapHelpers.h"
-
-// ============================================================================
-// IMAGE PROCESSING OPTIONS - Same as JpegToBmpConverter for consistency
-// ============================================================================
-constexpr bool USE_8BIT_OUTPUT = false;
-constexpr bool USE_ATKINSON = true;
-constexpr bool USE_FLOYD_STEINBERG = false;
-constexpr bool USE_PRESCALE = true;
-// ============================================================================
-
-// BMP writing helpers (same as JpegToBmpConverter)
-inline void write16(Print& out, const uint16_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-}
-
-inline void write32(Print& out, const uint32_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-  out.write((value >> 16) & 0xFF);
-  out.write((value >> 24) & 0xFF);
-}
-
-inline void write32Signed(Print& out, const int32_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-  out.write((value >> 16) & 0xFF);
-  out.write((value >> 24) & 0xFF);
-}
 
 // Paeth predictor function per PNG spec
 inline uint8_t paethPredictor(uint8_t a, uint8_t b, uint8_t c) {
@@ -89,96 +61,6 @@ bool readBE32(HalFile& file, uint32_t& value) {
   return true;
 }
 
-void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
-  const int bytesPerRow = (width + 3) / 4 * 4;
-  const int imageSize = bytesPerRow * height;
-  const uint32_t paletteSize = 256 * 4;
-  const uint32_t fileSize = 14 + 40 + paletteSize + imageSize;
-
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);
-  write32(bmpOut, 14 + 40 + paletteSize);
-
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);
-  write16(bmpOut, 1);
-  write16(bmpOut, 8);
-  write32(bmpOut, 0);
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 256);
-  write32(bmpOut, 256);
-
-  for (int i = 0; i < 256; i++) {
-    bmpOut.write(static_cast<uint8_t>(i));
-    bmpOut.write(static_cast<uint8_t>(i));
-    bmpOut.write(static_cast<uint8_t>(i));
-    bmpOut.write(static_cast<uint8_t>(0));
-  }
-}
-
-void writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
-  const int bytesPerRow = (width + 31) / 32 * 4;
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 62 + imageSize;
-
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);
-  write32(bmpOut, 62);
-
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);
-  write16(bmpOut, 1);
-  write16(bmpOut, 1);
-  write32(bmpOut, 0);
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2);
-  write32(bmpOut, 2);
-
-  uint8_t palette[8] = {0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  for (const uint8_t i : palette) {
-    bmpOut.write(i);
-  }
-}
-
-void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
-  const int bytesPerRow = (width * 2 + 31) / 32 * 4;
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 70 + imageSize;
-
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);
-  write32(bmpOut, 70);
-
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);
-  write16(bmpOut, 1);
-  write16(bmpOut, 2);
-  write32(bmpOut, 0);
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 2835);
-  write32(bmpOut, 4);
-  write32(bmpOut, 4);
-
-  uint8_t palette[16] = {0x00, 0x00, 0x00, 0x00, 0x55, 0x55, 0x55, 0x00,
-                         0xAA, 0xAA, 0xAA, 0x00, 0xFF, 0xFF, 0xFF, 0x00};
-  for (const uint8_t i : palette) {
-    bmpOut.write(i);
-  }
-}
 }  // namespace
 
 // Context for streaming PNG decompression
@@ -603,14 +485,11 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   // Write BMP header
   int bytesPerRow;
-  if (USE_8BIT_OUTPUT && !oneBit) {
-    writeBmpHeader8bit(bmpOut, outWidth, outHeight);
-    bytesPerRow = (outWidth + 3) / 4 * 4;
-  } else if (oneBit) {
-    writeBmpHeader1bit(bmpOut, outWidth, outHeight);
+  if (oneBit) {
+    bmp_writer::writeHeader1bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth + 31) / 32 * 4;
   } else {
-    writeBmpHeader2bit(bmpOut, outWidth, outHeight);
+    bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
@@ -625,17 +504,12 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   // Create ditherers (same as JpegToBmpConverter)
   AtkinsonDitherer* atkinsonDitherer = nullptr;
-  FloydSteinbergDitherer* fsDitherer = nullptr;
   Atkinson1BitDitherer* atkinson1BitDitherer = nullptr;
 
   if (oneBit) {
     atkinson1BitDitherer = new Atkinson1BitDitherer(outWidth);
-  } else if (!USE_8BIT_OUTPUT) {
-    if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(outWidth);
-    } else if (USE_FLOYD_STEINBERG) {
-      fsDitherer = new FloydSteinbergDitherer(outWidth);
-    }
+  } else {
+    atkinsonDitherer = new AtkinsonDitherer(outWidth);
   }
 
   // Scaling accumulators
@@ -658,7 +532,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     delete[] rowAccum;
     delete[] rowCount;
     delete atkinsonDitherer;
-    delete fsDitherer;
     delete atkinson1BitDitherer;
     free(rowBuffer);
     free(ctx.currentRow);
@@ -685,11 +558,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       // Direct output (no scaling)
       memset(rowBuffer, 0, bytesPerRow);
 
-      if (USE_8BIT_OUTPUT && !oneBit) {
-        for (int x = 0; x < outWidth; x++) {
-          rowBuffer[x] = adjustPixel(grayRow[x]);
-        }
-      } else if (oneBit) {
+      if (oneBit) {
         for (int x = 0; x < outWidth; x++) {
           const uint8_t bit =
               atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(grayRow[x], x) : quantize1bit(grayRow[x], x, y);
@@ -700,23 +569,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
         if (atkinson1BitDitherer) atkinson1BitDitherer->nextRow();
       } else {
         for (int x = 0; x < outWidth; x++) {
-          const uint8_t gray = adjustPixel(grayRow[x]);
-          uint8_t twoBit;
-          if (atkinsonDitherer) {
-            twoBit = atkinsonDitherer->processPixel(gray, x);
-          } else if (fsDitherer) {
-            twoBit = fsDitherer->processPixel(gray, x);
-          } else {
-            twoBit = quantize(gray, x, y);
-          }
+          const uint8_t gray = grayRow[x];
+          const uint8_t twoBit = atkinsonDitherer ? atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
           const int byteIndex = (x * 2) / 8;
           const int bitOffset = 6 - ((x * 2) % 8);
           rowBuffer[byteIndex] |= (twoBit << bitOffset);
         }
-        if (atkinsonDitherer)
-          atkinsonDitherer->nextRow();
-        else if (fsDitherer)
-          fsDitherer->nextRow();
+        if (atkinsonDitherer) atkinsonDitherer->nextRow();
       }
       bmpOut.write(rowBuffer, bytesPerRow);
       yieldDuringDecode(rowsSinceYield);
@@ -750,12 +609,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
         memset(rowBuffer, 0, bytesPerRow);
 
-        if (USE_8BIT_OUTPUT && !oneBit) {
-          for (int x = 0; x < outWidth; x++) {
-            const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
-            rowBuffer[x] = adjustPixel(gray);
-          }
-        } else if (oneBit) {
+        if (oneBit) {
           for (int x = 0; x < outWidth; x++) {
             const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
             const uint8_t bit =
@@ -767,23 +621,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
           if (atkinson1BitDitherer) atkinson1BitDitherer->nextRow();
         } else {
           for (int x = 0; x < outWidth; x++) {
-            const uint8_t gray = adjustPixel((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
-            uint8_t twoBit;
-            if (atkinsonDitherer) {
-              twoBit = atkinsonDitherer->processPixel(gray, x);
-            } else if (fsDitherer) {
-              twoBit = fsDitherer->processPixel(gray, x);
-            } else {
-              twoBit = quantize(gray, x, currentOutY);
-            }
+            const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
+            const uint8_t twoBit = atkinsonDitherer ? atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
             const int byteIndex = (x * 2) / 8;
             const int bitOffset = 6 - ((x * 2) % 8);
             rowBuffer[byteIndex] |= (twoBit << bitOffset);
           }
-          if (atkinsonDitherer)
-            atkinsonDitherer->nextRow();
-          else if (fsDitherer)
-            fsDitherer->nextRow();
+          if (atkinsonDitherer) atkinsonDitherer->nextRow();
         }
 
         bmpOut.write(rowBuffer, bytesPerRow);
@@ -815,7 +659,6 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   delete[] rowAccum;
   delete[] rowCount;
   delete atkinsonDitherer;
-  delete fsDitherer;
   delete atkinson1BitDitherer;
   free(rowBuffer);
   free(ctx.currentRow);

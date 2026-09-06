@@ -13,7 +13,6 @@
 // 2-bit (4-level) grayscale. Images whose palette entries all map to native
 // gray levels (0, 85, 170, 255 ±21) are mapped directly without dithering.
 // For cover images, dithering is done in JpegToBmpConverter.cpp instead.
-constexpr bool USE_ATKINSON = true;  // Use Atkinson dithering instead of Floyd-Steinberg
 constexpr uint32_t ADAPTIVE_TONE_LOW_PERCENTILE_PERMILLE = 10;
 constexpr uint32_t ADAPTIVE_TONE_HIGH_PERCENTILE_PERMILLE = 990;
 constexpr int ADAPTIVE_TONE_MIN_RANGE = 96;
@@ -26,7 +25,6 @@ Bitmap::~Bitmap() {
   delete[] errorNextRow;
 
   delete atkinsonDitherer;
-  delete fsDitherer;
 }
 
 uint16_t Bitmap::readLE16(HalFile& f) {
@@ -186,11 +184,7 @@ BmpReaderError Bitmap::parseHeaders() {
   if (highColor && dithering) {
     const Gray4QuantizationMode quantizationMode =
         adaptiveToneMapping ? Gray4QuantizationMode::Native : Gray4QuantizationMode::DisplayTuned;
-    if (USE_ATKINSON) {
-      atkinsonDitherer = new AtkinsonDitherer(width, quantizationMode);
-    } else {
-      fsDitherer = new FloydSteinbergDitherer(width, quantizationMode);
-    }
+    atkinsonDitherer = new AtkinsonDitherer(width, quantizationMode);
   }
 
   return BmpReaderError::Ok;
@@ -351,18 +345,16 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
     const uint8_t toneMappedLum = applyAdaptiveTone(lum);
     uint8_t color;
     if (atkinsonDitherer) {
-      color = atkinsonDitherer->processPixel(adjustPixel(toneMappedLum), currentX);
-    } else if (fsDitherer) {
-      color = fsDitherer->processPixel(adjustPixel(toneMappedLum), currentX);
+      color = atkinsonDitherer->processPixel(toneMappedLum, currentX);
     } else {
-      const int adjusted = adjustPixel(toneMappedLum);
+      const int adjusted = toneMappedLum;
       if (nativePalette) {
         // Palette matches native gray levels: direct mapping (still apply brightness/contrast/gamma)
         color = static_cast<uint8_t>(adjusted >> 6);
       } else {
         // Non-native palette with dithering disabled: simple quantization
         color = adaptiveToneMapping ? quantizeGray4(adjusted, Gray4QuantizationMode::Native).index
-                                    : quantize(adjusted, currentX, prevRowY);
+                                    : quantizeSimple(adjusted);
       }
     }
     currentOutByte |= (color << bitShift);
@@ -431,10 +423,7 @@ BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
       return BmpReaderError::UnsupportedBpp;
   }
 
-  if (atkinsonDitherer)
-    atkinsonDitherer->nextRow();
-  else if (fsDitherer)
-    fsDitherer->nextRow();
+  if (atkinsonDitherer) atkinsonDitherer->nextRow();
 
   // Flush remaining bits if width is not a multiple of 4
   if (bitShift != 6) *outPtr = currentOutByte;
@@ -448,7 +437,6 @@ BmpReaderError Bitmap::rewindToData() const {
   }
 
   // Reset dithering when rewinding
-  if (fsDitherer) fsDitherer->reset();
   if (atkinsonDitherer) atkinsonDitherer->reset();
 
   return BmpReaderError::Ok;

@@ -1,5 +1,6 @@
 #include "JpegToBmpConverter.h"
 
+#include <BmpWriter.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <JPEGDEC.h>
@@ -12,153 +13,6 @@
 #include <cstring>
 
 #include "BitmapHelpers.h"
-
-// ============================================================================
-// IMAGE PROCESSING OPTIONS - Toggle these to test different configurations
-// ============================================================================
-constexpr bool USE_8BIT_OUTPUT = false;  // true: 8-bit grayscale (no quantization), false: 2-bit (4 levels)
-// Dithering method selection (only one should be true, or all false for simple quantization):
-constexpr bool USE_ATKINSON = true;          // Atkinson dithering (cleaner than F-S, less error diffusion)
-constexpr bool USE_FLOYD_STEINBERG = false;  // Floyd-Steinberg error diffusion (can cause "worm" artifacts)
-constexpr bool USE_NOISE_DITHERING = false;  // Hash-based noise dithering (good for downsampling)
-// Pre-resize to target display size (CRITICAL: avoids dithering artifacts from post-downsampling)
-constexpr bool USE_PRESCALE = true;  // true: scale image to target size before dithering
-// ============================================================================
-
-inline void write16(Print& out, const uint16_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-}
-
-inline void write32(Print& out, const uint32_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-  out.write((value >> 16) & 0xFF);
-  out.write((value >> 24) & 0xFF);
-}
-
-inline void write32Signed(Print& out, const int32_t value) {
-  out.write(value & 0xFF);
-  out.write((value >> 8) & 0xFF);
-  out.write((value >> 16) & 0xFF);
-  out.write((value >> 24) & 0xFF);
-}
-
-// Helper function: Write BMP header with 8-bit grayscale (256 levels)
-void writeBmpHeader8bit(Print& bmpOut, const int width, const int height) {
-  // Calculate row padding (each row must be multiple of 4 bytes)
-  const int bytesPerRow = (width + 3) / 4 * 4;  // 8 bits per pixel, padded
-  const int imageSize = bytesPerRow * height;
-  const uint32_t paletteSize = 256 * 4;  // 256 colors * 4 bytes (BGRA)
-  const uint32_t fileSize = 14 + 40 + paletteSize + imageSize;
-
-  // BMP File Header (14 bytes)
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);
-  write32(bmpOut, 0);                      // Reserved
-  write32(bmpOut, 14 + 40 + paletteSize);  // Offset to pixel data
-
-  // DIB Header (BITMAPINFOHEADER - 40 bytes)
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);  // Negative height = top-down bitmap
-  write16(bmpOut, 1);              // Color planes
-  write16(bmpOut, 8);              // Bits per pixel (8 bits)
-  write32(bmpOut, 0);              // BI_RGB (no compression)
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
-  write32(bmpOut, 256);   // colorsUsed
-  write32(bmpOut, 256);   // colorsImportant
-
-  // Color Palette (256 grayscale entries x 4 bytes = 1024 bytes)
-  for (int i = 0; i < 256; i++) {
-    bmpOut.write(static_cast<uint8_t>(i));  // Blue
-    bmpOut.write(static_cast<uint8_t>(i));  // Green
-    bmpOut.write(static_cast<uint8_t>(i));  // Red
-    bmpOut.write(static_cast<uint8_t>(0));  // Reserved
-  }
-}
-
-// Helper function: Write BMP header with 1-bit color depth (black and white)
-static void writeBmpHeader1bit(Print& bmpOut, const int width, const int height) {
-  // Calculate row padding (each row must be multiple of 4 bytes)
-  const int bytesPerRow = (width + 31) / 32 * 4;  // 1 bit per pixel, round up to 4-byte boundary
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 62 + imageSize;  // 14 (file header) + 40 (DIB header) + 8 (palette) + image
-
-  // BMP File Header (14 bytes)
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);  // File size
-  write32(bmpOut, 0);         // Reserved
-  write32(bmpOut, 62);        // Offset to pixel data (14 + 40 + 8)
-
-  // DIB Header (BITMAPINFOHEADER - 40 bytes)
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);  // Negative height = top-down bitmap
-  write16(bmpOut, 1);              // Color planes
-  write16(bmpOut, 1);              // Bits per pixel (1 bit)
-  write32(bmpOut, 0);              // BI_RGB (no compression)
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2);     // colorsUsed
-  write32(bmpOut, 2);     // colorsImportant
-
-  // Color Palette (2 colors x 4 bytes = 8 bytes)
-  // Format: Blue, Green, Red, Reserved (BGRA)
-  // Note: In 1-bit BMP, palette index 0 = black, 1 = white
-  uint8_t palette[8] = {
-      0x00, 0x00, 0x00, 0x00,  // Color 0: Black
-      0xFF, 0xFF, 0xFF, 0x00   // Color 1: White
-  };
-  for (const uint8_t i : palette) {
-    bmpOut.write(i);
-  }
-}
-
-// Helper function: Write BMP header with 2-bit color depth
-static void writeBmpHeader2bit(Print& bmpOut, const int width, const int height) {
-  // Calculate row padding (each row must be multiple of 4 bytes)
-  const int bytesPerRow = (width * 2 + 31) / 32 * 4;  // 2 bits per pixel, round up
-  const int imageSize = bytesPerRow * height;
-  const uint32_t fileSize = 70 + imageSize;  // 14 (file header) + 40 (DIB header) + 16 (palette) + image
-
-  // BMP File Header (14 bytes)
-  bmpOut.write('B');
-  bmpOut.write('M');
-  write32(bmpOut, fileSize);  // File size
-  write32(bmpOut, 0);         // Reserved
-  write32(bmpOut, 70);        // Offset to pixel data
-
-  // DIB Header (BITMAPINFOHEADER - 40 bytes)
-  write32(bmpOut, 40);
-  write32Signed(bmpOut, width);
-  write32Signed(bmpOut, -height);  // Negative height = top-down bitmap
-  write16(bmpOut, 1);              // Color planes
-  write16(bmpOut, 2);              // Bits per pixel (2 bits)
-  write32(bmpOut, 0);              // BI_RGB (no compression)
-  write32(bmpOut, imageSize);
-  write32(bmpOut, 2835);  // xPixelsPerMeter (72 DPI)
-  write32(bmpOut, 2835);  // yPixelsPerMeter (72 DPI)
-  write32(bmpOut, 4);     // colorsUsed
-  write32(bmpOut, 4);     // colorsImportant
-
-  // Color Palette (4 colors x 4 bytes = 16 bytes)
-  // Format: Blue, Green, Red, Reserved (BGRA)
-  uint8_t palette[16] = {
-      0x00, 0x00, 0x00, 0x00,  // Color 0: Black
-      0x55, 0x55, 0x55, 0x00,  // Color 1: Dark gray (85)
-      0xAA, 0xAA, 0xAA, 0x00,  // Color 2: Light gray (170)
-      0xFF, 0xFF, 0xFF, 0x00   // Color 3: White
-  };
-  for (const uint8_t i : palette) {
-    bmpOut.write(i);
-  }
-}
 
 namespace {
 
@@ -248,7 +102,6 @@ struct BmpConvertCtx {
   std::unique_ptr<uint8_t[]> bmpRow;
 
   std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
-  std::unique_ptr<FloydSteinbergDitherer> fsDitherer;
   std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
 
   uint8_t rowsSinceYield;
@@ -272,11 +125,7 @@ static void yieldDuringDecodeBlock(BmpConvertCtx* ctx) {
 static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) {
   memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
 
-  if (USE_8BIT_OUTPUT && !ctx->oneBit) {
-    for (int x = 0; x < ctx->outWidth; x++) {
-      ctx->bmpRow[x] = adjustPixel(srcRow[x]);
-    }
-  } else if (ctx->oneBit) {
+  if (ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
       const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(srcRow[x], x)
                                                     : quantize1bit(srcRow[x], x, outY);
@@ -285,21 +134,12 @@ static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) 
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = adjustPixel(srcRow[x]);
+      const uint8_t gray = srcRow[x];
       uint8_t twoBit;
-      if (ctx->atkinsonDitherer) {
-        twoBit = ctx->atkinsonDitherer->processPixel(gray, x);
-      } else if (ctx->fsDitherer) {
-        twoBit = ctx->fsDitherer->processPixel(gray, x);
-      } else {
-        twoBit = quantize(gray, x, outY);
-      }
+      twoBit = ctx->atkinsonDitherer ? ctx->atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
       ctx->bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
     }
-    if (ctx->atkinsonDitherer)
-      ctx->atkinsonDitherer->nextRow();
-    else if (ctx->fsDitherer)
-      ctx->fsDitherer->nextRow();
+    if (ctx->atkinsonDitherer) ctx->atkinsonDitherer->nextRow();
   }
 
   ctx->bmpOut->write(ctx->bmpRow.get(), ctx->bytesPerRow);
@@ -392,12 +232,7 @@ static void finishSmoothUpscale(BmpConvertCtx* ctx) {
 static void flushScaledRow(BmpConvertCtx* ctx) {
   memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
 
-  if (USE_8BIT_OUTPUT && !ctx->oneBit) {
-    for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
-      ctx->bmpRow[x] = adjustPixel(gray);
-    }
-  } else if (ctx->oneBit) {
+  if (ctx->oneBit) {
     for (int x = 0; x < ctx->outWidth; x++) {
       const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
       const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(gray, x)
@@ -407,21 +242,12 @@ static void flushScaledRow(BmpConvertCtx* ctx) {
     if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
   } else {
     for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = adjustPixel((ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0);
+      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
       uint8_t twoBit;
-      if (ctx->atkinsonDitherer) {
-        twoBit = ctx->atkinsonDitherer->processPixel(gray, x);
-      } else if (ctx->fsDitherer) {
-        twoBit = ctx->fsDitherer->processPixel(gray, x);
-      } else {
-        twoBit = quantize(gray, x, ctx->currentOutY);
-      }
+      twoBit = ctx->atkinsonDitherer ? ctx->atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
       ctx->bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
     }
-    if (ctx->atkinsonDitherer)
-      ctx->atkinsonDitherer->nextRow();
-    else if (ctx->fsDitherer)
-      ctx->fsDitherer->nextRow();
+    if (ctx->atkinsonDitherer) ctx->atkinsonDitherer->nextRow();
   }
 
   ctx->bmpOut->write(ctx->bmpRow.get(), ctx->bytesPerRow);
@@ -604,14 +430,11 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
 
   // Write BMP header with output dimensions
   int bytesPerRow;
-  if (USE_8BIT_OUTPUT && !oneBit) {
-    writeBmpHeader8bit(bmpOut, outWidth, outHeight);
-    bytesPerRow = (outWidth + 3) / 4 * 4;
-  } else if (oneBit) {
-    writeBmpHeader1bit(bmpOut, outWidth, outHeight);
+  if (oneBit) {
+    bmp_writer::writeHeader1bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth + 31) / 32 * 4;
   } else {
-    writeBmpHeader2bit(bmpOut, outWidth, outHeight);
+    bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
     bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
   }
 
@@ -678,19 +501,11 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
       LOG_ERR("JPG", "OOM: Atkinson1BitDitherer");
       return false;
     }
-  } else if (!USE_8BIT_OUTPUT) {
-    if (USE_ATKINSON) {
-      ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-      if (!ctx.atkinsonDitherer) {
-        LOG_ERR("JPG", "OOM: AtkinsonDitherer");
-        return false;
-      }
-    } else if (USE_FLOYD_STEINBERG) {
-      ctx.fsDitherer = makeUniqueNoThrow<FloydSteinbergDitherer>(outWidth);
-      if (!ctx.fsDitherer) {
-        LOG_ERR("JPG", "OOM: FloydSteinbergDitherer");
-        return false;
-      }
+  } else {
+    ctx.atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
+    if (!ctx.atkinsonDitherer) {
+      LOG_ERR("JPG", "OOM: AtkinsonDitherer");
+      return false;
     }
   }
 
