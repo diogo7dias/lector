@@ -4,16 +4,31 @@
 #include <XmlParserUtils.h>
 
 #include <cstring>
+#include <new>
+
+#if defined(ESP32)
+#include <Esp.h>
+#endif
 
 namespace {
-constexpr size_t ENTRY_STORAGE_CAPACITY = 64;
-constexpr size_t MAX_ENTRIES = ENTRY_STORAGE_CAPACITY - 2;
+constexpr size_t MAX_ENTRIES = 64;
+// Text budget for every collected entry together, claimed once before the
+// transfer. 64 entries of a Calibre-Web page cost about 7 KB of title, author
+// and href; the rest is headroom for long hrefs.
+constexpr size_t ARENA_BYTES = 10 * 1024;
 constexpr size_t MAX_TITLE_CHARS = 160;
 constexpr size_t MAX_AUTHOR_CHARS = 120;
-constexpr size_t MAX_ID_CHARS = 128;
 constexpr size_t MAX_HREF_CHARS = 768;
 constexpr size_t MAX_SEARCH_TEMPLATE_CHARS = 768;
 constexpr size_t MAX_PAGE_URL_CHARS = 768;
+// Reserved up front for the feed-level links, so assigning them mid-transfer
+// does not allocate. Longer values still work, at the cost of one realloc.
+constexpr size_t FEED_URL_RESERVE = 256;
+#if defined(ESP32)
+// Free heap below which the fetch is stopped on purpose. wolfSSL fails around
+// 20 KB with an unreadable MEMORY_E (-125), so stop above that and report it.
+constexpr size_t MIN_FREE_HEAP_BYTES = 15 * 1024;
+#endif
 }  // namespace
 
 OpdsParser::OpdsParser() {
@@ -23,7 +38,22 @@ OpdsParser::OpdsParser() {
     LOG_DBG("OPDS", "Couldn't allocate memory for parser");
     return;
   }
-  entries.reserve(ENTRY_STORAGE_CAPACITY);
+  // Everything the parse needs is claimed here, before the caller opens the TLS
+  // session: during the transfer this object allocates nothing.
+  arena.reset(new (std::nothrow) char[ARENA_BYTES]);
+  if (!arena) {
+    errorOccured = true;
+    LOG_ERR("OPDS", "OOM: %u byte entry arena", (unsigned)ARENA_BYTES);
+    return;
+  }
+  slots.reserve(MAX_ENTRIES);
+  currentEntry.title.reserve(MAX_TITLE_CHARS);
+  currentEntry.author.reserve(MAX_AUTHOR_CHARS);
+  currentEntry.href.reserve(MAX_HREF_CHARS);
+  currentText.reserve(MAX_TITLE_CHARS);
+  searchTemplate.reserve(FEED_URL_RESERVE);
+  nextPageUrl.reserve(FEED_URL_RESERVE);
+  prevPageUrl.reserve(FEED_URL_RESERVE);
   XML_SetUserData(parser, this);
   XML_SetElementHandler(parser, startElement, endElement);
   XML_SetCharacterDataHandler(parser, characterData);
@@ -35,6 +65,19 @@ size_t OpdsParser::write(uint8_t c) { return write(&c, 1); }
 
 size_t OpdsParser::write(const uint8_t* xmlData, const size_t length) {
   if (errorOccured) return length;
+
+#if defined(ESP32)
+  if (ESP.getFreeHeap() < MIN_FREE_HEAP_BYTES) {
+    heapAbort = true;
+    errorOccured = true;
+    LOG_ERR("OPDS", "Aborting feed: free heap %u bytes, %u entries collected", (unsigned)ESP.getFreeHeap(),
+            (unsigned)slots.size());
+    destroyXmlParser(parser);
+    // Short write: the downloader reads it as "stop", so the transfer ends here
+    // instead of running the heap down to wolfSSL's MEMORY_E.
+    return 0;
+  }
+#endif
 
   const char* currentPos = reinterpret_cast<const char*>(xmlData);
   size_t remaining = length;
@@ -76,23 +119,55 @@ void OpdsParser::flush() {
 bool OpdsParser::error() const { return errorOccured; }
 
 void OpdsParser::clear() {
-  entries.clear();
+  slots.clear();
+  arenaUsed = 0;
   searchTemplate.clear();
   nextPageUrl.clear();
   prevPageUrl.clear();
-  currentEntry = OpdsEntry{};
+  currentEntry.type = OpdsEntryType::NAVIGATION;
+  currentEntry.title.clear();
+  currentEntry.author.clear();
+  currentEntry.href.clear();
   currentText.clear();
-  inEntry = inTitle = inAuthor = inAuthorName = inId = false;
+  inEntry = inTitle = inAuthor = inAuthorName = false;
   collectCurrentEntry = false;
   feedTruncated = false;
 }
 
-std::vector<OpdsEntry> OpdsParser::getBooks() const {
-  std::vector<OpdsEntry> books;
-  for (const auto& entry : entries) {
-    if (entry.type == OpdsEntryType::BOOK) books.push_back(entry);
+bool OpdsParser::storeCurrentEntry() {
+  if (slots.size() >= MAX_ENTRIES || !arena) return false;
+  const size_t need = currentEntry.title.size() + currentEntry.author.size() + currentEntry.href.size();
+  if (arenaUsed + need > ARENA_BYTES) return false;
+
+  Slot slot;
+  slot.type = currentEntry.type;
+  const auto put = [this](const std::string& text, uint16_t& off, uint16_t& len) {
+    off = static_cast<uint16_t>(arenaUsed);
+    len = static_cast<uint16_t>(text.size());
+    memcpy(arena.get() + arenaUsed, text.data(), text.size());
+    arenaUsed += text.size();
+  };
+  put(currentEntry.title, slot.titleOff, slot.titleLen);
+  put(currentEntry.author, slot.authorOff, slot.authorLen);
+  put(currentEntry.href, slot.hrefOff, slot.hrefLen);
+  slots.push_back(slot);
+  return true;
+}
+
+std::vector<OpdsEntry> OpdsParser::takeEntries() {
+  std::vector<OpdsEntry> out;
+  out.reserve(slots.size());
+  for (const Slot& slot : slots) {
+    OpdsEntry entry;
+    entry.type = slot.type;
+    entry.title.assign(arena.get() + slot.titleOff, slot.titleLen);
+    entry.author.assign(arena.get() + slot.authorOff, slot.authorLen);
+    entry.href.assign(arena.get() + slot.hrefOff, slot.hrefLen);
+    out.push_back(std::move(entry));
   }
-  return books;
+  slots.clear();
+  arenaUsed = 0;
+  return out;
 }
 
 const char* OpdsParser::findAttribute(const XML_Char** atts, const char* name) {
@@ -121,11 +196,16 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
     self->inEntry = true;
-    self->collectCurrentEntry = self->entries.size() < MAX_ENTRIES;
+    self->collectCurrentEntry = self->slots.size() < MAX_ENTRIES && self->arenaUsed < ARENA_BYTES;
     self->feedTruncated = self->feedTruncated || !self->collectCurrentEntry;
-    self->currentEntry = OpdsEntry{};
+    // Cleared field by field rather than reassigned: the strings keep the
+    // capacity reserved in the constructor, so no entry allocates mid-transfer.
+    self->currentEntry.type = OpdsEntryType::NAVIGATION;
+    self->currentEntry.title.clear();
+    self->currentEntry.author.clear();
+    self->currentEntry.href.clear();
     self->currentText.clear();
-    self->inTitle = self->inAuthor = self->inAuthorName = self->inId = false;
+    self->inTitle = self->inAuthor = self->inAuthorName = false;
     return;
   }
 
@@ -178,9 +258,6 @@ void XMLCALL OpdsParser::startElement(void* userData, const XML_Char* name, cons
   } else if (self->inAuthor && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
     self->inAuthorName = true;
     self->currentText.clear();
-  } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
-    self->inId = true;
-    self->currentText.clear();
   }
 }
 
@@ -189,7 +266,7 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
 
   if (strcmp(name, "entry") == 0 || strstr(name, ":entry") != nullptr) {
     if (self->collectCurrentEntry && !self->currentEntry.title.empty() && !self->currentEntry.href.empty()) {
-      self->entries.push_back(self->currentEntry);
+      if (!self->storeCurrentEntry()) self->feedTruncated = true;
     }
     self->inEntry = false;
     self->collectCurrentEntry = false;
@@ -202,9 +279,6 @@ void XMLCALL OpdsParser::endElement(void* userData, const XML_Char* name) {
     } else if (self->inAuthorName && (strcmp(name, "name") == 0 || strstr(name, ":name") != nullptr)) {
       self->currentEntry.author = self->currentText;
       self->inAuthorName = false;
-    } else if (strcmp(name, "id") == 0 || strstr(name, ":id") != nullptr) {
-      if (self->inId) self->currentEntry.id = self->currentText;
-      self->inId = false;
     }
   }
 }
@@ -216,7 +290,5 @@ void XMLCALL OpdsParser::characterData(void* userData, const XML_Char* s, const 
     appendBounded(self->currentText, s, len, MAX_TITLE_CHARS);
   } else if (self->inAuthorName) {
     appendBounded(self->currentText, s, len, MAX_AUTHOR_CHARS);
-  } else if (self->inId) {
-    appendBounded(self->currentText, s, len, MAX_ID_CHARS);
   }
 }
