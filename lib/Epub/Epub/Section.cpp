@@ -96,7 +96,12 @@ namespace {
 // Not a version: the Hidden Dots sub-option (keep the widened guide-dot gap, draw no
 // dot) reuses the v37 guide-dots header byte as a three-state mode, so the header keeps
 // its size and only books whose guide-dot state actually changed are rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 53;
+// v54: an internal EPUB link keeps its CSS vertical-align, so a footnote marker
+//      written as <a style="vertical-align: super">1</a> renders raised again
+//      (upstream #3355; upstream numbered it v45). The link branch returned before
+//      applying the resolved style, so superscript markers sat on the baseline.
+//      Marker glyphs change size and position, so cached pages must be rebuilt.
+constexpr uint8_t SECTION_FILE_VERSION = 54;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
