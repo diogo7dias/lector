@@ -749,26 +749,27 @@ void setup() {
   const bool quickResumeTargetIsReader = APP_STATE.quickResumeTargetIsReader;
   const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
 
-  // Waking from a wallpaper sleep face: a normal (non-quick-resume) deep-sleep wake whose
-  // sleep screen was a custom wallpaper. The unlock path below blanks the panel and goes
-  // to the book instead of showing the boot splash. Needs the seamless begin() so the
-  // panel keeps the wallpaper (no clearing pass) until that blank lands.
+  // Waking from a sleep face the wake has to paint over: any non-quick-resume deep-sleep
+  // wake. The unlock path below blanks the panel and goes to the book instead of showing
+  // the boot splash. Needs the seamless begin() so the panel keeps the sleep face (no
+  // clearing pass) until that blank lands.
   //
-  // Every wallpaper format qualifies, not just .pxc. The old .pxc-only rule existed
-  // because the wake re-rendered the image, and .pxc was the one format with a render
-  // path fast enough to attempt on a wake. Nothing is re-rendered now, so a BMP sleep
-  // face takes the same fast unlock a .pxc one does.
-  const std::string& lastWallpaper = APP_STATE.lastSleepWallpaperPath;
-  const bool sleepWasCustomWallpaper =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
-      (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM && !APP_STATE.lastSleepFromReader);
-  const bool wallpaperWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton &&
-                             sleepWasCustomWallpaper && !lastWallpaper.empty();
+  // Every sleep face qualifies, not only the custom wallpaper. Quick Resume is the one
+  // face whose pixels the wake keeps, and it never reaches BootResume::Splash (see
+  // WakeFacePolicy.h), so by the time the resume is Splash the panel is holding ink this
+  // wake is going to replace whatever drew it — crest, cover, stats or wallpaper alike.
+  //
+  // Restricting this to the wallpaper face is what left the default crest face on the old
+  // route: a boot splash of its own, then the activity painting over it. Two panel passes
+  // where one will do, and the 500 ms button-ladder settle below overlapped with neither.
+  // Measured on an X3, that is a FULL pass of about 800 ms plus the un-overlapped settle,
+  // on a wake whose wallpaper-face equivalent totals 2006 ms.
+  const bool paintedFaceWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton;
 
-  setupDisplayAndFonts(resume != BootResume::Splash || wallpaperWake);
+  setupDisplayAndFonts(resume != BootResume::Splash || paintedFaceWake);
   WakeTiming::mark(WakeTiming::Stage::DisplayReady);
 
-  // Start the wallpaper blank NOW, before the button-ladder settle below, and let the
+  // Start the blank NOW, before the button-ladder settle below, and let the
   // panel drive its waveform while the settle waits. The blank is a full pass — 710 ms on
   // an X3, 1809 ms on an X4 — and for most of it the chip has nothing to do but poll a
   // BUSY pin, so it is the one part of the wake that genuinely overlaps something else.
@@ -781,7 +782,7 @@ void setup() {
   // stays untouched until the refresh completes, and the settle loop only reads buttons.
   // waitRefreshComplete() runs before anything draws again.
   bool asyncBlankInFlight = false;
-  if (wallpaperWake && SETTINGS.wakeStraightToBook) {
+  if (paintedFaceWake && SETTINGS.wakeStraightToBook) {
     renderer.clearScreen();
     renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
     asyncBlankInFlight = true;
@@ -891,28 +892,29 @@ void setup() {
       break;
     }
     case BootResume::Splash:
-      // Waking from a wallpaper sleep face never redraws the wallpaper. The sleep screen
-      // itself is untouched — the wallpaper is still what the panel shows all night — but
-      // the unlock does not decode it a second time. Re-reading the .pxc and re-dithering
-      // 384,000 pixels measured at 3.3-3.7s of a ~4.7s wake on an X3 (lector.exp.9), and
-      // every one of those pixels is covered by the book page moments later.
+      // Waking from a painted sleep face never redraws that face. The sleep screen itself
+      // is untouched — it is still what the panel shows all night — but the unlock does
+      // not draw it a second time. Re-reading the .pxc and re-dithering 384,000 pixels
+      // measured at 3.3-3.7s of a ~4.7s wake on an X3 (lector.exp.9), and the crest face
+      // redrew its own splash for a pass the activity then painted over; every pixel of
+      // either is covered by the book page moments later.
       //
       // So: blank the framebuffer, draw the unlock banners into it if they are wanted,
       // and put that up with one FULL pass.
       //
-      // The blank is not optional and not decoration. A wallpaper is arbitrary content,
+      // The blank is not optional and not decoration. A sleep face is arbitrary content,
       // and a differential waveform only drives the pixels that changed — paint a page
-      // straight over a wallpaper and the wallpaper stays in the page, which is exactly
-      // what the first build of this path did (device photo, 0.15.0). FAST_REFRESH cannot
-      // stand in for FULL_REFRESH here either: its custom LUT nudges changed pixels with a
-      // short waveform and does not reset the ink, so dark wallpaper survives it. Only the
+      // straight over it and the sleep face stays in the page, which is exactly what the
+      // first build of this path did (device photo, 0.15.0). FAST_REFRESH cannot stand in
+      // for FULL_REFRESH here either: its custom LUT nudges changed pixels with a short
+      // waveform and does not reset the ink, so dark ink survives it. Only the
       // complete waveform over a blank buffer truly clears the panel, and only then may
       // the reader's own first paint take the cheap differential path.
       //
       // The blank also doubles as the loading face when the banners are off: the screen
       // goes blank the moment the wake starts, while the button is still held, so there IS
       // a visible answer to the press before the page arrives.
-      if (wallpaperWake) {
+      if (paintedFaceWake) {
         if (asyncBlankInFlight) {
           // Already issued before the settle window and running on the panel since. All
           // that is left is to let it finish; whatever the settle cost has come off it.
@@ -924,7 +926,7 @@ void setup() {
         bool bannersDrawn = false;
         renderer.clearScreen();
         if (!SETTINGS.wakeStraightToBook) {
-          // Banners wanted: they now sit on a blank page instead of over the wallpaper.
+          // Banners wanted: they now sit on a blank page instead of over the sleep face.
           // They cost only the draw — the FULL pass below happens either way.
           drawUnlockBanners(renderer);
           bannersDrawn = true;
@@ -934,8 +936,9 @@ void setup() {
         allowFastInitialReaderRefresh = true;
         break;
       }
-      // goToBoot() runs BootActivity::onEnter inline (no current activity yet), and that
-      // paint is blocking, so the splash is already on the panel when this returns.
+      // Not a deep-sleep wake: a flash, a USB boot, a plain restart. goToBoot() runs
+      // BootActivity::onEnter inline (no current activity yet), and that paint is
+      // blocking, so the splash is already on the panel when this returns.
       activityManager.goToBoot();
       break;
   }

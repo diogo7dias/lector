@@ -74,9 +74,10 @@ the normal half-second hold, and the double-click action works as bound.
 
 To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
 
-Boot, the plain sleep screen and the unlock screen all show one of six engraved crests
-between the two banners. The sleep screen picks one at random, and waking redraws that same
-crest rather than swapping it under you.
+Boot and the plain sleep screen show one of six engraved crests between the two banners,
+picked at random each time the device sleeps. Waking does not redraw it: the unlock clears
+the panel in one pass and goes straight to the screen you asked for, so no crest sits
+between the button press and the page.
 
 ### Battery
 
