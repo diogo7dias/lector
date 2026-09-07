@@ -20,8 +20,10 @@
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "SilentRestart.h"
+#include "SyncDecision.h"
 #include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
+#include "util/KOReaderSyncMessage.h"
 
 namespace {
 std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method) {
@@ -79,7 +81,7 @@ void KOReaderSyncActivity::ensureEpubLoaded() {
   }
 }
 
-void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
+void KOReaderSyncActivity::applyRemoteProgress(int spineIndex, int page) {
   // epub is guaranteed non-null here: ensureEpubLoaded() was called in performSync() before
   // SHOWING_RESULT state is entered, and this method is only called from that state.
   assert(epub);
@@ -96,7 +98,16 @@ void KOReaderSyncActivity::saveProgressAndReturn(int spineIndex, int page) {
     requestUpdate(true);
     return;
   }
-  returnToReader();
+  // Moving the reader's position is the one destructive thing a sync does, so
+  // it is never silent: say it happened, then return to the book the way an
+  // upload does.
+  {
+    RenderLock lock(*this);
+    state = SYNC_COMPLETE;
+    appliedRemote = true;
+  }
+  markAutoReturn();
+  requestUpdate(true);
 }
 
 void KOReaderSyncActivity::returnToReader() { activityManager.goToReader(epubPath); }
@@ -221,7 +232,7 @@ void KOReaderSyncActivity::performSync() {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
-      statusMessage = KOReaderSyncClient::errorString(result);
+      statusMessage = koSyncErrorText(result);
     }
     requestUpdate(true);
     return;
@@ -234,7 +245,7 @@ void KOReaderSyncActivity::performSync() {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
-      statusMessage = "";
+      statusMessage = tr(STR_SYNC_BOOK_UNREADABLE);
     }
     requestUpdate(true);
     return;
@@ -255,17 +266,16 @@ void KOReaderSyncActivity::performSync() {
   }
 
   if (smartSyncEnabled()) {
-    static constexpr float SAME_PROGRESS_EPSILON = 0.001f;  // 0.1 percentage points
-    const float delta = localProgress.percentage - remoteProgress.percentage;
-    LOG_DBG("KOSync", "Smart decision: doc=%s local=%.6f remote=%.6f delta=%.6f remoteXpath=%s mapped=%d/%d",
-            documentHash.c_str(), localProgress.percentage, remoteProgress.percentage, delta,
+    const kosync::MergeChoice choice = kosync::decideMerge(localProgress.percentage, remoteProgress.percentage);
+    LOG_DBG("KOSync", "Smart decision: doc=%s local=%.6f remote=%.6f choice=%d remoteXpath=%s mapped=%d/%d",
+            documentHash.c_str(), localProgress.percentage, remoteProgress.percentage, static_cast<int>(choice),
             remoteProgress.progress.c_str(), remotePosition.spineIndex, remotePosition.pageNumber);
-    if (std::fabs(delta) <= SAME_PROGRESS_EPSILON) {
+    if (choice == kosync::MergeChoice::ALREADY_SYNCED) {
       completeAlreadySynced();
       return;
     }
 
-    if (delta > 0) {
+    if (choice == kosync::MergeChoice::UPLOAD_LOCAL) {
       // Alternate hashes are only probes for newer remote state. Keep uploads
       // on the user's configured matching method so its primary record heals.
       documentHash = primaryHash;
@@ -273,7 +283,7 @@ void KOReaderSyncActivity::performSync() {
       return;
     }
 
-    saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+    applyRemoteProgress(remotePosition.spineIndex, remotePosition.pageNumber);
     return;
   }
 
@@ -351,7 +361,7 @@ void KOReaderSyncActivity::performUpload() {
     {
       RenderLock lock(*this);
       state = SYNC_FAILED;
-      statusMessage = KOReaderSyncClient::errorString(result);
+      statusMessage = koSyncErrorText(result);
     }
     requestUpdate();
     return;
@@ -460,8 +470,10 @@ UiStatusActivity::StatusView KOReaderSyncActivity::statusView() const {
       break;
     case UPLOAD_COMPLETE:
     case SYNC_COMPLETE:
-      view.lines = {state == UPLOAD_COMPLETE ? tr(STR_UPLOAD_SUCCESS) : tr(STR_ALREADY_SYNCED), nullptr, nullptr,
-                    nullptr};
+      view.lines = {state == UPLOAD_COMPLETE ? tr(STR_UPLOAD_SUCCESS)
+                    : appliedRemote          ? tr(STR_REMOTE_APPLIED)
+                                             : tr(STR_ALREADY_SYNCED),
+                    nullptr, nullptr, nullptr};
       view.confirmHint = tr(STR_DONE);
       break;
     case SYNC_FAILED:
@@ -506,7 +518,7 @@ void KOReaderSyncActivity::onConfirmButton() {
 void KOReaderSyncActivity::onChoiceActivated(const int index) {
   if (state != SHOWING_RESULT) return;
   if (index == 0) {
-    saveProgressAndReturn(remotePosition.spineIndex, remotePosition.pageNumber);
+    applyRemoteProgress(remotePosition.spineIndex, remotePosition.pageNumber);
     return;
   }
   performUpload();
