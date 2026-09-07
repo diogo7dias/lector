@@ -29,6 +29,7 @@
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
+#include "util/HoldRepeat.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -559,8 +560,8 @@ void FileBrowserActivity::loop() {
   // can move the selection or open a file underneath it.
   if (fileActionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
-  // Rows have variable heights now, so a fixed items-per-page is meaningless. The page jump
-  // steps by however many rows the last draw actually fit on screen.
+  // Rows have variable heights now, so a fixed items-per-page is meaningless.
+  // The swipe jump steps by however many rows the last draw actually fit.
   const int pageItems = std::max(1, lastVisibleIdx - firstVisibleIdx + 1);
 
   auto activateSelected = [this](const bool holdAction) {
@@ -742,7 +743,10 @@ void FileBrowserActivity::loop() {
   auto followSelection = [this, listSize] {
     const int index = static_cast<int>(selectorIndex);
     if (index > lastVisibleIdx) {
-      scrollOffset = std::min(scrollOffset + 1, listSize - 1);
+      // By however far the selection ran past the window, not by one: a held key
+      // now moves several rows per repeat, and a one-row nudge would leave the
+      // cursor off the bottom of the screen for the rest of the hold.
+      scrollOffset = std::min(scrollOffset + (index - lastVisibleIdx), listSize - 1);
     }
     if (index < firstVisibleIdx) {
       scrollOffset = index;
@@ -762,14 +766,23 @@ void FileBrowserActivity::loop() {
     requestUpdate();
   });
 
+  // Rows per repeat with the shared ramp, clamped at the ends — the library is
+  // the longest list on the device and a page-per-repeat hold was unaimable. A
+  // swipe arrives through the same callback and stays a page.
   buttonNavigator.onNextContinuous([this, listSize, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    selectorIndex = ButtonNavigator::swipeDrivenPass()
+                        ? ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
+                        : ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
+                                                     holdRepeatStep(buttonNavigator.repeats()));
     followSelection();
     requestUpdate();
   });
 
   buttonNavigator.onPreviousContinuous([this, listSize, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems);
+    selectorIndex = ButtonNavigator::swipeDrivenPass()
+                        ? ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
+                        : ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
+                                                     -holdRepeatStep(buttonNavigator.repeats()));
     followSelection();
     requestUpdate();
   });
@@ -810,10 +823,10 @@ void FileBrowserActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
 
   std::string folderName =
-      (mode == Mode::PickFirmware)   ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
-      : (mode == Mode::PickFolder)   ? std::string(tr(STR_MOVE_TO_FOLDER))
-                                     : ((basepath == "/") ? std::string(tr(STR_SD_CARD))
-                                                          : basepath.substr(basepath.rfind('/') + 1));
+      (mode == Mode::PickFirmware) ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
+      : (mode == Mode::PickFolder)
+          ? std::string(tr(STR_MOVE_TO_FOLDER))
+          : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
   // A folder too big to list in full must say so. Showing a silently short listing
   // would read as missing files.
   if (files.truncated()) {
@@ -871,12 +884,11 @@ void FileBrowserActivity::render(RenderLock&&) {
       listEmpty ? ""
                 : (rowKindAt(selectedRow) != RowKind::Entry ? tr(STR_SELECT)
                                                             : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN)));
-  const auto labels =
-      mode == Mode::PickFolder
-          ? mappedInput.mapLabels(backLabel, listEmpty ? "" : tr(STR_OPEN), tr(STR_MOVE_HERE),
-                                  listEmpty ? "" : tr(STR_DIR_DOWN))
-          : mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
-                                  listEmpty ? "" : tr(STR_DIR_DOWN));
+  const auto labels = mode == Mode::PickFolder
+                          ? mappedInput.mapLabels(backLabel, listEmpty ? "" : tr(STR_OPEN), tr(STR_MOVE_HERE),
+                                                  listEmpty ? "" : tr(STR_DIR_DOWN))
+                          : mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
+                                                  listEmpty ? "" : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
   // The browser is commonly reached straight from screens that paint only in FAST
@@ -892,9 +904,8 @@ void FileBrowserActivity::render(RenderLock&&) {
 }
 
 void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
-  startActivityForResult(
-      std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", Mode::PickFolder),
-      [this, fullPath](const ActivityResult& result) { onMoveDestinationResult(fullPath, result); });
+  startActivityForResult(std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", Mode::PickFolder),
+                         [this, fullPath](const ActivityResult& result) { onMoveDestinationResult(fullPath, result); });
 }
 
 void FileBrowserActivity::onMoveDestinationResult(const std::string& fullPath, const ActivityResult& result) {
