@@ -32,13 +32,23 @@ inline bool shouldRetry(const Failure failure, const int attemptsMade) {
 
 // Wait between attempts, so a router still finishing its own recovery is not
 // asked again the same instant.
-inline unsigned long backoffMs(const int attemptsMade) {
-  return static_cast<unsigned long>(attemptsMade) * 1000UL;
-}
+inline unsigned long backoffMs(const int attemptsMade) { return static_cast<unsigned long>(attemptsMade) * 1000UL; }
 
 // esp_ota_write appends, so bytes already written stay written and the next
 // attempt asks the server for the rest. Nothing written means nothing to resume.
 inline size_t resumeOffset(const size_t bytesWritten) { return bytesWritten; }
+
+// Whether a transfer that ended without an error actually delivered the image.
+// A connection can close cleanly in the middle of a body — a CDN dropping a
+// keep-alive, a chunked response cut short — and that reads to the HTTP layer
+// as a completed request. Counting it as installed hands commit() a truncated
+// image, which it can only reject as corrupt after the whole download has been
+// paid for. Treated as a dropped download instead, it resumes from where it
+// stopped. An expected size of 0 means the server never said (chunked), so
+// there is nothing to compare and the transfer is taken at its word.
+inline bool isShortTransfer(const size_t bytesWritten, const size_t expectedSize) {
+  return expectedSize > 0 && bytesWritten < expectedSize;
+}
 
 // The image header carries its chip id at offset 12. runningPartitionChipId()
 // reports 0xFFFF when it cannot read the device's own id, and an unknown device

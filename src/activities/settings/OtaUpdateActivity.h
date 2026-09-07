@@ -23,6 +23,17 @@ class OtaUpdateActivity : public UiStatusActivity {
   static constexpr unsigned int UNINITIALIZED_PERCENTAGE = 111;
 
   State state = WIFI_SELECTION;
+  // Which step the FAILED screen would repeat. A check that never found a
+  // release has nothing to install, so its Retry has to run the check again;
+  // a download that died mid-image resumes the install it already started.
+  enum class FailedStep { CHECK, INSTALL };
+  FailedStep failedStep = FailedStep::CHECK;
+  // Attempts the reader has asked for by hand. Unbounded on purpose: the
+  // bounded retry lives inside one install (OtaRetryPolicy), and a reader who
+  // keeps pressing Retry after moving closer to the router must not be told no.
+  // Only ever shown, never used as a limit.
+  unsigned manualRetries = 0;
+  std::string retryLine;
   // Install whatever the update server offers, whatever its version and
   // whichever firmware it is. Set from the start by the "Install Other
   // Firmware" entry, or from the "no update" screen. This is the only way off
@@ -50,6 +61,14 @@ class OtaUpdateActivity : public UiStatusActivity {
   // Maps an updater error onto the optional detail line under "Update failed".
   static const char* detailFor(OtaUpdater::OtaUpdaterError error);
   void runUpdateInstall();
+  // Runs the check, then the install, from the FAILED screen. The Wi-Fi link is
+  // still up (onExit is what tears it down), so a retry costs only the step
+  // that failed.
+  void retryFailedStep();
+  // Fills failedDetail/failedExtra/failedHint and moves to FAILED. One place,
+  // so the check path and the install path cannot describe the same error
+  // differently or forget to record which step to repeat.
+  void enterFailed(OtaUpdater::OtaUpdaterError error, FailedStep step);
 
  public:
   explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,

@@ -13,6 +13,7 @@
 #include "components/StatusStack.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "util/HoldRepeat.h"
 #include "util/QrUtils.h"
 
 namespace fui = freeink::ui;
@@ -189,12 +190,11 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
   // The band is finger-sized whatever the theme's row height is: a capsule you
   // drag is not a row you tap.
   const int16_t sliderControl = view.showSlider ? std::max(theme.rowHeight, theme.minTouchSize) : 0;
-  const int16_t sliderHeight =
-      view.showSlider ? static_cast<int16_t>(lineHeight + theme.spaceMd + sliderControl) : 0;
+  const int16_t sliderHeight = view.showSlider ? static_cast<int16_t>(lineHeight + theme.spaceMd + sliderControl) : 0;
 
   const status_stack::Content content{lineCount, qrSize, qrLineCount, sliderHeight, view.showProgress};
-  int16_t y = view.linesAtTop ? body.y
-                              : static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, content));
+  int16_t y =
+      view.linesAtTop ? body.y : static_cast<int16_t>(status_stack::topFor(stack, body.y, body.height, content));
 
   // The band leads: its caption already carries the readout, so the lines under
   // it are the ones explaining what moves it.
@@ -552,13 +552,19 @@ bool UiStatusActivity::navigateList() {
   };
   listButtons_.onNextRelease([&] { step(ButtonNavigator::nextIndex(listNav_.selected, listCount_)); });
   listButtons_.onPreviousRelease([&] { step(ButtonNavigator::previousIndex(listNav_.selected, listCount_)); });
-  // Page by the rows the last build actually drew, not by a fixed-height
-  // estimate: with a wrapped label the estimate overshoots and the rows between
-  // pages would never be shown.
-  listButtons_.onNextContinuous(
-      [&] { step(ButtonNavigator::nextPageIndex(listNav_.selected, listCount_, listNav_.pageRows())); });
-  listButtons_.onPreviousContinuous(
-      [&] { step(ButtonNavigator::previousPageIndex(listNav_.selected, listCount_, listNav_.pageRows())); });
+  // Rows per repeat, ramping via holdRepeatStep, and clamped at the ends: same
+  // hold behaviour as UiListActivity, for the same reason (see there). A swipe
+  // comes through here too and stays a page.
+  listButtons_.onNextContinuous([&] {
+    step(ButtonNavigator::swipeDrivenPass()
+             ? ButtonNavigator::nextPageIndex(listNav_.selected, listCount_, listNav_.pageRows())
+             : ButtonNavigator::heldIndex(listNav_.selected, listCount_, holdRepeatStep(listButtons_.repeats())));
+  });
+  listButtons_.onPreviousContinuous([&] {
+    step(ButtonNavigator::swipeDrivenPass()
+             ? ButtonNavigator::previousPageIndex(listNav_.selected, listCount_, listNav_.pageRows())
+             : ButtonNavigator::heldIndex(listNav_.selected, listCount_, -holdRepeatStep(listButtons_.repeats())));
+  });
   return moved;
 }
 

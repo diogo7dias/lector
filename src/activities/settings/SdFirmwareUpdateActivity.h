@@ -56,6 +56,15 @@ class SdFirmwareUpdateActivity : public UiStatusActivity {
   std::string errorMessage;
   std::string detailMessage;
   std::string hintMessage;
+  // Manual retries of the same image from the failure screen. Unbounded: a card
+  // reseated between attempts deserves as many tries as the reader wants.
+  // Shown, never used as a limit.
+  unsigned manualRetries = 0;
+  std::string retryLine;
+  // True when the failure happened with a file already picked, so Retry can
+  // re-flash it instead of sending the reader back to the browser. A failure
+  // before that (nothing picked) has nothing to repeat.
+  bool canRetryFlash = false;
 
   // True when the write has moved a whole percent since the last repaint.
   bool percentAdvanced();

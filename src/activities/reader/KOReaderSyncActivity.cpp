@@ -6,7 +6,6 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
-#include <esp_sntp.h>
 #include <esp_wifi.h>
 
 #include <algorithm>
@@ -39,31 +38,6 @@ const char* matchMethodName(const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? "filename" : "binary";
 }
 
-void syncTimeWithNTP() {
-  // Stop SNTP if already running (can't reconfigure while running)
-  if (esp_sntp_enabled()) {
-    esp_sntp_stop();
-  }
-
-  // Configure SNTP
-  esp_sntp_setoperatingmode(ESP_SNTP_OPMODE_POLL);
-  esp_sntp_setservername(0, "pool.ntp.org");
-  esp_sntp_init();
-
-  // Wait for time to sync (with timeout)
-  int retry = 0;
-  const int maxRetries = 50;  // 5 seconds max
-  while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && retry < maxRetries) {
-    vTaskDelay(100 / portTICK_PERIOD_MS);
-    retry++;
-  }
-
-  if (retry < maxRetries) {
-    LOG_DBG("KOSync", "NTP time synced");
-  } else {
-    LOG_DBG("KOSync", "NTP sync timeout, using fallback");
-  }
-}
 }  // namespace
 
 void KOReaderSyncActivity::ensureEpubLoaded() {
@@ -139,7 +113,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   {
     RenderLock lock(*this);
     state = SYNCING;
-    statusMessage = tr(STR_SYNCING_TIME);
+    statusMessage = tr(STR_CALC_HASH);
   }
   requestUpdate(true);
 
@@ -147,15 +121,6 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
   // introduce multi-second network stalls that surface as HTTP timeouts. WiFi is torn
   // down when this activity exits. Upstream #3233.
   WiFi.setSleep(false);
-
-  // Sync time with NTP before making API requests
-  syncTimeWithNTP();
-
-  {
-    RenderLock lock(*this);
-    statusMessage = tr(STR_CALC_HASH);
-  }
-  requestUpdate(true);
 
   performSync();
 }

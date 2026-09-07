@@ -30,7 +30,8 @@ class FileBrowserActivity final : public Activity {
   // Opens the delete confirmation for one entry.
   void confirmDelete(const std::string& fullPath);
 
-  ButtonNavigator buttonNavigator;
+  // List repeat rates, not the page-flick default: see UiListActivity.h.
+  ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
   // Holding Confirm on a file opens this: send it to a nearby reader, or delete it.
   OptionPopup fileActionPopup;
 

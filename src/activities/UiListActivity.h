@@ -99,7 +99,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Selection + viewport (selected/top/visibleRows/followOnBuild). Access via
   // activeNav() in shared code; `nav` is the single-list default storage.
   freeink::ui::ListNav nav;
-  ButtonNavigator buttonNavigator;
+  // List repeat rates, not the {500, 500} page-flick default: holding used to
+  // jump a whole page per repeat, which is ~14 rows twice a second and reads as
+  // the list throwing itself past whatever you were aiming at.
+  ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
 
  private:
   static void screenTrampoline(UiScreen& screen, void* user);

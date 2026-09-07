@@ -41,6 +41,7 @@ void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback
   // A release that ends a repeat run moves nothing: the hold already did the moving.
   if (lastContinuousNavTime == 0) callback();
   lastContinuousNavTime = 0;
+  repeatIndex_ = 0;
 }
 
 void ButtonNavigator::onNextStep(const Callback& callback) { onStep(getNextButtons(), callback); }
@@ -75,7 +76,10 @@ void ButtonNavigator::onStep(const Buttons& buttons, const Callback& callback) {
   const bool released = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
     return mappedInput != nullptr && mappedInput->wasReleased(button);
   });
-  if (released) lastContinuousNavTime = 0;
+  if (released) {
+    lastContinuousNavTime = 0;
+    repeatIndex_ = 0;
+  }
 }
 
 // A body swipe drives the same movement the nav buttons do, so every list screen
@@ -87,7 +91,8 @@ bool ButtonNavigator::swipeMatches(const Buttons& buttons) {
   if (mappedInput == nullptr) return false;
   const auto scroll = mappedInput->wasListScrollSwipe();
   if (scroll == list_swipe::Scroll::None) return false;
-  const bool wantsNext = std::find(buttons.begin(), buttons.end(), MappedInputManager::Button::NavNext) != buttons.end();
+  const bool wantsNext =
+      std::find(buttons.begin(), buttons.end(), MappedInputManager::Button::NavNext) != buttons.end();
   const bool wantsPrevious =
       std::find(buttons.begin(), buttons.end(), MappedInputManager::Button::NavPrevious) != buttons.end();
   return scroll == list_swipe::Scroll::PageDown ? wantsNext : wantsPrevious;
@@ -105,6 +110,9 @@ void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callb
   if (isPressed) {
     callback();
     lastContinuousNavTime = millis();
+    // Counted after the callback, so the first repeat of a hold is index 0 and
+    // holdRepeatStep() starts it fine-grained.
+    ++repeatIndex_;
   }
 }
 
@@ -130,6 +138,13 @@ int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems)
   // Calculate the previous index with wrap-around
   return (currentIndex + totalItems - 1) % totalItems;
 }
+
+int ButtonNavigator::heldIndex(const int currentIndex, const int totalItems, const int delta) {
+  if (totalItems <= 0) return 0;
+  return std::clamp(currentIndex + delta, 0, totalItems - 1);
+}
+
+bool ButtonNavigator::swipeDrivenPass() { return swipeMatches(getNextButtons()) || swipeMatches(getPreviousButtons()); }
 
 int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
   if (totalItems <= 0 || itemsPerPage <= 0) return 0;

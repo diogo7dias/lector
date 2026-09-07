@@ -6,8 +6,8 @@
 
 #include "activities/Activity.h"
 #include "components/UiAppHost.h"
-#include "util/ButtonNavigator.h"
 #include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
+#include "util/ButtonNavigator.h"
 
 // Base for the screens that report on something rather than list it: a clear, a
 // sweep, a sync, a firmware write. Every one of them is the same shape — a
@@ -232,7 +232,8 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // Selection and viewport for the list shape, plus the repeat behaviour that
   // steps a row on a press and a page on a hold.
   freeink::ui::ListNav listNav_;
-  ButtonNavigator listButtons_;
+  // List repeat rates, not the page-flick default: see UiListActivity.h.
+  ButtonNavigator listButtons_{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
   int listCount_ = 0;
   bool navigateList();
   // Choices the last build drew, so the loop task can step the selection

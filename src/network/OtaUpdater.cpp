@@ -200,11 +200,31 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     bool wrongChip = false;
     bool flashOk = true;
     bool replayedFromStart = false;
+    // Set once the replay has actually been folded into the partition, so the
+    // rewind happens exactly once per attempt.
+    bool replayHandled = false;
     const size_t resumeFrom = ota_retry::resumeOffset(processedSize);
 
     const bool fetchOk = HttpDownloader::fetchUrl(
         otaUrl,
         [&](const uint8_t* data, size_t len) {
+          // A server that answered a ranged request with the whole body starts
+          // replaying at byte 0. HttpDownloader raises the flag before handing
+          // over the first chunk, so the rewind has to happen HERE, in front of
+          // the write. Doing it after the attempt (as this loop used to) let the
+          // replayed image be appended to the partial already in the partition:
+          // the partition then held the head of the image followed by a second
+          // whole copy, which commit() could only reject as corrupt after paying
+          // for the entire download, and on a large image could run past the end
+          // of the slot before it ever got that far.
+          if (replayedFromStart && !replayHandled) {
+            replayHandled = true;
+            LOG_ERR("OTA", "Server ignored the Range and replayed from 0; discarding %zu partial bytes", processedSize);
+            installer.restart();
+            processedSize = 0;
+            lastReportedPct = -1;
+            hdrLen = 0;  // the header arrives again with the replayed body
+          }
           if (hdrLen < sizeof(hdr)) {
             const size_t take = std::min(len, sizeof(hdr) - hdrLen);
             std::memcpy(hdr + hdrLen, data, take);
@@ -246,6 +266,11 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
       failure = ota_retry::Failure::WRONG_CHIP;
     } else if (!flashOk) {
       failure = ota_retry::Failure::FLASH_WRITE;
+    } else if (fetchOk && ota_retry::isShortTransfer(processedSize, totalSize)) {
+      // Ended cleanly, short of the image: resumable, so say so rather than
+      // committing a truncated partition and calling it corrupt.
+      LOG_ERR("OTA", "Transfer ended at %zu of %zu bytes", processedSize, totalSize);
+      failure = ota_retry::Failure::DOWNLOAD;
     } else if (fetchOk) {
       installed = true;
       break;
@@ -254,16 +279,6 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     }
 
     if (!ota_retry::shouldRetry(failure, attempt)) break;
-
-    // A server that ignored the Range replayed the whole body, so the partition
-    // holds the image twice over from here on. Start it again rather than write
-    // a second copy onto the first.
-    if (replayedFromStart) {
-      installer.restart();
-      processedSize = 0;
-      lastReportedPct = -1;
-      hdrLen = 0;
-    }
 
     LOG_ERR("OTA", "Attempt %d stopped at %zu bytes; retrying", attempt, processedSize);
     delay(ota_retry::backoffMs(attempt));

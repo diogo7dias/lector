@@ -7,7 +7,9 @@
 
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
 #include "fontIds.h"
+#include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
 
@@ -123,17 +125,34 @@ void UiListActivity::navigateButtons() {
   buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
   buttonNavigator.onPreviousRelease(
       [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
-  // Page by the rows the last build actually drew (pageRows), not the
-  // fixed-height visibleRows estimate: with wrapped labels the estimate
-  // overshoots and rows between pages would never be shown.
-  buttonNavigator.onNextContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::nextPageIndex(n.selected, count, n.pageRows())); });
-  buttonNavigator.onPreviousContinuous(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousPageIndex(n.selected, count, n.pageRows())); });
+  // A hold travels in ROWS, not pages. Paging per repeat moved ~14 rows twice a
+  // second, so a held key crossed a long list far faster than the panel could
+  // show it and there was no way to stop on a row. One row per repeat at the
+  // list interval is aimable, and holdRepeatStep() coarsens it to five once the
+  // hold has plainly stopped being a nudge — the same ramp the numeric settings
+  // use, so there is one hold feel in the firmware rather than two.
+  // Clamped rather than wrapped: a hold that wraps past the end never ends.
+  //
+  // A swipe arrives through this same callback and stays a page: it is a travel
+  // gesture, and a finger that moved one row would be useless.
+  buttonNavigator.onNextContinuous([this, count, &n] {
+    moveSelectionTo(ButtonNavigator::swipeDrivenPass()
+                        ? ButtonNavigator::nextPageIndex(n.selected, count, n.pageRows())
+                        : ButtonNavigator::heldIndex(n.selected, count, holdRepeatStep(buttonNavigator.repeats())));
+  });
+  buttonNavigator.onPreviousContinuous([this, count, &n] {
+    moveSelectionTo(ButtonNavigator::swipeDrivenPass()
+                        ? ButtonNavigator::previousPageIndex(n.selected, count, n.pageRows())
+                        : ButtonNavigator::heldIndex(n.selected, count, -holdRepeatStep(buttonNavigator.repeats())));
+  });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
   int16_t rowHeight = screen.theme().rowHeight;
+  // Setting name and value at the same size and weight on the keys-only boards.
+  // Done here rather than in each screen: every list goes through this call, so
+  // one place cannot be forgotten by a new one.
+  applyKeysOnlyValueStyle(props, screen.theme());
   if (!mappedInput.hasTouch()) {
     // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
     // height instead of FreeInkUI's touch-target-sized default, so lists fit

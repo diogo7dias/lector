@@ -24,6 +24,7 @@ class DictionaryDefinitionActivity final : public Activity {
         htmlDefinition(htmlDefinition) {}
 
   void onEnter() override;
+  void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
   // Part of the reading flow (opened from the page mid-read), so it follows

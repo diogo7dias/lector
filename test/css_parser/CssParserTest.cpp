@@ -81,6 +81,27 @@ TEST_F(CssParserTest, BolderKeywordMapsToBold) {
   EXPECT_EQ(style.textIndent.unit, CssUnit::Em);
 }
 
+TEST_F(CssParserTest, ImportantIsStrippedFromEveryDeclaration) {
+  // Only `display` and `direction` used to strip the flag, so every other
+  // property compared against a value that still carried "!important" and was
+  // discarded. Books that mark their base styles important lost them all.
+  CssParser parser(cachePath());
+  loadCss(parser,
+          ".a { text-align: center !important; font-weight: bold !important;\n"
+          "     font-style: italic !important; text-indent: 1.5em !important;\n"
+          "     display: none !important; direction: rtl !important; }\n");
+
+  const CssStyle style = parser.resolveStyle("p", "a");
+  EXPECT_EQ(style.textAlign, CssTextAlign::Center);
+  EXPECT_EQ(style.fontWeight, CssFontWeight::Bold);
+  EXPECT_EQ(style.fontStyle, CssFontStyle::Italic);
+  ASSERT_TRUE(style.hasTextIndent());
+  EXPECT_FLOAT_EQ(style.textIndent.value, 1.5f);
+  EXPECT_EQ(style.textIndent.unit, CssUnit::Em);
+  EXPECT_EQ(style.display, CssDisplay::None);
+  EXPECT_EQ(style.direction, CssTextDirection::Rtl);
+}
+
 TEST_F(CssParserTest, SelectorsAreCaseInsensitive) {
   CssParser parser(cachePath());
   loadCss(parser,

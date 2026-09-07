@@ -159,6 +159,17 @@ void ChapterHtmlSlimParser::applyTextDecorationToEntry(StyleStackEntry& entry, c
   }
 }
 
+void ChapterHtmlSlimParser::applyVerticalAlignToEntry(StyleStackEntry& entry, const CssStyle& css) {
+  if (!css.hasVerticalAlign()) return;
+  if (css.verticalAlign == CssVerticalAlign::Super) {
+    entry.hasSup = true;
+    entry.sup = true;
+  } else if (css.verticalAlign == CssVerticalAlign::Sub) {
+    entry.hasSub = true;
+    entry.sub = true;
+  }
+}
+
 // <table>, <tr> and <td> carry styles that their cell text must inherit, but none of them
 // opens a text block of its own, so the styles go on the inline stack and pop with the
 // element's depth like any other wrapper.
@@ -1311,6 +1322,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       entry.hasTextDecoration = true;
       entry.textDecoration = CssTextDecoration::Underline;
       applyDirectionToEntry(entry, cssStyle);
+      applyVerticalAlignToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
 
@@ -1497,15 +1509,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
         entry.hasTextAlign = true;
         entry.textAlign = cssStyle.textAlign;
       }
-      if (cssStyle.hasVerticalAlign()) {
-        if (cssStyle.verticalAlign == CssVerticalAlign::Super) {
-          entry.hasSup = true;
-          entry.sup = true;
-        } else if (cssStyle.verticalAlign == CssVerticalAlign::Sub) {
-          entry.hasSub = true;
-          entry.sub = true;
-        }
-      }
+      applyVerticalAlignToEntry(entry, cssStyle);
       self->inlineStyleStack.push_back(entry);
       self->updateEffectiveInlineStyle();
     }

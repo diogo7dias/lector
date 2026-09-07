@@ -45,6 +45,16 @@ void DictionaryDefinitionActivity::onEnter() {
   requestUpdate();
 }
 
+void DictionaryDefinitionActivity::onExit() {
+  Activity::onExit();
+  // The styled path prewarms SD glyph caches for the definition's own fonts.
+  // The reader is still stacked underneath and rebuilds what it needs, so
+  // handing those blocks back keeps a long lookup session from starving it.
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+  }
+}
+
 DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
