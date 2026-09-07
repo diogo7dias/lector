@@ -200,14 +200,15 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
 
   const int16_t inset = theme.spaceSm;
   const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
-  const fui::Rect line{static_cast<int16_t>(box.x + inset),
-                       static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
+  const fui::Rect line{static_cast<int16_t>(box.x + inset), static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
                        static_cast<int16_t>(box.width - inset * 2), lineHeight};
 
+  // Keys-only rows use one regular face for both halves. The touch grid keeps
+  // its compact label/value hierarchy in buildCell().
   fui::TextStyle name = theme.bodyText;
   name.align = fui::TextAlign::Left;
   name.inverted = selected;
-  fui::TextStyle value = theme.smallText;
+  fui::TextStyle value = theme.bodyText;
   value.align = fui::TextAlign::Right;
   value.inverted = selected;
   if (cellName(index) != nullptr) target.text(line, cellName(index), name);
