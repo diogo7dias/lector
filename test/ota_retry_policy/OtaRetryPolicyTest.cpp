@@ -58,3 +58,37 @@ TEST(OtaRetryPolicy, AMatchingChipIsAccepted) {
 TEST(OtaRetryPolicy, AMismatchedChipIsRefused) {
   EXPECT_TRUE(isWrongChip(0x0009, 0x0005));
 }
+
+// --- a transfer that ended clean but short ---------------------------------
+//
+// A connection can close in the middle of a body and still look like a
+// completed request to the HTTP layer. Committing that hands the bootloader a
+// truncated image; it has to be treated as a resumable drop instead.
+
+TEST(OtaRetryPolicy, ATransferThatStoppedShortOfTheImageIsNotComplete) {
+  EXPECT_TRUE(isShortTransfer(1000, 4096));
+  EXPECT_TRUE(isShortTransfer(0, 4096));
+}
+
+TEST(OtaRetryPolicy, AFullTransferIsComplete) {
+  EXPECT_FALSE(isShortTransfer(4096, 4096));
+}
+
+TEST(OtaRetryPolicy, MoreBytesThanExpectedIsNotCalledShort) {
+  // Not this predicate's call to make: commit() validates the image itself.
+  EXPECT_FALSE(isShortTransfer(5000, 4096));
+}
+
+TEST(OtaRetryPolicy, AServerThatNeverGaveASizeIsTakenAtItsWord) {
+  // Chunked responses carry no Content-Length, so there is nothing to compare
+  // and a completed transfer must not be failed on suspicion.
+  EXPECT_FALSE(isShortTransfer(0, 0));
+  EXPECT_FALSE(isShortTransfer(4096, 0));
+}
+
+TEST(OtaRetryPolicy, AShortTransferIsRetriedLikeAnyOtherDrop) {
+  // It is reported as DOWNLOAD precisely so the existing resume path picks it
+  // up: the partition keeps what arrived and the next attempt asks for the rest.
+  EXPECT_TRUE(shouldRetry(Failure::DOWNLOAD, 1));
+  EXPECT_EQ(resumeOffset(1000), 1000u);
+}

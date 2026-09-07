@@ -57,6 +57,7 @@ void SdFirmwareUpdateActivity::onPickerResult(const ActivityResult& result) {
   requestUpdateAndWait();
 
   if (!validateFirmware()) {
+    canRetryFlash = true;  // the path is known; Retry re-validates and re-flashes it
     RenderLock lock(*this);
     state = State::FAILED;
     requestUpdate();
@@ -237,6 +238,12 @@ void SdFirmwareUpdateActivity::performUpdate() {
       // everything from a missing OTA slot to a bad erase.
       errorMessage = std::string(tr(STR_FIRMWARE_WRITE_FAILED)) + " (" + firmware_flash::resultName(result) + ")";
     }
+    // otadata was never switched on any of these paths, so the reader still
+    // boots the firmware it is running: retrying is safe and costs only the
+    // write it just lost.
+    canRetryFlash = true;
+    retryLine.clear();
+    if (manualRetries > 0) retryLine = "Retry attempt " + std::to_string(manualRetries);
     RenderLock lock(*this);
     state = State::FAILED;
     requestUpdate();
@@ -293,8 +300,15 @@ UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
           tr(STR_UPDATE_FAILED),
           errorMessage.empty() ? nullptr : errorMessage.c_str(),
           detailMessage.empty() ? nullptr : detailMessage.c_str(),
-          hintMessage.empty() ? nullptr : hintMessage.c_str(),
+          retryLine.empty() ? (hintMessage.empty() ? nullptr : hintMessage.c_str()) : retryLine.c_str(),
       };
+      // Retry the same image right here rather than walking back through the
+      // browser for it. Only offered once a path is known.
+      if (canRetryFlash) {
+        view.cancelLabel = tr(STR_BACK);
+        view.acceptLabel = tr(STR_RETRY);
+        view.confirmHint = tr(STR_RETRY);
+      }
       break;
     case State::PICKING:
     case State::CONFIRMING:
@@ -320,8 +334,8 @@ UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
   return view;
 }
 
-// Either button leaves a failure: in recovery mode back to the picker, because
-// a reader with no other way in has to be able to try a different image.
+// Back leaves a failure: in recovery mode back to the picker, because a reader
+// with no other way in has to be able to try a different image.
 void SdFirmwareUpdateActivity::onBackButton() {
   if (state != State::FAILED) return;
   if (recoveryMode) {
@@ -332,4 +346,38 @@ void SdFirmwareUpdateActivity::onBackButton() {
   finish();
 }
 
-void SdFirmwareUpdateActivity::onConfirmButton() { onBackButton(); }
+// Confirm retries the same image, as many times as asked. Nothing was written
+// to otadata by a failed attempt, so the running firmware is untouched and the
+// only cost of another go is the write itself. With no path picked yet there is
+// nothing to repeat, so it behaves as Back did.
+void SdFirmwareUpdateActivity::onConfirmButton() {
+  if (state != State::FAILED) return;
+  if (!canRetryFlash || firmwarePath.empty()) {
+    onBackButton();
+    return;
+  }
+  ++manualRetries;
+  LOG_INF("FW", "Manual retry %u of %s", manualRetries, firmwarePath.c_str());
+  {
+    RenderLock lock(*this);
+    state = State::VALIDATING;
+  }
+  requestUpdateAndWait();
+  // Re-validated from scratch every time: the card is removable, so a retry
+  // must not trust the last pass's verdict about the bytes on it.
+  if (!validateFirmware()) {
+    RenderLock lock(*this);
+    retryLine = "Retry attempt " + std::to_string(manualRetries);
+    state = State::FAILED;
+    requestUpdate();
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    state = State::UPDATING;
+    writtenBytes = 0;
+    lastRenderedPercent = 101;
+  }
+  requestUpdateAndWait();
+  performUpdate();
+}

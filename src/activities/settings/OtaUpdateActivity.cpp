@@ -35,25 +35,7 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   const auto res = updater.checkForUpdate(allowAnyVersion);
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update check failed: %d", res);
-    {
-      RenderLock lock(*this);
-      failedDetail = detailFor(res);
-      failedExtra.clear();
-      failedHint.clear();
-      if (res == OtaUpdater::HTTP_ERROR) {
-        failedExtra = "Server check failed";
-        failedHint = "Check Wi-Fi or update server";
-      } else if (res == OtaUpdater::OOM_ERROR) {
-        failedExtra = "Low memory for secure connection";
-        failedHint = "Restart reader and retry";
-      } else if (res == OtaUpdater::NO_UPDATE) {
-        failedExtra = "No firmware asset found in release";
-      } else if (res == OtaUpdater::JSON_PARSE_ERROR) {
-        failedExtra = "Unrecognized response from server";
-      }
-      state = FAILED;
-    }
-    requestUpdate();
+    enterFailed(res, FailedStep::CHECK);
     return;
   }
 
@@ -142,7 +124,15 @@ UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
       break;
     case FAILED:
       view.lines = {tr(STR_UPDATE_FAILED), failedDetail, failedExtra.empty() ? nullptr : failedExtra.c_str(),
-                    failedHint.empty() ? nullptr : failedHint.c_str()};
+                    retryLine.empty() ? (failedHint.empty() ? nullptr : failedHint.c_str()) : retryLine.c_str()};
+      // The way out and the way on, both on this screen. A failed update used
+      // to leave only Back, so trying again meant walking the whole settings
+      // tree down to Update again — with the Wi-Fi link torn down on the way
+      // out and rebuilt on the way back in.
+      view.cancelLabel = tr(STR_BACK);
+      view.acceptLabel = tr(STR_RETRY);
+      view.backHint = tr(STR_BACK);
+      view.confirmHint = tr(STR_RETRY);
       break;
     case FINISHED:
       view.lines = {
@@ -189,6 +179,12 @@ void OtaUpdateActivity::onConfirmButton() {
     runUpdateInstall();
     return;
   }
+  // Retry, as many times as the reader wants. Nothing counts down: the only
+  // bound is inside a single install attempt (OtaRetryPolicy).
+  if (state == FAILED) {
+    retryFailedStep();
+    return;
+  }
   if (state == NO_UPDATE) {
     allowAnyVersion = true;
     {
@@ -224,6 +220,92 @@ const char* OtaUpdateActivity::detailFor(const OtaUpdater::OtaUpdaterError error
     default:
       return "Update check failed";
   }
+}
+
+void OtaUpdateActivity::enterFailed(const OtaUpdater::OtaUpdaterError error, const FailedStep step) {
+  {
+    RenderLock lock(*this);
+    failedStep = step;
+    failedDetail = detailFor(error);
+    failedExtra.clear();
+    failedHint.clear();
+    switch (error) {
+      case OtaUpdater::WRONG_DEVICE_ERROR: {
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "Image: %s, device: %s", firmware_flash::chipName(updater.getLastImageChip()),
+                      firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
+        failedExtra = buf;
+        failedHint = "Use firmware for this device's chip";
+        break;
+      }
+      case OtaUpdater::INVALID_IMAGE_ERROR:
+        failedExtra = "Corrupt download: checksum mismatch";
+        failedHint = "Retry re-downloads the image";
+        break;
+      case OtaUpdater::HTTP_ERROR:
+        failedExtra = step == FailedStep::CHECK ? "Server check failed" : "Download failed or connection dropped";
+        failedHint = "Check Wi-Fi connection and retry";
+        break;
+      case OtaUpdater::OOM_ERROR:
+        failedExtra = "Low memory for secure connection";
+        failedHint = "Restart reader and retry";
+        break;
+      case OtaUpdater::NO_UPDATE:
+        failedExtra = "No firmware asset found in release";
+        break;
+      case OtaUpdater::JSON_PARSE_ERROR:
+        failedExtra = "Unrecognized response from server";
+        break;
+      default:
+        break;
+    }
+    // Kept out of failedHint so a hint the error itself wanted is not lost to
+    // the attempt count.
+    retryLine.clear();
+    if (manualRetries > 0) retryLine = "Retry attempt " + std::to_string(manualRetries);
+    state = FAILED;
+  }
+  requestUpdate();
+}
+
+void OtaUpdateActivity::retryFailedStep() {
+  ++manualRetries;
+  LOG_INF("OTA", "Manual retry %u from the failure screen (step=%s)", manualRetries,
+          failedStep == FailedStep::CHECK ? "check" : "install");
+
+  // A failed check never learned what to install, so the retry has to ask the
+  // server again. Doing it here rather than sending the reader back through the
+  // Wi-Fi picker is the point: the link is still up.
+  if (failedStep == FailedStep::CHECK) {
+    {
+      RenderLock lock(*this);
+      state = CHECKING_FOR_UPDATE;
+    }
+    requestUpdateAndWait();
+    const auto res = updater.checkForUpdate(allowAnyVersion);
+    if (res != OtaUpdater::OK) {
+      enterFailed(res, FailedStep::CHECK);
+      return;
+    }
+    newVersionLine = std::string(tr(STR_NEW_VERSION)) + updater.getLatestVersion();
+    currentVersionLine = std::string(tr(STR_CURRENT_VERSION)) + CROSSPOINT_VERSION;
+    // The reader already agreed to install once; a retry of a failed check goes
+    // straight on rather than asking the same question again. isUpdateNewer is
+    // still respected for the plain Check-for-Updates flow.
+    if (!allowAnyVersion && !updater.isUpdateNewer()) {
+      RenderLock lock(*this);
+      state = NO_UPDATE;
+      return;
+    }
+  }
+
+  // Fresh progress accounting: the bar and the byte line belong to this attempt,
+  // not to the one that died. The partition itself is NOT reset — installUpdate
+  // resumes from what was already written when the server allows it, and
+  // validates the whole image before anything is pointed at it.
+  lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
+  bytesLine.clear();
+  runUpdateInstall();
 }
 
 void OtaUpdateActivity::runUpdateInstall() {
@@ -278,26 +360,7 @@ void OtaUpdateActivity::runUpdateInstall() {
 
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update failed: %d", res);
-    {
-      RenderLock lock(*this);
-      failedDetail = detailFor(res);
-      failedExtra.clear();
-      failedHint.clear();
-      if (res == OtaUpdater::WRONG_DEVICE_ERROR) {
-        char buf[64];
-        std::snprintf(buf, sizeof(buf), "Image: %s, device: %s", firmware_flash::chipName(updater.getLastImageChip()),
-                      firmware_flash::chipName(firmware_flash::runningPartitionChipId()));
-        failedExtra = buf;
-        failedHint = "Use firmware for this device's chip";
-      } else if (res == OtaUpdater::INVALID_IMAGE_ERROR) {
-        failedExtra = "Corrupt download: checksum mismatch";
-      } else if (res == OtaUpdater::HTTP_ERROR) {
-        failedExtra = "Download failed or connection dropped";
-        failedHint = "Check Wi-Fi connection and retry";
-      }
-      state = FAILED;
-    }
-    requestUpdate();
+    enterFailed(res, FailedStep::INSTALL);
     return;
   }
 
