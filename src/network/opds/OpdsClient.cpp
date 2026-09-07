@@ -68,12 +68,19 @@ ClientStatus OpdsClient::fetchFeed(const OpdsServer& server, const std::string& 
       return ClientStatus::ABORTED;
     }
 
+    // The parser stops the transfer itself when free heap reaches its floor.
+    // Retrying would only run the same feed down the same heap, so report it.
+    if (parser.heapAborted()) {
+      LOG_ERR("OPDSCLI", "Feed too large for free memory; stopped after %u entries", (unsigned)parser.entryCount());
+      return ClientStatus::FEED_TOO_LARGE;
+    }
+
     if (fetched && parser) {
       outResult.searchTemplate = parser.getSearchTemplate();
       outResult.nextPageUrl = parser.getNextPageUrl();
       outResult.prevPageUrl = parser.getPrevPageUrl();
       outResult.truncated = parser.truncated();
-      outResult.entries = std::move(parser).getEntries();
+      outResult.entries = parser.takeEntries();
       return outResult.entries.empty() ? ClientStatus::EMPTY : ClientStatus::OK;
     }
 

@@ -155,12 +155,6 @@ ListChrome UiListActivity::chrome() const {
   return chrome;
 }
 
-fui::Insets UiListActivity::chromeInsets() const {
-  const list_chrome::Bands bands = listChromeBands(renderer, chrome());
-  return fui::Insets{static_cast<int16_t>(bands.contentTop), 0,
-                     static_cast<int16_t>(renderer.getScreenHeight() - bands.contentBottom), 0};
-}
-
 void UiListActivity::drawChrome() { drawListChromeTop(renderer, chrome()); }
 
 void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, chrome()); }

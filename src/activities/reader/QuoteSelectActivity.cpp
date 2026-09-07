@@ -14,13 +14,13 @@
 #include "components/UITheme.h"
 
 QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section,
-                                         int startPageNumber, int marginLeft, int marginTop, std::shared_ptr<Epub> epub,
-                                         int spineIndex, int fontId)
+                                         int startPageNumber, int marginLeft, int marginTop, Epub& epub, int spineIndex,
+                                         int fontId)
     : Activity("QuoteSelect", renderer, mappedInput),
       section(section),
       marginLeft(marginLeft),
       marginTop(marginTop),
-      epub(std::move(epub)),
+      epub(epub),
       spineIndex(spineIndex),
       fontId(fontId),
       pageNumber(startPageNumber),
@@ -209,9 +209,8 @@ void QuoteSelectActivity::moveVertical(const int direction) {
 }
 
 std::string QuoteSelectActivity::chapterTitle() const {
-  if (!epub) return "";
-  const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
-  if (tocIndex >= 0) return epub->getTocItem(tocIndex).title;
+  const int tocIndex = epub.getTocIndexForSpineIndex(spineIndex);
+  if (tocIndex >= 0) return epub.getTocItem(tocIndex).title;
   return "Chapter " + std::to_string(spineIndex + 1);
 }
 
@@ -238,8 +237,7 @@ void QuoteSelectActivity::saveSelectedQuote() {
 // into a .tmp, then rotate primary -> .bak, .tmp -> primary, drop .bak (restore
 // .bak on promote failure). Refused when the file would exceed MAX_QUOTES_FILE_BYTES.
 bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken) {
-  if (!epub) return false;
-  const std::string path = quote_text::quotesFilePathFor(epub->getPath());
+  const std::string path = quote_text::quotesFilePathFor(epub.getPath());
   const std::string tmpPath = path + ".tmp";
   const std::string bakPath = path + ".bak";
   const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote);
@@ -313,7 +311,6 @@ bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::s
 }
 
 void QuoteSelectActivity::loop() {
-
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     if (phase == Phase::SelectEnd) {
       // Drop the whole selection, including any pages it had run into.

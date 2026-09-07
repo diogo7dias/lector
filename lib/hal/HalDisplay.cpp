@@ -153,7 +153,7 @@ void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMod
   // displayBufferAsync, refreshDisplay, displayGrayscaleBase, displayGrayBuffer.
   const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
   const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
-  PerfStats::noteRefresh(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs);
+  PerfStats::noteRefresh(requested, actual, totalUs, wireUs, waveUs);
   PerfLog::record(requested, actual, totalUs, asyncStartUs, thinkMs, inkScore, debt, wireUs, waveUs, lastPassWasTurbo,
                   einkDisplay.lastRefreshDiagnostic(), einkDisplay.lastSettleWaitMs());
 }

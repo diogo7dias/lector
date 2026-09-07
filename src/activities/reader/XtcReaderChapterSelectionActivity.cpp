@@ -9,8 +9,7 @@
 namespace fui = freeink::ui;
 
 int XtcReaderChapterSelectionActivity::findChapterIndexForPage(const uint32_t page) const {
-  if (!xtc) return 0;
-  const auto& chapters = xtc->getChapters();
+  const auto& chapters = xtc.getChapters();
   for (size_t i = 0; i < chapters.size(); i++) {
     if (page >= chapters[i].startPage && page <= chapters[i].endPage) return static_cast<int>(i);
   }
@@ -19,7 +18,6 @@ int XtcReaderChapterSelectionActivity::findChapterIndexForPage(const uint32_t pa
 
 void XtcReaderChapterSelectionActivity::onEnter() {
   UiListActivity::onEnter();
-  if (!xtc) return;
   // Opens on the chapter being read, not at the top.
   moveSelectionTo(findChapterIndexForPage(currentPage));
 }
@@ -29,9 +27,7 @@ void XtcReaderChapterSelectionActivity::onExit() {
   rows.clear();
 }
 
-int XtcReaderChapterSelectionActivity::listCount() const {
-  return xtc ? static_cast<int>(xtc->getChapters().size()) : 0;
-}
+int XtcReaderChapterSelectionActivity::listCount() const { return static_cast<int>(xtc.getChapters().size()); }
 
 void XtcReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
   if (listCount() == 0) {
@@ -39,7 +35,7 @@ void XtcReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
     return;
   }
 
-  const auto& chapters = xtc->getChapters();
+  const auto& chapters = xtc.getChapters();
   rows.assign(chapters.size(), fui::ListItem{});
   for (size_t i = 0; i < chapters.size(); ++i) {
     rows[i].label = chapters[i].name.empty() ? tr(STR_UNNAMED) : chapters[i].name.c_str();
@@ -55,8 +51,7 @@ void XtcReaderChapterSelectionActivity::buildScreen(UiScreen& screen) {
 }
 
 void XtcReaderChapterSelectionActivity::activateIndex(const int index) {
-  if (!xtc) return;
-  const auto& chapters = xtc->getChapters();
+  const auto& chapters = xtc.getChapters();
   if (index < 0 || index >= static_cast<int>(chapters.size())) return;
   app.clearTapFlash();
   setResult(PageResult{chapters[index].startPage});

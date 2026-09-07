@@ -14,6 +14,11 @@
 
 class GfxRenderer;
 
+// Where each laid-out line goes. Function pointer plus caller context rather than
+// std::function: layout runs per paragraph on the render path, and a std::function would
+// heap-allocate its closure there.
+using LineSinkFn = void (*)(void* ctx, std::shared_ptr<TextBlock> line, uint32_t visibleOffset);
+
 class ParsedText {
   // words/rubyTexts are std::deque, not std::vector: a paragraph can hold thousands
   // of tokens (CJK splits every character), and a vector grows by reallocating its
@@ -96,8 +101,7 @@ class ParsedText {
                             std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
-                   const std::vector<size_t>& lineBreakIndices,
-                   const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
+                   const std::vector<size_t>& lineBreakIndices, LineSinkFn processLine, void* processLineCtx,
                    const GfxRenderer& renderer, int fontId);
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
@@ -138,7 +142,6 @@ class ParsedText {
   // A heading is a chapter title, not paragraph 1, so it must not consume a paragraph number.
   void setHeading(const bool heading) { isHeading = heading; }
   bool getIsHeading() const { return isHeading; }
-  void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth,
-                             const std::function<void(std::shared_ptr<TextBlock>, uint32_t)>& processLine,
-                             bool includeLastLine = true);
+  void layoutAndExtractLines(const GfxRenderer& renderer, int fontId, uint16_t viewportWidth, LineSinkFn processLine,
+                             void* processLineCtx, bool includeLastLine = true);
 };

@@ -17,64 +17,79 @@
 namespace tls_scratch {
 namespace {
 
-// The block serves one allocation at a time, which is all that is asked of it:
-// wolfSSL keeps a single receive buffer for a session (see the ShrinkInputBuffer
-// patch in scripts/patch_wolfssl.py, which stops it being freed and reallocated
-// per record). A second large request while the first is out falls through to
-// the heap and behaves as it always did.
-// Set only while a loan is running: what new large allocations may be served from.
+// The 48 KB framebuffer is split into two slots. wolfSSL holds one large
+// receive buffer through the handshake (see the ShrinkInputBuffer patch), then
+// asks for a second ~16 KB buffer for the first application record. A single
+// slot left that second request on the heap, which on a busy OPDS fetch is a
+// 12 KB hole: MEMORY_E at exactly 13553 bytes received. Two slots fit in 48 KB
+// with room to spare.
+// Set only while a loan is running.
 uint8_t* g_block = nullptr;
 size_t g_blockLen = 0;
-size_t g_inUse = 0;
-// The last block ever served, kept FOREVER. wolfSSL can free a buffer after the
-// loan has ended (a session torn down later, a context outliving the transfer),
-// and handing the framebuffer's address to the real free() corrupts the heap and
-// takes the reader down with no recorded reason. Recognising the address for the
-// rest of the run costs one pointer and makes that impossible.
-uint8_t* g_servedBlock = nullptr;
+
+constexpr int NSLOTS = 2;
+uint8_t* g_slot[NSLOTS] = {};
+size_t g_slotLen[NSLOTS] = {};
+bool g_slotUsed[NSLOTS] = {};
+// Every address ever handed to wolfSSL, kept FOREVER. wolfSSL can free a
+// buffer after the loan has ended, and handing the framebuffer's address to
+// the real free() corrupts the heap. Recognising the address for the rest of
+// the run costs two pointers and makes that impossible.
+uint8_t* g_everServed[NSLOTS] = {};
 
 // Below this, an allocation is a session structure or a bignum temp and belongs
-// on the heap; the block is reserved for the one allocation that does not fit
+// on the heap; the slots are reserved for the allocations that do not fit
 // there. A 16 KB TLS record asks for 16640 bytes.
 constexpr size_t MIN_BLOCK_ALLOC = 8192;
-// Enough for a 16 KB record plus wolfSSL's headers and padding, with the rest of
-// the framebuffer unused rather than handed to a second claimant.
-constexpr size_t NEEDED = 20 * 1024;
+// Two records plus wolfSSL headers. The framebuffer is 48 KB; claim() returns
+// the whole block if it is at least this long.
+constexpr size_t NEEDED = 40 * 1024;
+
+int slotOf(const void* ptr) {
+  for (int i = 0; i < NSLOTS; ++i) {
+    if (ptr == g_everServed[i] || ptr == g_slot[i]) return i;
+  }
+  return -1;
+}
 
 #if defined(FREEINK_NET_WOLFSSL)
 bool g_installed = false;
 
 void* scratchMalloc(size_t size) {
-  if (g_block && g_inUse == 0 && size >= MIN_BLOCK_ALLOC && size <= g_blockLen) {
-    g_inUse = size;
-    g_servedBlock = g_block;
-    return g_block;
+  if (g_block && size >= MIN_BLOCK_ALLOC) {
+    for (int i = 0; i < NSLOTS; ++i) {
+      if (!g_slotUsed[i] && g_slot[i] && size <= g_slotLen[i]) {
+        g_slotUsed[i] = true;
+        g_everServed[i] = g_slot[i];
+        return g_slot[i];
+      }
+    }
   }
   return malloc(size);
 }
 
 void scratchFree(void* ptr) {
   if (ptr == nullptr) return;
-  if (ptr == g_servedBlock) {
-    g_inUse = 0;
+  const int i = slotOf(ptr);
+  if (i >= 0) {
+    g_slotUsed[i] = false;
     return;
   }
   free(ptr);
 }
 
 void* scratchRealloc(void* ptr, size_t size) {
-  if (ptr != g_servedBlock) return realloc(ptr, size);
-  // Growing within the block costs nothing while it is still lent; outgrowing it,
-  // or growing after the loan ended, means copying what is there onto the heap and
-  // handing the block back.
-  if (ptr == g_block && size <= g_blockLen) {
-    g_inUse = size;
-    return g_block;
+  const int i = slotOf(ptr);
+  if (i < 0) return realloc(ptr, size);
+  if (ptr == g_slot[i] && size <= g_slotLen[i]) {
+    g_slotUsed[i] = true;
+    return g_slot[i];
   }
   void* moved = malloc(size);
   if (!moved) return nullptr;
-  memcpy(moved, ptr, g_inUse < size ? g_inUse : size);
-  g_inUse = 0;
+  const size_t copy = g_slotLen[i] < size ? g_slotLen[i] : size;
+  memcpy(moved, ptr, copy);
+  g_slotUsed[i] = false;
   return moved;
 }
 #endif
@@ -89,7 +104,7 @@ Session::Session() {
     LOG_DBG("TLS", "No build scratch to lend; wolfSSL stays on the heap");
     return;
   }
-  // Installed once and never taken back out: see g_servedBlock. Swapping the
+  // Installed once and never taken back out: see g_everServed. Swapping the
   // allocators back would leave wolfSSL's real free() holding an address that
   // belongs to the framebuffer.
   if (!g_installed) {
@@ -102,21 +117,28 @@ Session::Session() {
   }
   g_block = block;
   g_blockLen = len;
+  const size_t slot = len / NSLOTS;
+  for (int i = 0; i < NSLOTS; ++i) {
+    g_slot[i] = block + (i * slot);
+    g_slotLen[i] = (i == NSLOTS - 1) ? (len - i * slot) : slot;
+    g_slotUsed[i] = false;
+  }
   active_ = true;
-  LOG_DBG("TLS", "Lending %u bytes of framebuffer to wolfSSL", static_cast<unsigned>(len));
+  LOG_DBG("TLS", "Lending %u bytes of framebuffer to wolfSSL (%d slots of %u)", static_cast<unsigned>(len), NSLOTS,
+          static_cast<unsigned>(slot));
 #endif
 }
 
 Session::~Session() {
 #if defined(FREEINK_NET_WOLFSSL)
   if (!active_) return;
-  if (g_inUse != 0) {
-    // The session outlived the transfer and still points into the framebuffer.
-    // Drawing over those bytes is harmless (nothing reads them again) and the
-    // eventual free is caught by g_servedBlock, so the block goes back either
-    // way. Worth saying out loud, because it means an assumption slipped.
-    LOG_ERR("TLS", "%u bytes still lent to wolfSSL after the transfer", static_cast<unsigned>(g_inUse));
-    g_inUse = 0;
+  for (int i = 0; i < NSLOTS; ++i) {
+    if (g_slotUsed[i]) {
+      LOG_ERR("TLS", "%u bytes still lent to wolfSSL after the transfer", static_cast<unsigned>(g_slotLen[i]));
+      g_slotUsed[i] = false;
+    }
+    g_slot[i] = nullptr;
+    g_slotLen[i] = 0;
   }
   buildscratch::release(g_block);
   g_block = nullptr;

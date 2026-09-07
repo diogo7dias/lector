@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cstring>
@@ -94,7 +95,7 @@ void discover(std::vector<DictionaryEntry>& out) {
 
   // Case-insensitive sort by folder name (matches FileBrowserActivity ordering).
   std::sort(out.begin(), out.end(), [](const DictionaryEntry& a, const DictionaryEntry& b) {
-    return StringUtils::asciiCaseCmp(a.name.c_str(), b.name.c_str()) < 0;
+    return strcasecmp(a.name.c_str(), b.name.c_str()) < 0;
   });
 }
 

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+
 // The value logic behind every slider screen: what a step does at the ends of
 // the range, which physical button carries the large step, and what a drag
 // lands on. Pure arithmetic, so the wrap rule and the X3 button flip are
@@ -13,10 +15,8 @@ struct Range {
 };
 
 inline int clamp(const int value, const Range& range) {
-  if (range.max <= range.min) return range.min;
-  if (value < range.min) return range.min;
-  if (value > range.max) return range.max;
-  return value;
+  // std::clamp is undefined when hi < lo, so the degenerate range is answered first.
+  return range.max <= range.min ? range.min : std::clamp(value, range.min, range.max);
 }
 
 // Move by delta. Ordinary ranges clamp; a percent picker wraps instead, because

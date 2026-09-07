@@ -208,6 +208,47 @@ bool writeNormalizedXhtml(const std::string& html, HalFile& file) {
 
 }  // namespace
 
+namespace {
+
+// The parser hands each finished page here. A context struct plus a plain function rather
+// than a capturing lambda: the parser takes a function pointer, so this is what the four
+// captured locals travel in.
+struct PageCollector {
+  std::vector<std::unique_ptr<Page>>& pagesOut;
+  bool& resourceLimitHit;
+  const char*& limitReason;
+  size_t& retainedElements;
+};
+
+void collectPage(void* const ctx, std::unique_ptr<Page> page, uint16_t, uint16_t, uint32_t) {
+  auto& collect = *static_cast<PageCollector*>(ctx);
+  if (collect.resourceLimitHit) return;
+  const size_t pageElements = page->elements.size();
+  // Name the limit that fired. The three causes mean different things -- the count caps
+  // say the definition is genuinely too big to hold, while the heap floor says only that
+  // this moment was a bad one -- and a single "exceeded the budget" message cannot tell
+  // them apart.
+  if (collect.pagesOut.size() >= MAX_STYLED_PAGES) {
+    collect.limitReason = "page count";
+  } else if (pageElements > MAX_STYLED_PAGE_ELEMENTS - collect.retainedElements) {
+    collect.limitReason = "element count";
+  } else if (ESP.getFreeHeap() < MIN_STYLED_RETAIN_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_RETAIN_ALLOC) {
+    collect.limitReason = "free heap";
+  }
+  if (collect.limitReason != nullptr) {
+    LOG_ERR("DHTML", "Styled definition stopped on %s (pages=%u elements=%u free=%u contig=%u)", collect.limitReason,
+            static_cast<unsigned>(collect.pagesOut.size()),
+            static_cast<unsigned>(collect.retainedElements + pageElements), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    collect.resourceLimitHit = true;
+    collect.pagesOut.clear();
+    return;
+  }
+  collect.retainedElements += pageElements;
+  collect.pagesOut.push_back(std::move(page));
+}
+
+}  // namespace
+
 bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definition, const uint16_t viewportWidth,
                               const uint16_t viewportHeight, std::vector<std::unique_ptr<Page>>& pagesOut) {
   if (ESP.getFreeHeap() < MIN_STYLED_FREE_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_MAX_ALLOC) {
@@ -236,6 +277,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
   bool resourceLimitHit = false;
   const char* limitReason = nullptr;
   size_t retainedElements = 0;
+  PageCollector collect{pagesOut, resourceLimitHit, limitReason, retainedElements};
   {
     const std::string tmpPath = TMP_HTML_PATH;  // the parser stores a reference
     // Heap-allocated as Section does — the parser object is far too large for
@@ -250,33 +292,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
         // Percent mode at 0 is how "no indent" is spelled: there is no NONE mode, and
         // BOOK mode would honour whatever indent the definition's own markup carries.
         /*guideDotsMode=*/GUIDE_DOTS_OFF, /*firstLineIndentMode=*/CrossPointSettings::FIRST_LINE_INDENT_PERCENT,
-        /*firstLineIndentPercent=*/0,
-        [&pagesOut, &resourceLimitHit, &retainedElements, &limitReason](std::unique_ptr<Page> page, uint16_t, uint16_t,
-                                                                        uint32_t) {
-          if (resourceLimitHit) return;
-          const size_t pageElements = page->elements.size();
-          // Name the limit that fired. The three causes mean different things --
-          // the count caps say the definition is genuinely too big to hold,
-          // while the heap floor says only that this moment was a bad one -- and
-          // a single "exceeded the budget" message cannot tell them apart.
-          if (pagesOut.size() >= MAX_STYLED_PAGES) {
-            limitReason = "page count";
-          } else if (pageElements > MAX_STYLED_PAGE_ELEMENTS - retainedElements) {
-            limitReason = "element count";
-          } else if (ESP.getFreeHeap() < MIN_STYLED_RETAIN_HEAP || ESP.getMaxAllocHeap() < MIN_STYLED_RETAIN_ALLOC) {
-            limitReason = "free heap";
-          }
-          if (limitReason != nullptr) {
-            LOG_ERR("DHTML", "Styled definition stopped on %s (pages=%u elements=%u free=%u contig=%u)", limitReason,
-                    static_cast<unsigned>(pagesOut.size()), static_cast<unsigned>(retainedElements + pageElements),
-                    ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-            resourceLimitHit = true;
-            pagesOut.clear();
-            return;
-          }
-          retainedElements += pageElements;
-          pagesOut.push_back(std::move(page));
-        },
+        /*firstLineIndentPercent=*/0, &collectPage, &collect,
         /*embeddedTextStyle=*/false, /*embeddedLayoutStyle=*/false, /*contentBase=*/"", /*imageBasePath=*/"",
         /*imageRendering=*/2);
     if (!parser) {

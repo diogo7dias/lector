@@ -26,7 +26,6 @@
 #include "SleepGrayscaleBase.h"
 #include "SleepInfoOverlay.h"
 #include "SleepTiming.h"
-#include "StatsDashboardPolicy.h"
 #include "StatsDashboardRenderer.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/BannerStyle.h"
@@ -47,9 +46,25 @@
 #include "util/FavoriteImageNames.h"
 #include "util/TaskWatchdog.h"
 
-static_assert(CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD == stats_dashboard::kStatsDashboardMode);
-
 namespace {
+
+// Which files the stats dashboard has numbers for. Everything else falls back to
+// the default sleep face.
+constexpr char asciiLower(const char value) { return value >= 'A' && value <= 'Z' ? value + ('a' - 'A') : value; }
+
+constexpr bool endsWithIgnoringCase(const std::string_view value, const std::string_view suffix) {
+  if (value.size() < suffix.size()) return false;
+  const size_t offset = value.size() - suffix.size();
+  for (size_t index = 0; index < suffix.size(); ++index) {
+    if (asciiLower(value[offset + index]) != asciiLower(suffix[index])) return false;
+  }
+  return true;
+}
+
+constexpr bool dashboardSupportsBook(const std::string_view path) {
+  return endsWithIgnoringCase(path, ".epub") || endsWithIgnoringCase(path, ".xtc") ||
+         endsWithIgnoringCase(path, ".xtch") || endsWithIgnoringCase(path, ".txt") || endsWithIgnoringCase(path, ".md");
+}
 
 std::string fileNameFromPath(const std::string& path) {
   const size_t slash = path.find_last_of('/');
@@ -741,7 +756,7 @@ void SleepActivity::renderSleepScreen() const {
 
 void SleepActivity::renderStatsDashboardSleepScreen() const {
   const std::string& path = APP_STATE.openEpubPath;
-  if (path.empty() || !stats_dashboard::supportsBook(path)) {
+  if (path.empty() || !dashboardSupportsBook(path)) {
     return renderDefaultSleepScreen();
   }
 

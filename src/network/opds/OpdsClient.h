@@ -12,7 +12,19 @@
 
 namespace opds {
 
-enum class ClientStatus { OK = 0, NO_URL, HEAP_LOW, FETCH_FAILED, PARSE_FAILED, EMPTY, BAD_CREDENTIALS, ABORTED };
+enum class ClientStatus {
+  OK = 0,
+  NO_URL,
+  HEAP_LOW,
+  // The feed was still arriving when free heap reached the abort floor: the
+  // server's page is bigger than this board can hold.
+  FEED_TOO_LARGE,
+  FETCH_FAILED,
+  PARSE_FAILED,
+  EMPTY,
+  BAD_CREDENTIALS,
+  ABORTED
+};
 
 struct FeedResult {
   std::vector<OpdsEntry> entries;

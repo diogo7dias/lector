@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <strings.h>
 
 #include <algorithm>
 #include <cctype>
@@ -371,7 +372,7 @@ uint32_t Dictionary::bisectSamples(HalFile& sidecar, HalFile& source, uint32_t s
       lo = 0;  // unreadable sample: abandon the descent and scan from the start
       break;
     }
-    if (StringUtils::asciiCaseCmp(wordBuf, target) <= 0) {
+    if (strcasecmp(wordBuf, target) <= 0) {
       lo = mid;
     } else {
       hi = mid - 1;
@@ -405,7 +406,7 @@ DictLocation Dictionary::locate(LookupSession& session, const char* target, std:
     uint8_t suffix[8];
     if (session.idx.read(suffix, 8) != 8) break;
 
-    const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
+    const int cmp = strcasecmp(wordBuf, target);
     if (cmp == 0) {
       result.offset = readBe32(suffix);
       result.size = readBe32(suffix + 4);
@@ -483,7 +484,7 @@ DictLocation Dictionary::locateSynonym(LookupSession& session, const char* targe
     uint8_t ordBytes[4];
     if (session.syn.read(ordBytes, 4) != 4) break;
 
-    const int cmp = StringUtils::asciiCaseCmp(wordBuf, target);
+    const int cmp = strcasecmp(wordBuf, target);
     if (cmp == 0) return locateByOrdinal(session, readBe32(ordBytes), matchedHeadwordOut);
     if (cmp > 0) break;
   }

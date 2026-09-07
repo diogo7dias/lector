@@ -92,10 +92,6 @@ class UiListActivity : public Activity, protected UiAppHost {
   // hardware the denser override below uses the theme's *-with-subtitle row
   // height instead of its single-line one (see syncListViewport()).
   void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
-  // The content margin chrome() leaves for the body. The base applies it before
-  // buildScreen runs, so a screen only calls this when it wants to carve the
-  // band up further.
-  freeink::ui::Insets chromeInsets() const;
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);
 

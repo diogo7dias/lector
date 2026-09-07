@@ -273,7 +273,8 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // block is flushed so the chapter starts on a fresh page.
   if (std::find(tocAnchors.begin(), tocAnchors.end(), *pendingAnchorId) != tocAnchors.end()) {
     if (currentPage && !currentPage->elements.empty()) {
-      completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+      completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                     currentPageVisibleOffset);
       completedPageCount++;
       currentPage = makeUniqueNoThrow<Page>();
       if (!currentPage) {
@@ -441,7 +442,8 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
   if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
     setCurrentPageVisibleOffset(visibleTextOffset);
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+    completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                   currentPageVisibleOffset);
     completedPageCount++;
     currentPage.reset(new (std::nothrow) Page());
     if (!currentPage) {
@@ -586,16 +588,22 @@ void ChapterHtmlSlimParser::finishTableRow() {
     auto& lines = cellLines[column];
     // Two wrapped lines per buffered word avoids normal vector growth (max 64).
     lines.reserve(MAX_GRID_TABLE_CELL_WORDS * 2);
+    struct CellSink {
+      std::vector<std::shared_ptr<TextBlock>>& lines;
+      std::vector<uint32_t>& offsets;
+    } cellSink{lines, lineVisibleOffsets};
     tableRowCells[column]->layoutAndExtractLines(
         renderer, fontId, textWidth,
-        [&lines, &lineVisibleOffsets](const std::shared_ptr<TextBlock>& line, const uint32_t offset) {
-          const size_t lineIndex = lines.size();
-          lines.push_back(line);
-          if (lineVisibleOffsets.size() <= lineIndex) {
-            lineVisibleOffsets.resize(lineIndex + 1, UINT32_MAX);
+        [](void* const ctx, std::shared_ptr<TextBlock> line, const uint32_t offset) {
+          auto& sink = *static_cast<CellSink*>(ctx);
+          const size_t lineIndex = sink.lines.size();
+          sink.lines.push_back(std::move(line));
+          if (sink.offsets.size() <= lineIndex) {
+            sink.offsets.resize(lineIndex + 1, UINT32_MAX);
           }
-          lineVisibleOffsets[lineIndex] = std::min(lineVisibleOffsets[lineIndex], offset);
-        });
+          sink.offsets[lineIndex] = std::min(sink.offsets[lineIndex], offset);
+        },
+        &cellSink);
     if (column == 0 && !lines.empty()) {
       rowRtl = lines.front()->getBlockStyle().isRtl;
     }
@@ -620,7 +628,8 @@ void ChapterHtmlSlimParser::finishTableRow() {
     if (!currentPage || pageFull) {
       if (pageFull) {
         setCurrentPageVisibleOffset(lineVisibleOffset);
-        completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+        completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                       currentPageVisibleOffset);
         completedPageCount++;
       }
       currentPage = makeUniqueNoThrow<Page>();
@@ -969,7 +978,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 // surface the indexing popup first (single-shot per parser).
                 if (self->popupFn && !self->imagePopupFired) {
                   self->imagePopupFired = true;
-                  self->popupFn();
+                  self->popupFn(self->popupCtx);
                 }
                 HalFile cachedImageFile;
                 bool extractSuccess = false;
@@ -1117,7 +1126,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
                      self->viewportHeight)) {
-                  self->completePageFn(std::move(self->currentPage), self->xpathParagraphIndex,
+                  self->completePageFn(self->completePageCtx, std::move(self->currentPage), self->xpathParagraphIndex,
                                        self->xpathListItemIndex, self->currentPageVisibleOffset);
                   self->completedPageCount++;
                   self->currentPage = makeUniqueNoThrow<Page>();
@@ -1735,10 +1744,10 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
                                         : self->viewportWidth;
     self->currentTextBlock->layoutAndExtractLines(
         self->renderer, self->fontId, effectiveWidth,
-        [self](const std::shared_ptr<TextBlock>& textBlock, const uint32_t offset) {
-          self->addLineToPage(textBlock, offset);
+        [](void* const ctx, std::shared_ptr<TextBlock> textBlock, const uint32_t offset) {
+          static_cast<ChapterHtmlSlimParser*>(ctx)->addLineToPage(textBlock, offset);
         },
-        false);
+        self, false);
   }
 }
 
@@ -2029,7 +2038,7 @@ bool ChapterHtmlSlimParser::beginParse() {
 
   // Get file size to decide whether to show indexing popup.
   if (popupFn && parseFile_.size() >= MIN_SIZE_FOR_POPUP) {
-    popupFn();
+    popupFn(popupCtx);
   }
 
   XML_SetUserData(xmlParser_, this);
@@ -2114,7 +2123,8 @@ bool ChapterHtmlSlimParser::finishParse() {
       pendingAnchorId.reset();
     }
     setCurrentPageVisibleOffset(visibleTextOffset);
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+    completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                   currentPageVisibleOffset);
     completedPageCount++;
     currentPage.reset();
     currentTextBlock.reset();
@@ -2156,7 +2166,8 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     setCurrentPageVisibleOffset(visibleOffset);
-    completePageFn(std::move(currentPage), xpathParagraphIndex, xpathListItemIndex, currentPageVisibleOffset);
+    completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
+                   currentPageVisibleOffset);
     completedPageCount++;
     currentPage = makeUniqueNoThrow<Page>();
     if (!currentPage) {
@@ -2232,7 +2243,10 @@ void ChapterHtmlSlimParser::makePages() {
   pendingParagraphFirstLine_ = !currentTextBlock->getIsHeading() && currentTextBlock->hasLetters();
   currentTextBlock->layoutAndExtractLines(
       renderer, fontId, effectiveWidth,
-      [this](const std::shared_ptr<TextBlock>& textBlock, const uint32_t offset) { addLineToPage(textBlock, offset); });
+      [](void* const ctx, std::shared_ptr<TextBlock> textBlock, const uint32_t offset) {
+        static_cast<ChapterHtmlSlimParser*>(ctx)->addLineToPage(textBlock, offset);
+      },
+      this);
 
   // Fallback: transfer any remaining pending footnotes to current page.
   // Normally addLineToPage handles this via word-index tracking, but this catches

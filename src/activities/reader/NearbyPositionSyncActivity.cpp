@@ -2,6 +2,7 @@
 
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <cstdio>
 #include <utility>
@@ -94,7 +95,7 @@ void NearbyPositionSyncActivity::onExit() {
 void NearbyPositionSyncActivity::ensureEpubLoaded() {
   if (epub) return;
 
-  epub = std::make_shared<Epub>(epubPath, "/.crosspoint");
+  epub = makeUniqueNoThrow<Epub>(epubPath, "/.crosspoint");
   epub->setupCacheDir();
   // Metadata only: mapping a position needs the spine and TOC, not the CSS, and
   // this must not rebuild a missing cache while the radio holds the heap.
@@ -152,7 +153,7 @@ void NearbyPositionSyncActivity::applyPeerPosition() {
   // are only hints for estimating where it lands in this device's layout, which
   // may be paginated differently.
   const CrossPointPosition mapped =
-      ProgressMapper::toCrossPoint(epub, saved, renderer, currentSpineIndex, totalPagesInSpine, totalPagesInSpine);
+      ProgressMapper::toCrossPoint(*epub, saved, renderer, currentSpineIndex, totalPagesInSpine, totalPagesInSpine);
 
   std::optional<uint32_t> offset;
   if (mapped.hasVisibleTextOffset) offset = mapped.visibleTextOffset;
@@ -277,7 +278,7 @@ bool NearbyPositionSyncActivity::handleCustomInput() {
       SavedProgressPosition peerSaved;
       peerSaved.xpath = session.peerPosition().xpath.data();
       peerSaved.percentage = percentageFromQ(session.peerPosition().percentageQ);
-      peerLocalPosition = ProgressMapper::toCrossPoint(epub, peerSaved, renderer, currentSpineIndex, totalPagesInSpine,
+      peerLocalPosition = ProgressMapper::toCrossPoint(*epub, peerSaved, renderer, currentSpineIndex, totalPagesInSpine,
                                                        totalPagesInSpine);
     } else {
       // Nothing to resolve the xpath against, and toCrossPoint() dereferences the

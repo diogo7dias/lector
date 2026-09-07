@@ -10,7 +10,7 @@
 #include "components/OptionPopup.h"
 
 class EpubReaderBookmarksActivity final : public UiListActivity {
-  std::shared_ptr<Epub> epub;
+  Epub& epub;
   std::string epubPath;
   std::vector<BookmarkEntry> bookmarks;
   OptionPopup confirmPopup;
@@ -27,8 +27,8 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   void openBookmark(int index);
 
  public:
-  explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                       const std::shared_ptr<Epub>& epub, const std::string& epubPath)
+  explicit EpubReaderBookmarksActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Epub& epub,
+                                       const std::string& epubPath)
       : UiListActivity("EpubReaderBookmarks", renderer, mappedInput, /*wantsTouchLongPress=*/true),
         epub(epub),
         epubPath(epubPath) {}

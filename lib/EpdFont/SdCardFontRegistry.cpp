@@ -34,13 +34,6 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t po
   return best;
 }
 
-bool SdCardFontFamilyInfo::hasSize(uint8_t size) const {
-  for (const auto& f : files) {
-    if (f.pointSize == size) return true;
-  }
-  return false;
-}
-
 std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
   std::vector<uint8_t> sizes;
   for (const auto& f : files) {

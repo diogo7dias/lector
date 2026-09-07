@@ -35,7 +35,6 @@ class CalibreConnectActivity final : public UiStatusActivity {
 
   void onWifiSelectionComplete(bool connected);
   void startWebServer();
-  void stopWebServer();
 
  public:
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

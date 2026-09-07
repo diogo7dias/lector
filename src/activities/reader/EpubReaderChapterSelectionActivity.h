@@ -9,9 +9,8 @@
 
 class EpubReaderChapterSelectionActivity final : public UiListActivity {
  public:
-  explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                              const std::shared_ptr<Epub>& epub, const std::string& epubPath,
-                                              const int currentSpineIndex)
+  explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Epub& epub,
+                                              const std::string& epubPath, const int currentSpineIndex)
       : UiListActivity("EpubReaderChapterSelection", renderer, mappedInput),
         epub(epub),
         epubPath(epubPath),
@@ -28,7 +27,7 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
   const char* headerTitle() const override;
 
  private:
-  std::shared_ptr<Epub> epub;
+  Epub& epub;
   std::string epubPath;
   int currentSpineIndex = 0;
 

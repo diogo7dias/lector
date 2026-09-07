@@ -420,11 +420,7 @@ void SettingsActivity::onEnter() {
   requestUpdate();
 }
 
-void SettingsActivity::onExit() {
-  Activity::onExit();
-
-  UITheme::getInstance().reload();  // Re-apply theme in case it was changed
-}
+void SettingsActivity::onExit() { Activity::onExit(); }
 
 bool SettingsActivity::handleCustomInput() {
   return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
@@ -819,4 +815,3 @@ void SettingsActivity::openSleepTimeoutPicker() {
         requestUpdate();
       });
 }
-

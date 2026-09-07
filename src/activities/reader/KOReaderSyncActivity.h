@@ -61,7 +61,7 @@ class KOReaderSyncActivity final : public UiStatusActivity {
     NO_CREDENTIALS
   };
 
-  std::shared_ptr<Epub> epub;  // null until lazy-loaded after TLS in performSync()
+  std::unique_ptr<Epub> epub;  // null until lazy-loaded after TLS in performSync()
   std::string epubPath;
   std::string localChapterName;
   int currentSpineIndex;

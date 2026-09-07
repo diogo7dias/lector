@@ -27,7 +27,6 @@ namespace {
 int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(SMALL_FONT_ID); }
 }  // namespace
 
-
 namespace {
 
 // renderPxcSleepScreen's overlay hook is a bare function pointer with no context
@@ -74,21 +73,6 @@ void PxcViewerActivity::drawHints() const {
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-}
-
-// Favouriting renames the file on the card. It does not change one pixel of the
-// wallpaper — only the Fav/Unfav word in the hint strip. Re-running render() to flip
-// that word costs a blank FULL pass, a re-read and re-decode of the whole .pxc, and a
-// HALF refresh: roughly four seconds of panel time on the X3 to repaint an identical
-// image. Repainting the strip and refreshing differentially is one FAST pass.
-//
-// Safe only because the 1-bit pxc path leaves the finished image in the framebuffer:
-// renderPxcSleepScreen decodes into it, draws the overlay, then refreshes once, and
-// nothing clears it afterwards. Do NOT reuse this after the grayscale path, which
-// clears the buffer once per plane and leaves it holding the MSB plane, not the image.
-void PxcViewerActivity::refreshHintsOnly() const {
-  drawHints();
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
 void PxcViewerActivity::render() {

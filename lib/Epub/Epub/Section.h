@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Epub.h"
+#include "Epub/PageCallbacks.h"
 #include "ReaderRenderSpec.h"
 
 class Page;
@@ -31,7 +32,7 @@ class Section {
   };
 
  private:
-  std::shared_ptr<Epub> epub;
+  Epub& epub;
   const int spineIndex;
   GfxRenderer& renderer;
   std::string filePath;
@@ -39,6 +40,9 @@ class Section {
 
   void writeSectionFileHeader(const ReaderRenderSpec& spec);
   uint32_t onPageComplete(std::unique_ptr<Page> page);
+  // Page-complete callback handed to the parser; `ctx` is the BuildContext.
+  static void appendPageToLut(void* ctx, std::unique_ptr<Page> page, uint16_t paragraphIndex, uint16_t listItemIndex,
+                              uint32_t visibleTextOffset);
 
   // Page-offset table entry, kept in RAM while an incremental build is running so
   // already-built pages can be located in the partially-written .bin.
@@ -52,6 +56,9 @@ class Section {
   // live parser plus the strings it references (the parser stores them by reference)
   // and the in-RAM page-offset table.
   struct BuildContext {
+    // The section this build belongs to, so the page-complete trampoline can reach it
+    // without a capturing lambda.
+    Section* owner = nullptr;
     std::unique_ptr<ChapterHtmlSlimParser> parser;
     std::vector<PageLutEntry> lut;
     std::string parsePath;
@@ -114,18 +121,18 @@ class Section {
 
   // Constructor and destructor are out-of-line: BuildContext holds a unique_ptr to the
   // forward-declared ChapterHtmlSlimParser, whose full definition is only visible in the .cpp.
-  explicit Section(const std::shared_ptr<Epub>& epub, int spineIndex, GfxRenderer& renderer);
+  explicit Section(Epub& epub, int spineIndex, GfxRenderer& renderer);
   ~Section();
   bool loadSectionFile(const ReaderRenderSpec& spec);
   bool clearCache() const;
-  bool createSectionFile(const ReaderRenderSpec& spec, const std::function<void()>& popupFn = nullptr);
+  bool createSectionFile(const ReaderRenderSpec& spec, PopupFn popupFn = nullptr, void* popupCtx = nullptr);
 
   // Incremental build: lay out the section a few pages at a time so a large chapter
   // can show its first page immediately and keep the UI responsive while the rest
   // builds. createSectionFile() above is the one-shot wrapper over these.
   //   if (!startBuild(...)) fail;
   //   each tick: buildSomeMore(N); render up to pageCount; when isBuildComplete() stop.
-  bool startBuild(const ReaderRenderSpec& spec, const std::function<void()>& popupFn = nullptr);
+  bool startBuild(const ReaderRenderSpec& spec, PopupFn popupFn = nullptr, void* popupCtx = nullptr);
   // Lay out up to maxPages more pages (maxPages <= 0 = build to completion). Returns
   // false on error (the build is abandoned). Sets isBuildComplete() when finished.
   bool buildSomeMore(int maxPages);

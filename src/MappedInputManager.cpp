@@ -260,12 +260,6 @@ bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   return true;
 }
 
-bool MappedInputManager::wasTapInRect(const int x, const int y, const int width, const int height) const {
-  int tx = 0;
-  int ty = 0;
-  return wasScreenTapped(tx, ty) && tx >= x && tx < x + width && ty >= y && ty < y + height;
-}
-
 bool MappedInputManager::listItemFromPoint(const int x, const int y, int& index, const int itemCount,
                                            const int selectedIndex, const int listTop, const int listHeight,
                                            const bool hasSubtitle) const {
@@ -287,22 +281,6 @@ bool MappedInputManager::listItemFromPoint(const int x, const int y, int& index,
   return true;
 }
 
-bool MappedInputManager::wasListItemTapped(int& index, const int itemCount, const int selectedIndex, const int listTop,
-                                           const int listHeight, const bool hasSubtitle) const {
-  int tx = 0;
-  int ty = 0;
-  return wasScreenTapped(tx, ty) &&
-         listItemFromPoint(tx, ty, index, itemCount, selectedIndex, listTop, listHeight, hasSubtitle);
-}
-
-bool MappedInputManager::wasListItemTouchedDown(int& index, const int itemCount, const int selectedIndex,
-                                                const int listTop, const int listHeight, const bool hasSubtitle) const {
-  int tx = 0;
-  int ty = 0;
-  return wasScreenTouchDown(tx, ty) &&
-         listItemFromPoint(tx, ty, index, itemCount, selectedIndex, listTop, listHeight, hasSubtitle);
-}
-
 MappedInputManager::RowTouch MappedInputManager::rowTouch(int& row, const int top, const int rowStep,
                                                           const int rowCount, const int xStart, const int xEnd,
                                                           const int rowHeight) const {
@@ -313,25 +291,6 @@ MappedInputManager::RowTouch MappedInputManager::rowTouch(int& row, const int to
     if (r >= rowCount) return false;
     if (rowHeight > 0 && (y - top) % rowStep >= rowHeight) return false;
     row = r;
-    return true;
-  };
-  int x = 0;
-  int y = 0;
-  if (wasScreenTouchDown(x, y) && hit(x, y)) return RowTouch::Down;
-  if (wasScreenTapped(x, y) && hit(x, y)) return RowTouch::Tap;
-  return RowTouch::None;
-}
-
-MappedInputManager::RowTouch MappedInputManager::colTouch(int& col, const int left, const int colStep,
-                                                          const int colCount, const int yStart, const int yEnd,
-                                                          const int colWidth) const {
-  if (colStep <= 0 || colCount <= 0) return RowTouch::None;
-  const auto hit = [&](const int x, const int y) {
-    if (y < yStart || y >= yEnd || x < left) return false;
-    const int c = (x - left) / colStep;
-    if (c >= colCount) return false;
-    if (colWidth > 0 && (x - left) % colStep >= colWidth) return false;
-    col = c;
     return true;
   };
   int x = 0;

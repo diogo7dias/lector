@@ -139,29 +139,6 @@ void TINFCC uzlib_uncompress_init(TINF_DATA* d, void* dict, unsigned int dictLen
 int TINFCC uzlib_uncompress(TINF_DATA* d);
 int TINFCC uzlib_uncompress_chksum(TINF_DATA* d);
 
-int TINFCC uzlib_zlib_parse_header(TINF_DATA* d);
-int TINFCC uzlib_gzip_parse_header(TINF_DATA* d);
-
-/* Compression API */
-
-typedef const uint8_t* uzlib_hash_entry_t;
-
-struct uzlib_comp {
-  unsigned char* outbuf;
-  int outlen, outsize;
-  unsigned long outbits;
-  int noutbits;
-  int comp_disabled;
-
-  uzlib_hash_entry_t* hash_table;
-  unsigned int hash_bits;
-  unsigned int dict_size;
-};
-
-void TINFCC uzlib_compress(struct uzlib_comp* c, const uint8_t* src, unsigned slen);
-
-#include "defl_static.h"
-
 /* Checksum API */
 
 /* prev_sum is previous value for incremental computation, 1 initially */

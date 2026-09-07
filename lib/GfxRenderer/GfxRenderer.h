@@ -45,10 +45,6 @@ class GfxRenderer {
   RenderMode renderMode;
   Orientation orientation;
   bool fadingFix;
-  // Timings overlay state (see setTimingOverlay). Two words on a single long-lived
-  // object; no allocation and nothing drawn while disabled.
-  bool timingOverlayEnabled = false;
-  int timingOverlayFontId = 0;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -61,7 +57,6 @@ class GfxRenderer {
   // allocation inside the SdCardFont objects. Same pragmatic compromise as
   // fontCacheManager_ below.
   mutable std::map<int, SdCardFont*> sdCardFonts_;
-  mutable std::map<int, uint16_t> sdCardFontScales_;  // fontId -> 8.8 fixed point scale (256=1.0x)
 
   // Mutable because drawText() is const but needs to delegate scan-mode
   // recording to the (non-const) FontCacheManager. Same pragmatic compromise
@@ -139,7 +134,6 @@ class GfxRenderer {
   // Stamps the previous refresh's timing line into the framebuffer's top-left corner.
   // Called from the display paths, so every push carries it without each activity having
   // to remember to draw it.
-  void drawTimingOverlay() const;
 
  public:
   explicit GfxRenderer(HalDisplay& halDisplay)
@@ -160,7 +154,6 @@ class GfxRenderer {
   void removeFont(int fontId) {
     fontMap.erase(fontId);
     sdCardFonts_.erase(fontId);
-    sdCardFontScales_.erase(fontId);
   }
   void setFontCacheManager(FontCacheManager* m) { fontCacheManager_ = m; }
   FontCacheManager* getFontCacheManager() const { return fontCacheManager_; }
@@ -182,17 +175,7 @@ class GfxRenderer {
   bool isFontCacheScanning() const;
   const std::map<int, EpdFontFamily>& getFontMap() const { return fontMap; }
   void registerSdCardFont(int fontId, SdCardFont* font) { sdCardFonts_[fontId] = font; }
-  void unregisterSdCardFont(int fontId) { removeFont(fontId); }
-  void clearSdCardFonts() {
-    sdCardFonts_.clear();
-    sdCardFontScales_.clear();
-  }
-  void registerSdCardFontScale(int fontId, uint16_t scale) { sdCardFontScales_[fontId] = scale; }
-  void clearSdCardFontScales() { sdCardFontScales_.clear(); }
-  uint16_t getSdCardFontScale(int fontId) const {
-    auto it = sdCardFontScales_.find(fontId);
-    return (it != sdCardFontScales_.end()) ? it->second : 256;
-  }
+  void clearSdCardFonts() { sdCardFonts_.clear(); }
   const std::map<int, SdCardFont*>& getSdCardFonts() const { return sdCardFonts_; }
   bool isSdCardFont(int fontId) const { return sdCardFonts_.count(fontId) > 0; }
   // Register/clear size-matched CJK UI fallbacks (see fallbackFontMap_).
@@ -212,16 +195,6 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
-
-  // Timings overlay: draws the PREVIOUS refresh's cost into the top-left corner of every
-  // frame this renderer pushes. The font id is passed in rather than looked up because
-  // the UI font ids live in src/ and this library must not reach into it. Pass
-  // enabled=false (the default) and nothing is drawn and nothing is measured on the
-  // draw path. See PerfStats.
-  void setTimingOverlay(bool enabled, int fontId) {
-    timingOverlayEnabled = enabled;
-    timingOverlayFontId = fontId;
-  }
 
   // Screen ops
   int getScreenWidth() const;

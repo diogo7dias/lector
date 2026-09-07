@@ -217,20 +217,6 @@ void KeyboardEntryActivity::moveSelectionCol(const int delta) {
   selCol = (selCol + delta + cols) % cols;
 }
 
-bool KeyboardEntryActivity::syncSelectionToValue(const int16_t value) {
-  const fui::KeyboardLayout& layout = currentLayout();
-  for (int r = 0; r < layout.rowCount; r++) {
-    for (int c = 0; c < layout.rows[r].count; c++) {
-      if (layout.rows[r].keys[c].value == value) {
-        selRow = r;
-        selCol = c;
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 size_t KeyboardEntryActivity::utf8Prev(const std::string& s, size_t pos) {
   if (pos == 0) return 0;
   pos--;
@@ -401,87 +387,11 @@ keyboard_field::Metrics KeyboardEntryActivity::fieldMetrics() const {
     // The toggle keeps its own room whichever label it is showing, so the text
     // does not reflow when the password is revealed.
     const int toggleGap = 4;
-    field.toggleReserve = std::max(renderer.getTextWidth(UI_12_FONT_ID, "[abc]"),
-                                   renderer.getTextWidth(UI_12_FONT_ID, "[***]")) +
-                          toggleGap;
+    field.toggleReserve =
+        std::max(renderer.getTextWidth(UI_12_FONT_ID, "[abc]"), renderer.getTextWidth(UI_12_FONT_ID, "[***]")) +
+        toggleGap;
   }
   return field;
-}
-
-bool KeyboardEntryActivity::cursorPositionFromPoint(const int x, const int y, size_t& position) const {
-  // Key taps are the overwhelmingly common case; they land on the keyboard,
-  // never the text field, so skip the wrap/measure work entirely.
-  if (y >= keyboardRect().y) return false;
-
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const keyboard_field::Metrics field = fieldMetrics();
-
-  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int inputStartY = keyboard_field::fieldTop(metrics.topPadding, metrics.headerHeight, metrics.verticalSpacing,
-                                                   metrics.keyboardVerticalOffset);
-
-  const int effectiveMargin = keyboard_field::marginFor(field);
-  const int maxLineWidth = keyboard_field::textWidthFor(field);
-  const bool centerText = metrics.keyboardCenteredText;
-  std::string displayText = displayTextForCurrentState();
-
-  int lineStartIdx = 0;
-  int lineY = inputStartY;
-  int lastLineStartIdx = 0;
-  int lastLineEndIdx = static_cast<int>(displayText.length());
-  int lastLineStartX = effectiveMargin;
-  int lastLineWidth = 0;
-
-  while (true) {
-    const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
-    const int textWidth = measureRange(displayText, lineStartIdx, lineEndIdx);
-    const int lineStartX = keyboard_field::lineStartX(field, textWidth, centerText);
-    lastLineStartIdx = lineStartIdx;
-    lastLineEndIdx = lineEndIdx;
-    lastLineStartX = lineStartX;
-    lastLineWidth = textWidth;
-
-    if (y >= lineY - metrics.verticalSpacing && y < lineY + lineHeight + metrics.verticalSpacing) {
-      if (x <= lineStartX) {
-        position = static_cast<size_t>(lineStartIdx);
-        return true;
-      }
-      if (x >= lineStartX + textWidth) {
-        position = static_cast<size_t>(lineEndIdx);
-        return true;
-      }
-
-      int previousWidth = 0;
-      for (int i = lineStartIdx; i < lineEndIdx; i++) {
-        const int nextWidth = measureRange(displayText, lineStartIdx, i + 1);
-        const int midpoint = lineStartX + previousWidth + (nextWidth - previousWidth) / 2;
-        if (x < midpoint) {
-          position = static_cast<size_t>(i);
-          return true;
-        }
-        previousWidth = nextWidth;
-      }
-      position = static_cast<size_t>(lineEndIdx);
-      return true;
-    }
-
-    if (lineEndIdx == static_cast<int>(displayText.length())) {
-      break;
-    }
-
-    lineY += lineHeight;
-    lineStartIdx = lineEndIdx;
-  }
-
-  const int underlineBottom = lineY + lineHeight + metrics.verticalSpacing + 8;
-  if (y >= inputStartY - metrics.verticalSpacing && y < underlineBottom && x >= effectiveMargin &&
-      x < effectiveMargin + maxLineWidth + field.toggleReserve) {
-    position = x < lastLineStartX + lastLineWidth ? static_cast<size_t>(lastLineStartIdx)
-                                                  : static_cast<size_t>(lastLineEndIdx);
-    return true;
-  }
-
-  return false;
 }
 
 fui::Rect KeyboardEntryActivity::keyboardRect() const {
@@ -818,14 +728,14 @@ void KeyboardEntryActivity::render(RenderLock&&) {
                     pageWidth - 2 * lineMargin);
 
   const auto fillRect = [&](const int x, const int y, const int w, const int h) {
-    target.fill(fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(w),
-                          static_cast<int16_t>(h)},
-                fui::Paint::solid(fui::Color::Black));
+    target.fill(
+        fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(w), static_cast<int16_t>(h)},
+        fui::Paint::solid(fui::Color::Black));
   };
 
   if (cursorMode && !togglePos && cursorPos <= displayText.length()) {
-    const keyboard_field::Rect block = keyboard_field::blockCursor(cursorPixelX, cursorLineY, cursorCharWidth,
-                                                                   lineHeight);
+    const keyboard_field::Rect block =
+        keyboard_field::blockCursor(cursorPixelX, cursorLineY, cursorCharWidth, lineHeight);
     fillRect(block.x, block.y, block.width, block.height);
     if (cursorPos < text.length()) {
       // The character under the block is drawn in reverse, so the letter being
@@ -882,8 +792,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     if (cursorMode) {
       int hintLineY = hintY;
       if (inputType == InputType::Password && togglePos) {
-        drawCentredSmall(
-            passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD), hintLineY);
+        drawCentredSmall(passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD),
+                         hintLineY);
         hintLineY += hintLh;
         drawCentredSmall(tr(STR_KB_HINT_RETURN_CURSOR), hintLineY);
       } else {

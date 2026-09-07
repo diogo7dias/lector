@@ -25,10 +25,6 @@ enum class HomeMenuItem {
   OPDS_BROWSER,
   FILE_TRANSFER,
   SETTINGS_MENU,
-#ifdef LECTOR_LOCK_LAB_UI
-  // Last on purpose, so the throwaway row cannot shift the index of a real one.
-  LOCK_LAB,
-#endif
 };
 
 /**
@@ -121,9 +117,6 @@ class ActivityManager {
   // goTo... functions are convenient wrapper for replaceActivity()
   void goToFileTransfer();
   void goToSettings();
-#ifdef LECTOR_LOCK_LAB_UI
-  void goToLockLab();
-#endif
   void goToFileBrowser(std::string path = {});
   void goToBrowser();
   void goToReader(std::string path, bool allowFastInitialRefresh = false);

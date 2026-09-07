@@ -35,10 +35,6 @@ class PxcViewerActivity final : public Activity {
   // overlay hook, so the hints composite into the same refresh as the wallpaper
   // instead of costing a second one.
   void drawHints() const;
-  // Repaints the hint strip over the framebuffer that already holds the wallpaper
-  // and refreshes differentially. For changes that touch the hints and nothing else.
-  void refreshHintsOnly() const;
-
   // The path this file WILL have once the favorite queue drains, or filePath itself when
   // nothing is queued for it. Everything the user is shown reads through here: the press
   // that favorites a wallpaper only queues the rename, so the card still holds the old

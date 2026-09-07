@@ -27,9 +27,10 @@ namespace tls_scratch {
  * there is nothing to claim and every allocation falls through to the heap,
  * which is exactly the old behaviour.
  *
- * One at a time, and not while another task is using wolfSSL: the allocators
- * are global. The font download is the only caller, and it blocks its activity
- * for the whole transfer.
+ * Two large allocations at a time (handshake buffer + first application
+ * record), carved from the 48 KB framebuffer. Not while another task is using
+ * wolfSSL: the allocators are global. Callers block their activity for the
+ * whole transfer.
  */
 class Session {
  public:

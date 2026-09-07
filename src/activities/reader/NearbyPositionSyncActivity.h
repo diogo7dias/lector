@@ -72,7 +72,7 @@ class NearbyPositionSyncActivity final : public UiStatusActivity {
   /** Chapter title for a spine index, falling back to "Section N". */
   std::string chapterNameFor(int spineIndex) const;
 
-  std::shared_ptr<Epub> epub;
+  std::unique_ptr<Epub> epub;
   std::string epubPath;
   std::string documentHash;
   std::string localChapterName;

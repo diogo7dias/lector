@@ -658,7 +658,6 @@ void setup() {
   // to fill credentials into rather than typed out on a five-button keyboard.
   OPDS_STORE.seedBuiltInServers();
   READER_PRESETS.loadFromFile();
-  UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   WakeTiming::mark(WakeTiming::Stage::ConfigReady);
 
@@ -1166,11 +1165,6 @@ void loop() {
   mappedInputManager.clearBindingOverrides();
 
   renderer.setFadingFix(SETTINGS.fadingFix);
-  // Never on, in any build. The numbers reach the serial log and the perf CSV by paths
-  // that do not touch this flag, and an overlay across the top of every frame covers part
-  // of the screen a kit round exists to look at: a lock screen or a wallpaper cannot be
-  // judged with a timing bar painted over it.
-  renderer.setTimingOverlay(false, UI_10_FONT_ID);
   display.setFastPageTurns(SETTINGS.fastPageTurns != 0);
 
   if (Serial && millis() - lastMemPrint >= 10000) {
@@ -1238,18 +1232,6 @@ void loop() {
     screenshotButtonsReleased = true;
     screenshotComboActive = false;
   }
-
-#ifdef LECTOR_LOCK_LAB
-  // The Lock Lab's "Full lock" run. It goes through the ordinary sleep path rather than
-  // rendering in place, because a render in isolation skips the favourites reconcile, the
-  // index pick, the frame save and the WiFi teardown, and those are most of the ten
-  // seconds being measured.
-  if (locklab::takePendingFullLock()) {
-    LOG_INF("LAB", "Full lock requested");
-    enterDeepSleep();
-    return;
-  }
-#endif
 
   const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
   if (sleepTimeoutMs > 0 && millis() - lastActivityTime >= sleepTimeoutMs) {
