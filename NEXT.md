@@ -16,6 +16,24 @@ parsing in `QuotesViewerActivity`.
 Verified before the kit was cut: 1128 host tests pass (baseline 1123, plus 5 new). `pio run -e default` and
 `pio run -e x4pro` both succeed. clang-format applied.
 
+## 0. Upstream catch-up landed, 2026-09-07, branch `chore/lector-cleanup-upstream-20260907`
+
+Six commits on top of `0.30.1`, all ports of upstream crosspoint-reader fixes Lector had not taken,
+none pushed and none merged:
+
+- `fix(css): strip !important from every declaration value` (#3221, the !important half). CSS_CACHE_VERSION 8 -> 9.
+- `fix(fonts): retry the glyph arena smaller when the heap is fragmented` (#3126).
+- `fix(dictionary): release SD font caches when the definition screen exits` (#3317).
+- `fix(keyboard): keep multi-byte characters whole in the text field` (#3095, #3094).
+- `refactor(koreader): drop the duplicate NTP sync before a sync` (#3185). `STR_SYNCING_TIME` is now unused.
+- `fix(epub): keep superscript styling on internal links` (#3355). SECTION_FILE_VERSION 53 -> 54.
+
+Two cache versions moved, so the first boot after this rebuilds every book's CSS and section caches.
+
+Skipped on purpose, still open: #3377, #3341 and #3072 all need a `freeink-sdk` bump; #3005 rewrites
+CssParser wholesale; #3221's closing-block margin change is a layout change with no way to check it
+off-device; #3364 does not apply, Lector's settings UI no longer has those tables.
+
 ## 1. Run kit 44 on the X4 Pro (blocking, needs the device)
 
 Prerelease `x4pro-testkit-2026-08-31a` on `diogo7dias/lector-xteink-firmware`, titled "X4 Pro test kit 2026-08-31a".
