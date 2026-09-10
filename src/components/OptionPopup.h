@@ -73,7 +73,7 @@ class OptionPopup {
 
     int tx = 0;
     int ty = 0;
-    if (input.wasScreenTouchDown(tx, ty)) {
+    if (input.wasScreenTouchDown(tx, ty) && !input.isInHintBand(tx, ty)) {
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
@@ -86,7 +86,7 @@ class OptionPopup {
       }
       return true;
     }
-    if (input.wasScreenTapped(tx, ty)) {
+    if (input.wasScreenTapped(tx, ty) && !input.isInHintBand(tx, ty)) {
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
