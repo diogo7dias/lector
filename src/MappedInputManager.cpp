@@ -85,12 +85,14 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       return false;
     }
     if (tapped < 0 || hw != tapped) return false;
-    // Only the press half is answered on this frame; asking again for the same tap
-    // gets nothing, so one tap is one press.
-    if (releaseQuery) return false;
+    // A tap always owes a release, including when this is the first query a
+    // release-only screen makes. The tap frame remains press-only below.
     hintTapUsed = true;
     hintPendingRelease = static_cast<int>(hw);
     hintPendingReleaseAt = millis();
+    // Only the press half is answered on this frame; asking again for the same tap
+    // gets nothing, so one tap is one press.
+    if (releaseQuery) return false;
     return true;
   };
 
@@ -166,6 +168,29 @@ constexpr float TOP_EDGE_MENU_GESTURE_FRAC_Y = 0.14f;
 constexpr float MENU_DRAG_TRAVEL_FRAC_Y = 0.20f;
 constexpr unsigned long TOUCH_DOWN_SELECT_DELAY_MS = 90;
 constexpr unsigned long TOUCH_HELD_OVERRIDE_WINDOW_MS = 250;
+
+void hintBandPortraitPoint(const GfxRenderer& renderer, const hint_band::Band& band, int& x, int& y) {
+  switch (renderer.getOrientation()) {
+    case GfxRenderer::Portrait:
+      break;
+    case GfxRenderer::PortraitInverted:
+      x = band.screenWidth - 1 - x;
+      y = band.screenHeight - 1 - y;
+      break;
+    case GfxRenderer::LandscapeClockwise: {
+      const int portraitX = y;
+      y = band.screenHeight - 1 - x;
+      x = portraitX;
+      break;
+    }
+    case GfxRenderer::LandscapeCounterClockwise: {
+      const int portraitX = band.screenWidth - 1 - y;
+      y = x;
+      x = portraitX;
+      break;
+    }
+  }
+}
 }  // namespace
 
 bool MappedInputManager::hasTouch() const { return gpio.hasTouch(); }
@@ -190,6 +215,10 @@ int MappedInputManager::tappedHintHardware() const {
   int y = 0;
   renderer.tapToLogical(nx, ny, x, y);
 
+  // drawButtonHints() always paints in Portrait, even while a reader-owned
+  // activity remains rotated on the stack.
+  hintBandPortraitPoint(renderer, painted.band, x, y);
+
   const int slot = hint_band::tappedSlot(painted.band, x, y, painted.labelled);
   if (slot < 0) return -1;
   rememberTouchHeldTime();
@@ -198,7 +227,12 @@ int MappedInputManager::tappedHintHardware() const {
 
 bool MappedInputManager::isInHintBand(const int x, const int y) const {
   const hint_band::Painted& painted = hint_band::lastPainted();
-  return painted.valid && hint_band::tappedSlot(painted.band, x, y, painted.labelled) >= 0;
+  if (!painted.valid) return false;
+
+  int portraitX = x;
+  int portraitY = y;
+  hintBandPortraitPoint(renderer, painted.band, portraitX, portraitY);
+  return hint_band::tappedSlot(painted.band, portraitX, portraitY, painted.labelled) >= 0;
 }
 
 bool MappedInputManager::wasRowTapped(int& item) const {
