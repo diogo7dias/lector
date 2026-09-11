@@ -1,6 +1,5 @@
 #pragma once
 #include <cstddef>
-
 #include <string>
 #include <vector>
 
@@ -40,9 +39,6 @@ class ReaderPresetsActivity final : public UiListActivity {
   ReaderPrefs currentPrefs;
 
   OptionPopup optionPopup;
-  // True while the button press that closed the popup is still held; its release must
-  // not fall through to this screen's own Back/Confirm handlers.
-  bool popupClosing = false;
 
   // Rows are the saved themes, then "Save current look..." — which is absent once the
   // store is full, since there is nothing to save into.

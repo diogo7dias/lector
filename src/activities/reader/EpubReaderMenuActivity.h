@@ -157,9 +157,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   Tab preferredTab = Tab::Navigate;
 
   OptionPopup optionPopup;
-  // True while the button press that closed the popup is still held; its release
-  // must not fall through to the menu's own Back/Confirm handlers.
-  bool popupClosing = false;
   std::string title = "Reader Menu";
   std::string author;
   std::string chapterName;

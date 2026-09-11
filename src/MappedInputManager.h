@@ -3,6 +3,7 @@
 #include <HalGPIO.h>
 
 #include "ListSwipeGesture.h"
+#include "components/HintBandGeometry.h"
 #include "util/ReleaseGate.h"
 
 class GfxRenderer;
@@ -46,8 +47,14 @@ class MappedInputManager {
 
   // Swallow the release of whatever button is held right now. A screen that acted on the
   // press and opened another screen calls this, so the lift cannot act again on what it
-  // opened. Button counterpart of the touch path's takeScreenTouchDown().
-  void suppressHeldButtonRelease() const { releaseGate.arm(isAnyPressed()); }
+  // opened. Button counterpart of the touch path's takeScreenTouchDown(). A hint-band
+  // tap owes its release the same way, with no key held to gate on, so the owed one is
+  // dropped here too: a pop-back (a confirmation answered by tap) never re-enters the
+  // screen it returns to.
+  void suppressHeldButtonRelease() const {
+    releaseGate.arm(isAnyPressed());
+    hintStroke.clear();
+  }
 
   // True while any physical button is down.
   bool isAnyPressed() const;
@@ -65,6 +72,9 @@ class MappedInputManager {
   // (every FreeInkUI screen) has to leave it alone, or the row under the band
   // eats the press.
   bool isInHintBand(int x, int y) const;
+  // Both answer false for a contact in the hint band: those pixels are the button painted
+  // there, and it is answered through wasPressed()/wasReleased(). A screen that routes taps
+  // of its own therefore never has to test the band itself, and cannot forget to.
   bool wasScreenTapped(int& x, int& y) const;
   bool wasScreenTouchDown(int& x, int& y) const;
   // Same query, but the contact is spent by asking: it answers true once and the rest of
@@ -183,28 +193,13 @@ class MappedInputManager {
   void rememberTouchHeldTime() const;
 
  public:
-  // Drops a synthetic hint-band release that has not been delivered yet. Called on
-  // every screen entry: the release belongs to the screen that handled the press,
-  // and an orphan one would act on whatever the new screen has selected.
-  void clearHintTap() {
-    hintTapUsed = false;
-    hintPendingRelease = -1;
-  }
+  // Drops a synthetic hint-band release that has not been delivered yet. See
+  // hint_band::TapStroke::clear().
+  void clearHintTap() { hintStroke.clear(); }
 
  private:
-  // A tap on the hint band stands for a whole button stroke, not for one event: the
-  // press is answered on the frame the tap lands, and the release on the next frame,
-  // because that is what a physical key does and what every hold-aware button on top
-  // of one expects. Delivering both in a single frame let whichever query the caller
-  // wrote first eat the tap, and a screen reading press and release together (the
-  // file browser's Open, which also holds) then saw half a stroke and did nothing.
-  mutable bool hintTapUsed = false;
-  // The hardware id whose synthetic release is still owed, or -1, and when the
-  // press that owes it landed. A screen that never asks for the release must not
-  // leave one lying about for the next thing that does, so it expires.
-  mutable int hintPendingRelease = -1;
-  mutable unsigned long hintPendingReleaseAt = 0;
-  static constexpr unsigned long HINT_TAP_RELEASE_WINDOW_MS = 500;
+  // A tap on the hint band stands for a whole button stroke: see hint_band::TapStroke.
+  mutable hint_band::TapStroke hintStroke;
 
   // See suppressHeldButtonRelease().
   mutable input_gate::ReleaseGate releaseGate;
