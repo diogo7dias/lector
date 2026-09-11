@@ -50,6 +50,13 @@ TEST(FirmwareVersionIsNewer, ComparesEachFieldInTurn) {
   EXPECT_FALSE(firmware_version::isNewer("lector-0.24.1", "lector 0.24.1"));
 }
 
+TEST(FirmwareVersionIsNewer, ComparesFieldsAsNumbersNotDigits) {
+  // A tenth patch release must still look newer than the ninth, or the reader
+  // stops seeing updates the moment a field reaches two digits.
+  EXPECT_TRUE(firmware_version::isNewer("lector-0.30.10", "lector 0.30.9"));
+  EXPECT_FALSE(firmware_version::isNewer("lector-0.30.9", "lector 0.30.10"));
+}
+
 TEST(FirmwareVersionIsNewer, TreatsAReleaseCandidateAsOlderThanItsRelease) {
   EXPECT_TRUE(firmware_version::isNewer("lector-0.24.1", "lector 0.24.1-rc+ab12cd"));
   EXPECT_FALSE(firmware_version::isNewer("lector-0.24.1", "lector 0.24.1"));
