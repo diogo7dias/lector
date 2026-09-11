@@ -57,7 +57,8 @@ TEST(FirmwareRetryFlow, NothingCapsHowManyTimesTheReaderMayRetry) {
   for (const char* path : {OTA_ACTIVITY_SOURCE, SD_ACTIVITY_SOURCE}) {
     const std::string source = readSource(path);
     EXPECT_TRUE(contains(source, "manualRetries")) << path << " does not track manual retries at all";
-    EXPECT_FALSE(contains(source, "MAX_MANUAL_RETRIES")) << path << " caps manual retries; Retry must work indefinitely";
+    EXPECT_FALSE(contains(source, "MAX_MANUAL_RETRIES"))
+        << path << " caps manual retries; Retry must work indefinitely";
     // Every comparison of the counter must be the "have we retried at all" test.
     for (std::size_t at = source.find("manualRetries >"); at != std::string::npos;
          at = source.find("manualRetries >", at + 1)) {
@@ -126,6 +127,34 @@ TEST(FirmwareRetryFlow, EveryFailurePathStillLogs) {
     EXPECT_TRUE(contains(source, "LOG_ERR") || contains(source, "LOG_DBG"))
         << path << " reports no diagnostics on failure";
   }
+}
+
+TEST(FirmwareRetryFlow, TheDiagnosticsFileIsAppendedToNotReplaced) {
+  // Storage.openFileForWrite opens O_TRUNC, so every record wiped the one
+  // before it and the file only ever held its last line; the boot record then
+  // erased the failure it was meant to explain.
+  const std::string source = readSource(DIAGNOSTICS_SOURCE);
+  EXPECT_FALSE(contains(source, "openFileForWrite"))
+      << "diagnostics are opened with O_TRUNC; each record wipes the last";
+  EXPECT_TRUE(contains(source, "O_APPEND")) << "diagnostics are not appended";
+}
+
+// --- a plain update check never offers another fork's firmware -------------
+
+TEST(FirmwareRetryFlow, CheckForUpdatesNeverFallsBackToUpstream) {
+  // The upstream CrossPoint endpoint exists for Install Other Firmware on a
+  // reader behind an OTA unlocker. Reachable from the plain check, one dropped
+  // TLS handshake against this fork's endpoint offered upstream's v1.x as a
+  // "newer" lector, and the update screen then installed a different firmware.
+  const std::string source = readSource(OTA_UPDATER_SOURCE);
+  EXPECT_TRUE(contains(source, "if (includePrereleases) candidateUrls[numCandidates++] = upstreamReleaseUrl;"))
+      << "upstream is not gated on Install Other Firmware";
+  std::size_t uses = 0;
+  for (std::size_t at = source.find("= upstreamReleaseUrl;"); at != std::string::npos;
+       at = source.find("= upstreamReleaseUrl;", at + 1)) {
+    ++uses;
+  }
+  EXPECT_EQ(uses, 1u) << "upstream is queued on a second path";
 }
 
 TEST(FirmwareRetryFlow, TheFailureScreenStillNamesWhatWentWrong) {

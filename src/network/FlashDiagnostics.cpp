@@ -20,12 +20,13 @@ namespace {
 constexpr const char* kPath = "/lector-flash-diagnostics.txt";
 
 void append(const std::string& text) {
-  HalFile file;
-  if (!Storage.openFileForWrite("FLASH", kPath, file) || !file) {
+  // Not openFileForWrite: that opens O_TRUNC, so every record replaced the
+  // one before it and the file only ever held its last line.
+  HalFile file = Storage.open(kPath, O_WRONLY | O_CREAT | O_APPEND);
+  if (!file) {
     LOG_ERR("FLASH", "diagnostics: cannot open %s", kPath);
     return;
   }
-  file.seek(file.fileSize());
   file.write(reinterpret_cast<const uint8_t*>(text.data()), text.size());
   file.close();
 }

@@ -66,16 +66,16 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrerele
   // 1. If includePrereleases (Install Other Firmware), try releaseListUrl first.
   // 2. Try latestReleaseUrl (Lector's latest release).
   // 3. Fall back to upstreamReleaseUrl (for CrossPoint OTA Unlocker / upstream repos).
+  //
+  // Only Install Other Firmware gets step 3. Reachable from the plain check, one
+  // dropped handshake against this fork's endpoint fell through to upstream,
+  // whose v1.x tag reads as newer than lector 0.x, and Check for Updates offered
+  // a different firmware as an update: the 0.24.1 regression again.
   const char* candidateUrls[3];
   size_t numCandidates = 0;
-  if (includePrereleases) {
-    candidateUrls[numCandidates++] = releaseListUrl;
-    candidateUrls[numCandidates++] = latestReleaseUrl;
-    candidateUrls[numCandidates++] = upstreamReleaseUrl;
-  } else {
-    candidateUrls[numCandidates++] = latestReleaseUrl;
-    candidateUrls[numCandidates++] = upstreamReleaseUrl;
-  }
+  if (includePrereleases) candidateUrls[numCandidates++] = releaseListUrl;
+  candidateUrls[numCandidates++] = latestReleaseUrl;
+  if (includePrereleases) candidateUrls[numCandidates++] = upstreamReleaseUrl;
 
   bool ok = false;
   for (size_t i = 0; i < numCandidates; ++i) {

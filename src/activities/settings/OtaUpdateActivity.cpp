@@ -300,9 +300,9 @@ void OtaUpdateActivity::retryFailedStep() {
   }
 
   // Fresh progress accounting: the bar and the byte line belong to this attempt,
-  // not to the one that died. The partition itself is NOT reset — installUpdate
-  // resumes from what was already written when the server allows it, and
-  // validates the whole image before anything is pointed at it.
+  // not to the one that died. installUpdate starts the partition over from
+  // byte 0 (resume only spans the attempts inside one call) and validates the
+  // whole image before anything is pointed at it.
   lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   bytesLine.clear();
   runUpdateInstall();
