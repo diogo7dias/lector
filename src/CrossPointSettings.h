@@ -267,6 +267,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static constexpr auto LP_MENU_SEARCH = bound_action::LP_MENU_SEARCH;
   static constexpr auto LP_MENU_SETTINGS = bound_action::LP_MENU_SETTINGS;
   static constexpr auto LP_MENU_ROTATE = bound_action::LP_MENU_ROTATE;
+  static constexpr auto LP_MENU_READING_STATS = bound_action::LP_MENU_READING_STATS;
   static constexpr auto LONG_PRESS_MENU_FUNCTION_COUNT = bound_action::LONG_PRESS_MENU_FUNCTION_COUNT;
 
   // The three buttons the Buttons screen binds, in the order it lists them. Left and

@@ -72,6 +72,8 @@ inline StrId boundMenuActionLabel(const uint8_t function) {
       return StrId::STR_SETTINGS_TITLE;
     case CrossPointSettings::LP_MENU_ROTATE:
       return StrId::STR_ROTATE;
+    case CrossPointSettings::LP_MENU_READING_STATS:
+      return StrId::STR_READING_STATS;
     case CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE:
       return StrId::STR_FAVORITE_WALLPAPER;
     case CrossPointSettings::LP_MENU_FORCE_REFRESH:

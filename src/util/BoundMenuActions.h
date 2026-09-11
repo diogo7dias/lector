@@ -85,6 +85,9 @@ enum LONG_PRESS_MENU_FUNCTION {
   // rather than through the action list. Folding it in makes the panel's grid uniform:
   // every cell in it is one of these values.
   LP_MENU_ROTATE = 30,
+  // Opens Reading Stats for the book being read, or the most recent book when none
+  // is open. Appended so Controls > Buttons can bind it; values before this stay put.
+  LP_MENU_READING_STATS = 31,
   LONG_PRESS_MENU_FUNCTION_COUNT
 };
 

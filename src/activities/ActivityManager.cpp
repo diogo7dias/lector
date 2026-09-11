@@ -30,6 +30,7 @@
 #include "settings/SettingsActivity.h"
 #include "util/DebugTrace.h"
 #include "util/FullScreenMessageActivity.h"
+#include "util/OpenReadingStats.h"
 #include "util/OrientationCycle.h"
 
 static portMUX_TYPE activityManagerSpinlock = portMUX_INITIALIZER_UNLOCKED;
@@ -531,6 +532,10 @@ bool ActivityManager::runBoundAction(const uint8_t function) {
       // hand the very next pass to the panel and return before its own flush.
       requestUpdate(/*immediate=*/true);
       return true;
+    case CrossPointSettings::LP_MENU_READING_STATS:
+      // Readers consume this themselves so the live session pauses. Everywhere else
+      // this is the same recents screen Home Back already opens.
+      return currentActivity && launchRecentBookStats(*currentActivity, renderer, mappedInput);
     default:
       return false;
   }

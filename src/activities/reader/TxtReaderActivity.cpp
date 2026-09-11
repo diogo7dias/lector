@@ -23,6 +23,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/OpenReadingStats.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -601,6 +602,12 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
       return true;
     case simple_reader_shortcut::Action::None:
       break;
+  }
+  if (function == CrossPointSettings::LP_MENU_READING_STATS) {
+    const uint8_t progress = totalPages > 0 ? static_cast<uint8_t>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
+    launchLiveReadingStats(*this, renderer, mappedInput, statsSession, statsTrackingActive,
+                           txt ? txt->getTitle() : std::string{}, progress > 100 ? 100 : progress);
+    return true;
   }
   // Not runnable in this reader, or runnable only when a card read says so (Hold
   // Wallpaper checks the file is still there). Fall through to the shared handler, which

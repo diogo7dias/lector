@@ -24,6 +24,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
+#include "util/OpenReadingStats.h"
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -63,9 +64,21 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
     return true;
   }
 
-  // Wallpaper Hold is the only binding this reader can run itself; everything else falls
-  // through to the shared handler. Resolve can still say None for Wallpaper Hold, because
-  // this is where the card is asked whether the file is still on it.
+  if (function == CrossPointSettings::LP_MENU_READING_STATS) {
+    uint8_t progress = 0;
+    if (xtc) {
+      const uint32_t pageCount = xtc->getPageCount();
+      const uint32_t clampedPage = (pageCount > 0 && currentPage >= pageCount) ? pageCount - 1 : currentPage;
+      progress = pageCount > 0 ? static_cast<uint8_t>(xtc->calculateProgress(clampedPage)) : 0;
+    }
+    launchLiveReadingStats(*this, renderer, mappedInput, statsSession, statsTrackingActive,
+                           xtc ? xtc->getTitle() : std::string{}, progress);
+    return true;
+  }
+
+  // Wallpaper Hold is the only remaining binding this reader can run itself; everything
+  // else falls through to the shared handler. Resolve can still say None for Wallpaper
+  // Hold, because this is where the card is asked whether the file is still on it.
   if (simple_reader_shortcut::resolve(function, /*supportsStatusBarToggle=*/false) !=
       simple_reader_shortcut::Action::WallpaperHold) {
     return false;

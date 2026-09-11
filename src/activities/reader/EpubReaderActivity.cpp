@@ -20,7 +20,6 @@
 #include <limits>
 
 #include "../../util/BookmarkFile.h"
-#include "BookStatsActivity.h"
 #include "BookmarkEntry.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
@@ -57,7 +56,6 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "reading_stats/ReadingStatsClock.h"
-#include "reading_stats/ReadingStatsPresentation.h"
 #include "sleep/SleepPauseToggle.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
@@ -66,6 +64,7 @@
 #include "util/BoundMenuLabels.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
+#include "util/OpenReadingStats.h"
 #include "util/ScreenshotUtil.h"
 
 namespace {
@@ -492,11 +491,6 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 }
 
 void EpubReaderActivity::openReadingStats() {
-  // Stop the clock first: time spent staring at the stats screen is not reading.
-  if (statsTrackingActive) statsSession.pause(millis());
-
-  const reading_stats::ReadingStatsData book = statsSession.bookSnapshot();
-  const reading_stats::ReadingStatsData global = statsSession.globalSnapshot();
   float bookProgress = 0.0f;
   if (epub && epub->getBookSize() > 0 && section && section->estimatedTotalPages() > 0) {
     const float chapterProgress =
@@ -504,21 +498,8 @@ void EpubReaderActivity::openReadingStats() {
     bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
   }
   const uint8_t progress = static_cast<uint8_t>(clampPercent(static_cast<int>(bookProgress + 0.5f)));
-
-  startActivityForResult(std::make_unique<BookStatsActivity>(
-                             renderer, mappedInput, epub ? epub->getTitle() : std::string{}, book, global, progress,
-                             reading_stats::estimateTimeLeft(book.totalReadingSeconds, progress),
-                             [this](const bool resetAll, reading_stats::ReadingStatsData& nextBook,
-                                    reading_stats::ReadingStatsData& nextGlobal) {
-                               const auto now = reading_stats::currentLocalDateTime();
-                               const bool reset = resetAll ? statsSession.resetAll(now) : statsSession.resetBook(now);
-                               if (reset) {
-                                 nextBook = statsSession.bookSnapshot();
-                                 nextGlobal = statsSession.globalSnapshot();
-                               }
-                               return reset;
-                             }),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  launchLiveReadingStats(*this, renderer, mappedInput, statsSession, statsTrackingActive,
+                         epub ? epub->getTitle() : std::string{}, progress);
 }
 
 void EpubReaderActivity::openQuoteGrab() {
@@ -590,6 +571,8 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
     case CrossPointSettings::LP_MENU_PAGE_NEXT:
+      return true;
+    case CrossPointSettings::LP_MENU_READING_STATS:
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -674,6 +657,9 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_PAGE_NEXT:
       pageTurn(true);
+      return true;
+    case CrossPointSettings::LP_MENU_READING_STATS:
+      openReadingStats();
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:

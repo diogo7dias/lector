@@ -19,18 +19,13 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
-#include "activities/reader/BookStatsActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
-#include "reading_stats/ReaderStatsSession.h"
-#include "reading_stats/ReadingStatsPresentation.h"
-#include "reading_stats/ReadingStatsStore.h"
-#include "reading_stats/SdStatsFiles.h"
-#include "util/BookCacheUtils.h"
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
+#include "util/OpenReadingStats.h"
 
 int HomeActivity::menuRowCount() const {
   int count = 3;  // File Browser, File transfer, Settings
@@ -203,46 +198,7 @@ void HomeActivity::loop() {
   }
 }
 
-void HomeActivity::openRecentBookStats() {
-  const RecentBook& book = recentBooks[0];
-  const std::string cacheDir = bookCacheDirForPath(book.path);
-  if (cacheDir.empty()) return;  // an extension no reader caches has no stats file either
-
-  // Read the two stats files directly. The home screen has no ReaderStatsSession, so these
-  // are the numbers the last reading session saved and nothing is being timed right now.
-  // A missing file loads as an all-zero record, which the screen renders as "no reading
-  // yet" rather than failing.
-  reading_stats::SdStatsFiles files;
-  reading_stats::ReadingStatsStore store(files);
-  reading_stats::ReadingStatsData bookStats;
-  reading_stats::ReadingStatsData globalStats;
-  store.load(cacheDir + "/reading_stats.bin", bookStats);
-  store.load(reading_stats::ReaderStatsSession::globalPath(), globalStats);
-
-  const uint8_t progress = book.progressPercent > 0 ? static_cast<uint8_t>(book.progressPercent) : 0;
-
-  startActivityForResult(std::make_unique<BookStatsActivity>(
-                             renderer, mappedInput, book.title, bookStats, globalStats, progress,
-                             reading_stats::estimateTimeLeft(bookStats.totalReadingSeconds, progress),
-                             // Reset writes straight back to the same two files. Nothing here holds a live
-                             // session, so there is no in-memory copy that could overwrite it afterwards.
-                             [cacheDir](const bool resetAll, reading_stats::ReadingStatsData& outBook,
-                                        reading_stats::ReadingStatsData& outGlobal) {
-                               reading_stats::SdStatsFiles resetFiles;
-                               reading_stats::ReadingStatsStore resetStore(resetFiles);
-                               outBook = reading_stats::ReadingStatsData{};
-                               if (!resetStore.reset(cacheDir + "/reading_stats.bin", outBook)) return false;
-                               if (resetAll) {
-                                 outGlobal = reading_stats::ReadingStatsData{};
-                                 if (!resetStore.reset(reading_stats::ReaderStatsSession::globalPath(), outGlobal))
-                                   return false;
-                               } else {
-                                 resetStore.load(reading_stats::ReaderStatsSession::globalPath(), outGlobal);
-                               }
-                               return true;
-                             }),
-                         [this](const ActivityResult&) { requestUpdate(); });
-}
+void HomeActivity::openRecentBookStats() { launchRecentBookStats(*this, renderer, mappedInput); }
 
 void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
