@@ -14,8 +14,7 @@
 
 class TxtReaderActivity final : public Activity {
   // Reading statistics. This reader has only the small Confirm popup below, not the
-  // EPUB reader's tabbed menu, so the Reading Stats screen is still reached from the
-  // EPUB reader. Time and pages read here still land in the all-books totals.
+  // EPUB reader's tabbed menu. Bind LP_MENU_READING_STATS to open the stats screen.
   reading_stats::SdStatsFiles statsFiles;
   reading_stats::ReaderStatsSession statsSession{statsFiles};
   bool statsTrackingActive = false;
