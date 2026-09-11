@@ -143,7 +143,8 @@ inline freeink::ui::InputSnapshot touchSnapshotFrom(const MappedInputManager& ma
   // A contact in the hint band belongs to the button painted there, whatever the
   // screen drew under it. Without this an element whose rect runs into the band
   // (a list's last row, the choice band) swallows the press and the four buttons
-  // stop answering on exactly the screens that have the most to press.
+  // stop answering on exactly the screens that have the most to press. The tap and
+  // touch-down queries already refuse the band; the held and long-press ones do not.
   const auto inHintBand = [&mappedInput](const int x, const int y) { return mappedInput.isInHintBand(x, y); };
 
   if (withLongPress && mappedInput.wasScreenLongPress(tx, ty)) {
@@ -164,12 +165,12 @@ inline freeink::ui::InputSnapshot touchSnapshotFrom(const MappedInputManager& ma
     snap.touchX = static_cast<int16_t>(tx);
     snap.touchY = static_cast<int16_t>(ty);
   }
-  if (mappedInput.wasScreenTouchDown(tx, ty) && !inHintBand(tx, ty)) {
+  if (mappedInput.wasScreenTouchDown(tx, ty)) {
     snap.touchPressed = true;
     snap.touchX = static_cast<int16_t>(tx);
     snap.touchY = static_cast<int16_t>(ty);
   }
-  if (mappedInput.wasScreenTapped(tx, ty) && !inHintBand(tx, ty)) {
+  if (mappedInput.wasScreenTapped(tx, ty)) {
     snap.touchReleased = true;
     snap.touchX = static_cast<int16_t>(tx);
     snap.touchY = static_cast<int16_t>(ty);

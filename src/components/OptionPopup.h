@@ -24,6 +24,7 @@ class OptionPopup {
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    closing = false;
     active = true;
   }
 
@@ -37,6 +38,7 @@ class OptionPopup {
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    closing = false;
     active = true;
   }
 
@@ -49,6 +51,7 @@ class OptionPopup {
     selectedIndex = currentIndex;
     onSelectCallback = std::move(onSelect);
     layoutValid = false;
+    closing = false;
     active = true;
   }
 
@@ -69,11 +72,11 @@ class OptionPopup {
   }
 
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
-    if (!active) return false;
+    if (!active) return swallowClosingRelease(input);
 
     int tx = 0;
     int ty = 0;
-    if (input.wasScreenTouchDown(tx, ty) && !input.isInHintBand(tx, ty)) {
+    if (input.wasScreenTouchDown(tx, ty)) {
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
@@ -86,7 +89,7 @@ class OptionPopup {
       }
       return true;
     }
-    if (input.wasScreenTapped(tx, ty) && !input.isInHintBand(tx, ty)) {
+    if (input.wasScreenTapped(tx, ty)) {
       const auto& hitLayout = getLayout(input.getRenderer());
       for (int i = 0; i < static_cast<int>(hitLayout.options.size()); i++) {
         if (contains(hitLayout.options[i], tx, ty)) {
@@ -119,17 +122,14 @@ class OptionPopup {
       // Every row disabled: there is nothing to choose, so Confirm dismisses rather
       // than firing an action the caller declared impossible.
       if (isDisabled(selectedIndex)) {
-        active = false;
-        requestUpdate();
+        closeOnPress(requestUpdate);
         return true;
       }
-      active = false;
+      closeOnPress(requestUpdate);
       if (onSelectCallback) onSelectCallback(selectedIndex);
-      requestUpdate();
       return true;
     } else if (input.wasPressed(MappedInputManager::Button::Back)) {
-      active = false;
-      requestUpdate();
+      closeOnPress(requestUpdate);
       return true;
     }
     return true;
@@ -152,6 +152,27 @@ class OptionPopup {
   bool isActive() const { return active; }
 
  private:
+  void closeOnPress(const std::function<void()>& requestUpdate) {
+    active = false;
+    closing = true;
+    requestUpdate();
+  }
+
+  // The pop-up acts on the press, and the release of that same press still arrives a
+  // frame later: from the key coming up, or as the synthetic release a hint-band tap
+  // owes. A host that acts on releases (every list screen) read it as its own: Back
+  // left the screen, Confirm re-activated the row that had opened the pop-up. Held
+  // here until it has gone by, once, for every host.
+  bool swallowClosingRelease(const MappedInputManager& input) {
+    if (!closing) return false;
+    if (input.isPressed(MappedInputManager::Button::Back) || input.isPressed(MappedInputManager::Button::Confirm)) {
+      return true;  // closing press still held
+    }
+    closing = false;
+    return input.wasReleased(MappedInputManager::Button::Back) ||
+           input.wasReleased(MappedInputManager::Button::Confirm);
+  }
+
   bool isDisabled(const int index) const {
     return index >= 0 && index < static_cast<int>(disabled.size()) && disabled[index];
   }
@@ -198,6 +219,8 @@ class OptionPopup {
   }
 
   bool active = false;
+  // See swallowClosingRelease().
+  bool closing = false;
   std::string title;
   std::vector<std::string> ownedStrings;
   // Empty when every row is selectable, which is every caller except the Quick Menu.

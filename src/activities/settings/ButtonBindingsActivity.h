@@ -71,9 +71,6 @@ class ButtonBindingsActivity final : public UiListActivity {
   std::vector<uint8_t> pickerFunctions;
   /** The row the picker is editing. */
   size_t pickerRow = 0;
-  // True while the button press that closed the picker is still held; its release must
-  // not fall through to this screen's own Back/Confirm handlers.
-  bool popupClosing = false;
 
   // Row labels own their strings; the ListItems borrow them.
   std::vector<std::string> labels;

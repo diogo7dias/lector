@@ -76,24 +76,8 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
       if (heldQuery ? override.suppressHeld : override.suppressEdges) return false;
     }
     if ((gpio.*fn)(hw)) return true;
-    // The synthetic release, owed from the frame the tap landed on. Delivered only
-    // once the tap event itself is gone, so press and release never share a frame.
-    if (releaseQuery && tapped < 0 && hintPendingRelease == static_cast<int>(hw)) {
-      const bool expired = millis() - hintPendingReleaseAt > HINT_TAP_RELEASE_WINDOW_MS;
-      hintPendingRelease = -1;
-      if (!expired) return true;
-      return false;
-    }
-    if (tapped < 0 || hw != tapped) return false;
-    // A tap always owes a release, including when this is the first query a
-    // release-only screen makes. The tap frame remains press-only below.
-    hintTapUsed = true;
-    hintPendingRelease = static_cast<int>(hw);
-    hintPendingReleaseAt = millis();
-    // Only the press half is answered on this frame; asking again for the same tap
-    // gets nothing, so one tap is one press.
-    if (releaseQuery) return false;
-    return true;
+    if (!tapCounts) return false;
+    return hintStroke.query(static_cast<int>(hw), tapped, releaseQuery, millis());
   };
 
   switch (button) {
@@ -207,10 +191,10 @@ int MappedInputManager::tappedHintHardware() const {
   // Read the tap without consuming it at the HAL: an activity that also handles taps of
   // its own still sees this one, and a tap outside the band is left entirely alone.
   if (!gpio.wasTouchTap(nx, ny)) {
-    hintTapUsed = false;  // the tap event is over; the next one starts unspent
+    hintStroke.tapOver();
     return -1;
   }
-  if (hintTapUsed || !painted.valid) return -1;
+  if (!painted.valid) return -1;
   int x = 0;
   int y = 0;
   renderer.tapToLogical(nx, ny, x, y);
@@ -240,10 +224,6 @@ bool MappedInputManager::wasRowTapped(int& item) const {
   int x = 0;
   int y = 0;
   if (!wasScreenTapped(x, y)) return false;
-  // A tap that lands in the hint band belongs to that button, not to a row, even when a
-  // list's rect runs under the band. Tested on geometry alone, so it holds whether or not
-  // the band's own press has already been spent this frame.
-  if (isInHintBand(x, y)) return false;
   const int hit = row_hit::lastRows().itemAt(x, y);
   if (hit == row_hit::kNoItem) return false;
   item = hit;
@@ -261,6 +241,9 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   float ny = 0.0f;
   if (!gpio.wasTouchTap(nx, ny)) return false;
   renderer.tapToLogical(nx, ny, x, y);
+  // Tested on geometry alone, so it holds whether or not the band's own press has
+  // already been spent this frame.
+  if (isInHintBand(x, y)) return false;
   rememberTouchHeldTime();
   return true;
 }
@@ -272,7 +255,7 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
   if (!gpio.isTouchTapCandidate(nx, ny, heldMs)) return false;
   if (heldMs < TOUCH_DOWN_SELECT_DELAY_MS) return false;
   renderer.tapToLogical(nx, ny, x, y);
-  return true;
+  return !isInHintBand(x, y);
 }
 
 bool MappedInputManager::takeScreenTouchDown(int& x, int& y) {

@@ -19,6 +19,7 @@
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
 #include "components/BusyBanner.h"
+#include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "home/CrashActivity.h"
 #include "home/FileBrowserActivity.h"
@@ -177,6 +178,10 @@ void ActivityManager::renderTaskLoop() {
           lightPanel.processRender(renderer);
         } else {
           row_hit::lastRows().begin();
+          // Same contract for the button hints: a screen that paints none (a reader
+          // page) must not keep answering to the band the screen before it drew, or a
+          // tap along the bottom of the page is a Back that leaves the book.
+          hint_band::lastPainted().valid = false;
           currentActivity->render(std::move(lock));
         }
       }

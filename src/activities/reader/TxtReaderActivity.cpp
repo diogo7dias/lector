@@ -124,15 +124,17 @@ void TxtReaderActivity::onExit() {
 }
 
 void TxtReaderActivity::loop() {
-  // See ReaderUtils::ButtonPressLatch: swallow a Back release whose press belonged to a
-  // child screen that closed on press, instead of reading it as "leave the book".
-  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
-
   // The popup owns every button while it is up, including Back (which closes it), so
-  // it is handled before the reader's own Back and page-turn handling.
+  // it is handled before the reader's own Back and page-turn handling. Before the latch
+  // below, as in EpubReaderActivity: a press the pop-up eats must not be latched, or
+  // its release reads as a genuine Back on the page and leaves the book.
   if (settingsPopup.handleInput(mappedInput, [this]() { requestUpdate(); })) {
     return;
   }
+
+  // See ReaderUtils::ButtonPressLatch: swallow a Back release whose press belonged to a
+  // child screen that closed on press, instead of reading it as "leave the book".
+  backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     openSettingsPopup();

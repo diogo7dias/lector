@@ -184,24 +184,8 @@ void ButtonBindingsActivity::onBackButton() {
 }
 
 bool ButtonBindingsActivity::handleCustomInput() {
-  if (actionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-    // The pop-up acts on button press; if that input closed it, the trailing release
-    // must be swallowed below (Back would leave the screen, Confirm would reopen it).
-    popupClosing = !actionPopup.isActive();
-    return true;
-  }
-  if (popupClosing) {
-    if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-        mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // closing press still held
-    }
-    popupClosing = false;
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back) ||
-        mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-      return true;  // swallow the release that closed the pop-up
-    }
-  }
-  return false;
+  // The pop-up also swallows the release of the press that closed it.
+  return actionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
 }
 
 bool ButtonBindingsActivity::drawOverlay() { return actionPopup.processRender(renderer, mappedInput); }
