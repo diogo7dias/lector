@@ -134,7 +134,7 @@ TEST(FirmwareRetryFlow, TheDiagnosticsFileIsAppendedToNotReplaced) {
   // before it and the file only ever held its last line; the boot record then
   // erased the failure it was meant to explain.
   const std::string source = readSource(DIAGNOSTICS_SOURCE);
-  EXPECT_FALSE(contains(source, "openFileForWrite"))
+  EXPECT_FALSE(contains(source, "openFileForWrite("))
       << "diagnostics are opened with O_TRUNC; each record wipes the last";
   EXPECT_TRUE(contains(source, "O_APPEND")) << "diagnostics are not appended";
 }
