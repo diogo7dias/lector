@@ -97,6 +97,8 @@ jobs:
             .pio/build/gh_release/firmware.map
             .pio/build/gh_release/partitions.bin
             .pio/build/x4pro/firmware.bin
+            .pio/build/x4pro/bootloader.bin
+            .pio/build/x4pro/partitions.bin
 
       # Attaches the firmware binaries to a GitHub Release for the tag so a manual
       # flash (esptool, or copying firmware.bin onto the SD card for Settings ->
@@ -117,6 +119,11 @@ jobs:
           if [ -f "$X4PRO_DIR/firmware.bin" ]; then
             cp "$X4PRO_DIR/firmware.bin" "$BUILD_DIR/firmware-x4pro.bin"
             ASSETS+=("$BUILD_DIR/firmware-x4pro.bin")
+            if [ -f "$X4PRO_DIR/bootloader.bin" ] && [ -f "$X4PRO_DIR/partitions.bin" ]; then
+              cp "$X4PRO_DIR/bootloader.bin" "$BUILD_DIR/bootloader-x4pro.bin"
+              cp "$X4PRO_DIR/partitions.bin" "$BUILD_DIR/partitions-x4pro.bin"
+              ASSETS+=("$BUILD_DIR/bootloader-x4pro.bin" "$BUILD_DIR/partitions-x4pro.bin")
+            fi
           else
             echo "missing $X4PRO_DIR/firmware.bin; the X4 Pro would have no release image" >&2
             exit 1
@@ -137,9 +144,9 @@ jobs:
             printf '\n---\n\n' >> "$NOTES_FILE"
           fi
           cat >> "$NOTES_FILE" <<'EOF'
-          **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-xteink-firmware/#flash) (Chrome/Edge, USB cable). One build serves both Xteink X3 and X4.
+          **Easiest install:** use the [browser flasher](https://diogo7dias.github.io/lector-xteink-firmware/#flash) (Chrome/Edge, USB cable). Pick **X3 / X4** or **X4 Pro** first.
 
-          **Update from the SD card:** download `firmware.bin`, copy it to the SD card, then on the device open Settings and choose SD Card Firmware Update.
+          **Update from the SD card:** download `firmware.bin` (X3/X4) or `firmware-x4pro.bin` (X4 Pro), copy it to the SD card, then on the device open Settings and choose SD Card Firmware Update.
 
           **Manual flash (esptool):**
           ```
@@ -215,12 +222,19 @@ jobs:
           for f in firmware.bin bootloader.bin partitions.bin; do
             test -f "$BUILD_DIR/$f" || { echo "missing $BUILD_DIR/$f" >&2; exit 1; }
           done
+          X4PRO_DIR=.pio/build/x4pro
+          for f in firmware.bin bootloader.bin partitions.bin; do
+            test -f "$X4PRO_DIR/$f" || { echo "missing $X4PRO_DIR/$f; the X4 Pro would have no USB image" >&2; exit 1; }
+          done
           git clone --depth 1 \
             "https://x-access-token:${WALLPAPER_TOKEN}@github.com/diogo7dias/lector-xteink-firmware.git" site
           DEST="site/flash/firmware/${FW_DIR}"
           mkdir -p "$DEST"
           cp "$BUILD_DIR/firmware.bin" "$BUILD_DIR/bootloader.bin" "$BUILD_DIR/partitions.bin" "$DEST/"
           cp "$BOOT_APP0" "$DEST/boot_app0.bin"
+          cp "$X4PRO_DIR/firmware.bin" "$DEST/firmware-x4pro.bin"
+          cp "$X4PRO_DIR/bootloader.bin" "$DEST/bootloader-x4pro.bin"
+          cp "$X4PRO_DIR/partitions.bin" "$DEST/partitions-x4pro.bin"
           printf '%s' "$VERSION" > "site/flash/${VERSION_FILE}"
           # Heredoc, not python3 -c with "\n": inside single quotes the shell passes the
           # backslash-n through literally, so Python saw one line and raised SyntaxError.
@@ -228,30 +242,51 @@ jobs:
           import json, os, sys
 
           version, fw_dir, names = sys.argv[1], sys.argv[2], sys.argv[3:]
+          APP = 65536
+          BOOT_APP0 = 57344
+          BOOTLOADER = 0
+          PARTITIONS = 32768
+          c3_update = {
+              "chipFamily": "ESP32-C3",
+              "parts": [
+                  {"path": f"firmware/{fw_dir}/boot_app0.bin", "offset": BOOT_APP0},
+                  {"path": f"firmware/{fw_dir}/firmware.bin", "offset": APP},
+              ],
+          }
+          s3_update = {
+              "chipFamily": "ESP32-S3",
+              "parts": [
+                  {"path": f"firmware/{fw_dir}/boot_app0.bin", "offset": BOOT_APP0},
+                  {"path": f"firmware/{fw_dir}/firmware-x4pro.bin", "offset": APP},
+              ],
+          }
+          c3_full = {
+              "chipFamily": "ESP32-C3",
+              "parts": [
+                  {"path": f"firmware/{fw_dir}/bootloader.bin", "offset": BOOTLOADER},
+                  {"path": f"firmware/{fw_dir}/partitions.bin", "offset": PARTITIONS},
+                  {"path": f"firmware/{fw_dir}/boot_app0.bin", "offset": BOOT_APP0},
+                  {"path": f"firmware/{fw_dir}/firmware.bin", "offset": APP},
+              ],
+          }
+          s3_full = {
+              "chipFamily": "ESP32-S3",
+              "parts": [
+                  {"path": f"firmware/{fw_dir}/bootloader-x4pro.bin", "offset": BOOTLOADER},
+                  {"path": f"firmware/{fw_dir}/partitions-x4pro.bin", "offset": PARTITIONS},
+                  {"path": f"firmware/{fw_dir}/boot_app0.bin", "offset": BOOT_APP0},
+                  {"path": f"firmware/{fw_dir}/firmware-x4pro.bin", "offset": APP},
+              ],
+          }
           for name in names:
               path = os.path.join("site/flash", name)
-              if os.path.exists(path):
-                  with open(path) as fh:
-                      data = json.load(fh)
-              else:
-                  # Both stable manifests are committed, so this is a first-publish
-                  # fallback only: app-only (boot_app0 + firmware, no erase), pointed at
-                  # this channel's firmware directory.
-                  data = {
-                      "name": "Lector",
-                      "version": version,
-                      "erase": False,
-                      "builds": [
-                          {
-                              "chipFamily": "ESP32-C3",
-                              "parts": [
-                                  {"path": f"firmware/{fw_dir}/boot_app0.bin", "offset": 57344},
-                                  {"path": f"firmware/{fw_dir}/firmware.bin", "offset": 65536},
-                              ],
-                          }
-                      ],
-                  }
-              data["version"] = version
+              erase = name.endswith("full.json")
+              data = {
+                  "name": "Lector (full rescue)" if erase else "Lector",
+                  "version": version,
+                  "erase": erase,
+                  "builds": [c3_full, s3_full] if erase else [c3_update, s3_update],
+              }
               with open(path, "w") as fh:
                   json.dump(data, fh, indent=2)
                   fh.write("\n")
