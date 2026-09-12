@@ -1604,7 +1604,6 @@ bool EpubReaderActivity::launchKOReaderSync() {
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-  const std::optional<uint16_t> paragraphIndex = visibleParagraphIndex();
 
   // Pre-compute local KO position and chapter name while Epub is still in RAM.
   CrossPointPosition localPos = getCurrentPosition();
@@ -1639,8 +1638,7 @@ bool EpubReaderActivity::launchKOReaderSync() {
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
-      renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-      std::move(localChapterName), paragraphIndex));
+      renderer, mappedInput, savedEpubPath, localPos, std::move(localKoPos), std::move(localChapterName)));
   return true;  // acted: launched the sync activity
 }
 
@@ -3167,9 +3165,14 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
     // regardless of residue.
     pagesUntilFullRefresh = 0;
   } else {
-    // Async form: start the waveform and return so the grayscale plane rendering
-    // below overlaps the panel's refresh time instead of following it.
+    const bool cleanupRefresh = pagesUntilFullRefresh <= 1;
     ReaderUtils::displayWithRefreshCycle(renderer, pagesUntilFullRefresh, overlapRefresh);
+    // X3 AA needs its grayscale-precondition waveform after a HALF cleanup
+    // before gray planes are written. No-op on other panels. Skip when the
+    // BW refresh went out async — waitRefreshComplete below is the settle.
+    if (needsAnyGrayscale && cleanupRefresh && !overlapRefresh) {
+      renderer.preconditionGrayscale();
+    }
   }
   const auto tDisplay = millis();
 
@@ -3583,6 +3586,8 @@ CrossPointPosition EpubReaderActivity::getCurrentPosition() const {
   const std::optional<uint16_t> paragraphIndex = visibleParagraphIndex();
 
   CrossPointPosition localPos = {currentSpineIndex, currentPage, totalPages};
+  localPos.hasResolvedSpineIndex = true;
+  localPos.hasMappedPage = true;
   if (section && currentPage >= 0 && currentPage < section->pageCount) {
     if (const auto offset = section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage))) {
       localPos.visibleTextOffset = *offset;

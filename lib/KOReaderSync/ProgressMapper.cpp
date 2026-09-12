@@ -774,7 +774,10 @@ SavedProgressPosition ProgressMapper::toSavedProgress(Epub& epub, const CrossPoi
   float intra =
       (pos.totalPages > 1) ? static_cast<float>(pos.pageNumber) / static_cast<float>(pos.totalPages - 1) : 0.0f;
   result.percentage = epub.calculateProgress(pos.spineIndex, intra);
-  if (pos.hasParagraphIndex && pos.paragraphIndex > 0) {
+  if (pos.hasVisibleTextOffset) {
+    result.xpath = ChapterXPathResolver::findXPathForVisibleTextOffset(epub, pos.spineIndex, pos.visibleTextOffset);
+  }
+  if (result.xpath.empty() && pos.hasParagraphIndex && pos.paragraphIndex > 0) {
     result.xpath = ChapterXPathResolver::findXPathForParagraph(epub, pos.spineIndex, pos.paragraphIndex);
   }
   // Fall back to progress-based XPath, then synthetic progress mapping.
@@ -799,6 +802,7 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(Epub& epub, c
 
   CrossPointPosition result{};
   result.spineIndex = rich.spineIndex;
+  result.hasResolvedSpineIndex = true;
 
   // The existing rich extension carries the same KOReader XPath as the standard
   // progress field. Resolve that content anchor first; remote page counts are
@@ -826,6 +830,7 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(Epub& epub, c
   if (result.totalPages == remotePages) {
     // Identical layout (same render settings) — the page transfers losslessly.
     result.pageNumber = std::min<int>(rich.pageNumber, result.totalPages - 1);
+    result.hasMappedPage = true;
     LOG_DBG("PM", "Rich position exact: spine=%d page=%d/%d", result.spineIndex, result.pageNumber, result.totalPages);
     return result;
   }
@@ -837,6 +842,7 @@ std::optional<CrossPointPosition> ProgressMapper::fromRichPosition(Epub& epub, c
       result.paragraphIndex = *rich.paragraphIndex;
       result.hasParagraphIndex = true;
       result.pageNumber = std::min<int>(*lutPage, result.totalPages - 1);
+      result.hasMappedPage = true;
       LOG_DBG("PM", "Rich position para %u -> spine=%d page=%d/%d", *rich.paragraphIndex, result.spineIndex,
               result.pageNumber, result.totalPages);
       return result;
@@ -878,6 +884,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(Epub& epub, const SavedProgressP
 
   if (xpathSpine >= 0 && xpathSpine < spineCount) {
     result.spineIndex = xpathSpine;
+    result.hasResolvedSpineIndex = true;
   } else {
     for (int i = 0; i < spineCount; i++) {
       if (epub.getCumulativeSpineItemSize(i) >= targetBytes) {
@@ -983,6 +990,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(Epub& epub, const SavedProgressP
     if (const auto offsetPage = tempSection.getPageForVisibleTextOffset(result.visibleTextOffset, imageAnchor)) {
       result.pageNumber = *offsetPage;
       result.totalPages = std::max(result.totalPages, result.pageNumber + 1);
+      result.hasMappedPage = true;
       LOG_DBG("PM", "XPath content offset %u -> spine=%d page=%d/%d", result.visibleTextOffset, result.spineIndex,
               result.pageNumber, result.totalPages);
       return result;
@@ -1011,6 +1019,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(Epub& epub, const SavedProgressP
       if (liPage.has_value()) {
         LOG_DBG("PM", "Li index %u -> page %d (was %d)", result.liIndex, *liPage, result.pageNumber);
         result.pageNumber = *liPage;
+        result.hasMappedPage = true;
         refined = true;
       } else {
         LOG_DBG("PM", "Li index %u not found in section LUT", result.liIndex);
@@ -1021,6 +1030,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(Epub& epub, const SavedProgressP
       if (anchorPage.has_value()) {
         LOG_DBG("PM", "Anchor '%s' -> page %d (was %d)", result.xpathAnchorId, *anchorPage, result.pageNumber);
         result.pageNumber = *anchorPage;
+        result.hasMappedPage = true;
         refined = true;
       } else {
         LOG_DBG("PM", "Anchor '%s' not found in section cache", result.xpathAnchorId);
@@ -1048,6 +1058,7 @@ CrossPointPosition ProgressMapper::toCrossPoint(Epub& epub, const SavedProgressP
         LOG_DBG("PM", "Paragraph %u -> LUT page %d, nextPara page %s, intra page %d, using %d", result.paragraphIndex,
                 *paragraphPage, nextParaBuf, result.pageNumber, refinedPage);
         result.pageNumber = refinedPage;
+        result.hasMappedPage = true;
       } else {
         LOG_DBG("PM", "Paragraph %u not found in section LUT", result.paragraphIndex);
       }
