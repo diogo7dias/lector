@@ -864,7 +864,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 **Buttons**
 
-- **Remap Front Buttons** — reassign each bottom-edge button.
+- **Remap Front Buttons** — reassign each bottom-edge button (X3/X4 only; unavailable on X4 Pro).
 - **Orient front buttons** — rotate their meaning with the screen.
 - **Side Button Layout (reader)** — Prev/Next, Next/Prev or Disabled.
 
