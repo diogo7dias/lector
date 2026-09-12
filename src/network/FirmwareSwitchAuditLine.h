@@ -13,7 +13,7 @@ inline std::string formatSwitchFailedLine(const char* version, uint32_t intended
                                           size_t imageSize) {
   char line[192];
   std::snprintf(line, sizeof(line),
-                "%s: firmware written to 0x%06X (%u bytes) was refused at boot; running 0x%06X instead\n",
+                "%s: firmware written to 0x%06X (%u bytes); switch did not take effect; running 0x%06X instead\n",
                 version ? version : "?", static_cast<unsigned>(intendedAddress), static_cast<unsigned>(imageSize),
                 static_cast<unsigned>(runningAddress));
   return std::string(line);
