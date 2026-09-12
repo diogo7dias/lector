@@ -270,7 +270,9 @@ void SettingsActivity::rebuildSettingsList() {
   // Append ACTION items. Position here does not decide what the screen shows: applyGroups
   // below rebuilds every category from its group map, and each of these rows is named
   // there.
-  controlsSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  if (gpio.isXteinkDevice()) {
+    controlsSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, SettingAction::RemapFrontButtons));
+  }
   controlsSettings.push_back(SettingInfo::Action(StrId::STR_BUTTONS, SettingAction::Buttons));
   // Pop-up Items only exists to serve a binding set to Menu Pop-up, so it is offered
   // only while at least one of the three bindings actually opens one.

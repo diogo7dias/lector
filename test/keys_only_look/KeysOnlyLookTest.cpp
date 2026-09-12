@@ -122,3 +122,29 @@ TEST(KeysOnlyLook, TheTouchBoardKeepsTheSdkLook) {
     EXPECT_GT(source.find(keysOnly), guard) << keysOnly << " is applied outside the keys-only guard";
   }
 }
+
+// Availability is decided before either settings view selects or renders rows.
+TEST(KeysOnlyLook, FrontRemapIsOnlyOfferedOnX3AndX4) {
+  const std::string source = readSource(SETTINGS_ACTIVITY_SOURCE);
+  const std::string entry =
+      "controlsSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, "
+      "SettingAction::RemapFrontButtons));";
+  const auto row = source.find(entry);
+  ASSERT_NE(row, std::string::npos);
+  EXPECT_EQ(source.find(entry, row + entry.size()), std::string::npos);
+  EXPECT_TRUE(contains(source, ("if (gpio.isXteinkDevice()) {\n    " + entry + "\n  }").c_str()));
+  EXPECT_LT(source.find("void SettingsActivity::rebuildSettingsList()"), row);
+  EXPECT_LT(row, source.find("settings.insert(settings.end()"));
+
+  const std::string gpioSource = readSource(GPIO_SOURCE);
+  const auto start = gpioSource.find("bool HalGPIO::isXteinkDevice() const {");
+  ASSERT_NE(start, std::string::npos);
+  const auto end = gpioSource.find("\n}", start);
+  ASSERT_NE(end, std::string::npos);
+  const std::string predicate = gpioSource.substr(start, end - start);
+  EXPECT_TRUE(contains(predicate,
+                       "return BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3 ||\n"
+                       "         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279 ||\n"
+                       "         BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX4;"));
+  EXPECT_FALSE(contains(predicate, "XteinkX4Pro"));
+}
