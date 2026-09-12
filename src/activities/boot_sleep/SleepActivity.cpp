@@ -672,18 +672,14 @@ void SleepActivity::onEnter() {
 
   // Deep sleep is a chip reset, so the wake cannot know what the panel is holding unless
   // we write it down. Clear first and let the render path set it, so any screen that is
-  // not a wallpaper leaves it empty. Saved only when it changed: a fixed /sleep.pxc gives
-  // the same value every sleep and must not cost an SD write each time.
+  // not a wallpaper leaves it empty.
+  // ponytail: no save here. enterDeepSleep() writes APP_STATE once after this returns,
+  // so a second write of the same state only slowed the lock.
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
 
   renderSleepScreen();
   SleepTiming::mark("face");
-
-  if (APP_STATE.lastSleepWallpaperPath != previousWallpaper || stateDirty) {
-    APP_STATE.saveToFile();
-  }
-  SleepTiming::mark("state");
 }
 
 void SleepActivity::renderSleepScreen() const {
@@ -995,7 +991,6 @@ void SleepActivity::renderCustomSleepScreen() const {
         // the render costs one skipped wallpaper, nothing more.
         windex::storeQueueState(queueState);
         SleepTiming::mark("idxstore");
-        stateDirty = true;
         if (result.needsRebuild) {
           // Too many dead slots this pick: use the jump pick tonight and let
           // the next cold boot rebuild the index.
@@ -1121,7 +1116,6 @@ void SleepActivity::renderCustomSleepScreen() const {
       // dropping the user to the logo face over one stale record.
       if (pickedFromIndex) {
         APP_STATE.sleepIndexNeedsRebuild = true;
-        stateDirty = true;
         LOG_INF("SLP", "index record unrenderable, falling back to jump pick");
         const std::string again = pickWallpaperByJump(dir);
         if (!again.empty() && renderChosen(again)) {
@@ -1149,10 +1143,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
 
   renderer.clearScreen();
   // A crest per sleep, recorded so the wake can redraw the same one (see BootActivity).
-  // enterDeepSleep() saves APP_STATE before this runs, so the index would be lost without
-  // marking the state dirty for the save onEnter() performs after the render.
+  // enterDeepSleep() saves APP_STATE after this runs, so the index survives the reset.
   APP_STATE.lastBootLogo = bootlogos::randomIndex();
-  stateDirty = true;
   const int logoSize = bootlogos::kLogoSize;
   const int logoY = (pageHeight - logoSize) / 2 - 20;
   renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
