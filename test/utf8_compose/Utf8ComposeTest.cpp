@@ -52,3 +52,12 @@ TEST(Utf8ComposeNfc, ComposesWithinWord) {
   // "Ti" + e+circ+acute + "ng" -> "Tiếng"
   EXPECT_EQ(utf8ComposeNfc("Ti" + std::string("e") + kCombCirc + kCombAcute + "ng"), "Ti\xE1\xBA\xBFng");
 }
+
+// Hangul jamo L+V[+T] compose to precomposed syllables (macOS NFD filenames).
+TEST(Utf8ComposeNfc, ComposesHangulJamo) {
+  const std::string giyeok = "\xE1\x84\x80";                      // U+1100
+  const std::string a = "\xE1\x85\xA1";                           // U+1161
+  const std::string nieun = "\xE1\x86\xAB";                       // U+11AB
+  EXPECT_EQ(utf8ComposeNfc(giyeok + a), "\xEA\xB0\x80");          // 가 U+AC00
+  EXPECT_EQ(utf8ComposeNfc(giyeok + a + nieun), "\xEA\xB0\x84");  // 간 U+AC04
+}

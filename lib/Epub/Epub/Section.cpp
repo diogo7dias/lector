@@ -101,7 +101,9 @@ namespace {
 //      (upstream #3355; upstream numbered it v45). The link branch returned before
 //      applying the resolved style, so superscript markers sat on the baseline.
 //      Marker glyphs change size and position, so cached pages must be rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 54;
+// 55: honour the HTML hidden attribute as display:none (upstream #3390). Hidden
+//      nodes leave the page, so cached pages must be rebuilt.
+constexpr uint8_t SECTION_FILE_VERSION = 55;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
