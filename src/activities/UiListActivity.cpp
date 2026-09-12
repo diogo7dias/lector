@@ -165,6 +165,7 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
     rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
     props.rowHeight = rowHeight;
   }
+  applyInvertedSectionHeaderStyle(props, screen.theme());
   activeNav().syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, listCount(), props);
 }
 
