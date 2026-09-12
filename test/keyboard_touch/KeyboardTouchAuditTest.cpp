@@ -37,10 +37,21 @@ TEST(KeyboardTouchAudit, ThePaintPublishesItsInteractionTable) {
       << "a table that is never published is a table the loop task never sees";
 }
 
-TEST(KeyboardTouchAudit, TheLoopRoutesContactsAgainstIt) {
+TEST(KeyboardTouchAudit, ReleasesOwnPhysicalButtonActions) {
   const std::string source = body();
-  EXPECT_NE(source.find("touchRouter.update("), std::string::npos)
-      << "the keys register hit rects; without this nothing ever matches a contact to one";
-  EXPECT_NE(source.find("activateValue(result.event.value"), std::string::npos)
-      << "a routed key has to reach the same activation the physical Confirm uses";
+  EXPECT_EQ(source.find("if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {\n    if (upHeld"),
+            std::string::npos);
+  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Up)) {\n    if (upHeld"),
+            std::string::npos);
+  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {\n    if (confirmHeld"),
+            std::string::npos);
+  EXPECT_NE(source.find("if (mappedInput.wasReleased(MappedInputManager::Button::Back))"), std::string::npos);
+  EXPECT_NE(source.find("touchRouter.update("), std::string::npos);
+  EXPECT_NE(source.find("activateValue(result.event.value"), std::string::npos);
+}
+
+TEST(KeyboardTouchAudit, RoutesDuringInteractionTableRebuild) {
+  const std::string source = body();
+  EXPECT_NE(source.find("if (!mappedInput.hasTouch()) return false;"), std::string::npos);
+  EXPECT_EQ(source.find("!mappedInput.hasTouch() || !interactionsReady.load()"), std::string::npos);
 }
