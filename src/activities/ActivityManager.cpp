@@ -216,17 +216,11 @@ void ActivityManager::loop() {
     // be flushed at all: the panel opened, reported present=1, and was never drawn.
     if (lightPanel.isActive()) {
       if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(/*immediate=*/true); })) return;
-    } else if (mappedInput.wasMenuGesture()) {
-      // Logged rather than silently skipped: a board with no frontlight and a swipe that
-      // never decoded look the same from the outside, and only the log separates them.
-      if (!Frontlight.present()) {
-        debug_trace::note("top-edge gesture ignored: no frontlight on this board");
-      } else {
-        debug_trace::note("top-edge gesture: opening the light panel");
-        lightPanel.show();
-        requestUpdate(/*immediate=*/true);
-        return;
-      }
+    } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {
+      debug_trace::note("top-edge gesture: opening the light panel");
+      lightPanel.show();
+      requestUpdate(/*immediate=*/true);
+      return;
     }
 
     if (!currentActivity->isHomeActivity() && mappedInput.wasHomeGesture()) {

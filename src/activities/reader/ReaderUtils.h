@@ -86,18 +86,26 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
   return result;
 }
 
-// The reader menu opens on the bottom-edge swipe where that variant is selected, or on
-// the centre tap detectTouchPageTurn reports. With touch reader controls Off the page
-// ignores touch entirely, menu included, so a stray brush cannot open it; the menu stays
-// reachable from the Confirm button.
-//
-// The top-edge swipe used to open the menu too. It belongs to the light panel now
-// (ActivityManager), which needs a gesture reachable from every screen; the menu keeps
-// two ways in and is the only one of the two that also has a button.
-inline bool isTouchMenuGesture(const MappedInputManager& input, bool centreTap = false) {
-  if (touchMode() == reader_touch::Mode::Off || !input.hasTouch()) return false;
+// Reader-menu gestures are independent of page-turn controls. Turning page
+// controls off must not strand the menu, especially on touch boards.
+inline bool isTouchMenuGesture(const GfxRenderer& renderer, const MappedInputManager& input, bool centreTap = false) {
+  if (!input.hasTouch() || readerMenuMode() == reader_touch::MenuMode::Off) return false;
+  if (input.wasMenuGesture()) return true;
   if (readerMenuMode() == reader_touch::MenuMode::SwipeUp && input.wasReaderMenuSwipeUp()) return true;
-  return centreTap;
+  if (centreTap) return true;
+
+  // With page-turn controls off, detect the centre tap here instead of in
+  // detectTouchPageTurn(), which intentionally ignores page input in that mode.
+  if (touchMode() == reader_touch::Mode::Off && readerMenuMode() == reader_touch::MenuMode::Tap) {
+    int x = 0;
+    int y = 0;
+    if (!input.wasScreenTapped(x, y)) return false;
+    const int third = renderer.getScreenWidth() / 3;
+    const int thirdHeight = renderer.getScreenHeight() / 3;
+    return x >= third && x < renderer.getScreenWidth() - third && y >= thirdHeight &&
+           y < renderer.getScreenHeight() - thirdHeight;
+  }
+  return false;
 }
 
 struct PageTurnResult {
@@ -211,6 +219,8 @@ struct ButtonPressLatch {
 // branches below are ignored for a press this activity never saw.
 inline bool handleBackNavigation(const MappedInputManager& mappedInput, ActivityManager& activityManager,
                                  const char* filePath, BackNavCallback goHome, ButtonPressLatch& backLatch) {
+  // A left-edge right swipe is page-back in the reader, never reader exit.
+  if (mappedInput.wasBackGesture()) return false;
   if (!backLatch.seen) {
     // Stray release left over from a child screen that closed on press: swallow it so it
     // cannot be replayed later, and stay in the book.
