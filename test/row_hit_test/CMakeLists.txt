@@ -2,6 +2,8 @@ add_executable(RowHitTest
   RowHitTest.cpp
 )
 
+target_compile_definitions(RowHitTest PRIVATE REPO_SOURCE_DIR="${REPO_ROOT}/src")
+
 target_include_directories(RowHitTest PRIVATE
   ${REPO_ROOT}/src
 )
