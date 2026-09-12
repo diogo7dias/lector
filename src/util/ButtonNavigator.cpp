@@ -28,12 +28,8 @@ void ButtonNavigator::onNextRelease(const Callback& callback) { onRelease(getNex
 void ButtonNavigator::onPreviousRelease(const Callback& callback) { onRelease(getPreviousButtons(), callback); }
 
 void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback) {
-  // A swipe carries no press or release, so it is taken here too: without it a list
-  // hosted on release-stepping would ignore touch scrolling entirely.
-  if (swipeMatches(buttons)) {
-    callback();
-    return;
-  }
+  // Swipes belong to onContinuous; release-stepping lists call both helpers.
+  // Dispatching here too would move a row before the swipe moves a page.
   const bool released = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
     return mappedInput != nullptr && mappedInput->wasReleased(button);
   });
