@@ -133,10 +133,12 @@ TEST(FirmwareRetryFlow, TheDiagnosticsFileIsAppendedToNotReplaced) {
   // Storage.openFileForWrite opens O_TRUNC, so every record wiped the one
   // before it and the file only ever held its last line; the boot record then
   // erased the failure it was meant to explain.
-  const std::string source = readSource(DIAGNOSTICS_SOURCE);
-  EXPECT_FALSE(contains(source, "openFileForWrite("))
-      << "diagnostics are opened with O_TRUNC; each record wipes the last";
-  EXPECT_TRUE(contains(source, "O_APPEND")) << "diagnostics are not appended";
+  for (const char* path : {DIAGNOSTICS_SOURCE, SWITCH_AUDIT_SOURCE}) {
+    const std::string source = readSource(path);
+    EXPECT_FALSE(contains(source, "openFileForWrite("))
+        << "diagnostics are opened with O_TRUNC; each record wipes the last";
+    EXPECT_TRUE(contains(source, "O_APPEND")) << "diagnostics are not appended";
+  }
 }
 
 // --- a plain update check never offers another fork's firmware -------------
@@ -164,4 +166,32 @@ TEST(FirmwareRetryFlow, TheFailureScreenStillNamesWhatWentWrong) {
   EXPECT_TRUE(contains(source, "failedDetail"));
   EXPECT_TRUE(contains(source, "failedExtra"));
   EXPECT_TRUE(contains(source, "detailFor(error)"));
+}
+
+// Allocation must fail before an SDK open can create/truncate a file or advance
+// a directory. A nothrow allocation around SDCard.open(...) is still too late:
+// arguments are evaluated first. Pin all handle factories, not just SD flashing.
+TEST(FirmwareRetryFlow, StorageAllocatesBeforeOpeningFiles) {
+  const std::string source = readSource(STORAGE_SOURCE);
+  for (const char* signature :
+       {"HalFile HalStorage::open(", "bool HalStorage::openFileForRead(const char* moduleName, const char* path,",
+        "bool HalStorage::openFileForWrite(const char* moduleName, const char* path,",
+        "HalFile HalFile::openNextFile()"}) {
+    const auto start = source.find(signature);
+    ASSERT_NE(start, std::string::npos);
+    const auto end = source.find("\n}", start);
+    ASSERT_NE(end, std::string::npos);
+    const auto body = source.substr(start, end - start);
+    EXPECT_FALSE(contains(body, "std::make_unique")) << signature;
+    const auto allocation = body.find("makeUniqueNoThrow<");
+    const auto failure = body.find("if (!");
+    const auto open =
+        body.find("SDCard.") != std::string::npos ? body.find("SDCard.") : body.find("impl->file.openNextFile()");
+    ASSERT_NE(allocation, std::string::npos) << signature;
+    ASSERT_NE(failure, std::string::npos) << signature;
+    ASSERT_NE(open, std::string::npos) << signature;
+    EXPECT_LT(allocation, failure) << signature;
+    EXPECT_LT(failure, open) << signature;
+    EXPECT_TRUE(contains(body.substr(failure, open - failure), "return")) << signature;
+  }
 }

@@ -52,9 +52,11 @@ void auditPendingSwitch(const char* version) {
   const std::string line = formatSwitchFailedLine(version, intended, runningAddress, imageSize);
   LOG_ERR("FLASH", "%s", line.c_str());
 
-  HalFile file;
-  if (!Storage.openFileForWrite("FLASH", kLogPath, file) || !file) return;
-  file.seek(file.fileSize());  // append rather than overwrite earlier attempts
+  HalFile file = Storage.open(kLogPath, O_WRONLY | O_CREAT | O_APPEND);
+  if (!file) {
+    LOG_ERR("FLASH", "cannot append switch audit: %s", kLogPath);
+    return;
+  }
   file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size());
   file.close();
 }

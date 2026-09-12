@@ -7,6 +7,8 @@ target_compile_definitions(FirmwareRetryFlowTest PRIVATE
   SD_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/settings/SdFirmwareUpdateActivity.cpp"
   OTA_UPDATER_SOURCE="${REPO_ROOT}/src/network/OtaUpdater.cpp"
   FLASHER_SOURCE="${REPO_ROOT}/src/network/FirmwareFlasher.cpp"
+  STORAGE_SOURCE="${REPO_ROOT}/lib/hal/HalStorage.cpp"
+  SWITCH_AUDIT_SOURCE="${REPO_ROOT}/src/network/FirmwareSwitchAudit.cpp"
   DIAGNOSTICS_SOURCE="${REPO_ROOT}/src/network/FlashDiagnostics.cpp"
 )
 
