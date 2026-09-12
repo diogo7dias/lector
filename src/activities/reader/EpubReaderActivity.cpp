@@ -915,7 +915,7 @@ void EpubReaderActivity::loop() {
   // open the menu. Read before the Confirm handling below so the menu opens from
   // either input on the same pass.
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
-  if (ReaderUtils::isTouchMenuGesture(mappedInput, touch.menu)) {
+  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
     openReaderMenu();
     return;
   }

@@ -140,7 +140,10 @@ class LightPanel {
       if (!light_panel::insidePanel(layout_, tx, localY)) {
         // A tap on the page below is "put it away", not a page turn: the host returns
         // early on a consumed input, so the tap cannot also reach the reader.
-        if (down) close(requestUpdate);
+        if (down) {
+          input.spendTouchContact();
+          close(requestUpdate);
+        }
         return true;
       }
       if (!down) return true;  // a hold that started on nothing stays on nothing

@@ -104,6 +104,8 @@ class MappedInputManager {
   bool wasHomeGesture() const;
   bool wasBottomEdgeUpSwipe() const;
   bool wasMenuGesture() const;
+  // Reader surfaces use this to keep a page-back swipe from becoming an exit.
+  bool wasBackGesture() const;
   // Bottom-edge up-swipe, offered as a reader-menu gesture only where Home is the
   // capacitive key: elsewhere that swipe already means Home (wasHomeGesture).
   bool wasReaderMenuSwipeUp() const;
@@ -185,7 +187,6 @@ class MappedInputManager {
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;
-  bool wasBackGesture() const;
   // Fetch the pending swipe (if any) and map both endpoints to logical screen coords
   bool decodeSwipe(int& sx, int& sy, int& ex, int& ey) const;
   bool listItemFromPoint(int x, int y, int& index, int itemCount, int selectedIndex, int listTop, int listHeight,
