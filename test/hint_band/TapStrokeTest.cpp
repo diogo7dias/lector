@@ -52,6 +52,18 @@ TEST(TapStroke, UnclaimedReleaseExpires) {
   EXPECT_FALSE(stroke.query(kBack, -1, kRelease, 100 + hint_band::TapStroke::kReleaseWindowMs + 1));
 }
 
+TEST(TapStroke, ReleaseSurvivesFullRefreshAndSchedulingMargin) {
+  // A full e-ink refresh can take 2 s before the next input frame gets its turn.
+  constexpr unsigned long kAfterRefreshMs = 2000 + 500;
+  for (const bool firstQuery : {kPress, kRelease}) {
+    hint_band::TapStroke stroke;
+    EXPECT_EQ(stroke.query(kBack, kBack, firstQuery, 100), firstQuery == kPress);
+    stroke.tapOver();
+    EXPECT_TRUE(stroke.query(kBack, -1, kRelease, 100 + kAfterRefreshMs));
+    EXPECT_FALSE(stroke.query(kBack, -1, kRelease, 101 + kAfterRefreshMs));
+  }
+}
+
 TEST(TapStroke, ScreenChangeDropsTheOwedRelease) {
   // The press opened or closed a screen; its release belongs to that press, not to
   // whatever the screen now on top has selected.

@@ -88,8 +88,9 @@ inline Painted& lastPainted() {
 // on the host.
 struct TapStroke {
   // A screen that never asks for the release must not leave one lying about for the
-  // next thing that does, so it expires.
-  static constexpr unsigned long kReleaseWindowMs = 500;
+  // next thing that does, so it expires. Allow a full e-ink refresh (1–2 s) plus
+  // rendering/scheduling margin before the next input frame can claim it.
+  static constexpr unsigned long kReleaseWindowMs = 5000;
 
   // The tap frame's single press is spent: asking again for the same tap gets nothing.
   bool used = false;
