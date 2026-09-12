@@ -107,8 +107,8 @@ inline void applyKeysOnlyValueStyle(freeink::ui::ListProps& props, const freeink
 inline void applyInvertedSectionHeaderStyle(freeink::ui::ListProps& props, const freeink::ui::ThemeTokens& tokens) {
   if (!freeink::ui::textStyleUnset(props.headerText)) return;
   props.headerText = tokens.bodyText;
-  props.headerText.align = fui::TextAlign::Center;
-  props.headerText.color = fui::Color::White;
+  props.headerText.align = freeink::ui::TextAlign::Center;
+  props.headerText.color = freeink::ui::Color::White;
   props.headerUnderline = false;
   props.sectionGap = 0;
   if (props.headerRowHeight == 0) {
