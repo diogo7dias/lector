@@ -1,4 +1,4 @@
-<!-- lector-version: 0.31.0 -->
+<!-- lector-version: 0.31.1 -->
 
 # Lector User Guide
 
