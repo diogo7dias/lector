@@ -254,9 +254,10 @@ void ActivityManager::loop() {
   }
 
   while (pendingAction != PendingAction::None) {
+    RenderLock lock;
+    // Row numbers belong to the outgoing screen, including when resuming a parent.
+    row_hit::lastRows().begin();
     if (pendingAction == PendingAction::Pop) {
-      RenderLock lock;
-
       if (!currentActivity) {
         // Should never happen in practice
         LOG_ERR("ACT", "Pop set but currentActivity is null; ignoring pop request");
@@ -308,7 +309,6 @@ void ActivityManager::loop() {
 
     } else if (pendingActivity) {
       // Current activity has requested a new activity to be launched
-      RenderLock lock;
 
       if (pendingAction == PendingAction::Replace) {
         // Destroy the current activity

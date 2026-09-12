@@ -18,6 +18,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
+#include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/BookBadgeLabel.h"
@@ -59,6 +60,13 @@ std::string getFileName(std::string filename);
 std::string getFileExtension(const std::string& filename);
 
 void FileBrowserActivity::loadFiles() {
+  // Callers hold RenderLock: old hit rows must stop answering before the listing changes.
+  row_hit::lastRows().begin();
+  // Drop the old search mapping even when opening the new folder fails.
+  searchQuery.clear();
+  filtered.clear();
+  folderHasEntries = false;
+
   // Armed here rather than at each of the seven call sites, so every path into a
   // folder gets the same treatment. Nothing is drawn unless the scan actually
   // drags — a small folder still lists instantly with no extra panel refresh.
@@ -154,10 +162,6 @@ void FileBrowserActivity::loadFiles() {
   if (!gatherKeys || sortKeys.size() != files.size()) sortKeys.clear();
   applyBrowserOrder();
 
-  // A new folder is a new search scope, so any running search ends here rather than
-  // silently filtering a listing the user never searched.
-  searchQuery.clear();
-  filtered.clear();
   folderHasEntries = !files.empty();
 
   prewarmRowGlyphs();
@@ -280,6 +284,7 @@ void FileBrowserActivity::applySearch(const std::string& query) {
     // The render task walks `filtered` to map rows onto files; swapping it mid-draw
     // would index the wrong entries.
     RenderLock lock(*this);
+    row_hit::lastRows().begin();
     searchQuery = query;
     filtered = searchActive() ? librarysearch::rankMatches(files, searchQuery) : std::vector<int>{};
     // Land on the first result, which is the whole point of having searched.
@@ -397,6 +402,7 @@ void FileBrowserActivity::applyBrowserOrder() {
 
 void FileBrowserActivity::onEnter() {
   Activity::onEnter();
+  RenderLock lock(*this);
 
   fileNameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
   if (!fileNameBuffer) {
@@ -660,12 +666,17 @@ void FileBrowserActivity::loop() {
   // A tapped row opens straight away, exactly as a short press on it would: the wrapped
   // list records the rect of each row it paints, so a two-line title answers over both
   // of its lines.
-  int tappedRow = 0;
-  if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < totalRowCount()) {
-    selectorIndex = static_cast<size_t>(tappedRow);
-    activateSelected(/*holdAction=*/false);
-    requestUpdate();
-    return;
+  if (mappedInput.hasTouch()) {
+    // The render task rebuilds the table under this same lock.
+    RenderLock lock(*this);
+    int tappedRow = 0;
+    if (mappedInput.wasRowTapped(tappedRow) && tappedRow >= 0 && tappedRow < totalRowCount()) {
+      selectorIndex = static_cast<size_t>(tappedRow);
+      lock.unlock();  // Activation can reload the listing and acquire its own lock.
+      activateSelected(/*holdAction=*/false);
+      requestUpdate();
+      return;
+    }
   }
 
   // Confirm carries two actions, so it cannot fire on the press: the firmware has to

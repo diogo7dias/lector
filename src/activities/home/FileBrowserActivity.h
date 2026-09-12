@@ -118,6 +118,7 @@ class FileBrowserActivity final : public Activity {
   // The light panel's Sort row changed the order under us. Re-read rather than re-sort:
   // Last Read reads a key per book off the card, and those keys are gathered by the scan.
   void onBookOrderChanged() override {
+    RenderLock lock(*this);
     loadFiles();
     requestUpdate();
   }
