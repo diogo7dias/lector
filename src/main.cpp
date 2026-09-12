@@ -252,17 +252,15 @@ static void armUnlockBannerFloor() {
 }
 
 static bool loadSleepFrameBuffer() {
-  HalFile file;
-  if (!Storage.openFileForRead("SLP", SLEEP_FRAME_FILE, file)) return false;
+  // ponytail: plain open, no exists() probe. openFileForRead() and the caller's exists()
+  // were two extra directory lookups for a question the open itself answers.
+  HalFile file = Storage.open(SLEEP_FRAME_FILE, O_RDONLY);
+  if (!file) return false;
   const size_t bufferSize = display.getBufferSize();
   const size_t bytesRead = file.read(display.getFrameBuffer(), bufferSize);
   file.close();
-  if (bytesRead != bufferSize) {
-    Storage.remove(SLEEP_FRAME_FILE);
-    return false;
-  }
   Storage.remove(SLEEP_FRAME_FILE);
-  return true;
+  return bytesRead == bufferSize;
 }
 
 // Enter deep sleep mode
@@ -326,7 +324,8 @@ void enterDeepSleep(bool fromTimeout = false) {
         SETTINGS.bootBookMode == CrossPointSettings::BOOT_BOOK_OFF ? APP_STATE.openEpubPath : pickBootBookPath();
   }
 
-  APP_STATE.saveToFile();
+  // ponytail: no save here. persistAntiGhostBudget() below writes APP_STATE after the paint,
+  // and a JSON rewrite per lock stage was two redundant SD writes on every lock.
   sleepTState = millis();
 
   // Commit to sleeping before goToSleep() runs the outgoing activity's onExit():
@@ -340,8 +339,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   // the card here would only slow the lock for a frame nothing reads.
   if (isQuickResumeSleep) {
     saveSleepFrameBuffer();
-  } else if (Storage.exists(SLEEP_FRAME_FILE)) {
+  } else {
     // A stale Quick Resume frame must not replace the selected sleep screen during wake.
+    // ponytail: remove() alone, no exists() lookup first; a missing file just returns false.
     Storage.remove(SLEEP_FRAME_FILE);
   }
 
@@ -357,7 +357,8 @@ void enterDeepSleep(bool fromTimeout = false) {
   sleepTWifi = millis();
 
   // Read after the sleep screen has painted, so the passes it just spent are counted,
-  // and written with the state the next boot reads back.
+  // and written with the state the next boot reads back. This is the lock's only
+  // APP_STATE write: everything set above and in SleepActivity lands with it.
   persistAntiGhostBudget();
 
   // The per-mode totals for the session, written last so the file ends with the summary
@@ -834,6 +835,16 @@ void setup() {
   // Quick Resume draws no banners at all. Its whole promise is that unlocking changes
   // nothing on the panel, and a banner is a change.
 
+  // One-shot: consumed by this wake, so a later ordinary boot routes normally. The
+  // values were already copied into the locals above. Cleared here, before the switch,
+  // so the SplashlessWake save below carries the clear and does not pay a second
+  // state.json write for it after the banners.
+  const bool oneShotWakeFlagsSet =
+      APP_STATE.quickResumeWake || APP_STATE.quickResumeTargetIsReader || !APP_STATE.pendingWakeBookPath.empty();
+  APP_STATE.quickResumeWake = false;
+  APP_STATE.quickResumeTargetIsReader = false;
+  APP_STATE.pendingWakeBookPath.clear();
+
   switch (resume) {
     case BootResume::Silent:
       // Splash skipped: the routing block below picks the target activity; the
@@ -845,9 +856,7 @@ void setup() {
       // us in a splashless-with-no-frame loop on the next boot.
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
-      // exists() first: a missing frame file is the ordinary case for a sleep mode that
-      // never saved one, and the check costs less than an open that is going to fail.
-      const bool sleepFrameRestored = Storage.exists(SLEEP_FRAME_FILE) && loadSleepFrameBuffer();
+      const bool sleepFrameRestored = loadSleepFrameBuffer();
       // Stamped whichever way it went: "the frame was missing" is itself an answer to
       // where the wake's time went, and a stage that is only stamped on success reads as
       // a fast wake when it never ran at all.
@@ -875,9 +884,14 @@ void setup() {
           renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
           // The panel already holds the page; the reader's first paint can go over it.
           allowFastInitialReaderRefresh = true;
-        } else {
+        } else if (wake_face::restoredFrameNeedsPush(useDifferentialRefresh, bannersDrawn)) {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
+        // Quick Resume on an X4 pushes nothing: the glass already shows this exact frame,
+        // and both X4 drivers promote the first paint after begin() to a clean pass anyway
+        // (SSD1677: panel asleep -> HALF; UC8279: no OLD plane -> full GC). A HALF here was
+        // that same pass spent on pixels that do not change, then paid again by the
+        // reader. See wake_face::restoredFrameNeedsPush.
         // Stamped after the push: the floor measures how long the banners are on the
         // glass, not how long ago they were drawn into a buffer.
         if (bannersDrawn) unlockBannersShownAt = millis();
@@ -994,13 +1008,9 @@ void setup() {
                                             ? wake_route::Route::Unchanged
                                             : wake_route::resolve(wakeInputs);
 
-  // One-shot: consumed by this wake, so a later ordinary boot routes normally.
-  if (APP_STATE.quickResumeWake || APP_STATE.quickResumeTargetIsReader || !APP_STATE.pendingWakeBookPath.empty()) {
-    APP_STATE.quickResumeWake = false;
-    APP_STATE.quickResumeTargetIsReader = false;
-    APP_STATE.pendingWakeBookPath.clear();
-    APP_STATE.saveToFile();
-  }
+  // The one-shot clear above still has to reach the card. SplashlessWake already wrote
+  // it with the splash re-arm; every other boot that found a flag set writes it here.
+  if (oneShotWakeFlagsSet && resume != BootResume::SplashlessWake) APP_STATE.saveToFile();
 
   // The banners keep the panel until their floor; the activity below builds itself in
   // the meantime and its first push is what waits.
