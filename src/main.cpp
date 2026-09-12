@@ -835,6 +835,16 @@ void setup() {
   // Quick Resume draws no banners at all. Its whole promise is that unlocking changes
   // nothing on the panel, and a banner is a change.
 
+  // One-shot: consumed by this wake, so a later ordinary boot routes normally. The
+  // values were already copied into the locals above. Cleared here, before the switch,
+  // so the SplashlessWake save below carries the clear and does not pay a second
+  // state.json write for it after the banners.
+  const bool oneShotWakeFlagsSet =
+      APP_STATE.quickResumeWake || APP_STATE.quickResumeTargetIsReader || !APP_STATE.pendingWakeBookPath.empty();
+  APP_STATE.quickResumeWake = false;
+  APP_STATE.quickResumeTargetIsReader = false;
+  APP_STATE.pendingWakeBookPath.clear();
+
   switch (resume) {
     case BootResume::Silent:
       // Splash skipped: the routing block below picks the target activity; the
@@ -874,9 +884,14 @@ void setup() {
           renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
           // The panel already holds the page; the reader's first paint can go over it.
           allowFastInitialReaderRefresh = true;
-        } else {
+        } else if (wake_face::restoredFrameNeedsPush(useDifferentialRefresh, bannersDrawn)) {
           renderer.displayBuffer(HalDisplay::HALF_REFRESH);
         }
+        // Quick Resume on an X4 pushes nothing: the glass already shows this exact frame,
+        // and both X4 drivers promote the first paint after begin() to a clean pass anyway
+        // (SSD1677: panel asleep -> HALF; UC8279: no OLD plane -> full GC). A HALF here was
+        // that same pass spent on pixels that do not change, then paid again by the
+        // reader. See wake_face::restoredFrameNeedsPush.
         // Stamped after the push: the floor measures how long the banners are on the
         // glass, not how long ago they were drawn into a buffer.
         if (bannersDrawn) unlockBannersShownAt = millis();
@@ -993,13 +1008,9 @@ void setup() {
                                             ? wake_route::Route::Unchanged
                                             : wake_route::resolve(wakeInputs);
 
-  // One-shot: consumed by this wake, so a later ordinary boot routes normally.
-  if (APP_STATE.quickResumeWake || APP_STATE.quickResumeTargetIsReader || !APP_STATE.pendingWakeBookPath.empty()) {
-    APP_STATE.quickResumeWake = false;
-    APP_STATE.quickResumeTargetIsReader = false;
-    APP_STATE.pendingWakeBookPath.clear();
-    APP_STATE.saveToFile();
-  }
+  // The one-shot clear above still has to reach the card. SplashlessWake already wrote
+  // it with the splash re-arm; every other boot that found a flag set writes it here.
+  if (oneShotWakeFlagsSet && resume != BootResume::SplashlessWake) APP_STATE.saveToFile();
 
   // The banners keep the panel until their floor; the activity below builds itself in
   // the meantime and its first push is what waits.

@@ -2,6 +2,7 @@
 
 #include "sleep/WakeFacePolicy.h"
 
+using wake_face::restoredFrameNeedsPush;
 using wake_face::retainsPanelForWake;
 using Face = wake_face::SleepFace;
 
@@ -17,3 +18,16 @@ TEST(WakeFacePolicy, CustomWallpaperDoesNotKeepThePanel) { EXPECT_FALSE(retainsP
 
 // Anything else (cover, clock, blank) has no retained frame to hand over.
 TEST(WakeFacePolicy, OtherFacesDoNotKeepThePanel) { EXPECT_FALSE(retainsPanelForWake(Face::Other)); }
+
+// Quick Resume on an X4: the restored frame is what the glass already shows and the
+// driver's first paint is a clean pass either way, so the wake pushes nothing.
+TEST(WakeFacePolicy, X4QuickResumeSkipsTheFramePush) { EXPECT_FALSE(restoredFrameNeedsPush(false, false)); }
+
+// Banners are new pixels on top of the frame; they have to reach the panel.
+TEST(WakeFacePolicy, BannersForceTheFramePush) { EXPECT_TRUE(restoredFrameNeedsPush(false, true)); }
+
+// The X3 keeps its differential push (upstream #2698), banners or not.
+TEST(WakeFacePolicy, X3AlwaysPushesTheFrame) {
+  EXPECT_TRUE(restoredFrameNeedsPush(true, false));
+  EXPECT_TRUE(restoredFrameNeedsPush(true, true));
+}

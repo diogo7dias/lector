@@ -38,4 +38,12 @@ inline constexpr bool retainsPanelForWake(const SleepFace face) {
   return face == SleepFace::QuickResumeFrame;
 }
 
+// Once the saved frame is back in the framebuffer, must it be pushed to the panel before
+// the next activity paints? Yes when banners were drawn over it (they are new pixels), and
+// always on the X3, whose baseline restore and differential push are what stop it flashing
+// on the way in (upstream #2698). On an X4 with no banners the glass already shows this
+// exact frame and both X4 drivers promote the first paint after begin() to a clean pass
+// regardless, so a push here is a whole HALF pass spent on pixels that do not change.
+inline constexpr bool restoredFrameNeedsPush(const bool isX3, const bool bannersDrawn) { return isX3 || bannersDrawn; }
+
 }  // namespace wake_face
