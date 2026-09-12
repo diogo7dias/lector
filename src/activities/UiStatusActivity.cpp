@@ -13,6 +13,7 @@
 #include "components/StatusStack.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/UIThemeTokens.h"
 #include "util/HoldRepeat.h"
 #include "util/QrUtils.h"
 
@@ -435,6 +436,8 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
     rowHeight = static_cast<int16_t>(view.listHasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
     props.rowHeight = rowHeight;
   }
+  applyKeysOnlyValueStyle(props, theme);
+  applyInvertedSectionHeaderStyle(props, theme);
   listNav_.syncToProps(screen.body(), rowHeight, theme.listRowGap, listCount_, props);
   screen.list(props);
 }
@@ -472,7 +475,9 @@ void UiStatusActivity::buildComparison(UiScreen& screen, const StatusView& view)
     if (block.label == nullptr || block.label[0] == '\0') continue;
     if (y > body.y) y = static_cast<int16_t>(y + gap * 2);
     fui::TextStyle label = theme.bodyText;
-    label.align = fui::TextAlign::Left;
+    label.align = fui::TextAlign::Center;
+    label.color = fui::Color::White;
+    target.fill(fui::Rect{body.x, y, body.width, headlineHeight}, fui::Paint::solid(fui::Color::Black));
     target.text(fui::Rect{body.x, y, body.width, headlineHeight}, block.label, label);
     y = static_cast<int16_t>(y + headlineHeight);
     for (const char* line : block.lines) {

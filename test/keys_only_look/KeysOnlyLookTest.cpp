@@ -102,6 +102,13 @@ TEST(KeysOnlyLook, EveryListScreenGetsTheValueStyleWithoutAskingForIt) {
   EXPECT_GT(apply, sync) << "the value style must be applied inside syncListViewport, which every list calls";
 }
 
+TEST(KeysOnlyLook, EveryListScreenGetsInvertedSectionHeadersWithoutAskingForIt) {
+  const std::string lists = readSource(LIST_ACTIVITY_SOURCE);
+  EXPECT_TRUE(contains(lists, "applyInvertedSectionHeaderStyle(props, screen.theme())"));
+  const std::string status = readSource(STATUS_ACTIVITY_SOURCE);
+  EXPECT_TRUE(contains(status, "applyInvertedSectionHeaderStyle(props, theme)"));
+}
+
 // --- the touch board is left alone ------------------------------------------
 
 TEST(KeysOnlyLook, TheTouchBoardKeepsTheSdkLook) {
@@ -110,7 +117,8 @@ TEST(KeysOnlyLook, TheTouchBoardKeepsTheSdkLook) {
   const std::string source = readSource(THEME_TOKENS_HEADER);
   const std::size_t guard = source.find("if (!gpio.hasTouch())");
   ASSERT_NE(guard, std::string::npos);
-  for (const char* keysOnly : {"titleText.bold = false", "headerUnderline = 0", "titleText.color = fui::Color::White"}) {
+  for (const char* keysOnly :
+       {"titleText.bold = false", "headerUnderline = 0", "titleText.color = fui::Color::White"}) {
     EXPECT_GT(source.find(keysOnly), guard) << keysOnly << " is applied outside the keys-only guard";
   }
 }
