@@ -636,6 +636,7 @@ void setup() {
     }
   }
 
+  const uint32_t configStartedMs = millis();
   SETTINGS.loadFromFile();
   APP_STATE.loadFromFile();
   // Restore the anti-ghost budget the last session spent. Without this the count starts
@@ -660,6 +661,7 @@ void setup() {
   OPDS_STORE.seedBuiltInServers();
   READER_PRESETS.loadFromFile();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+  WakeTiming::noteCost(WakeTiming::Cost::Config, millis() - configStartedMs);
   WakeTiming::mark(WakeTiming::Stage::ConfigReady);
 
   // Settings are up, so the timings setting can be honoured. Started before the panel is
@@ -685,6 +687,7 @@ void setup() {
                    frontlight::restoreLightOnAtBoot(
                        {SETTINGS.frontlightOn != 0, SETTINGS.frontlightRestoreOnWake != 0, isSilentReboot}));
 
+  const uint32_t classifyStartedMs = millis();
   const auto wakeupReason = gpio.getWakeupReason();
   // INF, and on every boot: a device that sleeps and is woken straight back up by its own
   // USB power prints nothing else, so without this line the cycle can only be inferred
@@ -713,6 +716,8 @@ void setup() {
     default:
       break;
   }
+
+  WakeTiming::noteCost(WakeTiming::Cost::Classify, millis() - classifyStartedMs);
 
   // First serial output only here to avoid timing inconsistencies for power button press duration verification
   LOG_DBG("MAIN", "Starting CrossPoint version " CROSSPOINT_VERSION);
@@ -801,6 +806,7 @@ void setup() {
   // does too. Before the move it ran after the window and cost its 138 ms (X3) or 50 ms
   // (X4) on top; now the window absorbs it and what is left to wait for shrinks by the
   // same amount.
+  const uint32_t settleStartedMs = millis();
   bool recoveryFirmwareMode = sdRecoveryChord;
   if (!recoveryFirmwareMode && wakeupReason == HalGPIO::WakeupReason::PowerButton) {
     recoveryFirmwareMode = recoveryChordHeld(inputStartedMs);
@@ -808,6 +814,7 @@ void setup() {
   if (recoveryFirmwareMode)
     LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)", BoardConfig::isX4Pro() ? "DOWN" : "UP");
 
+  WakeTiming::noteCost(WakeTiming::Cost::Settle, millis() - settleStartedMs);
   WakeTiming::mark(WakeTiming::Stage::InputSettled);
 
   // Picked here rather than before the display bring-up because it reads
@@ -856,7 +863,9 @@ void setup() {
       // us in a splashless-with-no-frame loop on the next boot.
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
+      const uint32_t frameStartedMs = millis();
       const bool sleepFrameRestored = loadSleepFrameBuffer();
+      WakeTiming::noteCost(WakeTiming::Cost::Frame, millis() - frameStartedMs);
       // Stamped whichever way it went: "the frame was missing" is itself an answer to
       // where the wake's time went, and a stage that is only stamped on success reads as
       // a fast wake when it never ran at all.
@@ -880,13 +889,17 @@ void setup() {
         const bool bannersDrawn = !quickResumeWake;
         if (bannersDrawn) drawUnlockBanners(renderer);
         WakeTiming::mark(WakeTiming::Stage::BannersDrawn);
-        if (useDifferentialRefresh) {
-          renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-          // The panel already holds the page; the reader's first paint can go over it.
-          allowFastInitialReaderRefresh = true;
-        } else if (wake_face::restoredFrameNeedsPush(useDifferentialRefresh, bannersDrawn)) {
-          renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+        if (wake_face::restoredFrameNeedsPush(useDifferentialRefresh, bannersDrawn)) {
+          if (useDifferentialRefresh) {
+            renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+          } else {
+            renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+          }
         }
+        // The saved baseline is restored above even when the reinforcement is skipped.
+        // The first reader paint still removes the moon. See WAKE-BUDGET.md for the
+        // required device ghosting check and LECTOR_FAST_QUICK_RESUME=0 rollback.
+        if (useDifferentialRefresh) allowFastInitialReaderRefresh = true;
         // Quick Resume on an X4 pushes nothing: the glass already shows this exact frame,
         // and both X4 drivers promote the first paint after begin() to a clean pass anyway
         // (SSD1677: panel asleep -> HALF; UC8279: no OLD plane -> full GC). A HALF here was

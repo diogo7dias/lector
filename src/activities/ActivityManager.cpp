@@ -15,6 +15,7 @@
 #include "CrossPointSettings.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "WakeTiming.h"
 #include "boot_sleep/BootActivity.h"
 #include "boot_sleep/SleepActivity.h"
 #include "browser/OpdsBookBrowserActivity.h"
@@ -183,7 +184,10 @@ void ActivityManager::renderTaskLoop() {
           // page) must not keep answering to the band the screen before it drew, or a
           // tap along the bottom of the page is a Back that leaves the book.
           hint_band::lastPainted().valid = false;
+          const bool wakeDestination = currentActivity->isReaderActivity() || currentActivity->isHomeActivity();
+          const uint32_t panelsBefore = PerfStats::wakePanelCount();
           currentActivity->render(std::move(lock));
+          if (wakeDestination && PerfStats::wakePanelCount() != panelsBefore) WakeTiming::readable();
         }
       }
     }
@@ -214,6 +218,7 @@ void ActivityManager::loop() {
     // deferred-update flush at the bottom of this function, and once the panel is up
     // handleInput() consumes the pass on every pass, so a deferred request would never
     // be flushed at all: the panel opened, reported present=1, and was never drawn.
+    WakeTiming::reportInput();
     if (lightPanel.isActive()) {
       if (lightPanel.handleInput(mappedInput, [this] { requestUpdate(/*immediate=*/true); })) return;
     } else if (Frontlight.present() && mappedInput.wasMenuGesture()) {

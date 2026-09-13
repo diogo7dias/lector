@@ -1,3 +1,4 @@
+#include <PerfStats.h>
 #include <gtest/gtest.h>
 
 #include "sleep/WakeFacePolicy.h"
@@ -26,8 +27,30 @@ TEST(WakeFacePolicy, X4QuickResumeSkipsTheFramePush) { EXPECT_FALSE(restoredFram
 // Banners are new pixels on top of the frame; they have to reach the panel.
 TEST(WakeFacePolicy, BannersForceTheFramePush) { EXPECT_TRUE(restoredFrameNeedsPush(false, true)); }
 
-// The X3 keeps its differential push (upstream #2698), banners or not.
-TEST(WakeFacePolicy, X3AlwaysPushesTheFrame) {
-  EXPECT_TRUE(restoredFrameNeedsPush(true, false));
-  EXPECT_TRUE(restoredFrameNeedsPush(true, true));
+// Fast and conservative paths must both preserve new banner pixels. Only the
+// unchanged retained frame may skip a submission, on every supported board.
+TEST(WakeFacePolicy, RetainedFrameFastAndConservative) {
+  for (const bool x3 : {false, true}) {
+    EXPECT_FALSE(restoredFrameNeedsPush(x3, false, true));
+    EXPECT_EQ(restoredFrameNeedsPush(x3, false, false), x3);
+    EXPECT_TRUE(restoredFrameNeedsPush(x3, true, true));
+    EXPECT_TRUE(restoredFrameNeedsPush(x3, true, false));
+  }
+}
+
+TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {
+  // B/W base and grayscale composite are two submissions, regardless of their
+  // matching mode labels. Later page turns must not change the wake record.
+  PerfStats::noteRefresh(2, 2, 617000, 0, 0);
+  PerfStats::noteRefresh(2, 2, 500000, 0, 0);
+  PerfStats::finishWakePanels();
+  PerfStats::noteRefresh(1, 1, 1800000, 0, 0);
+  EXPECT_EQ(PerfStats::wakePanelCount(), 2u);
+  char out[48];
+  PerfStats::formatWakePanels(out, sizeof(out));
+  EXPECT_STREQ(out, "617/500");
+  char tiny[2] = {};
+  PerfStats::formatWakePanels(tiny, sizeof(tiny));
+  EXPECT_EQ(tiny[1], '\0');
+  PerfStats::formatWakePanels(nullptr, 0);
 }

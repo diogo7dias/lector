@@ -2,7 +2,9 @@
 
 #include <Arduino.h>
 #include <HalStorage.h>
+#include <PerfStats.h>
 
+#include <atomic>
 #include <cstdio>
 #include <cstring>
 
@@ -52,6 +54,12 @@ uint32_t wakeCount = 0;
 bool loadAttempted = false;
 bool loadedOk = false;
 bool enabled = false;
+uint32_t costs[static_cast<uint8_t>(Cost::Count)] = {};
+uint32_t setupStartedMs = 0;
+std::atomic<uint32_t> readableAt{0};
+std::atomic<uint32_t> firstInputAt{0};
+bool readyReported = false;
+bool inputReported = false;
 
 // Short labels, in Stage order. "pre" is the prologue before the first stamp, which is
 // printed as a stage in its own right rather than being silently rolled into the total.
@@ -65,6 +73,7 @@ uint16_t clampMs(const unsigned long ms) { return ms >= kUnset ? (kUnset - 1) : 
 }  // namespace
 
 void beginWake() {
+  setupStartedMs = millis();
   // The previous wake is no longer inherited from memory — loadPrevious() reads it off
   // the card once Storage is up. This only clears the slate for the wake starting now.
   for (uint8_t i = 0; i < kCount; i++) {
@@ -80,6 +89,43 @@ void mark(const Stage stage) {
   const uint8_t i = static_cast<uint8_t>(stage);
   if (i >= kCount) return;
   current[i] = clampMs(millis());
+}
+
+void noteCost(const Cost cost, const uint32_t ms) { costs[static_cast<uint8_t>(cost)] = ms; }
+
+void readable() {
+  if (readableAt.load(std::memory_order_relaxed)) return;
+  PerfStats::finishWakePanels();
+  // Publish the completed panel list to the main task (also on dual-core S3).
+  readableAt.store(millis(), std::memory_order_release);
+}
+
+bool noteAcceptedInput(const bool accepted) {
+  if (accepted && !firstInputAt.load(std::memory_order_relaxed)) {
+    uint32_t unset = 0;
+    firstInputAt.compare_exchange_strong(unset, millis(), std::memory_order_relaxed);
+  }
+  return accepted;
+}
+
+void reportInput() {
+  if (inputReported) return;
+  const uint32_t ready = readableAt.load(std::memory_order_acquire);
+  if (!ready) return;
+  if (!readyReported) {
+    LOG_INF("SLP", "Wake readable=%lu ms from setup; input dispatch ready=%lu", (unsigned long)(ready - setupStartedMs),
+            (unsigned long)(millis() - setupStartedMs));
+    readyReported = true;
+  }
+  const uint32_t acceptedAt = firstInputAt.load(std::memory_order_relaxed);
+  if (!acceptedAt) return;
+  inputReported = true;
+  char panels[48];
+  PerfStats::formatWakePanels(panels, sizeof(panels));
+  LOG_INF("SLP", "Wake %lu ms total classify=%lu cfg=%lu frame=%lu settle=%lu panels[%lu]=%s first_input=%lu",
+          (unsigned long)(ready - setupStartedMs), (unsigned long)costs[0], (unsigned long)costs[1],
+          (unsigned long)costs[2], (unsigned long)costs[3], (unsigned long)PerfStats::wakePanelCount(), panels,
+          (unsigned long)(acceptedAt - setupStartedMs));
 }
 
 void formatPrevious(char* const out, const size_t outLen) {

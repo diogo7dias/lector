@@ -34,16 +34,19 @@ enum class SleepFace : uint8_t {
 };
 
 // True when the wake may hand the panel over as-is and suppress the boot presentation.
-inline constexpr bool retainsPanelForWake(const SleepFace face) {
-  return face == SleepFace::QuickResumeFrame;
-}
+inline constexpr bool retainsPanelForWake(const SleepFace face) { return face == SleepFace::QuickResumeFrame; }
 
-// Once the saved frame is back in the framebuffer, must it be pushed to the panel before
-// the next activity paints? Yes when banners were drawn over it (they are new pixels), and
-// always on the X3, whose baseline restore and differential push are what stop it flashing
-// on the way in (upstream #2698). On an X4 with no banners the glass already shows this
-// exact frame and both X4 drivers promote the first paint after begin() to a clean pass
-// regardless, so a push here is a whole HALF pass spent on pixels that do not change.
-inline constexpr bool restoredFrameNeedsPush(const bool isX3, const bool bannersDrawn) { return isX3 || bannersDrawn; }
+// Device-check escape hatch: skipping the X3's retained-frame reinforcement saves
+// one FAST base submission, but retained ink charge must be tested on both batches.
+#ifndef LECTOR_FAST_QUICK_RESUME
+#define LECTOR_FAST_QUICK_RESUME 1
+#endif
+
+// Banners change pixels and must be submitted. X4 already skips the unchanged
+// frame; conservative X3 behavior retains upstream's reinforcement pass.
+inline constexpr bool restoredFrameNeedsPush(const bool isX3, const bool bannersDrawn,
+                                             const bool fastQuickResume = LECTOR_FAST_QUICK_RESUME != 0) {
+  return bannersDrawn || (isX3 && !fastQuickResume);
+}
 
 }  // namespace wake_face
