@@ -103,7 +103,8 @@ namespace {
 //      Marker glyphs change size and position, so cached pages must be rebuilt.
 // 55: honour the HTML hidden attribute as display:none (upstream #3390). Hidden
 //      nodes leave the page, so cached pages must be rebuilt.
-constexpr uint8_t SECTION_FILE_VERSION = 55;
+// v56: balance full text pages vertically; cached y positions change, binary layout does not.
+constexpr uint8_t SECTION_FILE_VERSION = 56;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

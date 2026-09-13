@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "ParagraphNumberLayout.h"
+#include "lib/Epub/Epub/PageVerticalAlignment.h"
 
 namespace {
 
@@ -116,4 +117,16 @@ TEST(ParagraphNumberLayout, FallsBackToLineBoxCentringWithoutInkMetrics) {
   m = metricsFor(kVollkorn16, kSpleenDouble);
   m.numInkTop = 0;
   EXPECT_EQ((46 - 26) / 2, paragraphNumberDrawY(m));
+}
+
+TEST(FullTextPageAlignment, BalancesRemainderWithoutChangingLineSpacing) {
+  EXPECT_EQ(fullTextPageOffset(700, 0, 650, 50, 40), 5);
+  EXPECT_EQ(fullTextPageOffset(701, 0, 650, 50, 40), 5);  // odd pixel stays below
+  EXPECT_EQ(fullTextPageOffset(700, 20, 660, 40, 40), -10);
+  EXPECT_EQ(fullTextPageOffset(700, 0, 200, 50, 40), 0);    // short final page
+  EXPECT_EQ(fullTextPageOffset(700, 0, 680, 20, 40), 0);    // compressed glyph box would overflow
+  EXPECT_EQ(fullTextPageOffset(700, 600, 650, 50, 40), 0);  // intentional leading space
+  EXPECT_EQ(fullTextPageOffset(700, 0, 0, 50, 40), 0);
+  EXPECT_EQ(fullTextPageOffset(700, 0, -50, 50, 40), 0);
+  EXPECT_EQ(fullTextPageOffset(700, 0, 650, 0, 40), 0);
 }

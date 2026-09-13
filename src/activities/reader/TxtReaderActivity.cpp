@@ -1,6 +1,7 @@
 #include "TxtReaderActivity.h"
 
 #include <BidiUtils.h>
+#include <Epub/PageVerticalAlignment.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -639,10 +640,13 @@ void TxtReaderActivity::askDeleteBook() {
 void TxtReaderActivity::renderPage() {
   const int lineHeight = renderer.getLineHeight(cachedFontId);
   const int contentWidth = viewportWidth;
+  const int viewportHeight = renderer.getScreenHeight() - cachedOrientedMarginTop - cachedOrientedMarginBottom;
+  const int verticalOffset = fullTextPageOffset(
+      viewportHeight, 0, (static_cast<int>(currentPageLines.size()) - 1) * lineHeight, lineHeight, lineHeight);
 
   // Render text lines with alignment
   auto renderLines = [&]() {
-    int y = cachedOrientedMarginTop;
+    int y = cachedOrientedMarginTop + verticalOffset;
     for (const auto& line : currentPageLines) {
       if (!line.empty()) {
         int x = cachedOrientedMarginLeft;

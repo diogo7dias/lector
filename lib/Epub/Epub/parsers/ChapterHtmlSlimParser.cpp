@@ -284,6 +284,7 @@ void ChapterHtmlSlimParser::flushPendingAnchor() {
   // block is flushed so the chapter starts on a fresh page.
   if (std::find(tocAnchors.begin(), tocAnchors.end(), *pendingAnchorId) != tocAnchors.end()) {
     if (currentPage && !currentPage->elements.empty()) {
+      currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
       completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
                      currentPageVisibleOffset);
       completedPageCount++;
@@ -453,6 +454,7 @@ void ChapterHtmlSlimParser::emitHorizontalRule(const BlockStyle& blockStyle) {
 
   if (!currentPage->elements.empty() && currentPageNextY + totalHeight > viewportHeight) {
     setCurrentPageVisibleOffset(visibleTextOffset);
+    if (currentPage) currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
     completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
                    currentPageVisibleOffset);
     completedPageCount++;
@@ -639,6 +641,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
     if (!currentPage || pageFull) {
       if (pageFull) {
         setCurrentPageVisibleOffset(lineVisibleOffset);
+        currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
         completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
                        currentPageVisibleOffset);
         completedPageCount++;
@@ -1146,6 +1149,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
                 if (self->currentPage && !self->currentPage->elements.empty() &&
                     (self->currentPageNextY + imageMarginTop + displayHeight + imageMarginBottom >
                      self->viewportHeight)) {
+                  self->currentPage->centerFullTextPage(self->renderer, self->fontId, self->lineCompression,
+                                                        self->viewportHeight);
                   self->completePageFn(self->completePageCtx, std::move(self->currentPage), self->xpathParagraphIndex,
                                        self->xpathListItemIndex, self->currentPageVisibleOffset);
                   self->completedPageCount++;
@@ -2136,6 +2141,7 @@ bool ChapterHtmlSlimParser::finishParse() {
       pendingAnchorId.reset();
     }
     setCurrentPageVisibleOffset(visibleTextOffset);
+    if (currentPage) currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
     completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
                    currentPageVisibleOffset);
     completedPageCount++;
@@ -2179,6 +2185,7 @@ void ChapterHtmlSlimParser::addLineToPage(std::shared_ptr<TextBlock> line, const
 
   if (currentPageNextY + lineHeight > viewportHeight) {
     setCurrentPageVisibleOffset(visibleOffset);
+    if (currentPage) currentPage->centerFullTextPage(renderer, fontId, lineCompression, viewportHeight);
     completePageFn(completePageCtx, std::move(currentPage), xpathParagraphIndex, xpathListItemIndex,
                    currentPageVisibleOffset);
     completedPageCount++;

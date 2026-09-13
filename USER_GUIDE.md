@@ -793,7 +793,10 @@ other numbers in Settings use the same band.
 
 - **Font** — Noto Serif, Noto Sans, plus any SD card families; opens a full-screen picker.
 - **Size**.
-- **Line Spacing**.
+- **Line Spacing**. Full text pages automatically share leftover vertical space above
+  and below the text, inside your margins and status bar. Short pages stay at the top;
+  EPUB pages with images, rules or ruby keep their layout. This balances line boxes
+  (within one pixel), so letter shapes may still look slightly uneven.
 - **Horizontal Margin** — left and right, one shared value. Listed as **Margin** in All
   Sides, where it is every side.
 - **Link Margins** — **Off**, **Top+Bottom** or **All Sides**. Off lists **Top Margin** and
