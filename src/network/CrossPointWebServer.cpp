@@ -1615,7 +1615,7 @@ void CrossPointWebServer::handlePostSettings() {
         const int val = doc[s.key].as<int>();
         const int maxVal = s.enumStringValues.empty() ? static_cast<int>(s.enumValues.size())
                                                       : static_cast<int>(s.enumStringValues.size());
-        if (val >= 0 && val < maxVal) {
+        if (val >= 0 && val < maxVal && !s.isEnumValueHidden(static_cast<uint8_t>(val))) {
           if (s.valuePtr) {
             SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
           } else if (s.valueSetter) {

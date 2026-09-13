@@ -137,8 +137,6 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
-  // True when the home menu is the activity on screen. Used by the Quick Resume lock,
-  // which repaints home before sleeping only when it is not already showing.
   bool isHomeActivity() const;
   bool handleForcedRefresh();
   // Forwarded to the CURRENT activity only — unlike isReaderActivity(), which is also true

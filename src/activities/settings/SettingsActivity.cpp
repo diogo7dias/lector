@@ -304,22 +304,22 @@ void SettingsActivity::rebuildSettingsList() {
   // Frontlight leads: brightness and warmth are reached for daily, the rest of this
   // category once in a while. Then the screen itself, then the two sleep-screen groups,
   // which are set up once and revisited only when the wallpapers change.
-  applyGroups(displaySettings, {
-                                   // Absent on a board with no frontlight, and applyGroups draws no
-                                   // heading for a group whose rows are all missing.
-                                   {StrId::STR_GRP_FRONTLIGHT,
-                                    {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
-                                     StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
-                                   {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
-                                   {StrId::STR_GRP_SLEEP_SCREEN,
-                                    {StrId::STR_SLEEP_SCREEN, StrId::STR_QUICK_RESUME_TIMEOUT,
-                                     StrId::STR_WAKE_STRAIGHT_TO_BOOK, StrId::STR_SLEEP_FOOTER_TEXT}},
-                                   {StrId::STR_GRP_WALLPAPER,
-                                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
-                                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
-                                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
-                                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
-                               });
+  applyGroups(displaySettings,
+              {
+                  // Absent on a board with no frontlight, and applyGroups draws no
+                  // heading for a group whose rows are all missing.
+                  {StrId::STR_GRP_FRONTLIGHT,
+                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
+                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
+                  {StrId::STR_GRP_SLEEP_SCREEN,
+                   {StrId::STR_SLEEP_SCREEN, StrId::STR_WAKE_STRAIGHT_TO_BOOK, StrId::STR_SLEEP_FOOTER_TEXT}},
+                  {StrId::STR_GRP_WALLPAPER,
+                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
+                    StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
+                    StrId::STR_SHUFFLE_WALLPAPERS}},
+                  {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
+              });
 
   applyGroups(
       readerSettings,
@@ -406,11 +406,6 @@ void SettingsActivity::onEnter() {
   // instant, and flashing a banner on every toggle would be worse than nothing.
   BusyBanner banner(renderer, tr(STR_BUSY_LOADING_SETTINGS));
 
-  preserveQuickResumeTimeoutOn =
-      SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
-  quickResumeTimeoutAutoEnabled = false;
-  syncQuickResumeTimeoutForSleepScreen(/*sleepScreenChanged=*/true, /*quickResumeTimeoutChanged=*/false);
-
   rebuildSettingsList();
   // Opens on the hub: which four categories there are is the first thing to say now that
   // the group headings live inside them.
@@ -490,8 +485,6 @@ void SettingsActivity::toggleCurrentSetting() {
   }
 
   const auto& setting = settings[selectedSetting];
-  const bool sleepScreenChanged = setting.valuePtr == &CrossPointSettings::sleepScreen;
-  const bool quickResumeTimeoutChanged = setting.valuePtr == &CrossPointSettings::quickResumeSleepScreen;
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
     openSleepTimeoutPicker();
@@ -521,10 +514,9 @@ void SettingsActivity::toggleCurrentSetting() {
         offeredValues.push_back(value);
       }
       optionPopup.show(setting.nameId, offeredLabels.data(), static_cast<int>(offeredLabels.size()), currentRow,
-                       [this, valuePtr, offeredValues, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
+                       [this, valuePtr, offeredValues](int idx) {
                          if (idx < 0 || idx >= static_cast<int>(offeredValues.size())) return;
                          SETTINGS.*valuePtr = offeredValues[idx];
-                         syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
                          rebuildSettingsList();
                          restoreCursorAfterRebuild();
@@ -549,9 +541,8 @@ void SettingsActivity::toggleCurrentSetting() {
     const uint8_t cur = setting.valueGetter();
     if (totalValues > 2) {
       const auto valueSetter = setting.valueSetter;
-      auto onSelect = [this, valueSetter, sleepScreenChanged, quickResumeTimeoutChanged](int idx) {
+      auto onSelect = [this, valueSetter](int idx) {
         valueSetter(idx);
-        syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
         SETTINGS.saveToFile();
         rebuildSettingsList();
         restoreCursorAfterRebuild();
@@ -720,7 +711,6 @@ void SettingsActivity::toggleCurrentSetting() {
     return;
   }
 
-  syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
   rebuildSettingsList();
   restoreCursorAfterRebuild();
@@ -735,29 +725,6 @@ void SettingsActivity::restoreCursorAfterRebuild() {
   const int wasSelected = selected();
   selectCategory(selectedCategory);
   setSelected(std::clamp(wasSelected, 0, std::max(0, settingsCount - 1)));
-}
-
-void SettingsActivity::syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged) {
-  if (quickResumeTimeoutChanged) {
-    preserveQuickResumeTimeoutOn =
-        SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
-    quickResumeTimeoutAutoEnabled = false;
-  }
-
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME) {
-    if (SETTINGS.quickResumeSleepScreen != CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT) {
-      SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT;
-      quickResumeTimeoutAutoEnabled = !preserveQuickResumeTimeoutOn;
-    } else if (sleepScreenChanged && !preserveQuickResumeTimeoutOn) {
-      quickResumeTimeoutAutoEnabled = true;
-    }
-    return;
-  }
-
-  if (sleepScreenChanged && quickResumeTimeoutAutoEnabled && !preserveQuickResumeTimeoutOn) {
-    SETTINGS.quickResumeSleepScreen = CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_NEVER;
-    quickResumeTimeoutAutoEnabled = false;
-  }
 }
 
 void SettingsActivity::shareCredentials() {

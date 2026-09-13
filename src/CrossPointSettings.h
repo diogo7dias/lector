@@ -59,7 +59,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // The slot stays so every value after it keeps its meaning; renderBlankSleepScreen()
     // and its switch case stay too, so re-offering it is a one-line change.
     BLANK = 5,
-    QUICK_RESUME = 6,
+    QUICK_RESUME = 6,  // Retired: migrate to LIGHT; keep persisted numbering.
     // Appended at the end: the stored value is the persisted setting, so new faces
     // must never be inserted before an existing one.
     STATS_DASHBOARD = 7,
@@ -67,7 +67,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // except the frame never appeared on the device. All of its behaviour is deleted —
     // the renderer, the frame-colour setting, and its branch in enterDeepSleep. The slot
     // stays reserved so the values around it keep their meaning, and fromJson() migrates
-    // a stored 8 to DARK. Quick Resume on Timeout covers the "keep my page" case.
+    // a stored 8 to DARK.
     FREEZE = 8,
     // Draws an alpha overlay over whatever the panel is already holding, instead of
     // replacing it. Upstream (#2937) gave this slot 7; here 7 is already STATS_DASHBOARD,
@@ -337,12 +337,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // fixed steps rather than a free size: Small is the native 12px cell (8px digits) and
   // Double is that same cell at 2x (16px digits). Per-book, like the mode above.
   enum PARAGRAPH_NUMBER_SIZE { PARA_NUM_SIZE_SMALL = 0, PARA_NUM_SIZE_DOUBLE = 1, PARAGRAPH_NUMBER_SIZE_COUNT };
-
-  enum QUICK_RESUME_SLEEP_SCREEN {
-    QUICK_RESUME_NEVER = 0,
-    QUICK_RESUME_AFTER_TIMEOUT = 1,
-    QUICK_RESUME_SLEEP_SCREEN_COUNT
-  };
 
   // Sleep screen settings
   uint8_t sleepScreen = LIGHT;
@@ -774,8 +768,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t imageRendering = IMAGES_DISPLAY;
   // Language setting (Language enum index, default 0 = EN)
   uint8_t language = 0;
-  // Quick Resume: keep current content visible with moon icon instead of showing a static sleep screen.
-  uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
 
   // Frontlight (X4 Pro and other boards the SDK reports a frontlight for). The
   // rows are filtered out of Settings on a board without one, but the values

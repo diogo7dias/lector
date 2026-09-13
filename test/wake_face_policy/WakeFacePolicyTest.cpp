@@ -3,39 +3,14 @@
 
 #include "sleep/WakeFacePolicy.h"
 
-using wake_face::restoredFrameNeedsPush;
-using wake_face::retainsPanelForWake;
-using Face = wake_face::SleepFace;
-
-// Quick Resume restores the exact frame the panel is already showing, so handing the
-// panel over untouched is honest and saves the clearing pass.
-TEST(WakeFacePolicy, QuickResumeFrameKeepsThePanel) { EXPECT_TRUE(retainsPanelForWake(Face::QuickResumeFrame)); }
-
-// Regression, 0.21.0 (upstream #2943): a custom wallpaper was treated as retained
-// boot content, which skipped the blank-and-FULL pass that clears it. A differential
-// waveform only drives changed pixels, so the artwork stayed visible under the home
-// screen and under every page that followed. The wake must clear.
-TEST(WakeFacePolicy, CustomWallpaperDoesNotKeepThePanel) { EXPECT_FALSE(retainsPanelForWake(Face::CustomWallpaper)); }
-
-// Anything else (cover, clock, blank) has no retained frame to hand over.
-TEST(WakeFacePolicy, OtherFacesDoNotKeepThePanel) { EXPECT_FALSE(retainsPanelForWake(Face::Other)); }
-
-// Quick Resume on an X4: the restored frame is what the glass already shows and the
-// driver's first paint is a clean pass either way, so the wake pushes nothing.
-TEST(WakeFacePolicy, X4QuickResumeSkipsTheFramePush) { EXPECT_FALSE(restoredFrameNeedsPush(false, false)); }
-
-// Banners are new pixels on top of the frame; they have to reach the panel.
-TEST(WakeFacePolicy, BannersForceTheFramePush) { EXPECT_TRUE(restoredFrameNeedsPush(false, true)); }
-
-// Fast and conservative paths must both preserve new banner pixels. Only the
-// unchanged retained frame may skip a submission, on every supported board.
-TEST(WakeFacePolicy, RetainedFrameFastAndConservative) {
-  for (const bool x3 : {false, true}) {
-    EXPECT_FALSE(restoredFrameNeedsPush(x3, false, true));
-    EXPECT_EQ(restoredFrameNeedsPush(x3, false, false), x3);
-    EXPECT_TRUE(restoredFrameNeedsPush(x3, true, true));
-    EXPECT_TRUE(restoredFrameNeedsPush(x3, true, false));
-  }
+TEST(WakeFacePolicy, RetiredSelectionsBecomeLightWithoutRenumberingOtherFaces) {
+  EXPECT_EQ(wake_face::migrateSleepScreen(6), 1);  // saved Quick Resume -> Light
+  EXPECT_EQ(wake_face::migrateSleepScreen(2), 2);  // Custom stays Custom
+  EXPECT_EQ(wake_face::migrateSleepScreen(7), 7);  // Stats keeps its persisted ID
+  EXPECT_EQ(wake_face::migrateSleepScreen(9), 9);  // Transparent keeps its persisted ID
+  EXPECT_EQ(wake_face::migrateSleepScreen(0), 1);  // older retired Dark
+  EXPECT_EQ(wake_face::migrateSleepScreen(5), 1);  // older retired Blank
+  EXPECT_EQ(wake_face::migrateSleepScreen(8), 1);  // older retired Freeze
 }
 
 TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {

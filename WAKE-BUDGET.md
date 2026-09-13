@@ -1,3 +1,7 @@
+> **Superseded:** Quick Resume and its timeout override have now been removed.
+> Existing Quick Resume selections migrate to Light. The Quick Resume budget and
+> guarded experiment below are historical; ordinary-wake timings still apply.
+
 # Wake budget — phase 1, before code changes
 
 Baseline: `46171d938`, branch `perf/unlock-2s`. No attached device; no new
@@ -288,3 +292,24 @@ Hardware status: **not measured here; not cleared to ship**. In particular,
 neither the exact physical floor nor a two-second button-to-readable result has
 been established. The user needs to return the new wake lines and ghosting A/B
 results before that claim can be made. No merge, push or PR is part of this work.
+
+## Quick Resume removal verification
+
+The user subsequently requested removal of Quick Resume. Both device/web controls,
+the timeout override, saved-frame handling, retained-frame wake routing and the
+experimental fast flag are removed. Persisted mode 6 migrates to Light without
+renumbering other modes; legacy wake flags are ignored. The web API rejects hidden
+retired enum values. Normal sleep-face panel sequences remain unchanged.
+
+After removal, `cmake --build /tmp/lector-unlock-host -j4` and
+`ctest --test-dir /tmp/lector-unlock-host --output-on-failure` pass **1231/1231**
+(4.37 seconds). Obsolete Quick Resume policy tests were removed and migration is
+covered. The SettingsPage inline script passes `node --check`; all touched C++
+files pass clang-format's dry run, and `git diff --check` passes.
+
+Both kit-script commands listed above were rerun, each preceded by
+`rm -rf .pio .cache managed_components`, and both exited 0. Final logs are
+`/tmp/remove-qr-c3-final.log` (1 dependency warning, 0 errors) and
+`/tmp/remove-qr-pro-final.log` (248 dependency/framework warnings, 0 errors).
+The stable kit filenames now contain this removal. Migration and normal lock/wake
+behavior still need a device check; no two-second claim is made.

@@ -57,8 +57,6 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
   std::optional<BusyBanner> banner;
   if (uncached) {
-    // The banner replaces the restored Quick Resume frame, so the reader must clean it
-    // rather than paint the first page differentially over what is no longer there.
     allowFastInitialRefresh = false;
     // Known slow every time, so it skips the banner's usual delay. Kept alive
     // across the load below so any busy::tick() inside the parse still lands on

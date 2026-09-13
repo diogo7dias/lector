@@ -227,7 +227,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     // remains index-aligned with the enum — the value is what persists — but both are
     // listed in withHiddenEnumValues() below and never reach the picker.
     sleepScreenValues[CrossPointSettings::BLANK] = StrId::STR_NONE_OPT;
-    sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
+    sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_LIGHT;  // retired slot
     sleepScreenValues[CrossPointSettings::STATS_DASHBOARD] = StrId::STR_STATS_DASHBOARD;
     sleepScreenValues[CrossPointSettings::FREEZE] = StrId::STR_FREEZE;
     sleepScreenValues[CrossPointSettings::TRANSPARENT_CUSTOM] = StrId::STR_TRANSPARENT;
@@ -241,10 +241,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     std::vector<SettingInfo> v;
     v.reserve(88);
     // --- Display ---
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
-                          "sleepScreen", StrId::STR_CAT_DISPLAY)
-            .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::BLANK, CrossPointSettings::FREEZE}));
+    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
+                                  std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
+                    .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::BLANK,
+                                           CrossPointSettings::FREEZE, CrossPointSettings::QUICK_RESUME}));
 
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                                   {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));
@@ -265,10 +265,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
                                     &CrossPointSettings::showSleepWallpaperPosition, "showSleepWallpaperPosition",
                                     StrId::STR_CAT_DISPLAY));
-
-    v.push_back(SettingInfo::Enum(StrId::STR_QUICK_RESUME_TIMEOUT, &CrossPointSettings::quickResumeSleepScreen,
-                                  {StrId::STR_STATE_OFF, StrId::STR_STATE_ON}, "quickResumeSleepScreen",
-                                  StrId::STR_CAT_DISPLAY));
 
     // "Never" (index 5) was dropped: an X3 left without a periodic cleanup ghosts badly,
     // and upstream never offered it. A settings file still holding 5 clamps back to the

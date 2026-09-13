@@ -34,7 +34,6 @@
 #include "dev/LockLab.h"
 #include "fontIds.h"
 #include "images/BootLogos.h"
-#include "images/MoonIcon.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsStore.h"
@@ -683,15 +682,6 @@ void SleepActivity::onEnter() {
 }
 
 void SleepActivity::renderSleepScreen() const {
-  const bool renderQuickResume =
-      SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::QUICK_RESUME ||
-      (fromTimeout &&
-       SETTINGS.quickResumeSleepScreen == CrossPointSettings::QUICK_RESUME_SLEEP_SCREEN::QUICK_RESUME_AFTER_TIMEOUT);
-
-  if (renderQuickResume) {
-    return renderLastScreenSleepScreen();
-  }
-
   // Transparent overlays composite onto the page the user locked from, so this path
   // must reach the renderer with that page intact, and its popup is drawn and lifted
   // back off rather than painted over the page.
@@ -1409,23 +1399,6 @@ void SleepActivity::renderCoverSleepScreen() const {
   }
 
   return (this->*renderNoCoverSleepScreen)();
-}
-
-void SleepActivity::renderLastScreenSleepScreen() const {
-  const auto pageHeight = renderer.getScreenHeight();
-  renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
-  // Twice: the second submission every other face makes. No popup precedes this face,
-  // and the frame must not change between the two pushes, because enterDeepSleep() saves
-  // this exact framebuffer for the wake to restore over what the glass is holding.
-  for (int pass = 0; pass < 2; pass++) {
-    if (gpio.deviceIsX3()) {
-      // The controller still holds the displayed page, so its differential base
-      // waveform can add the moon without a full-screen flash.
-      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-    } else {
-      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-    }
-  }
 }
 
 void SleepActivity::renderBlankSleepScreen() const {

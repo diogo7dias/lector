@@ -16,6 +16,7 @@
 #include "ReaderFontSizes.h"
 #include "SettingsList.h"
 #include "fontIds.h"
+#include "sleep/WakeFacePolicy.h"
 #include "util/BoundActionScope.h"
 #include "util/MarginLink.h"
 #include "util/SleepTimeoutGuard.h"
@@ -258,12 +259,9 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Retired sleep faces. BLANK ("None") and FREEZE are no longer offered, FREEZE has no
-  // behaviour left at all (so a settings file still naming one would sleep into nothing),
-  // and DARK is gone too — the crest face is light only. Fold all three to the default
-  // face and rewrite the file so the migration happens once.
-  if (sleepScreen == BLANK || sleepScreen == FREEZE || sleepScreen == DARK) {
-    sleepScreen = LIGHT;
+  // Keep stored IDs stable while migrating retired sleep faces to Light.
+  if (wake_face::migrateSleepScreen(sleepScreen) != sleepScreen) {
+    sleepScreen = wake_face::migrateSleepScreen(sleepScreen);
     needsResave = true;
   }
 

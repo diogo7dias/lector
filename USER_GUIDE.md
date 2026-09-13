@@ -365,7 +365,6 @@ screen can show a stats dashboard.
 | Custom         | A wallpaper from the SD card. Falls back to Light when none is found.             |
 | Cover          | The open book's cover. Falls back to Light when no book is open.                  |
 | Cover + Custom | The cover while you are reading, a custom wallpaper otherwise.                    |
-| Quick Resume   | The screen you locked from, with a moon icon at the edge.                         |
 | Stats Dashboard| Your reading statistics.                                                          |
 | Transparent    | A BMP or PNG overlay drawn on top of whatever the screen was showing.             |
 
@@ -373,14 +372,7 @@ On **Light**, waking always opens the book the sleep screen named, even when you
 from the home menu. The book it names is chosen when the device goes to sleep, so the name
 on the sleep screen is always the book you get.
 
-**Quick Resume** is meant to be invisible: the moon appears when you lock, and waking puts
-you back exactly where you were with the moon gone. Nothing else is drawn over it, and
-"Open Book on Boot" does not apply to it. Because waking is a full restart, only
-a book page can be rebuilt, so locking from a menu or a settings screen shows the home
-screen from the moment you lock rather than changing under you on the way back.
-
-**Quick Resume on Timeout** turns on the Quick Resume face for sleeps caused by inactivity,
-whatever the Sleep Screen setting says.
+Previously saved Quick Resume selections now use Light. Inactivity uses your selected sleep screen.
 
 ### Wallpaper files
 
@@ -758,9 +750,8 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Quick Resume, Stats
+- **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Stats
   Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
-- **Quick Resume on Timeout** — ON or OFF.
 - **Wake Straight to Book** — wake goes straight back into the book.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 

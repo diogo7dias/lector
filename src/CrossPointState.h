@@ -16,17 +16,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   std::string openEpubPath;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
-  bool showBootScreen = true;
-  // Quick Resume bookkeeping, written at lock and read once by the next wake.
-  // quickResumeWake marks that the frame on the glass is a Quick Resume frame, so the
-  // wake restores it, draws no unlock banners, and routes only to the screen that frame
-  // shows: the reader when quickResumeTargetIsReader, otherwise home (the lock repaints
-  // home first when the screen it locked from cannot be rebuilt after the reset).
-  bool quickResumeWake = false;
-  bool quickResumeTargetIsReader = false;
-  // Anti-ghost budget carried across the lock: FAST panel passes since the last full
-  // discharge. Waking is a chip reset, so without this the count restarts every session
-  // and a device that is locked often never reaches the discharge threshold at all.
   uint8_t fastRefreshesSinceFull = 0;
   // The other half of the same budget: ink debt, i.e. how much the passes since the last
   // discharge actually moved rather than merely how many there were. Carried for the same
