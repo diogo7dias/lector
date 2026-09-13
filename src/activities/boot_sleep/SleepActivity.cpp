@@ -732,7 +732,8 @@ void SleepActivity::renderSleepScreen() const {
 
   switch (SETTINGS.sleepScreen) {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::BLANK):
-      return renderBlankSleepScreen();
+      renderBlankSleepScreen();
+      break;
     case (CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
     case (CrossPointSettings::SLEEP_SCREEN_MODE::COVER):
@@ -746,8 +747,15 @@ void SleepActivity::renderSleepScreen() const {
     case (CrossPointSettings::SLEEP_SCREEN_MODE::STATS_DASHBOARD):
       return renderStatsDashboardSleepScreen();
     default:
-      return renderDefaultSleepScreen();
+      renderDefaultSleepScreen();
+      break;
   }
+  // Every lock is two panel submissions on every device. For the faces above the popup
+  // was the first and the face the second; the quick faces skipped the popup, so their
+  // frame goes to the panel once more in the mode it was painted with. Only here, not
+  // inside the face renderers: the crest is also the fallback face after a popup, and
+  // there it is already the second submission.
+  if (faceIsQuick) renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderStatsDashboardSleepScreen() const {
@@ -1406,12 +1414,17 @@ void SleepActivity::renderCoverSleepScreen() const {
 void SleepActivity::renderLastScreenSleepScreen() const {
   const auto pageHeight = renderer.getScreenHeight();
   renderer.drawImage(MoonIcon, 0, pageHeight - MOONICON_HEIGHT, MOONICON_WIDTH, MOONICON_HEIGHT);
-  if (gpio.deviceIsX3()) {
-    // The controller still holds the displayed page, so its differential base
-    // waveform can add the moon without a full-screen flash.
-    renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
-  } else {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  // Twice: the second submission every other face makes. No popup precedes this face,
+  // and the frame must not change between the two pushes, because enterDeepSleep() saves
+  // this exact framebuffer for the wake to restore over what the glass is holding.
+  for (int pass = 0; pass < 2; pass++) {
+    if (gpio.deviceIsX3()) {
+      // The controller still holds the displayed page, so its differential base
+      // waveform can add the moon without a full-screen flash.
+      renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
+    } else {
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    }
   }
 }
 
