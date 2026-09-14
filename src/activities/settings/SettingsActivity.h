@@ -209,9 +209,6 @@ class SettingsActivity final : public UiGridActivity {
   std::vector<SettingInfo> controlsSettings;
   std::vector<SettingInfo> systemSettings;
 
-  bool preserveQuickResumeTimeoutOn = false;
-  bool quickResumeTimeoutAutoEnabled = false;
-
   OptionPopup optionPopup;
 
   // The two strings a cell is drawn from, rebuilt on demand: the base asks for
@@ -238,7 +235,6 @@ class SettingsActivity final : public UiGridActivity {
   std::vector<SettingInfo>& categoryRows(int index);
   StrId categoryName(int index) const;
   std::string settingValueText(const SettingInfo& setting) const;
-  void syncQuickResumeTimeoutForSleepScreen(bool sleepScreenChanged, bool quickResumeTimeoutChanged);
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)

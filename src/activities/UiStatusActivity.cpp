@@ -100,7 +100,11 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   // The header (and its sub-header) are painted outside the app, same as every
   // list screen, so the body starts under whichever of them was drawn.
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int16_t bodyTop = static_cast<int16_t>(metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing);
+  int16_t bodyTop =
+      static_cast<int16_t>(metrics.topPadding +
+                           (view.title ? BaseTheme::headerHeightFor(renderer, renderer.getScreenWidth(), view.title)
+                                       : metrics.headerHeight) +
+                           metrics.verticalSpacing);
   if (view.subtitleLeft) bodyTop = static_cast<int16_t>(bodyTop + metrics.tabBarHeight);
   screen.setContentMargin(fui::Insets{bodyTop, static_cast<int16_t>(metrics.contentSidePadding),
                                       static_cast<int16_t>(metrics.buttonHintsHeight),
@@ -437,8 +441,11 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
     props.rowHeight = rowHeight;
   }
   applyKeysOnlyValueStyle(props, theme);
+  applyWrappingRowStyle(props, theme);
   applyInvertedSectionHeaderStyle(props, theme);
-  listNav_.syncToProps(screen.body(), rowHeight, theme.listRowGap, listCount_, props);
+  const fui::Rect body = screen.body();
+  listBand_ = Rect{body.x, body.y, body.width, body.height};
+  listNav_.syncToProps(body, rowHeight, theme.listRowGap, listCount_, props);
   screen.list(props);
 }
 
@@ -616,6 +623,8 @@ void UiStatusActivity::loop() {
   navigateList();
 }
 
+static int metricsSpacing() { return UITheme::getInstance().getMetrics().verticalSpacing; }
+
 void UiStatusActivity::render(RenderLock&&) {
   const StatusView view = statusView();
   if (view.hidden) return;
@@ -624,11 +633,12 @@ void UiStatusActivity::render(RenderLock&&) {
   if (view.title) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int pageWidth = renderer.getScreenWidth();
-    const Rect headerRect{0, metrics.topPadding, pageWidth, metrics.headerHeight};
+    const Rect headerRect{0, metrics.topPadding, pageWidth,
+                          BaseTheme::headerHeightFor(renderer, pageWidth, view.title)};
     GUI.drawHeader(renderer, headerRect, view.title, view.headerRight ? view.headerRight : "");
     drawHeaderExtras(headerRect);
     if (view.subtitleLeft) {
-      const int bandTop = metrics.topPadding + metrics.headerHeight;
+      const int bandTop = headerRect.y + headerRect.height;
       GUI.drawSubHeader(renderer, Rect{0, bandTop, pageWidth, metrics.tabBarHeight}, view.subtitleLeft,
                         view.subtitleRight);
       if (view.showSignal) {
@@ -641,6 +651,13 @@ void UiStatusActivity::render(RenderLock&&) {
   // The codes are bitmaps, not FreeInkUI elements: the body layout said where
   // they go, and they land in the same buffer the app just drew into.
   drawQrCodes();
+  if (listCount_ > 0) {
+    // Same chevrons as every UiListActivity, in the spacing outside the rows.
+    const list_scrollbar::Arrows arrows = list_scrollbar::forWindow(listCount_, listNav_.top, listNav_.pageRows());
+    const int reach = std::min<int>(metricsSpacing(), list_scrollbar::kHeight + list_scrollbar::kGap);
+    GUI.drawScrollArrows(renderer,
+                         Rect{listBand_.x, listBand_.y - reach, listBand_.width, listBand_.height + reach * 2}, arrows);
+  }
 
   const auto labels =
       mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK), view.confirmHint ? view.confirmHint : "",

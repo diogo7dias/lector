@@ -136,9 +136,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // Index of the first landable row of the section named by SETTINGS.bookMenuTab, or 0.
   int firstRowOfPreferredSection() const;
   void closeCancelled();
-  // The wrapped title lines. The book block itself is chrome() headerLines, so
-  // the base reserves exactly what it draws.
-  std::vector<std::string> titleLines() const;
   // The block's strings, held so the ListChrome can borrow them. Mutable because
   // chrome() is const: rebuilding the block changes nothing about the screen.
   mutable std::vector<std::string> headerBlock;

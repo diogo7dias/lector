@@ -294,10 +294,19 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   noteRefreshTiming(requested, fallback, micros() - startUs, 0, thinkMs, 0);
 }
 
-void HalDisplay::preconditionGrayscale() { einkDisplay.preconditionGrayscale(); }
+void HalDisplay::preconditionGrayscale() { preconditionGrayscale(0, 0, getDisplayWidth(), getDisplayHeight()); }
 
 void HalDisplay::preconditionGrayscale(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+  // Close any prior async record before measuring this separate conditioning pass.
+  waitRefreshComplete();
+  EInkDisplay::resetRefreshAccounting();
+  const uint32_t startUs = micros();
   einkDisplay.preconditionGrayscale(x, y, w, h);
+  // Only X3 drives a waveform here; other drivers and invalid regions are no-ops.
+  // Do not turn a plane copy or a skipped precondition into a panel submission.
+  if (EInkDisplay::refreshBusyMicros() != 0) {
+    noteRefreshTiming(FAST_REFRESH, FAST_REFRESH, micros() - startUs, 0, PerfStats::kNoThink, 0);
+  }
 }
 
 void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer); }
@@ -305,6 +314,8 @@ void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay
 void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay.copyGrayscaleMsbBuffers(msbBuffer); }
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
+
+void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
 
 // The grayscale planes go straight to the driver: there is no refresh mode to choose,
 // the waveform is the gray nudge. They still drive the panel and still leave charge, so

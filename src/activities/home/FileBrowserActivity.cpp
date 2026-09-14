@@ -182,9 +182,8 @@ void FileBrowserActivity::prewarmRowGlyphs() const {
         return self->prewarmScratch.c_str();
       },
       this, static_cast<uint32_t>(totalRowCount()));
-  // The bottom path band draws in SMALL_FONT_ID, a different fallback table
-  // than the rows, so it needs its own pass rather than joining the batch.
-  renderer.prewarmFallbackText(SMALL_FONT_ID, basepath.c_str());
+  // The bottom path band is not part of the row batch, so it gets its own pass.
+  renderer.prewarmFallbackText(UI_10_FONT_ID, basepath.c_str());
 }
 
 int FileBrowserActivity::headerRowCount() const {
@@ -852,11 +851,15 @@ void FileBrowserActivity::render(RenderLock&&) {
     folderName += tr(STR_PARTIAL_LISTING);
     folderName += ")";
   }
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, folderName.c_str());
+  // A long folder name wraps and the band grows with it, so the rows start under it.
+  const int headerHeight = BaseTheme::headerHeightFor(renderer, pageWidth, folderName.c_str());
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, folderName.c_str());
 
-  const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
+  // The path wraps over the lines it needs; the band is reserved from the same wrap.
+  const int pathLineHeight =
+      renderer.getLineHeight(UI_10_FONT_ID) * BaseTheme::pathBarLines(renderer, pageWidth, basepath.c_str());
   const int pathReserved = pathLineHeight + metrics.verticalSpacing;
-  const int contentTop = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  const int contentTop = metrics.topPadding + headerHeight + metrics.verticalSpacing;
   const int contentHeight =
       pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
   if (totalRowCount() == 0) {

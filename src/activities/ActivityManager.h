@@ -119,7 +119,9 @@ class ActivityManager {
   void goToSettings();
   void goToFileBrowser(std::string path = {});
   void goToBrowser();
-  void goToReader(std::string path, bool allowFastInitialRefresh = false);
+  // firstTurnCleans: the wake painted the first page with a drive-all FAST over the
+  // sleep face, so the first page turn runs the clean pass (wake_face::firstPageTurnCleans).
+  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool firstTurnCleans = false);
   void goToSleep(bool fromTimeout = false);
   // wallpaperPath: see BootActivity — a .pxc wallpaper to unlock over, or empty for the
   // plain logo boot screen.
@@ -137,8 +139,6 @@ class ActivityManager {
 
   bool preventAutoSleep() const;
   bool isReaderActivity() const;
-  // True when the home menu is the activity on screen. Used by the Quick Resume lock,
-  // which repaints home before sleeping only when it is not already showing.
   bool isHomeActivity() const;
   bool handleForcedRefresh();
   // Forwarded to the CURRENT activity only — unlike isReaderActivity(), which is also true

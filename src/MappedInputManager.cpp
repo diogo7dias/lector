@@ -7,6 +7,7 @@
 #include <cstdlib>
 
 #include "CrossPointSettings.h"
+#include "WakeTiming.h"
 #include "components/HintBandGeometry.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
@@ -245,7 +246,7 @@ bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   // already been spent this frame.
   if (isInHintBand(x, y)) return false;
   rememberTouchHeldTime();
-  return true;
+  return WakeTiming::noteAcceptedInput(true);
 }
 
 bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
@@ -255,7 +256,7 @@ bool MappedInputManager::wasScreenTouchDown(int& x, int& y) const {
   if (!gpio.isTouchTapCandidate(nx, ny, heldMs)) return false;
   if (heldMs < TOUCH_DOWN_SELECT_DELAY_MS) return false;
   renderer.tapToLogical(nx, ny, x, y);
-  return !isInHintBand(x, y);
+  return WakeTiming::noteAcceptedInput(!isInHintBand(x, y));
 }
 
 bool MappedInputManager::takeScreenTouchDown(int& x, int& y) {
@@ -274,27 +275,6 @@ bool MappedInputManager::isScreenTouchHeld(int& x, int& y) const {
   float ny = 0.0f;
   if (!gpio.isTouchHeldAt(nx, ny)) return false;
   renderer.tapToLogical(nx, ny, x, y);
-  return true;
-}
-
-bool MappedInputManager::listItemFromPoint(const int x, const int y, int& index, const int itemCount,
-                                           const int selectedIndex, const int listTop, const int listHeight,
-                                           const bool hasSubtitle) const {
-  (void)x;
-  if (itemCount <= 0) return false;
-  if (y < listTop || y >= listTop + listHeight) return false;
-
-  const auto& theme = UITheme::getInstance().getTheme();
-  const int rowStep = theme.getListRowStep(hasSubtitle);
-  if (rowStep <= 0) return false;
-
-  const int pageItems = theme.getListPageItems(listHeight, hasSubtitle);
-  if (pageItems <= 0) return false;
-  const int pageStart = std::max(0, selectedIndex / pageItems) * pageItems;
-  const int row = (y - listTop) / rowStep;
-  const int tapped = pageStart + row;
-  if (row < 0 || row >= pageItems || tapped >= itemCount) return false;
-  index = tapped;
   return true;
 }
 
@@ -354,7 +334,7 @@ bool MappedInputManager::wasBackGesture() const {
   const bool hit = sx <= renderer.getScreenWidth() * LEFT_EDGE_BACK_GESTURE_FRAC_X && ex > sx &&
                    std::abs(ex - sx) > std::abs(ey - sy);
   if (hit) rememberTouchHeldTime();
-  return hit;
+  return WakeTiming::noteAcceptedInput(hit);
 }
 
 bool MappedInputManager::wasMenuGesture() const {
@@ -392,7 +372,7 @@ bool MappedInputManager::wasMenuGesture() const {
       gpio.suppressTouchContact();
       debug_trace::note("top-edge drag fired: %d px down from y=%d", travel, menuDragStartY_);
       rememberTouchHeldTime();
-      return true;
+      return WakeTiming::noteAcceptedInput(true);
     }
   } else if (menuDragTracking_) {
     menuDragTracking_ = false;
@@ -414,7 +394,7 @@ bool MappedInputManager::wasMenuGesture() const {
   const bool hit = sy <= topEdgeBottom && ey > sy && std::abs(ey - sy) > std::abs(ex - sx);
   debug_trace::note("flick (%d,%d)->(%d,%d) topEdge=%d menu=%d", sx, sy, ex, ey, topEdgeBottom, hit ? 1 : 0);
   if (hit) rememberTouchHeldTime();
-  return hit;
+  return WakeTiming::noteAcceptedInput(hit);
 }
 
 bool MappedInputManager::wasBottomEdgeUpSwipe() const {
@@ -439,11 +419,11 @@ bool MappedInputManager::wasHomeGesture() const {
   if (gpio.hasHomeKey()) {
     // See setHomeKeyOverride(): the router holds a tap back while it decides whether a
     // second one is coming, and replays it here when it rules the tap a plain single.
-    if (homeKeyInjected) return true;
+    if (homeKeyInjected) return WakeTiming::noteAcceptedInput(true);
     if (homeKeySuppressed) return false;
-    return gpio.wasHomeKeyTapped();
+    return WakeTiming::noteAcceptedInput(gpio.wasHomeKeyTapped());
   }
-  return wasBottomEdgeUpSwipe();
+  return WakeTiming::noteAcceptedInput(wasBottomEdgeUpSwipe());
 }
 
 int MappedInputManager::sideKeySlot(const uint8_t hardware) {
@@ -473,10 +453,12 @@ bool MappedInputManager::wasScreenLongPress(int& x, int& y) const {
   // finger lift cannot also tap whatever the action opened.
   gpio.suppressTouchContact();
   renderer.tapToLogical(nx, ny, x, y);
-  return true;
+  return WakeTiming::noteAcceptedInput(true);
 }
 
-bool MappedInputManager::wasScreenTouchReleased() const { return gpio.wasTouchReleased(); }
+bool MappedInputManager::wasScreenTouchReleased() const {
+  return WakeTiming::noteAcceptedInput(gpio.wasTouchReleased());
+}
 
 bool MappedInputManager::wasReaderMenuSwipeUp() const { return gpio.hasHomeKey() && wasBottomEdgeUpSwipe(); }
 
@@ -492,8 +474,8 @@ list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
 }
 
 bool MappedInputManager::wasPressed(const Button button) const {
-  if (button == Button::Back && wasBackGesture()) return true;
-  return mapButton(button, &HalGPIO::wasPressed);
+  if (button == Button::Back && wasBackGesture()) return WakeTiming::noteAcceptedInput(true);
+  return WakeTiming::noteAcceptedInput(mapButton(button, &HalGPIO::wasPressed));
 }
 
 bool MappedInputManager::wasReleased(const Button button) const {
@@ -501,14 +483,14 @@ bool MappedInputManager::wasReleased(const Button button) const {
   // suppressHeldButtonRelease(). The back gesture is a touch event with no press behind
   // it, so it is checked after the gate rather than before.
   if (releaseGate.swallowsRelease()) return false;
-  if (button == Button::Back && wasBackGesture()) return true;
+  if (button == Button::Back && wasBackGesture()) return WakeTiming::noteAcceptedInput(true);
   // See setPowerReleaseOverride(): the reader's double-click detector holds a power release
   // back for one window and then replays it here, so every consumer keeps its existing code.
   if (button == Button::Power) {
-    if (powerReleaseInjected) return true;
+    if (powerReleaseInjected) return WakeTiming::noteAcceptedInput(true);
     if (powerReleaseSuppressed) return false;
   }
-  return mapButton(button, &HalGPIO::wasReleased);
+  return WakeTiming::noteAcceptedInput(mapButton(button, &HalGPIO::wasReleased));
 }
 
 bool MappedInputManager::isPressed(const Button button) const { return mapButton(button, &HalGPIO::isPressed); }

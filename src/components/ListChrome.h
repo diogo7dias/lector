@@ -15,7 +15,7 @@ class MappedInputManager;
 struct ListChrome {
   // Title band. nullptr draws no band, and the body starts at the top of the
   // screen; an empty string draws the band with its battery cluster but no
-  // text, which is what a screen naming the book below the band wants.
+  // text. A long title wraps and the band grows with it.
   const char* title = nullptr;
   // Right of the title, for a count the screen keeps ("3 / 8").
   const char* headerRight = nullptr;
@@ -25,11 +25,11 @@ struct ListChrome {
   const char* subHeaderRight = nullptr;
   // Centred lines under the bands, for a screen whose header is a block rather
   // than a line: the reader menu names the book, its author, the chapter and
-  // how far in the reader is.
-  // Eight, because a wrapped book title alone can take five of them.
+  // how far in the reader is. Each entry is one logical line; the painter wraps
+  // it over as many screen lines as it needs and reserves them all.
   static constexpr int MAX_HEADER_LINES = 8;
   std::array<const char*, MAX_HEADER_LINES> headerLines{};
-  // A left-aligned note under everything above, in the small face.
+  // A centred note under everything above, wrapped like the header lines.
   const char* note = nullptr;
   // Lines above the button hints, for something true of the whole list rather
   // than of the selection: what a hold does, what the side buttons do, or a
@@ -54,5 +54,4 @@ list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome
 void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome);
 
 // Paints the footnote and the button hints. Called after the app renders.
-void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput,
-                          const ListChrome& chrome);
+void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput, const ListChrome& chrome);

@@ -16,17 +16,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   std::string openEpubPath;
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
-  bool showBootScreen = true;
-  // Quick Resume bookkeeping, written at lock and read once by the next wake.
-  // quickResumeWake marks that the frame on the glass is a Quick Resume frame, so the
-  // wake restores it, draws no unlock banners, and routes only to the screen that frame
-  // shows: the reader when quickResumeTargetIsReader, otherwise home (the lock repaints
-  // home first when the screen it locked from cannot be rebuilt after the reset).
-  bool quickResumeWake = false;
-  bool quickResumeTargetIsReader = false;
-  // Anti-ghost budget carried across the lock: FAST panel passes since the last full
-  // discharge. Waking is a chip reset, so without this the count restarts every session
-  // and a device that is locked often never reaches the discharge threshold at all.
   uint8_t fastRefreshesSinceFull = 0;
   // The other half of the same budget: ink debt, i.e. how much the passes since the last
   // discharge actually moved rather than merely how many there were. Carried for the same
@@ -56,12 +45,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // logo one (the two take different unlock paths), and the reader menu uses it to
   // favorite, pause or delete the image the lock screen last showed.
   std::string lastSleepWallpaperPath;
-
-  // Index into bootlogos::kAll of the crest the last logo sleep screen drew. Deep sleep
-  // is a chip reset, so the wake has no other way to know which one is on the panel; the
-  // unlock redraws that same crest instead of picking a fresh one, which would read as
-  // the screen changing on its own.
-  uint8_t lastBootLogo = 0;
 
   // Sleep wallpaper index (/.crosspoint/sleep_index.bin) snapshot + rotation
   // cursor. The index file itself lives on SD; these scalars are all the RAM

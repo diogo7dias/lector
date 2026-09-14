@@ -11,8 +11,8 @@
 
 #include "MappedInputManager.h"
 #include "activities/util/ConfirmationActivity.h"
-#include "components/StatsDashboardLayout.h"
 #include "components/ListChrome.h"
+#include "components/StatsDashboardLayout.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "reading_stats/ReadingStatsClock.h"
@@ -260,7 +260,6 @@ void BookStatsActivity::buildCurrentBook(UiScreen& screen) {
 
   int y = body.y;
   fui::TextStyle titleStyle = theme.bodyText;
-  titleStyle.bold = true;
   centred(screen, stats_dashboard::Rect{body.x, y, body.width, lineHeight}, title_.c_str(), titleStyle);
   y += lineHeight + 3;
 
@@ -351,7 +350,6 @@ void BookStatsActivity::buildAllBooks(UiScreen& screen) {
            static_cast<unsigned>(globalStats_.currentStreak(today)), tr(STR_STATS_BEST),
            static_cast<unsigned>(globalStats_.longestReadingStreak));
   fui::TextStyle streakStyle = theme.bodyText;
-  streakStyle.bold = true;
   centred(screen, stats_dashboard::Rect{body.x, y, body.width, lineHeight}, streak, streakStyle);
   y += lineHeight + 3;
 

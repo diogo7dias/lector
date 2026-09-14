@@ -13,6 +13,7 @@
 #include "SdCardFontSystem.h"
 #include "Txt.h"
 #include "TxtReaderActivity.h"
+#include "WakeTiming.h"
 #include "Xtc.h"
 #include "XtcReaderActivity.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
@@ -35,6 +36,10 @@ bool ReaderActivity::isImageFile(const std::string& path) {
 
 int ReaderActivity::initialRefreshCountdown() const {
   if (!allowFastInitialRefresh) return 0;
+  // 2 = the first paint is a FAST, the very next page turn is the clean pass: after a
+  // drive-all wake whatever the short waveform left of the sleep face is gone with the
+  // first turn (displayWithRefreshCycle cleans at <= 1).
+  if (firstTurnCleans) return 2;
 
   const int refreshFrequency = SETTINGS.getRefreshFrequency();
   return refreshFrequency > 1 ? refreshFrequency : 2;
@@ -57,8 +62,6 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
   const bool uncached = !Storage.exists((epub->getCachePath() + "/book.bin").c_str());
   std::optional<BusyBanner> banner;
   if (uncached) {
-    // The banner replaces the restored Quick Resume frame, so the reader must clean it
-    // rather than paint the first page differentially over what is no longer there.
     allowFastInitialRefresh = false;
     // Known slow every time, so it skips the banner's usual delay. Kept alive
     // across the load below so any busy::tick() inside the parse still lands on
@@ -173,11 +176,20 @@ void ReaderActivity::onEnter() {
     BusyBanner fontBanner(renderer, tr(STR_BUSY_LOADING_FONT));
     sdFontSystem.ensureLoaded(renderer);
   }
+  WakeTiming::mark(WakeTiming::Stage::FontLoaded);
 
   currentBookPath = initialBookPath;
+  // Only from here on does anything draw. The font above and the book loads below run
+  // while a wake's clearing pass may still be on the panel (main.cpp starts it async
+  // and does not wait); the framebuffer stays untouched until this returns. The reader
+  // activities themselves paint from onEnter, so the wait sits in front of each of them,
+  // after its load. No-op when nothing is in flight.
+  const auto waitForPanel = [this] { renderer.waitRefreshComplete(); };
   if (isImageFile(initialBookPath)) {
+    waitForPanel();
     onGoToBmpViewer(initialBookPath);
   } else if (hasPxcExtension(initialBookPath)) {
+    waitForPanel();
     onGoToPxcViewer(initialBookPath);
   } else if (isXtcFile(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
@@ -185,6 +197,7 @@ void ReaderActivity::onEnter() {
       onGoBack();
       return;
     }
+    waitForPanel();
     onGoToXtcReader(std::move(xtc));
   } else if (isTxtFile(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
@@ -192,6 +205,7 @@ void ReaderActivity::onEnter() {
       onGoBack();
       return;
     }
+    waitForPanel();
     onGoToTxtReader(std::move(txt));
   } else {
     auto epub = loadEpub(initialBookPath);
@@ -199,8 +213,16 @@ void ReaderActivity::onEnter() {
       onGoBack();
       return;
     }
+    waitForPanel();
     onGoToEpubReader(std::move(epub));
   }
+  // The page reader is queued, not painted: its first render runs on the next
+  // ActivityManager::loop(). WakeTiming::readable() reports that end of the wake.
+  WakeTiming::mark(WakeTiming::Stage::BookLoaded);
 }
 
-void ReaderActivity::onGoBack() { finish(); }
+void ReaderActivity::onGoBack() {
+  // Whatever replaces this paints from its onEnter; see the wait in onEnter above.
+  renderer.waitRefreshComplete();
+  finish();
+}

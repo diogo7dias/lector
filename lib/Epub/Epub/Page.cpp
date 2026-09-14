@@ -7,6 +7,8 @@
 
 #include <new>
 
+#include "PageVerticalAlignment.h"
+
 namespace {
 
 template <typename Predicate>
@@ -243,4 +245,23 @@ std::unique_ptr<Page> Page::deserialize(HalFile& file) {
   }
 
   return page;
+}
+
+void Page::centerFullTextPage(GfxRenderer& renderer, const int fontId, const float lineCompression,
+                              const int viewportHeight) {
+  if (elements.size() < 2) return;
+  int top = viewportHeight;
+  int lastTop = 0;
+  for (const auto& element : elements) {
+    // Preserve illustrated layouts and ruby's extra vertical space.
+    if (element->getTag() != TAG_PageLine ||
+        static_cast<const PageLine&>(*element).getBlock()->getRubyShift(renderer.getFontAscenderSize(fontId)) != 0) {
+      return;
+    }
+    top = std::min(top, static_cast<int>(element->yPos));
+    lastTop = std::max(lastTop, static_cast<int>(element->yPos));
+  }
+  const int offset = fullTextPageOffset(viewportHeight, top, lastTop, renderer.getLineHeight(fontId, lineCompression),
+                                        renderer.getLineHeight(fontId));
+  for (const auto& element : elements) element->yPos += offset;
 }

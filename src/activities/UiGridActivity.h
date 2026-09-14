@@ -5,9 +5,10 @@
 #include "activities/Activity.h"
 #include "components/ListChrome.h"
 #include "components/SettingsGrid.h"
-#include "components/themes/BaseTheme.h"
 #include "components/SliderBand.h"
 #include "components/UiAppHost.h"
+#include "components/WrappedListWindow.h"
+#include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
 // Base for the two-column settings grids. UiAppHost owns the app-hosting
@@ -64,6 +65,13 @@ class UiGridActivity : public Activity, protected UiAppHost {
   Rect gridPane() const;
   settings_grid::Shape gridShape() const;
   settings_grid::Layout gridLayout() const;
+  // Keys-only boards: one column of rows as tall as their wrapped text, so the
+  // layout is a window over variable heights (WrappedListWindow) rather than a
+  // grid of equal cells. rowHeightFor measures one row; keysOnlyWindow says
+  // which rows the pane shows from scrollRow_ with the selection kept visible.
+  bool usesWrappedRows() const;
+  int rowHeightFor(int index) const;
+  wrapped_list::Window keysOnlyWindow() const;
   int selected() const { return selected_; }
   void setSelected(int index);
   // Up and Down move a whole grid row so the column is kept; Left and Right move
@@ -84,6 +92,9 @@ class UiGridActivity : public Activity, protected UiAppHost {
   void buildScreen(UiScreen& screen);
   void buildCell(UiScreen& screen, int index, const settings_grid::Rect& rect);
   void buildRow(UiScreen& screen, int index, const freeink::ui::Rect& box);
+  // The two-column touch grid's cells share one height: the tallest any cell
+  // needs for its wrapped name over its wrapped value, so none is cut.
+  int tallestCellHeight() const;
   void buildValueBand(UiScreen& screen);
   static void screenTrampoline(UiScreen& screen, void* user);
   static void cellTrampoline(const freeink::ui::ActionEvent& event, void* user);
@@ -91,4 +102,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
 
   int selected_ = 0;
   int scrollRow_ = 0;
+  // What the last build laid out, for the chevrons render() paints after the app.
+  Rect scrollArrowBand_{};
+  list_scrollbar::Arrows scrollArrows_{false, false};
 };

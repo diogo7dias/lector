@@ -157,6 +157,9 @@ GfxRenderer::FrameBufferLoan::FrameBufferLoan(GfxRenderer& renderer) : renderer_
   // Nesting guard: if the framebuffer is already lent out (an outer loan),
   // stay inert so this end() cannot return storage the outer loan still owns.
   if (!renderer_.hasFrameBuffer()) return;
+  // The bytes about to be lent may still be the source of an in-flight async refresh's
+  // post-work (the X3 rebases its old plane from them). No-op when nothing is pending.
+  renderer_.waitRefreshComplete();
   renderer_.releaseFrameBufferForBuild();
   active_ = true;
 }

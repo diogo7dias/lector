@@ -11,6 +11,8 @@
 #include "components/PlainSliderBand.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
+#include "components/UiRowWrap.h"
 
 namespace fui = freeink::ui;
 
@@ -41,8 +43,14 @@ Rect UiGridActivity::gridPane() const {
 
 // Two thumb-sized columns where a thumb exists, one column of full-width rows where
 // only the four buttons do: the shape the settings screens had through lector-0.28.0.
+// Either way no text is cut: the touch cells all take the height of the tallest one,
+// and the keys-only rows are each as tall as their own wrapped text (usesWrappedRows).
 settings_grid::Shape UiGridActivity::gridShape() const {
-  if (mappedInput.hasTouch()) return settings_grid::Shape{};
+  if (mappedInput.hasTouch()) {
+    settings_grid::Shape shape;
+    shape.minCellHeight = std::max(settings_grid::kMinCellHeight, tallestCellHeight());
+    return shape;
+  }
   const auto& metrics = UITheme::getInstance().getMetrics();
   settings_grid::Shape shape;
   shape.columns = 1;
@@ -51,6 +59,71 @@ settings_grid::Shape UiGridActivity::gridShape() const {
   shape.minCellHeight = metrics.listRowHeight;
   shape.stretchToFill = false;
   return shape;
+}
+
+bool UiGridActivity::usesWrappedRows() const { return !mappedInput.hasTouch(); }
+
+// Rows and cells measure through the same FreeInkUI target they are drawn with, so
+// the line count the height is built from is the line count text() will draw.
+namespace {
+int wrappedLines(const fui::DrawTarget& target, const fui::TextStyle& style, const char* text, const int width) {
+  if (text == nullptr || text[0] == '\0' || width <= 0) return 1;
+  const int16_t lineHeight = target.lineHeight(style.font);
+  if (lineHeight <= 0) return 1;
+  const fui::Size size = fui::measureWrappedText(target, text, style, static_cast<int16_t>(width));
+  return std::max(1, size.height / lineHeight);
+}
+
+// The label style every row and cell measures and draws with: the body face, wrapping
+// over as many lines as it needs.
+fui::TextStyle wrappingStyle(const fui::ThemeTokens& theme) {
+  fui::TextStyle style = theme.bodyText;
+  style.maxLines = 8;
+  return style;
+}
+}  // namespace
+
+int UiGridActivity::rowHeightFor(const int index) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const fui::ThemeTokens* theme = sharedUiThemeCell().load(std::memory_order_acquire);
+  if (theme == nullptr) return metrics.listRowHeight;
+  const fui::TextStyle style = wrappingStyle(*theme);
+  const int lineHeight = uiTarget.lineHeight(style.font);
+  const int avail = gridPane().width - theme->spaceSm * 2;
+  const char* name = cellName(index);
+  const char* value = cellValue(index);
+  const int nameW = name ? uiTarget.measureText(style.font, name, style).width : 0;
+  const int valueW = value ? uiTarget.measureText(style.font, value, style).width : 0;
+  constexpr int gap = 10;
+  const auto layout = ui_row_wrap::forRow(
+      nameW, valueW, avail, gap, lineHeight, std::max(0, metrics.listRowHeight - lineHeight),
+      [&](const int width) { return wrappedLines(uiTarget, style, name, width); },
+      [&](const int width) { return wrappedLines(uiTarget, style, value, width); });
+  return layout.height;
+}
+
+int UiGridActivity::tallestCellHeight() const {
+  const fui::ThemeTokens* theme = sharedUiThemeCell().load(std::memory_order_acquire);
+  if (theme == nullptr) return settings_grid::kMinCellHeight;
+  const fui::TextStyle style = wrappingStyle(*theme);
+  const int lineHeight = uiTarget.lineHeight(style.font);
+  const settings_grid::Layout probe =
+      settings_grid::forPane(gridPane().width, 1, cellCount(), 0, settings_grid::Shape{});
+  const int width = probe.cellWidth - theme->spaceSm * 2;
+  int tallest = 0;
+  const int count = cellCount();
+  for (int i = 0; i < count; ++i) {
+    const int nameLines = wrappedLines(uiTarget, style, cellName(i), width);
+    const int valueLines = cellValue(i) != nullptr ? wrappedLines(uiTarget, style, cellValue(i), width) : 0;
+    tallest = std::max(tallest, ui_row_wrap::stackedHeight(nameLines, valueLines, lineHeight, 8));
+  }
+  return tallest;
+}
+
+wrapped_list::Window UiGridActivity::keysOnlyWindow() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  return wrapped_list::window(cellCount(), selected_, scrollRow_, gridPane().height, metrics.listRowGap,
+                              [this](const int index) { return rowHeightFor(index); });
 }
 
 settings_grid::Layout UiGridActivity::gridLayout() const {
@@ -64,7 +137,7 @@ void UiGridActivity::setSelected(const int index) {
     // landing during a render would otherwise tear one against the other.
     RenderLock lock(*this);
     selected_ = index;
-    scrollRow_ = settings_grid::scrollToShow(gridLayout(), selected_);
+    scrollRow_ = usesWrappedRows() ? keysOnlyWindow().first : settings_grid::scrollToShow(gridLayout(), selected_);
   }
   requestUpdate();
 }
@@ -72,7 +145,11 @@ void UiGridActivity::setSelected(const int index) {
 void UiGridActivity::clampSelection() {
   const int count = cellCount();
   selected_ = count > 0 ? std::clamp(selected_, 0, count - 1) : 0;
-  scrollRow_ = count > 0 ? settings_grid::scrollToShow(gridLayout(), selected_) : 0;
+  if (count <= 0) {
+    scrollRow_ = 0;
+    return;
+  }
+  scrollRow_ = usesWrappedRows() ? keysOnlyWindow().first : settings_grid::scrollToShow(gridLayout(), selected_);
 }
 
 void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
@@ -119,13 +196,36 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
   if (valueBand.isActive()) buildValueBand(screen);
 
   const Rect pane = gridPane();
-  const settings_grid::Layout layout = gridLayout();
   const int count = cellCount();
+  if (usesWrappedRows()) {
+    // One column, each row as tall as its text. The window keeps the selection on
+    // screen and hands back where it starts, so a later press scrolls from there.
+    const wrapped_list::Window win = keysOnlyWindow();
+    scrollRow_ = win.first;
+    const int gap = UITheme::getInstance().getMetrics().listRowGap;
+    int y = pane.y;
+    for (int i = win.first; i < win.first + win.count && i < count; ++i) {
+      const int height = rowHeightFor(i);
+      buildCell(screen, i, settings_grid::Rect{0, y, pane.width, height});
+      y += height + gap;
+    }
+    // Chevrons in the spacing above and below the rows, as every list draws them.
+    const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
+    const int reach = std::min(spacing, list_scrollbar::kHeight + list_scrollbar::kGap);
+    scrollArrowBand_ = Rect{0, pane.y - reach, pane.width, pane.height + reach * 2};
+    scrollArrows_ = list_scrollbar::forWindow(count, win.first, win.count);
+    return;
+  }
+  const settings_grid::Layout layout = gridLayout();
   for (int i = 0; i < count; ++i) {
     const settings_grid::Rect rect = settings_grid::cellAt(layout, pane.y, i);
     if (rect.width == 0) continue;  // scrolled out
     buildCell(screen, i, rect);
   }
+  const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
+  const int reach = std::min(spacing, list_scrollbar::kHeight + list_scrollbar::kGap);
+  scrollArrowBand_ = Rect{0, pane.y - reach, pane.width, pane.height + reach * 2};
+  scrollArrows_ = list_scrollbar::forWindow(layout.totalRows, layout.scrollRow, layout.visibleRows);
 }
 
 // One cell: a box that answers to a tap, its name in the small face over its
@@ -160,19 +260,23 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   props.minTouchSize = screen.frame().device().minTouchSize;
   screen.button(props, box);
 
-  fui::TextStyle name = theme.smallText;
+  // One face, one size, both wrapped: the cell's height was taken from the tallest
+  // cell on the screen, so every name and value has the lines it needs.
+  fui::TextStyle name = wrappingStyle(theme);
   name.align = fui::TextAlign::Center;
   name.inverted = selected;
-  fui::TextStyle value = theme.bodyText;
-  value.align = fui::TextAlign::Center;
-  value.inverted = selected;
+  fui::TextStyle value = name;
 
-  const int16_t nameHeight = target.lineHeight(name.font);
-  const int16_t valueHeight = target.lineHeight(value.font);
-  const int16_t top = static_cast<int16_t>(box.y + (box.height - nameHeight - valueHeight) / 2);
   const int16_t inset = theme.spaceSm;
-  const fui::Rect line{static_cast<int16_t>(box.x + inset), top, static_cast<int16_t>(box.width - inset * 2),
-                       nameHeight};
+  const int16_t width = static_cast<int16_t>(box.width - inset * 2);
+  const int16_t lineHeight = target.lineHeight(name.font);
+  const int16_t nameHeight = static_cast<int16_t>(lineHeight * wrappedLines(target, name, cellName(index), width));
+  const int16_t valueHeight =
+      cellValue(index) != nullptr
+          ? static_cast<int16_t>(lineHeight * wrappedLines(target, value, cellValue(index), width))
+          : 0;
+  const int16_t top = static_cast<int16_t>(box.y + std::max(0, (box.height - nameHeight - valueHeight) / 2));
+  const fui::Rect line{static_cast<int16_t>(box.x + inset), top, width, nameHeight};
   if (cellName(index) != nullptr) target.text(line, cellName(index), name);
   if (cellValue(index) != nullptr) {
     target.text(fui::Rect{line.x, static_cast<int16_t>(top + nameHeight), line.width, valueHeight}, cellValue(index),
@@ -198,21 +302,38 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
   props.minTouchSize = 0;
   screen.button(props, box);
 
+  // The same measure rowHeightFor() sized the box from, so what is drawn is what was
+  // reserved: name and value on one line when they fit, otherwise the name wrapped
+  // over the full width and the value right-aligned on its own line(s) under it.
   const int16_t inset = theme.spaceSm;
-  const int16_t lineHeight = target.lineHeight(theme.bodyText.font);
-  const fui::Rect line{static_cast<int16_t>(box.x + inset), static_cast<int16_t>(box.y + (box.height - lineHeight) / 2),
-                       static_cast<int16_t>(box.width - inset * 2), lineHeight};
+  const fui::TextStyle style = wrappingStyle(theme);
+  const int16_t lineHeight = target.lineHeight(style.font);
+  const int16_t width = static_cast<int16_t>(box.width - inset * 2);
+  const char* nameText = cellName(index);
+  const char* valueText = cellValue(index);
+  const int nameW = nameText ? target.measureText(style.font, nameText, style).width : 0;
+  const int valueW = valueText ? target.measureText(style.font, valueText, style).width : 0;
+  constexpr int gap = 10;
+  const auto layout = ui_row_wrap::forRow(
+      nameW, valueW, width, gap, lineHeight, 0, [&](const int w) { return wrappedLines(target, style, nameText, w); },
+      [&](const int w) { return wrappedLines(target, style, valueText, w); });
 
-  // Keys-only rows use one regular face for both halves. The touch grid keeps
-  // its compact label/value hierarchy in buildCell().
-  fui::TextStyle name = theme.bodyText;
+  fui::TextStyle name = style;
   name.align = fui::TextAlign::Left;
   name.inverted = selected;
-  fui::TextStyle value = theme.bodyText;
+  fui::TextStyle value = style;
   value.align = fui::TextAlign::Right;
   value.inverted = selected;
-  if (cellName(index) != nullptr) target.text(line, cellName(index), name);
-  if (cellValue(index) != nullptr) target.text(line, cellValue(index), value);
+
+  const int16_t top = static_cast<int16_t>(box.y + std::max(0, (box.height - layout.height) / 2));
+  const int16_t x = static_cast<int16_t>(box.x + inset);
+  const int16_t nameH = static_cast<int16_t>(lineHeight * layout.nameLines);
+  if (nameText != nullptr) target.text(fui::Rect{x, top, width, nameH}, nameText, name);
+  if (valueText != nullptr) {
+    const int16_t valueTop = layout.valueBelow ? static_cast<int16_t>(top + nameH) : top;
+    const int16_t valueH = static_cast<int16_t>(lineHeight * std::max(1, layout.valueLines));
+    target.text(fui::Rect{x, valueTop, width, valueH}, valueText, value);
+  }
 }
 
 // The armed number, in the header's place. On the touch board that is a slider
@@ -317,6 +438,7 @@ void UiGridActivity::render(RenderLock&&) {
     const list_chrome::Bands measured = listChromeBands(renderer, bands);
     drawReserved(Rect{0, measured.contentTop, renderer.getScreenWidth(), reservedHeight()});
   }
+  GUI.drawScrollArrows(renderer, scrollArrowBand_, scrollArrows_);
   drawListChromeBottom(renderer, mappedInput, bands);
   if (drawOverlay()) return;
   renderer.displayBuffer();

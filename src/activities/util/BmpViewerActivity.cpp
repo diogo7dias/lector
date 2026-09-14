@@ -21,14 +21,11 @@
 namespace {
 // The one line an error state gets, in the theme's own help face: these screens
 // are an image and nothing else, so the message is all the chrome they have.
-int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(SMALL_FONT_ID); }
+int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(UI_10_FONT_ID); }
 }  // namespace
-
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
-constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
-constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
 }  // namespace
 
 BmpViewerActivity::BmpViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string path)
@@ -97,11 +94,7 @@ void BmpViewerActivity::drawHints() {
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
-bool BmpViewerActivity::canSetSleepCover() const {
-  return FsHelpers::hasBmpExtension(filePath) ||
-         (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM &&
-          FsHelpers::hasPngExtension(filePath));
-}
+bool BmpViewerActivity::canSetSleepCover() const { return FsHelpers::hasBmpExtension(filePath); }
 
 bool BmpViewerActivity::renderPng() {
   ImageDimensions dimensions;
@@ -203,7 +196,7 @@ void BmpViewerActivity::onEnter() {
     // Handle file open error
     renderer.clearScreen();
     GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
-                       tr(STR_FILE_OPEN_FAILED));
+                     tr(STR_FILE_OPEN_FAILED));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -219,15 +212,9 @@ void BmpViewerActivity::onExit() {
 void BmpViewerActivity::doSetSleepCover() {
   GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
 
-  // While the sleep face is Transparent, "set as sleep image" means "use this as the
-  // overlay" — copying to /sleep.bmp would write a file that face never reads, and
-  // switching the mode to CUSTOM behind the user's back would drop them out of it.
-  const bool transparentMode = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::TRANSPARENT_CUSTOM;
   if (!canSetSleepCover()) return;
 
-  const char* destination =
-      transparentMode ? (FsHelpers::hasPngExtension(filePath) ? TRANSPARENT_SLEEP_ROOT_PNG : TRANSPARENT_SLEEP_ROOT_BMP)
-                      : CUSTOM_SLEEP_ROOT_BMP;
+  const char* destination = CUSTOM_SLEEP_ROOT_BMP;
 
   // Already the destination: nothing to copy, and opening it for write would truncate
   // the very file being read.
@@ -253,7 +240,7 @@ void BmpViewerActivity::doSetSleepCover() {
   }
 
   if (success) {
-    if (!transparentMode) SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
+    SETTINGS.sleepScreen = CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
     SETTINGS.saveToFile();
     GUI.drawPopup(renderer, tr(STR_DONE));
   } else {

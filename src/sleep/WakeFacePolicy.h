@@ -1,49 +1,53 @@
 #pragma once
-
-// Pure policy: may a wake keep what the panel is physically holding, and skip the
-// boot presentation that would clear it?
-//
-// It may, and only, when the frame on the glass is the same frame the wake is about
-// to restore. Quick Resume is that case: it saves the pre-sleep framebuffer and puts
-// it straight back, so retained pixels and restored pixels agree and a differential
-// refresh over them is honest.
-//
-// A custom wallpaper sleep face is NOT that case. The panel holds arbitrary artwork
-// and the wake goes on to the home screen or the book, so retained pixels and the
-// next paint disagree. Skipping the boot presentation there also skips the
-// blank-and-FULL pass that clears the artwork, and a differential waveform only
-// drives the pixels that changed — so the wallpaper stays baked into the page.
-//
-// That failure shipped once before (device photo, 0.15.0) and returned in 0.21.0 via
-// upstream #2943, which suppressed the boot screen for every custom sleep face. The
-// X3 makes it obvious: begin() refills both controller RAM planes with white, so the
-// driver believes the glass is blank while it still shows the wallpaper, and every
-// later fast page turn diffs against that wrong baseline.
-//
-// Math core only: no SD, no framebuffer, no settings object, so it is host-testable.
-
 #include <cstdint>
 
 namespace wake_face {
+// Persisted IDs must not be renumbered. Only Custom (2, a wallpaper) and Cover (3)
+// remain; every other stored value — Dark, Light (the crest), Cover + Custom, Blank,
+// Quick Resume, Stats Dashboard, Freeze, Transparent — becomes Custom.
+inline constexpr uint8_t migrateSleepScreen(uint8_t mode) { return mode == 3 ? 3 : 2; }
 
-// What the panel is holding while the device sleeps.
-enum class SleepFace : uint8_t {
-  QuickResumeFrame,  // the exact pre-sleep framebuffer, restored on wake
-  CustomWallpaper,   // arbitrary artwork; the wake paints something else over it
-  Other,             // cover, clock, blank, and anything else that is not retained
-};
-
-// True when the wake may hand the panel over as-is and suppress the boot presentation.
-inline constexpr bool retainsPanelForWake(const SleepFace face) {
-  return face == SleepFace::QuickResumeFrame;
+// How long the wake waits, measured from gpio.begin(), before the recovery chord is
+// read. The X3/X4 buttons are an ADC resistor ladder that shares a supply with the
+// panel rails; the X4 Pro's are debounced digital inputs. Fast Unlock cuts the ladder
+// window from 500 ms to 100 ms: the card mount, the settings load and the display
+// bring-up already run inside the window, and the chord itself is still confirmed by
+// two agreeing samples 6 ms apart. Chosen from code inspection, hence the setting.
+inline constexpr unsigned long inputSettleMs(const bool isX4Pro, const bool fastUnlock) {
+  if (isX4Pro) return 20;
+  return fastUnlock ? 100 : 500;
 }
 
-// Once the saved frame is back in the framebuffer, must it be pushed to the panel before
-// the next activity paints? Yes when banners were drawn over it (they are new pixels), and
-// always on the X3, whose baseline restore and differential push are what stop it flashing
-// on the way in (upstream #2698). On an X4 with no banners the glass already shows this
-// exact frame and both X4 drivers promote the first paint after begin() to a clean pass
-// regardless, so a push here is a whole HALF pass spent on pixels that do not change.
-inline constexpr bool restoredFrameNeedsPush(const bool isX3, const bool bannersDrawn) { return isX3 || bannersDrawn; }
+// How a wake from a painted sleep face (a wallpaper, a cover, the Lector fallback, the
+// stats dashboard, a transparent overlay: all arbitrary content) gets the page onto the
+// panel.
+//
+// Blank: the clearing pass every wake used to run — a FULL request over a blanked
+// framebuffer (the SSD1677 promotes it to its HALF anyway), 710 ms on an X3 and
+// 1809 ms on an X4, then the destination's own FAST on top. Safe for any content.
+//
+// DriveAll: no clearing pass. The destination's first FAST is asked to drive EVERY pixel
+// toward its target (the controller's old plane is written as the target's complement,
+// the mechanism night mode already uses on every driver), so whatever ink the panel
+// holds is driven out by the same short waveform that draws the page. One submission,
+// ~505 ms on an X4. The X3 driver promotes the first paint after begin() to its half
+// scrub regardless, so there it is one ~710 ms pass carrying the page. What that short
+// waveform leaves of a dense wallpaper is the hardware question; the first page turn is
+// promoted to a clean pass on the boards that ran the differential (see
+// firstPageTurnCleans), so any residue lives on one page only.
+//
+// Only with Fast Unlock (off restores the clearing pass) and only without the unlock
+// banners: the banner path has its own blocking pass.
+enum class WakeClear : uint8_t { Blank, DriveAll };
 
+inline constexpr WakeClear wakeClearFor(const bool fastUnlock, const bool straightToBook) {
+  return fastUnlock && straightToBook ? WakeClear::DriveAll : WakeClear::Blank;
+}
+
+// After a DriveAll wake the reader's first page turn runs the periodic clean pass, so
+// residue of the sleep face survives at most one page. Not on the X3: its first paint was
+// already the half scrub, and an explicit HALF there costs a 2551 ms resync.
+inline constexpr bool firstPageTurnCleans(const WakeClear clear, const bool isX3) {
+  return clear == WakeClear::DriveAll && !isX3;
+}
 }  // namespace wake_face

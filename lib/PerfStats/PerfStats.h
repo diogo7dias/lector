@@ -47,6 +47,12 @@ uint16_t takeThinkMs(uint32_t nowMs);
 // this from the same place.
 void noteRefresh(uint8_t requestedMode, uint8_t actualMode, uint32_t totalUs, uint32_t wireUs, uint32_t waveUs);
 
+// First eight wake submissions, captured until the destination render completes.
+// These are HAL call times, including internal waveforms and async overlap.
+uint32_t wakePanelCount();
+void finishWakePanels();
+void formatWakePanels(char* out, size_t size);
+
 // Session totals of that split, for the end-of-session summary written to the card.
 void splitTotals(uint64_t& wireUs, uint64_t& waveUs, uint64_t& totalUs);
 

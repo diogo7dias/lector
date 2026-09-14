@@ -27,6 +27,12 @@ uint64_t sumWireUs = 0;
 uint64_t sumWaveUs = 0;
 uint64_t sumTotalUs = 0;
 
+// ponytail: eight submissions cover normal wakes; count exposes overflow and the
+// existing per-refresh CSV supplies the rest on unusually slow/indexing wakes.
+uint16_t wakePanels[8] = {};
+uint32_t wakeCount = 0;
+bool wakeFinished = false;
+
 uint32_t promoted = 0;
 uint32_t renderPasses = 0;
 uint32_t updateRequests = 0;
@@ -64,6 +70,13 @@ uint16_t takeThinkMs(const uint32_t nowMs) {
 
 void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const uint32_t totalUs, const uint32_t wireUs,
                  const uint32_t waveUs) {
+  if (!wakeFinished) {
+    if (wakeCount < 8) {
+      const uint32_t ms = totalUs / 1000;
+      wakePanels[wakeCount] = ms < 65535 ? ms : 65535;
+    }
+    ++wakeCount;
+  }
   if (actualMode < kModeCount) {
     ModeStats& s = stats[actualMode];
     if (s.count == 0 || totalUs < s.minUs) s.minUs = totalUs;
@@ -78,6 +91,21 @@ void noteRefresh(const uint8_t requestedMode, const uint8_t actualMode, const ui
   sumWireUs += wireUs;
   sumWaveUs += waveUs;
   sumTotalUs += totalUs;
+}
+
+uint32_t wakePanelCount() { return wakeCount; }
+
+void finishWakePanels() { wakeFinished = true; }
+
+void formatWakePanels(char* out, const size_t size) {
+  size_t used = 0;
+  if (!size) return;
+  out[0] = '\0';
+  for (uint32_t i = 0; i < wakeCount && i < 8; ++i) {
+    const int n = snprintf(out + used, size - used, "%s%u", i ? "/" : "", wakePanels[i]);
+    if (n < 0 || static_cast<size_t>(n) >= size - used) return;
+    used += n;
+  }
 }
 
 void splitTotals(uint64_t& wireUs, uint64_t& waveUs, uint64_t& totalUs) {

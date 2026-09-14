@@ -165,8 +165,28 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
     rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
     props.rowHeight = rowHeight;
   }
+  applyWrappingRowStyle(props, screen.theme());
   applyInvertedSectionHeaderStyle(props, screen.theme());
-  activeNav().syncToProps(screen.body(), rowHeight, screen.theme().listRowGap, listCount(), props);
+  // Remembered for the chevrons render() draws once the list has reported what it
+  // actually laid out.
+  const fui::Rect body = screen.body();
+  listBand = Rect{body.x, body.y, body.width, body.height};
+  activeNav().syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
+}
+
+void UiListActivity::drawScrollArrows() {
+  // The SDK draws no track (listScrollWidth is 0). The two chevrons sit in the
+  // vertical spacing the chrome leaves above and below the rows, so they never
+  // land on a row, selected or not. drawnRows is what list() really fitted, so
+  // the predicate is right when wrapped rows fit fewer than the estimate.
+  const auto& n = activeNav();
+  const list_scrollbar::Arrows arrows = list_scrollbar::forWindow(listCount(), n.top, n.pageRows());
+  if (!arrows.up && !arrows.down) return;
+  const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
+  const int reach = list_scrollbar::kHeight + list_scrollbar::kGap;
+  const Rect band{listBand.x, listBand.y - std::min(spacing, reach), listBand.width,
+                  listBand.height + std::min(spacing, reach) * 2};
+  GUI.drawScrollArrows(renderer, band, arrows);
 }
 
 ListChrome UiListActivity::chrome() const {
@@ -193,6 +213,7 @@ void UiListActivity::render(RenderLock&&) {
     drawChrome();
     renderUi();
   }
+  drawScrollArrows();
   drawFooter();
   if (drawOverlay()) return;
   renderer.displayBuffer(refreshMode());

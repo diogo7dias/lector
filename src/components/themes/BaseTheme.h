@@ -7,8 +7,9 @@
 #include <vector>
 
 #include "components/HintBandGeometry.h"
+#include "components/ListScrollbar.h"
 #include "components/StatusBar.h"  // StatusBarData for the v2 status bar
-#include "fontIds.h"               // UI_10_FONT_ID default for drawList
+#include "fontIds.h"
 
 class GfxRenderer;
 struct RecentBook;
@@ -208,7 +209,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupSelectionVPadding = 4,
                                  .optionPopupTitleGap = 10,
                                  .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = true,
+                                 .optionPopupOptionFontBold = false,
                                  .optionPopupSelectionRadius = 0,
                                  .optionPopupSelectionLight = false,
                                  .optionPopupDrawAllRows = false,
@@ -259,31 +260,25 @@ class BaseTheme {
   // bracketed instead. The solid and caret styles ignore spans entirely.
   bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0) const;
 
-  int getListRowStep(bool hasSubtitle) const;
-  int getListPageItems(int contentHeight, bool hasSubtitle) const;
-  void drawList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                const std::function<std::string(int index)>& rowTitle,
-                const std::function<std::string(int index)>& rowSubtitle = nullptr,
-                const std::function<UIIcon(int index)>& rowIcon = nullptr,
-                const std::function<std::string(int index)>& rowValue = nullptr, bool highlightValue = false,
-                const std::function<bool(int index)>& rowDimmed = nullptr, int itemFontId = UI_10_FONT_ID,
-                // Rows for which this returns true are section headings: a label
-                // with a rule running out to the right edge, never selectable and
-                // never highlighted. They occupy a normal row slot, so paging and
-                // the selection maths are unchanged. The caller is responsible for
-                // skipping them when moving the selection.
-                const std::function<bool(int index)>& rowIsHeader = nullptr,
-                // Opt in to scrolling instead of paging. Left null, the list snaps its
-                // window to whole pages as it always has. Pass a caller-owned offset
-                // that survives between frames and the window instead slides by the
-                // least amount that keeps the selected row visible, so the rows around
-                // the cursor hold still as it moves. drawList writes the clamped offset
-                // back, so the caller never has to correct it (see ListScrollPolicy.h).
-                int* scrollOffset = nullptr) const;
+  // Greedy word-wrap in the one UI face. Line 0 is wrapped to firstLineMaxWidth (room
+  // for an inline badge or a right-hand label), later lines to restMaxWidth. A word
+  // wider than a line is broken by character, so nothing is ever cut with an ellipsis.
+  static std::vector<std::string> wrapUiText(const GfxRenderer& renderer, const std::string& input,
+                                             int firstLineMaxWidth, int restMaxWidth);
+  // The scroll indicator every list shares: an up chevron at the top of `band` while
+  // rows sit above the window, a down chevron at its bottom while rows sit below it,
+  // both against the band's right edge. See ListScrollbar.h for the predicate.
+  void drawScrollArrows(const GfxRenderer& renderer, Rect band, list_scrollbar::Arrows arrows) const;
   // Geometry of the filled title band: flush with the top of the drawable area, ending
   // one pixel under the title. Exposed so a theme overriding drawHeader keeps the shape.
   static int headerBandTop(Rect rect);
-  static int headerBandHeight(const GfxRenderer& renderer, Rect rect);
+  static int headerBandHeight(const GfxRenderer& renderer, Rect rect, int titleLines = 1);
+  // The title wraps rather than being cut. These say how many lines it takes in a band
+  // `width` wide, and how tall the header rect must therefore be, so a caller reserving
+  // the band and the painter filling it agree by construction.
+  static std::vector<std::string> headerTitleWrapped(const GfxRenderer& renderer, int width, const char* title);
+  static int headerTitleLines(const GfxRenderer& renderer, int width, const char* title);
+  static int headerHeightFor(const GfxRenderer& renderer, int width, const char* title);
 
   void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr) const;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel = nullptr) const;
@@ -333,12 +328,14 @@ class BaseTheme {
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
   void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const;
+  // Centred lines of help text, wrapped to the rect's width and never cut. The caller
+  // reserves helpTextLines() lines; every line is drawn.
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
-  // Foot-of-screen path bar: a rule, then the path in the small face,
-  // left-truncated so the deepest folder is the part that survives. The file
-  // browser drew this itself, which put a rule thickness and a truncation rule
-  // outside the theme.
+  static int helpTextLines(const GfxRenderer& renderer, int rectWidth, const char* label);
+  // Foot-of-screen path bar: a rule, then the path wrapped over as many lines as it
+  // needs (pathBarLines says how many, so the caller can reserve them).
   void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
+  static int pathBarLines(const GfxRenderer& renderer, int rectWidth, const char* path);
   // The home header band's own contents: the firmware version at the left edge,
   // the clock against the battery cluster, and the skull on the screen's centre
   // line. nullptr for either string leaves that part out, which is what a board
@@ -352,9 +349,7 @@ class BaseTheme {
   static constexpr int batteryPercentSpacing = 4;
   // Gap between the battery icon and the right edge of the header.
   static constexpr int batteryRightPadding = 12;
-  // Font of the battery percentage. It shares a row with the version string, the
-  // Pages tile and the clock on the home header, and with every other segment in
-  // the reader status bar, so it must be the same size as those: UI_10.
+  // Font of the battery percentage: UI_10, the one UI size (the button-hint strip's).
   static constexpr int batteryPercentFontId = UI_10_FONT_ID;
 
   // Width of the whole right-hand battery cluster (right padding + icon + spacing +

@@ -104,6 +104,14 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 56
+
+Version 56 balances full text pages vertically within the reading viewport.
+The binary layout is unchanged; cached line positions change, so old sections
+are rebuilt automatically. Short pages, images, rules and ruby keep their layout.
+This balances line boxes, not individual glyph ink; font bearings can still
+produce small optical differences. User margins and status-bar bands are preserved.
+
 ### Version 53
 
 Each file in `sections/*.bin` stores one laid-out spine section. The header is

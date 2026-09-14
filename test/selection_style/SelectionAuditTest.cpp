@@ -87,11 +87,11 @@ TEST(SelectionAudit, EverySelectionSurfaceCallsTheSharedPainter) {
     if (contains(line, "BaseTheme::")) continue;  // the definition itself
     if (contains(line, "drawSelection(")) calls++;
   }
-  // drawList, drawWrappedList, drawButtonMenu, drawOptionPopup, the tab bar and the
-  // bookmarks list. Every hand-rolled list outside BaseTheme is gone now: the nearby
-  // peer list, the OPDS browser and the XTC chapter list all moved onto a FreeInkUI
-  // base, where the SDK marks the selection. The count dropped by the two sites in
-  // drawRecentBookCover, an unused cover-card painter deleted in the complexity audit
-  // (the live home screen paints through drawRecentBookList).
-  EXPECT_GE(calls, 6);
+  // drawWrappedList, drawButtonMenu, the tab bar and the home list. Every hand-rolled
+  // list outside BaseTheme is gone: the nearby peer list, the OPDS browser and the XTC
+  // chapter list all moved onto a FreeInkUI base, where the SDK marks the selection.
+  // drawList went with the flat-UI pass (its one caller, the end-of-book list, now
+  // wraps through drawWrappedList), and drawOptionPopup's call was on a branch its
+  // constexpr guard had already made dead.
+  EXPECT_GE(calls, 4);
 }
