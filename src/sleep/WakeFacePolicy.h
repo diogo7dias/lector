@@ -18,4 +18,28 @@ inline constexpr unsigned long inputSettleMs(const bool isX4Pro, const bool fast
   if (isX4Pro) return 20;
   return fastUnlock ? 100 : 500;
 }
+
+// How a wake from a painted sleep face clears the panel before the destination paints.
+//
+// Blank: the clearing pass every wake used to run — a FULL request over a blanked
+// framebuffer (the SSD1677 promotes it to its HALF anyway), 710 ms on an X3 and
+// 1809 ms on an X4, then the destination's own FAST on top. Required when the face is
+// arbitrary content the firmware cannot reconstruct: a wallpaper, a cover, the stats
+// dashboard, a transparent overlay.
+//
+// Differential: no clearing pass. The lock recorded that it painted the crest face, which
+// is drawn from flash and deterministic (APP_STATE.lastBootLogo names the crest, the
+// pending wake book names the banner). The wake redraws that exact frame into the
+// framebuffer, writes it to the controller's "old" plane without a refresh, and lets the
+// destination's FAST drive only the pixels that differ — the same differential a page
+// turn runs, from a known previous frame. One submission instead of two.
+//
+// Only with Fast Unlock (the hardware ghosting check for this lives behind the same
+// row as the settle cut), only when the lock actually painted the crest, and only
+// without the unlock banners: the banner path has its own blocking pass.
+enum class WakeClear : uint8_t { Blank, Differential };
+
+inline constexpr WakeClear wakeClearFor(const bool fastUnlock, const bool crestOnGlass, const bool straightToBook) {
+  return fastUnlock && crestOnGlass && straightToBook ? WakeClear::Differential : WakeClear::Blank;
+}
 }  // namespace wake_face

@@ -2,6 +2,20 @@
 > Existing Quick Resume selections migrate to Light. The Quick Resume budget and
 > guarded experiment below are historical; ordinary-wake timings still apply.
 
+## 0.31.5+ (perf/unlock-real): the clearing pass is gone on the crest face
+
+The wake's FULL blank (710 ms X3 / 1809 ms X4, then the reader's FAST on top) is
+skipped when the lock painted the crest face and Fast Unlock is on. The lock records
+`sleepFaceCrest` in state; the wake redraws that frame from flash
+(`SleepActivity::drawCrestFace`) and writes it to the controller's old plane with no
+refresh (`HalDisplay::seedDifferentialBaseline`, the grayscale-cleanup primitive; the
+SSD1677 driver now drops its boot-time promotion there). The reader's first FAST is
+then a true differential from the crest: one submission per wake. Policy is
+`wake_face::wakeClearFor`, host-tested. Every other face keeps the blank, but the SD
+font load and the book load now run underneath it (waits sit in front of the first
+draw: BusyBanner, the framebuffer loan, ReaderActivity). Hardware still has to confirm
+no crest ghosts through the page; Fast Unlock off restores the blank.
+
 # Wake budget — phase 1, before code changes
 
 Baseline: `46171d938`, branch `perf/unlock-2s`. No attached device; no new

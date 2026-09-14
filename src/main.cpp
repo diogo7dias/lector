@@ -40,6 +40,7 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
+#include "activities/boot_sleep/SleepActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
@@ -364,7 +365,7 @@ bool recoveryChordHeld(const unsigned long inputStartedMs) {
   return chordConfirmed();
 }
 
-void setupDisplayAndFonts(bool seamless = false) {
+static void setupDisplay(bool seamless = false) {
   display.begin(seamless);
   renderer.begin();
   // Only this file can put the device down, so the light panel's Sleep button is handed
@@ -372,7 +373,11 @@ void setupDisplayAndFonts(bool seamless = false) {
   activityManager.setSleepAction([] { enterDeepSleep(); });
   activityManager.begin();
   LOG_DBG("MAIN", "Display initialized");
+}
 
+// The built-in families only. SD card families are sdFontSystem.begin(), kept apart so a
+// wake can start its panel work between the two and let the card read overlap it.
+static void setupBuiltinFonts() {
   // Initialize font decompressor for compressed reader fonts
   if (!fontDecompressor.init()) {
     LOG_ERR("MAIN", "Font decompressor init failed");
@@ -391,10 +396,13 @@ void setupDisplayAndFonts(bool seamless = false) {
   // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
   // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);
+}
 
+void setupDisplayAndFonts(bool seamless = false) {
+  setupDisplay(seamless);
+  setupBuiltinFonts();
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
-
   LOG_DBG("MAIN", "Fonts setup");
 }
 
@@ -450,14 +458,21 @@ void setup() {
   // and the host has to be physically replugged for logs to flow. Warm reboot
   // worked without the delay because USB was already enumerated.
   //
-  // Not paid on a deep-sleep wake. That is the path a reader takes every time it is
-  // unlocked, several times an hour, and it was 250 ms of a measured ~2400 ms wake spent
-  // waiting for a host that is usually not there: the device is on battery in someone's
-  // hands. Every case where a developer IS attached still pays it — a fresh flash, a
-  // power-on with the cable in, a panic reboot — because none of those are deep-sleep
-  // wakes. The cost of being wrong is log lines missing from an unlock nobody is
-  // watching, and replugging brings them back.
-  if (esp_reset_reason() != ESP_RST_DEEPSLEEP) delay(250);
+  // Not paid on a wake. That is the path a reader takes every time it is unlocked,
+  // several times an hour, and it was 250 ms of a measured ~2400 ms wake spent waiting
+  // for a host that is usually not there: the device is on battery in someone's hands.
+  // A wake is a deep-sleep reset on the X3 and the X4 Pro, but a POWERON on the X4: its
+  // lock drives the battery latch low (HalPowerManager::startDeepSleep), so every X4
+  // unlock is a cold boot and used to pay this on every press. A POWERON with the cable
+  // in is a charge-sleep boot (HalGPIO::getWakeupReason, AfterUSBPower) that prints one
+  // line and sleeps again. A fresh flash (RST_UNKNOWN), a panic reboot and a software
+  // restart still pay it, because those are the boots a developer is watching. The cost
+  // of being wrong is log lines missing from a boot nobody is watching, and replugging
+  // brings them back.
+  {
+    const esp_reset_reason_t rst = esp_reset_reason();
+    if (rst != ESP_RST_DEEPSLEEP && rst != ESP_RST_POWERON) delay(250);
+  }
   Serial.begin(115200);
 #if LOG_SERIAL_HAS_TX_TIMEOUT
   logSerial.setTxTimeoutMs(1);  // This is a load-bearing 1. Do not modify.
@@ -577,6 +592,10 @@ void setup() {
   // device used in short sessions never reaches the full discharge and ghosts forever.
   display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
   display.seedInkDebt(APP_STATE.inkDebt);
+  // Read once and consumed: whatever this boot paints next, the crest is no longer what
+  // the glass holds. Written back with the other wake flags below.
+  const bool crestOnGlass = APP_STATE.sleepFaceCrest;
+  APP_STATE.sleepFaceCrest = false;
   RECENT_BOOKS.loadFromFile();
   // One-time upgrade: books read before the reading badges existed have a percentage in
   // the recents list and no marker beside their cache. Seeding costs at most thirteen
@@ -664,27 +683,51 @@ void setup() {
 
   const bool paintedFaceWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton;
 
-  setupDisplayAndFonts(resume != BootResume::Splash || paintedFaceWake);
-  WakeTiming::mark(WakeTiming::Stage::DisplayReady);
+  setupDisplay(resume != BootResume::Splash || paintedFaceWake);
+  setupBuiltinFonts();
 
-  // Start the blank NOW, before the button-ladder settle below, and let the
-  // panel drive its waveform while the settle waits. The blank is a full pass — 710 ms on
-  // an X3, 1809 ms on an X4 — and for most of it the chip has nothing to do but poll a
-  // BUSY pin, so it is the one part of the wake that genuinely overlaps something else.
+  // How the painted sleep face leaves the glass; see wake_face::wakeClearFor.
+  //
+  // Differential: the lock painted the crest, so redraw that exact frame from flash and
+  // hand it to the controller as the "old" plane. No pass runs here at all; the reader's
+  // own first FAST drives only the pixels that differ, exactly like a page turn. One
+  // submission instead of a clearing pass plus a paint — 1809 ms less on an X4.
+  //
+  // Blank: a FULL request over a blanked framebuffer, started NOW so the panel drives it
+  // while the settle window, the SD font load and the reader's book load all run
+  // underneath it. Nothing draws until it completes: BusyBanner, the framebuffer loan
+  // and ReaderActivity each wait before their first pixel, and every non-reader route
+  // below waits before it paints.
   //
   // Only when no banners are wanted. The banner names the book this wake is about to
   // open, and that pick reads recoveryFirmwareMode, which the settle below is what
   // decides. With banners on, the blank stays where it was, in the block further down.
-  //
-  // Async is safe here and nowhere near the reader: the contract is that the framebuffer
-  // stays untouched until the refresh completes, and the settle loop only reads buttons.
-  // waitRefreshComplete() runs before anything draws again.
   bool asyncBlankInFlight = false;
+  bool baselineSeeded = false;
+  bool sdFontsUp = false;
   if (paintedFaceWake && SETTINGS.wakeStraightToBook) {
-    renderer.clearScreen();
-    renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
-    asyncBlankInFlight = true;
+    switch (wake_face::wakeClearFor(SETTINGS.fastUnlock != 0, crestOnGlass, /*straightToBook=*/true)) {
+      case wake_face::WakeClear::Differential:
+        // SD families first: the lock drew the crest with their CJK UI fallbacks bound,
+        // and the redraw must produce the same pixels. Nothing overlaps on this path.
+        sdFontSystem.begin(renderer);
+        sdFontsUp = true;
+        SleepActivity::drawCrestFace(renderer, APP_STATE.lastBootLogo, pendingWakeBookPath);
+        display.seedDifferentialBaseline();
+        baselineSeeded = true;
+        break;
+      case wake_face::WakeClear::Blank:
+        renderer.clearScreen();
+        renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
+        asyncBlankInFlight = true;
+        break;
+    }
   }
+  // SD card families after the blank is in flight, so a family read off the card
+  // (seconds for a CJK one) costs that wake nothing.
+  if (!sdFontsUp) sdFontSystem.begin(renderer);
+  LOG_DBG("MAIN", "Fonts setup");
+  WakeTiming::mark(WakeTiming::Stage::DisplayReady);
 
   // Recovery firmware mode: hold a side button together with the power button at boot to skip
   // directly to the SD-card firmware update screen. This is the way back on a device whose USB
@@ -723,7 +766,8 @@ void setup() {
     if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
   }
 
-  const bool oneShotWakeFlagsSet = !APP_STATE.pendingWakeBookPath.empty();
+  // The crest marker was consumed above and is written back false with the same save.
+  const bool oneShotWakeFlagsSet = !APP_STATE.pendingWakeBookPath.empty() || crestOnGlass;
   APP_STATE.pendingWakeBookPath.clear();
 
   switch (resume) {
@@ -742,24 +786,22 @@ void setup() {
       // So: blank the framebuffer, draw the unlock banners into it if they are wanted,
       // and put that up with one FULL pass.
       //
-      // The blank is not optional and not decoration. A sleep face is arbitrary content,
-      // and a differential waveform only drives the pixels that changed — paint a page
-      // straight over it and the sleep face stays in the page, which is exactly what the
-      // first build of this path did (device photo, 0.15.0). FAST_REFRESH cannot stand in
-      // for FULL_REFRESH here either: its custom LUT nudges changed pixels with a short
-      // waveform and does not reset the ink, so dark ink survives it. Only the
-      // complete waveform over a blank buffer truly clears the panel, and only then may
-      // the reader's own first paint take the cheap differential path.
+      // The blank is not decoration. A sleep face is arbitrary content, and a
+      // differential waveform only drives the pixels that changed relative to what the
+      // controller believes is on the glass — paint a page straight over an unknown face
+      // and the face stays in the page, which is exactly what the first build of this
+      // path did (device photo, 0.15.0). The one exception is the crest face, whose
+      // pixels the firmware can reproduce and hand to the controller as the previous
+      // frame; that case was settled above (baselineSeeded) and skips this block.
       //
       // The blank also doubles as the loading face when the banners are off: the screen
       // goes blank the moment the wake starts, while the button is still held, so there IS
       // a visible answer to the press before the page arrives.
       if (paintedFaceWake) {
-        if (asyncBlankInFlight) {
-          // Already issued before the settle window and running on the panel since. All
-          // that is left is to let it finish; whatever the settle cost has come off it.
-          renderer.waitRefreshComplete();
-          asyncBlankInFlight = false;
+        if (asyncBlankInFlight || baselineSeeded) {
+          // Blank: issued before the settle window and still running; the reader loads
+          // its font and book underneath it and waits only when it is about to draw.
+          // Seeded: nothing is running, the reader's first FAST is the whole wake.
           allowFastInitialReaderRefresh = true;
           break;
         }
@@ -806,6 +848,7 @@ void setup() {
       if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild ||
           crosspoint::sleep::windex::indexedFolderChanged() ||
           (rst != ESP_RST_SW && crosspoint::sleep::windex::folderLooksChanged())) {
+        renderer.waitRefreshComplete();  // it paints a banner; the blank may still be running
         crosspoint::sleep::windex::reconcileAtColdBoot(renderer);
       }
     }
@@ -829,12 +872,17 @@ void setup() {
   // the meantime and its first push is what waits.
   armUnlockBannerFloor();
 
+  // Every route but the reader paints straight from its onEnter, so it waits out a blank
+  // still in flight first (no-op otherwise). The reader routes wait inside
+  // ReaderActivity::onEnter, after their font and book loads.
   if (recoveryFirmwareMode) {
     // Skip normal home/reader routing: jump straight into the SD firmware picker.
+    renderer.waitRefreshComplete();
     activityManager.replaceActivity(
         std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
   } else if (rebootedFromPanic) {
     // If we rebooted from a panic, go to crash report screen to show the panic info
+    renderer.waitRefreshComplete();
     activityManager.goToCrashReport();
   } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
              !APP_STATE.openEpubPath.empty()) {
@@ -851,6 +899,7 @@ void setup() {
     APP_STATE.saveToFile();
     activityManager.goToReader(path, allowFastInitialReaderRefresh);
   } else if (forcedRoute == wake_route::Route::ForceHome) {
+    renderer.waitRefreshComplete();
     activityManager.goHome(HomeMenuItem::NONE);
   } else if (SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF || APP_STATE.openEpubPath.empty() ||
              !APP_STATE.lastSleepFromReader || mappedInputManager.isPressed(MappedInputManager::Button::Back) ||
@@ -873,6 +922,7 @@ void setup() {
       APP_STATE.saveToFile();
       activityManager.goToReader(bootBookPath);
     } else {
+      renderer.waitRefreshComplete();
       activityManager.goHome(HomeMenuItem::NONE);
     }
   } else {

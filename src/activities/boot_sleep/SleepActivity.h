@@ -12,6 +12,13 @@ class SleepActivity final : public Activity {
       : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;
 
+  // The crest face, exactly as the lock paints it: white page, the crest at logoIndex,
+  // the Sleeping line, and the top unlock banner when wakeBookPath names a book. Shared
+  // with the wake, which redraws this same frame to seed the panel's differential
+  // baseline (see wake_face::wakeClearFor) — the two must stay pixel-identical, so
+  // neither side draws it any other way. Draws into the framebuffer only; no refresh.
+  static void drawCrestFace(GfxRenderer& renderer, uint8_t logoIndex, const std::string& wakeBookPath);
+
  private:
   // Everything onEnter() does apart from bookkeeping. Split out so onEnter() can wrap it
   // and record which wallpaper (if any) ended up on the panel; the render functions

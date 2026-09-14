@@ -98,7 +98,9 @@ from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while a
 without stopping at any other screen.
 
 **Fast Unlock** (Display settings, on by default) shortens the wait for the recovery button
-chord at wake. Turn it off if a wake ever lands in the recovery firmware picker by itself.
+chord at wake and, when the sleep screen is the crest, paints the page straight over it
+instead of clearing the screen first. Turn it off if a wake ever lands in the recovery
+firmware picker by itself, or if a faint crest stays visible in the page after a wake.
 
 ### First launch
 
@@ -756,7 +758,7 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Stats
   Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Wake Straight to Book** — wake goes straight back into the book.
-- **Fast Unlock** — shorter recovery-chord wait at wake. Off if a wake lands in the recovery picker by itself.
+- **Fast Unlock** — shorter recovery-chord wait at wake, and no clearing pass over the crest sleep screen. Off if a wake lands in the recovery picker by itself or the crest ghosts into the page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 
 **Wallpaper**

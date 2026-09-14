@@ -676,6 +676,9 @@ void SleepActivity::onEnter() {
   // so a second write of the same state only slowed the lock.
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
+  // Same idea for the crest: only renderDefaultSleepScreen() sets it, so any face that
+  // paints something else — or fails partway through — leaves the wake on the safe path.
+  APP_STATE.sleepFaceCrest = false;
 
   renderSleepScreen();
   SleepTiming::mark("face");
@@ -1135,27 +1138,33 @@ void SleepActivity::renderCustomSleepScreen() const {
 // Every mode except Light wants the crest inverted, including the ones that land here
 // because their own artwork was missing (a Custom wallpaper with no file, Cover with no
 // book). The transparent-overlay fallback is the exception and asks for light explicitly.
-void SleepActivity::renderDefaultSleepScreen() const {
+void SleepActivity::drawCrestFace(GfxRenderer& renderer, const uint8_t logoIndex, const std::string& wakeBookPath) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();
-  // A crest per sleep, recorded so the wake can redraw the same one (see BootActivity).
-  // enterDeepSleep() saves APP_STATE after this runs, so the index survives the reset.
-  APP_STATE.lastBootLogo = bootlogos::randomIndex();
   const int logoSize = bootlogos::kLogoSize;
   const int logoY = (pageHeight - logoSize) / 2 - 20;
-  renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
+  renderer.drawImage(bootlogos::byIndex(logoIndex), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
   renderer.drawCenteredText(UI_10_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
 
   // The book this sleep is guarding: the wake opens it, so the sleeping screen says
   // which one, in the same banner the unlock screen uses. enterDeepSleep() chose the
   // path (the pick made by "Open Book on Boot") before this ran, so
   // the name here and the book the wake opens are the same book by construction.
-  if (!APP_STATE.pendingWakeBookPath.empty()) {
-    setUnlockBannerBookPath(APP_STATE.pendingWakeBookPath);
+  if (!wakeBookPath.empty()) {
+    setUnlockBannerBookPath(wakeBookPath);
     drawUnlockBannerTop(renderer);
   }
+}
+
+void SleepActivity::renderDefaultSleepScreen() const {
+  // A crest per sleep, recorded so the wake can redraw the same one (see BootActivity and
+  // the differential wake in main.cpp). enterDeepSleep() saves APP_STATE after this runs,
+  // so the index and the marker survive the reset.
+  APP_STATE.lastBootLogo = bootlogos::randomIndex();
+  drawCrestFace(renderer, APP_STATE.lastBootLogo, APP_STATE.pendingWakeBookPath);
+  APP_STATE.sleepFaceCrest = true;
 
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }

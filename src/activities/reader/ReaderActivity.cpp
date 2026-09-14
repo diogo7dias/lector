@@ -175,9 +175,17 @@ void ReaderActivity::onEnter() {
   WakeTiming::mark(WakeTiming::Stage::FontLoaded);
 
   currentBookPath = initialBookPath;
+  // Only from here on does anything draw. The font above and the book loads below run
+  // while a wake's clearing pass may still be on the panel (main.cpp starts it async
+  // and does not wait); the framebuffer stays untouched until this returns. The reader
+  // activities themselves paint from onEnter, so the wait sits in front of each of them,
+  // after its load. No-op when nothing is in flight.
+  const auto waitForPanel = [this] { renderer.waitRefreshComplete(); };
   if (isImageFile(initialBookPath)) {
+    waitForPanel();
     onGoToBmpViewer(initialBookPath);
   } else if (hasPxcExtension(initialBookPath)) {
+    waitForPanel();
     onGoToPxcViewer(initialBookPath);
   } else if (isXtcFile(initialBookPath)) {
     auto xtc = loadXtc(initialBookPath);
@@ -185,6 +193,7 @@ void ReaderActivity::onEnter() {
       onGoBack();
       return;
     }
+    waitForPanel();
     onGoToXtcReader(std::move(xtc));
   } else if (isTxtFile(initialBookPath)) {
     auto txt = loadTxt(initialBookPath);
@@ -192,6 +201,7 @@ void ReaderActivity::onEnter() {
       onGoBack();
       return;
     }
+    waitForPanel();
     onGoToTxtReader(std::move(txt));
   } else {
     auto epub = loadEpub(initialBookPath);
@@ -199,6 +209,7 @@ void ReaderActivity::onEnter() {
       onGoBack();
       return;
     }
+    waitForPanel();
     onGoToEpubReader(std::move(epub));
   }
   // The page reader is queued, not painted: its first render runs on the next
@@ -206,4 +217,8 @@ void ReaderActivity::onEnter() {
   WakeTiming::mark(WakeTiming::Stage::BookLoaded);
 }
 
-void ReaderActivity::onGoBack() { finish(); }
+void ReaderActivity::onGoBack() {
+  // Whatever replaces this paints from its onEnter; see the wait in onEnter above.
+  renderer.waitRefreshComplete();
+  finish();
+}

@@ -20,6 +20,19 @@ TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {
   EXPECT_EQ(wake_face::inputSettleMs(true, false), 20ul);
 }
 
+TEST(WakeFacePolicy, DifferentialWakeOnlyForTheCrestFaceWithFastUnlockAndNoBanners) {
+  using wake_face::WakeClear;
+  using wake_face::wakeClearFor;
+  EXPECT_EQ(wakeClearFor(true, true, true), WakeClear::Differential);
+  // A wallpaper, cover, stats or overlay face is arbitrary content: keep the clearing pass.
+  EXPECT_EQ(wakeClearFor(true, false, true), WakeClear::Blank);
+  // Fast Unlock off restores the clearing pass even on the crest face.
+  EXPECT_EQ(wakeClearFor(false, true, true), WakeClear::Blank);
+  // Banners wanted: their blocking pass stays.
+  EXPECT_EQ(wakeClearFor(true, true, false), WakeClear::Blank);
+  EXPECT_EQ(wakeClearFor(false, false, false), WakeClear::Blank);
+}
+
 TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {
   // B/W base and grayscale composite are two submissions, regardless of their
   // matching mode labels. Later page turns must not change the wake record.
