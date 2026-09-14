@@ -20,6 +20,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
+#include "network/TlsHeapPolicy.h"
 #include "network/TlsScratchHeap.h"
 
 namespace {
@@ -478,15 +479,6 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     LOG_DBG("FONT", "Fetching %s: free %d bytes, largest block %d bytes", file.name, ESP.getFreeHeap(),
             ESP.getMaxAllocHeap());
 
-    // A handshake started on a nearly empty heap does not fail cleanly: wolfSSL
-    // spent 60 seconds inside its retry with 1004 bytes free and the reader was
-    // unresponsive until the watchdog reset it. Refuse the attempt instead.
-    if (ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
-      LOG_ERR("FONT", "Only %d bytes free, need %d for a secure connection", ESP.getFreeHeap(), MIN_HEAP_FOR_TLS);
-      errorMessage_ = "Not enough memory to download fonts";
-      return false;
-    }
-
     const std::string url = baseUrl_ + file.name;
     // The framebuffer's 48 KB go to wolfSSL for the length of the transfer, which
     // is the only place the reader has the room for a 16 KB TLS record buffer: with
@@ -500,6 +492,17 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       const tls_scratch::Session tlsScratch;
       if (!tlsScratch.active()) {
         LOG_ERR("FONT", "Framebuffer not lent; the transfer runs on the heap alone");
+      }
+      // Gated after the loan, so the floor matches where the record buffers
+      // will come from (TlsHeapPolicy.h). A handshake started below it does
+      // not fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004
+      // bytes free and the reader was unresponsive until the watchdog reset it.
+      if (!tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), tlsScratch.active())) {
+        LOG_ERR("FONT", "Only %d bytes free (largest block %d), need %u for a secure connection", ESP.getFreeHeap(),
+                ESP.getMaxAllocHeap(), static_cast<unsigned>(tls_heap::minFree(tlsScratch.active())));
+        errorMessage_ = "Not enough memory to download fonts";
+        drawingSuspended_ = false;
+        return false;
       }
       result = HttpDownloader::downloadToFile(
         url, partPath,
@@ -784,7 +787,6 @@ bool FontDownloadActivity::isSelectedFamilyDeletable() const {
   const auto& family = families_[familyIndexFromList(listSelection())];
   return family.installed && !family.hasUpdate;
 }
-
 
 // --- Rows and lines ---
 

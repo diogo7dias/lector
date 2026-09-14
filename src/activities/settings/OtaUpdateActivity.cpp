@@ -23,16 +23,10 @@ void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
 
   LOG_DBG("OTA", "WiFi connected, checking for update");
 
-  {
-    RenderLock lock(*this);
-    state = CHECKING_FOR_UPDATE;
-  }
-  requestUpdateAndWait();
-
   // Install Other Firmware also looks at prereleases: it exists for a reader
   // that must get off this firmware, and refusing a build for its channel is
   // the same trap as refusing it for its version.
-  const auto res = updater.checkForUpdate(allowAnyVersion);
+  const auto res = runUpdateCheck();
   if (res != OtaUpdater::OK) {
     LOG_DBG("OTA", "Update check failed: %d", res);
     enterFailed(res, FailedStep::CHECK);
@@ -246,10 +240,17 @@ void OtaUpdateActivity::enterFailed(const OtaUpdater::OtaUpdaterError error, con
         failedExtra = step == FailedStep::CHECK ? "Server check failed" : "Download failed or connection dropped";
         failedHint = "Check Wi-Fi connection and retry";
         break;
-      case OtaUpdater::OOM_ERROR:
-        failedExtra = "Low memory for secure connection";
+      case OtaUpdater::OOM_ERROR: {
+        // The measured numbers, on the panel: the reader has no serial cable,
+        // and "low memory" alone has already cost three blind retries.
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), "Low memory: %u free, %u block",
+                      static_cast<unsigned>(updater.getLastFreeHeap()),
+                      static_cast<unsigned>(updater.getLastLargestBlock()));
+        failedExtra = buf;
         failedHint = "Restart reader and retry";
         break;
+      }
       case OtaUpdater::NO_UPDATE:
         failedExtra = "No firmware asset found in release";
         break;
@@ -277,12 +278,7 @@ void OtaUpdateActivity::retryFailedStep() {
   // server again. Doing it here rather than sending the reader back through the
   // Wi-Fi picker is the point: the link is still up.
   if (failedStep == FailedStep::CHECK) {
-    {
-      RenderLock lock(*this);
-      state = CHECKING_FOR_UPDATE;
-    }
-    requestUpdateAndWait();
-    const auto res = updater.checkForUpdate(allowAnyVersion);
+    const auto res = runUpdateCheck();
     if (res != OtaUpdater::OK) {
       enterFailed(res, FailedStep::CHECK);
       return;
@@ -293,8 +289,12 @@ void OtaUpdateActivity::retryFailedStep() {
     // straight on rather than asking the same question again. isUpdateNewer is
     // still respected for the plain Check-for-Updates flow.
     if (!allowAnyVersion && !updater.isUpdateNewer()) {
-      RenderLock lock(*this);
-      state = NO_UPDATE;
+      {
+        RenderLock lock(*this);
+        state = NO_UPDATE;
+      }
+      // The loan handed the framebuffer back white; nothing else repaints here.
+      requestUpdate();
       return;
     }
   }
@@ -306,6 +306,25 @@ void OtaUpdateActivity::retryFailedStep() {
   lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   bytesLine.clear();
   runUpdateInstall();
+}
+
+OtaUpdater::OtaUpdaterError OtaUpdateActivity::runUpdateCheck() {
+  {
+    RenderLock lock(*this);
+    state = CHECKING_FOR_UPDATE;
+  }
+  requestUpdateAndWait();
+  // The release JSON is ~32 KB over TLS, and this was the one fetch on this
+  // screen that ran on the heap alone: the install below lends the framebuffer
+  // to wolfSSL, the check did not, and on a C3 with WiFi up the check's heap
+  // gate is what refused every update on the X3. Same loan, same lower floor
+  // (TlsHeapPolicy.h); the panel holds "Checking for update" until it ends.
+  GfxRenderer::FrameBufferLoan loan(renderer);
+  const tls_scratch::Session tlsScratch;
+  if (!tlsScratch.active()) {
+    LOG_ERR("OTA", "Framebuffer not lent; the release check runs on the heap alone");
+  }
+  return updater.checkForUpdate(allowAnyVersion);
 }
 
 void OtaUpdateActivity::runUpdateInstall() {

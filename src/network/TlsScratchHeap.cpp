@@ -96,6 +96,8 @@ void* scratchRealloc(void* ptr, size_t size) {
 
 }  // namespace
 
+bool isActive() { return g_block != nullptr; }
+
 Session::Session() {
 #if defined(FREEINK_NET_WOLFSSL)
   size_t len = 0;

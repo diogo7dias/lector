@@ -20,6 +20,11 @@
  */
 namespace tls_scratch {
 
+/** True while a Session holds the lent framebuffer, so a heap gate can use the
+ * lower floor (tls_heap::MIN_FREE_WITH_SCRATCH): the large record buffers are
+ * not going to come off the heap. */
+bool isActive();
+
 /**
  * Installs the wolfSSL allocators for as long as it lives, and claims the lent
  * framebuffer block. Construct INSIDE a GfxRenderer::FrameBufferLoan and after

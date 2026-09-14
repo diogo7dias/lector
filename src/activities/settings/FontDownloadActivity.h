@@ -157,14 +157,6 @@ class FontDownloadActivity : public UiStatusActivity {
    * moved. Redrawing in steps keeps the bar honest and the panel clean.
    */
   static constexpr int PROGRESS_STEP_PERCENT = 5;
-  /**
-   * Least free heap a TLS session is allowed to start on. The manifest's own
-   * handshake completed with 48188 bytes free and a file's handshake hung for a
-   * minute with 1004, taking the whole reader down with it; below this floor the
-   * download is refused with a message instead.
-   */
-  static constexpr int MIN_HEAP_FOR_TLS = 30000;
-
   void onWifiSelectionComplete(bool success);
   bool fetchAndParseManifest();
   /**
