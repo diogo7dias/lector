@@ -353,7 +353,7 @@ int KeyboardEntryActivity::measureRange(std::string& s, const int start, const i
   // be written there, which is exactly what the measurement needs.
   const char saved = s[end];
   s[end] = '\0';
-  const int width = renderer.getTextAdvanceX(UI_12_FONT_ID, s.c_str() + start, EpdFontFamily::REGULAR);
+  const int width = renderer.getTextAdvanceX(UI_10_FONT_ID, s.c_str() + start, EpdFontFamily::REGULAR);
   s[end] = saved;
   return width;
 }
@@ -397,7 +397,7 @@ keyboard_field::Metrics KeyboardEntryActivity::fieldMetrics() const {
     // does not reflow when the password is revealed.
     const int toggleGap = 4;
     field.toggleReserve =
-        std::max(renderer.getTextWidth(UI_12_FONT_ID, "[abc]"), renderer.getTextWidth(UI_12_FONT_ID, "[***]")) +
+        std::max(renderer.getTextWidth(UI_10_FONT_ID, "[abc]"), renderer.getTextWidth(UI_10_FONT_ID, "[***]")) +
         toggleGap;
   }
   return field;
@@ -616,7 +616,9 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   const auto pageWidth = renderer.getScreenWidth();
   const auto& metrics = UITheme::getInstance().getMetrics();
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, title.c_str());
+  // A long prompt wraps and the band grows; the field below starts under it.
+  const int headerHeight = BaseTheme::headerHeightFor(renderer, pageWidth, title.c_str());
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, title.c_str());
 
   // The field draws through the same target the keyboard does, so its type and
   // its ink come from the theme rather than from a font id named here. The
@@ -627,8 +629,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   // rebuilt here, so the rebuild goes into the other generation.
   interactions.beginPublishCycle();
   fui::GfxRendererTarget target(renderer);
-  target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
-  target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_12_FONT_ID);
+  target.setFont(fui::GfxRendererTarget::FONT_SMALL, UI_10_FONT_ID);
+  target.setFont(fui::GfxRendererTarget::FONT_BODY, UI_10_FONT_ID);
   const fui::DeviceContext device = target.deviceContext();
   const fui::InputSnapshot noInput{};
   fui::Frame<48> frame(target, device, noInput, interactions);
@@ -648,8 +650,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
                 content, style);
   };
 
-  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
-  const int inputStartY = keyboard_field::fieldTop(metrics.topPadding, metrics.headerHeight, metrics.verticalSpacing,
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  const int inputStartY = keyboard_field::fieldTop(metrics.topPadding, headerHeight, metrics.verticalSpacing,
                                                    metrics.keyboardVerticalOffset);
   int inputHeight = 0;
 
@@ -674,7 +676,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   int cursorCharWidth = 6;
   if (cursorCharBytes > 0) {
-    int w = renderer.getTextWidth(UI_12_FONT_ID, cursorChar);
+    int w = renderer.getTextWidth(UI_10_FONT_ID, cursorChar);
     if (w > cursorCharWidth) cursorCharWidth = w;
   }
 
@@ -687,7 +689,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   while (true) {
     const int lineEndIdx = lineBreakEnd(displayText, lineStartIdx, maxLineWidth);
     const std::string lineText = displayText.substr(lineStartIdx, lineEndIdx - lineStartIdx);
-    textWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
+    textWidth = renderer.getTextAdvanceX(UI_10_FONT_ID, lineText.c_str(), EpdFontFamily::REGULAR);
     {
       const bool isLastLine = (lineEndIdx == static_cast<int>(displayText.length()));
       bool isCursorLine = false;
@@ -699,13 +701,13 @@ void KeyboardEntryActivity::render(RenderLock&&) {
         } else {
           beforeCursor = displayText.substr(lineStartIdx, cursorPos - lineStartIdx);
         }
-        int beforeWidth = renderer.getTextAdvanceX(UI_12_FONT_ID, beforeCursor.c_str(), EpdFontFamily::REGULAR);
+        int beforeWidth = renderer.getTextAdvanceX(UI_10_FONT_ID, beforeCursor.c_str(), EpdFontFamily::REGULAR);
         int kernOffset = 0;
         if (cursorCharBytes > 0) {
           std::string beforeAndCursor = beforeCursor + displayCursorChar;
           int beforeAndCursorWidth =
-              renderer.getTextAdvanceX(UI_12_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
-          int charAdvance = renderer.getTextAdvanceX(UI_12_FONT_ID, displayCursorChar, EpdFontFamily::REGULAR);
+              renderer.getTextAdvanceX(UI_10_FONT_ID, beforeAndCursor.c_str(), EpdFontFamily::REGULAR);
+          int charAdvance = renderer.getTextAdvanceX(UI_10_FONT_ID, displayCursorChar, EpdFontFamily::REGULAR);
           kernOffset = beforeAndCursorWidth - beforeWidth - charAdvance;
         }
         cursorPixelX = keyboard_field::lineStartX(field, textWidth, centerText) + beforeWidth + kernOffset;
@@ -782,7 +784,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   if (isPassword) {
     const char* toggleLabel = passwordVisible ? "[***]" : "[abc]";
-    const int toggleWidth = renderer.getTextWidth(UI_12_FONT_ID, toggleLabel);
+    const int toggleWidth = renderer.getTextWidth(UI_10_FONT_ID, toggleLabel);
     const int toggleLeft = keyboard_field::toggleX(field, toggleWidth);
     const int toggleY = inputStartY + inputHeight;
     const bool toggleSelected = cursorMode && togglePos;
@@ -804,7 +806,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   };
 
   if (hintVisible && !text.empty()) {
-    const int hintLh = renderer.getLineHeight(SMALL_FONT_ID);
+    const int hintLh = renderer.getLineHeight(UI_10_FONT_ID);
     const int underlineY = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing;
     const int hintY = underlineY + 4;
     if (cursorMode) {
@@ -828,7 +830,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
 
   const fui::Rect kbRect = keyboardRect();
 
-  const int tipsLh = renderer.getLineHeight(SMALL_FONT_ID);
+  const int tipsLh = renderer.getLineHeight(UI_10_FONT_ID);
   const int underlineBottom = inputStartY + inputHeight + lineHeight + metrics.verticalSpacing + 4;
   auto drawTip = [&](const char* tip, const int y) { drawCentredSmall(tip, y); };
 

@@ -1146,7 +1146,7 @@ void SleepActivity::renderDefaultSleepScreen() const {
   const int logoSize = bootlogos::kLogoSize;
   const int logoY = (pageHeight - logoSize) / 2 - 20;
   renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
-  renderer.drawCenteredText(SMALL_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
+  renderer.drawCenteredText(UI_10_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
 
   // The book this sleep is guarding: the wake opens it, so the sleeping screen says
   // which one, in the same banner the unlock screen uses. enterDeepSleep() chose the

@@ -3,10 +3,10 @@
 #include <GfxRenderer.h>
 #include <I18n.h>
 
+#include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
 #include "components/UnlockBanners.h"
 #include "fontIds.h"
-#include "CrossPointState.h"
 #include "images/BootLogos.h"
 
 void BootActivity::onEnter() {
@@ -35,7 +35,7 @@ void BootActivity::onEnter() {
   renderer.drawImage(bootlogos::byIndex(APP_STATE.lastBootLogo), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
   // No name line under it: the crest carries the wording, and the top banner already
   // spells out the firmware and version.
-  renderer.drawCenteredText(SMALL_FONT_ID, logoY + logoSize + 12, tr(STR_BOOTING));
+  renderer.drawCenteredText(UI_10_FONT_ID, logoY + logoSize + 12, tr(STR_BOOTING));
   // Framed top and bottom banners, same as the quick-resume wake path. Only a
   // quick-resume sleep keeps a saved frame to composite over, and every other sleep
   // screen (wallpaper, cover, dark) wakes through here — without this the banners

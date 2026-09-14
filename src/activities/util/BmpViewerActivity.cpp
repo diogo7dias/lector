@@ -21,9 +21,8 @@
 namespace {
 // The one line an error state gets, in the theme's own help face: these screens
 // are an image and nothing else, so the message is all the chrome they have.
-int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(SMALL_FONT_ID); }
+int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(UI_10_FONT_ID); }
 }  // namespace
-
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
@@ -203,7 +202,7 @@ void BmpViewerActivity::onEnter() {
     // Handle file open error
     renderer.clearScreen();
     GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
-                       tr(STR_FILE_OPEN_FAILED));
+                     tr(STR_FILE_OPEN_FAILED));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);

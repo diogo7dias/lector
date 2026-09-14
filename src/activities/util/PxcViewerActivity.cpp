@@ -24,7 +24,7 @@
 namespace {
 // The one line an error state gets, in the theme's own help face: these screens
 // are an image and nothing else, so the message is all the chrome they have.
-int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(SMALL_FONT_ID); }
+int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(UI_10_FONT_ID); }
 }  // namespace
 
 namespace {

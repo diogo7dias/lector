@@ -87,18 +87,18 @@ int drawStatusBarEdge(const GfxRenderer& renderer, bool top, int edgeY, int pane
   collectStatusBarSlots(top, slots);
   if (slots[0].empty() && slots[1].empty() && slots[2].empty()) return 0;
 
-  const int lineH = renderer.getTextHeight(SMALL_FONT_ID);
+  const int lineH = renderer.getTextHeight(UI_10_FONT_ID);
   const int sideMargin = UITheme::getInstance().getMetrics().statusBarHorizontalMargin;
   const int y = top ? edgeY : edgeY - lineH;
 
-  if (!slots[0].empty()) renderer.drawText(SMALL_FONT_ID, paneLeft + sideMargin, y, slots[0].c_str());
+  if (!slots[0].empty()) renderer.drawText(UI_10_FONT_ID, paneLeft + sideMargin, y, slots[0].c_str());
   if (!slots[1].empty()) {
-    const int w = renderer.getTextWidth(SMALL_FONT_ID, slots[1].c_str());
-    renderer.drawText(SMALL_FONT_ID, paneLeft + (paneWidth - w) / 2, y, slots[1].c_str());
+    const int w = renderer.getTextWidth(UI_10_FONT_ID, slots[1].c_str());
+    renderer.drawText(UI_10_FONT_ID, paneLeft + (paneWidth - w) / 2, y, slots[1].c_str());
   }
   if (!slots[2].empty()) {
-    const int w = renderer.getTextWidth(SMALL_FONT_ID, slots[2].c_str());
-    renderer.drawText(SMALL_FONT_ID, paneLeft + paneWidth - sideMargin - w, y, slots[2].c_str());
+    const int w = renderer.getTextWidth(UI_10_FONT_ID, slots[2].c_str());
+    renderer.drawText(UI_10_FONT_ID, paneLeft + paneWidth - sideMargin - w, y, slots[2].c_str());
   }
   return lineH;
 }

@@ -195,7 +195,7 @@ class LightPanel {
 
     const int screenWidth = renderer.getScreenWidth();
     const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-    layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(SMALL_FONT_ID),
+    layout_ = light_panel::forScreen(screenWidth, lineHeight, renderer.getLineHeight(UI_10_FONT_ID),
                                      Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount);
 
     // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
@@ -342,7 +342,7 @@ class LightPanel {
     char left[32];
     snprintf(left, sizeof(left), "%s %u%%", I18N.get(StrId::STR_BATTERY),
              static_cast<unsigned>(powerManager.getBatteryPercentage()));
-    renderer.drawText(SMALL_FONT_ID, rect.x, y, left, true);
+    renderer.drawText(UI_10_FONT_ID, rect.x, y, left, true);
 
     char right[32];
     // Whole gigabytes below ten get a decimal; above it the tenth is noise on a card this
@@ -353,8 +353,8 @@ class LightPanel {
     } else {
       snprintf(right, sizeof(right), "%d GB %s", static_cast<int>(gigabytes + 0.5), I18N.get(StrId::STR_FREE_SPACE));
     }
-    const int width = renderer.getTextWidth(SMALL_FONT_ID, right);
-    renderer.drawText(SMALL_FONT_ID, rect.x + rect.width - width, y, right, true);
+    const int width = renderer.getTextWidth(UI_10_FONT_ID, right);
+    renderer.drawText(UI_10_FONT_ID, rect.x + rect.width - width, y, right, true);
   }
 
   void close(const std::function<void()>& requestUpdate) {

@@ -27,10 +27,9 @@ constexpr int kTitleChapterGap = 8;
 constexpr int kStatsRows = 7;
 constexpr int kStatsValueLabelGap = 1;
 
-void drawRightText(const GfxRenderer& renderer, const int font, const int rightX, const int y, const char* text,
-                   const bool bold = false) {
-  const EpdFontFamily::Style style = bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-  renderer.drawText(font, rightX - renderer.getTextWidth(font, text, style), y, text, true, style);
+// Regular weight only: the dashboard is UI chrome, and UI chrome carries one weight.
+void drawRightText(const GfxRenderer& renderer, const int font, const int rightX, const int y, const char* text) {
+  renderer.drawText(font, rightX - renderer.getTextWidth(font, text), y, text, true);
 }
 
 const char* readerTypeLabel(const ReadingStatsData& global) {
@@ -52,9 +51,9 @@ const char* readerTypeLabel(const ReadingStatsData& global) {
 
 void drawStatsRow(const GfxRenderer& renderer, const int rightX, const int y, const std::string& value,
                   const std::string& label) {
-  const int valueH = renderer.getLineHeight(UI_12_FONT_ID);
-  drawRightText(renderer, UI_12_FONT_ID, rightX, y, value.c_str(), true);
-  drawRightText(renderer, SMALL_FONT_ID, rightX, y + valueH + kStatsValueLabelGap, label.c_str());
+  const int valueH = renderer.getLineHeight(UI_10_FONT_ID);
+  drawRightText(renderer, UI_10_FONT_ID, rightX, y, value.c_str());
+  drawRightText(renderer, UI_10_FONT_ID, rightX, y + valueH + kStatsValueLabelGap, label.c_str());
 }
 
 std::string formatRate(const ReadingStatsData& stats) {
@@ -101,7 +100,7 @@ void drawChrome(const GfxRenderer& renderer, const DashboardData& data, const Da
   }};
 
   const int blockH =
-      renderer.getLineHeight(UI_12_FONT_ID) + kStatsValueLabelGap + renderer.getLineHeight(SMALL_FONT_ID);
+      renderer.getLineHeight(UI_10_FONT_ID) + kStatsValueLabelGap + renderer.getLineHeight(UI_10_FONT_ID);
   const int remaining = std::max(0, cover.height - blockH * kStatsRows);
   const int gap = remaining / (kStatsRows - 1);
   const int remainder = remaining % (kStatsRows - 1);
@@ -112,10 +111,10 @@ void drawChrome(const GfxRenderer& renderer, const DashboardData& data, const Da
 
   const int textWidth = renderer.getScreenWidth() - cover.x * 2;
   int textY = cover.y + cover.height + kTitleTopGap;
-  const auto titleLines = renderer.wrappedText(UI_12_FONT_ID, data.title.c_str(), textWidth, 2, EpdFontFamily::BOLD);
+  const auto titleLines = renderer.wrappedText(UI_10_FONT_ID, data.title.c_str(), textWidth, 2);
   for (const auto& line : titleLines) {
-    renderer.drawText(UI_12_FONT_ID, cover.x, textY, line.c_str(), true, EpdFontFamily::BOLD);
-    textY += renderer.getLineHeight(UI_12_FONT_ID);
+    renderer.drawText(UI_10_FONT_ID, cover.x, textY, line.c_str());
+    textY += renderer.getLineHeight(UI_10_FONT_ID);
   }
   if (!data.chapter.empty()) {
     textY += kTitleChapterGap;
@@ -133,9 +132,9 @@ void drawChrome(const GfxRenderer& renderer, const DashboardData& data, const Da
   } else {
     snprintf(streak, sizeof(streak), tr(STR_STATS_DAY_STREAK_FORMAT), static_cast<unsigned>(currentStreak));
   }
-  renderer.drawText(UI_10_FONT_ID, cover.x, layout.footerY, streak, true, EpdFontFamily::BOLD);
+  renderer.drawText(UI_10_FONT_ID, cover.x, layout.footerY, streak);
 
-  drawRightText(renderer, UI_10_FONT_ID, layout.statsRightX, layout.footerY, readerTypeLabel(data.global), true);
+  drawRightText(renderer, UI_10_FONT_ID, layout.statsRightX, layout.footerY, readerTypeLabel(data.global));
 }
 
 bool renderBitmap(GfxRenderer& renderer, const DashboardData& data, Bitmap& bitmap, const DashboardLayout& layout,
