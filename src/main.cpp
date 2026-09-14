@@ -50,6 +50,7 @@
 #include "network/FirmwareSwitchAudit.h"
 #include "network/FlashDiagnostics.h"
 #include "sleep/SleepWallpaperIndexStore.h"
+#include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
@@ -339,10 +340,13 @@ void enterDeepSleep(bool fromTimeout = false) {
 //
 // None of that ladder reasoning applies to the X4 Pro: its side buttons are
 // plain debounced digital inputs that read true almost immediately, so the
-// settle window is 20 ms there instead of 500.
+// settle window is 20 ms there instead of 500 (100 with Fast Unlock).
 bool recoveryChordHeld(const unsigned long inputStartedMs) {
   const bool isX4Pro = BoardConfig::isX4Pro();
-  const unsigned long inputSettleMs = isX4Pro ? 20 : 500;
+  // 500 ms stock, 100 ms with Fast Unlock; see wake_face::inputSettleMs. Settings are
+  // loaded before either caller reaches this, except the no-card recovery path, where
+  // the default (fast) applies.
+  const unsigned long inputSettleMs = wake_face::inputSettleMs(isX4Pro, SETTINGS.fastUnlock != 0);
   const uint8_t chordButton = isX4Pro ? HalGPIO::BTN_DOWN : HalGPIO::BTN_UP;
   const auto chordConfirmed = [chordButton] {
     gpio.update();

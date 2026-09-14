@@ -714,6 +714,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Off by default. The cost is that the wake shows no sign of progress: the wallpaper
   // simply sits there until the book appears.
   uint8_t wakeStraightToBook = 1;
+  // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
+  // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
+  // either way). Chosen from code inspection, so the row exists to switch back without
+  // a reflash if a wake ever lands in the recovery picker by itself. Only pays off when
+  // the wake shows banners: with Wake Straight to Book the blank already overlaps the
+  // window. See wake_face::inputSettleMs.
+  uint8_t fastUnlock = 1;
   // What boot opens by itself, before the ordinary routing has its say. OFF keeps that
   // routing (home unless the last sleep came from the reader), LAST_BOOK always opens the
   // last-read book, RANDOM picks one of the books in progress. Held Back and a prior

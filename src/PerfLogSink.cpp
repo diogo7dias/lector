@@ -63,10 +63,11 @@ void startPerfLogSink(const char* device) {
            static_cast<unsigned>(powerManager.getBatteryPercentage()));
   writeLine(header);
   snprintf(header, sizeof(header),
-           "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u refreshFreq=%u\n",
+           "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u fastUnlock=%u refreshFreq=%u\n",
            static_cast<unsigned>(SETTINGS.orientation), static_cast<unsigned>(SETTINGS.fontFamily),
            static_cast<unsigned>(SETTINGS.fontPointSize), static_cast<unsigned>(SETTINGS.sleepImageQuality),
-           static_cast<unsigned>(SETTINGS.wakeStraightToBook), static_cast<unsigned>(SETTINGS.refreshFrequency));
+           static_cast<unsigned>(SETTINGS.wakeStraightToBook), static_cast<unsigned>(SETTINGS.fastUnlock),
+           static_cast<unsigned>(SETTINGS.refreshFrequency));
   writeLine(header);
   // The book only affects what is drawn, not what a refresh costs — a refresh drives the
   // whole panel whatever is on it. Recorded so a surprising run can be traced back, not

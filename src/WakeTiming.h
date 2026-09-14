@@ -32,18 +32,15 @@ enum class Stage : uint8_t {
   // before, so a stamp out of order reports as zero and folds its cost into its neighbour.
   DisplayReady = 6,  // setupDisplayAndFonts() returned
   InputSettled = 7,  // power-button verify plus the recovery-mode button settle window
-  // The three below split what used to be one "ban" stage. On an X3 that stage measured
-  // 3675 ms of a 4740 ms wake, which named the wake's whole cost and explained none of
-  // it: four different things happen in there — a 52 KB frame read off the card, a full
-  // plane write to rebuild the panel's differential baseline, the banner drawing itself,
-  // and the panel refresh. Only one of them can be worth attacking, and the split is what
-  // says which.
-  FrameLoaded = 8,       // the saved sleep frame is in the framebuffer (or was absent)
-  BaselineRestored = 9,  // the X3 differential baseline has been written back
-  BannersDrawn = 10,     // the banners are in the framebuffer, not yet on the panel
-  BannersUp = 11,        // the refresh that puts them on the panel has returned
-  ActivityUp = 12,       // the routed activity has run onEnter and painted
-  Count = 13,
+  BannersUp = 8,     // the blank (with banners, if wanted) is on the panel
+  // The two below split the route into the reader. ReaderActivity::onEnter loads the
+  // font and opens the book inline before ActivityUp; an SD font family is re-read from
+  // the card on every wake (deep sleep is a chip reset), so this is where a slow unlock
+  // with a card font shows up. Unset on a wake that lands on home.
+  FontLoaded = 9,   // the reader's SD font family is resident (or was already built in)
+  BookLoaded = 10,  // the book's index is open, the page reader activity is queued
+  ActivityUp = 11,  // setup() routed and returned; the page itself paints on the next loop()
+  Count = 12,
 };
 
 // Current wake serial diagnostics are independent of the optional SD record.

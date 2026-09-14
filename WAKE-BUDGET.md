@@ -203,6 +203,11 @@ latency and ghosting, including several page turns after wake.
 
 Leave the 500/20 ms hardware settle deadlines in place: its exposed cost is only
 the residual, and changing the calibration before seeing `settle=` is unjustified.
+(0.31.5: the residual is now a setting. **Fast Unlock**, on by default, reads the
+chord at 100 ms instead of 500 on the X3/X4 ladder; the X4 Pro stays at 20. It
+changes nothing on the panel. Compare `settle=` with the row on and off; switch it
+off if a wake ever lands in the recovery picker by itself. With Wake Straight to
+Book the blank already overlaps the window, so the saving shows only with banners.)
 Keep the 250 ms cold serial delay and the explicit banner floor; use the existing
 straight-to-book setting for the latter. Skip SD micro-optimizations: no defensible
 millisecond gain is established for them. Lock Lab overrides can add preclears

@@ -259,6 +259,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Toggle(StrId::STR_WAKE_STRAIGHT_TO_BOOK, &CrossPointSettings::wakeStraightToBook,
                                     "wakeStraightToBook", StrId::STR_CAT_DISPLAY));
 
+    v.push_back(SettingInfo::Toggle(StrId::STR_FAST_UNLOCK, &CrossPointSettings::fastUnlock, "fastUnlock",
+                                    StrId::STR_CAT_DISPLAY));
+
     v.push_back(SettingInfo::Toggle(StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, &CrossPointSettings::showSleepFavoriteBadge,
                                     "showSleepFavoriteBadge", StrId::STR_CAT_DISPLAY));
 

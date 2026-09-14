@@ -97,6 +97,9 @@ from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while a
 **Wake Straight to Book** (Display settings) takes a wake from sleep back into the book
 without stopping at any other screen.
 
+**Fast Unlock** (Display settings, on by default) shortens the wait for the recovery button
+chord at wake. Turn it off if a wake ever lands in the recovery firmware picker by itself.
+
 ### First launch
 
 The first boot lands on the [Home screen](#3-home-screen). Later boots reopen the book you
@@ -753,6 +756,7 @@ belongs to, so the rows here appear in the same order as on the device.
 - **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Stats
   Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Wake Straight to Book** — wake goes straight back into the book.
+- **Fast Unlock** — shorter recovery-chord wait at wake. Off if a wake lands in the recovery picker by itself.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 
 **Wallpaper**

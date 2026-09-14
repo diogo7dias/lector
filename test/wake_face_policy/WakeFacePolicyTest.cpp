@@ -13,6 +13,13 @@ TEST(WakeFacePolicy, RetiredSelectionsBecomeLightWithoutRenumberingOtherFaces) {
   EXPECT_EQ(wake_face::migrateSleepScreen(8), 1);  // older retired Freeze
 }
 
+TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {
+  EXPECT_EQ(wake_face::inputSettleMs(false, true), 100ul);
+  EXPECT_EQ(wake_face::inputSettleMs(false, false), 500ul);
+  EXPECT_EQ(wake_face::inputSettleMs(true, true), 20ul);  // X4 Pro: digital inputs, no ladder
+  EXPECT_EQ(wake_face::inputSettleMs(true, false), 20ul);
+}
+
 TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {
   // B/W base and grayscale composite are two submissions, regardless of their
   // matching mode labels. Later page turns must not change the wake record.
