@@ -16,6 +16,8 @@
 #include "FirmwareFlasher.h"
 #include "FirmwareVersion.h"
 #include "OtaRetryPolicy.h"
+#include "TlsHeapPolicy.h"
+#include "TlsScratchHeap.h"
 
 namespace {
 // This fork's own releases, NOT upstream's. Pointed at crosspoint-reader until 0.24.1,
@@ -37,23 +39,32 @@ constexpr char releaseListUrl[] = "https://api.github.com/repos/diogo7dias/lecto
 constexpr char upstreamReleaseUrl[] =
     "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
 
-// A TLS session with WiFi up needs room the reader does not always have. Below
-// this, wolfSSL fails mid-handshake and retries for a minute with a few hundred
-// bytes free, which reads as a hang; refuse the attempt and say so instead.
-// Same threshold the font download uses (FontDownloadActivity.h).
-constexpr int MIN_HEAP_FOR_TLS = 30000;
-
 bool isHttps(const std::string& url) { return url.rfind("https://", 0) == 0; }
 }  // namespace
+
+bool OtaUpdater::heapAllowsTls(const char* step) {
+  lastFreeHeap = ESP.getFreeHeap();
+  lastLargestBlock = ESP.getMaxAllocHeap();
+  const bool scratch = tls_scratch::isActive();
+  // One line per gate, INF so a default build reads it back without a debug
+  // flag: the real numbers, not another guess about where the C3's heap went.
+  LOG_INF("OTA", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
+          static_cast<unsigned>(lastFreeHeap), static_cast<unsigned>(lastLargestBlock), scratch ? "yes" : "no",
+          static_cast<unsigned>(tls_heap::minFree(scratch)), static_cast<unsigned>(tls_heap::MIN_BLOCK));
+  if (tls_heap::canStartTls(lastFreeHeap, lastLargestBlock, scratch)) return true;
+  // Below the floor wolfSSL fails mid-handshake and retries for a minute with
+  // a few hundred bytes free, which reads as a hang; refuse and say so instead.
+  LOG_ERR("OTA", "Not enough heap for a secure connection at %s", step);
+  return false;
+}
 
 OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrereleases) {
   LOG_DBG("OTA", "Checking for update (current: %s)", CROSSPOINT_VERSION);
 
-  if (ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
-    LOG_ERR("OTA", "Only %u bytes free, need %d for a secure connection", static_cast<unsigned>(ESP.getFreeHeap()),
-            MIN_HEAP_FOR_TLS);
-    return OOM_ERROR;
-  }
+  // The caller lends the framebuffer (OtaUpdateActivity::runUpdateCheck) before
+  // this runs, the same as the install; the release JSON is ~32 KB over TLS and
+  // was the one fetch on this screen that ran on the heap alone.
+  if (!heapAllowsTls("check")) return OOM_ERROR;
 
   // Stream the ~32KB release JSON straight into the parser as it arrives.
   // Buffering the whole body in a std::string would add a growing allocation
@@ -154,11 +165,7 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
     return UPDATE_OLDER_ERROR;
   }
 
-  if (isHttps(otaUrl) && ESP.getFreeHeap() < MIN_HEAP_FOR_TLS) {
-    LOG_ERR("OTA", "Only %u bytes free, need %d for a secure connection", static_cast<unsigned>(ESP.getFreeHeap()),
-            MIN_HEAP_FOR_TLS);
-    return OOM_ERROR;
-  }
+  if (isHttps(otaUrl) && !heapAllowsTls("install")) return OOM_ERROR;
 
   // esp_https_ota is hardwired to esp-tls/mbedTLS, whose precompiled build on this
   // package can't negotiate TLS 1.3 (see SecureClient.h). Drive the OTA partition

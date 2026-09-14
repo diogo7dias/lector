@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 
 class OtaUpdater {
@@ -10,6 +11,13 @@ class OtaUpdater {
   size_t processedSize = 0;
   size_t totalSize = 0;
   uint16_t lastImageChip = 0xFFFF;
+  // Heap as measured by the last gate, for the failure screen: the reader has
+  // no serial cable, so the number has to be on the panel.
+  uint32_t lastFreeHeap = 0;
+  uint32_t lastLargestBlock = 0;
+
+  // Logs the heap and answers whether a TLS session may start (TlsHeapPolicy.h).
+  bool heapAllowsTls(const char* step);
 
  public:
   using ProgressCallback = void (*)(void* ctx);
@@ -31,6 +39,9 @@ class OtaUpdater {
   size_t getTotalSize() const { return totalSize; }
 
   uint16_t getLastImageChip() const { return lastImageChip; }
+
+  uint32_t getLastFreeHeap() const { return lastFreeHeap; }
+  uint32_t getLastLargestBlock() const { return lastLargestBlock; }
 
   OtaUpdater() = default;
   bool isUpdateNewer() const;
