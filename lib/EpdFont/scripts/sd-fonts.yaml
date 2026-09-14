@@ -300,6 +300,16 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/anonymouspro/AnonymousPro-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/anonymouspro/AnonymousPro-BoldItalic.ttf"}
 
+  - name: JetBrainsMono
+    description: "Developer monospace with tall x-height (Latin, Greek, Cyrillic)"
+    intervals: latin-ext,greek,cyrillic
+    sizes: [10, 11, 12, 13, 14, 15, 16, 17, 18]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf", variable: {wght: 400}}
+      bold:       {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf", variable: {wght: 700}}
+      italic:     {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono-Italic%5Bwght%5D.ttf", variable: {wght: 400}}
+      bolditalic: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/jetbrainsmono/JetBrainsMono-Italic%5Bwght%5D.ttf", variable: {wght: 700}}
+
   # ── Dyslexia ───────────────────────────────────────────────────────────────
 
   - name: OpenDyslexic
