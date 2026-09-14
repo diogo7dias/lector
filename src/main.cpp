@@ -27,6 +27,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "Diagnostics.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
@@ -48,7 +49,6 @@
 #include "fontIds.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "network/FirmwareSwitchAudit.h"
-#include "network/FlashDiagnostics.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
@@ -302,6 +302,9 @@ void enterDeepSleep(bool fromTimeout = false) {
            sleepTBudget - sleepTWifi, paintStages);
   PerfLog::note(sleepNote);
   PerfLog::flush();
+  // Ordinarily empty: attempts and failures flush as they happen. This is the
+  // safety net for anything recorded since, before the card loses power.
+  diag::flushIfPending();
 
   display.deepSleep();
   const unsigned long sleepTPanel = millis();
@@ -517,6 +520,7 @@ void setup() {
   bool sdRecoveryChord = false;
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
+    diag::recordSdMountFailure();  // reaches the card only if a retry mounts it
     setupDisplayAndFonts(isSilentReboot);
     // The firmware picker lives on the SD card, so a card that will not mount
     // used to end the boot right here -- on a device whose USB flashing the
@@ -560,7 +564,10 @@ void setup() {
   // refused it, we are running the old firmware right now and nothing else
   // would say so. Write that to the SD card while it is fresh.
   firmware_flash::auditPendingSwitch(CROSSPOINT_VERSION);
-  firmware_flash::diagnosticsRecordBoot(CROSSPOINT_VERSION);
+  // A crash, watchdog or brownout boot is recorded too; an ordinary wake is
+  // not, so this costs a card write only on the boots worth one.
+  diag::recordAbnormalBoot();
+  diag::flushIfPending();
 
   // Lector: on first install (fresh SD) make sure the folders lector uses exist,
   // so the user can drop files straight in (over WiFi or a card reader) without

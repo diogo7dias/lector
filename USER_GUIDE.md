@@ -985,10 +985,12 @@ cache folders.
 **A crash happened.** Lector writes a crash report to the SD card without needing a USB
 connection. Attach that file to any bug report.
 
-**A firmware update ran to the end, but the old firmware came back.** The image passed every
-check and the device was told to boot it, so the bootloader refused it and fell back. Lector
-records that on the next boot in `lector-firmware-update.log` at the root of the card. Send
-that file: it names the slot the image went to and the slot that actually booted.
+**A firmware update failed, or ran to the end and the old firmware came back.** Lector keeps
+`lector-flash-diagnostics.txt` at the root of the card: every install attempt from the card or
+over the air, where it stopped and at which byte, the battery and memory at the time, the
+partition table and boot record, the boot after an install, and any crash or watchdog restart.
+Send that whole file. It names no book, network or device. It is kept to the last two days and a
+few kilobytes, and the web interface home page links to it (the *Diagnostics* link).
 
 **More detail is needed.** Connect the device over USB and run the debugging monitor (needs
 Python 3 with `pyserial`, `colorama` and `matplotlib`; install with

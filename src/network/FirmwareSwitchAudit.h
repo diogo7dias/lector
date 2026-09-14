@@ -11,8 +11,8 @@
 // Why: when the bootloader refuses the image it was pointed at, it silently
 // boots the other slot instead and leaves otadata untouched. From the user's
 // side the update ran to 100%, the device restarted, and the old firmware came
-// back, forever, with nothing to go on. This module turns that into a line on
-// the SD card the user can read and send.
+// back, forever, with nothing to go on. This module turns that into an entry
+// in /lector-flash-diagnostics.txt the user can read and send.
 
 namespace firmware_flash {
 
@@ -21,9 +21,8 @@ namespace firmware_flash {
 void recordPendingSwitch(uint32_t address, size_t imageSize);
 
 // Compare the pending record against the partition actually running, then
-// clear it. When they disagree, log it and append a line to
-// /lector-firmware-update.log. Safe to call when no record exists. Requires
-// the SD card to be mounted.
+// clear it. Records the outcome in the diagnostics file (src/Diagnostics.h)
+// either way. Safe to call when no record exists.
 void auditPendingSwitch(const char* version);
 
 // Returns true if the bootloader rolled back the most recently attempted firmware

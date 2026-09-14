@@ -129,16 +129,54 @@ TEST(FirmwareRetryFlow, EveryFailurePathStillLogs) {
   }
 }
 
-TEST(FirmwareRetryFlow, TheDiagnosticsFileIsAppendedToNotReplaced) {
-  // Storage.openFileForWrite opens O_TRUNC, so every record wiped the one
-  // before it and the file only ever held its last line; the boot record then
-  // erased the failure it was meant to explain.
-  for (const char* path : {DIAGNOSTICS_SOURCE, SWITCH_AUDIT_SOURCE}) {
-    const std::string source = readSource(path);
-    EXPECT_FALSE(contains(source, "openFileForWrite("))
-        << "diagnostics are opened with O_TRUNC; each record wipes the last";
-    EXPECT_TRUE(contains(source, "O_APPEND")) << "diagnostics are not appended";
+TEST(FirmwareRetryFlow, RecordingADiagnosticNeverTouchesTheCard) {
+  // The performance guarantee: a page turn, wake or render can call any
+  // record function and pay a memcpy. The card is written by flush() alone.
+  const std::string lib = readSource(DIAGLOG_SOURCE);
+  EXPECT_FALSE(contains(lib, "Storage")) << "the RAM buffer reaches for storage";
+  EXPECT_FALSE(contains(lib, "#include <HalStorage.h>"));
+
+  const std::string glue = readSource(DIAGNOSTICS_SOURCE);
+  const std::size_t flushAt = glue.find("void flush() {");
+  ASSERT_NE(flushAt, std::string::npos);
+  EXPECT_EQ(glue.find("Storage.open("), glue.find("Storage.open(", flushAt))
+      << "a record function opens a file before flush() does";
+  std::size_t opens = 0;
+  for (std::size_t at = glue.find("Storage.open("); at != std::string::npos; at = glue.find("Storage.open(", at + 1)) {
+    ++opens;
   }
+  EXPECT_EQ(opens, 2u) << "flush() opens the file once to read and once to write; anything else is a new write path";
+
+  // The switch audit used to keep a second file; one file is the contract.
+  const std::string audit = readSource(SWITCH_AUDIT_SOURCE);
+  EXPECT_FALSE(contains(audit, "Storage.open(")) << "the switch audit writes its own file again";
+  EXPECT_TRUE(contains(audit, "diag::recordBootAfterInstall("));
+}
+
+TEST(FirmwareRetryFlow, ThePlaceholderSizeIsGone) {
+  // The incident: "image: /firmware.bin size=0" was a hardcoded 0 for a file
+  // not yet opened, and it was read as an empty file. The size is measured
+  // before the attempt opens, or printed as unknown.
+  const std::string flasher = readSource(FLASHER_SOURCE);
+  EXPECT_FALSE(contains(flasher, "sdPath, 0)")) << "the size placeholder is back";
+  EXPECT_TRUE(contains(flasher, "diag::beginAttempt(diag::Source::Sd, sdPath, imageSize)"));
+  const std::string glue = readSource(DIAGNOSTICS_SOURCE);
+  EXPECT_TRUE(contains(glue, "size=unknown")) << "an unmeasured size must print as unknown, never 0";
+  EXPECT_TRUE(contains(glue, "battery=unknown"));
+  EXPECT_TRUE(contains(glue, "running=unknown"));
+}
+
+TEST(FirmwareRetryFlow, TheScreenAndTheFileNameTheSameFailure) {
+  // A photo of the failure screen must match a file entry: both carry the
+  // firmware_flash::resultName and, for a readback mismatch, the byte offset.
+  const std::string sd = readSource(SD_ACTIVITY_SOURCE);
+  EXPECT_TRUE(contains(sd, "\" (VERIFY_FAIL)\"")) << "the readback failure screen does not name VERIFY_FAIL";
+  EXPECT_TRUE(contains(sd, "firmware_flash::lastFailureOffset()")) << "the mismatch offset is not on the screen";
+  const std::string flasher = readSource(FLASHER_SOURCE);
+  EXPECT_TRUE(contains(flasher, "diag::endAttempt(resultName(verifyRes), \"readback\")"));
+  EXPECT_TRUE(contains(flasher, "lastFailureOffset()"));
+  const std::string ota = readSource(OTA_ACTIVITY_SOURCE);
+  EXPECT_TRUE(contains(ota, "diag::recordOtaFailure(")) << "an OTA failure screen leaves no file entry";
 }
 
 // --- a plain update check never offers another fork's firmware -------------

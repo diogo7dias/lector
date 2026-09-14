@@ -41,6 +41,9 @@ class OtaUpdater {
   uint16_t getLastImageChip() const { return lastImageChip; }
 
   uint32_t getLastFreeHeap() const { return lastFreeHeap; }
+  // The enum name, for the diagnostics file: the same word the failure screen
+  // is keyed on, so a photo of the screen can be matched to a file entry.
+  static const char* errorName(OtaUpdaterError error);
   uint32_t getLastLargestBlock() const { return lastLargestBlock; }
 
   OtaUpdater() = default;

@@ -324,6 +324,11 @@ bool HalPowerManager::onEinkBusyWaitSlice(const int8_t busyPin, const uint8_t bu
   return true;
 }
 
+uint16_t HalPowerManager::getBatteryMillivolts() const {
+  static const BatteryMonitor battery;
+  return battery.readMillivolts();
+}
+
 uint16_t HalPowerManager::getBatteryPercentage() const {
   static const BatteryMonitor battery;
   if (BoardConfig::ACTIVE.batteryGauge.gaugeAddr != 0) {

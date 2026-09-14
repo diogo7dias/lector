@@ -10,10 +10,17 @@ namespace {
 constexpr size_t SEC = 4096;       // flash sector: erase granularity
 constexpr size_t BLK = 64 * 1024;  // block erase granularity
 constexpr size_t CHUNK = 4096;     // read/write/compare chunk
-size_t g_mismatchOffset = 0;
+size_t g_failOffset = 0;
 }  // namespace
 
-size_t lastVerifyMismatchOffset() { return g_mismatchOffset; }
+size_t lastFailureOffset() { return g_failOffset; }
+
+const char* failureOffsetHint(const size_t offset) {
+  if (offset == 0) return "start of image";
+  if (offset % BLK == 0) return "64 KiB block boundary";
+  if (offset % SEC == 0) return "4 KiB sector boundary";
+  return "mid-sector";
+}
 
 Result writeImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress, void* ctx) {
   const size_t imageSize = src.size();
@@ -32,12 +39,14 @@ Result writeImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress, void
       size_t eraseLen = std::min<size_t>(BLK, dst.size() - streamPos);
       eraseLen = (eraseLen + SEC - 1) & ~(SEC - 1);
       eraseLen = std::min<size_t>(eraseLen, dst.size() - streamPos);
+      g_failOffset = streamPos;
       if (!dst.erase(streamPos, eraseLen)) return Result::ERASE_FAIL;
       erasedUpto = streamPos + eraseLen;
     }
 
     const size_t want = std::min<size_t>(CHUNK, imageSize - streamPos);
     const int got = src.read(buffer.get(), want);
+    g_failOffset = streamPos;
     if (got <= 0 || static_cast<size_t>(got) != want) return Result::READ_FAIL;
     if (!dst.write(streamPos, buffer.get(), want)) return Result::WRITE_FAIL;
     streamPos += want;
@@ -55,12 +64,14 @@ Result StreamWriter::write(const uint8_t* data, size_t len) {
       size_t eraseLen = std::min<size_t>(BLK, dst_.size() - pos_);
       eraseLen = (eraseLen + SEC - 1) & ~(SEC - 1);
       eraseLen = std::min<size_t>(eraseLen, dst_.size() - pos_);
+      g_failOffset = pos_;
       if (!dst_.erase(pos_, eraseLen)) return Result::ERASE_FAIL;
       erasedUpto_ = pos_ + eraseLen;
     }
     // Never write past the erased frontier in one call, or the tail of a large
     // chunk would land in a block that has not been erased yet.
     const size_t take = std::min(len - offset, erasedUpto_ - pos_);
+    g_failOffset = pos_;
     if (!dst_.write(pos_, data + offset, take)) return Result::WRITE_FAIL;
     pos_ += take;
     offset += take;
@@ -85,13 +96,14 @@ Result verifyImage(ByteSource& src, FlashTarget& dst, ProgressCb onProgress, voi
   size_t pos = 0;
   while (pos < imageSize) {
     const size_t want = std::min<size_t>(CHUNK, imageSize - pos);
+    g_failOffset = pos;
     const int got = src.read(fromFile.get(), want);
     if (got <= 0 || static_cast<size_t>(got) != want) return Result::READ_FAIL;
     if (!dst.read(pos, fromFlash.get(), want)) return Result::READ_FAIL;
     if (std::memcmp(fromFile.get(), fromFlash.get(), want) != 0) {
       size_t i = 0;
       while (i < want && fromFile[i] == fromFlash[i]) i++;
-      g_mismatchOffset = pos + i;
+      g_failOffset = pos + i;
       return Result::VERIFY_FAIL;
     }
     pos += want;

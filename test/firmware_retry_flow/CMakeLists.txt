@@ -9,7 +9,8 @@ target_compile_definitions(FirmwareRetryFlowTest PRIVATE
   FLASHER_SOURCE="${REPO_ROOT}/src/network/FirmwareFlasher.cpp"
   STORAGE_SOURCE="${REPO_ROOT}/lib/hal/HalStorage.cpp"
   SWITCH_AUDIT_SOURCE="${REPO_ROOT}/src/network/FirmwareSwitchAudit.cpp"
-  DIAGNOSTICS_SOURCE="${REPO_ROOT}/src/network/FlashDiagnostics.cpp"
+  DIAGNOSTICS_SOURCE="${REPO_ROOT}/src/Diagnostics.cpp"
+  DIAGLOG_SOURCE="${REPO_ROOT}/lib/DiagLog/DiagLog.cpp"
 )
 
 target_link_libraries(FirmwareRetryFlowTest PRIVATE
