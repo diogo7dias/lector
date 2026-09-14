@@ -514,28 +514,15 @@ const char* EpubReaderMenuActivity::rowValue(const int index) const {
   }
 }
 
-std::vector<std::string> EpubReaderMenuActivity::titleLines() const {
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-  // Reserve space on both sides symmetrically so the first line never runs under the
-  // battery cluster.
-  const int batteryReserve = BaseTheme::batteryClusterWidth(renderer) + 12;
-  const int titleMaxWidth = screen.width - 2 * batteryReserve;
-  return renderer.wrappedText(UI_10_FONT_ID, title.c_str(), titleMaxWidth, 5, EpdFontFamily::REGULAR);
-}
-
 ListChrome EpubReaderMenuActivity::chrome() const {
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
-
+  // The book block: title, "by author", chapter, progress. Each is one logical line
+  // that the chrome painter wraps over as many screen lines as it needs, in the one UI
+  // face, never cut. No title band above it: the block starts flush at the top of the
+  // menu, in the padding every screen keeps clear of the panel edge.
   headerBlock.clear();
-  for (const std::string& line : titleLines()) headerBlock.push_back(line);
-  // "by {author}", only when an author is known.
-  if (!author.empty()) {
-    const std::string byLine = std::string(tr(STR_BY_PREFIX)) + author;
-    headerBlock.push_back(renderer.truncatedText(UI_10_FONT_ID, byLine.c_str(), screen.width - 40));
-  }
-  if (!chapterName.empty()) {
-    headerBlock.push_back(renderer.truncatedText(UI_10_FONT_ID, chapterName.c_str(), screen.width - 40));
-  }
+  headerBlock.push_back(title);
+  if (!author.empty()) headerBlock.push_back(std::string(tr(STR_BY_PREFIX)) + author);
+  if (!chapterName.empty()) headerBlock.push_back(chapterName);
   // Progress summary: "Pages: <page>/<pages>  |  Book: <pct>%". Both halves
   // carry a label so neither reads as a bare number.
   std::string progressLine;
@@ -547,9 +534,7 @@ ListChrome EpubReaderMenuActivity::chrome() const {
   headerBlock.push_back(progressLine);
 
   ListChrome chrome;
-  // The band carries the battery cluster only: the book's own name is one of
-  // the lines under it, where it can wrap.
-  chrome.title = "";
+  chrome.title = nullptr;
   for (size_t i = 0; i < headerBlock.size() && i < ListChrome::MAX_HEADER_LINES; ++i) {
     chrome.headerLines[i] = headerBlock[i].c_str();
   }
