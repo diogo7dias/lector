@@ -268,6 +268,14 @@ families:
       italic:     {path: "builtinFonts/source/LexendDeca/LexendDeca-Italic.ttf"}
       bolditalic: {path: "builtinFonts/source/LexendDeca/LexendDeca-BoldItalic.ttf"}
 
+  - name: Signika
+    description: "Humanist sans, slightly narrow (Latin, Greek, Cyrillic) — no italic upstream"
+    intervals: latin-ext,greek,cyrillic
+    sizes: [10, 11, 12, 13, 14, 15, 16, 17, 18]
+    styles:
+      regular: {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/signika/Signika%5BGRAD,wght%5D.ttf", variable: {wght: 400, GRAD: 0}}
+      bold:    {url: "https://raw.githubusercontent.com/google/fonts/main/ofl/signika/Signika%5BGRAD,wght%5D.ttf", variable: {wght: 700, GRAD: 0}}
+
   # ── Monospace ──────────────────────────────────────────────────────────
 
   - name: IBMPlexMono
