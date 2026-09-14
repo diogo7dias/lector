@@ -1,5 +1,6 @@
 # Handoff
 
+- 2026-09-14: Supervisor check — target work still complete (all audit branches + fast-lock-unlock + banner-on-favorites-exit in main, main == origin/main). Main advanced since 09-13 entry: X3 OTA TLS low-memory fix (c52ffdeec), releases 0.31.5 and 0.31.6 (890fd955f). Claude session no longer running. No pending work.
 - 2026-09-13: Supervisor check — all target work done and pushed (main == origin/main @ 523338e2d): audit write-throttle/constexpr/upstream-3245 merged, fast-lock-unlock + banner-on-favorites-exit merged and on origin. Follow-up merges by Claude after 09-05 entry: unlock wake path speed-up (031730e4c), two panel submissions on lock (afa18d538), release 0.31.3. Claude session ended, no pending work.
 - 2026-09-05: Merged claude/leave-lector-fix (31094fabd, 7b1857bfd) to main: OPDS server reboot/connection-drop backoff retry logic and UI state, plus OTA rollback-disarm parity check on re-entry.
 - 2026-09-05: Merged claude/fast-lock-unlock (6e74766a2) and fix/banner-on-favorites-exit (19bec6550) to main. All audit branches (file-close, write-throttle, constexpr, nothrow, upstream-3245), fast-lock-unlock, and banner-on-favorites-exit now merged and pushed. No pending work.
