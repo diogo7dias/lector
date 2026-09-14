@@ -235,6 +235,8 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // List repeat rates, not the page-flick default: see UiListActivity.h.
   ButtonNavigator listButtons_{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
   int listCount_ = 0;
+  // Where the last build put the list rows, for the scroll chevrons.
+  Rect listBand_{};
   bool navigateList();
   // Choices the last build drew, so the loop task can step the selection
   // without rebuilding the view. Zero until the first render, which is also

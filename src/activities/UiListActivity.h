@@ -3,6 +3,7 @@
 #include "activities/Activity.h"
 #include "components/ListChrome.h"
 #include "components/UiAppHost.h"
+#include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
 // Base for activities hosting a single FreeInkUI list screen. UiAppHost owns
@@ -95,7 +96,14 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);
 
+  // The chevrons that say "more above" / "more below", drawn after the list has
+  // reported its real window. Base render() calls it; a screen that paints its own
+  // page can too.
+  void drawScrollArrows();
+
   // --- shared state ----------------------------------------------------------
+  // Where the last build put the rows, for drawScrollArrows().
+  Rect listBand{};
   // Selection + viewport (selected/top/visibleRows/followOnBuild). Access via
   // activeNav() in shared code; `nav` is the single-list default storage.
   freeink::ui::ListNav nav;

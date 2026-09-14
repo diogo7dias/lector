@@ -208,7 +208,7 @@ class OptionPopup {
     layout.options.clear();
     layout.options.reserve(optionCount);
     for (int i = 0; i < optionCount; i++) {
-      layout.options.push_back(Rect{g.itemRectX, g.firstItemY + i * g.rowPitch, g.itemRectW, g.rowHeight});
+      layout.options.push_back(Rect{g.itemRectX, g.rowTop[i], g.itemRectW, g.rowHeight[i]});
     }
     layoutValid = true;
     return layout;

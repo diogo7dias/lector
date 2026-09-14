@@ -97,7 +97,7 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   if (!menuActive()) {
     // No suggestions: the historical plain end screen. 3/8 of the screen height matches
     // the previous fixed position on the 480x800 panel and scales to other resolutions.
-    renderer.drawCenteredText(UI_12_FONT_ID, renderer.getScreenHeight() * 3 / 8, tr(STR_END_OF_BOOK), true,
+    renderer.drawCenteredText(UI_10_FONT_ID, renderer.getScreenHeight() * 3 / 8, tr(STR_END_OF_BOOK), true,
                               EpdFontFamily::REGULAR);
     return;
   }
@@ -109,18 +109,21 @@ void EndOfBookOptions::render(GfxRenderer& renderer, const MappedInputManager& i
   // resolutions scale (review request on #2532).
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
   const int titleY = safe.y + safe.height / 8;
-  const int subtitleY = titleY + renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing;
+  const int subtitleY = titleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing;
   const int listTop = subtitleY + renderer.getLineHeight(UI_10_FONT_ID) + metrics.verticalSpacing * 2;
 
-  UITheme::drawCenteredText(renderer, safe, UI_12_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::REGULAR);
+  UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, titleY, tr(STR_END_OF_BOOK), true, EpdFontFamily::REGULAR);
   UITheme::drawCenteredText(renderer, safe, UI_10_FONT_ID, subtitleY, tr(STR_EOB_CONTINUE_WITH));
 
   const int listHeight = safe.y + safe.height - listTop - metrics.verticalSpacing;
-  GUI.drawList(renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
-               [this](const int index) {
-                 return index < static_cast<int>(names.size()) ? displayName(names[index])
-                                                               : std::string(tr(STR_EOB_HOME));
-               });
+  // Titles wrap over the lines they need rather than being cut; the visible range
+  // comes back from the draw and feeds the scroll offset, as in the file browser.
+  const ListVisibility vis = GUI.drawWrappedList(
+      renderer, Rect{safe.x, listTop, safe.width, listHeight}, static_cast<int>(names.size()) + 1, selector,
+      scrollOffset, [this](const int index) {
+        return index < static_cast<int>(names.size()) ? displayName(names[index]) : std::string(tr(STR_EOB_HOME));
+      });
+  scrollOffset = vis.firstVisible;
 
   const auto labels = input.mapLabels(tr(STR_BACK), tr(STR_OPEN), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

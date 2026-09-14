@@ -1,10 +1,11 @@
-// Source audit: the keys-only boards (X3, X4) keep the look they had before the
-// FreeInkUI migration, and the touch board keeps the SDK's.
+// Source audit: one flat look on every board, touch or keys. Regular weight, one
+// size, a black header band with white text, the selected row the same filled band,
+// no scroll track, names and values in the same style. None of it may be gated on
+// hasTouch(): the X4 Pro was once left with the SDK's own look that way.
 //
-// UIThemeTokens.h cannot be compiled on the host (it pulls BoardConfig, the
-// renderer and the HAL), so the split is checked by reading it — the same
-// approach as test/device_look, which covers the touch-only *shapes* while this
-// covers the *look*.
+// UIThemeTokens.h cannot be compiled on the host (it pulls BoardConfig and the
+// renderer), so the look is checked by reading it, the same approach as
+// test/device_look.
 #include <gtest/gtest.h>
 
 #include <fstream>
@@ -23,108 +24,100 @@ std::string readSource(const char* path) {
 
 bool contains(const std::string& haystack, const char* needle) { return haystack.find(needle) != std::string::npos; }
 
-// The body of the keys-only branch in uiThemeTokens().
-std::string keysOnlyBranch() {
+// The body of uiThemeTokens().
+std::string tokensBody() {
   const std::string source = readSource(THEME_TOKENS_HEADER);
-  const std::size_t start = source.find("if (!gpio.hasTouch())");
-  EXPECT_NE(start, std::string::npos) << "the keys-only look is no longer applied under a hasTouch() guard";
+  const std::size_t start = source.find("inline freeink::ui::ThemeTokens uiThemeTokens(");
+  EXPECT_NE(start, std::string::npos);
   if (start == std::string::npos) return {};
-  const std::size_t end = source.find("\n  }\n", start);
+  const std::size_t end = source.find("\n}\n", start);
   return source.substr(start, end == std::string::npos ? std::string::npos : end - start);
 }
 
 }  // namespace
 
-// --- the split itself -------------------------------------------------------
+// --- one look, no board split -----------------------------------------------
 
-TEST(KeysOnlyLook, TheLookIsSplitAtRuntimeNotAtCompileTime) {
-  // X3 and X4 share one C3 binary with the X4 Pro's environment being separate,
-  // but the keys-only pair cannot be told from a touch board at compile time —
-  // only hasTouch() knows.
+TEST(FlatLook, NothingInTheThemeTokensAsksWhetherTheBoardHasTouch) {
   const std::string source = readSource(THEME_TOKENS_HEADER);
-  EXPECT_TRUE(contains(source, "gpio.hasTouch()"));
-  EXPECT_FALSE(contains(source, "#ifdef FREEINK_DEVICE_X4PRO"))
-      << "the look split must be a runtime one; a macro cannot separate X3/X4 from a touch board";
+  EXPECT_FALSE(contains(source, "hasTouch()"))
+      << "the look is split on the board again; the X4 Pro must get the same one";
+  EXPECT_FALSE(contains(source, "#ifdef FREEINK_DEVICE_X4PRO"));
 }
 
 // --- regular, never bold, everywhere in the menus ---------------------------
 
-TEST(KeysOnlyLook, NoMenuTextAsksForBold) {
-  const std::string branch = keysOnlyBranch();
-  EXPECT_TRUE(contains(branch, "tokens.titleText.bold = false"))
-      << "the header title is still bold on the keys-only boards";
-  EXPECT_TRUE(contains(branch, "tokens.bodyText.bold = false"));
-  EXPECT_TRUE(contains(branch, "tokens.smallText.bold = false"));
-  EXPECT_FALSE(contains(branch, "bold = true")) << "something in the keys-only look still asks for a bold face";
+TEST(FlatLook, NoMenuTextAsksForBold) {
+  const std::string body = tokensBody();
+  EXPECT_TRUE(contains(body, "tokens.titleText.bold = false")) << "the header title still asks for bold";
+  EXPECT_TRUE(contains(body, "tokens.bodyText.bold = false"));
+  EXPECT_TRUE(contains(body, "tokens.smallText.bold = false"));
+  EXPECT_FALSE(contains(body, "bold = true")) << "something in the look still asks for a bold face";
 }
 
 // --- headers: black band, white text ----------------------------------------
 
-TEST(KeysOnlyLook, TheHeaderBandIsBlackWithWhiteText) {
-  const std::string branch = keysOnlyBranch();
-  EXPECT_TRUE(contains(branch, "tokens.popup.normal.background = fui::Paint::solid(fui::Color::Black)"))
+TEST(FlatLook, TheHeaderBandIsBlackWithWhiteText) {
+  const std::string body = tokensBody();
+  EXPECT_TRUE(contains(body, "tokens.popup.normal.background = fui::Paint::solid(fui::Color::Black)"))
       << "the header band is not filled black";
-  EXPECT_TRUE(contains(branch, "tokens.popup.normal.foreground = fui::Paint::solid(fui::Color::White)"));
-  EXPECT_TRUE(contains(branch, "tokens.titleText.color = fui::Color::White"))
+  EXPECT_TRUE(contains(body, "tokens.popup.normal.foreground = fui::Paint::solid(fui::Color::White)"));
+  EXPECT_TRUE(contains(body, "tokens.titleText.color = fui::Color::White"))
       << "the header title is not knocked out of the band";
-}
-
-TEST(KeysOnlyLook, TheBlackHeaderCarriesNoUnderline) {
-  // A rule under a filled band is the white-header look showing through.
-  EXPECT_TRUE(contains(keysOnlyBranch(), "tokens.headerUnderline = 0"));
+  EXPECT_TRUE(contains(body, "tokens.headerUnderline = 0")) << "a rule under a filled band is the white-header look";
 }
 
 // --- selected rows: black band, white text ----------------------------------
 
-TEST(KeysOnlyLook, TheSelectedRowIsFilledAndItsTextKnockedOut) {
-  EXPECT_TRUE(contains(keysOnlyBranch(), "tokens.listSelectionStyle = fui::SelectionStyle::InvertFill"))
+TEST(FlatLook, TheSelectedRowIsFilledAndItsTextKnockedOut) {
+  EXPECT_TRUE(contains(tokensBody(), "tokens.listSelectionStyle = fui::SelectionStyle::InvertFill"))
       << "the selected row is not the filled black band with white text";
+}
+
+// --- no scroll track: chevrons say "more" -----------------------------------
+
+TEST(FlatLook, TheSdkDrawsNoScrollTrack) {
+  EXPECT_TRUE(contains(tokensBody(), "tokens.listScrollWidth = 0"))
+      << "the SDK still draws a track; lists indicate overflow with the chevrons instead";
+  EXPECT_TRUE(contains(readSource(LIST_ACTIVITY_SOURCE), "drawScrollArrows"));
+  EXPECT_TRUE(contains(readSource(STATUS_ACTIVITY_SOURCE), "drawScrollArrows"));
 }
 
 // --- a setting's name and its value match -----------------------------------
 
-TEST(KeysOnlyLook, TheSettingValueTakesTheSameStyleAsItsName) {
+TEST(FlatLook, TheSettingValueTakesTheSameStyleAsItsName) {
   const std::string source = readSource(THEME_TOKENS_HEADER);
   EXPECT_TRUE(contains(source, "props.valueText = tokens.bodyText"))
       << "the value is still themed from smallText, so it is a size away from the name beside it";
-  EXPECT_TRUE(contains(source, "if (gpio.hasTouch()) return;"))
-      << "the value restyle is not guarded; the touch UI would lose its deliberate hierarchy";
 }
 
-TEST(KeysOnlyLook, EveryListScreenGetsTheValueStyleWithoutAskingForIt) {
-  // Applied in the shared viewport sync, so a new list screen cannot forget it.
+TEST(FlatLook, EveryListScreenGetsTheSharedRowStylesWithoutAskingForIt) {
+  // Applied in the shared viewport sync, so a new list screen cannot forget them.
   const std::string source = readSource(LIST_ACTIVITY_SOURCE);
-  EXPECT_TRUE(contains(source, "applyKeysOnlyValueStyle(props, screen.theme())"));
-  const std::size_t apply = source.find("applyKeysOnlyValueStyle");
   const std::size_t sync = source.find("void UiListActivity::syncListViewport");
-  ASSERT_NE(apply, std::string::npos);
   ASSERT_NE(sync, std::string::npos);
-  EXPECT_GT(apply, sync) << "the value style must be applied inside syncListViewport, which every list calls";
-}
-
-TEST(KeysOnlyLook, EveryListScreenGetsInvertedSectionHeadersWithoutAskingForIt) {
-  const std::string lists = readSource(LIST_ACTIVITY_SOURCE);
-  EXPECT_TRUE(contains(lists, "applyInvertedSectionHeaderStyle(props, screen.theme())"));
+  for (const char* call :
+       {"applyKeysOnlyValueStyle(props, screen.theme())", "applyWrappingRowStyle(props, screen.theme())",
+        "applyInvertedSectionHeaderStyle(props, screen.theme())"}) {
+    const std::size_t apply = source.find(call);
+    EXPECT_NE(apply, std::string::npos) << call;
+    EXPECT_GT(apply, sync) << call << " must be applied inside syncListViewport, which every list calls";
+  }
   const std::string status = readSource(STATUS_ACTIVITY_SOURCE);
+  EXPECT_TRUE(contains(status, "applyWrappingRowStyle(props, theme)"));
   EXPECT_TRUE(contains(status, "applyInvertedSectionHeaderStyle(props, theme)"));
 }
 
-// --- the touch board is left alone ------------------------------------------
+// --- labels wrap, never truncate --------------------------------------------
 
-TEST(KeysOnlyLook, TheTouchBoardKeepsTheSdkLook) {
-  // Everything above lives inside the !hasTouch() branch, so a touch board
-  // reaches `return tokens` with the SDK's own values.
+TEST(FlatLook, ListLabelsMayWrap) {
   const std::string source = readSource(THEME_TOKENS_HEADER);
-  const std::size_t guard = source.find("if (!gpio.hasTouch())");
-  ASSERT_NE(guard, std::string::npos);
-  for (const char* keysOnly :
-       {"titleText.bold = false", "headerUnderline = 0", "titleText.color = fui::Color::White"}) {
-    EXPECT_GT(source.find(keysOnly), guard) << keysOnly << " is applied outside the keys-only guard";
-  }
+  EXPECT_TRUE(contains(source, "props.labelText.maxLines = kListLabelMaxLines"));
+  EXPECT_TRUE(contains(source, "kListLabelMaxLines = 4"));
 }
 
 // Availability is decided before either settings view selects or renders rows.
-TEST(KeysOnlyLook, FrontRemapIsOnlyOfferedOnX3AndX4) {
+TEST(FlatLook, FrontRemapIsOnlyOfferedOnX3AndX4) {
   const std::string source = readSource(SETTINGS_ACTIVITY_SOURCE);
   const std::string entry =
       "controlsSettings.push_back(SettingInfo::Action(StrId::STR_REMAP_FRONT_BUTTONS, "

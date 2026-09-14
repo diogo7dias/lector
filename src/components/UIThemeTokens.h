@@ -1,7 +1,6 @@
 #pragma once
 #include <BoardConfig.h>
 #include <FreeInkUIGfxRenderer.h>
-#include <HalGPIO.h>
 
 #include "UITheme.h"
 #include "UiRowHeight.h"
@@ -46,58 +45,73 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   tokens.controlRadius = static_cast<uint8_t>(metrics.controlRadius);
   tokens.sheetRadius = static_cast<uint8_t>(metrics.sheetRadius);
   tokens.capsuleRadius = static_cast<uint8_t>(metrics.capsuleRadius);
-  tokens.bodyText.bold = metrics.listTitleBold;
-
-  // The keys-only boards (X3, X4) keep the look they had before the FreeInkUI
-  // migration, which is not the SDK's default. Split at runtime on hasTouch(),
-  // not on a device macro: the `default` environment builds one C3 binary for
-  // both keys-only boards, so a compile-time split could not tell them from the
-  // X4 Pro anyway (same reasoning as test/device_look).
-  if (!gpio.hasTouch()) {
-    // Regular everywhere in menus. The UI families ship a regular face only and
-    // fill their bold slot with it (see main.cpp), so a bold title was never a
-    // heavier cut — just the same glyphs asking for a face that does not exist.
-    // Weight hierarchy in this UI comes from size and from the inverted band.
-    tokens.titleText.bold = false;
-    tokens.smallText.bold = false;
-    tokens.bodyText.bold = false;
-    // Header band: solid black with the title knocked out white, matching
-    // BaseTheme::drawHeader, which every chrome-drawn header already uses. Only
-    // the fui-drawn headers (the OPDS browser) were coming out white-on-white
-    // paper with a rule under them.
-    tokens.popup.explicitlySet = true;
-    tokens.popup.normal.background = fui::Paint::solid(fui::Color::Black);
-    tokens.popup.normal.foreground = fui::Paint::solid(fui::Color::White);
-    tokens.popup.normal.border = fui::Paint::none();
-    tokens.popup.normal.borderWidth = 0;
-    tokens.popup.selected = tokens.popup.normal;
-    tokens.popup.focused = tokens.popup.normal;
-    tokens.popup.active = tokens.popup.normal;
-    tokens.popup.disabled = tokens.popup.normal;
-    tokens.titleText.color = fui::Color::White;
-    // The rule under the band belongs to a white header; a black band is its own
-    // separator.
-    tokens.headerUnderline = 0;
-    // Selected row: the same filled band, text knocked out white. This is what
-    // metrics.listSelectionStyle == 0 (InvertFill) already asks for, so it is
-    // stated here only so a theme cannot leave the rows outlined instead.
-    tokens.listSelectionStyle = fui::SelectionStyle::InvertFill;
-  }
+  // One look on every board, touch or keys: regular weight, one size, a black
+  // header band with the title knocked out white, the selected row the same
+  // filled band. Not split by board: the X4 Pro was left with the SDK's own
+  // look once before and the user wants one firmware look, so nothing here asks
+  // what the board is.
+  //
+  // Regular everywhere. The UI families ship a regular face only and fill their
+  // bold slot with it (see main.cpp), so a bold title was never a heavier cut,
+  // just the same glyphs asking for a face that does not exist. What sets a
+  // heading apart is the inverted band, never the weight.
+  tokens.titleText.bold = false;
+  tokens.smallText.bold = false;
+  tokens.bodyText.bold = false;
+  // Header band: solid black with the title knocked out white, matching
+  // BaseTheme::drawHeader, which every chrome-drawn header already uses.
+  tokens.popup.explicitlySet = true;
+  tokens.popup.normal.background = fui::Paint::solid(fui::Color::Black);
+  tokens.popup.normal.foreground = fui::Paint::solid(fui::Color::White);
+  tokens.popup.normal.border = fui::Paint::none();
+  tokens.popup.normal.borderWidth = 0;
+  tokens.popup.selected = tokens.popup.normal;
+  tokens.popup.focused = tokens.popup.normal;
+  tokens.popup.active = tokens.popup.normal;
+  tokens.popup.disabled = tokens.popup.normal;
+  tokens.titleText.color = fui::Color::White;
+  // The rule under the band belongs to a white header; a black band is its own
+  // separator.
+  tokens.headerUnderline = 0;
+  // Selected row: the same filled band, text knocked out white. This is what
+  // metrics.listSelectionStyle == 0 (InvertFill) already asks for, so it is
+  // stated here only so a theme cannot leave the rows outlined instead.
+  tokens.listSelectionStyle = fui::SelectionStyle::InvertFill;
+  // No scroll track. Lists say "more" with the two chevrons UiListActivity draws
+  // outside the row band (ListScrollbar.h), so the SDK draws no indicator and
+  // the rows keep the width the track used to take.
+  tokens.listScrollWidth = 0;
   return tokens;
 }
 
-// Same face, same size, same weight for a setting's NAME and its VALUE on the
-// keys-only boards. Screen::list() otherwise themes the label from bodyText and
-// the value from smallText, which is a size apart: "Font size / 14" came out
-// with the number visibly smaller than the name beside it. A touch board keeps
-// the SDK pairing, where the smaller value is a deliberate hierarchy.
+// Same face, same size, same weight for a setting's NAME and its VALUE.
+// Screen::list() otherwise themes the label from bodyText and the value from
+// smallText; the two slots now carry the same font, but a theme file could
+// split them again, so the pairing is stated here.
 //
 // Call after filling a ListProps and before screen.list(). Leaves an explicitly
 // styled value alone, so a screen that means its value to differ still can.
 inline void applyKeysOnlyValueStyle(freeink::ui::ListProps& props, const freeink::ui::ThemeTokens& tokens) {
-  if (gpio.hasTouch()) return;
   if (!freeink::ui::textStyleUnset(props.valueText)) return;
   props.valueText = tokens.bodyText;
+}
+
+// Labels and subtitles wrap, never truncate: a row grows by the lines its text
+// needs (list() sizes wrapped rows per row). The caps are generous enough that
+// the last-line ellipsis the SDK applies past them is never reached by a
+// setting name or a chapter title on this panel. Values stay single-line: the
+// SDK lays the value out beside the label and wraps the label around it.
+constexpr uint8_t kListLabelMaxLines = 4;
+constexpr uint8_t kListSubtitleMaxLines = 3;
+inline void applyWrappingRowStyle(freeink::ui::ListProps& props, const freeink::ui::ThemeTokens& tokens) {
+  if (freeink::ui::textStyleUnset(props.labelText)) {
+    props.labelText = tokens.bodyText;
+    props.labelText.maxLines = kListLabelMaxLines;
+  }
+  if (freeink::ui::textStyleUnset(props.subtitleText)) {
+    props.subtitleText = tokens.smallText;
+    props.subtitleText.maxLines = kListSubtitleMaxLines;
+  }
 }
 
 // Section headings: a full-width inverted band, label centred in white, matching
