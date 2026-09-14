@@ -4,7 +4,6 @@
 #include "activities/Activity.h"
 
 class Bitmap;
-class HalFile;
 
 class SleepActivity final : public Activity {
  public:
@@ -17,33 +16,14 @@ class SleepActivity final : public Activity {
   // and record which wallpaper (if any) ended up on the panel; the render functions
   // return from several places.
   void renderSleepScreen() const;
-  // Blank FULL pass before painting a sleep face, so the screen the user locked from
-  // does not ghost through it. See the definition for why nothing else provides it.
-  // Keeps the page already on the panel and adds a thin border. Must not be preceded
-  // by the popup or the deep clean.
   // The Lector fallback: white page, the name centred. Every face that finds nothing to
   // show (no wallpaper, no cover, a decode that failed) lands here.
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;
-  // preserveBackground keeps whatever the panel is already holding and draws the bitmap
-  // over it: no initial clear, and no cover filter (the filter is about how a full-screen
-  // wallpaper looks, and inverting a composite would invert the retained page too).
-  void renderBitmapSleepScreen(const Bitmap& bitmap, bool preserveBackground = false) const;
-  // Alpha overlay over the retained page. Reads a 32-bit BGRA BMP and composites it
-  // with a Bayer dither on the alpha channel, so partial transparency survives a
-  // 1-bit panel. Falls back to a plain over-draw for any other BMP.
-  bool renderSleepOverlayFile(HalFile& file, const char* pathForLog) const;
-  // PNG overlays go through the shared EPUB image decoder instead, which already
-  // handles every PNG colour type; it grew a preserve-alpha mode for this.
-  bool renderTransparentOverlayPng(const std::string& path) const;
-  // Dispatches one overlay path to the PNG or the BMP renderer by extension.
-  bool renderSleepOverlayPath(const std::string& path) const;
-  void renderTransparentCustomSleepScreen() const;
-  // Reading-stats dashboard over the current book's cover. Falls back to the default
-  // face when there is no open book, the format has no stats, or no cover can be made.
-  void renderStatsDashboardSleepScreen() const;
-  void renderBlankSleepScreen() const;
+  // Full-screen wallpaper or cover: cleared page, the bitmap centred (fit or crop), the
+  // cover filter applied, the grayscale pipeline when the image and the filter allow it.
+  void renderBitmapSleepScreen(const Bitmap& bitmap) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared

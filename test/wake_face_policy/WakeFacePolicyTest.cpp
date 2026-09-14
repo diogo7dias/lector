@@ -3,17 +3,18 @@
 
 #include "sleep/WakeFacePolicy.h"
 
-TEST(WakeFacePolicy, RetiredSelectionsBecomeWallpaperWithoutRenumberingOtherFaces) {
-  EXPECT_EQ(wake_face::migrateSleepScreen(1), 2);  // Light (the crest) -> Custom wallpaper
-  EXPECT_EQ(wake_face::migrateSleepScreen(6), 2);  // saved Quick Resume -> Custom
-  EXPECT_EQ(wake_face::migrateSleepScreen(2), 2);  // Custom stays Custom
-  EXPECT_EQ(wake_face::migrateSleepScreen(3), 3);  // Cover stays Cover
-  EXPECT_EQ(wake_face::migrateSleepScreen(4), 4);  // Cover + Custom keeps its ID
-  EXPECT_EQ(wake_face::migrateSleepScreen(7), 7);  // Stats keeps its persisted ID
-  EXPECT_EQ(wake_face::migrateSleepScreen(9), 9);  // Transparent keeps its persisted ID
-  EXPECT_EQ(wake_face::migrateSleepScreen(0), 2);  // older retired Dark
-  EXPECT_EQ(wake_face::migrateSleepScreen(5), 2);  // older retired Blank
-  EXPECT_EQ(wake_face::migrateSleepScreen(8), 2);  // older retired Freeze
+TEST(WakeFacePolicy, OnlyWallpaperAndCoverSurviveMigration) {
+  EXPECT_EQ(wake_face::migrateSleepScreen(2), 2);   // Custom stays Custom
+  EXPECT_EQ(wake_face::migrateSleepScreen(3), 3);   // Cover stays Cover
+  EXPECT_EQ(wake_face::migrateSleepScreen(0), 2);   // Dark
+  EXPECT_EQ(wake_face::migrateSleepScreen(1), 2);   // Light (the crest)
+  EXPECT_EQ(wake_face::migrateSleepScreen(4), 2);   // Cover + Custom
+  EXPECT_EQ(wake_face::migrateSleepScreen(5), 2);   // Blank
+  EXPECT_EQ(wake_face::migrateSleepScreen(6), 2);   // Quick Resume
+  EXPECT_EQ(wake_face::migrateSleepScreen(7), 2);   // Stats Dashboard
+  EXPECT_EQ(wake_face::migrateSleepScreen(8), 2);   // Freeze
+  EXPECT_EQ(wake_face::migrateSleepScreen(9), 2);   // Transparent
+  EXPECT_EQ(wake_face::migrateSleepScreen(42), 2);  // anything a future build wrote
 }
 
 TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {
@@ -32,6 +33,17 @@ TEST(WakeFacePolicy, DriveAllWakeOnlyWithFastUnlockAndNoBanners) {
   // Banners wanted: their blocking pass stays.
   EXPECT_EQ(wakeClearFor(true, false), WakeClear::Blank);
   EXPECT_EQ(wakeClearFor(false, false), WakeClear::Blank);
+}
+
+TEST(WakeFacePolicy, X4ProTakesTheSameDriveAllPathAsTheX4) {
+  // The X4 Pro (SSD1677 on early batches, UC8179 on later ones) has no firmware branch
+  // of its own on this path: the board split lives in the panel driver, and both drivers
+  // honour the same one-shot. The policy answer for a non-X3 board is the X4's.
+  using wake_face::WakeClear;
+  constexpr bool kIsX3 = false;  // an X4 Pro, either batch
+  EXPECT_EQ(wake_face::wakeClearFor(true, true), WakeClear::DriveAll);
+  EXPECT_TRUE(wake_face::firstPageTurnCleans(WakeClear::DriveAll, kIsX3));
+  EXPECT_EQ(wake_face::inputSettleMs(/*isX4Pro=*/true, true), 20ul);
 }
 
 TEST(WakeFacePolicy, FirstPageTurnCleansAfterADriveAllWakeExceptOnTheX3) {

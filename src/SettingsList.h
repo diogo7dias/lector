@@ -215,22 +215,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
-    std::vector<StrId> sleepScreenValues(CrossPointSettings::SLEEP_SCREEN_MODE_COUNT);
-    // DARK is retired (see SLEEP_SCREEN_MODE): the label stays for index alignment, and
-    // withHiddenEnumValues() below keeps it out of the picker.
-    sleepScreenValues[CrossPointSettings::DARK] = StrId::STR_DARK;
-    sleepScreenValues[CrossPointSettings::LIGHT] = StrId::STR_LIGHT;  // retired crest
+    // Only Custom and Cover are offered. Every other slot is a retired face (see
+    // SLEEP_SCREEN_MODE) whose value is migrated to Custom on load; the array stays
+    // index-aligned with the enum and the placeholders never reach the picker or the web
+    // API (withHiddenEnumValues below).
+    std::vector<StrId> sleepScreenValues(CrossPointSettings::SLEEP_SCREEN_MODE_COUNT, StrId::STR_NONE_OPT);
     sleepScreenValues[CrossPointSettings::CUSTOM] = StrId::STR_CUSTOM;
     sleepScreenValues[CrossPointSettings::COVER] = StrId::STR_COVER;
-    sleepScreenValues[CrossPointSettings::COVER_CUSTOM] = StrId::STR_COVER_CUSTOM;
-    // BLANK and FREEZE are retired (see SLEEP_SCREEN_MODE). Their labels stay so the array
-    // remains index-aligned with the enum — the value is what persists — but both are
-    // listed in withHiddenEnumValues() below and never reach the picker.
-    sleepScreenValues[CrossPointSettings::BLANK] = StrId::STR_NONE_OPT;
-    sleepScreenValues[CrossPointSettings::QUICK_RESUME] = StrId::STR_LIGHT;  // retired slot
-    sleepScreenValues[CrossPointSettings::STATS_DASHBOARD] = StrId::STR_STATS_DASHBOARD;
-    sleepScreenValues[CrossPointSettings::FREEZE] = StrId::STR_FREEZE;
-    sleepScreenValues[CrossPointSettings::TRANSPARENT_CUSTOM] = StrId::STR_TRANSPARENT;
 
     // The list is appended one entry at a time instead of being written as a single
     // braced initializer. A braced list materializes ALL entries as one temporary array
@@ -241,11 +232,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     std::vector<SettingInfo> v;
     v.reserve(88);
     // --- Display ---
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen, std::move(sleepScreenValues),
-                          "sleepScreen", StrId::STR_CAT_DISPLAY)
-            .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::LIGHT, CrossPointSettings::BLANK,
-                                   CrossPointSettings::FREEZE, CrossPointSettings::QUICK_RESUME}));
+    v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_SCREEN, &CrossPointSettings::sleepScreen,
+                                  std::move(sleepScreenValues), "sleepScreen", StrId::STR_CAT_DISPLAY)
+                    .withHiddenEnumValues({CrossPointSettings::DARK, CrossPointSettings::LIGHT,
+                                           CrossPointSettings::COVER_CUSTOM, CrossPointSettings::BLANK,
+                                           CrossPointSettings::QUICK_RESUME, CrossPointSettings::STATS_DASHBOARD,
+                                           CrossPointSettings::FREEZE, CrossPointSettings::TRANSPARENT_CUSTOM}));
 
     v.push_back(SettingInfo::Enum(StrId::STR_SLEEP_COVER_MODE, &CrossPointSettings::sleepScreenCoverMode,
                                   {StrId::STR_FIT, StrId::STR_CROP}, "sleepScreenCoverMode", StrId::STR_CAT_DISPLAY));

@@ -827,8 +827,7 @@ void setup() {
   // across an update, so that one check runs on every boot.
   {
     const esp_reset_reason_t rst = esp_reset_reason();
-    const bool wantsWallpaperIndex = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM ||
-                                     SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::COVER_CUSTOM;
+    const bool wantsWallpaperIndex = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM;
     if (rst != ESP_RST_DEEPSLEEP && !recoveryFirmwareMode && !rebootedFromPanic && wantsWallpaperIndex) {
       if (APP_STATE.sleepIndexDirty || APP_STATE.sleepIndexNeedsRebuild ||
           crosspoint::sleep::windex::indexedFolderChanged() ||
