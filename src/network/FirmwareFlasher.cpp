@@ -11,8 +11,8 @@
 #include <cstring>
 #include <memory>
 
+#include "Diagnostics.h"
 #include "FirmwareSwitchAudit.h"
-#include "FlashDiagnostics.h"
 #include "FlashWriteVerify.h"
 #include "OtaBootSwitch.h"
 
@@ -342,13 +342,20 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
   // we touch otadata, so a truncated/corrupted .bin can never become the next boot target.
   // Opened before anything can fail: a device with no serial console gives us
   // nothing else, and "no next-update partition" is exactly the case where the
-  // partition table dump is the answer.
-  diagnosticsBeginAttempt(CROSSPOINT_VERSION, sdPath, 0);
+  // partition table dump is the answer. The size is measured first rather than
+  // taken from the stream opened below: a placeholder 0 in this line once had
+  // a user's perfectly good image diagnosed as an empty file.
+  size_t imageSize = diag::kUnknownSize;
+  {
+    HalFile probe = Storage.open(sdPath, O_RDONLY);
+    if (probe) imageSize = probe.fileSize();
+  }
+  diag::beginAttempt(diag::Source::Sd, sdPath, imageSize);
 
   const esp_partition_t* dest = esp_ota_get_next_update_partition(nullptr);
   if (!dest) {
     LOG_ERR("FLASH", "no next-update partition");
-    diagnosticsFailAttempt("partition lookup", resultName(Result::NO_PARTITION));
+    diag::endAttempt(resultName(Result::NO_PARTITION), "partition lookup");
     return Result::NO_PARTITION;
   }
 
@@ -360,15 +367,19 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
     const Result validateRes = validateImageFile(sdPath, dest->size);
     if (validateRes != Result::OK) {
       LOG_ERR("FLASH", "image validation failed: %s", resultName(validateRes));
-      diagnosticsFailAttempt("validate", resultName(validateRes));
+      diag::note("  validate: %s", resultName(validateRes));
+      diag::endAttempt(resultName(validateRes), "validate");
       return validateRes;
     }
+    diag::note("  validate: OK (header, segments, checksum, sha256)");
+  } else {
+    diag::note("  validate: skipped (caller validated)");
   }
 
   SdFileSource source;
   if (!source.open(sdPath)) {
     LOG_ERR("FLASH", "open failed: %s", sdPath);
-    diagnosticsFailAttempt("open", resultName(Result::OPEN_FAIL));
+    diag::endAttempt(resultName(Result::OPEN_FAIL), "open");
     return Result::OPEN_FAIL;
   }
   PartitionTarget target(dest);
@@ -377,27 +388,40 @@ Result flashFromSdPath(const char* sdPath, ProgressCb onProgress, void* ctx, boo
 
   const Result writeRes = writeImage(source, target, onProgress, ctx);
   if (writeRes != Result::OK) {
-    LOG_ERR("FLASH", "write failed: %s", resultName(writeRes));
-    diagnosticsFailAttempt("write", resultName(writeRes));
+    LOG_ERR("FLASH", "write failed: %s at %u", resultName(writeRes), static_cast<unsigned>(lastFailureOffset()));
+    // READ_FAIL here is the card, not the image: validation already read the
+    // whole file once. The offset says how far the second read got.
+    diag::note("  write: %s at byte %u of %u (0x%X)%s", resultName(writeRes),
+               static_cast<unsigned>(lastFailureOffset()), static_cast<unsigned>(source.size()),
+               static_cast<unsigned>(lastFailureOffset()),
+               writeRes == Result::READ_FAIL ? " - card stopped answering mid-read; image had already validated" : "");
+    diag::endAttempt(resultName(writeRes), "write");
     return writeRes;
   }
+  diag::note("  write: OK %u bytes", static_cast<unsigned>(source.size()));
 
   // Readback: what the bootloader will validate is what is in flash now, not
   // what was on the card. Switching otadata to a slot the bootloader then
   // refuses leaves the device booting the old firmware forever, with no error.
   const Result verifyRes = verifyImage(source, target, onVerifyProgress, ctx);
   if (verifyRes != Result::OK) {
-    LOG_ERR("FLASH", "readback failed: %s (offset %u)", resultName(verifyRes),
-            static_cast<unsigned>(lastVerifyMismatchOffset()));
-    diagnosticsFailAttempt("readback", resultName(verifyRes));
+    const unsigned at = static_cast<unsigned>(lastFailureOffset());
+    LOG_ERR("FLASH", "readback failed: %s (offset %u)", resultName(verifyRes), at);
+    diag::note("  readback: %s at byte %u of %u (0x%X, %s)", resultName(verifyRes), at,
+               static_cast<unsigned>(source.size()), at, failureOffsetHint(at));
+    diag::noteVitals();
+    diag::endAttempt(resultName(verifyRes), "readback");
     return verifyRes;
   }
+  diag::note("  readback: OK %u bytes match flash", static_cast<unsigned>(source.size()));
   const bool switchOk = ota_boot::switchTo(dest);
-  diagnosticsEndAttempt(dest->address, dest->label, dest->subtype, switchOk);
+  diag::recordSwitch(dest->address, dest->label, dest->subtype, switchOk);
   if (!switchOk) {
     LOG_ERR("FLASH", "otadata switch failed");
+    diag::endAttempt(resultName(Result::OTADATA_FAIL), "switch");
     return Result::OTADATA_FAIL;
   }
+  diag::endAttempt(resultName(Result::OK), nullptr);
   // Leave a breadcrumb the next boot checks: if the bootloader refuses this
   // image it boots the other slot without touching otadata, and that silent
   // fallback is the only trace it leaves.
@@ -450,22 +474,26 @@ Result StreamingInstall::commit() {
   const Result validateRes = validateFlashedImage(impl_->dest, imageSize);
   if (validateRes != Result::OK) {
     LOG_ERR("FLASH", "flashed image invalid: %s", resultName(validateRes));
-    diagnosticsBeginAttempt(CROSSPOINT_VERSION, nullptr, imageSize);
-    diagnosticsFailAttempt("validate", resultName(validateRes));
+    diag::note("  readback validate: %s over %u bytes in flash", resultName(validateRes),
+               static_cast<unsigned>(imageSize));
+    diag::endAttempt(resultName(validateRes), "readback validate");
     return validateRes;
   }
+  diag::note("  readback validate: OK (%u bytes in flash: header, segments, checksum, sha256)",
+             static_cast<unsigned>(imageSize));
   // ota_boot::switchTo, not esp_ota_set_boot_partition: the latter marks the
   // slot NEW, which arms the bootloader's rollback. Firmware that is not built
   // on the Arduino core never calls esp_ota_mark_app_valid_cancel_rollback(),
   // so its first boot would be rolled straight back into this one and the
   // device would look permanently stuck on lector. See OtaBootEntry.h.
-  diagnosticsBeginAttempt(CROSSPOINT_VERSION, nullptr, imageSize);
   const bool switchOk = ota_boot::switchTo(impl_->dest);
-  diagnosticsEndAttempt(impl_->dest->address, impl_->dest->label, impl_->dest->subtype, switchOk);
+  diag::recordSwitch(impl_->dest->address, impl_->dest->label, impl_->dest->subtype, switchOk);
   if (!switchOk) {
     LOG_ERR("FLASH", "otadata switch failed");
+    diag::endAttempt(resultName(Result::OTADATA_FAIL), "switch");
     return Result::OTADATA_FAIL;
   }
+  diag::endAttempt(resultName(Result::OK), nullptr);
   recordPendingSwitch(impl_->dest->address, imageSize);
   return Result::OK;
 }

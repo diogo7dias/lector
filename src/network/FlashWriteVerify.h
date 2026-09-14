@@ -78,8 +78,16 @@ class StreamWriter {
   size_t erasedUpto_ = 0;
 };
 
-// Byte offset of the mismatch reported by the last verifyImage() failure, for
-// logging. Undefined after a successful verify.
-size_t lastVerifyMismatchOffset();
+// Image byte offset the last failure happened at: the first mismatching byte
+// of a VERIFY_FAIL, or the start of the chunk whose read, erase or write
+// failed. Where an image dies is the most telling number there is (byte 0, a
+// 64 KiB block boundary, the tail of a 4 MB write on a low battery), so every
+// failure path sets it. Undefined after a success.
+size_t lastFailureOffset();
+
+// What an offset sits on, for the log: "start of image", "64 KiB block
+// boundary", "4 KiB sector boundary" or "mid-sector". A mismatch on a block
+// boundary points at an erase; mid-sector points at the write or the card.
+const char* failureOffsetHint(size_t offset);
 
 }  // namespace firmware_flash

@@ -114,6 +114,10 @@ class HalPowerManager {
 
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
+  // Battery voltage in millivolts, uncached; 0 when the board cannot read one.
+  // For the diagnostics file: a percentage rounds to tens, a voltage says
+  // whether a 4 MB flash write was running on a cell about to brown out.
+  uint16_t getBatteryMillivolts() const;
 
   // RAII helper class to manage power saving locks
   // Usage: create an instance of Lock in a scope to disable power saving, for example when running a task that needs

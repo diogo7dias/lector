@@ -1,9 +1,10 @@
 #include "FirmwareSwitchAudit.h"
 
-#include <HalStorage.h>
 #include <Logging.h>
 #include <esp_ota_ops.h>
 #include <nvs.h>
+
+#include "Diagnostics.h"
 
 namespace firmware_flash {
 
@@ -11,7 +12,6 @@ namespace {
 constexpr const char* kNamespace = "fwswitch";
 constexpr const char* kKeyAddress = "addr";
 constexpr const char* kKeySize = "size";
-constexpr const char* kLogPath = "/lector-firmware-update.log";
 bool s_switchRolledBack = false;
 }  // namespace
 
@@ -43,6 +43,10 @@ void auditPendingSwitch(const char* version) {
 
   const esp_partition_t* running = esp_ota_get_running_partition();
   const uint32_t runningAddress = running ? running->address : 0;
+  // Either way it goes into the diagnostics file: "did the update take" is
+  // the question that file exists to answer, and main() flushes it once the
+  // boot records are in.
+  diag::recordBootAfterInstall(intended, runningAddress, imageSize);
   if (running && runningAddress == intended) {
     LOG_INF("FLASH", "firmware switch to 0x%06X took effect", static_cast<unsigned>(intended));
     return;
@@ -51,14 +55,6 @@ void auditPendingSwitch(const char* version) {
   s_switchRolledBack = true;
   const std::string line = formatSwitchFailedLine(version, intended, runningAddress, imageSize);
   LOG_ERR("FLASH", "%s", line.c_str());
-
-  HalFile file = Storage.open(kLogPath, O_WRONLY | O_CREAT | O_APPEND);
-  if (!file) {
-    LOG_ERR("FLASH", "cannot append switch audit: %s", kLogPath);
-    return;
-  }
-  file.write(reinterpret_cast<const uint8_t*>(line.data()), line.size());
-  file.close();
 }
 
 bool didPreviousSwitchRollBack() { return s_switchRolledBack; }

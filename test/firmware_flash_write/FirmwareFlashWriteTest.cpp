@@ -85,6 +85,25 @@ TEST(FirmwareFlashWrite, VerifyCatchesASingleFlippedBit) {
 
   ASSERT_EQ(firmware_flash::writeImage(src, flash, nullptr, nullptr), Result::OK);
   EXPECT_EQ(firmware_flash::verifyImage(src, flash), Result::VERIFY_FAIL);
+  // The offset is the number a remote debugger reads first: it is what tells a
+  // bad erase from a dying card from a brownout. It was computed and thrown away.
+  EXPECT_EQ(firmware_flash::lastFailureOffset(), 128 * 1024 + 7);
+}
+
+TEST(FirmwareFlashWrite, AShortSourceReadReportsWhereTheCardStoppedAnswering) {
+  // The incident: a card that fails mid-read during the write. The log said
+  // READ_FAIL and nothing else; the offset says how far the write got.
+  struct DyingSource : FakeSource {
+    using FakeSource::FakeSource;
+    int read(uint8_t* dst, size_t len) override {
+      if (pos >= 100 * 1024) return -1;
+      return FakeSource::read(dst, len);
+    }
+  };
+  DyingSource src(makeImage(200 * 1024));
+  FakeFlash flash(kPartition);
+  EXPECT_EQ(firmware_flash::writeImage(src, flash, nullptr, nullptr), Result::READ_FAIL);
+  EXPECT_EQ(firmware_flash::lastFailureOffset(), 100 * 1024);
 }
 
 TEST(FirmwareFlashWrite, VerifyCatchesATruncatedWrite) {
@@ -114,6 +133,7 @@ TEST(FirmwareFlashWrite, ReportsWriteFailure) {
   flash.failWriteAt = 64 * 1024;
 
   EXPECT_EQ(firmware_flash::writeImage(src, flash, nullptr, nullptr), Result::WRITE_FAIL);
+  EXPECT_EQ(firmware_flash::lastFailureOffset(), 64 * 1024);
 }
 
 TEST(FirmwareFlashWrite, RefusesAnImageLargerThanThePartition) {

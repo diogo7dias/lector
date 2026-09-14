@@ -4,6 +4,7 @@
 #include <I18n.h>
 #include <WiFi.h>
 
+#include "Diagnostics.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
@@ -266,6 +267,9 @@ void OtaUpdateActivity::enterFailed(const OtaUpdater::OtaUpdaterError error, con
     if (manualRetries > 0) retryLine = "Retry attempt " + std::to_string(manualRetries);
     state = FAILED;
   }
+  // Outside the render lock: this one writes the card.
+  diag::recordOtaFailure(step == FailedStep::CHECK ? "check" : "install", OtaUpdater::errorName(error),
+                         failedExtra.c_str());
   requestUpdate();
 }
 

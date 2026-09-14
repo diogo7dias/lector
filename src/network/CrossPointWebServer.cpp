@@ -16,6 +16,7 @@
 #include <cstring>
 
 #include "CrossPointSettings.h"
+#include "Diagnostics.h"
 #include "FetchUrlPolicy.h"
 #include "FontInstaller.h"
 #include "HttpDownloader.h"
@@ -833,6 +834,8 @@ void CrossPointWebServer::handleDownload() const {
   }
 
   String itemPath = normalizeWebPath(server->arg("path"));
+  // The diagnostics file is downloaded to be sent; make sure it is current.
+  if (itemPath == diag::kFilePath) diag::flush();
   if (itemPath.isEmpty() || itemPath == "/") {
     server->send(400, "text/plain", "Invalid path");
     return;

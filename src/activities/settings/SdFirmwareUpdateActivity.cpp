@@ -14,6 +14,7 @@
 #include "fontIds.h"
 #include "network/FirmwareFlasher.h"
 #include "network/FirmwareSwitchAudit.h"
+#include "network/FlashWriteVerify.h"
 
 void SdFirmwareUpdateActivity::onEnter() {
   UiStatusActivity::onEnter();
@@ -228,10 +229,17 @@ void SdFirmwareUpdateActivity::performUpdate() {
       hintMessage = "Use firmware for this device's chip";
     } else if (result == firmware_flash::Result::VERIFY_FAIL) {
       // The bytes in flash do not match the file. otadata was left alone, so
-      // the device still boots the firmware it is running now.
-      errorMessage = tr(STR_FIRMWARE_VERIFY_FAILED);
-      detailMessage = "Flash write mismatch; bytes not saved";
-      hintMessage = "Check SD card or try again";
+      // the device still boots the firmware it is running now. The offset goes
+      // on the panel with the code: it is the same line the diagnostics file
+      // carries, so a photo and the file can be matched, and byte 0 versus a
+      // block boundary versus the tail of the image are different faults.
+      errorMessage = std::string(tr(STR_FIRMWARE_VERIFY_FAILED)) + " (VERIFY_FAIL)";
+      char buf[64];
+      std::snprintf(buf, sizeof(buf), "Mismatch at byte %u (0x%X); bytes not saved",
+                    static_cast<unsigned>(firmware_flash::lastFailureOffset()),
+                    static_cast<unsigned>(firmware_flash::lastFailureOffset()));
+      detailMessage = buf;
+      hintMessage = "Check SD card, battery, or try again";
     } else {
       // The code goes on screen: on a USB-locked reader a photo of this screen
       // is often the only report we get, and "write failed" alone covers
