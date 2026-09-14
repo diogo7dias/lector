@@ -46,18 +46,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // favorite, pause or delete the image the lock screen last showed.
   std::string lastSleepWallpaperPath;
 
-  // Index into bootlogos::kAll of the crest the last logo sleep screen drew. Deep sleep
-  // is a chip reset, so the wake has no other way to know which one is on the panel; the
-  // unlock redraws that same crest instead of picking a fresh one, which would read as
-  // the screen changing on its own.
-  uint8_t lastBootLogo = 0;
-  // True when the last lock painted the crest face (lastBootLogo plus the pending wake
-  // book's banner) and nothing has been painted since. The wake can then rebuild that
-  // frame from flash and skip the clearing pass; see wake_face::wakeClearFor. Cleared
-  // by every boot that reads it, so a session cut short by the battery latch (page still
-  // on the glass, no lock) can never be mistaken for a crest.
-  bool sleepFaceCrest = false;
-
   // Sleep wallpaper index (/.crosspoint/sleep_index.bin) snapshot + rotation
   // cursor. The index file itself lives on SD; these scalars are all the RAM
   // the rotation ever holds. Snapshot halves detect folder changes at cold

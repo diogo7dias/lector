@@ -40,7 +40,6 @@
 #include "activities/Activity.h"
 #include "activities/ActivityManager.h"
 #include "activities/boot_sleep/PxcSleepRenderer.h"
-#include "activities/boot_sleep/SleepActivity.h"
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
@@ -222,8 +221,7 @@ void silentRestartToReader() {
   ESP.restart();
 }
 
-// Defined below setup()'s helpers; the sleep path needs it to choose the book the
-// Light sleep screen names, which happens before the wake ever runs.
+// Defined below setup()'s helpers.
 static std::string pickRandomRecentBookPath();
 static std::string pickBootBookPath();
 
@@ -256,15 +254,9 @@ void enterDeepSleep(bool fromTimeout = false) {
   unsigned long sleepTWifi = sleepT0;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
+  // Only the retired crest face ever named the wake's book on the sleep screen; no face
+  // sets this any more, and a stale one from an older build must not force a wake.
   APP_STATE.pendingWakeBookPath.clear();
-  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT) {
-    // Off names the book that is already open; the other two name the book their own
-    // pick returns. A mode that finds nothing to open deliberately names nothing: falling
-    // back to the last book here would force the wake into a book the ordinary routing
-    // would have skipped.
-    APP_STATE.pendingWakeBookPath =
-        SETTINGS.bootBookMode == CrossPointSettings::BOOT_BOOK_OFF ? APP_STATE.openEpubPath : pickBootBookPath();
-  }
 
   // ponytail: no save here. persistAntiGhostBudget() below writes APP_STATE after the paint,
   // and a JSON rewrite per lock stage was two redundant SD writes on every lock.
@@ -592,10 +584,6 @@ void setup() {
   // device used in short sessions never reaches the full discharge and ghosts forever.
   display.seedFastRefreshesSinceFull(APP_STATE.fastRefreshesSinceFull);
   display.seedInkDebt(APP_STATE.inkDebt);
-  // Read once and consumed: whatever this boot paints next, the crest is no longer what
-  // the glass holds. Written back with the other wake flags below.
-  const bool crestOnGlass = APP_STATE.sleepFaceCrest;
-  APP_STATE.sleepFaceCrest = false;
   RECENT_BOOKS.loadFromFile();
   // One-time upgrade: books read before the reading badges existed have a percentage in
   // the recents list and no marker beside their cache. Seeding costs at most thirteen
@@ -686,12 +674,13 @@ void setup() {
   setupDisplay(resume != BootResume::Splash || paintedFaceWake);
   setupBuiltinFonts();
 
-  // How the painted sleep face leaves the glass; see wake_face::wakeClearFor.
+  // How the page gets over the painted sleep face; see wake_face::wakeClearFor.
   //
-  // Differential: the lock painted the crest, so redraw that exact frame from flash and
-  // hand it to the controller as the "old" plane. No pass runs here at all; the reader's
-  // own first FAST drives only the pixels that differ, exactly like a page turn. One
-  // submission instead of a clearing pass plus a paint — 1809 ms less on an X4.
+  // DriveAll: no pass runs here at all. The reader's own first FAST is asked to drive
+  // every pixel, so the wallpaper (or cover, or whatever the lock painted) is driven out
+  // by the same ~505 ms waveform that draws the page. One submission instead of a
+  // clearing pass plus a paint: 1809 ms less on an X4. The X3 driver promotes that first
+  // paint to its ~710 ms half scrub on its own.
   //
   // Blank: a FULL request over a blanked framebuffer, started NOW so the panel drives it
   // while the settle window, the SD font load and the reader's book load all run
@@ -702,19 +691,16 @@ void setup() {
   // Only when no banners are wanted. The banner names the book this wake is about to
   // open, and that pick reads recoveryFirmwareMode, which the settle below is what
   // decides. With banners on, the blank stays where it was, in the block further down.
+  const wake_face::WakeClear wakeClear =
+      paintedFaceWake ? wake_face::wakeClearFor(SETTINGS.fastUnlock != 0, SETTINGS.wakeStraightToBook != 0)
+                      : wake_face::WakeClear::Blank;
   bool asyncBlankInFlight = false;
-  bool baselineSeeded = false;
-  bool sdFontsUp = false;
+  bool driveAllArmed = false;
   if (paintedFaceWake && SETTINGS.wakeStraightToBook) {
-    switch (wake_face::wakeClearFor(SETTINGS.fastUnlock != 0, crestOnGlass, /*straightToBook=*/true)) {
-      case wake_face::WakeClear::Differential:
-        // SD families first: the lock drew the crest with their CJK UI fallbacks bound,
-        // and the redraw must produce the same pixels. Nothing overlaps on this path.
-        sdFontSystem.begin(renderer);
-        sdFontsUp = true;
-        SleepActivity::drawCrestFace(renderer, APP_STATE.lastBootLogo, pendingWakeBookPath);
-        display.seedDifferentialBaseline();
-        baselineSeeded = true;
+    switch (wakeClear) {
+      case wake_face::WakeClear::DriveAll:
+        display.driveAllPixelsNextFast();
+        driveAllArmed = true;
         break;
       case wake_face::WakeClear::Blank:
         renderer.clearScreen();
@@ -725,7 +711,7 @@ void setup() {
   }
   // SD card families after the blank is in flight, so a family read off the card
   // (seconds for a CJK one) costs that wake nothing.
-  if (!sdFontsUp) sdFontSystem.begin(renderer);
+  sdFontSystem.begin(renderer);
   LOG_DBG("MAIN", "Fonts setup");
   WakeTiming::mark(WakeTiming::Stage::DisplayReady);
 
@@ -766,8 +752,7 @@ void setup() {
     if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
   }
 
-  // The crest marker was consumed above and is written back false with the same save.
-  const bool oneShotWakeFlagsSet = !APP_STATE.pendingWakeBookPath.empty() || crestOnGlass;
+  const bool oneShotWakeFlagsSet = !APP_STATE.pendingWakeBookPath.empty();
   APP_STATE.pendingWakeBookPath.clear();
 
   switch (resume) {
@@ -790,18 +775,18 @@ void setup() {
       // differential waveform only drives the pixels that changed relative to what the
       // controller believes is on the glass — paint a page straight over an unknown face
       // and the face stays in the page, which is exactly what the first build of this
-      // path did (device photo, 0.15.0). The one exception is the crest face, whose
-      // pixels the firmware can reproduce and hand to the controller as the previous
-      // frame; that case was settled above (baselineSeeded) and skips this block.
+      // path did (device photo, 0.15.0). The drive-all wake armed above (driveAllArmed)
+      // is the other answer to that: it makes the first FAST drive every pixel, and
+      // skips this block.
       //
       // The blank also doubles as the loading face when the banners are off: the screen
       // goes blank the moment the wake starts, while the button is still held, so there IS
       // a visible answer to the press before the page arrives.
       if (paintedFaceWake) {
-        if (asyncBlankInFlight || baselineSeeded) {
+        if (asyncBlankInFlight || driveAllArmed) {
           // Blank: issued before the settle window and still running; the reader loads
           // its font and book underneath it and waits only when it is about to draw.
-          // Seeded: nothing is running, the reader's first FAST is the whole wake.
+          // DriveAll: nothing is running, the reader's first FAST is the whole wake.
           allowFastInitialReaderRefresh = true;
           break;
         }
@@ -865,6 +850,8 @@ void setup() {
   const wake_route::Route forcedRoute = (recoveryFirmwareMode || rebootedFromPanic || resume == BootResume::Silent)
                                             ? wake_route::Route::Unchanged
                                             : wake_route::resolve(wakeInputs);
+  // Whether the reader's first page turn has to clean up after a drive-all first paint.
+  const bool firstTurnCleans = driveAllArmed && wake_face::firstPageTurnCleans(wakeClear, gpio.deviceIsX3());
 
   if (oneShotWakeFlagsSet) APP_STATE.saveToFile();
 
@@ -897,7 +884,7 @@ void setup() {
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
-    activityManager.goToReader(path, allowFastInitialReaderRefresh);
+    activityManager.goToReader(path, allowFastInitialReaderRefresh, firstTurnCleans);
   } else if (forcedRoute == wake_route::Route::ForceHome) {
     renderer.waitRefreshComplete();
     activityManager.goHome(HomeMenuItem::NONE);
@@ -931,7 +918,7 @@ void setup() {
     APP_STATE.openEpubPath = "";
     APP_STATE.readerActivityLoadCount++;
     APP_STATE.saveToFile();
-    activityManager.goToReader(path, allowFastInitialReaderRefresh);
+    activityManager.goToReader(path, allowFastInitialReaderRefresh, firstTurnCleans);
   }
 
   WakeTiming::mark(WakeTiming::Stage::ActivityUp);

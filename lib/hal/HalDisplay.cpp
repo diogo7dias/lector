@@ -315,7 +315,7 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
-void HalDisplay::seedDifferentialBaseline() { einkDisplay.cleanupGrayscaleBuffers(einkDisplay.getFrameBuffer()); }
+void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
 
 // The grayscale planes go straight to the driver: there is no refresh mode to choose,
 // the waveform is the gray nudge. They still drive the panel and still leave charge, so

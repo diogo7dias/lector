@@ -34,11 +34,6 @@ void drawBanners(GfxRenderer& renderer, bool withFooter);
 
 void setUnlockBannerBookPath(const std::string& path) { bannerBookPathOverride = path; }
 
-// The top banner alone: version plus the book being resumed. Split out of
-// drawUnlockBanners() for the Light sleep face, which names the book it is about to
-// open but has no use for the footer band at the bottom of a sleeping screen.
-void drawUnlockBannerTop(GfxRenderer& renderer) { drawBanners(renderer, /*withFooter=*/false); }
-
 void drawUnlockBanners(GfxRenderer& renderer) { drawBanners(renderer, /*withFooter=*/true); }
 
 namespace {

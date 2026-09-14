@@ -74,10 +74,8 @@ the normal half-second hold, and the double-click action works as bound.
 
 To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
 
-Boot and the plain sleep screen show one of six engraved crests between the two banners,
-picked at random each time the device sleeps. Waking does not redraw it: the unlock clears
-the panel in one pass and goes straight to the screen you asked for, so no crest sits
-between the button press and the page.
+Boot shows the name "Lector" between the two banners. Waking never redraws the sleep
+screen: the unlock goes straight to the screen you asked for.
 
 ### Battery
 
@@ -98,9 +96,10 @@ from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while a
 without stopping at any other screen.
 
 **Fast Unlock** (Display settings, on by default) shortens the wait for the recovery button
-chord at wake and, when the sleep screen is the crest, paints the page straight over it
-instead of clearing the screen first. Turn it off if a wake ever lands in the recovery
-firmware picker by itself, or if a faint crest stays visible in the page after a wake.
+chord at wake and paints the page straight over the sleep screen in one pass instead of
+clearing the screen first; the first page turn after a wake then runs the clean pass. Turn
+it off if a wake ever lands in the recovery firmware picker by itself, or if a faint
+wallpaper stays visible in the first page after a wake.
 
 ### First launch
 
@@ -366,18 +365,14 @@ screen can show a stats dashboard.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Light          | A crest on a white background, picked at random from six, with a banner naming the book that waking will open. |
-| Custom         | A wallpaper from the SD card. Falls back to Light when none is found.             |
-| Cover          | The open book's cover. Falls back to Light when no book is open.                  |
+| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen reading "Lector". |
+| Cover          | The open book's cover. With no book open, the white "Lector" screen.              |
 | Cover + Custom | The cover while you are reading, a custom wallpaper otherwise.                    |
 | Stats Dashboard| Your reading statistics.                                                          |
 | Transparent    | A BMP or PNG overlay drawn on top of whatever the screen was showing.             |
 
-On **Light**, waking always opens the book the sleep screen named, even when you locked
-from the home menu. The book it names is chosen when the device goes to sleep, so the name
-on the sleep screen is always the book you get.
-
-Previously saved Quick Resume selections now use Light. Inactivity uses your selected sleep screen.
+Custom is the default. Previously saved Light (the crest) and Quick Resume selections now
+use Custom. Inactivity uses your selected sleep screen.
 
 ### Wallpaper files
 
@@ -755,10 +750,10 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Stats
+- **Sleep Screen** — Custom, Cover, Cover + Custom, Stats, Transparent
   Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Wake Straight to Book** — wake goes straight back into the book.
-- **Fast Unlock** — shorter recovery-chord wait at wake, and no clearing pass over the crest sleep screen. Off if a wake lands in the recovery picker by itself or the crest ghosts into the page.
+- **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 
 **Wallpaper**

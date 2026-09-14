@@ -36,6 +36,10 @@ bool ReaderActivity::isImageFile(const std::string& path) {
 
 int ReaderActivity::initialRefreshCountdown() const {
   if (!allowFastInitialRefresh) return 0;
+  // 2 = the first paint is a FAST, the very next page turn is the clean pass: after a
+  // drive-all wake whatever the short waveform left of the sleep face is gone with the
+  // first turn (displayWithRefreshCycle cleans at <= 1).
+  if (firstTurnCleans) return 2;
 
   const int refreshFrequency = SETTINGS.getRefreshFrequency();
   return refreshFrequency > 1 ? refreshFrequency : 2;

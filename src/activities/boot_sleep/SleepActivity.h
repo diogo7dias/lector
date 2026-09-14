@@ -12,13 +12,6 @@ class SleepActivity final : public Activity {
       : Activity("Sleep", renderer, mappedInput), fromTimeout(fromTimeout) {}
   void onEnter() override;
 
-  // The crest face, exactly as the lock paints it: white page, the crest at logoIndex,
-  // the Sleeping line, and the top unlock banner when wakeBookPath names a book. Shared
-  // with the wake, which redraws this same frame to seed the panel's differential
-  // baseline (see wake_face::wakeClearFor) — the two must stay pixel-identical, so
-  // neither side draws it any other way. Draws into the framebuffer only; no refresh.
-  static void drawCrestFace(GfxRenderer& renderer, uint8_t logoIndex, const std::string& wakeBookPath);
-
  private:
   // Everything onEnter() does apart from bookkeeping. Split out so onEnter() can wrap it
   // and record which wallpaper (if any) ended up on the panel; the render functions
@@ -28,11 +21,8 @@ class SleepActivity final : public Activity {
   // does not ghost through it. See the definition for why nothing else provides it.
   // Keeps the page already on the panel and adds a thin border. Must not be preceded
   // by the popup or the deep clean.
-  // darkBackground: the crest screen normally inverts, which is what Dark (and every
-  // mode that falls back to it) asks for. The transparent-overlay fallback passes false:
-  // that mode never asked for a dark screen, it asked for a picture over the page.
-  // The polarity the sleep-screen setting implies, for the callers that fall back to the
-  // crest screen because their own artwork was missing.
+  // The Lector fallback: white page, the name centred. Every face that finds nothing to
+  // show (no wallpaper, no cover, a decode that failed) lands here.
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
   void renderCoverSleepScreen() const;

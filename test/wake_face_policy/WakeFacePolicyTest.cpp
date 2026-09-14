@@ -3,14 +3,17 @@
 
 #include "sleep/WakeFacePolicy.h"
 
-TEST(WakeFacePolicy, RetiredSelectionsBecomeLightWithoutRenumberingOtherFaces) {
-  EXPECT_EQ(wake_face::migrateSleepScreen(6), 1);  // saved Quick Resume -> Light
+TEST(WakeFacePolicy, RetiredSelectionsBecomeWallpaperWithoutRenumberingOtherFaces) {
+  EXPECT_EQ(wake_face::migrateSleepScreen(1), 2);  // Light (the crest) -> Custom wallpaper
+  EXPECT_EQ(wake_face::migrateSleepScreen(6), 2);  // saved Quick Resume -> Custom
   EXPECT_EQ(wake_face::migrateSleepScreen(2), 2);  // Custom stays Custom
+  EXPECT_EQ(wake_face::migrateSleepScreen(3), 3);  // Cover stays Cover
+  EXPECT_EQ(wake_face::migrateSleepScreen(4), 4);  // Cover + Custom keeps its ID
   EXPECT_EQ(wake_face::migrateSleepScreen(7), 7);  // Stats keeps its persisted ID
   EXPECT_EQ(wake_face::migrateSleepScreen(9), 9);  // Transparent keeps its persisted ID
-  EXPECT_EQ(wake_face::migrateSleepScreen(0), 1);  // older retired Dark
-  EXPECT_EQ(wake_face::migrateSleepScreen(5), 1);  // older retired Blank
-  EXPECT_EQ(wake_face::migrateSleepScreen(8), 1);  // older retired Freeze
+  EXPECT_EQ(wake_face::migrateSleepScreen(0), 2);  // older retired Dark
+  EXPECT_EQ(wake_face::migrateSleepScreen(5), 2);  // older retired Blank
+  EXPECT_EQ(wake_face::migrateSleepScreen(8), 2);  // older retired Freeze
 }
 
 TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {
@@ -20,17 +23,23 @@ TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {
   EXPECT_EQ(wake_face::inputSettleMs(true, false), 20ul);
 }
 
-TEST(WakeFacePolicy, DifferentialWakeOnlyForTheCrestFaceWithFastUnlockAndNoBanners) {
+TEST(WakeFacePolicy, DriveAllWakeOnlyWithFastUnlockAndNoBanners) {
   using wake_face::WakeClear;
   using wake_face::wakeClearFor;
-  EXPECT_EQ(wakeClearFor(true, true, true), WakeClear::Differential);
-  // A wallpaper, cover, stats or overlay face is arbitrary content: keep the clearing pass.
-  EXPECT_EQ(wakeClearFor(true, false, true), WakeClear::Blank);
-  // Fast Unlock off restores the clearing pass even on the crest face.
-  EXPECT_EQ(wakeClearFor(false, true, true), WakeClear::Blank);
+  EXPECT_EQ(wakeClearFor(true, true), WakeClear::DriveAll);
+  // Fast Unlock off restores the clearing pass.
+  EXPECT_EQ(wakeClearFor(false, true), WakeClear::Blank);
   // Banners wanted: their blocking pass stays.
-  EXPECT_EQ(wakeClearFor(true, true, false), WakeClear::Blank);
-  EXPECT_EQ(wakeClearFor(false, false, false), WakeClear::Blank);
+  EXPECT_EQ(wakeClearFor(true, false), WakeClear::Blank);
+  EXPECT_EQ(wakeClearFor(false, false), WakeClear::Blank);
+}
+
+TEST(WakeFacePolicy, FirstPageTurnCleansAfterADriveAllWakeExceptOnTheX3) {
+  using wake_face::WakeClear;
+  EXPECT_TRUE(wake_face::firstPageTurnCleans(WakeClear::DriveAll, false));
+  EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::DriveAll, true));  // X3 first paint was the scrub
+  EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::Blank, false));    // the blank already cleaned
+  EXPECT_FALSE(wake_face::firstPageTurnCleans(WakeClear::Blank, true));
 }
 
 TEST(WakeFacePolicy, WakePanelCaptureStopsAtReadableAndBoundsOutput) {

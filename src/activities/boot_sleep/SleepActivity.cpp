@@ -33,7 +33,6 @@
 #include "components/UnlockBanners.h"
 #include "dev/LockLab.h"
 #include "fontIds.h"
-#include "images/BootLogos.h"
 #include "reading_stats/ReaderStatsSession.h"
 #include "reading_stats/ReadingStatsClock.h"
 #include "reading_stats/ReadingStatsStore.h"
@@ -676,9 +675,6 @@ void SleepActivity::onEnter() {
   // so a second write of the same state only slowed the lock.
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
-  // Same idea for the crest: only renderDefaultSleepScreen() sets it, so any face that
-  // paints something else — or fails partway through — leaves the wake on the safe path.
-  APP_STATE.sleepFaceCrest = false;
 
   renderSleepScreen();
   SleepTiming::mark("face");
@@ -707,11 +703,10 @@ void SleepActivity::renderSleepScreen() const {
 
   // Show popup with reader orientation only when going to sleep from reader.
   // The popup is one extra panel refresh per lock. Faces that read the card (wallpaper,
-  // cover, stats) can take seconds and want the note; the blank face and the default
-  // crest paint from flash within the same refresh budget as the popup itself, so on
-  // those the note would only make the lock slower.
-  const bool faceIsQuick = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK ||
-                           SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::LIGHT;
+  // cover, stats) can take seconds and want the note; the retired blank face painted
+  // from flash within the same refresh budget as the popup itself, so there the note
+  // would only make the lock slower.
+  const bool faceIsQuick = SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::BLANK;
   if (!faceIsQuick) {
     if (APP_STATE.lastSleepFromReader) {
       ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
@@ -746,7 +741,7 @@ void SleepActivity::renderSleepScreen() const {
   // Every lock is two panel submissions on every device. For the faces above the popup
   // was the first and the face the second; the quick faces skipped the popup, so their
   // frame goes to the panel once more in the mode it was painted with. Only here, not
-  // inside the face renderers: the crest is also the fallback face after a popup, and
+  // inside the face renderers: the Lector fallback is also the face after a popup, and
   // there it is already the second submission.
   if (faceIsQuick) renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
@@ -1128,6 +1123,9 @@ void SleepActivity::renderCustomSleepScreen() const {
   }
   if (dir) dir.close();
 
+  // No wallpaper to show. The open book's cover is the next best face; Cover + Custom
+  // arrives here from the cover path already, so it goes straight to the fallback.
+  if (SETTINGS.sleepScreen == CrossPointSettings::SLEEP_SCREEN_MODE::CUSTOM) return renderCoverSleepScreen();
   renderDefaultSleepScreen();
 }
 
@@ -1135,37 +1133,14 @@ void SleepActivity::renderCustomSleepScreen() const {
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
 // waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
-// Every mode except Light wants the crest inverted, including the ones that land here
-// because their own artwork was missing (a Custom wallpaper with no file, Cover with no
-// book). The transparent-overlay fallback is the exception and asks for light explicitly.
-void SleepActivity::drawCrestFace(GfxRenderer& renderer, const uint8_t logoIndex, const std::string& wakeBookPath) {
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-
-  renderer.clearScreen();
-  const int logoSize = bootlogos::kLogoSize;
-  const int logoY = (pageHeight - logoSize) / 2 - 20;
-  renderer.drawImage(bootlogos::byIndex(logoIndex), (pageWidth - logoSize) / 2, logoY, logoSize, logoSize);
-  renderer.drawCenteredText(UI_10_FONT_ID, logoY + logoSize + 12, tr(STR_SLEEPING));
-
-  // The book this sleep is guarding: the wake opens it, so the sleeping screen says
-  // which one, in the same banner the unlock screen uses. enterDeepSleep() chose the
-  // path (the pick made by "Open Book on Boot") before this ran, so
-  // the name here and the book the wake opens are the same book by construction.
-  if (!wakeBookPath.empty()) {
-    setUnlockBannerBookPath(wakeBookPath);
-    drawUnlockBannerTop(renderer);
-  }
-}
-
+//
+// The Lector fallback: a white page with the name centred, in the one UI face. Reached
+// only when no wallpaper and no cover could be shown (no files, no open book, a decode
+// that failed partway). Every face that fails lands here.
 void SleepActivity::renderDefaultSleepScreen() const {
-  // A crest per sleep, recorded so the wake can redraw the same one (see BootActivity and
-  // the differential wake in main.cpp). enterDeepSleep() saves APP_STATE after this runs,
-  // so the index and the marker survive the reset.
-  APP_STATE.lastBootLogo = bootlogos::randomIndex();
-  drawCrestFace(renderer, APP_STATE.lastBootLogo, APP_STATE.pendingWakeBookPath);
-  APP_STATE.sleepFaceCrest = true;
-
+  renderer.clearScreen();
+  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+  renderer.drawCenteredText(UI_10_FONT_ID, (renderer.getScreenHeight() - lineHeight) / 2, tr(STR_LECTOR));
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
@@ -1324,9 +1299,6 @@ void SleepActivity::renderTransparentCustomSleepScreen() const {
   // reads as "sleep did nothing", so fall back to a real sleep face. renderDefaultSleepScreen
   // clears the buffer and paints a HALF over it, which is the whole screen, so the page
   // goes with it and no separate clean is needed.
-  // The crest face is light for every mode now (Dark is retired), which is also what
-  // this fallback always wanted: the mode asked for a picture over a light page, and the
-  // old settings-derived polarity used to invert it into white-on-black here.
   LOG_ERR("SLP", "No valid transparent sleep overlay found");
   renderDefaultSleepScreen();
 }

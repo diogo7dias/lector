@@ -47,10 +47,12 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
  public:
   enum SLEEP_SCREEN_MODE {
-    // RETIRED (2026-08-19, Diogo): the crest sleep face is light only now. The slot stays
-    // so every value after it keeps its meaning, and fromJson() migrates a stored 0 to
-    // LIGHT. Re-offering it means restoring the invert in renderDefaultSleepScreen().
+    // RETIRED (2026-08-19, Diogo): the dark crest. Slot kept so later values keep their
+    // meaning; fromJson() migrates it to CUSTOM.
     DARK = 0,
+    // RETIRED (2026-09-14, Diogo): the crest face itself. Wallpapers are the sleep screen;
+    // the only flash-drawn face left is the Lector fallback in renderDefaultSleepScreen(),
+    // reached when no wallpaper and no cover can be shown. fromJson() migrates to CUSTOM.
     LIGHT = 1,
     CUSTOM = 2,
     COVER = 3,
@@ -339,7 +341,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum PARAGRAPH_NUMBER_SIZE { PARA_NUM_SIZE_SMALL = 0, PARA_NUM_SIZE_DOUBLE = 1, PARAGRAPH_NUMBER_SIZE_COUNT };
 
   // Sleep screen settings
-  uint8_t sleepScreen = LIGHT;
+  uint8_t sleepScreen = CUSTOM;
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;
