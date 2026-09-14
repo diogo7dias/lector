@@ -397,8 +397,9 @@ void ActivityManager::goToBrowser() {
   }
 }
 
-void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh) {
-  replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh));
+void ActivityManager::goToReader(std::string path, const bool allowFastInitialRefresh, const bool firstTurnCleans) {
+  replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), allowFastInitialRefresh,
+                                                   firstTurnCleans));
 }
 
 void ActivityManager::goToSleep(bool fromTimeout) {

@@ -47,31 +47,31 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
  public:
   enum SLEEP_SCREEN_MODE {
-    // RETIRED (2026-08-19, Diogo): the crest sleep face is light only now. The slot stays
-    // so every value after it keeps its meaning, and fromJson() migrates a stored 0 to
-    // LIGHT. Re-offering it means restoring the invert in renderDefaultSleepScreen().
+    // RETIRED (2026-08-19, Diogo): the dark crest. Slot kept so later values keep their
+    // meaning; fromJson() migrates it to CUSTOM.
     DARK = 0,
+    // RETIRED (2026-09-14, Diogo): the crest face itself. Wallpapers are the sleep screen;
+    // the only flash-drawn face left is the Lector fallback in renderDefaultSleepScreen(),
+    // reached when no wallpaper and no cover can be shown. fromJson() migrates to CUSTOM.
     LIGHT = 1,
     CUSTOM = 2,
     COVER = 3,
+    // RETIRED (2026-09-14, Diogo): the cover while reading, a wallpaper otherwise. Custom
+    // now falls back to the cover on its own. fromJson() migrates to CUSTOM.
     COVER_CUSTOM = 4,
     // RETIRED: no longer offered in Settings, and fromJson() migrates a stored 5 to DARK.
     // The slot stays so every value after it keeps its meaning; renderBlankSleepScreen()
     // and its switch case stay too, so re-offering it is a one-line change.
     BLANK = 5,
     QUICK_RESUME = 6,  // Retired: migrate to LIGHT; keep persisted numbering.
-    // Appended at the end: the stored value is the persisted setting, so new faces
-    // must never be inserted before an existing one.
+    // RETIRED (2026-09-14, Diogo): the reading-stats dashboard. fromJson() migrates to
+    // CUSTOM. Slot kept for the values after it.
     STATS_DASHBOARD = 7,
     // RETIRED (2026-08-11, Diogo): kept the last reader page and drew a frame around it,
-    // except the frame never appeared on the device. All of its behaviour is deleted —
-    // the renderer, the frame-colour setting, and its branch in enterDeepSleep. The slot
-    // stays reserved so the values around it keep their meaning, and fromJson() migrates
-    // a stored 8 to DARK.
+    // except the frame never appeared on the device. fromJson() migrates to CUSTOM.
     FREEZE = 8,
-    // Draws an alpha overlay over whatever the panel is already holding, instead of
-    // replacing it. Upstream (#2937) gave this slot 7; here 7 is already STATS_DASHBOARD,
-    // so it is appended after FREEZE — the stored value is the persisted setting.
+    // RETIRED (2026-09-14, Diogo): an alpha overlay over whatever the panel held.
+    // fromJson() migrates to CUSTOM.
     TRANSPARENT_CUSTOM = 9,
     SLEEP_SCREEN_MODE_COUNT
   };
@@ -339,7 +339,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   enum PARAGRAPH_NUMBER_SIZE { PARA_NUM_SIZE_SMALL = 0, PARA_NUM_SIZE_DOUBLE = 1, PARAGRAPH_NUMBER_SIZE_COUNT };
 
   // Sleep screen settings
-  uint8_t sleepScreen = LIGHT;
+  uint8_t sleepScreen = CUSTOM;
   // Night mode: inverted output polarity on the reading surfaces only
   // (resolved per render by ActivityManager via Activity::appliesNightMode).
   uint8_t screenInverted = 0;

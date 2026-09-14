@@ -46,6 +46,11 @@ void BusyBanner::showNow() {
   if (drawn) return;
   drawn = true;
 
+  // A wake's clearing pass may still be running on the panel while the reader loads its
+  // font and book underneath it; the framebuffer is off limits until it completes.
+  // No-op when nothing is in flight.
+  renderer.waitRefreshComplete();
+
   // The same strip every popup uses, so a wait and a result read as one surface.
   // Opaque, because it lands on top of whatever screen the user was looking at.
   GUI.drawBannerStrip(renderer, text);

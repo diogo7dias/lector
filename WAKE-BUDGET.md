@@ -2,6 +2,25 @@
 > Existing Quick Resume selections migrate to Light. The Quick Resume budget and
 > guarded experiment below are historical; ordinary-wake timings still apply.
 
+## 0.31.5+ (perf/unlock-real): no clearing pass on the wake
+
+The wake's FULL blank (710 ms X3 / 1809 ms X4, then the reader's FAST on top) is gone
+with Fast Unlock on. `HalDisplay::driveAllPixelsNextFast()` asks the panel driver to
+make the reader's first FAST drive every pixel (old plane written as the target's
+complement, the mechanism night mode already used on every driver; the SSD1677 skips
+its boot-time clean promotion for that pass). Whatever the lock painted — wallpaper,
+cover, the Lector fallback — is driven out by the ~505 ms waveform that draws the page,
+one submission per wake; the X3 driver promotes that first paint to its ~710 ms half
+scrub regardless. The reader's first page turn then runs the clean pass on the boards
+that ran the differential (`wake_face::firstPageTurnCleans`), so residue of a dense
+wallpaper lives on one page at most. Policy is `wake_face::wakeClearFor`, host-tested.
+With Fast Unlock off the blank stays, and the SD font load and the book load run
+underneath it (waits sit in front of the first draw: BusyBanner, the framebuffer loan,
+ReaderActivity). The 250 ms serial delay is also skipped on `ESP_RST_POWERON`: every X4
+unlock is one, because its lock drops the battery latch. The crest sleep face is
+deleted; wallpapers are the sleep screen, cover then a white "Lector" page the fallbacks.
+Hardware still has to confirm what the drive-all FAST leaves of a wallpaper.
+
 # Wake budget — phase 1, before code changes
 
 Baseline: `46171d938`, branch `perf/unlock-2s`. No attached device; no new

@@ -118,6 +118,13 @@ class HalDisplay {
   void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
 
+  // The next FAST drives every pixel toward its target instead of only the pixels that
+  // differ from the controller's old plane. For the first paint after a wake, when the
+  // panel holds a sleep face the firmware cannot reconstruct: what is on the glass no
+  // longer matters, and the page still costs one differential pass rather than a
+  // clearing pass plus a paint. See PanelDriver::requestDriveAllNextFast.
+  void driveAllPixelsNextFast();
+
   void displayGrayBuffer(bool turnOffScreen = false);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)

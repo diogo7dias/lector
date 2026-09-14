@@ -74,10 +74,8 @@ the normal half-second hold, and the double-click action works as bound.
 
 To reboot, press and release **Reset**, then press and hold **Power** for a few seconds.
 
-Boot and the plain sleep screen show one of six engraved crests between the two banners,
-picked at random each time the device sleeps. Waking does not redraw it: the unlock clears
-the panel in one pass and goes straight to the screen you asked for, so no crest sits
-between the button press and the page.
+Boot shows the name "Lector" between the two banners. Waking never redraws the sleep
+screen: the unlock goes straight to the screen you asked for.
 
 ### Battery
 
@@ -98,7 +96,10 @@ from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while a
 without stopping at any other screen.
 
 **Fast Unlock** (Display settings, on by default) shortens the wait for the recovery button
-chord at wake. Turn it off if a wake ever lands in the recovery firmware picker by itself.
+chord at wake and paints the page straight over the sleep screen in one pass instead of
+clearing the screen first; the first page turn after a wake then runs the clean pass. Turn
+it off if a wake ever lands in the recovery firmware picker by itself, or if a faint
+wallpaper stays visible in the first page after a wake.
 
 ### First launch
 
@@ -353,8 +354,7 @@ device.
 
 With **Settings > System > Track Reading Stats** on, Lector records reading time and pages.
 **Reading Idle Limit** sets how long a page can sit untouched before that time stops counting.
-Stats are visible from the Home screen and per book from the in-book menu, and the sleep
-screen can show a stats dashboard.
+Stats are visible from the Home screen and per book from the in-book menu.
 
 ---
 
@@ -364,18 +364,12 @@ screen can show a stats dashboard.
 
 | Mode           | Behaviour                                                                        |
 | -------------- | -------------------------------------------------------------------------------- |
-| Light          | A crest on a white background, picked at random from six, with a banner naming the book that waking will open. |
-| Custom         | A wallpaper from the SD card. Falls back to Light when none is found.             |
-| Cover          | The open book's cover. Falls back to Light when no book is open.                  |
-| Cover + Custom | The cover while you are reading, a custom wallpaper otherwise.                    |
-| Stats Dashboard| Your reading statistics.                                                          |
-| Transparent    | A BMP or PNG overlay drawn on top of whatever the screen was showing.             |
+| Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen reading "Lector". |
+| Cover          | The open book's cover. With no book open, the white "Lector" screen.              |
 
-On **Light**, waking always opens the book the sleep screen named, even when you locked
-from the home menu. The book it names is chosen when the device goes to sleep, so the name
-on the sleep screen is always the book you get.
-
-Previously saved Quick Resume selections now use Light. Inactivity uses your selected sleep screen.
+Custom is the default. Every sleep screen an earlier build offered (Light, Cover + Custom,
+Stats Dashboard, Transparent, Quick Resume) now uses Custom. Inactivity uses your selected
+sleep screen.
 
 ### Wallpaper files
 
@@ -400,25 +394,12 @@ text). **Sleep Image Quality** trades rendering time against how the image looks
 
 ### Cover settings
 
-For **Cover** and **Cover + Custom**:
+For **Cover**, and for the cover Custom falls back to:
 
 - **Sleep Screen Cover Mode** — **Fit** (scaled to fit, white borders) or **Crop** (scaled and
   cropped to fill).
 - **Sleep Screen Cover Filter** — **None** (grayscale), **Contrast** (black and white) or
   **Inverted**.
-
-### Transparent overlays
-
-Overlays are drawn over the current screen instead of replacing it, so they need an alpha
-channel: a PNG, or a 32-bit BGRA BMP. In a regular BMP, white is treated as transparent.
-
-- **A folder of overlays:** `/.sleep-overlay`, or `/sleep-overlay`.
-- **A single overlay:** `/sleep-overlay.bmp` or `/sleep-overlay.png` in the root. A root BMP
-  wins over a root PNG, and both win over the folders.
-
-> [!NOTE]
-> `.pxc` cannot be an overlay. The format is already quantised to four opaque levels and
-> carries no alpha channel.
 
 ---
 
@@ -753,10 +734,9 @@ belongs to, so the rows here appear in the same order as on the device.
 
 **Sleep screen**
 
-- **Sleep Screen** — Light, Custom, Cover, Cover + Custom, Stats
-  Dashboard, Transparent. See [section 8](#8-sleep-screen-and-wallpapers).
+- **Sleep Screen** — Custom, Cover. See [section 8](#8-sleep-screen-and-wallpapers).
 - **Wake Straight to Book** — wake goes straight back into the book.
-- **Fast Unlock** — shorter recovery-chord wait at wake. Off if a wake lands in the recovery picker by itself.
+- **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 
 **Wallpaper**
