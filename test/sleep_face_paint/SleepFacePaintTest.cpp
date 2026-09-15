@@ -134,8 +134,13 @@ TEST(SleepFacePaint, TheX3GrayscaleBaseIsHalf) {
   EXPECT_EQ(planFor(Face::Wallpaper, /*sourceHasGrayscale=*/true, uc8279X3()).base, HalDisplay::HALF_REFRESH);
 }
 
-TEST(SleepFacePaint, TheX4ProGrayscaleBaseIsHalf) {
-  EXPECT_EQ(planFor(Face::Wallpaper, /*sourceHasGrayscale=*/true, ssd1677X4Pro()).base, HalDisplay::HALF_REFRESH);
+// The X4 Pro's SSD1677 has no requestResync() path, so its grayscale base never gets the
+// clean slate HalDisplay.cpp:290 gives the X3, and the previous frame ghosts under the
+// wallpaper. FULL is the nearest approximation available on this controller. Trade: the
+// multi-flash waveform blinks more at lock. Revert to HALF here and in
+// sleepGrayscaleBaseRefresh together if the blinking is judged worse than the ghosting.
+TEST(SleepFacePaint, TheX4ProGrayscaleBaseIsFull) {
+  EXPECT_EQ(planFor(Face::Wallpaper, /*sourceHasGrayscale=*/true, ssd1677X4Pro()).base, HalDisplay::FULL_REFRESH);
 }
 
 // ---------------------------------------------------------------------------
