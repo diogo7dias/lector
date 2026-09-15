@@ -15,6 +15,11 @@
 #include "network/OtaUpdater.h"
 #include "network/TlsScratchHeap.h"
 
+// Hold after requestUpdateAndWait() so the success screen is readable. That wait
+// already finished the blocking e-ink refresh (UiStatusActivity::render ->
+// displayBuffer), so this is not covering an in-flight panel pass.
+constexpr unsigned long POST_FLASH_SUCCESS_HOLD_MS = 1200;
+
 void OtaUpdateActivity::onWifiSelectionComplete(const bool success) {
   if (!success) {
     LOG_ERR("OTA", "WiFi connection failed, exiting");
@@ -392,8 +397,7 @@ void OtaUpdateActivity::runUpdateInstall() {
     state = FINISHED;
   }
   requestUpdateAndWait();
-  // Hold the completion screen briefly so the user sees it, then restart.
-  delay(4000);
+  delay(POST_FLASH_SUCCESS_HOLD_MS);
   {
     RenderLock lock(*this);
     state = SHUTTING_DOWN;
