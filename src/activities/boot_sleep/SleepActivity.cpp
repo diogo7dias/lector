@@ -532,7 +532,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
     // calibrated against the pixel state the single-pass HALF waveform leaves
     // behind. A FULL (GC) base parks pixels in a different charge state and
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
-    renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
+    renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh(display.profile()));
   } else {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }

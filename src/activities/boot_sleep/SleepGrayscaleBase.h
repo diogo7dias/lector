@@ -1,8 +1,7 @@
 #pragma once
 
-#include <BoardConfig.h>
+#include <DeviceProfile.h>
 #include <HalDisplay.h>
-#include <HalGPIO.h>
 
 // Which refresh the black-and-white base pass of a grayscale sleep screen runs at.
 //
@@ -16,8 +15,10 @@
 //
 // The X4 and X3 keep HALF: their base is the exact waveform the gray-nudge LUT was
 // calibrated against, and driving it harder would shift every tone in the image.
-inline HalDisplay::RefreshMode sleepGrayscaleBaseRefresh() {
-  const bool uc8279X4 =
-      BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279 && !gpio.deviceIsX3();
+//
+// Takes the device as a PARAMETER rather than reading the `gpio` / `BoardConfig::ACTIVE`
+// globals, so it is a pure function and host-testable. See test/sleep_face_paint.
+inline constexpr HalDisplay::RefreshMode sleepGrayscaleBaseRefresh(const DeviceProfile& dev) {
+  const bool uc8279X4 = dev.controllerIsUc8279 && !dev.isX3;
   return uc8279X4 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
 }

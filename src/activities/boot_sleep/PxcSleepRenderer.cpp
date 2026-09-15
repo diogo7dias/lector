@@ -208,7 +208,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   // gray-nudge LUT is calibrated against (see renderBitmapSleepScreen). On the X4
   // that waveform also powers the panel rails down, which is why the driver config
   // enables grayPowerUpFirst (src/platform/LectorSsd1677Config.cpp).
-  HalDisplay::RefreshMode grayBase = sleepGrayscaleBaseRefresh();
+  HalDisplay::RefreshMode grayBase = sleepGrayscaleBaseRefresh(display.profile());
 #ifdef LECTOR_LOCK_LAB
   if (o.grayBaseRefresh >= 0) grayBase = static_cast<HalDisplay::RefreshMode>(o.grayBaseRefresh);
   if (o.passes != PxcRenderOptions::PLANES_ONLY) {
