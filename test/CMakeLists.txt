@@ -154,3 +154,4 @@ add_subdirectory(firmware_retry_flow)
 add_subdirectory(keys_only_look)
 
 add_subdirectory(serialized_value_guard)
+add_subdirectory(button_mapping)
