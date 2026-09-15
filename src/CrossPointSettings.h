@@ -991,6 +991,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   }
 
  private:
+  // Runs after current fields are decoded; reports whether the legacy document needs a resave.
+  bool migrateFromJson(JsonVariantConst doc);
+
   // Shared resolvers so getReaderFontId()/getReaderLineCompression() and their
   // ReaderPrefs overloads compute font id / line compression from one code path.
   int resolveReaderFontId(uint8_t fontFamily, uint8_t fontSize, const char* sdFontFamilyName) const;
