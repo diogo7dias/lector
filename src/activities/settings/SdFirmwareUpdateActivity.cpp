@@ -16,6 +16,11 @@
 #include "network/FirmwareSwitchAudit.h"
 #include "network/FlashWriteVerify.h"
 
+// Hold after requestUpdateAndWait() so the success screen is readable. That wait
+// already finished the blocking e-ink refresh (UiStatusActivity::render ->
+// displayBuffer), so this is not covering an in-flight panel pass.
+constexpr unsigned long POST_FLASH_SUCCESS_HOLD_MS = 1200;
+
 void SdFirmwareUpdateActivity::onEnter() {
   UiStatusActivity::onEnter();
   // Build-identity marker — confirms which firmware build owns the SD update flow.
@@ -264,7 +269,7 @@ void SdFirmwareUpdateActivity::performUpdate() {
     state = State::SUCCESS;
   }
   requestUpdateAndWait();
-  delay(4000);
+  delay(POST_FLASH_SUCCESS_HOLD_MS);
   ESP.restart();
 }
 

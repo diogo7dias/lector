@@ -3,6 +3,7 @@
 #include <HalStorage.h>
 
 #include <cstdint>
+#include <memory>
 
 #include "BitmapHelpers.h"
 
@@ -107,5 +108,5 @@ class Bitmap {
   mutable int16_t* errorNextRow = nullptr;
   mutable int prevRowY = -1;  // Track row progression for error propagation
 
-  mutable AtkinsonDitherer* atkinsonDitherer = nullptr;
+  mutable std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
 };

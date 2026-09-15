@@ -104,10 +104,11 @@ class EpubReaderActivity final : public Activity {
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
   bool currentPageBookmarked = false;
-  // Idle-time glyph prewarm: after a page settles, scan the LIKELY next page
-  // (scan mode draws nothing) and load its missing glyphs from SD during idle,
-  // so the next turn's in-render prewarm is a cache hit instead of ~100 ms of
-  // SD reads on the page-turn critical path. One attempt per position.
+  // Idle-time glyph prewarm: after a page settles, scan the neighbour the
+  // reader is moving toward (scan mode draws nothing) and load its missing
+  // glyphs from SD during idle, so the next turn's in-render prewarm is a cache
+  // hit instead of ~100 ms of SD reads on the page-turn critical path. One
+  // attempt per position. Latency claim needs device measurement.
   int idlePrewarmSpine = -1;
   int idlePrewarmPage = -1;
   unsigned long lastRenderCompleteMs = 0;

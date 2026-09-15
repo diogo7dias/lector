@@ -30,6 +30,8 @@
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "IdlePrewarmNeighbour.h"
+#include "WatermarkBuildBail.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -742,7 +744,7 @@ void EpubReaderActivity::loop() {
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
   confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
 
-  // Idle glyph prewarm for the likely next page (currentPage + 1). The scan
+  // Idle glyph prewarm for the neighbour the reader is moving toward. The scan
   // pass draws nothing (FCM scan mode suppresses pixels), so the displayed
   // framebuffer is untouched; endScanAndPrewarm loads only glyphs not already
   // cached. Debounced past rapid page-flipping, one attempt per position, and
@@ -759,17 +761,19 @@ void EpubReaderActivity::loop() {
     // task may have reset/replaced the section or moved the page in between.
     if (section && !section->isBuilding() &&
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
+      const int neighbour =
+          idlePrewarmNeighbour(section->currentPage, idlePrewarmPage, idlePrewarmSpine, currentSpineIndex,
+                               static_cast<int>(section->pageCount));
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
-      const int nextPage = section->currentPage + 1;
-      if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
+      if (neighbour >= 0) {
+        if (const auto p = section->loadPage(neighbour)) {
           if (auto* fcm = renderer.getFontCacheManager()) {
             const auto t0 = millis();
             auto scope = fcm->createPrewarmScope();
             p->render(renderer, SETTINGS.getReaderFontId(prefs_), 0, 0);  // scan only, no pixels
             scope.endScanAndPrewarm();
-            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
+            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", neighbour, millis() - t0);
           }
         }
       }
@@ -821,6 +825,8 @@ void EpubReaderActivity::loop() {
     // always true.
     // cppcheck-suppress knownConditionTrueFalse
     if (section->isBuilding() && buildTickHeapGate()) {
+      const int pageCountBefore = static_cast<int>(section->pageCount);
+      const int waitingPage = section->currentPage;
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
@@ -828,6 +834,8 @@ void EpubReaderActivity::loop() {
       } else if (section->isBuildComplete() && applyDeferredReposition()) {
         // The chapter re-paginated since the saved progress (settings changed): we now know the
         // real page count, so re-render at the remapped page. No-op for an unchanged resume.
+        requestUpdate();
+      } else if (waitingPageBecameReadable(waitingPage, pageCountBefore, static_cast<int>(section->pageCount))) {
         requestUpdate();
       }
     }
@@ -2787,7 +2795,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       showBuildError(failure, failHeap, failAlloc);
       return;
     }
-    // Extend until either the target page exists or the build completes.
+    // Extend one chunk, then yield if the requested page still does not exist so
+    // loop() can take input. Instant reopen is suspendBuild() on exit, same as
+    // the background builder.
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
@@ -2796,6 +2806,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const auto failAlloc = section->lastFailureMaxAlloc();
         section.reset();
         showBuildError(failure, failHeap, failAlloc);
+        return;
+      }
+      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
+                                    section->isBuildComplete())) {
         return;
       }
     }
@@ -2810,6 +2824,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const auto failAlloc = section->lastFailureMaxAlloc();
         section.reset();
         showBuildError(failure, failHeap, failAlloc);
+        return;
+      }
+      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
+                                    section->isBuildComplete())) {
         return;
       }
     }

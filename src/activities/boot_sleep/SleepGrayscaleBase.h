@@ -19,6 +19,10 @@
 // Takes the device as a PARAMETER rather than reading the `gpio` / `BoardConfig::ACTIVE`
 // globals, so it is a pure function and host-testable. See test/sleep_face_paint.
 inline constexpr HalDisplay::RefreshMode sleepGrayscaleBaseRefresh(const DeviceProfile& dev) {
+  // EXPERIMENT (not for merge): the X4 Pro's SSD1677 has no requestResync() path, so its
+  // grayscale base never gets the clean slate HalDisplay.cpp:290 gives the X3. FULL is the
+  // nearest available approximation. Judge on hardware: deeper blacks vs visible blinking.
   const bool uc8279X4 = dev.controllerIsUc8279 && !dev.isX3;
+  if (dev.isX4Pro) return HalDisplay::FULL_REFRESH;
   return uc8279X4 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
 }

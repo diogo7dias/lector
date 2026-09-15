@@ -23,8 +23,6 @@ constexpr int ADAPTIVE_TONE_BLEND_DEN = 4;
 Bitmap::~Bitmap() {
   delete[] errorCurRow;
   delete[] errorNextRow;
-
-  delete atkinsonDitherer;
 }
 
 uint16_t Bitmap::readLE16(HalFile& f) {
@@ -184,7 +182,11 @@ BmpReaderError Bitmap::parseHeaders() {
   if (highColor && dithering) {
     const Gray4QuantizationMode quantizationMode =
         adaptiveToneMapping ? Gray4QuantizationMode::Native : Gray4QuantizationMode::DisplayTuned;
-    atkinsonDitherer = new AtkinsonDitherer(width, quantizationMode);
+    atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(width, quantizationMode);
+    if (!atkinsonDitherer) {
+      LOG_ERR("BMP", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
+      return BmpReaderError::OomRowBuffer;
+    }
   }
 
   return BmpReaderError::Ok;
