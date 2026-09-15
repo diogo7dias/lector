@@ -25,6 +25,10 @@ class MappedInputManager {
 
   void update() const {
     gpio.update();
+    // HalGPIO exposes touch taps as one-shot release events. Latch once per poll so
+    // settings' button, row, and FreeInkUI routes all see the same tap.
+    touchTapValid = gpio.wasTouchTap(touchTapX, touchTapY);
+    if (!touchTapValid) hintStroke.tapOver();
     // After the poll and before anything queries the buttons: the gate has to see this
     // pass's edges to decide whether the release it is waiting for has gone by.
     releaseGate.tick(isAnyPressed(), gpio.wasAnyReleased());
@@ -217,6 +221,11 @@ class MappedInputManager {
   SideKeyOverride sideKeyOverrides[2];
   bool homeKeySuppressed = false;
   bool homeKeyInjected = false;
+
+  // A touch tap is latched in update(); all consumers must read the same release event.
+  mutable bool touchTapValid = false;
+  mutable float touchTapX = 0.0f;
+  mutable float touchTapY = 0.0f;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;
