@@ -31,6 +31,7 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
+#include "WatermarkBuildBail.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -824,6 +825,8 @@ void EpubReaderActivity::loop() {
     // always true.
     // cppcheck-suppress knownConditionTrueFalse
     if (section->isBuilding() && buildTickHeapGate()) {
+      const int pageCountBefore = static_cast<int>(section->pageCount);
+      const int waitingPage = section->currentPage;
       if (!section->buildSomeMore(BACKGROUND_BUILD_PAGES_PER_TICK)) {
         LOG_ERR("ERS", "Background section build failed");
         section.reset();
@@ -831,6 +834,8 @@ void EpubReaderActivity::loop() {
       } else if (section->isBuildComplete() && applyDeferredReposition()) {
         // The chapter re-paginated since the saved progress (settings changed): we now know the
         // real page count, so re-render at the remapped page. No-op for an unchanged resume.
+        requestUpdate();
+      } else if (waitingPageBecameReadable(waitingPage, pageCountBefore, static_cast<int>(section->pageCount))) {
         requestUpdate();
       }
     }
@@ -2790,7 +2795,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       showBuildError(failure, failHeap, failAlloc);
       return;
     }
-    // Extend until either the target page exists or the build completes.
+    // Extend one chunk, then yield if the requested page still does not exist so
+    // loop() can take input. Instant reopen is suspendBuild() on exit, same as
+    // the background builder.
     while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
       if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
         LOG_ERR("ERS", "Failed during incremental section build");
@@ -2799,6 +2806,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const auto failAlloc = section->lastFailureMaxAlloc();
         section.reset();
         showBuildError(failure, failHeap, failAlloc);
+        return;
+      }
+      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
+                                    section->isBuildComplete())) {
         return;
       }
     }
@@ -2813,6 +2824,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         const auto failAlloc = section->lastFailureMaxAlloc();
         section.reset();
         showBuildError(failure, failHeap, failAlloc);
+        return;
+      }
+      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
+                                    section->isBuildComplete())) {
         return;
       }
     }
