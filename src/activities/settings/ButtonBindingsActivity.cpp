@@ -165,10 +165,22 @@ void ButtonBindingsActivity::navigateButtons() {
   std::vector<bool> headerFlags;
   headerFlags.reserve(bindingRows.size());
   for (const auto& row : bindingRows) headerFlags.push_back(row.isHeader);
-  buttonNavigator.onNextRelease(
-      [this, &headerFlags] { moveSelectionTo(settings_nav::nextRow(nav.selected, headerFlags, true)); });
-  buttonNavigator.onPreviousRelease(
-      [this, &headerFlags] { moveSelectionTo(settings_nav::nextRow(nav.selected, headerFlags, false)); });
+  buttonNavigator.onRowTap(
+      MappedInputManager::Button::NavNext,
+      [this, &headerFlags](const int rows) {
+        int index = nav.selected;
+        for (int row = 0; row < rows; ++row) index = settings_nav::nextRow(index, headerFlags, true);
+        moveSelectionTo(index);
+      },
+      /*onRelease=*/true);
+  buttonNavigator.onRowTap(
+      MappedInputManager::Button::NavPrevious,
+      [this, &headerFlags](const int rows) {
+        int index = nav.selected;
+        for (int row = 0; row < rows; ++row) index = settings_nav::nextRow(index, headerFlags, false);
+        moveSelectionTo(index);
+      },
+      /*onRelease=*/true);
   buttonNavigator.onNextContinuous(
       [this, &headerFlags] { moveSelectionTo(settings_nav::nextSection(nav.selected, headerFlags, true)); });
   buttonNavigator.onPreviousContinuous(

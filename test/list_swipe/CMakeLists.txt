@@ -1,5 +1,6 @@
 add_executable(ListSwipeTest
   ListSwipeTest.cpp
+  RowNavigationTest.cpp
   ${REPO_ROOT}/src/util/ButtonNavigator.cpp
 )
 

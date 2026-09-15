@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <fstream>
+#include <sstream>
+
 #include "components/SettingsGrid.h"
 
 namespace {
@@ -171,4 +174,50 @@ TEST(SettingsGrid, OneColumnSteppingMovesOneItemPerRow) {
   EXPECT_EQ(settings_grid::step(5, 22, 0, 1, /*columns=*/1), 6);
   EXPECT_EQ(settings_grid::step(0, 22, -1, 0, /*columns=*/1), 0);
   EXPECT_EQ(settings_grid::step(21, 22, 1, 0, /*columns=*/1), 21);
+}
+
+TEST(SettingsGrid, OnlyX4ProAndKeysOnlyDevicesUseWrappedRows) {
+  EXPECT_TRUE(settings_grid::usesWrappedRows(true, true));
+  EXPECT_TRUE(settings_grid::usesWrappedRows(false, true));
+  EXPECT_TRUE(settings_grid::usesWrappedRows(false, false));
+  EXPECT_FALSE(settings_grid::usesWrappedRows(true, false));
+}
+
+TEST(SettingsGrid, X4ProRowsRemainFullWidthAndScrollUnderAReservedPreview) {
+  ASSERT_TRUE(settings_grid::usesWrappedRows(true, true));
+  for (int height : {600, 300}) {
+    auto layout = forPane(480, height, 40, 0, listShape());
+    layout = forPane(480, height, 40, settings_grid::scrollToShow(layout, 35), listShape());
+    const auto row = cellAt(layout, 100, 35);
+    EXPECT_EQ(layout.columns, 1);
+    EXPECT_EQ(row.width, 480);
+    EXPECT_GE(row.y, 100);
+    EXPECT_LE(row.y + row.height, 100 + height);
+  }
+}
+
+TEST(SettingsGrid, ActivityUsesTheDevicePolicyForBothGeometryAndTouchRows) {
+  std::ifstream file(GRID_ACTIVITY_SOURCE);
+  ASSERT_TRUE(file.is_open());
+  std::stringstream contents;
+  contents << file.rdbuf();
+  const std::string source = contents.str();
+  EXPECT_NE(source.find("settings_grid::usesWrappedRows(mappedInput.hasTouch(), display.profile().isX4Pro)"),
+            std::string::npos);
+  const auto shape = source.find("settings_grid::Shape UiGridActivity::gridShape()");
+  const auto rows = source.find("bool UiGridActivity::usesWrappedRows()");
+  ASSERT_LT(shape, rows);
+  EXPECT_NE(source.substr(shape, rows - shape).find("if (!usesWrappedRows())"), std::string::npos);
+  const auto cell = source.find("void UiGridActivity::buildCell(");
+  const auto row = source.find("void UiGridActivity::buildRow(");
+  ASSERT_LT(cell, row);
+  const auto cellBody = source.substr(cell, row - cell);
+  EXPECT_NE(cellBody.find("if (usesWrappedRows())"), std::string::npos);
+  EXPECT_NE(cellBody.find("buildRow(screen, index, box)"), std::string::npos);
+  const auto band = source.find("void UiGridActivity::buildValueBand(");
+  ASSERT_LT(row, band);
+  const auto rowBody = source.substr(row, band - row);
+  EXPECT_NE(rowBody.find("props.action = ACTION_CELL"), std::string::npos);
+  EXPECT_NE(rowBody.find("screen.button(props, box)"), std::string::npos);
+  EXPECT_NE(source.substr(band).find("if (!mappedInput.hasTouch())"), std::string::npos);
 }

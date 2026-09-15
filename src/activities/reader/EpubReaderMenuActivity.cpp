@@ -415,10 +415,16 @@ void EpubReaderMenuActivity::navigateButtons() {
   // bar used to provide.
   const int count = static_cast<int>(items.size());
 
-  buttonNavigator.onNextStep(
-      [this, count] { moveSelectionTo(stepPastHeaders(ButtonNavigator::nextIndex(nav.selected, count), 1)); });
-  buttonNavigator.onPreviousStep(
-      [this, count] { moveSelectionTo(stepPastHeaders(ButtonNavigator::previousIndex(nav.selected, count), -1)); });
+  buttonNavigator.onRowTap(MappedInputManager::Button::NavNext, [this, count](const int rows) {
+    int index = nav.selected;
+    for (int row = 0; row < rows; ++row) index = stepPastHeaders(ButtonNavigator::nextIndex(index, count), 1);
+    moveSelectionTo(index);
+  });
+  buttonNavigator.onRowTap(MappedInputManager::Button::NavPrevious, [this, count](const int rows) {
+    int index = nav.selected;
+    for (int row = 0; row < rows; ++row) index = stepPastHeaders(ButtonNavigator::previousIndex(index, count), -1);
+    moveSelectionTo(index);
+  });
   buttonNavigator.onNextContinuous([this] { jumpSection(true); });
   buttonNavigator.onPreviousContinuous([this] { jumpSection(false); });
 }

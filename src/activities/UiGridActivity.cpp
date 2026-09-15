@@ -1,6 +1,7 @@
 #include "UiGridActivity.h"
 
 #include <GfxRenderer.h>
+#include <HalDisplay.h>
 #include <I18n.h>
 
 #include <algorithm>
@@ -21,6 +22,7 @@ UiGridActivity::UiGridActivity(const char* name, GfxRenderer& renderer, MappedIn
 
 void UiGridActivity::onEnter() {
   Activity::onEnter();
+  buttonNavigator.resetRowTap();
   resetUi();
   app.on(ACTION_CELL, &UiGridActivity::cellTrampoline, this);
   app.on(ACTION_SLIDER, &UiGridActivity::sliderTrampoline, this);
@@ -41,12 +43,10 @@ Rect UiGridActivity::gridPane() const {
   return Rect{0, top, renderer.getScreenWidth(), height};
 }
 
-// Two thumb-sized columns where a thumb exists, one column of full-width rows where
-// only the four buttons do: the shape the settings screens had through lector-0.28.0.
-// Either way no text is cut: the touch cells all take the height of the tallest one,
-// and the keys-only rows are each as tall as their own wrapped text (usesWrappedRows).
+// X4 Pro shares the existing wrapped rows with keys-only boards. Other touch
+// boards keep their cells; touch capability alone is not device identity.
 settings_grid::Shape UiGridActivity::gridShape() const {
-  if (mappedInput.hasTouch()) {
+  if (!usesWrappedRows()) {
     settings_grid::Shape shape;
     shape.minCellHeight = std::max(settings_grid::kMinCellHeight, tallestCellHeight());
     return shape;
@@ -61,7 +61,9 @@ settings_grid::Shape UiGridActivity::gridShape() const {
   return shape;
 }
 
-bool UiGridActivity::usesWrappedRows() const { return !mappedInput.hasTouch(); }
+bool UiGridActivity::usesWrappedRows() const {
+  return settings_grid::usesWrappedRows(mappedInput.hasTouch(), display.profile().isX4Pro);
+}
 
 // Rows and cells measure through the same FreeInkUI target they are drawn with, so
 // the line count the height is built from is the line count text() will draw.
@@ -239,7 +241,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   const fui::Rect box{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
                       static_cast<int16_t>(rect.height)};
 
-  if (!mappedInput.hasTouch()) {
+  if (usesWrappedRows()) {
     buildRow(screen, index, box);
     return;
   }
@@ -249,13 +251,6 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   props.value = static_cast<int16_t>(index);
   props.state = selected ? fui::StateChecked : fui::StateNormal;
   props.styles = theme.button;
-  if (!mappedInput.hasTouch()) {
-    // The keys-only grid always outlined its cells; only the touch grid reads
-    // them as buttons.
-    props.styles = fui::defaultButtonStyles();
-    props.styles.normal.border = fui::Paint::solid(fui::Color::Black);
-    props.styles.normal.borderWidth = 1;
-  }
   props.radius = static_cast<uint8_t>(theme.controlRadius);
   props.minTouchSize = screen.frame().device().minTouchSize;
   screen.button(props, box);
@@ -284,7 +279,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   }
 }
 
-// One row of the keys-only list: the name on the left, its value against the right
+// One row of the settings list: the name on the left, its value against the right
 // edge, the selected one reversed. The same two pieces of text the cell stacks, laid
 // out the way GUI.drawList laid them out before the grid.
 void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect& box) {
@@ -379,8 +374,16 @@ void UiGridActivity::buildValueBand(UiScreen& screen) {
 }
 
 void UiGridActivity::loop() {
-  if (handleCustomInput()) return;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    buttonNavigator.resetRowTap();
+  }
+  if (handleCustomInput()) {
+    buttonNavigator.resetRowTap();
+    return;
+  }
   if (valueBand.handleInput(mappedInput, [this] { requestUpdate(); })) {
+    buttonNavigator.resetRowTap();
     // The band owns the keys while it is up. A touch still routes below, so the
     // capsule and its two buttons answer; anything else puts the band away.
     const auto route = UiAppHost::routeTouch(mappedInput, /*withLongPress=*/false, /*routeHeld=*/true);
@@ -396,7 +399,10 @@ void UiGridActivity::loop() {
 
   const auto route = UiAppHost::routeTouch(mappedInput);
   if (route.routed && app.invalidated()) requestUpdate();
-  if (route) return;
+  if (route) {
+    buttonNavigator.resetRowTap();
+    return;
+  }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     if (selected_ >= 0 && selected_ < cellCount()) activateCell(selected_);
@@ -410,17 +416,27 @@ void UiGridActivity::loop() {
   // Rows on the side pair, cells on the front pair, and each press counted once.
   // ScreenUp/ScreenDown/ScreenLeft/ScreenRight rather than the raw buttons, so a
   // rotated screen keeps moving the way the hints under it say it does.
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
+  buttonNavigator.onRowTap(MappedInputManager::Button::ScreenDown, [this](const int rows) { moveSelection(rows, 0); });
+  buttonNavigator.onRowTap(MappedInputManager::Button::ScreenUp, [this](const int rows) { moveSelection(-rows, 0); });
+  buttonNavigator.onContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
+  buttonNavigator.onContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] {
+    buttonNavigator.resetRowTap();
+    moveSelection(0, -1);
+  });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] {
+    buttonNavigator.resetRowTap();
+    moveSelection(0, 1);
+  });
 
   // A swipe scrolls the grid by a row.
   switch (mappedInput.wasListScrollSwipe()) {
     case list_swipe::Scroll::PageDown:
+      buttonNavigator.resetRowTap();
       moveSelection(1, 0);
       break;
     case list_swipe::Scroll::PageUp:
+      buttonNavigator.resetRowTap();
       moveSelection(-1, 0);
       break;
     default:

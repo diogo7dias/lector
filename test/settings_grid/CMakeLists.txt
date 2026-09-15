@@ -11,4 +11,8 @@ target_link_libraries(SettingsGridTest PRIVATE
   GTest::gtest_main
 )
 
+target_compile_definitions(SettingsGridTest PRIVATE
+  GRID_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/UiGridActivity.cpp"
+)
+
 gtest_discover_tests(SettingsGridTest)
