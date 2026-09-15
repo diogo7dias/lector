@@ -1,4 +1,5 @@
 # Handoff
+- 2026-09-15: Supervisor check — all target work still complete and on origin/main (audit write-throttle/constexpr/upstream-3245/file-close/nothrow, fast-lock-unlock, banner-on-favorites-exit). Local main ahead 1: prior supervisor's 09-14 HANDOFF note (890118899) unpushed. Claude session not running. No pending work.
 
 - 2026-09-14: Supervisor check — all target branches (audit write-throttle/constexpr/upstream-3245, fast-lock-unlock, banner-on-favorites-exit) confirmed in origin/main; main advanced since prior entry: diagnostics-v2 merge (00ec369c4) and release 0.31.7 (81433570e). Claude session ended. No pending work.
 - 2026-09-14: Supervisor check — target work still complete (all audit branches + fast-lock-unlock + banner-on-favorites-exit in main, main == origin/main). Main advanced since 09-13 entry: X3 OTA TLS low-memory fix (c52ffdeec), releases 0.31.5 and 0.31.6 (890fd955f). Claude session no longer running. No pending work.
