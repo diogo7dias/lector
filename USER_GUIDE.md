@@ -216,6 +216,10 @@ page when you read in landscape.
 With **Short Power Button Click** set to **Page Turn**, a short press of **Power** also turns
 the page.
 
+EPUB, TXT and XTC batch position saves every ten page turns, or on the next page redraw
+after five minutes. Leaving the book or putting the reader to sleep saves any pending
+position; explicit progress sync saves immediately.
+
 ### Chapters
 
 Chapter jumps live in the in-book menu, under **Navigate > Select Chapter**. Holding a page

@@ -13,6 +13,7 @@
 #include <utility>
 
 #include "EndOfBookOptions.h"
+#include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
@@ -53,10 +54,9 @@ class XtcReaderActivity final : public Activity {
   void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;
   StatusBarInfo getStatusBarInfo() const;
-  void saveProgress() const;
+  void saveProgress(uint32_t page);
   void loadProgress();
-  // Page last written to progress.bin; saveProgress skips a write for an unmoved page.
-  mutable uint32_t lastSavedPage = UINT32_MAX;
+  ReaderProgressSaveDebouncer progressSaveDebouncer;
 
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,

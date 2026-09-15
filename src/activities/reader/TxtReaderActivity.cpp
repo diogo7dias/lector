@@ -74,6 +74,10 @@ void TxtReaderActivity::onEnter() {
 void TxtReaderActivity::onExit() {
   Activity::onExit();
 
+  if (txt && progressSaveDebouncer.hasPending()) {
+    saveProgress(progressSaveDebouncer.lastObservedPosition());
+  }
+
   if (statsTrackingActive) {
     statsSession.pause(millis());
     if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save TXT reading stats");
@@ -474,7 +478,7 @@ void TxtReaderActivity::render(RenderLock&&) {
   // The read timer starts when the page is actually on the panel, not at the press.
   if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   // Save progress
-  saveProgress();
+  if (progressSaveDebouncer.observe(currentPage)) saveProgress(currentPage);
 }
 
 void TxtReaderActivity::openSettingsPopup() {
@@ -722,20 +726,17 @@ void TxtReaderActivity::renderStatusBar() const {
   renderer.setPaperbackLook(false);
 }
 
-void TxtReaderActivity::saveProgress() const {
-  // render() also runs for popups and status-bar refreshes; only a moved page is
-  // worth the several FAT operations writeAtomic costs (SPIFFS/SD write throttling).
-  if (currentPage == lastSavedPage) return;
+void TxtReaderActivity::saveProgress(const uint32_t page) {
   uint8_t data[4];
-  data[0] = currentPage & 0xFF;
-  data[1] = (currentPage >> 8) & 0xFF;
+  data[0] = page & 0xFF;
+  data[1] = (page >> 8) & 0xFF;
   data[2] = 0;
   data[3] = 0;
   if (!ProgressFile::writeAtomic(txt->getCachePath(), data, sizeof(data))) {
-    LOG_ERR("TRS", "Failed to save progress: page %d", currentPage);
+    LOG_ERR("TRS", "Failed to save progress: page %u", static_cast<unsigned>(page));
     return;
   }
-  lastSavedPage = currentPage;
+  progressSaveDebouncer.markPersisted(page);
 }
 
 void TxtReaderActivity::loadProgress() {

@@ -2895,21 +2895,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // long it was read starts here, not at the button press.
     if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   }
-  // Only persist when the position actually changed. render() also runs on menu,
-  // bookmark and screenshot re-renders, and writeAtomic is several FAT ops for 6 bytes.
-  // Every real page turn changes currentPage, so progress durability is unaffected.
-  if (currentSpineIndex != lastSavedSpineIndex || section->currentPage != lastSavedPage ||
-      section->pageCount != lastSavedPageCount) {
-    // A changed page count means the chapter was re-laid out (font, margins, spacing), so the
-    // stored pagination is now wrong and has to go to the card immediately. An ordinary page
-    // turn only moves the position, which the debouncer is allowed to batch.
-    const bool relayout = section->pageCount != lastSavedPageCount && lastSavedPageCount != -1;
-    if (queueProgressSave(currentSpineIndex, section->currentPage, section->estimatedTotalPages(), relayout)) {
-      lastSavedSpineIndex = currentSpineIndex;
-      lastSavedPage = section->currentPage;
-      lastSavedPageCount = section->estimatedTotalPages();
-    }
-  }
+  // Observe every render so unchanged pages can still reach the time limit.
+  queueProgressSave(currentSpineIndex, section->currentPage, section->estimatedTotalPages());
 
   showPendingSyncSaveError();
 
@@ -3010,11 +2997,10 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
   return true;
 }
 
-bool EpubReaderActivity::queueProgressSave(const int spineIndex, const int currentPage, const int pageCount,
-                                           const bool forceSave) {
+bool EpubReaderActivity::queueProgressSave(const int spineIndex, const int currentPage, const int pageCount) {
   const bool due =
       progressSaveDebouncer.observe(positionKeyFor(spineIndex, currentPage), static_cast<uint32_t>(pageCount));
-  if (!due && !forceSave) {
+  if (!due) {
     return true;
   }
   return saveProgress(spineIndex, currentPage, pageCount);

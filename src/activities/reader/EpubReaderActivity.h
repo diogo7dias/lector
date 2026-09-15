@@ -184,12 +184,6 @@ class EpubReaderActivity final : public Activity {
   // tick; the blocking extension in render() remains the fallback past the watermark.
   bool partialRebuildStartFailed = false;
 
-  // Last position persisted by render()'s saveProgress, used to skip redundant
-  // writeAtomic calls on no-op re-renders (menu/bookmark/screenshot).
-  int lastSavedSpineIndex = -1;
-  int lastSavedPage = -1;
-  int lastSavedPageCount = -1;
-
   // Ordinary page turns are batched instead of writing progress on each one:
   // EpubReaderUtils::saveProgress() is a writeAtomic, several FAT operations for
   // six bytes, and on the X3 that lands between the button press and the page.
@@ -290,9 +284,8 @@ class EpubReaderActivity final : public Activity {
   void clearDeferredReposition();
   void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
-  // Page-turn path: writes only when the debouncer says the batch is due, or when
-  // forceSave is set (a re-layout changed the pagination and must not be left stale).
-  bool queueProgressSave(int spineIndex, int currentPage, int pageCount, bool forceSave = false);
+  // Ordinary renders, including changed pagination, wait until the batch is due.
+  bool queueProgressSave(int spineIndex, int currentPage, int pageCount);
   // Write whatever the debouncer is still holding. Call before the book goes away.
   bool flushQueuedProgress();
   // Jump to a percentage of the book (0-100), mapping it to spine and page.
