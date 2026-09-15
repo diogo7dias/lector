@@ -155,3 +155,4 @@ add_subdirectory(keys_only_look)
 
 add_subdirectory(serialized_value_guard)
 add_subdirectory(button_mapping)
+add_subdirectory(section_cache_validity)

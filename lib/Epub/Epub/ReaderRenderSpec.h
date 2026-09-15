@@ -58,3 +58,22 @@ struct ReaderRenderSpec {
   uint8_t firstLineIndentMode = 0;
   uint8_t firstLineIndentPercent = 0;
 };
+
+// Compare decoded section-cache parameters field by field: the struct's padding
+// is not serialized, and floating-point equality must retain its existing semantics.
+// Version/trailer validation and the on-disk byte order remain owned by Section.
+constexpr bool sectionCacheMatches(const ReaderRenderSpec& requested, const ReaderRenderSpec& cached) {
+  return requested.fontId == cached.fontId && requested.lineCompression == cached.lineCompression &&
+         requested.extraParagraphSpacing == cached.extraParagraphSpacing &&
+         requested.paragraphSpacing == cached.paragraphSpacing &&
+         requested.paragraphAlignment == cached.paragraphAlignment && requested.viewportWidth == cached.viewportWidth &&
+         requested.viewportHeight == cached.viewportHeight &&
+         requested.hyphenationEnabled == cached.hyphenationEnabled &&
+         requested.embeddedTextStyle == cached.embeddedTextStyle &&
+         requested.embeddedLayoutStyle == cached.embeddedLayoutStyle &&
+         requested.imageRendering == cached.imageRendering &&
+         requested.focusReadingEnabled == cached.focusReadingEnabled &&
+         requested.guideDotsMode == cached.guideDotsMode &&
+         requested.firstLineIndentMode == cached.firstLineIndentMode &&
+         requested.firstLineIndentPercent == cached.firstLineIndentPercent;
+}

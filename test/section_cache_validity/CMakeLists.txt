@@ -1,0 +1,4 @@
+add_executable(SectionCacheValidityTest SectionCacheValidityTest.cpp)
+target_include_directories(SectionCacheValidityTest PRIVATE ${REPO_ROOT}/lib/Epub/Epub)
+target_link_libraries(SectionCacheValidityTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(SectionCacheValidityTest)
