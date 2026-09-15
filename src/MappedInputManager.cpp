@@ -110,12 +110,11 @@ int MappedInputManager::tappedHintHardware() const {
 
   float nx = 0.0f;
   float ny = 0.0f;
-  // Read the tap without consuming it at the HAL: an activity that also handles taps of
-  // its own still sees this one, and a tap outside the band is left entirely alone.
-  if (!gpio.wasTouchTap(nx, ny)) {
-    hintStroke.tapOver();
+  if (!touchTapValid) {
     return -1;
   }
+  nx = touchTapX;
+  ny = touchTapY;
   if (!painted.valid) return -1;
   int x = 0;
   int y = 0;
@@ -161,7 +160,9 @@ void MappedInputManager::rememberTouchHeldTime() const {
 bool MappedInputManager::wasScreenTapped(int& x, int& y) const {
   float nx = 0.0f;
   float ny = 0.0f;
-  if (!gpio.wasTouchTap(nx, ny)) return false;
+  if (!touchTapValid) return false;
+  nx = touchTapX;
+  ny = touchTapY;
   renderer.tapToLogical(nx, ny, x, y);
   // Tested on geometry alone, so it holds whether or not the band's own press has
   // already been spent this frame.
