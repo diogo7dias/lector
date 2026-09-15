@@ -104,8 +104,9 @@ TEST(ReaderPrefs, LegacyFontSizeSlotFolds) {
   EXPECT_EQ(16, foldLegacyReaderFontSize(2));  // was LARGE
   EXPECT_EQ(18, foldLegacyReaderFontSize(3));  // was EXTRA_LARGE
   // Anything already a point size is left alone.
-  EXPECT_EQ(12, foldLegacyReaderFontSize(12));
-  EXPECT_EQ(22, foldLegacyReaderFontSize(22));
+  for (unsigned value = 4; value <= UINT8_MAX; ++value) {
+    EXPECT_EQ(value, foldLegacyReaderFontSize(static_cast<uint8_t>(value)));
+  }
 }
 
 // A v5 sidecar has the same layout; only fontPointSize's meaning changed. It must

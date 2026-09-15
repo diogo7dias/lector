@@ -16,7 +16,7 @@
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
 #include "PxcSleepRenderer.h"
-#include "SleepGrayscaleBase.h"
+#include "SleepFacePaint.h"
 #include "SleepInfoOverlay.h"
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
@@ -31,6 +31,13 @@
 #include "util/TaskWatchdog.h"
 
 namespace {
+
+// The value passed for renderPxcSleepScreen's oneBitRefresh on the sleep faces, where
+// grayscale is always true and the argument is therefore never read. Named rather than
+// spelled as a literal so nobody reads it as a waveform this path chooses; it is the
+// parameter's own default. The 1-bit callers that DO read it (BootActivity,
+// PxcViewerActivity) pass their own.
+constexpr HalDisplay::RefreshMode kPxcOneBitRefreshUnused = HalDisplay::HALF_REFRESH;
 
 // A FAT directory is a flat array of fixed-size slots, so a random wallpaper can be
 // reached by SEEKING to a random slot rather than walking every entry (the slot
@@ -184,7 +191,24 @@ void SleepActivity::onEnter() {
 void SleepActivity::renderSleepScreen() const {
   // The "Entering sleep" popup, in the reader's orientation when locking from a book.
   // Both faces read the card and can take seconds, so the press gets a visible answer
-  // first. Every lock is two panel submissions: this popup, then the face.
+  // first.
+  //
+  // This popup is one panel submission (sleep_face::POPUP_SUBMISSIONS); the face that
+  // follows costs one or two more depending on which face it is and whether its source
+  // carries tone — see sleep_face::planFor, whose rows test/sleep_face_paint asserts. The
+  // comment that used to sit here said "every lock is two panel submissions", which had
+  // been false for the grayscale faces for as long as they have existed: those cost
+  // three (popup, BW base, the two grayscale planes committed together).
+  //
+  // POSSIBLE SAVING, hardware-gated — do not take it from a code reading. drawPopup ends
+  // in a full FAST submission (617 ms measured at the low end), and it runs BEFORE the
+  // face is chosen, so the cheapest lock drives the panel twice to show one picture. The
+  // paint/submit split now exists to make composing them possible: GUI.drawBannerStrip()
+  // paints without submitting, so the popup could ride into the face's own submission.
+  // Not done, for two reasons that need a device to settle: removing a submission is
+  // physically observable (and this one is the user's visible answer to a press that then
+  // spends seconds reading the card), and the face's own base is HALF/FULL, not FAST, so
+  // the composed pass would put the popup on a different waveform than it runs today.
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
@@ -230,7 +254,7 @@ void SleepActivity::renderCustomSleepScreen() const {
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Loading: /sleep.bmp");
       const SleepInfoOverlayScope overlayScope("/sleep.bmp");
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, sleep_face::Face::Wallpaper);
       APP_STATE.lastSleepWallpaperPath = "/sleep.bmp";
       file.close();
       return;
@@ -250,10 +274,20 @@ void SleepActivity::renderCustomSleepScreen() const {
   // was the wrong thing to offer: the sleep screen is the picture the device wears while
   // it is off, so tone is the whole point of it, and the second or so the extra two panel
   // refreshes cost is spent after the user has already put the device down.
+  //
+  // Because pxcGrayscale is a compile-time true, the oneBitRefresh argument below is NEVER
+  // READ on this path: PxcSleepRenderer.cpp only consumes it when grayscale == false. It
+  // is not deletable from the signature — BootActivity (the unlock-over-wallpaper redraw)
+  // and PxcViewerActivity both call this with grayscale=false and DO read it. Passing the
+  // parameter's own default here rather than a literal says that plainly.
+  //
+  // What the panel actually does on this path is sleep_face::planFor(Face::Wallpaper,
+  // /*sourceHasGrayscale=*/true, ...): a base at that plan's waveform, then the two
+  // grayscale planes. Two submissions on top of the popup.
   constexpr bool pxcGrayscale = true;
   {
     const SleepInfoOverlayScope overlayScope("/sleep.pxc");
-    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,
+    if (renderPxcSleepScreen(renderer, "/sleep.pxc", pxcGrayscale, kPxcOneBitRefreshUnused, &drawSleepInfoOverlay,
                              pxcOptions)) {
       LOG_INF("SLP", "Loaded: /sleep.pxc");
       APP_STATE.lastSleepWallpaperPath = "/sleep.pxc";
@@ -420,7 +454,7 @@ void SleepActivity::renderCustomSleepScreen() const {
       LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
       if (hasPxcExtension(name)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, HalDisplay::HALF_REFRESH, &drawSleepInfoOverlay,
+        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, kPxcOneBitRefreshUnused, &drawSleepInfoOverlay,
                                  pxcOptions)) {
           APP_STATE.lastSleepWallpaperPath = filename;
           return true;
@@ -447,7 +481,7 @@ void SleepActivity::renderCustomSleepScreen() const {
         randFile.close();
         return false;
       }
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, sleep_face::Face::Wallpaper);
       APP_STATE.lastSleepWallpaperPath = filename;
       randFile.close();
       return true;
@@ -479,22 +513,23 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderCoverSleepScreen();
 }
 
-// Sleep screens paint with a single HALF refresh (stock parity): the OEM X4
-// firmware's only clean refresh in normal operation is the single-pass 0xD7
-// sequence, used once for the sleep image. It never runs the multi-flash GC
-// waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
-//
 // The Lector fallback: a white page with the name centred, in the one UI face. Reached
 // only when no wallpaper and no cover could be shown (no files, no open book, a decode
 // that failed partway). Every face that fails lands here.
+//
+// The stock-parity rule this face obeys now lives in sleep_face::planFor next to the two
+// other faces, so all three read as one table instead of three literals in three
+// functions.
 void SleepActivity::renderDefaultSleepScreen() const {
   renderer.clearScreen();
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   renderer.drawCenteredText(UI_10_FONT_ID, (renderer.getScreenHeight() - lineHeight) / 2, tr(STR_LECTOR));
-  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  const sleep_face::PaintPlan plan =
+      sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile());
+  renderer.displayBuffer(plan.base);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_face::Face face) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -527,17 +562,28 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap) const {
   // panel. The gap between "decode" and "face" is the wallpaper's own refresh cost.
   SleepTiming::mark("decode");
 
-  if (hasGreyscale) {
+  // The face's whole panel recipe in one value: which waveform the base runs at, how many
+  // submissions this costs, whether the two grayscale planes follow. Replaces the literal
+  // that used to sit in each branch below. sourceHasGrayscale is what the image offers AND
+  // the cover filter allows, which is the same question hasGreyscale answered before.
+  const sleep_face::PaintPlan plan = sleep_face::planFor(face, hasGreyscale, display.profile());
+
+  if (plan.grayscalePlanes) {
     // OEM grayscale pipeline base. Must stay HALF: the gray nudge LUT is
     // calibrated against the pixel state the single-pass HALF waveform leaves
     // behind. A FULL (GC) base parks pixels in a different charge state and
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
-    renderer.displayGrayscaleBase(sleepGrayscaleBaseRefresh());
+    //
+    // NOTE, unresolved: on a UC8279 non-X3 board plan.base is FULL, which is what has
+    // shipped and what this comment says must not happen. See the contradiction recorded
+    // in test/sleep_face_paint/SleepGrayscaleBaseTest.cpp — settling it needs an X4
+    // ghosting check on hardware, not a code reading.
+    renderer.displayGrayscaleBase(plan.base);
   } else {
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+    renderer.displayBuffer(plan.base);
   }
 
-  if (hasGreyscale) {
+  if (plan.grayscalePlanes) {
     bitmap.rewindToData();
     renderer.clearScreen(0x00);
     renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
@@ -620,7 +666,7 @@ void SleepActivity::renderCoverSleepScreen() const {
     Bitmap bitmap(file);
     if (bitmap.parseHeaders() == BmpReaderError::Ok) {
       LOG_DBG("SLP", "Rendering sleep cover: %s", coverBmpPath.c_str());
-      renderBitmapSleepScreen(bitmap);
+      renderBitmapSleepScreen(bitmap, sleep_face::Face::CoverFallback);
       return;
     }
   }

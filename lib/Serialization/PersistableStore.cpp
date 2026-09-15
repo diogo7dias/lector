@@ -8,6 +8,8 @@
 #include <limits>
 #include <string>
 
+#include "SerializedValueComparator.h"
+
 // Suffix of the staging file a save writes before it swaps. Also what loadDocFromFile()
 // looks for when the real file is missing, so a save interrupted by a power cut leaves a
 // recoverable file rather than nothing.
@@ -38,6 +40,17 @@ bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& 
     return false;
   }
 
+  // Compare the actual serialized bytes, not a hash or a retained JSON copy. Opening
+  // through HAL uses its normal file handle; the comparator adds only a 64-byte buffer.
+  {
+    HalFile current;
+    if (Storage.exists(path) && Storage.openFileForRead("PERSIST", path, current) && current.size() == expected) {
+      SerializedValueComparator comparison(current);
+      Print& sink = comparison;
+      if (serializeJson(doc, sink) == expected && comparison.matches()) return true;
+    }
+  }
+
   // Stage, then swap. The old file stays intact until the new content is on the card, so
   // a failure anywhere below leaves the previous save in place instead of destroying it.
   const std::string tmp = tmpPathFor(path);
@@ -48,7 +61,8 @@ bool PersistableStoreBase::writeDocToFile(const char* path, const JsonDocument& 
       LOG_ERR("PERSIST", "Failed to open %s for write", tmp.c_str());
       return false;
     }
-    written = serializeJson(doc, file);
+    Print& sink = file;
+    written = serializeJson(doc, sink);
     file.close();
   }
   if (written != expected) {

@@ -55,3 +55,41 @@ TEST(ReaderProgressSaveDebouncer, PositionOnlyCallersKeepExistingBehavior) {
   EXPECT_TRUE(debouncer.hasPending());
   EXPECT_EQ(debouncer.lastObservedMetadata(), 0U);
 }
+
+TEST(ReaderProgressSaveDebouncer, FirstPageIsNotATurnAndTenTurnsAreDue) {
+  ReaderProgressSaveDebouncer debouncer;
+  EXPECT_FALSE(debouncer.observe(0));
+  for (uint32_t page = 1; page < 10; ++page) EXPECT_FALSE(debouncer.observe(page));
+  EXPECT_TRUE(debouncer.observe(10));
+  // A failed write leaves the batch due, including on a same-page retry.
+  EXPECT_TRUE(debouncer.observe(10));
+  debouncer.markPersisted(10);
+  EXPECT_FALSE(debouncer.hasPending());
+  EXPECT_FALSE(debouncer.observe(10));
+}
+
+TEST(ReaderProgressSaveDebouncer, TimeLimitIncludesSamePageAndClockWrap) {
+  testMillis = UINT32_MAX - 1000;
+  ReaderProgressSaveDebouncer debouncer;
+  EXPECT_FALSE(debouncer.observe(12));
+  testMillis += 299999;
+  EXPECT_FALSE(debouncer.observe(12));
+  ++testMillis;
+  EXPECT_TRUE(debouncer.observe(12));
+  debouncer.markPersisted(12);
+  testMillis += 300000;
+  EXPECT_FALSE(debouncer.observe(12));  // Clean state never writes just because time passed.
+  testMillis = 0;
+}
+
+TEST(ReaderProgressSaveDebouncer, ExitFlushAndExplicitSaveClearTheBatchOnlyOnSuccess) {
+  ReaderProgressSaveDebouncer debouncer;
+  debouncer.observe(7, 20);
+  EXPECT_TRUE(debouncer.hasPending());
+  EXPECT_EQ(debouncer.lastObservedPosition(), 7U);
+  EXPECT_EQ(debouncer.lastObservedMetadata(), 20U);
+  debouncer.markPersisted(7, 20);  // The caller's successful flush or one-shot sync save.
+  EXPECT_FALSE(debouncer.hasPending());
+  debouncer.observe(8, 20);
+  EXPECT_TRUE(debouncer.hasPending());
+}

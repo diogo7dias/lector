@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "CrossPointSettings.h"
+#include "ReaderProgressSaveDebouncer.h"
 #include "ReaderUtils.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
@@ -71,10 +72,9 @@ class TxtReaderActivity final : public Activity {
   void buildPageIndex();
   bool loadPageIndexCache();
   void savePageIndexCache() const;
-  void saveProgress() const;
+  void saveProgress(uint32_t page);
   void loadProgress();
-  // Page last written to progress.bin; saveProgress skips a write for an unmoved page.
-  mutable int lastSavedPage = -1;
+  ReaderProgressSaveDebouncer progressSaveDebouncer;
 
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,

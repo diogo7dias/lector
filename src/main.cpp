@@ -45,13 +45,13 @@
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
 #include "components/UnlockBanners.h"
-#include "dev/LockLab.h"
 #include "fontIds.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "network/FirmwareSwitchAudit.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
 #include "sleep/WakeRoutePolicy.h"
+#include "sleep/WakeSequence.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
 #include "util/ButtonRouter.h"
@@ -845,17 +845,34 @@ void setup() {
     }
   }
 
+  // The whole wake decision, once, in one Module. What used to happen here was three
+  // passes over the same raw inputs: wake_route::resolve was called, immediately
+  // overridden by an inline recovery/panic/silent ternary, and then re-decided by a
+  // six-arm if/else chain that read isPressed(Back) and readerActivityLoadCount for the
+  // third and fourth time. The tested helper could be — and was — contradicted by the
+  // untested layers wrapped around it. wake_sequence::plan() folds all three together, so
+  // the overrides are arms of the same decision rather than a correction applied to it.
   const std::string forcedBookPath = pendingWakeBookPath.empty() ? APP_STATE.openEpubPath : pendingWakeBookPath;
-  wake_route::WakeInputs wakeInputs;
+  wake_sequence::WakeInputs wakeInputs;
+  wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
+  wakeInputs.panic = rebootedFromPanic;
+  wakeInputs.silentReboot = resume == BootResume::Silent;
+  wakeInputs.silentTargetIsReader = snapshotTarget == SILENT_REBOOT_TARGET_READER;
   wakeInputs.forceBookOnWake = !pendingWakeBookPath.empty();
-  wakeInputs.hasBook = !forcedBookPath.empty();
-  wakeInputs.sleptFromReader = APP_STATE.lastSleepFromReader;
+  wakeInputs.hasForcedBook = !forcedBookPath.empty();
+  wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
+  wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
   wakeInputs.bookOnBoot = SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF;
   wakeInputs.readerCrashed = APP_STATE.readerActivityLoadCount > 0;
-  const wake_route::Route forcedRoute = (recoveryFirmwareMode || rebootedFromPanic || resume == BootResume::Silent)
-                                            ? wake_route::Route::Unchanged
-                                            : wake_route::resolve(wakeInputs);
+  wakeInputs.bootBookPicked = !bootBookPath.empty();
+  wakeInputs.paintedFaceWake = paintedFaceWake;
+  wakeInputs.fastUnlock = SETTINGS.fastUnlock != 0;
+  wakeInputs.wakeStraightToBook = SETTINGS.wakeStraightToBook != 0;
+  wakeInputs.asyncBlankInFlight = asyncBlankInFlight;
+  wakeInputs.driveAllArmed = driveAllArmed;
+  const wake_sequence::WakePlan wakePlan = wake_sequence::plan(wakeInputs);
+
   // Whether the reader's first page turn has to clean up after a drive-all first paint.
   const bool firstTurnCleans = driveAllArmed && wake_face::firstPageTurnCleans(wakeClear, gpio.deviceIsX3());
 
@@ -865,66 +882,79 @@ void setup() {
   // the meantime and its first push is what waits.
   armUnlockBannerFloor();
 
-  // Every route but the reader paints straight from its onEnter, so it waits out a blank
-  // still in flight first (no-op otherwise). The reader routes wait inside
-  // ReaderActivity::onEnter, after their font and book loads.
-  if (recoveryFirmwareMode) {
-    // Skip normal home/reader routing: jump straight into the SD firmware picker.
-    renderer.waitRefreshComplete();
-    activityManager.replaceActivity(
-        std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
-  } else if (rebootedFromPanic) {
-    // If we rebooted from a panic, go to crash report screen to show the panic info
-    renderer.waitRefreshComplete();
-    activityManager.goToCrashReport();
-  } else if (resume == BootResume::Silent && snapshotTarget == SILENT_REBOOT_TARGET_READER &&
-             !APP_STATE.openEpubPath.empty()) {
-    activityManager.goToReader(APP_STATE.openEpubPath);
-  } else if (resume == BootResume::Silent) {
-    // target == home (or reader with no open book): land on home — don't fall
-    // through to the sleep-wake "resume reader" logic, which fires on stale
-    // openEpubPath + lastSleepFromReader from a prior session.
-    activityManager.goHome();
-  } else if (forcedRoute == wake_route::Route::ForceReader) {
-    const auto path = forcedBookPath;
-    APP_STATE.openEpubPath = "";
-    APP_STATE.readerActivityLoadCount++;
-    APP_STATE.saveToFile();
-    activityManager.goToReader(path, allowFastInitialReaderRefresh, firstTurnCleans);
-  } else if (forcedRoute == wake_route::Route::ForceHome) {
-    renderer.waitRefreshComplete();
-    activityManager.goHome(HomeMenuItem::NONE);
-  } else if (SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF || APP_STATE.openEpubPath.empty() ||
-             !APP_STATE.lastSleepFromReader || mappedInputManager.isPressed(MappedInputManager::Button::Back) ||
-             APP_STATE.readerActivityLoadCount > 0) {
-    // Boot to home screen if no book is open, last sleep was not from reader, back button is held, or reader activity
-    // crashed (indicated by readerActivityLoadCount > 0)
-    //
-    // "Open Book on Boot" jumps straight into a book instead: the last-read one, or one
-    // of the books in progress at random.
-    // Skipped when Back is held (the user is asking for home) or after a reader crash,
-    // so a book that cannot open can never wedge boot.
-    // bootBookPath was chosen above, before the banners painted, so the banner named
-    // this exact book. Back held or a prior reader crash clears it rather than re-picking.
-    const bool backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
-    if (backHeld || APP_STATE.readerActivityLoadCount > 0) bootBookPath.clear();
-    if (!bootBookPath.empty()) {
-      // Same crash-loop guard the resume path uses: bump the counter first so a crash
-      // while opening lands on home next boot instead of trying again forever.
+  // Straight-line executor: every decision above it, every side effect below it. The
+  // wait rule that used to live only in a comment — "Every route but the reader paints
+  // straight from its onEnter, so it waits out a blank still in flight first (no-op
+  // otherwise); the reader routes wait inside ReaderActivity::onEnter, after their font
+  // and book loads" — is now wakePlan.waitBeforeRoutePaint, asserted per target in
+  // test/wake_sequence. It was five scattered call sites and two deliberate omissions; a
+  // new arm that forgot the call was a silent double-paint with nothing to catch it.
+  if (wakePlan.waitBeforeRoutePaint) renderer.waitRefreshComplete();
+
+  // The crash-loop guard, for every arm that enters the reader. The counter goes up and
+  // is COMMITTED before goToReader, which is the whole point: a crash while opening then
+  // lands on home next boot instead of trying again forever.
+  //
+  // Takes the path BY VALUE, deliberately. Two arms pass APP_STATE.openEpubPath and then
+  // clear that very field before opening it; a reference would be dangling by the time
+  // goToReader read it. The original code copied it into a local for the same reason.
+  const auto enterReader = [&](const std::string path, const bool withWakeFlags) {
+    if (wakePlan.clearOpenEpubPath) APP_STATE.openEpubPath = "";
+    if (wakePlan.bumpReaderLoadCount) {
       APP_STATE.readerActivityLoadCount++;
       APP_STATE.saveToFile();
-      activityManager.goToReader(bootBookPath);
-    } else {
-      renderer.waitRefreshComplete();
-      activityManager.goHome(HomeMenuItem::NONE);
     }
-  } else {
-    // Clear app state to avoid getting into a boot loop if the epub doesn't load
-    const auto path = APP_STATE.openEpubPath;
-    APP_STATE.openEpubPath = "";
-    APP_STATE.readerActivityLoadCount++;
-    APP_STATE.saveToFile();
-    activityManager.goToReader(path, allowFastInitialReaderRefresh, firstTurnCleans);
+    if (withWakeFlags) {
+      activityManager.goToReader(path, allowFastInitialReaderRefresh, firstTurnCleans);
+    } else {
+      activityManager.goToReader(path);
+    }
+  };
+
+  switch (wakePlan.target) {
+    case wake_sequence::Target::RecoveryFirmware:
+      // Skip normal home/reader routing: jump straight into the SD firmware picker.
+      activityManager.replaceActivity(
+          std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInputManager, /*recoveryMode=*/true));
+      break;
+    case wake_sequence::Target::CrashReport:
+      // If we rebooted from a panic, go to crash report screen to show the panic info
+      activityManager.goToCrashReport();
+      break;
+    case wake_sequence::Target::SilentReader:
+      enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/false);
+      break;
+    case wake_sequence::Target::SilentHome:
+      // target == home (or reader with no open book): land on home — don't fall
+      // through to the sleep-wake "resume reader" logic, which fires on stale
+      // openEpubPath + lastSleepFromReader from a prior session.
+      activityManager.goHome();
+      break;
+    case wake_sequence::Target::ForcedReader:
+      enterReader(forcedBookPath, /*withWakeFlags=*/true);
+      break;
+    case wake_sequence::Target::ForcedHome:
+      activityManager.goHome(HomeMenuItem::NONE);
+      break;
+    case wake_sequence::Target::BootBookReader:
+      // "Open Book on Boot" jumps straight into a book instead of home: the last-read
+      // one, or one of the books in progress at random. Skipped when Back is held (the
+      // user is asking for home) or after a reader crash, so a book that cannot open can
+      // never wedge boot — that exclusion is inside plan(), which is why this arm can
+      // simply open the book.
+      // bootBookPath was chosen above, before the banners painted, so the banner named
+      // this exact book.
+      enterReader(bootBookPath, /*withWakeFlags=*/false);
+      break;
+    case wake_sequence::Target::Home:
+      // Boot to home screen if no book is open, last sleep was not from reader, back
+      // button is held, or reader activity crashed (readerActivityLoadCount > 0).
+      activityManager.goHome(HomeMenuItem::NONE);
+      break;
+    case wake_sequence::Target::ResumeReader:
+      // Clear app state to avoid getting into a boot loop if the epub doesn't load
+      enterReader(APP_STATE.openEpubPath, /*withWakeFlags=*/true);
+      break;
   }
 
   WakeTiming::mark(WakeTiming::Stage::ActivityUp);

@@ -93,6 +93,10 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
 void XtcReaderActivity::onExit() {
   Activity::onExit();
 
+  if (xtc && progressSaveDebouncer.hasPending()) {
+    saveProgress(progressSaveDebouncer.lastObservedPosition());
+  }
+
   if (statsTrackingActive) {
     statsSession.pause(millis());
     if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save XTC reading stats");
@@ -239,7 +243,7 @@ void XtcReaderActivity::render(RenderLock&&) {
   renderPage();
   // The read timer starts when the page is actually on the panel, not at the press.
   if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
-  saveProgress();
+  if (progressSaveDebouncer.observe(currentPage)) saveProgress(currentPage);
 }
 
 XtcReaderActivity::StatusBarInfo XtcReaderActivity::getStatusBarInfo() const {
@@ -515,20 +519,17 @@ void XtcReaderActivity::renderPage() {
   LOG_DBG("XTR", "Rendered page %lu/%lu (%u-bit)", currentPage + 1, xtc->getPageCount(), bitDepth);
 }
 
-void XtcReaderActivity::saveProgress() const {
-  // render() also runs for popups and status-bar refreshes; only a moved page is
-  // worth the several FAT operations writeAtomic costs (SPIFFS/SD write throttling).
-  if (currentPage == lastSavedPage) return;
+void XtcReaderActivity::saveProgress(const uint32_t page) {
   uint8_t data[4];
-  data[0] = currentPage & 0xFF;
-  data[1] = (currentPage >> 8) & 0xFF;
-  data[2] = (currentPage >> 16) & 0xFF;
-  data[3] = (currentPage >> 24) & 0xFF;
+  data[0] = page & 0xFF;
+  data[1] = (page >> 8) & 0xFF;
+  data[2] = (page >> 16) & 0xFF;
+  data[3] = (page >> 24) & 0xFF;
   if (!ProgressFile::writeAtomic(xtc->getCachePath(), data, sizeof(data))) {
-    LOG_ERR("XTR", "Failed to save progress: page %lu", currentPage);
+    LOG_ERR("XTR", "Failed to save progress: page %u", static_cast<unsigned>(page));
     return;
   }
-  lastSavedPage = currentPage;
+  progressSaveDebouncer.markPersisted(page);
 }
 
 void XtcReaderActivity::loadProgress() {

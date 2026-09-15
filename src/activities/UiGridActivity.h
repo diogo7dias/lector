@@ -11,7 +11,7 @@
 #include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
-// Base for the two-column settings grids. UiAppHost owns the app-hosting
+// Base for settings rows (X4 Pro/keys-only) and grids (other touch boards). UiAppHost owns the app-hosting
 // protocol; this base layers the grid protocol on top: the selection and scroll
 // model over settings_grid, the cell painting (a name over its value, one
 // truncation rule), the touch dispatch, the chrome, and the header band an armed
@@ -65,7 +65,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
   Rect gridPane() const;
   settings_grid::Shape gridShape() const;
   settings_grid::Layout gridLayout() const;
-  // Keys-only boards: one column of rows as tall as their wrapped text, so the
+  // X4 Pro and keys-only boards: one column of rows as tall as their wrapped text, so the
   // layout is a window over variable heights (WrappedListWindow) rather than a
   // grid of equal cells. rowHeightFor measures one row; keysOnlyWindow says
   // which rows the pane shows from scrollRow_ with the selection kept visible.

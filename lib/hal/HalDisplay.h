@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <DeviceProfile.h>
 #include <DisplayRefreshPolicy.h>
 #include <EInkDisplay.h>
 #include <FrameInkMetrics.h>
@@ -139,6 +140,12 @@ class HalDisplay {
   uint16_t getDisplayWidthBytes() const;
   uint32_t getBufferSize() const;
 
+  // Which device this is, as one value. Latched in begin(); every display rule that used
+  // to spell the question its own way (gpio.deviceIsX3(), BoardConfig::isX4Pro(),
+  // BoardConfig::ACTIVE.displayController) now reads this and passes it as a PARAMETER,
+  // which is what makes those rules pure functions a host test can call.
+  const DeviceProfile& profile() const { return deviceProfile; }
+
  private:
   // Anti-ghosting cap, ported verbatim from the pre-rebase fork. Every refresh this
   // class performs is routed through it, so no run of FAST passes can grow long
@@ -153,6 +160,11 @@ class HalDisplay {
   // True only when the caller asked for HALF itself, never when the anti-ghost cap
   // promoted a FAST into one. See the definition for why the difference matters.
   bool needsX3HalfResync(RefreshMode requested, RefreshMode actual) const;
+  // Which device this is, latched once in begin() from the hardware detect rather than
+  // re-read from the `gpio` global at each of the three sites that used to ask. The X3's
+  // display rules ("an X3 HALF is not one waveform"; "an X3 grayscale base with a HALF
+  // fallback has to resync first") then all read the same field.
+  DeviceProfile deviceProfile;
   // Feeds both the in-RAM stats the overlay draws and the CSV on the card.
   void noteRefreshTiming(RefreshMode requested, RefreshMode actual, uint32_t totalUs, uint32_t asyncStartUs,
                          uint16_t thinkMs, uint16_t inkScore) const;

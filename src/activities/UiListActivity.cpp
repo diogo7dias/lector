@@ -19,6 +19,7 @@ UiListActivity::UiListActivity(const char* name, GfxRenderer& renderer, MappedIn
 
 void UiListActivity::onEnter() {
   Activity::onEnter();
+  buttonNavigator.resetRowTap();
   // Before resetUi(): the shared theme tokens are derived from this target's
   // fonts, so a screen-specific body font has to be bound first.
   const int fontId = listFontId();
@@ -95,14 +96,20 @@ void UiListActivity::moveSelectionTo(const int index) {
 }
 
 void UiListActivity::loop() {
-  if (handleCustomInput()) return;
-  if (handleButtons()) return;
-  if (routeListTouch()) return;
+  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    buttonNavigator.resetRowTap();
+  }
+  if (handleCustomInput() || handleButtons() || routeListTouch()) {
+    buttonNavigator.resetRowTap();
+    return;
+  }
 
   // Swipes scroll the viewport; the selection stays put (it may scroll
   // off-screen) and button navigation pulls the view back to it.
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    buttonNavigator.resetRowTap();
     bool moved = false;
     {
       // Same nav-vs-render race as moveSelectionTo: the render task writes
@@ -122,9 +129,14 @@ void UiListActivity::loop() {
 void UiListActivity::navigateButtons() {
   const int count = listCount();
   auto& n = activeNav();
-  buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
-  buttonNavigator.onPreviousRelease(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
+  buttonNavigator.onRowTap(
+      MappedInputManager::Button::NavNext,
+      [this, count, &n](const int rows) { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count, rows)); },
+      /*onRelease=*/true);
+  buttonNavigator.onRowTap(
+      MappedInputManager::Button::NavPrevious,
+      [this, count, &n](const int rows) { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count, rows)); },
+      /*onRelease=*/true);
   // A hold travels in ROWS, not pages. Paging per repeat moved ~14 rows twice a
   // second, so a held key crossed a long list far faster than the panel could
   // show it and there was no way to stop on a row. One row per repeat at the

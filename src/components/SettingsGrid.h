@@ -3,21 +3,11 @@
 #include <algorithm>
 #include <cstdint>
 
-// Where a grid of setting cells lands.
-//
-// The settings screens used to be one column of full-width rows, which put about eight of
-// twenty-two settings on screen and left the rest below the fold. A cell carries the same
-// two pieces of text a row did — the name and the current value — stacked instead of
-// spread, so two fit side by side and the scroll halves.
-//
-// Only the X4 Pro has a touch panel, and a cell is a thumb target. The keys-only boards
-// walk their settings with four buttons, where a second column buys nothing and costs a
-// press per move, so they pass a one-column Shape and get the full-width rows they had
-// through lector-0.28.0 back.
-//
-// Pure geometry, so the draw code stays a draw loop and this can be tested on the host
-// without a renderer.
+// Pure settings geometry. X4 Pro and keys-only boards use wrapped full-width
+// rows; other touch boards retain their two-column cells.
 namespace settings_grid {
+
+constexpr bool usesWrappedRows(const bool hasTouch, const bool isX4Pro) { return !hasTouch || isX4Pro; }
 
 constexpr int kColumns = 2;
 constexpr int kSidePad = 12;
@@ -72,8 +62,7 @@ inline Layout forPane(const int paneWidth, const int paneHeight, const int count
   layout.columns = shape.columns > 0 ? shape.columns : 1;
   layout.sidePad = shape.sidePad;
   layout.gap = shape.gap;
-  layout.cellWidth =
-      (paneWidth - shape.sidePad * 2 - shape.gap * (layout.columns - 1)) / layout.columns;
+  layout.cellWidth = (paneWidth - shape.sidePad * 2 - shape.gap * (layout.columns - 1)) / layout.columns;
   layout.totalRows = rowsFor(layout.count, layout.columns);
 
   const int minHeight = shape.minCellHeight > 1 ? shape.minCellHeight : 1;
@@ -85,8 +74,7 @@ inline Layout forPane(const int paneWidth, const int paneHeight, const int count
     // Everything fits: a grid spreads its rows over the pane, a list keeps its row
     // height and leaves the space under the last row.
     if (shape.stretchToFill) {
-      layout.cellHeight =
-          std::max(minHeight, (paneHeight - shape.gap * (layout.totalRows - 1)) / layout.totalRows);
+      layout.cellHeight = std::max(minHeight, (paneHeight - shape.gap * (layout.totalRows - 1)) / layout.totalRows);
     }
   }
 

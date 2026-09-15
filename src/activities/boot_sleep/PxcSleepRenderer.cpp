@@ -17,7 +17,7 @@
 
 #include "Epub/converters/DirectPixelWriter.h"
 #include "PxcDither.h"
-#include "SleepGrayscaleBase.h"
+#include "SleepFacePaint.h"
 #include "SleepTiming.h"
 
 bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const bool grayscale,
@@ -204,11 +204,13 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
     return true;
   }
 
-  // Clean base paint. displayGrayscaleBase's HALF waveform is the exact base the
-  // gray-nudge LUT is calibrated against (see renderBitmapSleepScreen). On the X4
-  // that waveform also powers the panel rails down, which is why the driver config
-  // enables grayPowerUpFirst (src/platform/LectorSsd1677Config.cpp).
-  HalDisplay::RefreshMode grayBase = sleepGrayscaleBaseRefresh();
+  // Clean base paint. The waveform comes from the face's plan (sleep_face::planFor for
+  // Face::Wallpaper with tone), which is the same row SleepActivity::renderBitmapSleepScreen
+  // reads — the .pxc and .bmp wallpapers are one face and must paint alike. On the X4 that
+  // waveform also powers the panel rails down, which is why the driver config enables
+  // grayPowerUpFirst (src/platform/LectorSsd1677Config.cpp).
+  HalDisplay::RefreshMode grayBase =
+      sleep_face::planFor(sleep_face::Face::Wallpaper, /*sourceHasGrayscale=*/true, display.profile()).base;
 #ifdef LECTOR_LOCK_LAB
   if (o.grayBaseRefresh >= 0) grayBase = static_cast<HalDisplay::RefreshMode>(o.grayBaseRefresh);
   if (o.passes != PxcRenderOptions::PLANES_ONLY) {

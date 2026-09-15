@@ -13,49 +13,28 @@
 #include "components/UITheme.h"
 #include "util/DebugTrace.h"
 
-bool MappedInputManager::isNavDirectionSwapped() const {
-  // Key the swap on the orientation the screen is *actually* rendered at, not the persisted reader
-  // setting. The reader (and its modal menus) render rotated, so navigation/labels flip there; the
-  // home and settings UI render in portrait, so they never flip even when a rotated reader is configured.
-  const auto orientation = renderer.getOrientation();
-  return SETTINGS.frontButtonFollowOrientation &&
-         (orientation == GfxRenderer::PortraitInverted || orientation == GfxRenderer::LandscapeCounterClockwise);
+// The pure mapping uses the persisted/HAL numbering. Fail here if either changes.
+static_assert(HalGPIO::BTN_BACK == 0 && HalGPIO::BTN_CONFIRM == 1 && HalGPIO::BTN_LEFT == 2 &&
+              HalGPIO::BTN_RIGHT == 3 && HalGPIO::BTN_UP == 4 && HalGPIO::BTN_DOWN == 5 && HalGPIO::BTN_POWER == 6);
+static_assert(GfxRenderer::Portrait == 0 && GfxRenderer::LandscapeClockwise == 1 &&
+              GfxRenderer::PortraitInverted == 2 && GfxRenderer::LandscapeCounterClockwise == 3);
+static_assert(CrossPointSettings::PREV_NEXT == 0 && CrossPointSettings::NEXT_PREV == 1 &&
+              CrossPointSettings::SIDE_BUTTONS_DISABLED == 2);
+
+button_mapping::Config MappedInputManager::mappingConfig() const {
+  return {{SETTINGS.frontButtonBack, SETTINGS.frontButtonConfirm, SETTINGS.frontButtonLeft, SETTINGS.frontButtonRight},
+          SETTINGS.sideButtonLayout,
+          static_cast<uint8_t>(renderer.getOrientation()),
+          SETTINGS.frontButtonFollowOrientation != 0};
 }
 
+bool MappedInputManager::isNavDirectionSwapped() const { return button_mapping::navDirectionSwapped(mappingConfig()); }
+
 MappedInputManager::Button MappedInputManager::mapScreenDirection(const Button button) const {
-  // Rows follow GfxRenderer::Orientation's declared order.
-  static constexpr Button directions[][4] = {
-      {Button::Left, Button::Right, Button::Up, Button::Down},
-      {Button::Down, Button::Up, Button::Left, Button::Right},
-      {Button::Right, Button::Left, Button::Down, Button::Up},
-      {Button::Up, Button::Down, Button::Right, Button::Left},
-  };
-
-  uint8_t direction = 0;
-  switch (button) {
-    case Button::ScreenLeft:
-      direction = 0;
-      break;
-    case Button::ScreenRight:
-      direction = 1;
-      break;
-    case Button::ScreenUp:
-      direction = 2;
-      break;
-    case Button::ScreenDown:
-      direction = 3;
-      break;
-    default:
-      return button;
-  }
-
-  const uint8_t orientation =
-      SETTINGS.frontButtonFollowOrientation ? static_cast<uint8_t>(renderer.getOrientation()) : 0;
-  return directions[orientation][direction];
+  return button_mapping::screenDirection(button, mappingConfig());
 }
 
 bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint8_t) const) const {
-  const auto sideLayout = SETTINGS.sideButtonLayout;
   // A tap on the hint band stands in for the front button that hint belongs to. Routed
   // through the same hardware ids the physical keys use, so every logical role — Back,
   // Confirm, NavNext, the lot — inherits it without a second mapping to keep in step.
@@ -81,67 +60,9 @@ bool MappedInputManager::mapButton(const Button button, bool (HalGPIO::*fn)(uint
     return hintStroke.query(static_cast<int>(hw), tapped, releaseQuery, millis());
   };
 
-  switch (button) {
-    case Button::Back:
-      // Logical Back maps to user-configured front button.
-      return press(SETTINGS.frontButtonBack);
-    case Button::Confirm:
-      // Logical Confirm maps to user-configured front button.
-      return press(SETTINGS.frontButtonConfirm);
-    case Button::Left:
-      // Logical Left maps to user-configured front button.
-      return press(SETTINGS.frontButtonLeft);
-    case Button::Right:
-      // Logical Right maps to user-configured front button.
-      return press(SETTINGS.frontButtonRight);
-    case Button::Up:
-      // Side buttons remain fixed for Up/Down.
-      return press(HalGPIO::BTN_UP);
-    case Button::Down:
-      // Side buttons remain fixed for Up/Down.
-      return press(HalGPIO::BTN_DOWN);
-    case Button::Power:
-      // Power button bypasses remapping.
-      return press(HalGPIO::BTN_POWER);
-    case Button::PageBack:
-      // Reader page navigation uses side buttons and can be swapped via settings.
-      switch (sideLayout) {
-        case CrossPointSettings::PREV_NEXT:
-          return press(HalGPIO::BTN_UP);
-        case CrossPointSettings::NEXT_PREV:
-          return press(HalGPIO::BTN_DOWN);
-        case CrossPointSettings::SIDE_BUTTONS_DISABLED:
-        default:
-          return false;
-      }
-    case Button::PageForward:
-      // Reader page navigation uses side buttons and can be swapped via settings.
-      switch (sideLayout) {
-        case CrossPointSettings::PREV_NEXT:
-          return press(HalGPIO::BTN_DOWN);
-        case CrossPointSettings::NEXT_PREV:
-          return press(HalGPIO::BTN_UP);
-        case CrossPointSettings::SIDE_BUTTONS_DISABLED:
-        default:
-          return false;
-      }
-    case Button::NavNext:
-      // Logical "next item" navigation: side Down + front Right, with the control axis flipped in
-      // INVERTED / LANDSCAPE_CCW (frontButtonFollowOrientation) so it matches the rotated hint labels.
-      return isNavDirectionSwapped() ? (mapButton(Button::Up, fn) || mapButton(Button::Left, fn))
-                                     : (mapButton(Button::Down, fn) || mapButton(Button::Right, fn));
-    case Button::NavPrevious:
-      // Logical "previous item" navigation: side Up + front Left, axis-flipped in the same orientations.
-      return isNavDirectionSwapped() ? (mapButton(Button::Down, fn) || mapButton(Button::Right, fn))
-                                     : (mapButton(Button::Up, fn) || mapButton(Button::Left, fn));
-    case Button::ScreenLeft:
-    case Button::ScreenRight:
-    case Button::ScreenUp:
-    case Button::ScreenDown:
-      return mapButton(mapScreenDirection(button), fn);
-  }
-
-  return false;
+  const auto hardware = button_mapping::resolve(button, mappingConfig());
+  return (hardware.first != button_mapping::NONE && press(hardware.first)) ||
+         (hardware.second != button_mapping::NONE && press(hardware.second));
 }
 
 namespace {

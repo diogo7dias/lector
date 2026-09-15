@@ -1,0 +1,4 @@
+add_executable(ButtonMappingTest ButtonMappingTest.cpp)
+target_include_directories(ButtonMappingTest PRIVATE ${REPO_ROOT}/src)
+target_link_libraries(ButtonMappingTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(ButtonMappingTest)

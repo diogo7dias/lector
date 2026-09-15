@@ -191,12 +191,6 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     }
   }
 
-  if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
-    const uint8_t legacyValue =
-        clamp(doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN, SLEEP_TIMEOUT_COUNT, (uint8_t)SLEEP_10_MIN);
-    sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacyValue);
-    needsResave = true;
-  }
   // Front button remap — managed by RemapFrontButtons sub-activity, not in SettingsList.
   frontButtonBack = clamp(doc["frontButtonBack"] | (uint8_t)FRONT_HW_BACK, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_BACK);
   frontButtonConfirm =
@@ -206,6 +200,79 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
       clamp(doc["frontButtonRight"] | (uint8_t)FRONT_HW_RIGHT, FRONT_BUTTON_HARDWARE_COUNT, FRONT_HW_RIGHT);
   validateFrontButtonMapping(s);
 
+  // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
+  wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
+
+  // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
+  // future-version settings file cannot set a bit no builder knows how to draw, and
+  // trimmed to POPUP_ITEM_MAX so a file claiming twenty rows cannot build a pop-up
+  // taller than the panel.
+  {
+    // Widened to 32 bits when Delete Wallpaper became the first pop-up row past bit 15.
+    // No migration: the mask persists as a plain number and every existing bit keeps its
+    // position, so a file written by an older build reads back unchanged.
+    uint32_t storedPopupItems = doc["popupItems"] | (uint32_t)0;
+    uint32_t validMask = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) validMask |= static_cast<uint32_t>(1u << fn);
+    storedPopupItems &= validMask;
+    popupItems = 0;
+    uint8_t kept = 0;
+    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
+      if (!((storedPopupItems >> fn) & 1u)) continue;
+      if (kept >= POPUP_ITEM_MAX) break;
+      popupItems |= static_cast<uint32_t>(1u << fn);
+      kept++;
+    }
+    if (popupItems != storedPopupItems) needsResave = true;
+  }
+
+  fontPointSize = doc["fontSize"] | DEFAULT_FONT_POINT_SIZE;
+
+  // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
+  const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
+  fontFamily = clamp(storedFontFamily, BUILTIN_FONT_COUNT, 0);
+  // SD card font family name — not in SettingsList, load manually
+  const char* sfn = doc["sdFontFamilyName"] | "";
+  strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
+  sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
+  // TXT reader font — absent on any settings file written before the TXT popup
+  // existed, so an upgrade lands on the smallest size, which is the intended default.
+  txtFontPointSize = doc["txtFontSize"] | TXT_DEFAULT_FONT_POINT_SIZE;
+  copyToField(txtSdFontFamilyName, doc["txtSdFontFamilyName"] | "", sizeof(txtSdFontFamilyName));
+
+  // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
+  copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
+
+  // Language -- stored as code string for stability across enum reorders.
+  if (doc["language"].is<const char*>()) {
+    language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
+  }
+
+  needsResave = migrateFromJson(doc) || needsResave;
+
+  // A hand-edited or partly-migrated file can hold sides that disagree with its link
+  // mode; the mode is the statement of record, so it wins.
+  normalizeMargins();
+
+  if (needsResave) {
+    LOG_DBG("CPS", "Resaving settings to update format");
+    requestResave();
+  }
+
+  LOG_DBG("CPS", "Settings loaded from file");
+
+  return true;
+}
+
+bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
+  CrossPointSettings& s = *this;
+  bool needsResave = false;
+
+  if (doc["sleepTimeoutMinutes"].isNull() && !doc["sleepTimeout"].isNull()) {
+    const uint8_t legacyValue = doc["sleepTimeout"] | (uint8_t)SLEEP_10_MIN;
+    sleepTimeoutMinutes = sleepTimeoutEnumToMinutes(legacyValue);
+    needsResave = true;
+  }
   // "Open Book on Boot" replaced the old "Open Random Book on Boot" toggle.
   // A settings file that only carries the toggle keeps the behaviour it described: on
   // means Random, off means the ordinary routing.
@@ -221,9 +288,6 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     bookBrowserOrder = (doc["bookBrowserRandomOrder"] | (uint8_t)0) ? BOOK_ORDER_RANDOM : BOOK_ORDER_ALPHABETICAL;
     needsResave = true;
   }
-
-  // Hold Wallpaper — see toJson. Loaded by hand for the same reason.
-  wallpaperRotationPaused = (doc["wallpaperRotationPaused"] | (uint8_t)0) ? 1 : 0;
 
   // Margins model, two changes deep. "verticalMarginsLinked" was an on/off switch over
   // the two vertical sides; it is now one of three link modes, so a file holding only the
@@ -312,47 +376,16 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Menu Pop-up membership. Masked to the defined actions so a hand-edited or
-  // future-version settings file cannot set a bit no builder knows how to draw, and
-  // trimmed to POPUP_ITEM_MAX so a file claiming twenty rows cannot build a pop-up
-  // taller than the panel.
-  {
-    // Widened to 32 bits when Delete Wallpaper became the first pop-up row past bit 15.
-    // No migration: the mask persists as a plain number and every existing bit keeps its
-    // position, so a file written by an older build reads back unchanged.
-    uint32_t storedPopupItems = doc["popupItems"] | (uint32_t)0;
-    uint32_t validMask = 0;
-    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) validMask |= static_cast<uint32_t>(1u << fn);
-    storedPopupItems &= validMask;
-    popupItems = 0;
-    uint8_t kept = 0;
-    for (const uint8_t fn : POPUP_ITEM_FUNCTIONS) {
-      if (!((storedPopupItems >> fn) & 1u)) continue;
-      if (kept >= POPUP_ITEM_MAX) break;
-      popupItems |= static_cast<uint32_t>(1u << fn);
-      kept++;
-    }
-    if (popupItems != storedPopupItems) needsResave = true;
-  }
-
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and
   // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is
   // renderable at those sizes, so the range is unambiguous and folds to the
   // point sizes those slots used to mean. Drop this once 1.4 upgrades are done.
-  uint8_t storedFontSize = doc["fontSize"] | DEFAULT_FONT_POINT_SIZE;
-  if (storedFontSize <= LEGACY_FONT_SIZE_MAX) {
-    storedFontSize = 12 + storedFontSize * 2;  // 0,1,2,3 -> 12,14,16,18
+  if (fontPointSize <= LEGACY_FONT_SIZE_MAX) {
+    fontPointSize = foldLegacyReaderFontSize(fontPointSize);  // 0,1,2,3 -> 12,14,16,18
     needsResave = true;
   }
-  fontPointSize = storedFontSize;
 
-  // Font family — uses dynamic getter/setter in SettingsList so the generic loop skips it.
   const uint8_t storedFontFamily = doc["fontFamily"] | (uint8_t)0;
-  fontFamily = clamp(storedFontFamily, BUILTIN_FONT_COUNT, 0);
-  // SD card font family name — not in SettingsList, load manually
-  const char* sfn = doc["sdFontFamilyName"] | "";
-  strncpy(sdFontFamilyName, sfn, sizeof(sdFontFamilyName) - 1);
-  sdFontFamilyName[sizeof(sdFontFamilyName) - 1] = '\0';
   if (storedFontFamily == LEGACY_OPENDYSLEXIC && sdFontFamilyName[0] == '\0') {
     fontFamily = CHAREINK;
     strncpy(sdFontFamilyName, "OpenDyslexic", sizeof(sdFontFamilyName) - 1);
@@ -379,31 +412,7 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // TXT reader font — absent on any settings file written before the TXT popup
-  // existed, so an upgrade lands on the smallest size, which is the intended default.
-  txtFontPointSize = doc["txtFontSize"] | TXT_DEFAULT_FONT_POINT_SIZE;
-  copyToField(txtSdFontFamilyName, doc["txtSdFontFamilyName"] | "", sizeof(txtSdFontFamilyName));
-
-  // Dictionary folder name — uses dynamic getter/setter in SettingsList, load manually
-  copyToField(dictionaryName, doc["dictionaryName"] | "", sizeof(dictionaryName));
-
-  // Language -- stored as code string for stability across enum reorders.
-  if (doc["language"].is<const char*>()) {
-    language = static_cast<uint8_t>(I18n::languageFromCode(doc["language"].as<const char*>()));
-  }
-
-  // A hand-edited or partly-migrated file can hold sides that disagree with its link
-  // mode; the mode is the statement of record, so it wins.
-  normalizeMargins();
-
-  if (needsResave) {
-    LOG_DBG("CPS", "Resaving settings to update format");
-    requestResave();
-  }
-
-  LOG_DBG("CPS", "Settings loaded from file");
-
-  return true;
+  return needsResave;
 }
 
 ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth,

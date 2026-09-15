@@ -13,8 +13,12 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 HalDisplay::~HalDisplay() {}
 
 void HalDisplay::begin(bool seamless) {
+  // The one read of the hardware detect. Everything below, and the two other X3 branches
+  // in this file, take their answer from this latched value rather than the global.
+  deviceProfile = deviceProfileFromHardware();
+
   // Set X3-specific panel mode before initializing.
-  if (gpio.deviceIsX3()) {
+  if (deviceProfile.isX3) {
     einkDisplay.setDisplayX3();
   }
 
@@ -116,7 +120,7 @@ HalDisplay::RefreshMode HalDisplay::applyRefreshPolicy(const RefreshMode request
 // previous frame — a real clean, just not a full discharge. The every-48 FULL remains the
 // discharge, exactly as the policy intends.
 bool HalDisplay::needsX3HalfResync(const RefreshMode requested, const RefreshMode actual) const {
-  return gpio.deviceIsX3() && actual == RefreshMode::HALF_REFRESH && requested == RefreshMode::HALF_REFRESH;
+  return deviceProfile.isX3 && actual == RefreshMode::HALF_REFRESH && requested == RefreshMode::HALF_REFRESH;
 }
 
 // The frame is only worth measuring when the answer can change what happens. Only a FAST
@@ -283,7 +287,7 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   // resync makes displayGrayscaleBase clear first, matching displayBuffer(HALF).
   // The reader's FAST path is deliberately left on the differential path so
   // per-page grayscale stays cheap.
-  if (gpio.deviceIsX3() && fallback == RefreshMode::HALF_REFRESH) {
+  if (deviceProfile.isX3 && fallback == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 

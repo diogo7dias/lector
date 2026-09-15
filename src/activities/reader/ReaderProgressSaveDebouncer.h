@@ -7,13 +7,14 @@
 // Allocation-free save policy adapted from Sichroteph/YACP commit
 // 3f3c5fc42e794c021edb9832856ef98c2d2065b9 (MIT). Callers retain ownership
 // of their persistence format and explicitly flush pending state on exit.
+// Check on every render: ten position changes, or five minutes with pending state.
 class ReaderProgressSaveDebouncer {
   static constexpr uint8_t PAGE_CHANGE_INTERVAL = 10;
-  static constexpr unsigned long MAX_SAVE_INTERVAL_MS = 5UL * 60UL * 1000UL;
+  static constexpr uint32_t MAX_SAVE_INTERVAL_MS = 5UL * 60UL * 1000UL;
 
   uint32_t lastPositionKey_ = 0;
   uint32_t lastMetadataKey_ = 0;
-  unsigned long lastPersistedAtMs_ = 0;
+  uint32_t lastPersistedAtMs_ = 0;
   uint8_t pendingPageChanges_ = 0;
   bool initialized_ = false;
   bool pending_ = false;
@@ -22,13 +23,13 @@ class ReaderProgressSaveDebouncer {
   bool observe(const uint32_t positionKey) { return observe(positionKey, 0); }
 
   bool observe(const uint32_t positionKey, const uint32_t metadataKey) {
-    const unsigned long now = millis();
+    const uint32_t now = millis();
     if (!initialized_) {
       initialized_ = true;
       lastPositionKey_ = positionKey;
       lastMetadataKey_ = metadataKey;
       lastPersistedAtMs_ = now;
-      pendingPageChanges_ = 1;
+      pendingPageChanges_ = 0;
       pending_ = true;
       return false;
     }

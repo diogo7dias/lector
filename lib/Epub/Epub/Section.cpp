@@ -246,44 +246,24 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     }
     filePartial = (version == SECTION_FILE_PARTIAL_VERSION);
 
-    int fileFontId;
-    uint16_t fileViewportWidth, fileViewportHeight;
-    float fileLineCompression;
-    bool fileExtraParagraphSpacing;
-    uint8_t fileParagraphSpacing;
-    uint8_t fileParagraphAlignment;
-    bool fileHyphenationEnabled;
-    bool fileEmbeddedTextStyle;
-    bool fileEmbeddedLayoutStyle;
-    uint8_t fileImageRendering;
-    bool fileFocusReadingEnabled;
-    uint8_t fileGuideDotsMode;
-    uint8_t fileFirstLineIndentMode;
-    uint8_t fileFirstLineIndentPercent;
-    serialization::readPod(file, fileFontId);
-    serialization::readPod(file, fileLineCompression);
-    serialization::readPod(file, fileExtraParagraphSpacing);
-    serialization::readPod(file, fileParagraphSpacing);
-    serialization::readPod(file, fileParagraphAlignment);
-    serialization::readPod(file, fileViewportWidth);
-    serialization::readPod(file, fileViewportHeight);
-    serialization::readPod(file, fileHyphenationEnabled);
-    serialization::readPod(file, fileEmbeddedTextStyle);
-    serialization::readPod(file, fileEmbeddedLayoutStyle);
-    serialization::readPod(file, fileImageRendering);
-    serialization::readPod(file, fileFocusReadingEnabled);
-    serialization::readPod(file, fileGuideDotsMode);
-    serialization::readPod(file, fileFirstLineIndentMode);
-    serialization::readPod(file, fileFirstLineIndentPercent);
+    ReaderRenderSpec cached;
+    serialization::readPod(file, cached.fontId);
+    serialization::readPod(file, cached.lineCompression);
+    serialization::readPod(file, cached.extraParagraphSpacing);
+    serialization::readPod(file, cached.paragraphSpacing);
+    serialization::readPod(file, cached.paragraphAlignment);
+    serialization::readPod(file, cached.viewportWidth);
+    serialization::readPod(file, cached.viewportHeight);
+    serialization::readPod(file, cached.hyphenationEnabled);
+    serialization::readPod(file, cached.embeddedTextStyle);
+    serialization::readPod(file, cached.embeddedLayoutStyle);
+    serialization::readPod(file, cached.imageRendering);
+    serialization::readPod(file, cached.focusReadingEnabled);
+    serialization::readPod(file, cached.guideDotsMode);
+    serialization::readPod(file, cached.firstLineIndentMode);
+    serialization::readPod(file, cached.firstLineIndentPercent);
 
-    if (spec.fontId != fileFontId || spec.lineCompression != fileLineCompression ||
-        spec.extraParagraphSpacing != fileExtraParagraphSpacing || spec.paragraphSpacing != fileParagraphSpacing ||
-        spec.paragraphAlignment != fileParagraphAlignment || spec.viewportWidth != fileViewportWidth ||
-        spec.viewportHeight != fileViewportHeight || spec.hyphenationEnabled != fileHyphenationEnabled ||
-        spec.embeddedTextStyle != fileEmbeddedTextStyle || spec.embeddedLayoutStyle != fileEmbeddedLayoutStyle ||
-        spec.imageRendering != fileImageRendering || spec.focusReadingEnabled != fileFocusReadingEnabled ||
-        spec.guideDotsMode != fileGuideDotsMode || spec.firstLineIndentMode != fileFirstLineIndentMode ||
-        spec.firstLineIndentPercent != fileFirstLineIndentPercent) {
+    if (!sectionCacheMatches(spec, cached)) {
       file.close();
       LOG_ERR("SCT", "Deserialization failed: Parameters do not match");
       clearCache();

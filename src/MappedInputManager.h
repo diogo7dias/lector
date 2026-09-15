@@ -2,6 +2,7 @@
 
 #include <HalGPIO.h>
 
+#include "ButtonMapping.h"
 #include "ListSwipeGesture.h"
 #include "components/HintBandGeometry.h"
 #include "util/ReleaseGate.h"
@@ -10,23 +11,7 @@ class GfxRenderer;
 
 class MappedInputManager {
  public:
-  enum class Button {
-    Back,
-    Confirm,
-    Left,
-    Right,
-    Up,
-    Down,
-    Power,
-    PageBack,
-    PageForward,
-    NavNext,
-    NavPrevious,
-    ScreenLeft,
-    ScreenRight,
-    ScreenUp,
-    ScreenDown
-  };
+  using Button = button_mapping::Button;
   enum class SwipeDir { None, Left, Right, Up, Down };
 
   struct Labels {
@@ -184,6 +169,7 @@ class MappedInputManager {
   // preference and stays "rotated" even while portrait UI like home/settings is on screen.
   const GfxRenderer& renderer;
 
+  button_mapping::Config mappingConfig() const;
   Button mapScreenDirection(Button button) const;
   Labels mapFrontLabels(const char* back, const char* confirm, const char* left, const char* right) const;
   bool mapButton(Button button, bool (HalGPIO::*fn)(uint8_t) const) const;

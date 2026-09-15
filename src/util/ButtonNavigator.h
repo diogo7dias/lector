@@ -3,6 +3,7 @@
 #include <functional>
 #include <vector>
 
+#include "ButtonGestures.h"
 #include "MappedInputManager.h"
 
 class ButtonNavigator final {
@@ -17,6 +18,9 @@ class ButtonNavigator final {
   // lastContinuousNavTime is, i.e. on the release that ends the run.
   unsigned repeatIndex_ = 0;
   static const MappedInputManager* mappedInput;
+  button_gestures::Detector rowTapDetector_;
+  MappedInputManager::Button rowTapButton_ = MappedInputManager::Button::NavNext;
+  int rowTapSteps_ = 1;
 
   [[nodiscard]] bool shouldNavigateContinuously() const;
   [[nodiscard]] static bool swipeMatches(const Buttons& buttons);
@@ -69,8 +73,14 @@ class ButtonNavigator final {
   void onPreviousContinuous(const Callback& callback);
   void onContinuous(const Buttons& buttons, const Callback& callback);
 
-  [[nodiscard]] static int nextIndex(int currentIndex, int totalItems);
-  [[nodiscard]] static int previousIndex(int currentIndex, int totalItems);
+  // Opt-in row navigation only. The first tap moves immediately on the existing
+  // press/release edge; a second press within DOUBLE_WINDOW_MS adds four rows.
+  // Continuous movement stays with the caller's existing onContinuous handler.
+  void onRowTap(MappedInputManager::Button button, const std::function<void(int)>& callback, bool onRelease = false);
+  void resetRowTap();
+
+  [[nodiscard]] static int nextIndex(int currentIndex, int totalItems, int steps = 1);
+  [[nodiscard]] static int previousIndex(int currentIndex, int totalItems, int steps = 1);
 
   // Move `delta` rows for one repeat of a held key. Clamped, never wrapped: a
   // hold that wrapped past the last row would run forever and could not be
