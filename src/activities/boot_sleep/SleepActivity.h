@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 
+#include "SleepFacePaint.h"
 #include "activities/Activity.h"
 
 class Bitmap;
@@ -23,7 +24,12 @@ class SleepActivity final : public Activity {
   void renderCoverSleepScreen() const;
   // Full-screen wallpaper or cover: cleared page, the bitmap centred (fit or crop), the
   // cover filter applied, the grayscale pipeline when the image and the filter allow it.
-  void renderBitmapSleepScreen(const Bitmap& bitmap) const;
+  //
+  // face names which of the three sleep faces this bitmap IS, so the waveform and the
+  // submission count come from sleep_face::planFor rather than from a literal here. Both
+  // faces share this renderer and therefore share those rows; the parameter exists so the
+  // call site states its intent and the plan is asked the right question.
+  void renderBitmapSleepScreen(const Bitmap& bitmap, sleep_face::Face face) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared

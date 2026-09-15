@@ -1,5 +1,6 @@
 add_executable(SleepFacePaintTest
   SleepGrayscaleBaseTest.cpp
+  SleepFacePaintTest.cpp
 )
 
 # stubs/ first: it carries the host HalDisplay (refresh-mode enum only), which shadows the
