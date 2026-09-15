@@ -32,7 +32,6 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
-#include "components/BusyBanner.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -57,6 +56,7 @@
 #include "activities/settings/TextSettingsActivity.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
+#include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
@@ -512,6 +512,25 @@ void EpubReaderActivity::openQuoteGrab() {
       });
 }
 
+reader_landing::Pending EpubReaderActivity::landingPending() const {
+  // Gathering only: which anchors are set, and the two facts that decide whether the
+  // reflow anchors still apply. The precedence between them lives in ReaderLanding.h.
+  reader_landing::Pending pending;
+  pending.explicitOffset = pendingOffsetJump.has_value();
+  pending.resumeOffset = cachedVisibleTextOffset.has_value();
+  pending.pageJump = pendingPageJump.has_value();
+  pending.fragmentAnchor = !pendingAnchor.empty();
+  pending.percentJump = pendingPercentJump;
+  pending.paragraphScan = pendingParagraphScan_.has_value();
+  pending.ordinalAnchor = pendingOrdinalAnchor_.has_value();
+  pending.sortesPage = pendingSortesPage;
+  // The reflow anchors name a page in the chapter they were captured in.
+  pending.sameSpineAsCapture = currentSpineIndex == cachedSpineIndex;
+  // A total saved mid-build is a watermark, not the real count.
+  pending.haveCapturedPageCount = cachedChapterTotalPageCount > 0;
+  return pending;
+}
+
 bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) const {
   switch (function) {
     case CrossPointSettings::LP_MENU_KOSYNC:
@@ -747,9 +766,8 @@ void EpubReaderActivity::loop() {
     // task may have reset/replaced the section or moved the page in between.
     if (section && !section->isBuilding() &&
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
-      const int neighbour =
-          idlePrewarmNeighbour(section->currentPage, idlePrewarmPage, idlePrewarmSpine, currentSpineIndex,
-                               static_cast<int>(section->pageCount));
+      const int neighbour = idlePrewarmNeighbour(section->currentPage, idlePrewarmPage, idlePrewarmSpine,
+                                                 currentSpineIndex, static_cast<int>(section->pageCount));
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
       if (neighbour >= 0) {
@@ -2523,17 +2541,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       cachedVisibleTextOffset.reset();
     }
     const bool cacheComplete = cacheLoaded && !section->isPartial();
-    // Land this render by content offset when one applies. An explicit bookmark jump
-    // (pendingOffsetJump) always wins -- it is a deliberate navigation to a stored content anchor.
-    // Otherwise fall back to the settings-change reposition: read after the cache-hit reset above,
-    // a spec match means the saved page number still names the same content so there is nothing to
-    // reposition, while a page jump or fragment anchor is a deliberate navigation that outranks it.
-    const bool explicitOffsetJump = pendingOffsetJump.has_value();
+    // WHICH anchor governs this landing is named in ReaderLanding.h; the lookup it implies
+    // stays here, where the section is. Read after the cache-hit reset above: a spec match
+    // means the saved page number still names the same content, so there is nothing to
+    // reposition.
+    const reader_landing::Pending pendingLanding = landingPending();
+    const reader_landing::Anchor landingAnchor = reader_landing::forOffsetLanding(pendingLanding);
     const std::optional<uint32_t> offsetJump =
-        explicitOffsetJump ? pendingOffsetJump
-        : (pendingPageJump.has_value() || !pendingAnchor.empty() || currentSpineIndex != cachedSpineIndex)
-            ? std::nullopt
-            : cachedVisibleTextOffset;
+        landingAnchor == reader_landing::Anchor::ExplicitOffset ? pendingOffsetJump
+        : landingAnchor == reader_landing::Anchor::ResumeOffset ? cachedVisibleTextOffset
+                                                                : std::nullopt;
     if (!cacheComplete) {
       if (section->isPartial()) {
         LOG_DBG("ERS", "Partial cache found (%d pages), resuming build...", section->pageCount);
@@ -2553,7 +2570,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // page count). Anchor jumps (TOC / chapter select / footnotes) resolve incrementally below --
       // the anchor is recorded as its page is laid out, so a chapter-top anchor lands on page 0
       // without indexing the whole chapter.
-      const bool needsFullBuild = pendingPercentJump || pendingSortesPage;
+      const bool needsFullBuild = reader_landing::needsFullBuild(pendingLanding);
       if (needsFullBuild) {
         GUI.drawPopup(renderer, tr(STR_INDEXING));
         scheduleGhostCleanup();
@@ -2738,11 +2755,11 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     if (offsetJump.has_value()) {
       if (const auto offsetPage = section->getPageForVisibleTextOffset(*offsetJump)) {
         section->currentPage = *offsetPage;
-        // This anchor has now established the landing page. It must not be
-        // applied again by applyDeferredReposition() after a background build
-        // finishes, or it would undo page turns made during that build.
+        // This anchor has now established the landing page. It must not be applied again
+        // by applyDeferredReposition() after a background build finishes, or it would
+        // undo page turns made during that build.
         clearDeferredReposition();
-      } else if (explicitOffsetJump) {
+      } else if (landingAnchor == reader_landing::Anchor::ExplicitOffset) {
         LOG_ERR("ERS", "Could not resolve content offset");
         pendingOffsetJump.reset();
         section.reset();
@@ -2750,7 +2767,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         return;
       }
     }
-    if (explicitOffsetJump) {
+    if (reader_landing::retiresDeferredReposition(pendingLanding)) {
       // A bookmark/Return target supersedes any stale session-start resume anchor.
       clearDeferredReposition();
     }
@@ -2992,15 +3009,25 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 }
 
 bool EpubReaderActivity::applyDeferredReposition() {
-  if ((!cachedVisibleTextOffset.has_value() && cachedChapterTotalPageCount == 0 &&
-       !pendingOrdinalAnchor_.has_value()) ||
-      !section || section->isBuilding()) {
+  const reader_landing::Pending pending = landingPending();
+  // Nothing pending at all, or the chapter cannot answer yet: no decision to make.
+  if ((!pending.resumeOffset && !pending.haveCapturedPageCount && !pending.ordinalAnchor) || !section ||
+      section->isBuilding()) {
+    return false;
+  }
+  // WHICH anchor wins here is the same decision render() makes, named in ReaderLanding.h.
+  const reader_landing::Anchor resolved = reader_landing::forDeferredReposition(pending);
+  if (resolved == reader_landing::Anchor::None) {
+    // Pending, but captured in a chapter the reader has since left: the anchors name a
+    // page that no longer exists here, so drop them rather than resolve them against
+    // the wrong chapter.
+    clearDeferredReposition();
     return false;
   }
 
   // The paragraph anchor outranks both fallbacks: it is the place the reader actually
   // was. The chapter is fully laid out by now, so the paragraph is certainly in it.
-  if (pendingOrdinalAnchor_.has_value() && section->pageCount > 0 && currentSpineIndex == cachedSpineIndex) {
+  if (resolved == reader_landing::Anchor::OrdinalAnchor && section->pageCount > 0) {
     const int ordinalPage = findPageForOrdinal(*section, *pendingOrdinalAnchor_);
     pendingOrdinalAnchor_.reset();
     cachedChapterTotalPageCount = 0;
@@ -3015,8 +3042,10 @@ bool EpubReaderActivity::applyDeferredReposition() {
 
   bool changed = false;
   // Re-derive the page from the saved content offset after a settings reflow.
-  // Older 4/6-byte progress files retain the page-fraction fallback.
-  if (currentSpineIndex == cachedSpineIndex) {
+  // Older 4/6-byte progress files retain the page-fraction fallback. The spine check the
+  // old code repeated here is already in forDeferredReposition: reaching this point means
+  // the anchors belong to this chapter.
+  {
     int newPage = section->currentPage;
     bool mappedOffset = false;
     if (cachedVisibleTextOffset.has_value()) {

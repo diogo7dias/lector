@@ -10,6 +10,7 @@
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
+#include "ReaderLanding.h"
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
@@ -287,6 +288,9 @@ class EpubReaderActivity final : public Activity {
   // initial landing page. Later user navigation must never be overwritten when
   // a background section build finishes.
   void clearDeferredReposition();
+  // Which landing anchors are pending. reader_landing decides which of them wins; this
+  // only reports what is set. See ReaderLanding.h.
+  reader_landing::Pending landingPending() const;
   void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Ordinary renders, including changed pagination, wait until the batch is due.
