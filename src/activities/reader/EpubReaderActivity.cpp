@@ -30,6 +30,7 @@
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "IdlePrewarmNeighbour.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -742,7 +743,7 @@ void EpubReaderActivity::loop() {
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
   confirmLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Confirm));
 
-  // Idle glyph prewarm for the likely next page (currentPage + 1). The scan
+  // Idle glyph prewarm for the neighbour the reader is moving toward. The scan
   // pass draws nothing (FCM scan mode suppresses pixels), so the displayed
   // framebuffer is untouched; endScanAndPrewarm loads only glyphs not already
   // cached. Debounced past rapid page-flipping, one attempt per position, and
@@ -759,17 +760,19 @@ void EpubReaderActivity::loop() {
     // task may have reset/replaced the section or moved the page in between.
     if (section && !section->isBuilding() &&
         (idlePrewarmSpine != currentSpineIndex || idlePrewarmPage != section->currentPage)) {
+      const int neighbour =
+          idlePrewarmNeighbour(section->currentPage, idlePrewarmPage, idlePrewarmSpine, currentSpineIndex,
+                               static_cast<int>(section->pageCount));
       idlePrewarmSpine = currentSpineIndex;
       idlePrewarmPage = section->currentPage;
-      const int nextPage = section->currentPage + 1;
-      if (nextPage < static_cast<int>(section->pageCount)) {
-        if (const auto p = section->loadPage(nextPage)) {
+      if (neighbour >= 0) {
+        if (const auto p = section->loadPage(neighbour)) {
           if (auto* fcm = renderer.getFontCacheManager()) {
             const auto t0 = millis();
             auto scope = fcm->createPrewarmScope();
             p->render(renderer, SETTINGS.getReaderFontId(prefs_), 0, 0);  // scan only, no pixels
             scope.endScanAndPrewarm();
-            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", nextPage, millis() - t0);
+            LOG_DBG("ERS", "Idle prewarm: page %d in %lums", neighbour, millis() - t0);
           }
         }
       }
