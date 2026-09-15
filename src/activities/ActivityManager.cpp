@@ -4,7 +4,6 @@
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <I18n.h>
-#include <PerfLog.h>
 #include <PerfStats.h>
 #include <esp_random.h>
 
@@ -286,12 +285,8 @@ void ActivityManager::loop() {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
         LOG_DBG("ACT", "Popped from activity stack, new size = %zu", stackActivities.size());
-        // Re-tag the perf log. onEnter() is what normally sets this, and a resumed
-        // activity is never re-entered — it was pushed under, not exited — so without
-        // this every refresh after a child screen closes is still filed under the child.
-        // That is how a reader page turn came back labelled "TextSettings".
-        PerfLog::flush();
-        PerfLog::setScreen(currentActivity->name.c_str());
+        // Resume bookkeeping runs before the result handler can render or navigate again.
+        currentActivity->becameTopmost();
         // Handle result if necessary
         if (currentActivity->resultHandler) {
           LOG_DBG("ACT", "Handling result for popped activity");
