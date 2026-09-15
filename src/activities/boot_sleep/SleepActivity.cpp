@@ -199,6 +199,16 @@ void SleepActivity::renderSleepScreen() const {
   // comment that used to sit here said "every lock is two panel submissions", which had
   // been false for the grayscale faces for as long as they have existed: those cost
   // three (popup, BW base, the two grayscale planes committed together).
+  //
+  // POSSIBLE SAVING, hardware-gated — do not take it from a code reading. drawPopup ends
+  // in a full FAST submission (617 ms measured at the low end), and it runs BEFORE the
+  // face is chosen, so the cheapest lock drives the panel twice to show one picture. The
+  // paint/submit split now exists to make composing them possible: GUI.drawBannerStrip()
+  // paints without submitting, so the popup could ride into the face's own submission.
+  // Not done, for two reasons that need a device to settle: removing a submission is
+  // physically observable (and this one is the user's visible answer to a press that then
+  // spends seconds reading the card), and the face's own base is HALF/FULL, not FAST, so
+  // the composed pass would put the popup on a different waveform than it runs today.
   if (APP_STATE.lastSleepFromReader) {
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));

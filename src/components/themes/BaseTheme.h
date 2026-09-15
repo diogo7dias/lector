@@ -314,7 +314,14 @@ class BaseTheme {
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
+  //
+  // This is the paint/submit split. Any caller that wants to compose further drawing into
+  // the SAME panel submission uses this and submits once itself; BusyBanner is the worked
+  // example. drawPopup below is the convenience for the 42 callers that just want a
+  // message on the glass.
   Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
+  // drawBannerStrip plus ONE panel submission at FAST. Paints and drives the panel — the
+  // only draw* entry point on this class that does, which is why it is called out here.
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
   // leftAlign left-aligns the rows instead of centring them, so a caller whose labels carry
   // a status marker keeps that marker in a fixed column rather than letting it shunt each

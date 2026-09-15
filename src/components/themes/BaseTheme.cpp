@@ -864,9 +864,19 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   return Rect{0, y, w, h};
 }
 
+// drawBannerStrip above is the paint-only Interface: it touches the framebuffer and no
+// panel. drawPopup is that paint plus one submission, which is what its 42 call sites
+// want — they draw a message and expect it on the glass.
+//
+// The submission was INVISIBLE: renderer.displayBuffer() with no argument silently means
+// FAST (GfxRenderer.h). Spelled out here, because "this function drives the panel, with
+// this waveform" is the single most consequential fact about it and it was being carried
+// by a defaulted argument. A caller that wants to compose its own drawing into the same
+// submission calls drawBannerStrip and submits once itself — BusyBanner already does
+// exactly that.
 Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) const {
   const Rect layout = drawBannerStrip(renderer, message);
-  renderer.displayBuffer();
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   return layout;
 }
 
