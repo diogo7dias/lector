@@ -2,7 +2,7 @@ name: CI (build)
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
 
 permissions:
@@ -137,6 +137,13 @@ jobs:
         with:
           path: build/test/_deps/googletest-src
           key: ${{ runner.os }}-googletest-${{ hashFiles('test/CMakeLists.txt') }}
+
+      - name: Generate i18n string tables
+        # lib/I18n/I18nKeys.h is a gitignored build product. A pio build makes it
+        # via the pre:scripts/gen_i18n.py extra_script; the cmake test build has
+        # no such hook, so generate it explicitly or every target that includes
+        # it fails with "I18nKeys.h: No such file or directory".
+        run: python3 scripts/gen_i18n.py lib/I18n/translations lib/I18n/
 
       - name: Configure
         run: cmake -S test -B build/test -G Ninja -DCMAKE_BUILD_TYPE=Release
