@@ -84,11 +84,10 @@ class TextSettingsActivity final : public UiGridActivity {
   // Numeric rows share one editing path; these give it the field and its range.
   uint8_t* numberField(Row row) const;
   void numberRange(Row row, int& minValue, int& maxValue) const;
-  void setEditedValue(int value);
+  void setEditedValue(Row row, int value);
   void applyNumber(Row row, int value);
 
   void activateRow(Row row);
-  void leaveEdit();
 
   void applyFamily(int listIndex);
   void applySize(int listIndex);
@@ -119,14 +118,10 @@ class TextSettingsActivity final : public UiGridActivity {
   mutable std::string cellNameScratch_;
   mutable std::string cellValueScratch_;
 
-  // Set while a numeric row is armed. The preview redraw is debounced so holding Up does
-  // not queue one full e-ink pass per step.
-  bool editing_ = false;
-  uint32_t pendingRedrawAt_ = 0;
-  // An edited number is written once the value stops moving, not on every button press.
+  // An edited number is written when its dialog closes. settingsDirty_ carries an
+  // applied-but-unwritten value from applyNumber() to commitSettings().
   // See commitSettings() in the .cpp for why.
   bool settingsDirty_ = false;
-  uint32_t pendingSaveAt_ = 0;
   void commitSettings();
 
   int currentFamilyIndex_ = 0;
