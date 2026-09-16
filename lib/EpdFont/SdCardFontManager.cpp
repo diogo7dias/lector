@@ -5,27 +5,12 @@
 #include <Logging.h>
 #include <SdCardFont.h>
 #include <SdCardFontRegistry.h>
+#include <TtfFamilyScan.h>
 
 SdCardFontManager::~SdCardFontManager() {
   for (auto& lf : loaded_) {
     delete lf.font;
   }
-}
-
-// FNV-1a continuation: seeds with contentHash, then hashes family name + point size.
-// Produces a deterministic ID that is stable across load/unload cycles and reboots,
-// and changes when font content changes (different header/TOC = different contentHash).
-int SdCardFontManager::computeFontId(uint32_t contentHash, const char* familyName, uint8_t pointSize) {
-  static constexpr uint32_t FNV_PRIME = 16777619u;
-  uint32_t hash = contentHash;
-  while (*familyName) {
-    hash ^= static_cast<uint8_t>(*familyName++);
-    hash *= FNV_PRIME;
-  }
-  hash ^= pointSize;
-  hash *= FNV_PRIME;
-  int id = static_cast<int>(hash);
-  return id != 0 ? id : 1;  // 0 is reserved as "not found" sentinel
 }
 
 int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* familyName, GfxRenderer& renderer) {
@@ -41,7 +26,9 @@ int SdCardFontManager::loadFile(const SdCardFontFileInfo& file, const char* fami
     return 0;
   }
 
-  int fontId = computeFontId(font->contentHash(), familyName, file.pointSize);
+  // Deterministic id, stable across load/unload cycles and reboots, changing when
+  // font content changes (different header/TOC = different contentHash).
+  int fontId = ttfscan::fontIdForFamilySize(font->contentHash(), familyName, file.pointSize);
   // Guard against collision with built-in font IDs (astronomically unlikely
   // with FNV-1a hashes, but provides a safety net)
   if (renderer.getFontMap().count(fontId) != 0) {
