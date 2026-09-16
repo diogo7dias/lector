@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -456,16 +457,6 @@ ListChrome SettingsActivity::chrome() const {
   const int index = selected();
   const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&
                               settings[index].nameId == StrId::STR_TIME_TO_SLEEP;
-  // An armed band owns the four keys: the side pair carries its large step, so
-  // the hints have to say so or the labels would point at a grid that is not
-  // listening.
-  if (valueBand.isActive()) {
-    chrome.backHint = tr(STR_DONE_EDIT);
-    chrome.confirmHint = tr(STR_DONE_EDIT);
-    chrome.thirdHint = "-";
-    chrome.fourthHint = "+";
-    return chrome;
-  }
   chrome.confirmHint = onSleepTimeout ? tr(STR_SELECT) : tr(STR_TOGGLE);
   chrome.thirdHint = tr(STR_DIR_UP);
   chrome.fourthHint = tr(STR_DIR_DOWN);
@@ -562,25 +553,43 @@ void SettingsActivity::toggleCurrentSetting() {
     // only be set to a multiple of five cannot be set to the value between them, and a
     // brightness or a margin is exactly where that one unit is worth having. The side
     // buttons carry the setting's own step (five, where it has one) so a wide range is
-    // still crossed in a few presses. The band applies every step as it happens, so there
-    // is nothing to cancel: what the device is doing IS the value.
+    // still crossed in a few presses.
     const auto valuePtr = setting.valuePtr;
     constexpr int minLargeStep = 5;
-    armValueBand(
-        I18N.get(setting.nameId), setting.valueRange.min, setting.valueRange.max, /*smallStep=*/1,
-        std::max(minLargeStep, static_cast<int>(setting.valueRange.step)), SETTINGS.*(setting.valuePtr),
-        [this, valuePtr](const int chosen) {
-          // Live: a frontlight or a margin is judged on the device, not on the number.
-          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen);
+    auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
+        renderer, mappedInput, "SettingValue", setting.nameId, SETTINGS.*(setting.valuePtr), setting.valueRange.min,
+        setting.valueRange.max, /*smallStep=*/1, std::max(minLargeStep, static_cast<int>(setting.valueRange.step)));
+    if (!dialog) {
+      LOG_ERR("SET", "OOM: IntervalSelectionActivity");
+      return;
+    }
+    // Live: a frontlight is judged on the device, not on the number. The field
+    // itself is the scratch the dialog writes through, so Cancel restoring the
+    // opening value restores the setting too.
+    liveValuePtr = valuePtr;
+    dialog->setLiveApply({[](void* ctx, const int chosen) {
+                            auto* self = static_cast<SettingsActivity*>(ctx);
+                            if (self->liveValuePtr == nullptr) return;
+                            SETTINGS.*(self->liveValuePtr) = static_cast<uint8_t>(chosen);
+                            applyFrontlightSetting(self->liveValuePtr);
+                          },
+                          this});
+    startActivityForResult(std::move(dialog), [this, valuePtr](const ActivityResult& result) {
+      liveValuePtr = nullptr;
+      if (!result.isCancelled) {
+        const auto* chosen = std::get_if<IntervalResult>(&result.data);
+        if (chosen != nullptr) {
+          SETTINGS.*valuePtr = static_cast<uint8_t>(chosen->value);
           applyFrontlightSetting(valuePtr);
-        },
-        [this] {
-          // One write when the band closes, not one per step: the value moved
-          // through every number between the two ends on the way here.
-          SETTINGS.saveToFile();
-          rebuildSettingsList();
-          restoreCursorAfterRebuild();
-        });
+        }
+        // One write when the dialog closes, not one per step: the value moved
+        // through every number between the two ends on the way here.
+        SETTINGS.saveToFile();
+      }
+      rebuildSettingsList();
+      restoreCursorAfterRebuild();
+      requestUpdate();
+    });
     requestUpdate();
     return;
   } else if (setting.type == SettingType::STRING) {

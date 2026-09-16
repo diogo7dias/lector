@@ -72,3 +72,41 @@ TEST(SliderField, TheX3SideButtonsAreFlipped) {
   EXPECT_EQ(x3.up, -10);
   EXPECT_EQ(x3.down, 10);
 }
+
+// The dialog's live-apply contract, in the arithmetic it is made of: a value
+// judged on the device (frontlight, margin) follows the slider while the dialog
+// is open, so cancelling has to re-apply the value the dialog opened with rather
+// than leave the device on whatever the finger last touched.
+namespace {
+struct LiveField {
+  int applied = 0;
+  void apply(const int value) { applied = value; }
+};
+}  // namespace
+
+TEST(SliderField, CancellingRestoresTheValueTheDialogOpenedWith) {
+  LiveField device;
+  constexpr int openedWith = 20;
+  device.apply(openedWith);
+
+  int value = openedWith;
+  for (const int delta : {5, 5, -1, 40}) {
+    value = slider_field::step(value, kPercent, delta, /*wrap=*/false);
+    device.apply(value);  // every change reaches the device as it happens
+  }
+  ASSERT_NE(device.applied, openedWith);
+
+  // Cancel: put it back where it was found.
+  if (value != openedWith) device.apply(openedWith);
+  EXPECT_EQ(device.applied, openedWith);
+}
+
+TEST(SliderField, ConfirmingKeepsTheValueUnderTheFinger) {
+  LiveField device;
+  int value = 20;
+  value = slider_field::step(value, kPercent, 30, /*wrap=*/false);
+  device.apply(value);
+  // Confirm changes nothing the live apply had not already done.
+  EXPECT_EQ(device.applied, 50);
+  EXPECT_EQ(value, 50);
+}

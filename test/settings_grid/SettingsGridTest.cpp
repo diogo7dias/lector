@@ -214,10 +214,12 @@ TEST(SettingsGrid, ActivityUsesTheDevicePolicyForBothGeometryAndTouchRows) {
   const auto cellBody = source.substr(cell, row - cell);
   EXPECT_NE(cellBody.find("if (usesWrappedRows())"), std::string::npos);
   EXPECT_NE(cellBody.find("buildRow(screen, index, box)"), std::string::npos);
-  const auto band = source.find("void UiGridActivity::buildValueBand(");
-  ASSERT_LT(row, band);
-  const auto rowBody = source.substr(row, band - row);
+  const auto loop = source.find("void UiGridActivity::loop(");
+  ASSERT_LT(row, loop);
+  const auto rowBody = source.substr(row, loop - row);
   EXPECT_NE(rowBody.find("props.action = ACTION_CELL"), std::string::npos);
   EXPECT_NE(rowBody.find("screen.button(props, box)"), std::string::npos);
-  EXPECT_NE(source.substr(band).find("if (!mappedInput.hasTouch())"), std::string::npos);
+  // A numeric cell opens the shared slider dialog on its own screen; the grid no
+  // longer carries an in-place value band over its header.
+  EXPECT_EQ(source.find("buildValueBand"), std::string::npos);
 }

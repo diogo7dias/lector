@@ -2,6 +2,8 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -15,9 +17,10 @@
 #include "ReaderFontSizes.h"
 #include "SdCardFontSystem.h"
 #include "TextSettingsPreview.h"
+#include "activities/settings/FontPickerActivity.h"
+#include "activities/util/IntervalSelectionActivity.h"
 #include "components/RowHitTest.h"
 #include "components/UITheme.h"
-#include "activities/settings/FontPickerActivity.h"
 #include "fontIds.h"
 #include "util/MarginLink.h"
 
@@ -46,15 +49,6 @@ std::string needsLayoutLabel(const std::string& label) {
 // viewport (landscape, or a smaller panel) from leaving no room for the list.
 constexpr int PREVIEW_HEIGHT = 320;
 constexpr int PREVIEW_MAX_PERCENT = 55;
-
-// Holding Up on an armed number steps it far faster than e-ink can follow. Redraw once the
-// value has been still this long; the value itself moves at full speed in the row.
-constexpr uint32_t EDIT_REDRAW_DEBOUNCE_MS = 200;
-// Holding Up or Down on a numeric row steps the value once per repeat. Writing the
-// settings file on each of those steps would rewrite the whole file dozens of times for
-// one margin sweep, and SPIFFS sectors have a finite erase cycle limit (CLAUDE.md,
-// Resource Protocol 8). The value is written once it stops moving instead.
-constexpr uint32_t EDIT_SAVE_DEBOUNCE_MS = 1200;
 
 int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontFamilyName, uint8_t fontFamily) {
   if (sdFontFamilyName[0] != '\0' && registry) {
@@ -349,11 +343,10 @@ void TextSettingsActivity::applyNumber(const Row row, const int value) {
 }
 
 // Write the settings file if an edited value is still waiting to be persisted. Called
-// when the value stops moving, when the row is left, and on the way out of the screen,
+// when a value dialog closes, when the row is left, and on the way out of the screen,
 // so powering off or sleeping from inside Text Settings cannot lose the change
 // (the same failure applySize() guards against, upstream #2806).
 void TextSettingsActivity::commitSettings() {
-  pendingSaveAt_ = 0;
   if (!settingsDirty_) return;
   settingsDirty_ = false;
   SETTINGS.saveToFile();
@@ -482,11 +475,25 @@ void TextSettingsActivity::activateRow(const Row row) {
       int maxValue = 0;
       numberRange(row, minValue, maxValue);
       const uint8_t* field = numberField(row);
-      editing_ = true;
-      const auto& metrics = UITheme::getInstance().getMetrics();
-      armValueBand(I18N.get(rowNameId(row)), minValue, maxValue, /*smallStep=*/1, /*largeStep=*/5,
-                   field ? *field : minValue, [this](const int chosen) { setEditedValue(chosen); },
-                   [this] { leaveEdit(); });
+      // A dedicated slider screen rather than a band over this list. The live
+      // preview under the band is lost, but the row is only two taps away and
+      // the number gets a finger-sized track instead of a header's worth of it.
+      auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
+          renderer, mappedInput, "TextSettingNumber", rowNameId(row), field ? *field : minValue, minValue, maxValue,
+          /*smallStep=*/1, /*largeStep=*/5);
+      if (!dialog) {
+        LOG_ERR("TXTSET", "OOM: IntervalSelectionActivity");
+        return;
+      }
+      startActivityForResult(std::move(dialog), [this, row](const ActivityResult& result) {
+        const auto* chosen = std::get_if<IntervalResult>(&result.data);
+        if (!result.isCancelled && chosen != nullptr) {
+          setEditedValue(row, static_cast<int>(chosen->value));
+          commitSettings();
+        }
+        requestUpdate();
+      });
+      requestUpdate();
       return;
     }
     case RowKind::Picker:
@@ -577,10 +584,9 @@ void TextSettingsActivity::activateRow(const Row row) {
   requestUpdate();
 }
 
-void TextSettingsActivity::setEditedValue(const int value) {
-  const auto rows = visibleRows();
-  if (selected() >= static_cast<int>(rows.size())) return;
-  const Row row = rows[selected()];
+// The dialog hands the value back once, when it closes, so there is nothing to
+// debounce any more: apply it and let the caller write it.
+void TextSettingsActivity::setEditedValue(const Row row, const int value) {
   const uint8_t* field = numberField(row);
   if (!field) return;
 
@@ -589,31 +595,11 @@ void TextSettingsActivity::setEditedValue(const int value) {
   const int next = std::clamp(value, minValue, maxValue);
   if (next == *field) return;
   applyNumber(row, next);
-  // The band and the cell follow the finger; the preview and the write wait for the value
-  // to settle, so a drag across the whole range costs one preview pass and one write.
-  const uint32_t now = millis();
-  pendingRedrawAt_ = now + EDIT_REDRAW_DEBOUNCE_MS;
-  pendingSaveAt_ = now + EDIT_SAVE_DEBOUNCE_MS;
-  requestUpdate();
-}
-
-void TextSettingsActivity::leaveEdit() {
-  editing_ = false;
-  pendingRedrawAt_ = 0;
-  commitSettings();
   requestUpdate();
 }
 
 bool TextSettingsActivity::handleCustomInput() {
   if (optionPopup_.handleInput(mappedInput, [this] { requestUpdate(); })) return true;  // picker owns input
-
-  // A debounced preview redraw that came due while the value sat still.
-  if (pendingRedrawAt_ != 0 && millis() >= pendingRedrawAt_) {
-    pendingRedrawAt_ = 0;
-    requestUpdate();
-  }
-  // The value has stopped moving: write it once.
-  if (pendingSaveAt_ != 0 && millis() >= pendingSaveAt_) commitSettings();
   return false;
 }
 
@@ -636,22 +622,13 @@ ListChrome TextSettingsActivity::chrome() const {
     }
   }
 
-  // Back closes the band rather than the screen while a value is armed, and the
-  // hint has to say so or it reads as a way out of Text Settings.
-  if (editing_) {
-    chrome.backHint = tr(STR_DONE_EDIT);
-    chrome.confirmHint = tr(STR_DONE_EDIT);
-    chrome.thirdHint = "-";
-    chrome.fourthHint = "+";
-    return chrome;
-  }
+  // Back closes the screen: a number is edited on its own screen now, so nothing
+  // here is ever mid-edit.
   chrome.confirmHint = confirmLabel;
   chrome.thirdHint = tr(STR_DIR_UP);
   chrome.fourthHint = tr(STR_DIR_DOWN);
   return chrome;
 }
-
-
 
 // Font switching runs on the main task from loop(), which deliberately holds no
 // RenderLock. ensureLoaded() deletes the resident SdCardFont before loading the next one,
