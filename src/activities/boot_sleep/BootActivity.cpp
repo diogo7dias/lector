@@ -17,8 +17,18 @@ void BootActivity::onEnter() {
   // more here than tone, and the seamless display begin() in setup() kept the wallpaper
   // physically on the panel until this refresh lands, so there is no white flash.
   // Falls through to the logo screen if the file is missing or corrupt.
+  //
+  // FULL, not HALF: the sleep screen this paints over is a grayscale composite, and HALF
+  // is the differential DU waveform, which drives pixels from whatever charge state they
+  // are already in rather than resetting them. Waking onto the same wallpaper that way
+  // left the top of the screen visibly lighter than the rest — the sleep info overlay
+  // and the unlock banner both sit up there, so that strip is the one part of the panel
+  // whose charge history differs from the image being redrawn. FULL runs the clearing GC
+  // waveform first, so the wake is uniform. It costs roughly a second of blinking on a
+  // screen the reader is already looking at, which is the trade this is making
+  // deliberately.
   if (!wallpaperPath_.empty() && renderPxcSleepScreen(renderer, wallpaperPath_, /*grayscale=*/false,
-                                                      HalDisplay::HALF_REFRESH, &drawUnlockBanners)) {
+                                                      HalDisplay::FULL_REFRESH, &drawUnlockBanners)) {
     return;
   }
 
