@@ -32,17 +32,19 @@ void begin() {
   if (!SETTINGS.showTimings) return;
   if (!Storage.ready()) return;
   char path[24];
-  for (int session = 1; session <= kMaxSessions; ++session) {
-    snprintf(path, sizeof(path), "/trace-%d.log", session);
-    if (Storage.exists(path)) continue;
-    if (Storage.openFileForWrite("TRACE", path, traceFile)) {
-      note("trace opened");
-    }
-    return;
+  int low = 1;
+  int high = kMaxSessions + 1;
+  while (low < high) {
+    const int mid = low + (high - low) / 2;
+    snprintf(path, sizeof(path), "/trace-%d.log", mid);
+    if (Storage.exists(path))
+      low = mid + 1;
+    else
+      high = mid;
   }
-  // Every slot taken: the oldest is the least interesting, so the newest run wins it.
-  snprintf(path, sizeof(path), "/trace-%d.log", kMaxSessions);
-  if (Storage.openFileForWrite("TRACE", path, traceFile)) note("trace opened (reused)");
+  const int session = low <= kMaxSessions ? low : kMaxSessions;
+  snprintf(path, sizeof(path), "/trace-%d.log", session);
+  if (Storage.openFileForWrite("TRACE", path, traceFile)) note("trace opened");
 }
 
 void note(const char* format, ...) {

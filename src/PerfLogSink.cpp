@@ -19,7 +19,8 @@ constexpr const char* kDir = "/perf";
 // reopen the same path and truncate everything recorded before it: SDCardManager opens
 // for write with O_TRUNC and there is no append mode to reach for. A fresh numbered file
 // per session keeps every run, and makes the lock/unlock sequence readable as separate
-// files rather than one stream with invisible seams.
+// files rather than one stream with invisible seams. The filenames remain numbered so
+// existing tooling can read them; the contiguous allocation is found with binary search.
 constexpr int kMaxSessions = 200;
 
 // Held open for the whole session, for the same reason: reopening would truncate. It also
@@ -47,10 +48,18 @@ void startPerfLogSink(const char* device) {
   if (!Storage.ensureDirectoryExists(kDir)) return;
 
   char filePath[32] = {0};
-  for (int session = 0; session < kMaxSessions; session++) {
-    snprintf(filePath, sizeof(filePath), "%s/%s-%03d.csv", kDir, device, session);
-    if (!Storage.exists(filePath)) break;
+  int low = 0;
+  int high = kMaxSessions;
+  while (low < high) {
+    const int mid = low + (high - low) / 2;
+    snprintf(filePath, sizeof(filePath), "%s/%s-%03d.csv", kDir, device, mid);
+    if (Storage.exists(filePath))
+      low = mid + 1;
+    else
+      high = mid;
   }
+  const int session = low < kMaxSessions ? low : kMaxSessions - 1;
+  snprintf(filePath, sizeof(filePath), "%s/%s-%03d.csv", kDir, device, session);
 
   if (!Storage.openFileForWrite("PERF", filePath, logFile)) return;
 
