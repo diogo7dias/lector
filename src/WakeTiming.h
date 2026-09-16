@@ -44,7 +44,9 @@ enum class Stage : uint8_t {
 };
 
 // Current wake serial diagnostics are independent of the optional SD record.
-enum class Cost : uint8_t { Classify, Config, Frame, Settle, Count };
+// Logs is the card trace and perf log opening their session files: card lookups that
+// scale with how many old sessions are on the card, so it gets its own figure.
+enum class Cost : uint8_t { Classify, Config, Logs, Settle, Count };
 void noteCost(Cost cost, uint32_t ms);
 // Called on the render task, after a destination render that submitted a frame.
 void readable();
