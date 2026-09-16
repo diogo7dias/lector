@@ -7,6 +7,9 @@
 #include <HalGPIO.h>
 #include <Logging.h>
 #include <SdCardFont.h>
+#ifdef CROSSPOINT_TTF_READER
+#include <TtfSdFont.h>
+#endif
 #include <Utf8.h>
 
 #include <algorithm>
@@ -79,6 +82,10 @@ const uint8_t* GfxRenderer::getGlyphBitmap(const EpdFontData* fontData, const Ep
   //   - nullptr for non-overflow glyphs (normal prewarmed path)
   // We distinguish overflow-with-no-bitmap from non-overflow by checking isOverflowGlyph().
   if (fontData->glyphMissCtx) {
+#ifdef CROSSPOINT_TTF_READER
+    // TTF faces keep every cached glyph inside fontData->bitmap, like a flash font.
+    if (TtfSdFont::ownsMissCtx(fontData->glyphMissCtx)) return &fontData->bitmap[glyph->dataOffset];
+#endif
     auto* sdFont = SdCardFont::fromMissCtx(fontData->glyphMissCtx);
     if (sdFont->isOverflowGlyph(glyph)) {
       return sdFont->getOverflowBitmap(glyph);  // may be nullptr for zero-width glyphs

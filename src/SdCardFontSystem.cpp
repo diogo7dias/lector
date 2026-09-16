@@ -132,8 +132,12 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
       if (ownsGlobalSelection) SETTINGS.clearSdFontFamily();
       return;
     }
+#ifdef CROSSPOINT_TTF_READER
+    const uint8_t wantedPt = family->resolvePointSize(pointSize);
+#else
     const auto* selected = family->findNearestSize(pointSize);
     const uint8_t wantedPt = selected ? selected->pointSize : 0;
+#endif
     // Snap before the early return: the wanted size can already be loaded while
     // the setting still names a size this family does not ship.
     if (ownsGlobalSelection) snapFontPointSizeTo(wantedPt);
