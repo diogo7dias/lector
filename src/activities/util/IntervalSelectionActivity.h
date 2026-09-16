@@ -10,10 +10,24 @@
 
 class GfxRenderer;
 
-// One number on a slider: every timeout, every count, every interval in the
-// settings tree comes through here.
+// One number on a slider: every timeout, every count, every interval, and every
+// numeric settings row comes through here. A dedicated screen rather than a band
+// over the list it was opened from, so the readout, the track, the -/+ step
+// buttons and (on touch) Cancel/OK all get room to be finger-sized.
 class IntervalSelectionActivity final : public UiStatusActivity {
  public:
+  // Applied on every change while the dialog is open, for values judged on the
+  // device rather than on the number (frontlight, margins). Cancel re-applies
+  // whatever the dialog opened with, so backing out really does back out.
+  // Function pointer + context rather than std::function: this is on the
+  // activity-construction path of every numeric row (CLAUDE.md, template and
+  // std::function bloat).
+  struct LiveApply {
+    void (*fn)(void* ctx, int value) = nullptr;
+    void* ctx = nullptr;
+  };
+  void setLiveApply(const LiveApply apply) { liveApply = apply; }
+
   explicit IntervalSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const char* activityName,
                                      StrId titleId, int initialValue, int minValue, int maxValue, int smallStep,
                                      int largeStep, StrId valueFormatId = StrId::STR_NONE_OPT,
@@ -54,6 +68,10 @@ class IntervalSelectionActivity final : public UiStatusActivity {
   bool readerActivity;
   bool ignoreConfirmRelease;
   ButtonNavigator buttonNavigator;
+  LiveApply liveApply;
+  // What to hand back to liveApply if the reader cancels.
+  int openedWithValue = 0;
+  void applyLive() const;
 
   // The strings the view hands out as pointers, so they outlive it.
   std::string valueText;

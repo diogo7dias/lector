@@ -35,11 +35,20 @@ std::string stepLine(const StrId labelId, const StrId formatId, const int step) 
 void IntervalSelectionActivity::onEnter() {
   UiStatusActivity::onEnter();
   value = slider_field::clamp(value, slider_field::Range{minValue, maxValue});
-  // Neither hint changes; only the readout is rebuilt as the value moves.
-  smallStepLine = stepLine(StrId::STR_STEP_HINT_FRONT, valueFormatId, smallStep);
-  largeStepLine = stepLine(StrId::STR_STEP_HINT_SIDE, valueFormatId, largeStep);
+  openedWithValue = value;
+  // Neither hint changes; only the readout is rebuilt as the value moves. Touch
+  // boards never show them (they get Cancel/OK instead), so the two strings are
+  // not built there either.
+  if (!mappedInput.hasTouch()) {
+    smallStepLine = stepLine(StrId::STR_STEP_HINT_FRONT, valueFormatId, smallStep);
+    largeStepLine = stepLine(StrId::STR_STEP_HINT_SIDE, valueFormatId, largeStep);
+  }
   refreshValueText();
   requestUpdate();
+}
+
+void IntervalSelectionActivity::applyLive() const {
+  if (liveApply.fn) liveApply.fn(liveApply.ctx, value);
 }
 
 void IntervalSelectionActivity::refreshValueText() {
@@ -61,6 +70,14 @@ UiStatusActivity::StatusView IntervalSelectionActivity::statusView() const {
   view.sliderValue = value;
   view.sliderMin = minValue;
   view.sliderMax = maxValue;
+  if (mappedInput.hasTouch()) {
+    // Touch boards drag the track and confirm on screen, so the two lines
+    // naming physical buttons would name buttons this reader does not have —
+    // same rule GUI.drawButtonHints follows.
+    view.cancelLabel = tr(STR_CANCEL);
+    view.acceptLabel = tr(STR_OK_BUTTON);
+    return view;
+  }
   view.lines[0] = smallStepLine.c_str();
   view.lines[1] = largeStepLine.c_str();
   view.confirmHint = tr(STR_SELECT);
@@ -72,12 +89,14 @@ UiStatusActivity::StatusView IntervalSelectionActivity::statusView() const {
 void IntervalSelectionActivity::adjustValue(const int delta) {
   value = slider_field::step(value, slider_field::Range{minValue, maxValue}, delta, /*wrap=*/false);
   refreshValueText();
+  applyLive();
   requestUpdate();
 }
 
 void IntervalSelectionActivity::onSliderChanged(const int next) {
   value = slider_field::clamp(next, slider_field::Range{minValue, maxValue});
   refreshValueText();
+  applyLive();
   requestUpdate();
 }
 
@@ -103,6 +122,10 @@ bool IntervalSelectionActivity::handleCustomInput() {
 }
 
 void IntervalSelectionActivity::onBackButton() {
+  // Live-applied values (frontlight, margins) have been following the slider the
+  // whole time, so cancelling has to put the device back where it was found
+  // rather than just declining to report a number.
+  if (liveApply.fn && value != openedWithValue) liveApply.fn(liveApply.ctx, openedWithValue);
   ActivityResult result;
   result.isCancelled = true;
   setResult(std::move(result));
