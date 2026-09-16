@@ -5,7 +5,6 @@
 #include "activities/Activity.h"
 #include "components/ListChrome.h"
 #include "components/SettingsGrid.h"
-#include "components/SliderBand.h"
 #include "components/UiAppHost.h"
 #include "components/WrappedListWindow.h"
 #include "components/themes/BaseTheme.h"
@@ -14,8 +13,8 @@
 // Base for settings rows (X4 Pro/keys-only) and grids (other touch boards). UiAppHost owns the app-hosting
 // protocol; this base layers the grid protocol on top: the selection and scroll
 // model over settings_grid, the cell painting (a name over its value, one
-// truncation rule), the touch dispatch, the chrome, and the header band an armed
-// number takes over.
+// truncation rule), the touch dispatch, and the chrome. A numeric cell opens the
+// shared slider dialog (IntervalSelectionActivity) rather than editing in place.
 //
 // Both grid screens used to do all of that themselves, including a hand-rolled
 // hit test that walked the same cells the paint had just walked. Anything that
@@ -30,10 +29,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
  protected:
   // Base-owned actions; subclass-registered ones start at ACTION_USER.
   static constexpr freeink::ui::ActionId ACTION_CELL = 1;
-  // One id for the whole armed band: a drag arrives with dragPermille set, a step
-  // button with its delta in the event's value.
-  static constexpr freeink::ui::ActionId ACTION_SLIDER = 2;
-  static constexpr freeink::ui::ActionId ACTION_USER = 3;
+  static constexpr freeink::ui::ActionId ACTION_USER = 2;
 
   UiGridActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
 
@@ -81,12 +77,6 @@ class UiGridActivity : public Activity, protected UiAppHost {
   void clampSelection();
 
   ButtonNavigator buttonNavigator;
-  // Numeric cells arm this instead of stepping once per press. It takes the
-  // header's place while it is up, so the grid under it does not move.
-  SliderBand valueBand;
-  // Arms the band over the header, for `index`'s value.
-  void armValueBand(const char* name, int minValue, int maxValue, int smallStep, int largeStep, int current,
-                    std::function<void(int)> onChange, std::function<void()> onClose);
 
  private:
   void buildScreen(UiScreen& screen);
@@ -95,10 +85,8 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // The two-column touch grid's cells share one height: the tallest any cell
   // needs for its wrapped name over its wrapped value, so none is cut.
   int tallestCellHeight() const;
-  void buildValueBand(UiScreen& screen);
   static void screenTrampoline(UiScreen& screen, void* user);
   static void cellTrampoline(const freeink::ui::ActionEvent& event, void* user);
-  static void sliderTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   int selected_ = 0;
   int scrollRow_ = 0;
