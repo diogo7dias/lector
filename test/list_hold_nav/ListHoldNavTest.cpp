@@ -6,22 +6,18 @@
 #include <string>
 
 #include "util/HoldRepeat.h"
+#include "util/ListIndex.h"
 
-// The clamped hold step, lifted out of ButtonNavigator so it can be checked on
-// the host: the .cpp pulls in Arduino (millis) and MappedInputManager, neither
-// of which exists here. Kept identical to ButtonNavigator::heldIndex, and the
-// audit below fails if that stops being true.
+// The index rules are the PRODUCTION ones: ButtonNavigator::heldIndex and
+// friends now forward to list_index, which is pure arithmetic in a header and
+// so compiles on the host. This file used to carry its own copy of them plus a
+// source-substring audit to catch the copy drifting.
 namespace {
 int heldIndex(const int currentIndex, const int totalItems, const int delta) {
-  if (totalItems <= 0) return 0;
-  return std::clamp(currentIndex + delta, 0, totalItems - 1);
+  return list_index::held(currentIndex, totalItems, delta);
 }
 
-// One press of the nav key, which still wraps (ButtonNavigator::nextIndex).
-int nextIndex(const int currentIndex, const int totalItems) {
-  if (totalItems <= 0) return 0;
-  return (currentIndex + 1) % totalItems;
-}
+int nextIndex(const int currentIndex, const int totalItems) { return list_index::next(currentIndex, totalItems); }
 }  // namespace
 
 // --- a single press moves exactly one row -----------------------------------
@@ -83,6 +79,38 @@ TEST(ListHoldNav, ASingleRowListStaysOnItsOnlyRow) {
   EXPECT_EQ(heldIndex(0, 1, -5), 0);
 }
 
+// --- page travel, now that it can be called directly ------------------------
+//
+// A swipe pages; these rules were unreachable from the host before list_index,
+// so nothing covered them.
+
+TEST(ListHoldNav, ASwipeMovesAWholePageAndLandsOnItsFirstRow) {
+  EXPECT_EQ(list_index::nextPage(0, 500, 10), 10);
+  EXPECT_EQ(list_index::nextPage(7, 500, 10), 10) << "a page jump lands on a page boundary, not current+page";
+  EXPECT_EQ(list_index::previousPage(25, 500, 10), 10);
+}
+
+TEST(ListHoldNav, PagingPastTheEndWrapsToTheStartAndBack) {
+  // 500 rows, 10 per page: the last page starts at 490.
+  EXPECT_EQ(list_index::nextPage(495, 500, 10), 0);
+  EXPECT_EQ(list_index::previousPage(3, 500, 10), 490);
+}
+
+TEST(ListHoldNav, AListThatFitsOnOnePageStepsInsteadOfPaging) {
+  // No page to jump to, so it degrades to the wrapping single step.
+  EXPECT_EQ(list_index::nextPage(0, 5, 10), 1);
+  EXPECT_EQ(list_index::nextPage(4, 5, 10), 0);
+  EXPECT_EQ(list_index::previousPage(0, 5, 10), 4);
+}
+
+TEST(ListHoldNav, PagingAnEmptyOrUnmeasuredListIsNeverIndexed) {
+  EXPECT_EQ(list_index::nextPage(0, 0, 10), 0);
+  EXPECT_EQ(list_index::previousPage(0, 0, 10), 0);
+  // pageRows() can be 0 before the first render measures the viewport.
+  EXPECT_EQ(list_index::nextPage(3, 500, 0), 0);
+  EXPECT_EQ(list_index::previousPage(3, 500, 0), 0);
+}
+
 // --- the rate itself --------------------------------------------------------
 
 TEST(ListHoldNav, TheHoldRateIsSlowEnoughToRead) {
@@ -109,11 +137,11 @@ TEST(ListHoldNav, OneSecondOfHoldingCoversAReadableNumberOfRows) {
   EXPECT_LE(index, 20) << "a second of holding should not cross a whole screen of rows";
 }
 
-// --- the constants above are the ones the firmware actually uses ------------
+// --- the wiring the arithmetic cannot see -----------------------------------
 //
-// heldIndex and the two rates are restated in this file because ButtonNavigator
-// cannot be compiled on the host (Arduino millis, MappedInputManager). Restated
-// values rot, so the source is read back and checked.
+// The index rules above are exercised directly. What is left to audit is the
+// wiring: which rule each screen reaches for, and the two repeat rates, which
+// are timing constants rather than arithmetic.
 
 namespace {
 std::string readSource(const char* path) {
@@ -133,12 +161,6 @@ TEST(ListHoldNav, TheRepeatRatesMatchTheHeader) {
       << "the interval this test asserts on is no longer the one ButtonNavigator declares";
   EXPECT_TRUE(contains(header, "LIST_REPEAT_START_MS = 400"))
       << "the start delay this test asserts on is no longer the one ButtonNavigator declares";
-}
-
-TEST(ListHoldNav, TheHeldStepIsStillClampedInTheFirmware) {
-  const std::string source = readSource(BUTTON_NAVIGATOR_SOURCE);
-  EXPECT_TRUE(contains(source, "std::clamp(currentIndex + delta, 0, totalItems - 1)"))
-      << "ButtonNavigator::heldIndex no longer clamps; a held key can wrap and run forever again";
 }
 
 TEST(ListHoldNav, TheListScreensHoldByRowsNotPages) {

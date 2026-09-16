@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "ListIndex.h"
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 void ButtonNavigator::onNext(const Callback& callback) {
@@ -158,58 +160,23 @@ bool ButtonNavigator::shouldNavigateContinuously() const {
 }
 
 int ButtonNavigator::nextIndex(const int currentIndex, const int totalItems, const int steps) {
-  if (totalItems <= 0) return 0;
-
-  // Calculate the next index with wrap-around
-  return (currentIndex + steps % totalItems) % totalItems;
+  return list_index::next(currentIndex, totalItems, steps);
 }
 
 int ButtonNavigator::previousIndex(const int currentIndex, const int totalItems, const int steps) {
-  if (totalItems <= 0) return 0;
-
-  // Calculate the previous index with wrap-around
-  return (currentIndex + totalItems - steps % totalItems) % totalItems;
+  return list_index::previous(currentIndex, totalItems, steps);
 }
 
 int ButtonNavigator::heldIndex(const int currentIndex, const int totalItems, const int delta) {
-  if (totalItems <= 0) return 0;
-  return std::clamp(currentIndex + delta, 0, totalItems - 1);
+  return list_index::held(currentIndex, totalItems, delta);
 }
 
 bool ButtonNavigator::swipeDrivenPass() { return swipeMatches(getNextButtons()) || swipeMatches(getPreviousButtons()); }
 
 int ButtonNavigator::nextPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
-  if (totalItems <= 0 || itemsPerPage <= 0) return 0;
-
-  // When items fit on one page, use index navigation instead
-  if (totalItems <= itemsPerPage) {
-    return nextIndex(currentIndex, totalItems);
-  }
-
-  const int lastPageIndex = (totalItems - 1) / itemsPerPage;
-  const int currentPageIndex = currentIndex / itemsPerPage;
-
-  if (currentPageIndex < lastPageIndex) {
-    return (currentPageIndex + 1) * itemsPerPage;
-  }
-
-  return 0;
+  return list_index::nextPage(currentIndex, totalItems, itemsPerPage);
 }
 
 int ButtonNavigator::previousPageIndex(const int currentIndex, const int totalItems, const int itemsPerPage) {
-  if (totalItems <= 0 || itemsPerPage <= 0) return 0;
-
-  // When items fit on one page, use index navigation instead
-  if (totalItems <= itemsPerPage) {
-    return previousIndex(currentIndex, totalItems);
-  }
-
-  const int lastPageIndex = (totalItems - 1) / itemsPerPage;
-  const int currentPageIndex = currentIndex / itemsPerPage;
-
-  if (currentPageIndex > 0) {
-    return (currentPageIndex - 1) * itemsPerPage;
-  }
-
-  return lastPageIndex * itemsPerPage;
+  return list_index::previousPage(currentIndex, totalItems, itemsPerPage);
 }
