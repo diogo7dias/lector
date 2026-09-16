@@ -249,6 +249,15 @@ void EpubReaderActivity::onExit() {
   // status bar setting again.
   SETTINGS.clearStatusBarOverride();
 
+  // Same for an open Reader Settings edit. The result handler that normally ends the
+  // overlay (applyReaderSettingsEdit) only runs on the POP path; Home and sleep
+  // REPLACE the stack, which destroys this activity without ever running it
+  // (ActivityManager::loop, PendingAction::Replace). Left set, two things outlive the
+  // book: the live reader fields keep its font and margins as if they were global, and
+  // readerEditSink_ still points at this freed activity — the next saveToFile() would
+  // call through it. onExit() is the one place every destruction path routes through.
+  if (SETTINGS.readerEditOverlayActive()) SETTINGS.endReaderEditOverlay();
+
   if (statsTrackingActive) {
     statsSession.pause(millis());
     if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save EPUB reading stats");
