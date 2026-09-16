@@ -685,6 +685,13 @@ Downloadable families are built at point sizes 10 through 18, so a family gives 
 reading sizes. OpenDyslexic is the exception, at 8 through 16, because its glyphs run larger
 for the same point size.
 
+On the X4 Pro a family can also be an ordinary TrueType or OpenType font. Make a folder under
+`/fonts/` (or `/.fonts/`) named after the family and copy its `.ttf` or `.otf` files into it,
+one per style. The style comes from the file name (`Regular`, `Bold`, `Italic`, `BoldItalic`
+and the usual weight names); a folder holding a single file uses it as the regular face. Such a
+family offers every size from 8 to 40 pt and renders anti-aliased when **Text Anti-Aliasing**
+is on. The X4 and X3 skip these folders; they read `.cpfont` families only.
+
 Installed families appear in **Settings > Reader > Text Settings > Reader Font Family**. Full
 details are in [docs/sd-card-fonts.md](./docs/sd-card-fonts.md).
 

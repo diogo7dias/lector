@@ -16,12 +16,32 @@ struct SdCardFontFileInfo {
 struct SdCardFontFamilyInfo {
   std::string name;  // directory name, e.g. "NotoSansCJK"
   std::vector<SdCardFontFileInfo> files;
+#ifdef CROSSPOINT_TTF_READER
+  // Vector faces found beside (or instead of) the .cpfont files, one full path
+  // per EpdFontFamily style index (regular, bold, italic, bold-italic); empty
+  // when the family has no such face. A family with any face here is a TTF
+  // family: the reader loads it at the requested size and ignores its .cpfont
+  // files (see SdCardFontManager::loadFamily). Resolution rules live in
+  // TtfFamilyScan.h.
+  std::string ttfFaces[4];
+  bool hasTtf() const { return !ttfFaces[0].empty(); }
+#else
+  static constexpr bool hasTtf() { return false; }
+#endif
 
   const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
   // Installed file closest to `pointSize` (ties → smaller). nullptr when the
   // family ships nothing in `style`.
   const SdCardFontFileInfo* findNearestSize(uint8_t pointSize, uint8_t style = 0) const;
+  // Point sizes the reader can select for this family, ascending. A .cpfont
+  // family ships fixed sizes; a TTF family offers every size in the TTF range.
   std::vector<uint8_t> availableSizes() const;
+#ifdef CROSSPOINT_TTF_READER
+  // The size the reader actually loads for a requested size: the nearest
+  // shipped .cpfont size, or the request clamped into the TTF range. 0 when
+  // the family has nothing loadable.
+  uint8_t resolvePointSize(uint8_t pointSize) const;
+#endif
 };
 
 class SdCardFontRegistry {

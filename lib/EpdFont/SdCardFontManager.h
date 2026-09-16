@@ -6,6 +6,9 @@
 
 class GfxRenderer;
 class SdCardFont;
+#ifdef CROSSPOINT_TTF_READER
+class TtfSdFont;
+#endif
 struct SdCardFontFamilyInfo;
 struct SdCardFontFileInfo;
 
@@ -49,8 +52,6 @@ class SdCardFontManager {
     int fontId;
     uint8_t size;
   };
-  static int computeFontId(uint32_t contentHash, const char* familyName, uint8_t pointSize);
-
   // Load+register a single .cpfont file and append it to loaded_.
   // Returns the font id, or 0 on failure (allocation, read, or id collision).
   int loadFile(const SdCardFontFileInfo& file, const char* familyName, GfxRenderer& renderer);
@@ -58,4 +59,15 @@ class SdCardFontManager {
   std::string loadedFamilyName_;
   uint8_t loadedPointSize_ = 0;
   std::vector<LoadedFont> loaded_;
+
+#ifdef CROSSPOINT_TTF_READER
+  // A TTF family is loaded instead of, never beside, a .cpfont one. Extra UI
+  // sizes (CJK fallback) are not offered for it: the section cache keys on the
+  // one reader-size id, and the UI fonts keep their bitmap fallbacks.
+  int loadTtfFamily(const SdCardFontFamilyInfo& family, GfxRenderer& renderer, uint8_t pointSize);
+  // Owned, like LoadedFont::font: a raw pointer keeps the inline constructor
+  // free of the (gated, incomplete here) type. Freed in unloadAll() and the destructor.
+  TtfSdFont* ttf_ = nullptr;
+  int ttfFontId_ = 0;
+#endif
 };

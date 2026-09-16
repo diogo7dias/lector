@@ -2,6 +2,9 @@
 
 #include <HalStorage.h>
 #include <Logging.h>
+#ifdef CROSSPOINT_TTF_READER
+#include <TtfFamilyScan.h>
+#endif
 
 #include <algorithm>
 #include <cstring>
@@ -36,6 +39,13 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t po
 
 std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
   std::vector<uint8_t> sizes;
+#ifdef CROSSPOINT_TTF_READER
+  if (hasTtf()) {
+    sizes.reserve(ttfscan::TTF_MAX_PT - ttfscan::TTF_MIN_PT + 1);
+    for (uint8_t pt = ttfscan::TTF_MIN_PT; pt <= ttfscan::TTF_MAX_PT; ++pt) sizes.push_back(pt);
+    return sizes;
+  }
+#endif
   for (const auto& f : files) {
     bool found = false;
     for (uint8_t s : sizes) {
@@ -49,6 +59,14 @@ std::vector<uint8_t> SdCardFontFamilyInfo::availableSizes() const {
   std::sort(sizes.begin(), sizes.end());
   return sizes;
 }
+
+#ifdef CROSSPOINT_TTF_READER
+uint8_t SdCardFontFamilyInfo::resolvePointSize(const uint8_t pointSize) const {
+  if (hasTtf()) return ttfscan::clampTtfPointSize(pointSize);
+  const SdCardFontFileInfo* selected = findNearestSize(pointSize);
+  return selected ? selected->pointSize : 0;
+}
+#endif
 
 // --- SdCardFontRegistry ---
 
@@ -93,6 +111,11 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
   if (!dir || !dir.isDirectory()) return;
 
   char nameBuffer[128];
+#ifdef CROSSPOINT_TTF_READER
+  // ~800 bytes of slot names on the stack for the scan's duration; the
+  // registry walk is a one-off at discovery time, not a render-loop path.
+  ttfscan::TtfFamilyFaces ttf;
+#endif
   while (true) {
     HalFile entry = dir.openNextFile();
     if (!entry) break;
@@ -107,6 +130,9 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     // Skip macOS resource fork files (._*) and other hidden files
     if (nameBuffer[0] == '.' || nameBuffer[0] == '_') continue;
 
+#ifdef CROSSPOINT_TTF_READER
+    if (ttf.offer(nameBuffer)) continue;
+#endif
     uint8_t size, style;
     if (!parseFilename(nameBuffer, size, style)) continue;
 
@@ -132,6 +158,12 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     info.style = style;
     family.files.push_back(std::move(info));
   }
+#ifdef CROSSPOINT_TTF_READER
+  ttf.finish();
+  for (uint8_t st = 0; st < ttfscan::STYLE_COUNT; ++st) {
+    if (ttf.has(st)) family.ttfFaces[st] = std::string(dirPath) + "/" + ttf.file(st);
+  }
+#endif
 }
 
 // Scan a single root (e.g. "/.fonts") and append its families to `out`.
@@ -174,7 +206,7 @@ void SdCardFontRegistry::scanRoot(const char* rootPath, std::vector<SdCardFontFa
       std::string subDirPath = std::string(rootPath) + "/" + nameBuffer;
       SdCardFontRegistry::scanDirectory(subDirPath.c_str(), family);
 
-      if (!family.files.empty()) {
+      if (!family.files.empty() || family.hasTtf()) {
         out.push_back(std::move(family));
         LOG_DBG("SDREG", "Found family: %s (%d files) in %s", out.back().name.c_str(),
                 static_cast<int>(out.back().files.size()), rootPath);

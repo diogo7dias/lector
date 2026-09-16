@@ -85,6 +85,19 @@ void InstalledFontsActivity::loadFamilies() {
       // iteration.
       if (Storage.openFileForRead(LOG_TAG, face.path, file) && file.isOpen()) family.totalBytes += file.fileSize64();
     }
+#ifdef CROSSPOINT_TTF_READER
+    if (info.hasTtf()) {
+      // A vector family is selectable at every TTF size; its faces count like files.
+      family.sizeCount = static_cast<uint8_t>(info.availableSizes().size());
+      for (const auto& path : info.ttfFaces) {
+        if (path.empty()) continue;
+        busy::tick();
+        family.facePaths.push_back(path);
+        HalFile file;
+        if (Storage.openFileForRead(LOG_TAG, path, file) && file.isOpen()) family.totalBytes += file.fileSize64();
+      }
+    }
+#endif
     families.push_back(std::move(family));
   }
 
