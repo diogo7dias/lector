@@ -374,8 +374,14 @@ void UiGridActivity::buildValueBand(UiScreen& screen) {
 }
 
 void UiGridActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  // Read each edge ONCE per pass and reuse the answer. A hint-band tap is synthesized by
+  // TapStroke, which is CONSUMING: the first wasPressed() for that hardware id spends the
+  // tap, so asking a second time further down answered false and the band's Back/Toggle
+  // did nothing while the physical keys (non-consuming edge flags) worked. The grid asked
+  // twice — once here to cancel row-tap state, once at the dispatch below.
+  const bool confirmPressed = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
+  const bool backPressed = mappedInput.wasPressed(MappedInputManager::Button::Back);
+  if (confirmPressed || backPressed) {
     buttonNavigator.resetRowTap();
   }
   if (handleCustomInput()) {
@@ -404,11 +410,11 @@ void UiGridActivity::loop() {
     return;
   }
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  if (confirmPressed) {
     if (selected_ >= 0 && selected_ < cellCount()) activateCell(selected_);
     return;
   }
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+  if (backPressed) {
     onBackButton();
     return;
   }
