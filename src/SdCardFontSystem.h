@@ -60,6 +60,7 @@ class SdCardFontSystem {
     if (registryDirty_.exchange(false, std::memory_order_acquire)) {
       registry_.discover();
       discovered_ = true;
+      partial_ = false;
     }
   }
 
@@ -83,8 +84,18 @@ class SdCardFontSystem {
   // still trigger the deferred scan.
   void ensureDiscovered() const;
 
+  // Make sure `familyName` is resolvable in the registry, cheaply. Probes that one
+  // family's directory instead of listing every installed family; falls back to a
+  // full scan if the probe misses, so a genuinely missing family is still detected.
+  // Leaves the registry PARTIAL: only callers that need the whole family list
+  // (the settings UI, FontInstaller) must use ensureDiscovered() instead.
+  void ensureFamilyResolved(const char* familyName) const;
+
   mutable SdCardFontRegistry registry_;
   mutable bool discovered_ = false;
+  // discoverOne() filled the registry with a single family, so the family LIST is
+  // incomplete even though discovered_ logic has been satisfied for that one name.
+  mutable bool partial_ = false;
   SdCardFontManager manager_;
   std::atomic<bool> registryDirty_{false};
 };
