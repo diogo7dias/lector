@@ -13,16 +13,16 @@
 // two grey levels the AA overlay adds afterwards are only ever as deep as the base under
 // them.
 //
-// The X4 and X3 keep HALF: their base is the exact waveform the gray-nudge LUT was
-// calibrated against, and driving it harder would shift every tone in the image.
+// The X4 Pro, X4 and X3 all keep HALF: their base is the exact waveform the gray-nudge LUT
+// was calibrated against, and driving it harder shifts every tone in the image. A FULL (GC)
+// base parks pixels in a different charge state, the differential nudge then lands unevenly,
+// and the two mid greys collapse — the wallpaper comes out black, white and one grey.
 //
 // Takes the device as a PARAMETER rather than reading the `gpio` / `BoardConfig::ACTIVE`
 // globals, so it is a pure function and host-testable. See test/sleep_face_paint.
 inline constexpr HalDisplay::RefreshMode sleepGrayscaleBaseRefresh(const DeviceProfile& dev) {
-  // EXPERIMENT (not for merge): the X4 Pro's SSD1677 has no requestResync() path, so its
-  // grayscale base never gets the clean slate HalDisplay.cpp:290 gives the X3. FULL is the
-  // nearest available approximation. Judge on hardware: deeper blacks vs visible blinking.
+  // The C3 X4 keeps FULL: nobody has judged it on hardware, and the X4 Pro verdict does not
+  // transfer across controllers (UC8279 vs SSD1677 have different grayscale LUTs).
   const bool uc8279X4 = dev.controllerIsUc8279 && !dev.isX3;
-  if (dev.isX4Pro) return HalDisplay::FULL_REFRESH;
   return uc8279X4 ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
 }

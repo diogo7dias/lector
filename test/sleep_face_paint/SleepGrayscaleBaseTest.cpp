@@ -59,12 +59,13 @@ TEST(SleepGrayscaleBase, AUc8279X3BaseIsHalf) {
   EXPECT_EQ(sleepGrayscaleBaseRefresh(uc8279X3()), HalDisplay::HALF_REFRESH);
 }
 
-// The X4 Pro takes FULL, unlike every other SSD1677 board: its controller has no
-// requestResync() path, so the grayscale base cannot be given the clean slate the X3 gets
-// at HalDisplay.cpp:290, and the previous frame ghosts under the wallpaper. Revert this
-// and sleepGrayscaleBaseRefresh together if the extra blinking is judged the worse evil.
-TEST(SleepGrayscaleBase, TheX4ProBaseIsFull) {
-  EXPECT_EQ(sleepGrayscaleBaseRefresh(ssd1677X4Pro()), HalDisplay::FULL_REFRESH);
+// The X4 Pro takes HALF, like every other board. FULL was tried (its SSD1677 has no
+// requestResync() path, so the grayscale base cannot be given the clean slate the X3 gets at
+// HalDisplay.cpp:290) and judged on hardware: the wallpaper lost its mid tones, rendering as
+// black, white and a single grey. The gray-nudge LUT is calibrated against HALF; that wins
+// over the ghosting FULL was meant to hide.
+TEST(SleepGrayscaleBase, TheX4ProBaseIsHalf) {
+  EXPECT_EQ(sleepGrayscaleBaseRefresh(ssd1677X4Pro()), HalDisplay::HALF_REFRESH);
 }
 
 // The rule is about the CONTROLLER as well as the board: a non-UC8279 board takes HALF

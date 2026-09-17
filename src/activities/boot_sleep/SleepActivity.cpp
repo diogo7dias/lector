@@ -574,10 +574,9 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
     // behind. A FULL (GC) base parks pixels in a different charge state and
     // the differential nudge then lands unevenly (blotchy noise in gray areas).
     //
-    // NOTE, unresolved: on a UC8279 non-X3 board plan.base is FULL, which is what has
-    // shipped and what this comment says must not happen. See the contradiction recorded
-    // in test/sleep_face_paint/SleepGrayscaleBaseTest.cpp — settling it needs an X4
-    // ghosting check on hardware, not a code reading.
+    // Settled for the X4 Pro on hardware: FULL collapsed the wallpaper's mid tones to a
+    // single grey, so it is back on HALF. The C3 X4 (UC8279 non-X3) still takes FULL —
+    // untested there, and the verdict does not transfer across controllers.
     renderer.displayGrayscaleBase(plan.base);
   } else {
     renderer.displayBuffer(plan.base);
