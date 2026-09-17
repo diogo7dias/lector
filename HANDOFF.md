@@ -1,4 +1,5 @@
 # Handoff
+- 2026-09-17 (11:52 UTC): Supervisor check — unchanged since 11:05. All 5 targets merged + pushed; origin/main @ 584f490a7 (release 0.31.12). No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (11:05 UTC): Supervisor check — all 5 targets still merged; main advanced 5759e8f80 → 584f490a7 (wake perf series + release 0.31.12) and is pushed: main == origin/main. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (10:53 UTC): Supervisor check — unchanged. All 5 targets merged + on origin/main @ 5759e8f80; main == origin/main. No Claude lector agent/pane. No pending work. DONE-FOR-USER.
 - 2026-09-17 (10:41 UTC): Supervisor check — unchanged. All 5 targets merged + on origin/main @ 5759e8f80; main == origin/main. No Claude lector agent/pane. No pending work. DONE-FOR-USER.
