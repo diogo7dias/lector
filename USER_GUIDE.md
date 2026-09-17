@@ -1,4 +1,4 @@
-<!-- lector-version: 0.31.11 -->
+<!-- lector-version: 0.31.12 -->
 
 # Lector User Guide
 
@@ -92,8 +92,7 @@ The device sleeps after the inactivity set in **Settings > System > Time to Slee
 from 1 to 30 minutes, or Never. The default is 10 minutes. What it shows while asleep is the sleep screen, covered in
 [section 8](#8-sleep-screen-and-wallpapers).
 
-**Wake Straight to Book** (Display settings) takes a wake from sleep back into the book
-without stopping at any other screen.
+A wake from sleep goes straight back into the book, without stopping at any other screen.
 
 **Fast Unlock** (Display settings, on by default) shortens the wait for the recovery button
 chord at wake and paints the page straight over the sleep screen in one pass instead of
@@ -103,10 +102,10 @@ wallpaper stays visible in the first page after a wake.
 
 ### First launch
 
-The first boot lands on the [Home screen](#3-home-screen). Later boots reopen the book you
-were reading. **Open Book on Boot** changes that: **Last Book** opens the last-read book
-every time, even after the reader was closed, and **Random Book** opens one of the books in
-progress at random. Holding Back during boot skips both and lands on Home.
+The first boot lands on the [Home screen](#3-home-screen). After that, an unlock always
+opens a book. **Open Book on Boot** chooses which: **Last Book** (the default) opens the
+last-read book every time, and **Random Book** opens one of the books in progress at
+random. Holding Back during boot skips both and lands on Home.
 
 On a fresh card, Lector creates the folders it uses: `/read`, `/recents`, `/sleep` and
 `/sleep pause` (that last name contains a space).
@@ -746,7 +745,6 @@ belongs to, so the rows here appear in the same order as on the device.
 **Sleep screen**
 
 - **Sleep Screen** — Custom, Cover. See [section 8](#8-sleep-screen-and-wallpapers).
-- **Wake Straight to Book** — wake goes straight back into the book.
 - **Fast Unlock** — shorter recovery-chord wait at wake, and the page painted over the sleep screen in one pass. Off if a wake lands in the recovery picker by itself or the wallpaper ghosts into the first page.
 - **Sleep Footer Text** — your own line of text on the sleep screen.
 
@@ -893,7 +891,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 - **Show Hidden Files**.
 - **File Browser Order** — Alphabetical, Random, Recently Added or Last Read.
-- **Open Book on Boot** — Off, Last Book or Random Book.
+- **Open Book on Boot** — Last Book or Random Book.
 - **Clear Read Books from Recent List**.
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
