@@ -1,4 +1,7 @@
 # Handoff
+
+- 2026-09-17 (14:58 UTC): Supervisor check — unchanged. All 5 targets merged; deliverables on origin/main @ 584f490a7 (release 0.31.12); fast-lock-unlock + banner-on-favorites-exit pushed. No Claude lector agent/pane. DONE-FOR-USER.
+- 2026-09-17 (14:47 UTC): Supervisor check — unchanged since 12:04. All 5 targets merged (deliverables on origin/main @ 584f490a7, release 0.31.12); fast-lock-unlock + banner-on-favorites-exit pushed. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (12:04 UTC): Supervisor check — all 5 targets verified merged into main (audit-write-throttle, audit-constexpr, upstream-3245-framebuffer-guard, fast-lock-unlock, banner-on-favorites-exit); deliverable work on origin/main @ 584f490a7 (release 0.31.12). Local main 2 docs-only commits ahead. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (11:52 UTC): Supervisor check — unchanged since 11:05. All 5 targets merged + pushed; origin/main @ 584f490a7 (release 0.31.12). No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (11:05 UTC): Supervisor check — all 5 targets still merged; main advanced 5759e8f80 → 584f490a7 (wake perf series + release 0.31.12) and is pushed: main == origin/main. No Claude lector agent/pane. DONE-FOR-USER.
