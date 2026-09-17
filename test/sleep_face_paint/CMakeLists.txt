@@ -1,5 +1,6 @@
 add_executable(SleepFacePaintTest
   SleepGrayscaleBaseTest.cpp
+  SleepPreClearTest.cpp
   SleepFacePaintTest.cpp
 )
 

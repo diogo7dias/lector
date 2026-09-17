@@ -14,8 +14,9 @@
 // very thing they exist to measure.
 //
 // Every field is an index the render options are built from (LockLab.cpp), and the
-// defaults are the recipe chosen on glass: Identity tone curve, a FULL grayscale base,
-// and a white FULL pre-clear before the render. The JSON key carries a version suffix so
+// defaults are the recipe chosen on glass: Identity tone curve and a FULL grayscale base.
+// The pre-clear the bench chose is no longer a knob: it ships for every build that needs
+// it (activities/boot_sleep/SleepPreClear.h). The JSON key carries a version suffix so
 // a device that already holds the old block falls back to these rather than resurrecting
 // whatever was last cycled by hand.
 struct LockLabState {
@@ -24,7 +25,6 @@ struct LockLabState {
   uint8_t invert = 0;
   uint8_t grayBaseRefresh = 1;  // 0 Auto, then Full / Half / Fast
   uint8_t passes = 0;           // PxcRenderOptions::Passes
-  uint8_t preClear = 1;         // 0 Off, 1 White FULL, 2 Black then white, 3 Two cycles
   uint8_t wholeFileCache = 1;
   uint8_t rowsPerRead = 0;  // 0 Auto, then 1 / 4 / 8 / 16
 };
@@ -36,7 +36,6 @@ inline void lockLabToJson(const LockLabState& s, JsonDocument& doc) {
   o["invert"] = s.invert;
   o["grayBaseRefresh"] = s.grayBaseRefresh;
   o["passes"] = s.passes;
-  o["preClear"] = s.preClear;
   o["wholeFileCache"] = s.wholeFileCache;
   o["rowsPerRead"] = s.rowsPerRead;
 }
@@ -49,7 +48,6 @@ inline void lockLabFromJson(LockLabState& s, JsonVariantConst doc) {
   s.invert = o["invert"] | s.invert;
   s.grayBaseRefresh = o["grayBaseRefresh"] | s.grayBaseRefresh;
   s.passes = o["passes"] | s.passes;
-  s.preClear = o["preClear"] | s.preClear;
   s.wholeFileCache = o["wholeFileCache"] | s.wholeFileCache;
   s.rowsPerRead = o["rowsPerRead"] | s.rowsPerRead;
 }

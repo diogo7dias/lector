@@ -18,6 +18,7 @@
 #include "PxcSleepRenderer.h"
 #include "SleepFacePaint.h"
 #include "SleepInfoOverlay.h"
+#include "SleepPreClear.h"
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
@@ -236,13 +237,22 @@ void SleepActivity::renderCustomSleepScreen() const {
   // a different recipe than the picture on the panel.
   const PxcRenderOptions labOptions = locklab::optionsFor(APP_STATE.lockLab);
   const PxcRenderOptions* const pxcOptions = &labOptions;
-  // Before anything is drawn, and before any sleep face is chosen: a scrub is about the
-  // panel's charge history, not about which picture is going on top of it.
-  const uint32_t preClearMs = locklab::applyPreClear(renderer);
-  if (preClearMs != 0) LOG_INF("LAB", "pre-clear %ums", static_cast<unsigned>(preClearMs));
 #else
   const PxcRenderOptions* const pxcOptions = nullptr;
 #endif
+  // Before anything is drawn, and before any sleep face is chosen: a scrub is about the
+  // panel's charge history, not about which picture is going on top of it.
+  //
+  // This is the lock screen's only defence against a ghost. The X4 Pro's SSD1677 has no
+  // requestResync(), so the grayscale base cannot clear the panel the way the X3's does at
+  // HalDisplay.cpp:290 — whatever the reader or the status bar left behind is still in the
+  // ink when the wallpaper lands on top. High-contrast furniture (the top bar most of all)
+  // is what survives, because it sat unchanged through many differential updates.
+  //
+  // The cost is a full clean pass at lock, which the user does not wait for: it runs after
+  // the device has already been put down.
+  const uint32_t preClearMs = sleepPreClear(renderer, display.profile());
+  if (preClearMs != 0) LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
