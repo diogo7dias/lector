@@ -1,5 +1,6 @@
 # Handoff
 
+- 2026-09-17 (17:03 UTC): Supervisor check — unchanged since 15:21. All 5 targets merged; origin/main @ 584f490a7 (release 0.31.12); fast-lock-unlock + banner-on-favorites-exit pushed. Local main 4 docs-only commits ahead. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (15:21 UTC): Supervisor check — unchanged since 14:58. All 5 targets merged; origin/main @ 584f490a7 (release 0.31.12); fast-lock-unlock + banner-on-favorites-exit pushed. Local main 4 docs-only commits ahead (supervisor checks). No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (14:58 UTC): Supervisor check — unchanged. All 5 targets merged; deliverables on origin/main @ 584f490a7 (release 0.31.12); fast-lock-unlock + banner-on-favorites-exit pushed. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (14:47 UTC): Supervisor check — unchanged since 12:04. All 5 targets merged (deliverables on origin/main @ 584f490a7, release 0.31.12); fast-lock-unlock + banner-on-favorites-exit pushed. No Claude lector agent/pane. DONE-FOR-USER.
