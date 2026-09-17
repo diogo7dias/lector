@@ -1,4 +1,5 @@
 # Handoff
+- 2026-09-17 (20:40 UTC): Supervisor check — unchanged since 19:05. All 5 targets ancestors of origin/main (merge-base verified); fast-lock-unlock + banner-on-favorites-exit pushed; HANDOFF line present. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (19:56 UTC): Supervisor check — unchanged since 19:05. All 5 targets ancestors of origin/main (verified with merge-base); fast-lock-unlock + banner-on-favorites-exit pushed; HANDOFF line present. No Claude lector agent/pane. DONE-FOR-USER.
 - 2026-09-17 (20:07 UTC): Supervisor check — unchanged since 19:05. All 5 targets ancestors of origin/main (merge-base verified); fast-lock-unlock + banner-on-favorites-exit pushed; HANDOFF line present. No Claude lector agent/pane. DONE-FOR-USER.
 
