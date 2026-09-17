@@ -239,6 +239,33 @@ bool SdCardFontRegistry::discover() {
   return !families_.empty();
 }
 
+// Resolve one family by name, skipping the directory walk entirely. findFamilyRoot
+// probes the two candidate paths directly, so the cost is two exists() calls plus
+// the family's own file scan, instead of one probe per installed family.
+bool SdCardFontRegistry::discoverOne(const char* familyName) {
+  if (!familyName || !*familyName) return false;
+  // Append, never clear: a partial registry can accumulate several families (the global
+  // selection plus a book's own), and dropping the previous one would make an already
+  // loaded family look uninstalled to setupUiFallbacks and the reader.
+  for (const auto& fam : families_) {
+    if (fam.name == familyName) return true;
+  }
+
+  const char* root = findFamilyRoot(familyName);
+  if (!root) return false;
+
+  SdCardFontFamilyInfo family;
+  family.name = familyName;
+  const std::string dirPath = std::string(root) + "/" + familyName;
+  scanDirectory(dirPath.c_str(), family);
+
+  if (family.files.empty() && !family.hasTtf()) return false;
+
+  families_.push_back(std::move(family));
+  LOG_DBG("SDREG", "Resolved family without a full scan: %s in %s", familyName, root);
+  return true;
+}
+
 const char* SdCardFontRegistry::findFamilyRoot(const char* familyName) {
   if (!familyName || !*familyName) return nullptr;
   char path[160];

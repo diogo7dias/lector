@@ -123,7 +123,7 @@ void reportInput() {
   inputReported = true;
   char panels[48];
   PerfStats::formatWakePanels(panels, sizeof(panels));
-  LOG_INF("SLP", "Wake %lu ms total classify=%lu cfg=%lu frame=%lu settle=%lu panels[%lu]=%s first_input=%lu",
+  LOG_INF("SLP", "Wake %lu ms total classify=%lu cfg=%lu logs=%lu settle=%lu panels[%lu]=%s first_input=%lu",
           (unsigned long)(ready - setupStartedMs), (unsigned long)costs[0], (unsigned long)costs[1],
           (unsigned long)costs[2], (unsigned long)costs[3], (unsigned long)PerfStats::wakePanelCount(), panels,
           (unsigned long)(acceptedAt - setupStartedMs));

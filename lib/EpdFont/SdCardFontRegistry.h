@@ -65,6 +65,13 @@ class SdCardFontRegistry {
   // Scan SD card, populate families_. Returns true if any families found.
   bool discover();
 
+  // Populate families_ with ONE named family, without walking either root's
+  // directory listing. The wake path knows which family it wants from settings,
+  // and a full discover() costs one directory probe per installed family to then
+  // use exactly one of them. Returns false when the family is not installed, in
+  // which case the caller must fall back to discover().
+  bool discoverOne(const char* familyName);
+
   const std::vector<SdCardFontFamilyInfo>& getFamilies() const { return families_; }
   const SdCardFontFamilyInfo* findFamily(const std::string& name) const;
   int getFamilyIndex(const std::string& name) const;

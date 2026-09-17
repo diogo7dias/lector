@@ -38,9 +38,29 @@ constexpr UiFontSize kUiFontSizes[] = {
 }  // namespace
 
 void SdCardFontSystem::ensureDiscovered() const {
-  if (discovered_) return;
+  // A partial registry satisfies one family lookup but not a family LIST, so it must
+  // be upgraded to a real scan here even though a discoverOne() already ran.
+  if (discovered_ && !partial_) return;
   discovered_ = true;
+  partial_ = false;
   registry_.discover();
+}
+
+void SdCardFontSystem::ensureFamilyResolved(const char* familyName) const {
+  if (!familyName || !*familyName) return;
+  // Already resolvable: either a full scan ran, or a previous discoverOne() landed on
+  // this same family. Asking for a DIFFERENT family than the partial registry holds must
+  // NOT take the early return — that is what made a per-book font report itself missing.
+  if (registry_.findFamily(familyName)) return;
+  if (discovered_ && !partial_) return;  // full scan already says it is not installed
+  if (registry_.discoverOne(familyName)) {
+    discovered_ = true;
+    partial_ = true;
+    return;
+  }
+  // Probe missed: the family may still exist under a name the probe cannot guess.
+  // Pay for the full scan rather than wrongly reporting it gone.
+  ensureDiscovered();
 }
 
 void SdCardFontSystem::begin(GfxRenderer& renderer) {
@@ -54,7 +74,7 @@ void SdCardFontSystem::begin(GfxRenderer& renderer) {
   // If user has a saved SD font selection, load it. This is the only boot path that needs
   // the family list, so it is also the only one that pays for the scan.
   if (SETTINGS.sdFontFamilyName[0] != '\0') {
-    ensureDiscovered();
+    ensureFamilyResolved(SETTINGS.sdFontFamilyName);
     const auto* family = registry_.findFamily(SETTINGS.sdFontFamilyName);
     if (family) {
       if (manager_.loadFamily(*family, renderer, SETTINGS.fontPointSize)) {
@@ -89,7 +109,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
   // Nothing below can match a family without the card having been scanned, and a caller
   // asking for a named family is exactly the moment a deferred scan has to happen.
   if (wantedFamily && wantedFamily[0] != '\0') {
-    ensureDiscovered();
+    ensureFamilyResolved(wantedFamily);
   }
 
   // If the web server (or another task) installed/deleted fonts, re-discover.
@@ -101,6 +121,7 @@ void SdCardFontSystem::ensureLoadedImpl(GfxRenderer& renderer, const char* wante
     LOG_DBG("SDFS", "Registry dirty — re-discovering fonts");
     registry_.discover();
     discovered_ = true;
+    partial_ = false;
   }
 
   const std::string& currentFamily = manager_.currentFamilyName();
