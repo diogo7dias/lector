@@ -702,18 +702,21 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // column. The sleep wallpaper is always drawn through the OEM 3-pass grayscale
   // pipeline now; nothing reads this to choose anything. See SleepActivity.
   uint8_t sleepImageQuality = 1;
-  // Skip the unlock screen on a wallpaper wake and go straight back into the book.
+  // The unlock screen is skipped on a wallpaper wake: the wake goes straight back into
+  // the book.
   //
   // The sleep screen itself is untouched: the wallpaper is drawn and shown exactly as
-  // before. This only changes what happens on the way OUT. Normally the wake re-reads the
-  // .pxc, re-dithers every pixel, composites the unlock banners and refreshes the panel —
-  // measured at ~3.6s of a ~4.7s wake on an X3 — and then the reader paints over all of
-  // it anyway. With this on, none of that runs: the wallpaper stays on the panel from the
-  // sleep until the reader's own first paint replaces it.
+  // before. This only changes what happens on the way OUT. The wake used to re-read the
+  // .pxc, re-dither every pixel, composite the unlock banners and refresh the panel —
+  // measured at ~3.6s of a ~4.7s wake on an X3 — and then the reader painted over all of
+  // it anyway. None of that runs: the wallpaper stays on the panel from the sleep until
+  // the reader's own first paint replaces it.
   //
-  // Off by default. The cost is that the wake shows no sign of progress: the wallpaper
-  // simply sits there until the book appears.
-  uint8_t wakeStraightToBook = 1;
+  // No longer a setting. It was on by default, it is what makes the fast drive-all wake
+  // reachable, and the only thing the off path bought was a progress indication nobody
+  // waits for. Kept as a constant so the wake policy still reads as a condition and the
+  // perf log keeps its column.
+  static constexpr uint8_t wakeStraightToBook = 1;
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
   // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
   // either way). Chosen from code inspection, so the row exists to switch back without
@@ -721,12 +724,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // the wake shows banners: with Wake Straight to Book the blank already overlaps the
   // window. See wake_face::inputSettleMs.
   uint8_t fastUnlock = 1;
-  // What boot opens by itself, before the ordinary routing has its say. OFF keeps that
-  // routing (home unless the last sleep came from the reader), LAST_BOOK always opens the
-  // last-read book, RANDOM picks one of the books in progress. Held Back and a prior
-  // reader crash skip both non-OFF modes, so neither can wedge boot.
+  // What boot opens by itself, before the ordinary routing has its say. LAST_BOOK always
+  // opens the last-read book, RANDOM picks one of the books in progress. There is no OFF:
+  // an unlock lands on a book. Held Back and a prior reader crash still skip both modes,
+  // so neither can wedge boot.
+  // BOOT_BOOK_OFF is retired but its stored value 0 must keep its slot: renumbering would
+  // turn an existing "Off" into "Random". loadFromFile migrates any stored 0 to LAST.
   enum BOOT_BOOK : uint8_t { BOOT_BOOK_OFF = 0, BOOT_BOOK_LAST = 1, BOOT_BOOK_RANDOM = 2, BOOT_BOOK_COUNT };
-  uint8_t bootBookMode = BOOT_BOOK_OFF;
+  uint8_t bootBookMode = BOOT_BOOK_LAST;
   // Show hidden files/directories (starting with '.') in the file browser (0 = hidden, 1 = show)
   uint8_t showHiddenFiles = 0;
   // File browser listing order. Random shuffles only the files: folders stay sorted at the

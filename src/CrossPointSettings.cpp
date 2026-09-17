@@ -280,6 +280,12 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     bootBookMode = (doc["openRandomRecentOnBoot"] | (uint8_t)0) ? BOOT_BOOK_RANDOM : BOOT_BOOK_OFF;
     needsResave = true;
   }
+  // "Off" is retired: an unlock always lands on a book. A file still holding it moves to
+  // Last Book, which is what Off did whenever the last sleep came from the reader anyway.
+  if (bootBookMode == BOOT_BOOK_OFF) {
+    bootBookMode = BOOT_BOOK_LAST;
+    needsResave = true;
+  }
 
   // "File Browser Order" grew from a two-way alphabetical/random pick into a four-way one.
   // The old key's two values mean the same thing under the new one, so a settings file that
