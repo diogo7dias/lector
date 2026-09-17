@@ -243,8 +243,13 @@ bool SdCardFontRegistry::discover() {
 // probes the two candidate paths directly, so the cost is two exists() calls plus
 // the family's own file scan, instead of one probe per installed family.
 bool SdCardFontRegistry::discoverOne(const char* familyName) {
-  families_.clear();
   if (!familyName || !*familyName) return false;
+  // Append, never clear: a partial registry can accumulate several families (the global
+  // selection plus a book's own), and dropping the previous one would make an already
+  // loaded family look uninstalled to setupUiFallbacks and the reader.
+  for (const auto& fam : families_) {
+    if (fam.name == familyName) return true;
+  }
 
   const char* root = findFamilyRoot(familyName);
   if (!root) return false;

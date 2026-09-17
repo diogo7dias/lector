@@ -47,7 +47,12 @@ void SdCardFontSystem::ensureDiscovered() const {
 }
 
 void SdCardFontSystem::ensureFamilyResolved(const char* familyName) const {
-  if (discovered_) return;
+  if (!familyName || !*familyName) return;
+  // Already resolvable: either a full scan ran, or a previous discoverOne() landed on
+  // this same family. Asking for a DIFFERENT family than the partial registry holds must
+  // NOT take the early return — that is what made a per-book font report itself missing.
+  if (registry_.findFamily(familyName)) return;
+  if (discovered_ && !partial_) return;  // full scan already says it is not installed
   if (registry_.discoverOne(familyName)) {
     discovered_ = true;
     partial_ = true;
