@@ -146,13 +146,15 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     if (status < 0) {
       LOG_ERR("HTTP", "wolfSSL request failed: %s (free %d bytes, largest block %d bytes)", url.c_str(),
               ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-      return HttpDownloader::HTTP_ERROR;
+      // No status line was ever read, so nothing on the far end answered: this
+      // is the link or the handshake, not the server's opinion of the request.
+      return HttpDownloader::NO_CONNECTION;
     }
     if (isRedirect(status)) {
       const std::string location = http.getHeader("location");
       if (location.empty() || !freeink::SecureHttpClient::resolveUrl(url, location, url)) {
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
-        return HttpDownloader::HTTP_ERROR;
+        return HttpDownloader::SERVER_ERROR;
       }
       continue;
     }
@@ -162,19 +164,19 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     if (http_range::isRangeAlreadyComplete(status, sink.rangeStart)) return HttpDownloader::OK;
     if (!http_range::isBodyStatus(status, sink.rangeStart)) {
       LOG_ERR("HTTP", "wolfSSL unexpected status: %d for %s", status, url.c_str());
-      return HttpDownloader::HTTP_ERROR;
+      return HttpDownloader::SERVER_ERROR;
     }
     if (http.callbackAborted()) return HttpDownloader::FILE_ERROR;
     if (!http.responseComplete()) {
       LOG_ERR("HTTP", "wolfSSL incomplete: got %zu of %zu bytes (free %d bytes, largest block %d bytes)",
               sink.downloaded, sink.total, ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-      return HttpDownloader::HTTP_ERROR;
+      return HttpDownloader::INCOMPLETE;
     }
     if (sink.contentDisposition) *sink.contentDisposition = http.getHeader("content-disposition");
     return HttpDownloader::OK;
   }
   LOG_ERR("HTTP", "too many redirects");
-  return HttpDownloader::HTTP_ERROR;
+  return HttpDownloader::SERVER_ERROR;
 }
 #endif
 
@@ -225,10 +227,11 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   if (err != ESP_OK) {
     LOG_ERR("HTTP", "open failed: %s", esp_err_to_name(err));
     esp_http_client_cleanup(client);
-    return HttpDownloader::HTTP_ERROR;
+    return HttpDownloader::NO_CONNECTION;
   }
   int64_t contentLength = esp_http_client_fetch_headers(client);
   int status = esp_http_client_get_status_code(client);
+  sink.status = status;
   for (int hop = 0; isRedirect(status) && hop < MAX_REDIRECTS; ++hop) {
     if (esp_http_client_set_redirection(client) != ESP_OK) break;
     esp_http_client_close(client);
@@ -236,10 +239,11 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     if (err != ESP_OK) {
       LOG_ERR("HTTP", "redirect open failed: %s", esp_err_to_name(err));
       esp_http_client_cleanup(client);
-      return HttpDownloader::HTTP_ERROR;
+      return HttpDownloader::NO_CONNECTION;
     }
     contentLength = esp_http_client_fetch_headers(client);
     status = esp_http_client_get_status_code(client);
+    sink.status = status;
   }
 
   // 416 answers a Range that starts at or past the end of the file: every byte
@@ -252,7 +256,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   if (!http_range::isBodyStatus(status, sink.rangeStart)) {
     LOG_ERR("HTTP", "unexpected status: %d", status);
     esp_http_client_cleanup(client);
-    return HttpDownloader::HTTP_ERROR;
+    return HttpDownloader::SERVER_ERROR;
   }
 
   // sink.contentDisposition is deliberately left untouched here. This transport
@@ -284,7 +288,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
     if (read < 0) {
       LOG_ERR("HTTP", "read error after %zu bytes", sink.downloaded);
       esp_http_client_cleanup(client);
-      return HttpDownloader::HTTP_ERROR;
+      return HttpDownloader::INCOMPLETE;
     }
     if (read == 0) break;  // all data received
     if (!sink.write(reinterpret_cast<const uint8_t*>(buf.get()), read)) {
@@ -299,7 +303,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   esp_http_client_cleanup(client);
   if (!complete) {
     LOG_ERR("HTTP", "incomplete: got %zu of %zu bytes", sink.downloaded, sink.total);
-    return HttpDownloader::HTTP_ERROR;
+    return HttpDownloader::INCOMPLETE;
   }
   return HttpDownloader::OK;
 }
@@ -372,7 +376,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
                                                              ProgressCallback progress, bool* cancelFlag,
                                                              const std::string& username, const std::string& password,
                                                              const bool allowResume, std::string* contentDisposition,
-                                                             const uint32_t timeoutMs) {
+                                                             const uint32_t timeoutMs, int* outStatus) {
   LOG_DBG("HTTP", "Downloading: %s -> %s", url.c_str(), destPath.c_str());
 
   const WifiFullPower fullPower;
@@ -433,6 +437,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   };
 
   const DownloadError result = runGetSecure(url, username, password, sink, timeoutMs);
+  if (outStatus) *outStatus = sink.status;
   // Close before any remove() on the same path; DESTRUCTOR_CLOSES_FILE would
   // otherwise close only after the remove.
   file.close();
@@ -457,7 +462,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (sink.downloaded == 0) {
     LOG_ERR("HTTP", "no data received");
     Storage.remove(destPath.c_str());
-    return HTTP_ERROR;
+    return INCOMPLETE;
   }
   // Belt and braces over the transport's own completeness check: a short body that
   // still reports complete would leave a truncated book on the SD card, which then
@@ -466,7 +471,7 @@ HttpDownloader::DownloadError HttpDownloader::downloadToFile(const std::string& 
   if (sink.total > 0 && sink.downloaded != sink.total) {
     LOG_ERR("HTTP", "short download: got %zu of %zu bytes", sink.downloaded, sink.total);
     if (!allowResume) Storage.remove(destPath.c_str());
-    return HTTP_ERROR;
+    return INCOMPLETE;
   }
   LOG_DBG("HTTP", "Downloaded %zu bytes", sink.downloaded);
   return OK;
