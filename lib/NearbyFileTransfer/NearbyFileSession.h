@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -66,6 +67,7 @@ struct TransferAction {
   uint32_t sequence = 0;
   uint64_t offset = 0;
   uint16_t length = 0;
+  // SEND_ACCEPT: carried in `offset`, the bytes of the file already on the card.
   // SEND_RESULT: whether the received file matched the sender's checksum.
   bool success = false;
 };
@@ -94,6 +96,9 @@ struct TransferEvent {
   uint32_t sequence = 0;
   uint64_t fileSize = 0;
   uint32_t crc32 = 0;
+  // ACCEPT: how much of the file the receiver already holds, so the sender skips
+  // what it does not need to send again.
+  uint64_t resumeBytes = 0;
   bool success = false;
 };
 
@@ -128,6 +133,38 @@ class TransferSession {
 
   /** Receiver: the reader accepted, and the activity resolved where it goes. */
   void acceptOffer(const std::string& destinationPath, uint32_t nowMs);
+  /**
+   * Hands back `length` bytes of the file at `offset`, or nullptr when they
+   * cannot be read. The buffer is the caller's; this layer only hashes it and
+   * does not keep the pointer.
+   */
+  using PrefixReader = std::function<const uint8_t*(uint64_t offset, uint16_t length)>;
+  /**
+   * Either side: re-enters a transfer that already has `resumeBytes` of the file
+   * in hand, so the bytes before that point are never sent again.
+   *
+   * The running checksum is the reason this takes a reader rather than a number.
+   * Both ends hash the whole file in file order, so the prefix has to go through
+   * the same crc32 the chunks would have; a resume that skipped it would reach
+   * the end with a checksum over the tail alone and fail verification every
+   * time. The prefix is read back chunk by chunk and hashed here, in order.
+   *
+   * `resumeBytes` must be a whole number of chunks and shorter than the file,
+   * because the sequence numbering both ends agree on counts chunks. Anything
+   * else, a read that fails part way, or a session that has already moved,
+   * returns false and leaves the session exactly as it was: at zero, ready to
+   * transfer the whole file.
+   */
+  bool resumeFrom(uint64_t resumeBytes, const PrefixReader& readPrefix);
+  /** Bytes skipped by a successful resumeFrom. Zero for a transfer from the start. */
+  uint64_t resumeBytes() const { return resumeBytes_; }
+  /**
+   * Sender: what the accept asked to skip, or zero. Read from here rather than
+   * from the packet so the peer check in onEvent applies to it too: a resume
+   * offset is a claim about a file, and only the reader this one is paired with
+   * may make it.
+   */
+  uint64_t pendingResumeBytes() const { return pendingResumeBytes_; }
   /** Receiver: the reader declined. */
   void rejectOffer(uint32_t nowMs);
   /**
@@ -159,10 +196,17 @@ class TransferSession {
   uint32_t sessionId() const { return session_.id(); }
   int progressPercent() const;
   /**
-   * True when a partly written file is on the card and must be deleted: the
-   * transfer was cancelled, or the bytes did not survive the trip.
+   * True when the partly written file on the card must be deleted rather than
+   * kept for a resume: the sender's checksum did not match what was written, so
+   * the bytes already there are wrong and every later resume would inherit them.
    */
   bool shouldDiscardPartialFile() const;
+  /**
+   * True when the partly written file is a sound prefix of the offered file and
+   * is worth keeping: the transfer stopped early, but nothing said the bytes
+   * that did arrive were wrong.
+   */
+  bool hasResumablePartialFile() const;
 
  private:
   bool isFinished() const;
@@ -180,6 +224,8 @@ class TransferSession {
   std::string fileName_;
   std::string offeredName_;
   std::string destinationPath_;
+  uint64_t resumeBytes_ = 0;
+  uint64_t pendingResumeBytes_ = 0;
 
   // Queued one-shot sends, drained by nextAction in the order they were raised.
   bool advertisePending_ = false;
@@ -203,6 +249,9 @@ class TransferSession {
   bool discoverSent_ = false;
   bool offerSent_ = false;
   bool receivedIntact_ = false;
+  // Set only by a COMPLETE whose checksum did not match. Distinguishes a file
+  // that is wrong from one that is merely unfinished.
+  bool checksumRejected_ = false;
 
   uint32_t lastDiscoverMs_ = 0;
   uint32_t lastOfferMs_ = 0;

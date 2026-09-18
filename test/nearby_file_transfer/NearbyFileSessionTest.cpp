@@ -507,7 +507,11 @@ TEST(NearbyFileSession, EitherSideCanCancel) {
 
   receiver.onEvent(event(TransferEventKind::CANCEL), receiverNow);
   EXPECT_EQ(receiver.state(), TransferState::CANCELLED);
-  EXPECT_TRUE(receiver.shouldDiscardPartialFile());
+  // Nothing said the bytes that did arrive were wrong, so the partial file stays
+  // on the card for the next attempt to resume from. Only a checksum the sender
+  // rejected makes it worth deleting.
+  EXPECT_FALSE(receiver.shouldDiscardPartialFile());
+  EXPECT_TRUE(receiver.hasResumablePartialFile());
 }
 
 TEST(NearbyFileSession, ReportsProgressWhileItRuns) {

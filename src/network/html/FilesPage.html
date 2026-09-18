@@ -5574,6 +5574,37 @@ function getWsUrl() {
   return `ws://${host}:${WS_PORT}/`;
 }
 
+// CRC32 (the ISO-HDLC one the firmware uses), computed a slice at a time so a
+// large book is never held in memory twice. This exists for exactly one job: an
+// upload that is resuming has to prove the bytes already on the reader are the
+// head of the file about to be sent, and not some other file that happens to
+// share its name and be shorter.
+let crc32Table = null;
+function crc32Update(crc, bytes) {
+  if (!crc32Table) {
+    crc32Table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      crc32Table[n] = c >>> 0;
+    }
+  }
+  let c = crc >>> 0;
+  for (let i = 0; i < bytes.length; i++) c = (crc32Table[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8)) >>> 0;
+  return c >>> 0;
+}
+
+async function crc32OfPrefix(file, length) {
+  const STEP = 1 << 20;
+  let crc = 0xFFFFFFFF;
+  for (let offset = 0; offset < length; offset += STEP) {
+    const end = Math.min(offset + STEP, length);
+    const buffer = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+    crc = crc32Update(crc, buffer);
+  }
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
 // Upload file via WebSocket (faster, binary protocol)
 function uploadFileWebSocket(file, onProgress, onComplete, onError) {
   return new Promise((resolve, reject) => {
@@ -5582,6 +5613,7 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
     let uploadStarted = false;
     let sendingChunks = false;
     let uploadComplete = false; // set only when DONE is received and resolve() called
+    let startOffset = 0; // where to start sending: past what the reader already has
 
     ws.binaryType = 'arraybuffer';
 
@@ -5595,7 +5627,31 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
       const msg = event.data;
       console.log('[WS] Message:', msg);
 
-      if (msg === 'READY') {
+      if (msg.startsWith('RESUME:')) {
+        // The reader still holds part of this file from an upload that was cut
+        // off. It sends back how much, and what those bytes hash to; resuming is
+        // only safe if our own first bytes hash the same.
+        const parts = msg.split(':');
+        const resumeBytes = parseInt(parts[1], 10);
+        const readerCrc = (parseInt(parts[2], 10) >>> 0);
+        let ourCrc = -1;
+        if (Number.isFinite(resumeBytes) && resumeBytes > 0 && resumeBytes < file.size) {
+          try {
+            ourCrc = await crc32OfPrefix(file, resumeBytes);
+          } catch (err) {
+            console.error('[WS] Could not hash the resume prefix:', err);
+            ourCrc = -1;
+          }
+        }
+        if (ourCrc === readerCrc) {
+          startOffset = resumeBytes;
+          console.log('[WS] Resuming at', resumeBytes, 'bytes');
+        } else {
+          startOffset = 0;
+          console.log('[WS] Partial file does not match, uploading from the start');
+        }
+        ws.send('SEEK:' + startOffset);
+      } else if (msg === 'READY') {
         uploadStarted = true;
         sendingChunks = true;
 
@@ -5605,7 +5661,8 @@ function uploadFileWebSocket(file, onProgress, onComplete, onError) {
         try {
           // Send file in chunks
           const totalSize = file.size;
-          let offset = 0;
+          let offset = startOffset;
+          if (onProgress) onProgress(offset, totalSize);
 
           while (offset < totalSize && ws.readyState === WebSocket.OPEN) {
             const chunkSize = Math.min(WS_CHUNK_SIZE, totalSize - offset);

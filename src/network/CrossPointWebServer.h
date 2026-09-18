@@ -38,6 +38,18 @@ class CrossPointWebServer {
     size_t size = 0;
     bool success = false;
     String error = "";
+    /**
+     * Where the file lands, and the ".part" name it is written under until it
+     * gets there.
+     *
+     * A plain multipart POST has no way to say "carry on from byte N", so this
+     * path is not resumable and does not pretend to be: a partial is deleted the
+     * moment the upload fails. It still stages through ".part" so that a
+     * connection dropped half way cannot leave a truncated book sitting in the
+     * library waiting to be opened. The WebSocket path is the one that resumes.
+     */
+    String finalPath;
+    String partialPath;
 
     // Upload write buffer - batches small writes into larger SD card operations
     // 4KB is a good balance: large enough to reduce syscall overhead, small enough
@@ -96,7 +108,14 @@ class CrossPointWebServer {
   // WebSocket upload state
   void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
   static void wsEventCallback(uint8_t num, WStype_t type, uint8_t* payload, size_t length);
-  void abortWsUpload(const char* tag);
+  /**
+   * Ends a WebSocket upload that did not finish.
+   *
+   * `keepPartial` decides the fate of the ".part" file: kept when the upload was
+   * merely interrupted, so the next attempt resumes from it, and removed when
+   * what is on the card cannot be trusted or the card had no room for it.
+   */
+  void abortWsUpload(const char* tag, bool keepPartial);
 
   // File scanning
   void scanFiles(const char* path, const std::function<void(FileInfo)>& callback) const;

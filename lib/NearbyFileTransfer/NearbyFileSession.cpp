@@ -96,7 +96,10 @@ void TransferSession::onEvent(const TransferEvent& incoming, const uint32_t nowM
       break;
 
     case TransferEventKind::ACCEPT:
-      if (state_ == TransferState::OFFER_SENT) state_ = TransferState::TRANSFERRING;
+      if (state_ == TransferState::OFFER_SENT) {
+        pendingResumeBytes_ = incoming.resumeBytes;
+        state_ = TransferState::TRANSFERRING;
+      }
       break;
 
     case TransferEventKind::REJECT:
@@ -119,6 +122,7 @@ void TransferSession::onEvent(const TransferEvent& incoming, const uint32_t nowM
     case TransferEventKind::COMPLETE:
       if (state_ == TransferState::TRANSFERRING) {
         receivedIntact_ = incoming.crc32 == session_.crc32() && session_.transferredBytes() == session_.totalBytes();
+        checksumRejected_ = !receivedIntact_;
         resultPending_ = true;
         resultSuccess_ = receivedIntact_;
         finish(receivedIntact_ ? TransferState::DONE : TransferState::FAILED);
@@ -154,6 +158,44 @@ void TransferSession::acceptOffer(const std::string& destinationPath, const uint
   acceptPending_ = true;
   state_ = TransferState::TRANSFERRING;
   lastPeerPacketMs_ = nowMs;
+}
+
+bool TransferSession::resumeFrom(const uint64_t resumeBytes, const PrefixReader& readPrefix) {
+  pendingResumeBytes_ = 0;
+  // The receiver settles its offset before the accept goes out, so the packet can
+  // carry it; the sender only learns of one once the accept has arrived.
+  if ((state_ != TransferState::TRANSFERRING && state_ != TransferState::OFFER_PROMPT) || !readPrefix) return false;
+  // Only ever at the very start of a transfer: fast-forwarding a session that has
+  // already moved would hash the same bytes twice.
+  if (session_.transferredBytes() != 0 || session_.nextSequence() != 0) return false;
+  if (resumeBytes == 0 || resumeBytes >= session_.totalBytes()) return false;
+  // Both ends count chunks, so a partial chunk in the middle has no sequence
+  // number either side could name. The caller trims to a boundary first.
+  if (resumeBytes % chunkBytes() != 0) return false;
+
+  const ReliableTransferSession::Role role = session_.role();
+  for (uint64_t offset = 0; offset < resumeBytes; offset += chunkBytes()) {
+    const uint8_t* slice = readPrefix(offset, chunkBytes());
+    if (slice == nullptr) {
+      // Half a fast-forward is a checksum over part of a file. Put the session
+      // back where it started so the caller can send the whole thing instead.
+      session_.begin(role, session_.id(), session_.totalBytes(), chunkBytes());
+      resumeBytes_ = 0;
+      chunkOffset_ = 0;
+      return false;
+    }
+    session_.includeBytes(slice, chunkBytes());
+    if (role == ReliableTransferSession::Role::Receiver) {
+      session_.acceptReceivedChunk(session_.nextSequence(), chunkBytes());
+    } else {
+      session_.acceptAcknowledgement(session_.nextSequence() + 1);
+      session_.advanceSentBytes(chunkBytes());
+    }
+  }
+
+  resumeBytes_ = resumeBytes;
+  chunkOffset_ = resumeBytes;
+  return true;
 }
 
 void TransferSession::rejectOffer(const uint32_t nowMs) {
@@ -227,7 +269,7 @@ bool TransferSession::nextAction(const uint32_t nowMs, TransferAction& action) {
   }
   if (acceptPending_) {
     acceptPending_ = false;
-    action = TransferAction{TransferActionKind::SEND_ACCEPT, peerMac_, 0, 0, 0, false};
+    action = TransferAction{TransferActionKind::SEND_ACCEPT, peerMac_, 0, resumeBytes_, 0, false};
     return true;
   }
   if (ackPending_) {
@@ -322,7 +364,11 @@ int TransferSession::progressPercent() const {
 }
 
 bool TransferSession::shouldDiscardPartialFile() const {
-  if (session_.role() != ReliableTransferSession::Role::Receiver) return false;
+  return session_.role() == ReliableTransferSession::Role::Receiver && checksumRejected_;
+}
+
+bool TransferSession::hasResumablePartialFile() const {
+  if (session_.role() != ReliableTransferSession::Role::Receiver || checksumRejected_) return false;
   return state_ == TransferState::CANCELLED || state_ == TransferState::FAILED;
 }
 
