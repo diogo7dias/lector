@@ -111,6 +111,16 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
 
+  // onEnter() released these, and then the WiFi picker drew a list over the top
+  // and loaded them straight back — 13216 bytes on the reader this was measured
+  // on, taken from the heap the handshake below needs. Same release that runs
+  // before every per-file transfer, for the same reason.
+  if (auto* fcm = renderer.getFontCacheManager()) {
+    fcm->releaseSdFontCaches();
+    LOG_DBG("FONT", "Free heap before the manifest fetch: %d bytes, largest block %d bytes", ESP.getFreeHeap(),
+            ESP.getMaxAllocHeap());
+  }
+
   // The font list is the first thing a reader hits after joining WiFi, and a
   // handshake that fails while the connection settles used to end the trip here.
   auto result = HttpDownloader::OK;
@@ -120,7 +130,39 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       break;
     }
 
-    result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+    // This fetch was the last one in the font flow still running on the heap
+    // alone. The manifest is ~37 KB over TLS and GitHub redirects it to an
+    // asset host that ignores the 2 KB max_fragment_length the reader asks
+    // for, so wolfSSL sizes its receive buffer to a 16 KB record: a 16640-byte
+    // contiguous allocation, which with WiFi up on a C3 the heap is a few
+    // kilobytes short of (TlsScratchHeap.h). The per-file transfer below
+    // already lends the framebuffer for exactly this, and
+    // OtaUpdateActivity::runUpdateCheck() lends it for the release JSON after
+    // the same gap refused every update on the X3. Nothing draws while the
+    // bytes are lent: the panel holds the "loading font list" screen.
+    {
+      GfxRenderer::FrameBufferLoan loan(renderer);
+      const tls_scratch::Session tlsScratch;
+      if (!tlsScratch.active()) {
+        LOG_ERR("FONT", "Framebuffer not lent; the manifest fetch runs on the heap alone");
+      }
+      // Gated after the loan, so the floor matches where the record buffers
+      // will come from (TlsHeapPolicy.h). A handshake started below it does not
+      // fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004 bytes
+      // free and the reader was unresponsive until the watchdog reset it.
+      if (!tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), tlsScratch.active())) {
+        LOG_ERR("FONT", "Only %d bytes free (largest block %d), need %u for a secure connection", ESP.getFreeHeap(),
+                ESP.getMaxAllocHeap(), static_cast<unsigned>(tls_heap::minFree(tlsScratch.active())));
+        errorMessage_ = "Not enough memory for font list";
+        Storage.remove(MANIFEST_TMP);
+        return false;
+      }
+      result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+    }
+    // The loan hands the framebuffer back white, so the next paint has to be a
+    // full one rather than a difference against a screen that is no longer there.
+    lastDisplayedState_ = WIFI_SELECTION;
+
     if (result == HttpDownloader::OK) break;
     LOG_ERR("FONT", "Manifest fetch attempt %d of %d failed (%d)", attempt, MAX_ATTEMPTS, result);
     if (attempt < MAX_ATTEMPTS) waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt));
