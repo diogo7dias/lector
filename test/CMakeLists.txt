@@ -162,3 +162,5 @@ add_subdirectory(button_mapping)
 add_subdirectory(section_cache_validity)
 add_subdirectory(idle_prewarm_neighbour)
 add_subdirectory(watermark_build_bail)
+
+add_subdirectory(lut_lab)

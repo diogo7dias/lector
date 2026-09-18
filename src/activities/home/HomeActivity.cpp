@@ -8,6 +8,7 @@
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <Memory.h>
 #include <Utf8.h>
 #include <Xtc.h>
 
@@ -23,6 +24,7 @@
 #include "components/UITheme.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
+#include "lut/LutLabActivity.h"
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 #include "util/OpenReadingStats.h"
@@ -32,6 +34,7 @@ int HomeActivity::menuRowCount() const {
   if (hasOpdsServers) {
     count++;
   }
+  if (display.supportsLutLab()) ++count;
   return count;
 }
 
@@ -123,6 +126,16 @@ void HomeActivity::loop() {
       return;
     }
     const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
+    if (display.supportsLutLab() && menuIndex == menuRowCount() - 1) {
+      auto lab = makeUniqueNoThrow<LutLabActivity>(renderer, mappedInput);
+      if (!lab) {
+        LOG_ERR("LUT", "OOM opening LUT Lab");
+        GUI.drawPopup(renderer, tr(STR_ERROR_GENERAL_FAILURE));
+        return;
+      }
+      activityManager.pushActivity(std::move(lab));
+      return;
+    }
     switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
       case HomeMenuItem::FILE_BROWSER:
         onFileBrowserOpen();
@@ -238,6 +251,13 @@ void HomeActivity::render(RenderLock&&) {
   if (hasOpdsServers) {
     menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
     menuIcons.insert(menuIcons.begin() + 1, Library);
+  }
+
+  if (display.supportsLutLab()) {
+    menuItems.reserve(menuItems.size() + 1);
+    menuIcons.reserve(menuIcons.size() + 1);
+    menuItems.push_back(tr(STR_LUT_LAB));
+    menuIcons.push_back(Settings);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {

@@ -185,7 +185,12 @@ void SleepActivity::onEnter() {
   previousWallpaper = APP_STATE.lastSleepWallpaperPath;
   APP_STATE.lastSleepWallpaperPath.clear();
 
+  // Only sleep uses the experiment. Control takes the SDK's original default
+  // path; menus, wake redraws and reader AA never inherit the override.
+  const auto variant = lutlab::validVariant(APP_STATE.lutLab.variant);
+  display.setSleepLut(variant == 0 ? nullptr : lutlab::VARIANTS[variant].data());
   renderSleepScreen();
+  display.setSleepLut(nullptr);
   SleepTiming::mark("face");
 }
 
@@ -218,6 +223,19 @@ void SleepActivity::renderSleepScreen() const {
     GUI.drawPopup(renderer, tr(STR_ENTERING_SLEEP));
   }
   SleepTiming::mark("popup");
+
+  if (display.supportsLutLab() && APP_STATE.lutLab.pinned) {
+    // Pin outranks root files and Cover mode. Never silently rotate on failure:
+    // that would turn a waveform comparison into a different image.
+    sleepPreClear(renderer, display.profile());
+    APP_STATE.lutLab.imageFailed = !lutlab::validWallpaper(APP_STATE.lutLab.wallpaper) ||
+                                   !renderWallpaper(APP_STATE.lutLab.wallpaper, nullptr, true);
+    if (APP_STATE.lutLab.imageFailed) {
+      renderDefaultSleepScreen();
+      GUI.drawPopup(renderer, tr(STR_LUT_IMAGE_FAILED));
+    }
+    return;
+  }
 
   // Custom: wallpaper, then cover, then the Lector fallback. Cover: cover, then the
   // fallback. Retired values are migrated to Custom when settings load, so nothing else
@@ -461,40 +479,8 @@ void SleepActivity::renderCustomSleepScreen() const {
     // question.
     const auto renderChosen = [&](const std::string& name) {
       const auto filename = std::string(sleepDir) + "/" + name;
-      LOG_INF("SLP", "Randomly loading: %s", filename.c_str());
       const SleepInfoOverlayScope overlayScope(filename, linePosition, lineTotal);
-      if (hasPxcExtension(name)) {
-        if (renderPxcSleepScreen(renderer, filename, pxcGrayscale, kPxcOneBitRefreshUnused, &drawSleepInfoOverlay,
-                                 pxcOptions)) {
-          APP_STATE.lastSleepWallpaperPath = filename;
-          return true;
-        }
-        return false;
-      }
-      HalFile randFile;
-      // Storage.open rather than openFileForRead: the latter calls exists() before
-      // open(), which is a second full directory lookup for the same name and measured
-      // as half of a 2543 ms wallpaper open. A failed open is reported here instead.
-      randFile = Storage.open(filename.c_str(), O_RDONLY);
-      if (!randFile) {
-        LOG_INF("SLP", "wallpaper open failed: %s", filename.c_str());
-        return false;
-      }
-      // Same rule the /sleep.bmp path above uses: stretch the tone range only when
-      // the user has asked for no cover filter, so a filtered image still looks the
-      // way they set it. Applies to .bmp wallpapers only; .pxc took the branch above
-      // and is already quantised to four levels when the file is written.
-      const bool adaptiveTone =
-          SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
-      Bitmap bitmap(randFile, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
-      if (bitmap.parseHeaders() != BmpReaderError::Ok) {
-        randFile.close();
-        return false;
-      }
-      renderBitmapSleepScreen(bitmap, sleep_face::Face::Wallpaper);
-      APP_STATE.lastSleepWallpaperPath = filename;
-      randFile.close();
-      return true;
+      return renderWallpaper(filename, pxcOptions);
     };
 
     if (!chosen.empty()) {
@@ -523,6 +509,25 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderCoverSleepScreen();
 }
 
+// Shared by rotation and the explicit LUT Lab pin, for both supported formats.
+bool SleepActivity::renderWallpaper(const std::string& path, const PxcRenderOptions* options,
+                                    bool forceGrayscale) const {
+  if (hasPxcExtension(path)) {
+    if (!renderPxcSleepScreen(renderer, path, true, kPxcOneBitRefreshUnused, &drawSleepInfoOverlay, options))
+      return false;
+  } else {
+    auto file = Storage.open(path.c_str(), O_RDONLY);
+    if (!file) return false;
+    const bool adaptiveTone =
+        forceGrayscale || SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+    Bitmap bitmap(file, true, adaptiveTone ? BitmapToneMapping::Adaptive : BitmapToneMapping::None);
+    if (bitmap.parseHeaders() != BmpReaderError::Ok) return false;
+    renderBitmapSleepScreen(bitmap, sleep_face::Face::Wallpaper, forceGrayscale);
+  }
+  APP_STATE.lastSleepWallpaperPath = path;
+  return true;
+}
+
 // The Lector fallback: a white page with the name centred, in the one UI face. Reached
 // only when no wallpaper and no cover could be shown (no files, no open book, a decode
 // that failed partway). Every face that fails lands here.
@@ -539,7 +544,8 @@ void SleepActivity::renderDefaultSleepScreen() const {
   renderer.displayBuffer(plan.base);
 }
 
-void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_face::Face face) const {
+void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_face::Face face,
+                                            bool forceGrayscale) const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();
   const auto placement = calculateBitmapPlacement(bitmap.getWidth(), bitmap.getHeight(), renderer);
@@ -554,12 +560,14 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
 
   // The cover filter describes how a full-screen image should look: NO_FILTER keeps the
   // tone (grayscale), the others flatten it to black and white.
-  const bool hasGreyscale = bitmap.hasGreyscale() &&
-                            SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER;
+  const bool hasGreyscale =
+      bitmap.hasGreyscale() &&
+      (forceGrayscale || SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
   renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY);
 
-  if (SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
+  if (!forceGrayscale &&
+      SETTINGS.sleepScreenCoverFilter == CrossPointSettings::SLEEP_SCREEN_COVER_FILTER::INVERTED_BLACK_AND_WHITE) {
     renderer.invertScreen();
   }
 

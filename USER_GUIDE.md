@@ -123,6 +123,36 @@ The Home screen is the entry point. It lists the books you have been reading, an
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
 - **Settings** — see [section 12](#12-settings-reference).
+- **LUT Lab (temporary)** — grayscale calibration, shown only on an X4 Pro with an
+  SSD1677 panel. See the testing instructions below.
+
+### Temporary LUT Lab (X4 Pro)
+
+1. Open **LUT Lab (temporary)** from Home. Use Up/Down to highlight a row and Confirm
+   to activate it, or tap the row. Back returns to Home.
+2. The screen shows the variant number, whether it changes VCOM, VSH1 or timing,
+   the exact VCOM/VSH1/T60/T61 bytes, pin status, and the selected wallpaper path.
+   It initially selects the wallpaper from your last lock, when there is one.
+3. Choose **Pin selected wallpaper**. To choose a different image, use **Next wallpaper**
+   or **Previous wallpaper**, then pin it. Browsing wraps through BMP/PXC files in
+   `/sleep`, `/.sleep`, and the root `sleep.bmp`/`sleep.pxc` files, in path order.
+   Changing the wallpaper while pinned changes the pin too.
+4. Start with **Variant 0 - Control**. Press Power using your usual lock gesture, inspect
+   the image, then unlock and return to Home → **LUT Lab (temporary)**. Use **Next variant**
+   or **Previous variant**, lock again, and compare. Choices survive sleep.
+5. After comparing variants 0–8, keep the best variant and try other wallpapers.
+   Report the variant number, displayed bytes and image filename. No variant is a
+   calibrated recommendation; the panel decides which one works.
+6. **Unpin wallpaper** restores your ordinary sleep-image selection. **Reset: control + unpin**
+   also restores the shipping waveform. Back saves once; if saving fails, the lab stays
+   open and asks you to check the SD card.
+
+Pinning temporarily overrides Cover mode, root-file priority and BMP cover filters so
+that the chosen image is compared in grayscale. Your saved sleep settings are retained.
+A missing or unreadable pin shows an error instead of another image; choose another
+wallpaper or unpin. Pure black-and-white images cannot reveal a grayscale LUT difference.
+Browsing large wallpaper folders may take a while; it uses a directory scan to keep RAM
+usage bounded.
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
 the current book, or open [Reading Stats](#7-bookmarks-quotes-and-reading-stats).
