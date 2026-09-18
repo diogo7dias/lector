@@ -1,6 +1,7 @@
 #pragma once
 
 #include <FontManifestParser.h>
+#include <I18n.h>
 
 #include <cstdint>
 #include <functional>
@@ -106,7 +107,17 @@ class FontDownloadActivity : public UiStatusActivity {
   int downloadingFamilyIndex_ = 0;
   /** Drawn on the DOWNLOADING screen, which runs while families_ is empty. */
   std::string downloadingFamilyName_;
+  /**
+   * The three lines the ERROR screen shows: a headline naming which half of the
+   * trip failed, the reason in the reader's language, and an untranslated code
+   * line. Two rounds of this bug were diagnosed from guesses because the screen
+   * said "Failed to fetch font list" for every one of a dozen distinct causes;
+   * these exist so a photograph of the panel names the cause.
+   */
+  StrId errorHeadline_ = StrId::STR_FONT_INSTALL_FAILED;
   std::string errorMessage_;
+  std::string errorDetail_;
+  void setError(StrId headline, std::string message, std::string detail);
   bool cancelRequested_ = false;
   // Which attempt at the current file is running, 0 while the first one is in
   // flight. Shown on the progress screen so a slow retry does not look like a

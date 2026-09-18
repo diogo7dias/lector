@@ -29,6 +29,51 @@ namespace {
 // family's file names from it rather than holding every family's names in RAM.
 constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
 
+// What to put on the screen for a transfer that did not finish. The reader
+// cannot open a serial log, so the difference between "nothing answered",
+// "the server said no" and "the card would not take it" has to reach the
+// panel: each one needs a different thing done about it.
+// tr() pastes StrId:: onto a bare key name, so a StrId that was chosen at
+// runtime cannot go through it.
+const char* trId(const StrId id) { return I18n::getInstance().get(id); }
+
+StrId transferErrorText(const HttpDownloader::DownloadError error) {
+  switch (error) {
+    case HttpDownloader::NO_CONNECTION:
+      return StrId::STR_FONT_ERR_NO_SERVER;
+    case HttpDownloader::SERVER_ERROR:
+      return StrId::STR_FONT_ERR_SERVER_REFUSED;
+    case HttpDownloader::INCOMPLETE:
+      return StrId::STR_FONT_ERR_INCOMPLETE;
+    case HttpDownloader::FILE_ERROR:
+      return StrId::STR_FONT_ERR_SD;
+    default:
+      // HTTP_ERROR is what the transport could not classify (a malformed URL,
+      // mostly). Nothing reached the far end either way.
+      return StrId::STR_FONT_ERR_NO_SERVER;
+  }
+}
+
+// The numbers that tell those causes apart in a photograph of the screen: the
+// transport's own code, what the server answered, the heap the handshake had,
+// and whether the framebuffer was lent to wolfSSL for it. A transfer that ran
+// "nofb" had no 16 KB record buffer to work with and fails for a reason that
+// has nothing to do with the network, which otherwise reads identically here.
+// Deliberately untranslated -- it is a code, not prose.
+std::string transferErrorDetail(const HttpDownloader::DownloadError error, const int httpStatus,
+                                const bool framebufferLent = true) {
+  char buf[72];
+  const char* loan = framebufferLent ? "" : " nofb";
+  if (httpStatus > 0) {
+    snprintf(buf, sizeof(buf), "E%d HTTP %d heap %u/%u%s", static_cast<int>(error), httpStatus,
+             static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()), loan);
+  } else {
+    snprintf(buf, sizeof(buf), "E%d no reply heap %u/%u%s", static_cast<int>(error),
+             static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()), loan);
+  }
+  return buf;
+}
+
 }  // namespace
 
 FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -124,9 +169,13 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // The font list is the first thing a reader hits after joining WiFi, and a
   // handshake that fails while the connection settles used to end the trip here.
   auto result = HttpDownloader::OK;
+  int httpStatus = 0;
+  bool noWifi = false;
+  bool framebufferLent = true;
   for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (!waitForWifi()) {
-      result = HttpDownloader::HTTP_ERROR;
+      result = HttpDownloader::NO_CONNECTION;
+      noWifi = true;
       break;
     }
 
@@ -143,7 +192,8 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     {
       GfxRenderer::FrameBufferLoan loan(renderer);
       const tls_scratch::Session tlsScratch;
-      if (!tlsScratch.active()) {
+      framebufferLent = tlsScratch.active();
+      if (!framebufferLent) {
         LOG_ERR("FONT", "Framebuffer not lent; the manifest fetch runs on the heap alone");
       }
       // Gated after the loan, so the floor matches where the record buffers
@@ -153,11 +203,14 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       if (!tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), tlsScratch.active())) {
         LOG_ERR("FONT", "Only %d bytes free (largest block %d), need %u for a secure connection", ESP.getFreeHeap(),
                 ESP.getMaxAllocHeap(), static_cast<unsigned>(tls_heap::minFree(tlsScratch.active())));
-        errorMessage_ = "Not enough memory for font list";
+        setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY),
+                 transferErrorDetail(HttpDownloader::HTTP_ERROR, 0, framebufferLent));
         Storage.remove(MANIFEST_TMP);
         return false;
       }
-      result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+      result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr, nullptr, "", "",
+                                              /*allowResume=*/false, nullptr, HttpDownloader::DEFAULT_TIMEOUT_MS,
+                                              &httpStatus);
     }
     // The loan hands the framebuffer back white, so the next paint has to be a
     // full one rather than a difference against a screen that is no longer there.
@@ -168,8 +221,10 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     if (attempt < MAX_ATTEMPTS) waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt));
   }
   if (result != HttpDownloader::OK) {
-    LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
-    errorMessage_ = "Failed to fetch font list";
+    LOG_ERR("FONT", "Failed to fetch manifest from %s (error %d, status %d)", FONT_MANIFEST_URL,
+            static_cast<int>(result), httpStatus);
+    setError(StrId::STR_FONT_LIST_FAILED, trId(noWifi ? StrId::STR_FONT_ERR_NO_WIFI : transferErrorText(result)),
+             transferErrorDetail(result, httpStatus, framebufferLent));
     Storage.remove(MANIFEST_TMP);
     return false;
   }
@@ -229,9 +284,12 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   HalFile manifestFile;
   if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
     LOG_ERR("FONT", "Failed to open temp manifest");
-    errorMessage_ = "Failed to read font list";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_SD), "");
     return false;
   }
+
+  char manifestBytes[32];
+  snprintf(manifestBytes, sizeof(manifestBytes), "%u bytes", static_cast<unsigned>(manifestFile.fileSize()));
 
   out.clear();
   out.shrink_to_fit();
@@ -242,7 +300,7 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   if (!parserOwner) {
     manifestFile.close();
     LOG_ERR("FONT", "No room for the manifest parser");
-    errorMessage_ = "Not enough memory for font list";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY), transferErrorDetail(HttpDownloader::HTTP_ERROR, 0));
     return false;
   }
   FontManifestParser& parser = *parserOwner;
@@ -257,7 +315,8 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
     if (!buffer) {
       manifestFile.close();
       LOG_ERR("FONT", "No room for the manifest read buffer");
-      errorMessage_ = "Not enough memory for font list";
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY),
+               transferErrorDetail(HttpDownloader::HTTP_ERROR, 0));
       return false;
     }
     while (true) {
@@ -270,29 +329,29 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   manifestFile.close();
   parser.finish();
 
-  LOG_DBG("FONT", "Manifest parsed: free %d bytes, largest block %d bytes", ESP.getFreeHeap(),
-          ESP.getMaxAllocHeap());
+  LOG_DBG("FONT", "Manifest parsed: free %d bytes, largest block %d bytes", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   if (parser.hasError()) {
     if (parser.outOfMemory()) {
       LOG_ERR("FONT", "Out of memory while reading the font manifest (free %d bytes, largest block %d bytes)",
               ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-      errorMessage_ = "Not enough memory for font list";
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY),
+               transferErrorDetail(HttpDownloader::HTTP_ERROR, 0));
     } else if (parser.tooLarge()) {
       LOG_ERR("FONT", "Manifest exceeds the %u family / %u file limits",
               static_cast<unsigned>(FontManifestParser::MAX_FAMILIES),
               static_cast<unsigned>(FontManifestParser::MAX_FILES_PER_FAMILY));
-      errorMessage_ = "Font list too large";
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_LIST_TOO_LARGE), "");
     } else {
-      LOG_ERR("FONT", "Manifest parse error");
-      errorMessage_ = "Invalid font manifest";
+      LOG_ERR("FONT", "Manifest parse error after %s", manifestBytes);
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), manifestBytes);
     }
     return false;
   }
 
   if (parser.version() != FONTS_MANIFEST_VERSION) {
     LOG_ERR("FONT", "Unsupported manifest version: %d", parser.version());
-    errorMessage_ = "Unsupported manifest version";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_OLD_FIRMWARE), "");
     return false;
   }
 
@@ -339,8 +398,9 @@ void FontDownloadActivity::runBatch(const std::function<bool(const ManifestFamil
     return;
   }
   state_ = ERROR;
-  errorMessage_ = "Could not install: " + failed.front();
-  for (size_t i = 1; i < failed.size(); i++) errorMessage_ += ", " + failed[i];
+  std::string names = failed.front();
+  for (size_t i = 1; i < failed.size(); i++) names += ", " + failed[i];
+  setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_INSTALL)) + ": " + names, "");
 }
 
 bool FontDownloadActivity::showDownloadAllRow() const {
@@ -508,7 +568,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
         return false;
       }
       LOG_ERR("FONT", "No WiFi for attempt %d for %s", total, file.name);
-      errorMessage_ = "Lost WiFi connection";
+      setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_LOST_WIFI), "");
       fruitless++;
       if (fruitless < MAX_ATTEMPTS && total < MAX_TOTAL_ATTEMPTS &&
           !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) {
@@ -529,10 +589,13 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     // holds still until the file lands and the panel keeps the screen drawn above.
     drawingSuspended_ = true;
     HttpDownloader::DownloadError result;
+    int httpStatus = 0;
+    bool framebufferLent = true;
     {
       GfxRenderer::FrameBufferLoan loan(renderer);
       const tls_scratch::Session tlsScratch;
-      if (!tlsScratch.active()) {
+      framebufferLent = tlsScratch.active();
+      if (!framebufferLent) {
         LOG_ERR("FONT", "Framebuffer not lent; the transfer runs on the heap alone");
       }
       // Gated after the loan, so the floor matches where the record buffers
@@ -542,29 +605,30 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       if (!tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), tlsScratch.active())) {
         LOG_ERR("FONT", "Only %d bytes free (largest block %d), need %u for a secure connection", ESP.getFreeHeap(),
                 ESP.getMaxAllocHeap(), static_cast<unsigned>(tls_heap::minFree(tlsScratch.active())));
-        errorMessage_ = "Not enough memory to download fonts";
+        setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MEMORY),
+                 transferErrorDetail(HttpDownloader::HTTP_ERROR, 0, framebufferLent));
         drawingSuspended_ = false;
         return false;
       }
       result = HttpDownloader::downloadToFile(
-        url, partPath,
-        [this](size_t downloaded, size_t total) {
-          fileProgress_ = downloaded;
-          fileTotal_ = total;
-          // Cancel is polled on every chunk; only the repaint is rationed.
-          mappedInput.update();
-          if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-              mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-            cancelRequested_ = true;
-          }
-          if (drawingSuspended_) return;
-          const int percent = total > 0 ? static_cast<int>(downloaded * 100 / total) : 0;
-          const int step = percent / PROGRESS_STEP_PERCENT;
-          if (step == lastDrawnProgressStep_) return;
-          lastDrawnProgressStep_ = step;
-          requestUpdate(true);
-        },
-        &cancelRequested_, "", "", /*allowResume=*/true);
+          url, partPath,
+          [this](size_t downloaded, size_t total) {
+            fileProgress_ = downloaded;
+            fileTotal_ = total;
+            // Cancel is polled on every chunk; only the repaint is rationed.
+            mappedInput.update();
+            if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+                mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+              cancelRequested_ = true;
+            }
+            if (drawingSuspended_) return;
+            const int percent = total > 0 ? static_cast<int>(downloaded * 100 / total) : 0;
+            const int step = percent / PROGRESS_STEP_PERCENT;
+            if (step == lastDrawnProgressStep_) return;
+            lastDrawnProgressStep_ = step;
+            requestUpdate(true);
+          },
+          &cancelRequested_, "", "", /*allowResume=*/true, nullptr, HttpDownloader::DEFAULT_TIMEOUT_MS, &httpStatus);
     }
     drawingSuspended_ = false;
     // The loan hands the framebuffer back white, so the next paint has to be a
@@ -581,24 +645,25 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     }
 
     if (result != HttpDownloader::OK) {
-      LOG_ERR("FONT", "Download attempt %d failed for %s (%d)", total, file.name, result);
-      errorMessage_ = std::string("Download failed: ") + file.name;
+      LOG_ERR("FONT", "Download attempt %d failed for %s (%d, status %d)", total, file.name, result, httpStatus);
+      setError(StrId::STR_FONT_INSTALL_FAILED, std::string(trId(transferErrorText(result))) + ": " + file.name,
+               transferErrorDetail(result, httpStatus, framebufferLent));
     } else {
       uint32_t actualCrc = 0;
       if (!computeFileCrc32(partPath, actualCrc)) {
         LOG_ERR("FONT", "Failed to open file for CRC check: %s", partPath);
-        errorMessage_ = std::string("Failed to compute checksum: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_CHECKSUM_READ)) + ": " + file.name, "");
       } else if (actualCrc != file.crc32) {
         // A body that arrived corrupted is worth fetching again: the manifest
         // checksum is the only thing that separates a bad transfer from a font
         // the renderer would later choke on.
         LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name, actualCrc, file.crc32);
-        errorMessage_ = std::string("Checksum mismatch: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_CHECKSUM)) + ": " + file.name, "");
       } else if (!fontInstaller_.validateCpfontFile(partPath)) {
         LOG_ERR("FONT", "Invalid .cpfont: %s", partPath);
-        errorMessage_ = std::string("Invalid font file: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_BAD_FILE)) + ": " + file.name, "");
       } else if (!promoteStagedFile(partPath, destPath)) {
-        errorMessage_ = std::string("Failed to install: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_INSTALL)) + ": " + file.name, "");
       } else {
         LOG_DBG("FONT", "Downloaded %s (size=%u crc32=%08x)", file.name, static_cast<unsigned>(file.size), actualCrc);
         RenderLock lock(*this);
@@ -664,7 +729,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   }
   if (familyIndex < 0) {
     LOG_ERR("FONT", "No family named %s in the manifest", familyName.c_str());
-    errorMessage_ = "Invalid font manifest";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), "");
     return false;
   }
 
@@ -691,7 +756,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   }
 
   if (!fontInstaller_.ensureFamilyDir(familyName.c_str())) {
-    errorMessage_ = "Failed to create font directory";
+    setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MKDIR), "");
     return false;
   }
 
@@ -711,7 +776,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   reread.shrink_to_fit();
   if (files.empty()) {
     LOG_ERR("FONT", "No files listed for %s in the manifest", familyName.c_str());
-    errorMessage_ = "Invalid font manifest";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), "");
     return false;
   }
 
@@ -810,7 +875,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
   if (fontInstaller_.deleteFamily(family.name) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
     state_ = ERROR;
-    errorMessage_ = "Failed to delete font";
+    setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_DELETE_FAILED), "");
   } else {
     fontInstaller_.refreshRegistry();
     family.installed = false;
@@ -892,6 +957,14 @@ void FontDownloadActivity::refreshProgressLines() {
                                  : std::string();
 }
 
+// Every failure path goes through here so none of them can leave a stale
+// headline, message or code behind from the previous one.
+void FontDownloadActivity::setError(const StrId headline, std::string message, std::string detail) {
+  errorHeadline_ = headline;
+  errorMessage_ = std::move(message);
+  errorDetail_ = std::move(detail);
+}
+
 // --- Screen ---
 
 UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
@@ -923,7 +996,7 @@ UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
       view.listItems = rows_.data();
       view.listCount = static_cast<int>(rows_.size());
       view.listHasSubtitle = true;
-      view.confirmHint = isSelectedFamilyDeletable()      ? tr(STR_DELETE)
+      view.confirmHint = isSelectedFamilyDeletable()       ? tr(STR_DELETE)
                          : isUpdateAllRow(listSelection()) ? tr(STR_UPDATE)
                                                            : tr(STR_DOWNLOAD);
       break;
@@ -939,8 +1012,11 @@ UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
       view.lines = {tr(STR_FONT_INSTALLED), nullptr, nullptr, nullptr};
       break;
     case ERROR:
-      view.lines = {tr(STR_FONT_INSTALL_FAILED), errorMessage_.empty() ? nullptr : errorMessage_.c_str(), nullptr,
-                    nullptr};
+      // Headline, then what went wrong, then the numbers. A reader who cannot
+      // read a serial log photographs this screen, and those three lines are
+      // what has to say which failure it was.
+      view.lines = {trId(errorHeadline_), errorMessage_.empty() ? nullptr : errorMessage_.c_str(),
+                    errorDetail_.empty() ? nullptr : errorDetail_.c_str(), nullptr};
       view.confirmHint = tr(STR_RETRY);
       break;
   }
