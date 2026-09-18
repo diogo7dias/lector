@@ -85,6 +85,22 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
   bool writeChunk(const uint8_t* data, size_t length);
   void handleOffer(const nearby_file::OfferPayload& offer, const std::array<uint8_t, 6>& sourceMac);
   void acceptIncomingOffer();
+  /**
+   * Opens the ".part" file an accepted offer is written into, and reports in
+   * `resumeOffset` how much of it is already there and worth keeping.
+   *
+   * With `allowResume` the existing partial is kept and appended to, trimmed
+   * back to a whole number of chunks; without it, and whenever the partial is
+   * not a prefix of the file being offered, the file starts again from empty.
+   * False when nothing could be opened.
+   */
+  bool openIncomingFile(const std::string& finalPath, bool allowResume, uint64_t& resumeOffset);
+  /** Rebuilds the receiving session's checksum over the partial already on the card. */
+  bool resumeIncomingFrom(uint64_t resumeOffset);
+  /** Rebuilds the sending session's checksum over the prefix the receiver already holds. */
+  bool resumeOutgoingFrom(uint64_t resumeOffset);
+  /** Gives a verified file its real name. False when the rename did not take. */
+  bool finishIncomingFile();
   /** Opens the file at `sourceIndex` and sizes it. False when it cannot be read. */
   bool openCurrentSource();
   /** Sender: moves on to the next file of a batch without hunting for the peer again. */
@@ -140,7 +156,15 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
 
   HalFile outgoing;
   HalFile incoming;
+  /** Where the file lands once it is whole and verified. */
   std::string destinationPath;
+  /**
+   * What is actually written to while the bytes arrive: destinationPath plus
+   * ".part". No book scanner or font registry looks at that extension, so a
+   * transfer that stops half way leaves nothing the library will try to open,
+   * and the bytes stay on the card for the next attempt to resume from.
+   */
+  std::string partialPath;
   /** What an imported credential bundle did, shown on the finished screen. */
   std::string credentialsMessage;
   bool destinationOpen = false;

@@ -60,6 +60,17 @@ bool decodeNamePayload(const uint8_t* data, size_t length, std::string& deviceNa
 bool encodeOfferPayload(const OfferPayload& offer, uint8_t* output, size_t capacity, size_t& outputLength);
 bool decodeOfferPayload(const uint8_t* data, size_t length, OfferPayload& offer);
 
+/**
+ * The accept carries how many bytes of the file the receiver already holds, so
+ * an interrupted transfer picks up where it stopped instead of starting over.
+ *
+ * Zero, or an accept with no payload at all, means start from the beginning.
+ * Firmware that predates resume sends the empty form and decodes to zero here,
+ * so neither side has to know what the other is running.
+ */
+bool encodeAcceptPayload(uint64_t resumeBytes, uint8_t* output, size_t capacity, size_t& outputLength);
+bool decodeAcceptPayload(const uint8_t* data, size_t length, uint64_t& resumeBytes);
+
 bool encodeCompletePayload(const CompletePayload& complete, uint8_t* output, size_t capacity, size_t& outputLength);
 bool decodeCompletePayload(const uint8_t* data, size_t length, CompletePayload& complete);
 

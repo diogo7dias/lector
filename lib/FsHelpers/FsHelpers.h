@@ -77,6 +77,27 @@ inline bool hasCssExtension(const String& fileName) {
 }
 std::string extractFolderPath(const std::string& filePath);
 
+// The suffix a file being received is written under until it is whole.
+//
+// Every book scanner on the device, and the font registry, picks files by
+// extension, so a name ending in ".part" is invisible to all of them: a
+// half-arrived book can sit on the card without appearing in the library and
+// failing to open. The final name is taken only once the bytes are verified.
+inline constexpr const char* PARTIAL_SUFFIX = ".part";
+
+// "/books/Book.epub" -> "/books/Book.epub.part".
+std::string partialPathFor(std::string_view finalPath);
+
+// "/books/Book.epub.part" -> "/books/Book.epub". The path unchanged when it does
+// not end in the suffix.
+std::string finalPathForPartial(std::string_view partialPath);
+
+// Check for the ".part" staging extension (case-insensitive).
+bool hasPartialExtension(std::string_view fileName);
+inline bool hasPartialExtension(const String& fileName) {
+  return hasPartialExtension(std::string_view{fileName.c_str(), fileName.length()});
+}
+
 // Rejects an empty component, one containing '/' or '\\', or the exact components
 // "." and "..", so a single filename/folder-name argument can never be used to
 // escape the directory it is placed into. Names like "volume..2.epub" or

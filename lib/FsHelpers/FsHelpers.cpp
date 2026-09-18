@@ -182,6 +182,15 @@ bool hasMarkdownExtension(std::string_view fileName) { return checkFileExtension
 
 bool hasCssExtension(std::string_view fileName) { return checkFileExtension(fileName, ".css"); }
 
+std::string partialPathFor(const std::string_view finalPath) { return std::string(finalPath) + PARTIAL_SUFFIX; }
+
+std::string finalPathForPartial(const std::string_view partialPath) {
+  if (!hasPartialExtension(partialPath)) return std::string(partialPath);
+  return std::string(partialPath.substr(0, partialPath.size() - std::strlen(PARTIAL_SUFFIX)));
+}
+
+bool hasPartialExtension(const std::string_view fileName) { return checkFileExtension(fileName, PARTIAL_SUFFIX); }
+
 std::string extractFolderPath(const std::string& filePath) {
   const auto lastSlash = filePath.find_last_of('/');
   if (lastSlash == std::string::npos || lastSlash == 0) {

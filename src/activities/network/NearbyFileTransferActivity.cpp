@@ -1,7 +1,9 @@
 #include "NearbyFileTransferActivity.h"
 
+#include <FsHelpers.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 #include <WiFi.h>
 
 #include <algorithm>
@@ -12,12 +14,14 @@
 #include "FontInstaller.h"
 #include "I18nKeys.h"
 #include "MappedInputManager.h"
-#include "SdCardFontSystem.h"
-#include "activities/ActivityManager.h"
 #include "OpdsServerStore.h"
+#include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
+#include "activities/ActivityManager.h"
 #include "util/BookFilingNames.h"
+#include "util/BusyTick.h"
 #include "util/CredentialBundle.h"
+#include "util/PartialUploads.h"
 
 using namespace nearby_file;
 using freeink::nearby::PacketType;
@@ -151,6 +155,7 @@ void NearbyFileTransferActivity::awaitNextGroupFile() {
   session = TransferSession{};
   session.beginReceive(millis());
   destinationPath.clear();
+  partialPath.clear();
   lastDrawnPercent = -1;
   requestUpdate();
 }
@@ -228,14 +233,126 @@ void NearbyFileTransferActivity::importCredentialBundle() {
 }
 
 void NearbyFileTransferActivity::discardPartialFile() {
-  if (destinationPath.empty()) return;
-  // A half-written book is worse than no book: it would sit in the library and
-  // fail to open. The file only survives a transfer that verified.
+  if (partialPath.empty()) return;
+  // Only reached when the bytes on the card are known to be wrong, or when the
+  // card could not take them. A transfer that merely stopped early leaves its
+  // ".part" in place for the next attempt to pick up.
   if (incoming.isOpen()) incoming.close();
   destinationOpen = false;
-  Storage.remove(destinationPath.c_str());
-  LOG_DBG(LOG_TAG, "Removed the partly written file %s", destinationPath.c_str());
+  Storage.remove(partialPath.c_str());
+  LOG_DBG(LOG_TAG, "Removed the partly written file %s", partialPath.c_str());
+  partialPath.clear();
   destinationPath.clear();
+}
+
+bool NearbyFileTransferActivity::openIncomingFile(const std::string& finalPath, const bool allowResume,
+                                                  uint64_t& resumeOffset) {
+  resumeOffset = 0;
+  if (incoming.isOpen()) incoming.close();
+  destinationOpen = false;
+  partialPath = FsHelpers::partialPathFor(finalPath);
+
+  // One partial per folder. Nothing else ever deletes these, so the leftovers of
+  // transfers that were never retried would otherwise fill the card.
+  partial_uploads::sweepFolder(FsHelpers::extractFolderPath(partialPath), allowResume ? partialPath : std::string());
+
+  const uint64_t offeredSize = session.offeredSize();
+  constexpr uint16_t CHUNK = TransferSession::chunkBytes();
+  if (allowResume && Storage.exists(partialPath.c_str())) {
+    uint64_t existingSize = 0;
+    HalFile existing;
+    if (Storage.openFileForRead(LOG_TAG, partialPath, existing) && existing.isOpen()) {
+      existingSize = existing.fileSize64();
+      existing.close();
+    }
+    // Three things have to hold before a byte of it is trusted. It must be no
+    // longer than the file being offered, or it is a different file that happens
+    // to share the name and appending would leave a tail of the old one past the
+    // end of the new. It is trimmed to a whole number of chunks, because a chunk
+    // is the unit both ends number and a half-written one has no sequence either
+    // side could name. And it must stop short of the end, since a resume that
+    // covers the whole file would have nothing left to send or to verify.
+    const uint64_t aligned = existingSize - (existingSize % CHUNK);
+    if (existingSize <= offeredSize && aligned > 0 && aligned < offeredSize) resumeOffset = aligned;
+  }
+
+  if (resumeOffset > 0) {
+    // Opened read-write rather than for append: the checksum has to be rebuilt by
+    // reading back what is already there before any new byte is written.
+    incoming = Storage.open(partialPath.c_str(), O_RDWR);
+    if (incoming.isOpen() && incoming.seek64(resumeOffset)) return true;
+    if (incoming.isOpen()) incoming.close();
+    resumeOffset = 0;
+  }
+
+  if (!Storage.openFileForWrite(LOG_TAG, partialPath, incoming) || !incoming.isOpen()) {
+    LOG_ERR(LOG_TAG, "Could not open %s for writing", partialPath.c_str());
+    partialPath.clear();
+    return false;
+  }
+  return true;
+}
+
+bool NearbyFileTransferActivity::resumeIncomingFrom(const uint64_t resumeOffset) {
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(TransferSession::chunkBytes());
+  if (!buffer) {
+    LOG_ERR(LOG_TAG, "OOM: %u bytes", (unsigned)TransferSession::chunkBytes());
+    return false;
+  }
+
+  // Reading back several megabytes takes seconds, so the loop feeds the watchdog
+  // and lets the busy banner say what is happening, as every other long scan does.
+  const bool resumed =
+      session.resumeFrom(resumeOffset, [this, &buffer](const uint64_t offset, const uint16_t length) -> const uint8_t* {
+        if ((offset & 0xFFFF) == 0) busy::tick();
+        if (!incoming.seek64(offset)) return nullptr;
+        if (incoming.read(buffer.get(), length) != static_cast<int>(length)) return nullptr;
+        return buffer.get();
+      });
+  // Back to where the next arriving chunk goes, whichever way the rebuild went:
+  // the reader above left the handle wherever the last read finished.
+  if (!incoming.seek64(resumed ? resumeOffset : 0)) return false;
+  if (!resumed) {
+    LOG_DBG(LOG_TAG, "Could not resume %s, taking it from the start", partialPath.c_str());
+    return false;
+  }
+  LOG_DBG(LOG_TAG, "Resuming %s at %u bytes", partialPath.c_str(), (unsigned)resumeOffset);
+  return true;
+}
+
+bool NearbyFileTransferActivity::resumeOutgoingFrom(const uint64_t resumeOffset) {
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(TransferSession::chunkBytes());
+  if (!buffer) {
+    LOG_ERR(LOG_TAG, "OOM: %u bytes", (unsigned)TransferSession::chunkBytes());
+    return false;
+  }
+
+  const bool resumed =
+      session.resumeFrom(resumeOffset, [this, &buffer](const uint64_t offset, const uint16_t length) -> const uint8_t* {
+        if ((offset & 0xFFFF) == 0) busy::tick();
+        if (!outgoing.seek64(offset)) return nullptr;
+        if (outgoing.read(buffer.get(), length) != static_cast<int>(length)) return nullptr;
+        return buffer.get();
+      });
+  if (resumed) LOG_DBG(LOG_TAG, "Sending %s from %u bytes", sourceName.c_str(), (unsigned)resumeOffset);
+  return resumed;
+}
+
+bool NearbyFileTransferActivity::finishIncomingFile() {
+  if (partialPath.empty()) return true;
+  if (incoming.isOpen()) incoming.close();
+  destinationOpen = false;
+
+  if (!Storage.rename(partialPath.c_str(), destinationPath.c_str())) {
+    // The bytes are all there and verified, so they are not thrown away; the file
+    // simply keeps its ".part" name and stays out of the library until the card
+    // is in a state where it can be renamed.
+    LOG_ERR(LOG_TAG, "Could not rename %s to %s", partialPath.c_str(), destinationPath.c_str());
+    errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
+    return false;
+  }
+  partialPath.clear();
+  return true;
 }
 
 bool NearbyFileTransferActivity::sendPacket(const PacketType type, const std::array<uint8_t, 6>& peerMac,
@@ -404,7 +521,21 @@ void NearbyFileTransferActivity::acceptIncomingOffer() {
     if (!folder.empty()) resolved = folder + "/" + check.safeName;
   }
 
-  if (resolved.empty() || !Storage.openFileForWrite(LOG_TAG, resolved, incoming) || !incoming.isOpen()) {
+  // A font face is never resumed. A family is wiped whole when its batch does not
+  // finish, so there is no prefix left to pick up, and a face is small enough
+  // that resending one costs less than reading it back to rebuild a checksum.
+  const bool allowResume = check.safeFolder.empty();
+  uint64_t resumeOffset = 0;
+  bool opened = !resolved.empty() && openIncomingFile(resolved, allowResume, resumeOffset);
+  // The offset settles before the accept goes out, because the accept is what
+  // carries it to the sender. A prefix that cannot be read back is not resumed
+  // from: the file starts again rather than build a checksum over bytes nobody
+  // verified.
+  if (opened && resumeOffset > 0 && !resumeIncomingFrom(resumeOffset)) {
+    opened = openIncomingFile(resolved, false, resumeOffset);
+  }
+
+  if (!opened) {
     if (errorMessage.empty()) errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
     session.rejectOffer(millis());
     runSessionActions();
@@ -456,10 +587,19 @@ void NearbyFileTransferActivity::pumpRadio() {
         if (decodeOfferPayload(view.payload, view.payloadLength, offer)) handleOffer(offer, sourceMac);
         break;
       }
-      case PacketType::Accept:
+      case PacketType::Accept: {
         incomingEvent.kind = TransferEventKind::ACCEPT;
+        // An accept from firmware without resume carries no payload and decodes
+        // to zero, which is the whole file from the start.
+        decodeAcceptPayload(view.payload, view.payloadLength, incomingEvent.resumeBytes);
         session.onEvent(incomingEvent, now);
+        const uint64_t resumeOffset = session.pendingResumeBytes();
+        // The receiver will only acknowledge the chunk it asked for, so a sender
+        // that cannot honour the offset would sit resending a chunk nobody wants
+        // until the silence timeout. Saying so now ends it at once.
+        if (resumeOffset > 0 && !resumeOutgoingFrom(resumeOffset)) finishWithError(tr(STR_NEARBY_CANNOT_READ_FILE));
         break;
+      }
       case PacketType::Reject:
         incomingEvent.kind = TransferEventKind::REJECT;
         session.onEvent(incomingEvent, now);
@@ -529,7 +669,11 @@ void NearbyFileTransferActivity::runSessionActions() {
         break;
       }
       case TransferActionKind::SEND_ACCEPT:
-        sendPacket(PacketType::Accept, action.peerMac, 0, nullptr, 0);
+        // `offset` is how much of the file is already on the card: zero for a
+        // fresh transfer, and where to pick up for one being resumed.
+        if (encodeAcceptPayload(action.offset, payload.data(), payload.size(), payloadLength)) {
+          sendPacket(PacketType::Accept, action.peerMac, 0, payload.data(), payloadLength);
+        }
         break;
       case TransferActionKind::SEND_REJECT:
         sendPacket(PacketType::Reject, action.peerMac, 0, nullptr, 0);
@@ -617,6 +761,12 @@ void NearbyFileTransferActivity::refreshProgressLines() {
 }
 
 void NearbyFileTransferActivity::refreshDoneLine() {
+  // A file whose bytes verified but whose rename did not take is not a success
+  // story, so what went wrong is what the finished screen says.
+  if (!errorMessage.empty()) {
+    doneLine = errorMessage;
+    return;
+  }
   const std::string installedFamily =
       mode == Mode::Receive ? nearby_file::familyNameFromFolder(pendingOffer.folder) : std::string();
   char buffer[220];
@@ -752,14 +902,15 @@ bool NearbyFileTransferActivity::handleCustomInput() {
   // last bytes are on the card before the screen says so.
   if (state == TransferState::DONE && destinationOpen) {
     incoming.flush();
-    incoming.close();
-    destinationOpen = false;
+    // The file takes its real name only here, with every byte written and the
+    // sender's checksum matched. Until this point the library cannot see it.
+    finishIncomingFile();
     // A credential bundle is not a file the reader keeps: it is read, applied, and
     // removed. Doing it the moment the bytes land means the passwords sit on the
     // card for as short a time as possible.
     if (mode == Mode::Receive && credential_bundle::isBundleFilename(destinationPath)) importCredentialBundle();
   }
-  if (session.shouldDiscardPartialFile() && !destinationPath.empty()) discardPartialFile();
+  if (session.shouldDiscardPartialFile() && !partialPath.empty()) discardPartialFile();
 
   if (state == TransferState::DONE && mode == Mode::Receive && group.expectsMore()) {
     group.onFileDone(millis());

@@ -3,6 +3,7 @@ add_executable(NearbyFileTransferTest
   NearbyFileSessionTest.cpp
   NearbyFilePayloadsTest.cpp
   NearbyFileGroupTest.cpp
+  NearbyFileResumeTest.cpp
   ${REPO_ROOT}/lib/NearbyFileTransfer/NearbyFileRules.cpp
   ${REPO_ROOT}/lib/NearbyFileTransfer/NearbyFileSession.cpp
   ${REPO_ROOT}/lib/NearbyFileTransfer/NearbyFilePayloads.cpp
