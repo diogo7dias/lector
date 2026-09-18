@@ -5,7 +5,6 @@
 #include "activities/Activity.h"
 
 class Bitmap;
-struct PxcRenderOptions;
 
 class SleepActivity final : public Activity {
  public:
@@ -22,8 +21,6 @@ class SleepActivity final : public Activity {
   // show (no wallpaper, no cover, a decode that failed) lands here.
   void renderDefaultSleepScreen() const;
   void renderCustomSleepScreen() const;
-  bool renderWallpaper(const std::string& path, const PxcRenderOptions* options = nullptr,
-                       bool forceGrayscale = false) const;
   void renderCoverSleepScreen() const;
   // Full-screen wallpaper or cover: cleared page, the bitmap centred (fit or crop), the
   // cover filter applied, the grayscale pipeline when the image and the filter allow it.
@@ -32,7 +29,7 @@ class SleepActivity final : public Activity {
   // submission count come from sleep_face::planFor rather than from a literal here. Both
   // faces share this renderer and therefore share those rows; the parameter exists so the
   // call site states its intent and the plan is asked the right question.
-  void renderBitmapSleepScreen(const Bitmap& bitmap, sleep_face::Face face, bool forceGrayscale = false) const;
+  void renderBitmapSleepScreen(const Bitmap& bitmap, sleep_face::Face face) const;
 
   bool fromTimeout = false;
   // The wallpaper the previous sleep left on the panel. onEnter clears the shared

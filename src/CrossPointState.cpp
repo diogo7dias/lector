@@ -13,7 +13,6 @@ void CrossPointState::toJson(JsonDocument& doc) const {
   doc["lowBatteryWarned"] = lowBatteryWarned;
   doc["pendingWakeBookPath"] = pendingWakeBookPath;
   doc["lastSleepWallpaperPath"] = lastSleepWallpaperPath;
-  lutLab.toJson(doc["lutLab"].to<JsonObject>());
   doc["sleepIndexLiveCount"] = sleepIndexLiveCount;
   doc["sleepIndexFingerprint"] = sleepIndexFingerprint;
   doc["sleepIndexDirId"] = sleepIndexDirId;
@@ -44,7 +43,6 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   lowBatteryWarned = doc["lowBatteryWarned"] | false;
   pendingWakeBookPath = doc["pendingWakeBookPath"] | std::string("");
   lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
-  lutLab.fromJson(doc["lutLab"]);
   // Missing keys fall back to "no index yet" defaults, so a pre-index
   // state.json (or one from the removed recency-buffer era) forces a clean
   // first build instead of misreading stale fields.

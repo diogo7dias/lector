@@ -1,4 +1,3 @@
-#include <BoardConfig.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <PerfLog.h>
@@ -322,15 +321,6 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.
 
 void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
 
-bool HalDisplay::supportsLutLab() const {
-  // Match the SDK X4-class UC8279 route; the X3 UC8279d uses a different driver.
-  return !deviceProfile.isX3 && deviceProfile.controllerIsUc8279;
-}
-
-uint8_t HalDisplay::lutLabControlFrames() const { return BoardConfig::ACTIVE.displayControllerVariant == 0x02 ? 2 : 3; }
-
-void HalDisplay::setSleepLut(const unsigned char* lut) { sleepLut = supportsLutLab() ? lut : nullptr; }
-
 // The grayscale planes go straight to the driver: there is no refresh mode to choose,
 // the waveform is the gray nudge. They still drive the panel and still leave charge, so
 // they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
@@ -340,7 +330,7 @@ void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   refreshPolicy.noteExternalFastPass();
-  einkDisplay.displayGrayBuffer(turnOffScreen, sleepLut);
+  einkDisplay.displayGrayBuffer(turnOffScreen);
   // Recorded as FAST/FAST: there is no mode to choose here, and charging it to the same
   // bucket keeps the per-mode totals comparable with a text page turn.
   noteRefreshTiming(RefreshMode::FAST_REFRESH, RefreshMode::FAST_REFRESH, micros() - startUs, 0, thinkMs,

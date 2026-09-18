@@ -127,11 +127,6 @@ class HalDisplay {
   void driveAllPixelsNextFast();
 
   void displayGrayBuffer(bool turnOffScreen = false);
-  // Temporary LUT Lab: scoped to sleep rendering; null restores the SDK default.
-  bool supportsLutLab() const;
-  uint8_t lutLabControlFrames() const;
-  // UC8279 X4 only: 5 * 49 contiguous data bytes, commands excluded.
-  void setSleepLut(const unsigned char* lut);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)
   // straight to the controller; supportsStripGrayscale() gates the path. See
@@ -174,7 +169,6 @@ class HalDisplay {
   void noteRefreshTiming(RefreshMode requested, RefreshMode actual, uint32_t totalUs, uint32_t asyncStartUs,
                          uint16_t thinkMs, uint16_t inkScore) const;
 
-  const unsigned char* sleepLut = nullptr;
   EInkDisplay einkDisplay;
   DisplayRefreshPolicy refreshPolicy;
   bool turboWanted = false;
