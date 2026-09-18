@@ -6,6 +6,7 @@
 #include <string>
 
 #include "dev/LockLabState.h"
+#include "lut/LutLabState.h"
 
 class CrossPointState : public PersistableStore<CrossPointState> {
   CrossPointState() = default;
@@ -45,6 +46,8 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // logo one (the two take different unlock paths), and the reader menu uses it to
   // favorite, pause or delete the image the lock screen last showed.
   std::string lastSleepWallpaperPath;
+  // Temporary OTA calibration; saved with the existing state write at sleep.
+  lutlab::State lutLab;
 
   // Sleep wallpaper index (/.crosspoint/sleep_index.bin) snapshot + rotation
   // cursor. The index file itself lives on SD; these scalars are all the RAM
