@@ -994,6 +994,31 @@ static void delayWallClock(const unsigned long ms) {
   }
 }
 
+// The main loop's idle wait, and the whole reason the IDF power manager has
+// anything to work with.
+//
+// FreeRTOS only reaches tickless light sleep when no task needs to run for
+// CONFIG_FREERTOS_IDLE_TIME_BEFORE_SLEEP ticks. delayWallClock() spins on
+// vTaskDelay(1), so it never leaves a window longer than a single tick and the
+// idle task never once qualifies — the chip would stay awake for every
+// millisecond of a reading session with PM enabled and look, from the outside,
+// exactly like PM doing nothing. One blocking wait is what opens the window.
+//
+// The spin is still right in one case: while a render holds the performance
+// lock, the render task's BUSY-wait slice light-sleeps the chip by hand and
+// stops the FreeRTOS tick while it does (millis() is RTC-corrected on wake, the
+// tick is not). A single vTaskDelay through that would overshoot by the whole
+// frozen window and starve button sampling mid-refresh, which is the bug
+// delayWallClock was written to fix. Nothing is lost by spinning there: a held
+// perf lock already keeps the power manager out of light sleep.
+static void idlePoll(const unsigned long ms) {
+  if (powerManager.isPerfLockHeld()) {
+    delayWallClock(ms);
+    return;
+  }
+  vTaskDelay(pdMS_TO_TICKS(ms));
+}
+
 // Polls the battery and shows the low-battery notice the first time the charge drops to
 // the warning level. The rule itself lives in low_battery::resolve(), so the thresholds,
 // the hysteresis and the "no usable reading" case are covered by host tests.
@@ -1089,9 +1114,13 @@ void loop() {
   // Check for any user activity (button press or release) or active background work
   static unsigned long lastActivityTime = millis();
   if (gpio.wasAnyPressed() || gpio.wasAnyReleased() || activityManager.preventAutoSleep()) {
-    lastActivityTime = millis();         // Reset inactivity timer
-    powerManager.setPowerSaving(false);  // Restore normal CPU frequency on user activity
+    lastActivityTime = millis();  // Reset inactivity timer
   }
+  // Publishes the USB console state and takes or releases the WiFi and
+  // recent-activity PM locks. The clock itself needs no poke here any more: DFS
+  // raises it whenever a lock is taken, and the recent-activity lock is what used
+  // to be the explicit setPowerSaving(false) on input.
+  powerManager.updateLocks(gpio, millis() - lastActivityTime);
   // The press, not the release, and not "any activity": this is the instant the reader's
   // thumb acted, and the refresh that answers it closes the measurement. A release-driven
   // action (a short power click) still lands within the same press-to-paint window.
@@ -1323,8 +1352,10 @@ void loop() {
   // When an activity requests skip loop delay (e.g., webserver running), use yield() for faster response
   // Otherwise, use longer delay to save power
   if (activityManager.skipLoopDelay()) {
-    powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
-    yield();                             // Give FreeRTOS a chance to run tasks, but return immediately
+    // No delay and no sleep: an activity with a web server up wants the loop back
+    // immediately. The clock looks after itself — a running web server means WiFi
+    // is up, and updateLocks() holds the WiFi lock at full speed for that.
+    yield();  // Give FreeRTOS a chance to run tasks, but return immediately
   } else {
     const unsigned long idleMs = millis() - lastActivityTime;
     // Drop the panel's rails before the chip starts light-sleeping.
@@ -1340,39 +1371,22 @@ void loop() {
     // rails back up by itself. Repeat calls are free, so no "already off" flag is kept
     // here — the driver holds that state and returns immediately when it is already down.
     if (idleMs >= HalPowerManager::IDLE_PANEL_POWER_OFF_MS) display.powerOffPanel();
-    if (idleMs >= HalPowerManager::IDLE_LIGHT_SLEEP_MS) {
-      // Idle: light-sleep between input polls instead of busy-delaying (same poll cadence).
-      // Race-to-sleep: run the brief wake windows at normal clock, not LOW_POWER_FREQ.
-      // The board's sleep-floor current is paid per-millisecond regardless of CPU
-      // speed, so finishing the per-wake work ~16x faster and returning to sleep
-      // costs less charge than stretching the window at 10 MHz (measured at 10 MHz:
-      // 8.8 mA for 4.5 ms per wake). The downclock below only serves the pre-sleep
-      // 100 Hz delay-poll phase. The lightSleep()-rejected fallback delay() then
-      // also runs at normal clock, but that only happens when USB (externally
-      // powered), WiFi, or a render Lock (full speed wanted anyway) is active.
-      powerManager.setPowerSaving(false);
-      if (gpio.isDebouncePending()) {
-        // A raw button-state change is mid-debounce: commitment needs a second
-        // matching sample, so poll again quickly instead of sleeping a slice —
-        // a tap shorter than the 50 ms cadence would otherwise land in a single
-        // sample and be dropped, and every press would commit a slice late.
-        delayWallClock(10);
-      } else if (!powerManager.lightSleep(gpio)) {
-        // Light sleep declined = a render Lock, USB, or WiFi is active — the
-        // chip is at full clock anyway, so poll at 100 Hz. A 50 ms cadence
-        // here dropped sub-slice power taps (a press needs two samples >=5 ms
-        // apart to commit), which made short-press sleep flaky during renders
-        // — exactly when a render Lock forces this fallback.
-        delayWallClock(10);
-      }
+
+    // One 100 Hz cadence at every idle depth now (see IDLE_POLL_MS for why the old
+    // 50 ms stage could not survive the switch to tickless idle). What changed is
+    // what happens during the wait: the loop task blocks for the whole period in
+    // one go, so the FreeRTOS idle task can light-sleep the chip for almost all of
+    // it. The 0 to 1000 ms window used to busy-poll at full attention, and that is
+    // the gap this closes.
+    if (gpio.isDebouncePending()) {
+      // A raw button-state change is mid-debounce: committing needs a second
+      // matching sample, so stay awake and poll again quickly rather than hand
+      // the window to light sleep. Costs one poll period of awake time per
+      // button press, and is the difference between a tap committing and a tap
+      // being dropped.
+      delayWallClock(HalPowerManager::IDLE_POLL_MS);
     } else {
-      // Response window after recent input: keep 100 Hz polling for snappy interaction,
-      // but downclock once rapid-input bursts have settled — renders re-raise the clock
-      // via HalPowerManager::Lock, so full speed only serves loop bookkeeping here
-      if (idleMs >= HalPowerManager::IDLE_DOWNCLOCK_MS) {
-        powerManager.setPowerSaving(true);
-      }
-      delayWallClock(10);
+      idlePoll(HalPowerManager::IDLE_POLL_MS);
     }
   }
 }
