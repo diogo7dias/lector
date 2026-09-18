@@ -138,4 +138,20 @@ void logPerfSummary() {
   snprintf(missedLine, sizeof(missedLine), "missed busy assertions %lu",
            static_cast<unsigned long>(EInkDisplay::missedBusyAssertions()));
   PerfLog::note(missedLine);
+
+  // What the IDF power manager actually did with the session: current CPU
+  // frequency, how much of the uptime went into light sleep, and which locks are
+  // held as this is written. Measured, not modelled -- the sleep total is summed
+  // from the power manager's own light-sleep exit callback.
+  //
+  // Read it after unplugging. A session spent on USB reads near 0.0% by
+  // construction and says nothing about battery behaviour: an enumerated CDC
+  // link holds the USB lock, and that lock exists precisely to stop the chip
+  // sleeping the serial console away.
+  //
+  // The lock list covers this firmware's own locks only. A suspected lock inside
+  // the IDF (a driver, the WiFi stack) needs CONFIG_PM_PROFILING and
+  // esp_pm_dump_locks(), which are deliberately not on in a shipping build.
+  char pmLine[160];
+  if (powerManager.formatPowerReport(pmLine, sizeof(pmLine)) > 0) PerfLog::note(pmLine);
 }
