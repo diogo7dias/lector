@@ -123,15 +123,17 @@ The Home screen is the entry point. It lists the books you have been reading, an
   [section 9](#9-getting-books-onto-the-device).
 - **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
 - **Settings** — see [section 12](#12-settings-reference).
-- **LUT Lab (temporary)** — grayscale calibration, shown only on an X4 Pro with an
-  SSD1677 panel. See the testing instructions below.
+- **LUT Lab (temporary)** — grayscale calibration, shown on X4-class devices with a
+  UC8279 panel (including X4 Pro), not the X3 or SSD1677 models. See the testing
+  instructions below.
 
-### Temporary LUT Lab (X4 Pro)
+### Temporary LUT Lab (UC8279 X4 / X4 Pro)
 
 1. Open **LUT Lab (temporary)** from Home. Use Up/Down to highlight a row and Confirm
    to activate it, or tap the row. Back returns to Home.
-2. The screen shows the variant number, whether it changes VCOM, VSH1 or timing,
-   the exact VCOM/VSH1/T60/T61 bytes, pin status, and the selected wallpaper path.
+2. The screen shows the variant number, gray-phase timing bytes, pin status, and
+   the selected wallpaper path. `AA[2]` is byte 2 of the five grayscale tables:
+   `20/21/24` share one value; `22/23` share that value with the polarity bit set.
    It initially selects the wallpaper from your last lock, when there is one.
 3. Choose **Pin selected wallpaper**. To choose a different image, use **Next wallpaper**
    or **Previous wallpaper**, then pin it. Browsing wraps through BMP/PXC files in
@@ -140,12 +142,19 @@ The Home screen is the entry point. It lists the books you have been reading, an
 4. Start with **Variant 0 - Control**. Press Power using your usual lock gesture, inspect
    the image, then unlock and return to Home → **LUT Lab (temporary)**. Use **Next variant**
    or **Previous variant**, lock again, and compare. Choices survive sleep.
-5. After comparing variants 0–8, keep the best variant and try other wallpapers.
+5. After comparing variants 0–7, keep the best variant and try other wallpapers.
    Report the variant number, displayed bytes and image filename. No variant is a
    calibrated recommendation; the panel decides which one works.
 6. **Unpin wallpaper** restores your ordinary sleep-image selection. **Reset: control + unpin**
    also restores the shipping waveform. Back saves once; if saving fails, the lab stays
    open and asks you to check the SD card.
+
+Variant 0 uses your panel's untouched shipping waveform (2 frames on LUT_VER=02,
+3 on LUT_VER=68/69). Variants 1–7 use 1, 3, 4, 5, 6, 7 and 8 gray-phase frames
+respectively, stepping all five tables together. Variant 2 matches the vendor's
+LUT_VER=68 waveform. Longer phases may take longer to refresh; visual improvement
+is unverified. Reset returns to stock. Upgrading from the old SSD1677 lab resets
+the variant to control and keeps your wallpaper selection and pin.
 
 Pinning temporarily overrides Cover mode, root-file priority and BMP cover filters so
 that the chosen image is compared in grayscale. Your saved sleep settings are retained.

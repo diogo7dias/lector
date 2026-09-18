@@ -129,6 +129,8 @@ class HalDisplay {
   void displayGrayBuffer(bool turnOffScreen = false);
   // Temporary LUT Lab: scoped to sleep rendering; null restores the SDK default.
   bool supportsLutLab() const;
+  uint8_t lutLabControlFrames() const;
+  // UC8279 X4 only: 5 * 49 contiguous data bytes, commands excluded.
   void setSleepLut(const unsigned char* lut);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)

@@ -323,8 +323,11 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.
 void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
 
 bool HalDisplay::supportsLutLab() const {
-  return deviceProfile.isX4Pro && BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::SSD1677;
+  // Match the SDK X4-class UC8279 route; the X3 UC8279d uses a different driver.
+  return !deviceProfile.isX3 && deviceProfile.controllerIsUc8279;
 }
+
+uint8_t HalDisplay::lutLabControlFrames() const { return BoardConfig::ACTIVE.displayControllerVariant == 0x02 ? 2 : 3; }
 
 void HalDisplay::setSleepLut(const unsigned char* lut) { sleepLut = supportsLutLab() ? lut : nullptr; }
 

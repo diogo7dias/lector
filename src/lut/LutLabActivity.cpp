@@ -37,12 +37,10 @@ ListChrome LutLabActivity::chrome() const {
   const auto& lab = APP_STATE.lutLab;
   const auto index = lutlab::validVariant(lab.variant);
   const auto& lut = lutlab::VARIANTS[index];
-  const char* kind = index == 0  ? tr(STR_LUT_CONTROL)
-                     : index < 5 ? tr(STR_LUT_VCOM)
-                     : index < 7 ? tr(STR_LUT_VSH1)
-                                 : tr(STR_LUT_TIMING);
+  const char* kind = index == 0 ? tr(STR_LUT_CONTROL) : tr(STR_LUT_TIMING);
+  const unsigned frames = index == 0 ? display.lutLabControlFrames() : lut[2];
   snprintf(variantLabel, sizeof(variantLabel), tr(STR_LUT_VARIANT_FORMAT), index, kind);
-  snprintf(bytesLabel, sizeof(bytesLabel), tr(STR_LUT_BYTES_FORMAT), lut[109], lut[106], lut[60], lut[61]);
+  snprintf(bytesLabel, sizeof(bytesLabel), tr(STR_LUT_BYTES_FORMAT), frames, frames | 0x80);
   chrome.title = tr(STR_LUT_LAB);
   chrome.headerLines[0] = variantLabel;
   chrome.headerLines[1] = bytesLabel;
