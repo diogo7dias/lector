@@ -7,6 +7,7 @@
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <NearbyTransfer.h>  // crc32Update: the one CRC32 already in the firmware
 #include <WiFi.h>
 #include <esp_efuse.h>
 #include <esp_efuse_table.h>
@@ -33,6 +34,7 @@
 #include "html/js/jszip_minJs.generated.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/BookCacheUtils.h"
+#include "util/PartialUploads.h"
 #include "util/TaskWatchdog.h"
 
 namespace {
@@ -49,6 +51,17 @@ CrossPointWebServer* wsInstance = nullptr;
 HalFile wsUploadFile;
 String wsUploadFileName;
 String wsUploadPath;
+// An upload is written to "<name>.part" and only takes its real name once every
+// byte has arrived. Nothing that lists books looks at that extension, so a
+// transfer cut off half way leaves no half-book in the library, and the bytes
+// stay on the card for the next attempt to carry on from.
+String wsUploadFinalPath;
+String wsUploadPartialPath;
+// Set between offering a resume and the browser saying whether it wants it. The
+// browser is the only side holding the source bytes, so it is the side that
+// checks the partial is really the head of the file it is about to send.
+size_t wsUploadResumeOffered = 0;
+bool wsUploadAwaitingSeek = false;
 size_t wsUploadSize = 0;
 size_t wsUploadReceived = 0;
 unsigned long wsUploadStartTime = 0;
@@ -246,18 +259,62 @@ void CrossPointWebServer::begin() {
   LOG_DBG("WEB", "[MEM] Free heap after server.begin(): %d bytes", ESP.getFreeHeap());
 }
 
-void CrossPointWebServer::abortWsUpload(const char* tag) {
+namespace {
+
+/**
+ * CRC32 over the first `length` bytes of `path`.
+ *
+ * This is what makes a resume safe. The only thing tying a partial file to the
+ * upload now starting is its name and its length, and two different files can
+ * share both; appending to the wrong one would produce a book that is a
+ * convincing size and silently broken inside. So the browser is told what the
+ * bytes already on the card hash to, and it resumes only if its own first bytes
+ * hash the same.
+ */
+bool crc32OfFilePrefix(const String& path, const size_t length, uint32_t& outCrc) {
+  HalFile file;
+  if (!Storage.openFileForRead("WS", path, file) || !file.isOpen()) return false;
+
+  constexpr size_t READ_BYTES = 2048;
+  auto buffer = makeUniqueNoThrow<uint8_t[]>(READ_BYTES);
+  if (!buffer) {
+    LOG_ERR("WS", "OOM: %u bytes", (unsigned)READ_BYTES);
+    return false;
+  }
+
+  uint32_t crc = 0xFFFFFFFFu;
+  size_t remaining = length;
+  while (remaining > 0) {
+    const size_t want = remaining < READ_BYTES ? remaining : READ_BYTES;
+    const int read = file.read(buffer.get(), want);
+    if (read <= 0) return false;
+    crc = freeink::nearby::crc32Update(crc, buffer.get(), static_cast<size_t>(read));
+    remaining -= static_cast<size_t>(read);
+    // Several megabytes off an SD card takes seconds; the watchdog is fed on the
+    // way through rather than after.
+    resetTaskWatchdogIfSubscribed();
+  }
+  outCrc = crc ^ 0xFFFFFFFFu;
+  return true;
+}
+
+}  // namespace
+
+void CrossPointWebServer::abortWsUpload(const char* tag, const bool keepPartial) {
   // Explicit close() required: file-scope global persists beyond function scope
   wsUploadFile.close();
-  String filePath = wsUploadPath;
-  if (!filePath.endsWith("/")) filePath += "/";
-  filePath += wsUploadFileName;
-  if (Storage.remove(filePath.c_str())) {
-    LOG_DBG(tag, "Deleted incomplete upload: %s", filePath.c_str());
-  } else {
-    LOG_DBG(tag, "Failed to delete incomplete upload: %s", filePath.c_str());
+  if (keepPartial) {
+    LOG_DBG(tag, "Kept the partial upload for a later resume: %s", wsUploadPartialPath.c_str());
+  } else if (!wsUploadPartialPath.isEmpty()) {
+    if (Storage.remove(wsUploadPartialPath.c_str())) {
+      LOG_DBG(tag, "Deleted incomplete upload: %s", wsUploadPartialPath.c_str());
+    } else {
+      LOG_DBG(tag, "Failed to delete incomplete upload: %s", wsUploadPartialPath.c_str());
+    }
   }
   wsUploadInProgress = false;
+  wsUploadAwaitingSeek = false;
+  wsUploadResumeOffered = 0;
   wsUploadClientNum = 255;
   wsLastProgressSent = 0;
 }
@@ -273,9 +330,10 @@ void CrossPointWebServer::stop() {
 
   LOG_DBG("WEB", "[MEM] Free heap before stop: %d bytes", ESP.getFreeHeap());
 
-  // Close any in-progress WebSocket upload and remove partial file
-  if (wsUploadInProgress && wsUploadFile) {
-    abortWsUpload("WEB");
+  // Close any in-progress WebSocket upload. The partial stays on the card: the
+  // radio going away is exactly the interruption resume exists for.
+  if (wsUploadInProgress) {
+    abortWsUpload("WEB", true);
   }
 
   // Stop WebSocket server
@@ -978,28 +1036,29 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
     LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
 
-    String filePath = state.path;
-    if (!filePath.endsWith("/")) filePath += "/";
-    filePath += state.fileName;
+    state.finalPath = state.path;
+    if (!state.finalPath.endsWith("/")) state.finalPath += "/";
+    state.finalPath += state.fileName;
+    state.partialPath = state.finalPath + FsHelpers::PARTIAL_SUFFIX;
 
     // Check if file already exists - SD operations can be slow
     resetTaskWatchdogIfSubscribed();
-    if (Storage.exists(filePath.c_str())) {
+    if (Storage.exists(state.finalPath.c_str())) {
       state.error = "File already exists: " + state.fileName;
-      LOG_DBG("WEB", "[UPLOAD] Collision: %s", filePath.c_str());
+      LOG_DBG("WEB", "[UPLOAD] Collision: %s", state.finalPath.c_str());
       return;
     }
 
     // Open file for writing - this can be slow due to FAT cluster allocation
     resetTaskWatchdogIfSubscribed();
-    if (!Storage.openFileForWrite("WEB", filePath, state.file)) {
+    if (!Storage.openFileForWrite("WEB", state.partialPath, state.file)) {
       state.error = "Failed to create file on SD card";
-      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", filePath.c_str());
+      LOG_DBG("WEB", "[UPLOAD] FAILED to create file: %s", state.partialPath.c_str());
       return;
     }
     resetTaskWatchdogIfSubscribed();
 
-    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", filePath.c_str());
+    LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", state.partialPath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
@@ -1021,6 +1080,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
           if (!flushUploadBuffer(state)) {
             state.error = "Failed to write to SD card - disk may be full";
             state.file.close();
+            Storage.remove(state.partialPath.c_str());
             return;
           }
         }
@@ -1045,6 +1105,16 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       }
       state.file.close();
 
+      // The real name is taken only with every byte written: until here the file
+      // browser and the library never saw it.
+      if (!state.error.isEmpty()) {
+        Storage.remove(state.partialPath.c_str());
+      } else if (!Storage.rename(state.partialPath.c_str(), state.finalPath.c_str())) {
+        state.error = "Failed to finish file on SD card";
+        LOG_ERR("WEB", "[UPLOAD] Could not rename %s to %s", state.partialPath.c_str(), state.finalPath.c_str());
+        Storage.remove(state.partialPath.c_str());
+      }
+
       if (state.error.isEmpty()) {
         state.success = true;
         const unsigned long elapsed = millis() - uploadStartTime;
@@ -1056,26 +1126,21 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
                 writePercent);
 
         // Clear epub cache after uploading the file
-        String filePath = state.path;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += state.fileName;
-        clearBookCache(filePath.c_str());
+        clearBookCache(state.finalPath.c_str());
         // A wallpaper landed over WiFi: append its index record right here so
         // the new file jumps the rotation queue without the next boot paying a
         // folder walk. Handlers run on the main task (handleClient is called
         // from the activity loop), so the persisted patch is safe here.
-        crosspoint::sleep::windex::noteCreated(filePath.c_str());
+        crosspoint::sleep::windex::noteCreated(state.finalPath.c_str());
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
     state.bufferPos = 0;  // Discard buffered data
     if (state.file) {
       state.file.close();
-      // Try to delete the incomplete file
-      String filePath = state.path;
-      if (!filePath.endsWith("/")) filePath += "/";
-      filePath += state.fileName;
-      Storage.remove(filePath.c_str());
+      // Deleted rather than kept: this path cannot be resumed, so the partial
+      // would only ever be dead weight on the card.
+      Storage.remove(state.partialPath.c_str());
     }
     state.error = "Upload aborted";
     LOG_DBG("WEB", "Upload aborted");
@@ -1941,8 +2006,11 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       // Only clean up if this is the client that owns the active upload.
       // A new client may have already started a fresh upload before this
       // DISCONNECTED event fires (race condition on quick cancel + retry).
-      if (num == wsUploadClientNum && wsUploadInProgress && wsUploadFile) {
-        abortWsUpload("WS");
+      // No wsUploadFile check: an upload waiting for the browser's answer to a
+      // RESUME offer holds no open handle, and leaving it marked in progress
+      // would refuse every upload after it.
+      if (num == wsUploadClientNum && wsUploadInProgress) {
+        abortWsUpload("WS", true);
       }
       break;
 
@@ -1991,25 +2059,60 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           wsUploadPath = normalizeWebPath(msg.substring(secondColon + 1));
           wsUploadReceived = 0;
           wsLastProgressSent = 0;
+          wsUploadResumeOffered = 0;
+          wsUploadAwaitingSeek = false;
           wsUploadStartTime = millis();
 
-          String filePath = wsUploadPath;
-          if (!filePath.endsWith("/")) filePath += "/";
-          filePath += wsUploadFileName;
+          wsUploadFinalPath = wsUploadPath;
+          if (!wsUploadFinalPath.endsWith("/")) wsUploadFinalPath += "/";
+          wsUploadFinalPath += wsUploadFileName;
+          wsUploadPartialPath = wsUploadFinalPath + FsHelpers::PARTIAL_SUFFIX;
 
           resetTaskWatchdogIfSubscribed();
-          if (Storage.exists(filePath.c_str())) {
-            LOG_DBG("WS", "Upload collision: %s", filePath.c_str());
+          if (Storage.exists(wsUploadFinalPath.c_str())) {
+            LOG_DBG("WS", "Upload collision: %s", wsUploadFinalPath.c_str());
             wsServer->sendTXT(num, "ERROR:File already exists: " + wsUploadFileName);
             return;
           }
 
           LOG_DBG("WS", "Starting upload: %s (%d bytes) to %s", wsUploadFileName.c_str(), wsUploadSize,
-                  filePath.c_str());
+                  wsUploadFinalPath.c_str());
+
+          // One partial per folder. Nothing else ever deletes these, so without a
+          // sweep the leftovers of uploads that were never retried would sit on
+          // the card for good.
+          partial_uploads::sweepFolder(wsUploadPath.c_str(), wsUploadPartialPath.c_str());
+          resetTaskWatchdogIfSubscribed();
+
+          // Is there a partial worth offering back? Only one shorter than the
+          // file now being sent: anything else is a different file wearing the
+          // same name, and appending to it would leave a tail of the old one
+          // past the end of the new.
+          size_t partialSize = 0;
+          if (wsUploadSize > 0 && Storage.exists(wsUploadPartialPath.c_str())) {
+            HalFile existing;
+            if (Storage.openFileForRead("WS", wsUploadPartialPath, existing) && existing.isOpen()) {
+              partialSize = static_cast<size_t>(existing.fileSize64());
+              existing.close();
+            }
+            uint32_t partialCrc = 0;
+            if (partialSize > 0 && partialSize < wsUploadSize &&
+                crc32OfFilePrefix(wsUploadPartialPath, partialSize, partialCrc)) {
+              // The browser decides: it hashes its own first `partialSize` bytes
+              // and answers SEEK with either that offset or zero.
+              wsUploadResumeOffered = partialSize;
+              wsUploadAwaitingSeek = true;
+              wsUploadClientNum = num;
+              wsUploadInProgress = true;
+              wsServer->sendTXT(num, "RESUME:" + String((uint32_t)partialSize) + ":" + String(partialCrc));
+              break;
+            }
+            Storage.remove(wsUploadPartialPath.c_str());
+          }
 
           // Open file for writing
           resetTaskWatchdogIfSubscribed();
-          if (!Storage.openFileForWrite("WS", filePath, wsUploadFile)) {
+          if (!Storage.openFileForWrite("WS", wsUploadPartialPath, wsUploadFile)) {
             wsServer->sendTXT(num, "ERROR:Failed to create file");
             wsUploadInProgress = false;
             wsUploadClientNum = 255;
@@ -2021,11 +2124,16 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           if (wsUploadSize == 0) {
             // Explicit close() required: file-scope global persists beyond function scope
             wsUploadFile.close();
+            if (!Storage.rename(wsUploadPartialPath.c_str(), wsUploadFinalPath.c_str())) {
+              LOG_ERR("WS", "Could not rename %s to %s", wsUploadPartialPath.c_str(), wsUploadFinalPath.c_str());
+              wsServer->sendTXT(num, "ERROR:Failed to create file");
+              return;
+            }
             wsLastCompleteName = wsUploadFileName;
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
-            LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
-            clearBookCache(filePath.c_str());
+            LOG_DBG("WS", "Zero-byte upload complete: %s", wsUploadFinalPath.c_str());
+            clearBookCache(wsUploadFinalPath.c_str());
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2037,6 +2145,59 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         } else {
           wsServer->sendTXT(num, "ERROR:Invalid START format");
         }
+      } else if (msg.startsWith("SEEK:")) {
+        // The browser's answer to a RESUME offer: where to carry on from.
+        if (!wsUploadAwaitingSeek || num != wsUploadClientNum) {
+          wsServer->sendTXT(num, "ERROR:No upload in progress");
+          break;
+        }
+        const String offsetToken = msg.substring(5);
+        bool offsetValid = offsetToken.length() > 0;
+        for (int i = 0; i < (int)offsetToken.length() && offsetValid; i++) {
+          if (!isdigit((unsigned char)offsetToken[i])) offsetValid = false;
+        }
+        // Exactly one of two answers is allowed: the offset that was offered, or
+        // nothing. Any other number is a client writing wherever it likes into a
+        // file it did not send, so the upload ends rather than honouring it.
+        const size_t requested = offsetValid ? (size_t)offsetToken.toInt() : 0;
+        if (!offsetValid || (requested != 0 && requested != wsUploadResumeOffered)) {
+          LOG_DBG("WS", "SEEK rejected: '%s'", offsetToken.c_str());
+          abortWsUpload("WS", true);
+          wsServer->sendTXT(num, "ERROR:Invalid resume offset");
+          break;
+        }
+
+        wsUploadAwaitingSeek = false;
+        wsUploadResumeOffered = 0;
+        resetTaskWatchdogIfSubscribed();
+        if (requested > 0) {
+          // Read-write rather than truncating, so what is already there survives.
+          wsUploadFile = Storage.open(wsUploadPartialPath.c_str(), O_RDWR);
+          if (!wsUploadFile || !wsUploadFile.seek64(requested)) {
+            // The browser is about to send from `requested`, so there is no
+            // starting over from here: writing those bytes at the head of an
+            // empty file would produce a book that is the right length and
+            // wrong throughout. The upload ends instead, and the browser can
+            // try again from a clean START.
+            LOG_ERR("WS", "Could not resume %s at %u bytes", wsUploadPartialPath.c_str(), (unsigned)requested);
+            abortWsUpload("WS", false);
+            wsServer->sendTXT(num, "ERROR:Failed to resume file");
+            return;
+          }
+          wsUploadReceived = requested;
+          LOG_DBG("WS", "Resuming %s at %u bytes", wsUploadPartialPath.c_str(), (unsigned)requested);
+        } else {
+          wsUploadFile.close();
+          if (!Storage.openFileForWrite("WS", wsUploadPartialPath, wsUploadFile)) {
+            wsServer->sendTXT(num, "ERROR:Failed to create file");
+            abortWsUpload("WS", false);
+            return;
+          }
+          wsUploadReceived = 0;
+        }
+        wsLastProgressSent = wsUploadReceived;
+        wsUploadStartTime = millis();
+        wsServer->sendTXT(num, "READY");
       }
       break;
     }
@@ -2050,7 +2211,9 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       // Write binary data directly to file
       size_t remaining = wsUploadSize - wsUploadReceived;
       if (length > remaining) {
-        abortWsUpload("WS");
+        // Nothing of this frame was written, so what is on the card is still a
+        // clean prefix and worth keeping.
+        abortWsUpload("WS", true);
         wsServer->sendTXT(num, "ERROR:Upload overflow");
         return;
       }
@@ -2059,7 +2222,9 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
       resetTaskWatchdogIfSubscribed();
 
       if (written != length) {
-        abortWsUpload("WS");
+        // A card with no room left is the usual cause, and keeping the partial
+        // would leave it holding space that the retry needs.
+        abortWsUpload("WS", false);
         wsServer->sendTXT(num, "ERROR:Write failed - disk full?");
         return;
       }
@@ -2080,6 +2245,15 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         wsUploadInProgress = false;
         wsUploadClientNum = 255;
 
+        // The real name is taken only here, with every byte on the card. Until
+        // this point the file browser and the library never saw it.
+        if (!Storage.rename(wsUploadPartialPath.c_str(), wsUploadFinalPath.c_str())) {
+          LOG_ERR("WS", "Could not rename %s to %s", wsUploadPartialPath.c_str(), wsUploadFinalPath.c_str());
+          wsServer->sendTXT(num, "ERROR:Failed to finish file");
+          wsLastProgressSent = 0;
+          return;
+        }
+
         wsLastCompleteName = wsUploadFileName;
         wsLastCompleteSize = wsUploadSize;
         wsLastCompleteAt = millis();
@@ -2091,10 +2265,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
                 elapsed, kbps);
 
         // Clear epub cache after uploading the file
-        String filePath = wsUploadPath;
-        if (!filePath.endsWith("/")) filePath += "/";
-        filePath += wsUploadFileName;
-        clearBookCache(filePath.c_str());
+        clearBookCache(wsUploadFinalPath.c_str());
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;

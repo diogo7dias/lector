@@ -116,6 +116,22 @@ bool decodeOfferPayload(const uint8_t* data, const size_t length, OfferPayload& 
   return true;
 }
 
+bool encodeAcceptPayload(const uint64_t resumeBytes, uint8_t* output, const size_t capacity, size_t& outputLength) {
+  if (!output || capacity < 8) return false;
+  uint8_t* cursor = output;
+  writeU64(cursor, resumeBytes);
+  outputLength = static_cast<size_t>(cursor - output);
+  return true;
+}
+
+bool decodeAcceptPayload(const uint8_t* data, const size_t length, uint64_t& resumeBytes) {
+  resumeBytes = 0;
+  // An accept from firmware without resume carries nothing, and means zero.
+  if (!data || length == 0) return true;
+  size_t remaining = length;
+  return readU64(data, remaining, resumeBytes);
+}
+
 bool encodeCompletePayload(const CompletePayload& complete, uint8_t* output, const size_t capacity,
                            size_t& outputLength) {
   if (!output || capacity < 12) return false;

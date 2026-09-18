@@ -432,6 +432,15 @@ The home page shows battery charge, free card space, and the books you have in p
 The file manager can zip several selected files into one download, and **Fetch from URL**
 hands the reader a link so it downloads the file itself instead of you uploading it.
 
+An upload that is cut off part way through does not have to start again. What arrived is kept
+beside the finished books under a `.part` name, which the library ignores, and uploading the
+same file again carries on from that point. The browser checks that the part already on the
+card really is the start of the file being sent, so a different file that happens to share the
+name is uploaded from the beginning instead of being appended to. A file only takes its real
+name, and only appears in the library, once every byte is there. Starting an upload into a
+folder clears any other `.part` file left in it, so the leftovers cannot build up; you can also
+delete them yourself from the file manager.
+
 While joined to a network, the screen shows the Wi-Fi signal strength in dBm.
 
 See [docs/webserver.md](./docs/webserver.md) for the full web server documentation, including
@@ -478,6 +487,12 @@ Two Lector devices can pass a file directly, with no network in between.
 2. On the sending device, select the file in the browser and choose **Send to Nearby Reader**,
    or use the same row in the in-book menu's Device tab to send the open book.
 3. The receiving device asks before accepting, and reports the name and size.
+
+A transfer that is interrupted, by walking out of range or by pressing Back, keeps what
+arrived. Send the same file again and it carries on from there rather than starting over. Both
+devices check the whole file against the sender's checksum before it is kept, so a resumed file
+that does not match is discarded rather than left in the library. Font families are the
+exception: a family that does not finish is removed whole and sent again from the start.
 
 The list of readers found, and the accept/decline question, are chosen with the direction keys
 and Select, or by tapping the row on a device with a touch screen.
