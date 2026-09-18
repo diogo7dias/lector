@@ -1,6 +1,9 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <cstring>
+#include <fstream>
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -281,3 +284,77 @@ TEST(FontManifestParser, ResetClearsPreviousParse) {
 }
 
 }  // namespace
+
+// ---------------------------------------------------------------------------
+// The manifest the device actually downloads.
+//
+// "Managed Fonts shows no font list" has twice been diagnosed as a memory
+// problem without anyone checking that the published document still fits the
+// parser's fixed caps. It does, and this keeps it that way: the fixture is a
+// byte-for-byte copy of
+// https://github.com/diogo7dias/lector-fonts/releases/download/sd-fonts-m1-b4/fonts.json
+// and the parse runs in the same 1024-byte chunks FontDownloadActivity feeds
+// off the SD card, so a manifest that outgrows MAX_FAMILIES,
+// MAX_FILES_PER_FAMILY, the name/description buffers or the baseUrl buffer
+// fails here rather than on someone's reader.
+namespace {
+
+std::string readPublishedManifest() {
+  std::ifstream in(PUBLISHED_FONTS_JSON, std::ios::binary);
+  EXPECT_TRUE(in.good()) << "fixture missing: " << PUBLISHED_FONTS_JSON;
+  return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+}  // namespace
+
+TEST(FontManifestParserPublished, ParsesTheManifestTheDeviceDownloads) {
+  const std::string json = readPublishedManifest();
+  ASSERT_FALSE(json.empty());
+
+  FontManifestParser parser;
+  parser.retainFiles(FontManifestParser::FileRetention::None);
+  // FontDownloadActivity::MANIFEST_CHUNK.
+  constexpr size_t kChunk = 1024;
+  for (size_t offset = 0; offset < json.size(); offset += kChunk) {
+    parser.feed(json.data() + offset, std::min(kChunk, json.size() - offset));
+    ASSERT_FALSE(parser.hasError()) << "failed at byte " << offset;
+  }
+  parser.finish();
+
+  ASSERT_FALSE(parser.hasError());
+  EXPECT_FALSE(parser.tooLarge());
+  EXPECT_FALSE(parser.outOfMemory());
+  EXPECT_EQ(parser.version(), 1);
+  EXPECT_STREQ(parser.baseUrl(), "https://github.com/diogo7dias/lector-fonts/releases/download/sd-fonts-m1-b4/");
+
+  const auto& families = parser.families();
+  EXPECT_FALSE(families.empty());
+  EXPECT_LE(families.size(), FontManifestParser::MAX_FAMILIES);
+  for (const auto& family : families) {
+    EXPECT_NE(family.name[0], '\0');
+    EXPECT_GT(family.fileCount, 0);
+    EXPECT_LE(family.fileCount, FontManifestParser::MAX_FILES_PER_FAMILY);
+    EXPECT_GT(family.totalSize, 0u);
+  }
+}
+
+TEST(FontManifestParserPublished, KeepsOneFamilysFileNamesWhenAsked) {
+  const std::string json = readPublishedManifest();
+  ASSERT_FALSE(json.empty());
+
+  FontManifestParser parser;
+  parser.retainFiles(FontManifestParser::FileRetention::One);
+  parser.retainFilesFor("Alegreya");
+  parser.feed(json.data(), json.size());
+  parser.finish();
+
+  ASSERT_FALSE(parser.hasError());
+  ASSERT_EQ(parser.families().size(), 1u);
+  const auto& only = parser.families().front();
+  EXPECT_STREQ(only.name, "Alegreya");
+  EXPECT_EQ(only.files.size(), only.fileCount);
+  for (const auto& file : only.files) {
+    EXPECT_NE(file.name[0], '\0');
+    EXPECT_GT(file.size, 0u);
+  }
+}
