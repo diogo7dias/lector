@@ -25,13 +25,16 @@ struct State {
   bool imageFailed = false;
 
   void toJson(JsonObject doc) const {
+    doc["waveform"] = "uc8279-aa";
     doc["variant"] = variant;
     doc["pinned"] = pinned;
     doc["wallpaper"] = wallpaper;
     doc["imageFailed"] = imageFailed;
   }
   void fromJson(JsonVariantConst doc) {
-    variant = validVariant(doc["variant"] | 0);
+    // Old SSD1677 variant numbers mean different experiments. Keep the pin,
+    // but start at native control after upgrading rather than silently remap.
+    variant = doc["waveform"] == "uc8279-aa" ? validVariant(doc["variant"] | 0) : 0;
     const char* path = doc["wallpaper"] | "";
     wallpaper = validWallpaper(path) ? path : "";
     pinned = (doc["pinned"] | false) && !wallpaper.empty();
