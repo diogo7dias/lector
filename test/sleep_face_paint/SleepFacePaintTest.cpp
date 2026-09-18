@@ -111,23 +111,21 @@ TEST(SleepFacePaint, ThePlainLectorFaceIsAlwaysOneHalfSubmission) {
 // Base waveform per device.
 // ---------------------------------------------------------------------------
 
-// CONTRADICTION ON RECORD — for Diogo to settle on hardware. Do not "fix" it from here.
+// CONTRADICTION SETTLED ON HARDWARE.
 //
 // SleepActivity.cpp says of the grayscale base: "Must stay HALF: the gray nudge LUT is
 // calibrated against the pixel state the single-pass HALF waveform leaves behind. A FULL
 // (GC) base parks pixels in a different charge state and the differential nudge then
-// lands unevenly (blotchy noise in gray areas)." SleepGrayscaleBase.h then returns
-// FULL_REFRESH for exactly that board, and its own prose ("The X4 and X3 keep HALF")
-// disagrees with its code as well. SleepActivity.cpp separately asserts single-HALF
-// "stock parity" for all sleep screens, citing issue #2471's blinking complaint.
+// lands unevenly (blotchy noise in gray areas)." SleepGrayscaleBase.h nevertheless
+// returned FULL_REFRESH for a UC8279 non-X3 board — which is what the X4 Pro actually is,
+// once XTDET's "promoted SSD1677 -> UC8279" probe is believed over the assumption that the
+// panel was an SSD1677.
 //
-// The test asserts the CODE, because the code is what ships and what the panel has been
-// wearing. Which of the two is right is a question about blotchy grey in a wallpaper on a
-// real UC8279 X4, and retained e-ink charge means it cannot be answered from a source
-// file.
-TEST(SleepFacePaint, TheUc8279NonX3GrayscaleBaseIsFullToday) {
-  EXPECT_EQ(planFor(Face::Wallpaper, /*sourceHasGrayscale=*/true, uc8279X4()).base, HalDisplay::FULL_REFRESH);
-  EXPECT_EQ(planFor(Face::CoverFallback, /*sourceHasGrayscale=*/true, uc8279X4()).base, HalDisplay::FULL_REFRESH);
+// Judged on an X4 Pro: FULL lost the mid tones (black, white and one grey) and kept a
+// status-bar ghost; HALF restores both. The prose was right and the code was wrong.
+TEST(SleepFacePaint, TheUc8279NonX3GrayscaleBaseIsHalf) {
+  EXPECT_EQ(planFor(Face::Wallpaper, /*sourceHasGrayscale=*/true, uc8279X4()).base, HalDisplay::HALF_REFRESH);
+  EXPECT_EQ(planFor(Face::CoverFallback, /*sourceHasGrayscale=*/true, uc8279X4()).base, HalDisplay::HALF_REFRESH);
 }
 
 TEST(SleepFacePaint, TheX3GrayscaleBaseIsHalf) {

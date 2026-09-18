@@ -27,31 +27,33 @@ DeviceProfile uc8279X4() {
   return d;
 }
 
-DeviceProfile ssd1677X4Pro() {
+// The real X4 Pro: it probes as a UC8279 (XTDET promotes SSD1677 -> UC8279 at boot).
+DeviceProfile uc8279X4Pro() {
   DeviceProfile d;
   d.isX4Pro = true;
   d.hasTouch = true;
-  d.controllerIsUc8279 = false;
+  d.controllerIsUc8279 = true;
   return d;
 }
 
 }  // namespace
 
-// CONTRADICTION ON RECORD, for Diogo to settle on hardware — do not "fix" it from here.
+// CONTRADICTION SETTLED ON HARDWARE.
 //
-// SleepActivity.cpp:531-534 says of the call one line above it: "Must stay HALF: the gray
-// nudge LUT is calibrated against the pixel state the single-pass HALF waveform leaves
-// behind. A FULL (GC) base parks pixels in a different charge state and the differential
-// nudge then lands unevenly (blotchy noise in gray areas)." SleepGrayscaleBase.h then
-// returns FULL for exactly that board. The header's own prose ("The X4 and X3 keep HALF")
-// disagrees with its code too.
+// SleepActivity.cpp said the base "Must stay HALF: the gray nudge LUT is calibrated
+// against the pixel state the single-pass HALF waveform leaves behind. A FULL (GC) base
+// parks pixels in a different charge state and the differential nudge then lands
+// unevenly." The code nevertheless returned FULL for a UC8279 non-X3 board, which is what
+// the X4 Pro actually is — the earlier reading that it was an SSD1677 was wrong.
 //
-// The test asserts the CODE, because the code is what ships and what the panel has been
-// wearing. Resolving which of the two is right needs an X4 ghosting check on real
-// hardware: the difference is blotchy grey in the wallpaper, and retained e-ink charge
-// means it cannot be read off a source file.
-TEST(SleepGrayscaleBase, AUc8279NonX3BaseIsFullToday) {
-  EXPECT_EQ(sleepGrayscaleBaseRefresh(uc8279X4()), HalDisplay::FULL_REFRESH);
+// Judged on an X4 Pro: with a FULL base the wallpaper lost its mid tones (black, white and
+// one grey) and the status bar kept a ghost. HALF restores both. The prose was right.
+//
+// The ghost has a second mechanism worth recording: Uc8279X4Driver::displayGrayscaleBase
+// only takes its real B/W activation branch — the periodic ghost purge — when the fallback
+// is Half. A FULL base skipped that purge on every sleep.
+TEST(SleepGrayscaleBase, AUc8279NonX3BaseIsHalf) {
+  EXPECT_EQ(sleepGrayscaleBaseRefresh(uc8279X4()), HalDisplay::HALF_REFRESH);
 }
 
 // The X3's base is the exact waveform its gray-nudge LUT was calibrated against.
@@ -59,17 +61,12 @@ TEST(SleepGrayscaleBase, AUc8279X3BaseIsHalf) {
   EXPECT_EQ(sleepGrayscaleBaseRefresh(uc8279X3()), HalDisplay::HALF_REFRESH);
 }
 
-// The X4 Pro takes HALF, like every other board. FULL was tried (its SSD1677 has no
-// requestResync() path, so the grayscale base cannot be given the clean slate the X3 gets at
-// HalDisplay.cpp:290) and judged on hardware: the wallpaper lost its mid tones, rendering as
-// black, white and a single grey. The gray-nudge LUT is calibrated against HALF; that wins
-// over the ghosting FULL was meant to hide.
+// The X4 Pro takes HALF, on the controller it really reports.
 TEST(SleepGrayscaleBase, TheX4ProBaseIsHalf) {
-  EXPECT_EQ(sleepGrayscaleBaseRefresh(ssd1677X4Pro()), HalDisplay::HALF_REFRESH);
+  EXPECT_EQ(sleepGrayscaleBaseRefresh(uc8279X4Pro()), HalDisplay::HALF_REFRESH);
 }
 
-// The rule is about the CONTROLLER as well as the board: a non-UC8279 board takes HALF
-// whatever else it is, which is why the profile carries both fields.
+// No board takes FULL: every device's gray nudge is calibrated against the HALF base.
 TEST(SleepGrayscaleBase, ANonUc8279BoardTakesHalf) {
   DeviceProfile d;
   d.controllerIsUc8279 = false;
