@@ -46,6 +46,10 @@ constexpr size_t MIN_BLOCK_ALLOC = 8192;
 constexpr size_t NEEDED = 40 * 1024;
 
 int slotOf(const void* ptr) {
+  // A null pointer belongs to no slot. Without this, realloc(NULL, n) -- which C
+  // code writes for a plain allocation -- matched whichever slot had not been
+  // served yet (both sides null) and took the copy path instead of the slots.
+  if (ptr == nullptr) return -1;
   for (int i = 0; i < NSLOTS; ++i) {
     if (ptr == g_everServed[i] || ptr == g_slot[i]) return i;
   }
