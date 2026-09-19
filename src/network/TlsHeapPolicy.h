@@ -43,8 +43,20 @@ constexpr uint32_t MIN_POOL_BLOCK = tls_scratch::RECORD_BYTES;
 // all nine CRC-verified downloads and zero spills before release. IDF sums
 // per-region minima, which need not occur simultaneously.
 enum class Transfer { General, FontFile };
-constexpr uint32_t MIN_FREE_WITH_SCRATCH = 25 * 1024;
-constexpr uint32_t MIN_FREE_FONT_FILE_WITH_SCRATCH = 20 * 1024;
+// x3-log5-REFUSED.log (2026-09-19): the 25600 floor refused the font list at
+// 24528 free, and refused again at 24652 on the retry. The manifest fetch that
+// SUCCEEDED in log4 started from 26460, so free at this gate swings ~1900 bytes
+// run to run: a floor calibrated on one snapshot sits inside the noise. Drop to
+// 22 KiB, which clears both refused admissions and still leaves 22528 - 21468 =
+// 1060 bytes over measured demand.
+// ponytail: floor tuned against two device logs, not a bound. If a refusal
+// shows up again above this, the fix is to cut demand, not to keep lowering it.
+constexpr uint32_t MIN_FREE_WITH_SCRATCH = 22 * 1024;
+// Same trap on the font path: log4's nine successful downloads were admitted
+// from 18752 and 18704 free, so the 20480 floor would refuse every one of them
+// even though they ran to completion. 18 KiB clears both and stays 3012 bytes
+// over the 15420-byte measured demand.
+constexpr uint32_t MIN_FREE_FONT_FILE_WITH_SCRATCH = 18 * 1024;
 constexpr uint32_t MIN_BLOCK_WITH_SCRATCH = 4096;
 
 // Without scratch, preserve the existing heap-only protection.
