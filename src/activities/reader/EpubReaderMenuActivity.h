@@ -71,19 +71,20 @@ class EpubReaderMenuActivity final : public UiListActivity {
   void onExit() override;
 
  protected:
-  int listCount() const override { return static_cast<int>(items.size()); }
+  int listCount() const override { return sections.visibleCount(rows.data(), static_cast<int>(rows.size())); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
+  void onRowAction(const freeink::ui::ActionEvent& event) override { activateIndex(event.value); }
   // The book block above the list is chrome, not rows: title, author, chapter and
   // progress. The base reserves the band it paints, so the two cannot drift.
   ListChrome chrome() const override;
   // Popup input, and the Confirm hold that runs the bound menu function. Both own the
   // pass before the base looks at Back, Confirm or the selection.
   bool handleCustomInput() override;
-  // Back closes on the press; Confirm activates on press or release depending on
+  // Back collapses or closes on the press; Confirm activates on press or release depending on
   // whether a menu hold function is bound. Neither matches the base defaults.
   bool handleButtons() override;
-  // A press steps past headings; a hold jumps to the next section instead of repeating.
+  // A press walks visible rows; a hold jumps to the next section header.
   void navigateButtons() override;
   bool drawOverlay() override;
 
@@ -91,8 +92,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   struct MenuItem {
     MenuAction action;
     StrId labelId;
-    // Section heading rather than a row: drawn as a filled bar, never landable. The
-    // nav ring steps past it, so no handler ever sees SECTION_HEADER.
+    // Landable section heading, drawn as an inverted band by the SDK.
     bool isHeader = false;
 
     static MenuItem Header(const StrId labelId) { return MenuItem{MenuAction::SECTION_HEADER, labelId, true}; }
@@ -108,10 +108,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     int selectedIndex = 0;
   };
 
-  // Maps a CrossPointSettings::BOOK_MENU_TAB value onto the tab it names. Unknown
-  // values fall back to Navigate, so a setting written by a newer firmware cannot
-  // leave the menu pointing at nothing.
-  static Tab tabForSetting(uint8_t setting);
   // Builds only the tabs that have something to show, so indices into the result are
   // NOT Tab values and the Sleep tab simply is not there when no wallpaper is in play.
   static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
@@ -119,22 +115,17 @@ class EpubReaderMenuActivity final : public UiListActivity {
                                         bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
   // Adds or removes the Progress Bar row to match selectedStatusBar, in place, so the
   // row appears the moment the Status Bar row is switched off rather than on the next
-  // menu open. Safe to call from loop(): it mutates one tab's item vector, never the
-  // tabs vector itself, and no reference into either outlives the call.
+  // menu open. Called under the render lock; the focused header and Status Bar
+  // row are before the insertion/removal, so their indexes stay valid.
   void syncProgressBarRow();
   // Flattens the built sections into the one list the menu shows: each section's label
   // becomes a heading row, followed by that section's rows.
   static std::vector<MenuItem> flatten(const std::vector<TabPage>& pages);
-  // True when this row is a section heading.
-  bool isHeaderRow(int index) const;
-  // Walks on in `direction` until the row is landable, so a heading is never selected
-  // and Confirm can never fire on one.
-  int stepPastHeaders(int index, int direction) const;
-  // Jumps the cursor to the next or previous section heading's first row, the same fast
-  // travel the Settings list gives a held nav button.
+  // Refresh borrowed labels/values in the storage reserved on entry.
+  void updateRows();
+  void focusRow(int index);
+  void stepRow(int direction, int steps);
   void jumpSection(bool forward);
-  // Index of the first landable row of the section named by SETTINGS.bookMenuTab, or 0.
-  int firstRowOfPreferredSection() const;
   void closeCancelled();
   // The block's strings, held so the ListChrome can borrow them. Mutable because
   // chrome() is const: rebuilding the block changes nothing about the screen.
@@ -146,12 +137,11 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // tables, so the ListItems can borrow both.
   std::vector<freeink::ui::ListItem> rows;
 
-  // Fixed menu layout: one flat list of headings and rows, built once. Only the cursor
-  // and the scroll window move after that.
+  // Full menu data; the SDK maps visible indexes without rebuilding this list.
   std::vector<MenuItem> items;
 
-  // The section the menu opened on, kept so the constructor's choice survives onEnter.
-  Tab preferredTab = Tab::Navigate;
+  // One transient index; never part of settings, MenuResult or web state.
+  freeink::ui::ListSections sections;
 
   OptionPopup optionPopup;
   std::string title = "Reader Menu";
