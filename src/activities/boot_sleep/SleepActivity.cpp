@@ -243,16 +243,16 @@ void SleepActivity::renderCustomSleepScreen() const {
   // Before anything is drawn, and before any sleep face is chosen: a scrub is about the
   // panel's charge history, not about which picture is going on top of it.
   //
-  // This is the lock screen's only defence against a ghost. The X4 Pro's SSD1677 has no
-  // requestResync(), so the grayscale base cannot clear the panel the way the X3's does at
-  // HalDisplay.cpp:290 — whatever the reader or the status bar left behind is still in the
-  // ink when the wallpaper lands on top. High-contrast furniture (the top bar most of all)
-  // is what survives, because it sat unchanged through many differential updates.
+  // This is the lock screen's only defence against a ghost. No face's own paint clears the
+  // panel: every board writes the picture against a baseline that leaves the pixels which
+  // are NOT changing sitting on whatever charge the reader left them with. On the X3 the
+  // grayscale base's requestResync() was mistaken for a clear; it is a sync, and it flashes
+  // only the pure-white part of the frame. See SleepPreClear.h for the waveform cells.
   //
-  // The cost is a full clean pass at lock, which the user does not wait for: it runs after
-  // the device has already been put down.
+  // The cost is a clean pass at lock, which the user does not wait for: it runs after the
+  // device has already been put down. One submission on the X3, four elsewhere.
   const uint32_t preClearMs = sleepPreClear(renderer, display.profile());
-  if (preClearMs != 0) LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
+  LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.
