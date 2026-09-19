@@ -65,8 +65,7 @@ void replacePathReferences(const std::string& oldPath, const std::string& newPat
   // index pick resolves the record through favoriteCounterpart(), and the
   // reconcile's counterpart check refuses the duplicate append. Callers that
   // move a file BETWEEN folders (SleepPauseToggle) mark dirty themselves.
-  // The wake path re-renders this exact file to composite the unlock banners over
-  // it, so a stale path here means the wake falls back to the boot logo.
+  // Keep the last wallpaper reference valid after the rename.
   if (APP_STATE.lastSleepWallpaperPath == oldPath) APP_STATE.lastSleepWallpaperPath = newPath;
 }
 

@@ -36,12 +36,11 @@ inline constexpr unsigned long inputSettleMs(const bool isX4Pro, const bool fast
 // promoted to a clean pass on the boards that ran the differential (see
 // firstPageTurnCleans), so any residue lives on one page only.
 //
-// Only with Fast Unlock (off restores the clearing pass) and only without the unlock
-// banners: the banner path has its own blocking pass.
+// Only with Fast Unlock; off restores the clearing pass.
 enum class WakeClear : uint8_t { Blank, DriveAll };
 
-inline constexpr WakeClear wakeClearFor(const bool fastUnlock, const bool straightToBook) {
-  return fastUnlock && straightToBook ? WakeClear::DriveAll : WakeClear::Blank;
+inline constexpr WakeClear wakeClearFor(const bool fastUnlock) {
+  return fastUnlock ? WakeClear::DriveAll : WakeClear::Blank;
 }
 
 // After a DriveAll wake the reader's first page turn runs the periodic clean pass, so

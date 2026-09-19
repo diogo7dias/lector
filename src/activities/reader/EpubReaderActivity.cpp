@@ -1409,8 +1409,7 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
               requestUpdate();
               return;
             }
-            // The wake path re-renders the last wallpaper to composite the unlock
-            // banners over it; a dead path there sends the next wake to the boot logo.
+            // Clear references to the deleted wallpaper so no later view reopens it.
             FavoriteImage::removePathReferences(lastPath);
             // Holding a wallpaper that no longer exists would freeze the rotation on
             // nothing, so deleting the held one resumes it.

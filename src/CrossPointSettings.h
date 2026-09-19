@@ -673,9 +673,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Diagnostic: outline the reader text viewport (0 = off, 1 = on). Drawn as an
   // overlay after the page renders, so it never affects layout or the cache.
   uint8_t debugBorders = 0;
-  // Custom text for the wake/unlock screen bottom banner (restored old lector).
-  // Empty = the default displayed string "READ UNTIL YOU DIE." (not stored here).
-  char customFooter[64] = "";
   // How this reader introduces itself to another reader over Nearby Position Sync,
   // so a sync screen can say whose page it is offering rather than showing a MAC
   // address. Empty = the generated fallback from getEffectiveDeviceName().
@@ -711,27 +708,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // column. The sleep wallpaper is always drawn through the OEM 3-pass grayscale
   // pipeline now; nothing reads this to choose anything. See SleepActivity.
   uint8_t sleepImageQuality = 1;
-  // The unlock screen is skipped on a wallpaper wake: the wake goes straight back into
-  // the book.
-  //
-  // The sleep screen itself is untouched: the wallpaper is drawn and shown exactly as
-  // before. This only changes what happens on the way OUT. The wake used to re-read the
-  // .pxc, re-dither every pixel, composite the unlock banners and refresh the panel —
-  // measured at ~3.6s of a ~4.7s wake on an X3 — and then the reader painted over all of
-  // it anyway. None of that runs: the wallpaper stays on the panel from the sleep until
-  // the reader's own first paint replaces it.
-  //
-  // No longer a setting. It was on by default, it is what makes the fast drive-all wake
-  // reachable, and the only thing the off path bought was a progress indication nobody
-  // waits for. Kept as a constant so the wake policy still reads as a condition and the
-  // perf log keeps its column.
-  static constexpr uint8_t wakeStraightToBook = 1;
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
   // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
   // either way). Chosen from code inspection, so the row exists to switch back without
-  // a reflash if a wake ever lands in the recovery picker by itself. Only pays off when
-  // the wake shows banners: with Wake Straight to Book the blank already overlaps the
-  // window. See wake_face::inputSettleMs.
+  // a reflash if a wake ever lands in the recovery picker by itself. The clearing blank
+  // can overlap this window. See wake_face::inputSettleMs.
   uint8_t fastUnlock = 1;
   // What boot opens by itself, before the ordinary routing has its say. LAST_BOOK always
   // opens the last-read book, RANDOM picks one of the books in progress. There is no OFF:

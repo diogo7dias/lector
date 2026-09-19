@@ -846,7 +846,7 @@ Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message
   const int h = banner::PAD * 2 + lineHeight * lineCount;
 
   // Physical top crop (X4 crops ~9px, X3 crops 0) via the renderer's oriented viewable
-  // inset, the same construction the wake banners use: the black backing starts at row
+  // inset: the black backing starts at row
   // 0 so nothing white shows above the band, while the text and the rule sit below the
   // crop where they cannot be clipped. Starting the backing at the theme's topPadding
   // instead left a white gap along the top edge.

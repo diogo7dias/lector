@@ -1739,15 +1739,6 @@ void GfxRenderer::reportOutOfRangePixels() const {
   outOfRangeLogged = 0;
 }
 
-void GfxRenderer::waitDisplayHold() const {
-  if (holdDisplayUntilMs == 0) return;
-  const uint32_t until = holdDisplayUntilMs;
-  holdDisplayUntilMs = 0;
-  // Signed difference so the comparison survives the millis() rollover.
-  const int32_t remaining = static_cast<int32_t>(until - millis());
-  if (remaining > 0) delay(static_cast<uint32_t>(remaining));
-}
-
 void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const {
   if (!hasFrameBuffer()) {
     LOG_ERR("GFX", "displayBuffer called with null framebuffer");
@@ -1756,7 +1747,6 @@ void GfxRenderer::displayBuffer(const HalDisplay::RefreshMode refreshMode) const
   auto elapsed = millis() - start_ms;
   LOG_DBG("GFX", "Time = %lu ms from clearScreen to displayBuffer", elapsed);
   reportOutOfRangePixels();
-  waitDisplayHold();
   display.displayBuffer(refreshMode, fadingFix);
 }
 
@@ -1766,7 +1756,6 @@ void GfxRenderer::displayBufferAsync(const HalDisplay::RefreshMode refreshMode) 
     return;
   }
   reportOutOfRangePixels();
-  waitDisplayHold();
   // The async path has no turn-off-screen hook, which the sunlight fading fix
   // relies on; keep those users on the blocking path.
   if (fadingFix) {
@@ -2290,7 +2279,6 @@ size_t GfxRenderer::getBufferSize() const { return frameBufferSize; }
 // void GfxRenderer::grayscaleRevert() const { display.grayscaleRevert(); }
 
 void GfxRenderer::displayGrayscaleBase(HalDisplay::RefreshMode fallback) const {
-  waitDisplayHold();
   display.displayGrayscaleBase(fallback, fadingFix);
 }
 

@@ -44,7 +44,6 @@
 #include "activities/settings/SdFirmwareUpdateActivity.h"
 #include "activities/util/LowBatteryNoticeActivity.h"
 #include "components/UITheme.h"
-#include "components/UnlockBanners.h"
 #include "fontIds.h"
 #include "frontlight/FrontlightBootPolicy.h"
 #include "network/FirmwareSwitchAudit.h"
@@ -225,21 +224,6 @@ void silentRestartToReader() {
 // Defined below setup()'s helpers.
 static std::string pickRandomRecentBookPath();
 static std::string pickBootBookPath();
-
-// How long the wake/unlock banners are guaranteed to stay readable. A floor on the
-// banner paint, not a sleep: the next activity's own work usually outlasts it, and only
-// a wake that would have covered the banners sooner ever waits.
-constexpr uint32_t UNLOCK_BANNER_MIN_VISIBLE_MS = 800;
-static uint32_t unlockBannersShownAt = 0;
-
-// Arms the floor on the renderer instead of blocking here: the next panel push (the
-// reader's or home's first paint) waits out whatever is left of it, so the book open,
-// section load and page layout run UNDER the floor rather than after it. Safe to call
-// when the banners were never drawn: unlockBannersShownAt stays 0 and nothing is armed.
-static void armUnlockBannerFloor() {
-  if (unlockBannersShownAt == 0) return;
-  renderer.holdNextDisplayUntil(unlockBannersShownAt + UNLOCK_BANNER_MIN_VISIBLE_MS);
-}
 
 void enterDeepSleep(bool fromTimeout = false) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -556,8 +540,7 @@ void setup() {
   WakeTiming::mark(WakeTiming::Stage::SdReady);
   // Neither the perf sink nor the wake-timing card read can run here any more: both are
   // switched by a setting, and settings have not been loaded yet. Both start immediately
-  // after they are (Stage::ConfigReady), which is still well before the unlock banners
-  // that display the numbers.
+  // after they are (Stage::ConfigReady), before the wake diagnostics are logged.
 
   HalSystem::checkPanic();
 
@@ -697,16 +680,11 @@ void setup() {
   // underneath it. Nothing draws until it completes: BusyBanner, the framebuffer loan
   // and ReaderActivity each wait before their first pixel, and every non-reader route
   // below waits before it paints.
-  //
-  // Only when no banners are wanted. The banner names the book this wake is about to
-  // open, and that pick reads recoveryFirmwareMode, which the settle below is what
-  // decides. With banners on, the blank stays where it was, in the block further down.
   const wake_face::WakeClear wakeClear =
-      paintedFaceWake ? wake_face::wakeClearFor(SETTINGS.fastUnlock != 0, SETTINGS.wakeStraightToBook != 0)
-                      : wake_face::WakeClear::Blank;
+      paintedFaceWake ? wake_face::wakeClearFor(SETTINGS.fastUnlock != 0) : wake_face::WakeClear::Blank;
   bool asyncBlankInFlight = false;
   bool driveAllArmed = false;
-  if (paintedFaceWake && SETTINGS.wakeStraightToBook) {
+  if (paintedFaceWake) {
     switch (wakeClear) {
       case wake_face::WakeClear::DriveAll:
         display.driveAllPixelsNextFast();
@@ -750,16 +728,14 @@ void setup() {
 
   // Picked here rather than before the display bring-up because it reads
   // recoveryFirmwareMode, which is only known once the check above has run. Still ahead
-  // of every use: the banners that name the book are drawn below.
+  // of routing into the chosen book below.
   std::string bootBookPath;
   if (!pendingWakeBookPath.empty()) {
     bootBookPath = pendingWakeBookPath;
-    setUnlockBannerBookPath(bootBookPath);
   } else if (SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
              !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
              !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
     bootBookPath = pickBootBookPath();
-    if (!bootBookPath.empty()) setUnlockBannerBookPath(bootBookPath);
   }
 
   const bool oneShotWakeFlagsSet = !APP_STATE.pendingWakeBookPath.empty();
@@ -771,45 +747,10 @@ void setup() {
       // panel keeps showing the pre-reboot popup until that first paint lands.
       break;
     case BootResume::Splash:
-      // Waking from a painted sleep face never redraws that face. The sleep screen itself
-      // is untouched — it is still what the panel shows all night — but the unlock does
-      // not draw it a second time. Re-reading the .pxc and re-dithering 384,000 pixels
-      // measured at 3.3-3.7s of a ~4.7s wake on an X3 (lector.exp.9), and the crest face
-      // redrew its own splash for a pass the activity then painted over; every pixel of
-      // either is covered by the book page moments later.
-      //
-      // So: blank the framebuffer, draw the unlock banners into it if they are wanted,
-      // and put that up with one FULL pass.
-      //
-      // The blank is not decoration. A sleep face is arbitrary content, and a
-      // differential waveform only drives the pixels that changed relative to what the
-      // controller believes is on the glass — paint a page straight over an unknown face
-      // and the face stays in the page, which is exactly what the first build of this
-      // path did (device photo, 0.15.0). The drive-all wake armed above (driveAllArmed)
-      // is the other answer to that: it makes the first FAST drive every pixel, and
-      // skips this block.
-      //
-      // The blank also doubles as the loading face when the banners are off: the screen
-      // goes blank the moment the wake starts, while the button is still held, so there IS
-      // a visible answer to the press before the page arrives.
+      // Painted-face wakes already armed either the asynchronous blank or DriveAll
+      // above. The destination waits for the blank before painting, or supplies the
+      // first drive-all frame itself. No extra splash submission is needed.
       if (paintedFaceWake) {
-        if (asyncBlankInFlight || driveAllArmed) {
-          // Blank: issued before the settle window and still running; the reader loads
-          // its font and book underneath it and waits only when it is about to draw.
-          // DriveAll: nothing is running, the reader's first FAST is the whole wake.
-          allowFastInitialReaderRefresh = true;
-          break;
-        }
-        bool bannersDrawn = false;
-        renderer.clearScreen();
-        if (!SETTINGS.wakeStraightToBook) {
-          // Banners wanted: they now sit on a blank page instead of over the sleep face.
-          // They cost only the draw — the FULL pass below happens either way.
-          drawUnlockBanners(renderer);
-          bannersDrawn = true;
-        }
-        renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-        if (bannersDrawn) unlockBannersShownAt = millis();
         allowFastInitialReaderRefresh = true;
         break;
       }
@@ -820,7 +761,7 @@ void setup() {
       break;
   }
 
-  WakeTiming::mark(WakeTiming::Stage::BannersUp);
+  WakeTiming::mark(WakeTiming::Stage::WakeFaceReady);
 
   // Wallpaper index reconcile. A battery lock on the Xteink boards is a full
   // power cut (battery latch), so every unlock arrives as ESP_RST_POWERON —
@@ -871,7 +812,6 @@ void setup() {
   wakeInputs.bootBookPicked = !bootBookPath.empty();
   wakeInputs.paintedFaceWake = paintedFaceWake;
   wakeInputs.fastUnlock = SETTINGS.fastUnlock != 0;
-  wakeInputs.wakeStraightToBook = SETTINGS.wakeStraightToBook != 0;
   wakeInputs.asyncBlankInFlight = asyncBlankInFlight;
   wakeInputs.driveAllArmed = driveAllArmed;
   const wake_sequence::WakePlan wakePlan = wake_sequence::plan(wakeInputs);
@@ -880,10 +820,6 @@ void setup() {
   const bool firstTurnCleans = driveAllArmed && wake_face::firstPageTurnCleans(wakeClear, gpio.deviceIsX3());
 
   if (oneShotWakeFlagsSet) APP_STATE.saveToFile();
-
-  // The banners keep the panel until their floor; the activity below builds itself in
-  // the meantime and its first push is what waits.
-  armUnlockBannerFloor();
 
   // Straight-line executor: every decision above it, every side effect below it. The
   // wait rule that used to live only in a comment — "Every route but the reader paints
@@ -945,8 +881,6 @@ void setup() {
       // user is asking for home) or after a reader crash, so a book that cannot open can
       // never wedge boot — that exclusion is inside plan(), which is why this arm can
       // simply open the book.
-      // bootBookPath was chosen above, before the banners painted, so the banner named
-      // this exact book.
       enterReader(bootBookPath, /*withWakeFlags=*/false);
       break;
     case wake_sequence::Target::Home:

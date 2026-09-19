@@ -199,7 +199,7 @@ class LightPanel {
                                      Frontlight.hasColorTemperature(), context_.hasAux(), context_.actionCount);
 
     // Physical top crop (X4 crops ~9px, X3 none): the black backing reaches the physical
-    // edge while the rows sit below the crop, the same trick the unlock banners use.
+    // edge while the rows sit below the crop, matching message popups.
     int viewTop = 0;
     int viewRight = 0;
     int viewBottom = 0;

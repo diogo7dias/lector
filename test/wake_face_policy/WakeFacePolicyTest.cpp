@@ -24,15 +24,12 @@ TEST(WakeFacePolicy, FastUnlockShortensOnlyTheLadderSettleWindow) {
   EXPECT_EQ(wake_face::inputSettleMs(true, false), 20ul);
 }
 
-TEST(WakeFacePolicy, DriveAllWakeOnlyWithFastUnlockAndNoBanners) {
+TEST(WakeFacePolicy, DriveAllWakeOnlyWithFastUnlock) {
   using wake_face::WakeClear;
   using wake_face::wakeClearFor;
-  EXPECT_EQ(wakeClearFor(true, true), WakeClear::DriveAll);
+  EXPECT_EQ(wakeClearFor(true), WakeClear::DriveAll);
   // Fast Unlock off restores the clearing pass.
-  EXPECT_EQ(wakeClearFor(false, true), WakeClear::Blank);
-  // Banners wanted: their blocking pass stays.
-  EXPECT_EQ(wakeClearFor(true, false), WakeClear::Blank);
-  EXPECT_EQ(wakeClearFor(false, false), WakeClear::Blank);
+  EXPECT_EQ(wakeClearFor(false), WakeClear::Blank);
 }
 
 TEST(WakeFacePolicy, X4ProTakesTheSameDriveAllPathAsTheX4) {
@@ -41,7 +38,7 @@ TEST(WakeFacePolicy, X4ProTakesTheSameDriveAllPathAsTheX4) {
   // honour the same one-shot. The policy answer for a non-X3 board is the X4's.
   using wake_face::WakeClear;
   constexpr bool kIsX3 = false;  // an X4 Pro, either batch
-  EXPECT_EQ(wake_face::wakeClearFor(true, true), WakeClear::DriveAll);
+  EXPECT_EQ(wake_face::wakeClearFor(true), WakeClear::DriveAll);
   EXPECT_TRUE(wake_face::firstPageTurnCleans(WakeClear::DriveAll, kIsX3));
   EXPECT_EQ(wake_face::inputSettleMs(/*isX4Pro=*/true, true), 20ul);
 }
