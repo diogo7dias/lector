@@ -114,16 +114,16 @@ inline void applyWrappingRowStyle(freeink::ui::ListProps& props, const freeink::
   }
 }
 
-// Section headings: a full-width inverted band, label centred in white, matching
-// BaseTheme::drawList's rowIsHeader path. The SDK default is a left-aligned
-// underlined caption — that is what the in-book menu was showing. One place,
-// every UiListActivity, so Controls and the reader menu cannot drift.
+// Section headings: an inverted band that hugs its label, left-aligned, white
+// on black. One place, every UiListActivity, so Controls and the reader menu
+// cannot drift. The SDK default is a left-aligned underlined caption.
 inline void applyInvertedSectionHeaderStyle(freeink::ui::ListProps& props, const freeink::ui::ThemeTokens& tokens) {
   if (!freeink::ui::textStyleUnset(props.headerText)) return;
   props.headerText = tokens.bodyText;
-  props.headerText.align = freeink::ui::TextAlign::Center;
+  props.headerText.align = freeink::ui::TextAlign::Left;
   props.headerText.color = freeink::ui::Color::White;
   props.headerUnderline = false;
+  props.headerFillHugsText = true;
   props.sectionGap = 0;
   if (props.headerRowHeight == 0) {
     props.headerRowHeight = props.rowHeight > 0 ? props.rowHeight : tokens.rowHeight;
