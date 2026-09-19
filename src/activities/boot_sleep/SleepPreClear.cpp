@@ -8,15 +8,10 @@ uint32_t sleepPreClear(GfxRenderer& renderer, const DeviceProfile& dev) {
   const uint32_t startMs = millis();
 
   if (dev.isX3) {
-    // One white FULL, and the panel is scrubbed. A FULL takes the driver's full-sync
-    // branch, which forces the DTM1 baseline white, so an all-white target puts every
-    // pixel in WW and lut_x3_ww_full drives 24 frames to black before 24 back to white.
-    // Both rails, whole panel, one submission. Measured cost of an X3 FULL: 2016 ms
-    // (HalDisplay.cpp:107-109), spent after the reader has put the device down.
-    //
-    // HALF would scrub the same way but through requestResync(), which adds a
-    // conditioning pass and measures 2551 ms for the same picture. FULL is the cheaper
-    // spelling of this pass on this board.
+    // Candidate scrub: all-white target against the full-sync white baseline.
+    // One renderer call fires the full waveform AND the driver's FAST settle.
+    // HalDisplay.cpp records prior FULL/HALF timings of 2016/2551 ms; this lock
+    // sequence and its effect on ghosting have not been measured on hardware.
     renderer.clearScreen();
     renderer.displayBuffer(HalDisplay::FULL_REFRESH);
     return millis() - startMs;
