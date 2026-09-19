@@ -2,6 +2,7 @@
 
 #include <iomanip>
 
+#include "lib/Epub/Epub/JustifySpacing.h"
 #include "lib/Epub/Epub/TokenBoundary.h"
 
 TEST(TokenBoundary, OrdinaryWordGapIsBreakableAndJustifiable) {
@@ -47,4 +48,24 @@ TEST(TokenBoundary, ConditionalAndNonBreakingHyphensKeepTheirSemantics) {
   EXPECT_FALSE(TokenBoundary::allowsBreakAfterExplicitHyphen(0x00AD));  // soft hyphen
   EXPECT_FALSE(TokenBoundary::allowsBreakAfterExplicitHyphen(0x2011));  // non-breaking hyphen
   EXPECT_FALSE(TokenBoundary::allowsBreakAfterExplicitHyphen('.'));
+}
+
+TEST(JustifySpacing, DistributesEverySparePixel) {
+  for (int spareSpace = -2; spareSpace <= 800; ++spareSpace) {
+    for (size_t gapCount = 0; gapCount <= 100; ++gapCount) {
+      JustifySpacing spacing(spareSpace, gapCount);
+      const bool active = gapCount >= JustifySpacing::MIN_JUSTIFY_GAPS && spareSpace > 0;
+      int sum = 0;
+      for (size_t gap = 0; gap < gapCount; ++gap) {
+        const int extra = spacing.nextExtra();
+        const int expected = active ? spareSpace / static_cast<int>(gapCount) +
+                                          (gap < static_cast<size_t>(spareSpace) % gapCount ? 1 : 0)
+                                    : 0;
+        ASSERT_EQ(extra, expected) << "spare=" << spareSpace << " gaps=" << gapCount << " gap=" << gap;
+        sum += extra;
+      }
+      ASSERT_EQ(sum, active ? spareSpace : 0) << "spare=" << spareSpace << " gaps=" << gapCount;
+      ASSERT_EQ(sum, spacing.totalExtra);
+    }
+  }
 }
