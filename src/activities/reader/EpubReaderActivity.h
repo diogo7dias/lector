@@ -12,6 +12,7 @@
 #include "ProgressMapper.h"
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
+#include "ReaderReturnHistory.h"
 #include "ReaderUtils.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
@@ -82,6 +83,12 @@ class EpubReaderActivity final : public Activity {
   // Visible-codepoint offset of the page currently on screen, captured when the page is loaded
   // (Page::visibleTextOffset). Lets saveProgress persist the offset without reopening section.bin.
   std::optional<uint32_t> currentPageVisibleOffset;
+  // Paired with the displayed offset, even if a later destination fails to load.
+  int32_t currentPageSpineIndex = -1;
+  ReaderReturnHistory returnHistory;
+  // Call under RenderLock, before changing the reading position.
+  void recordJumpOrigin(bool accepted = true);
+  void jumpToContentOffset(int spineIndex, uint32_t offset, int pageHint = 0);
   // Explicit "land at this visible-codepoint offset in the target spine" request (bookmark open).
   // Resolved in render() once the section is loaded/built far enough, then cleared. Unlike a
   // settings-change reposition it always resolves by content, so it survives any re-pagination.

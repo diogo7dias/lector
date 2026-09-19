@@ -49,6 +49,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
     WALLPAPER_DELETE,           // delete that wallpaper file from the card, behind a confirmation
     REMOVE_FROM_RECENTS,        // drop this book from the home list and put its file back at the card root
     DELETE_BOOK,                // erase this book's file and its cache from the card, behind a confirmation
+    RETURN,                     // back to the last deliberate-jump origin
     VIEW_QUOTES                 // browse (and delete) the quotes saved in <book>_QUOTES.txt
   };
 
@@ -65,7 +66,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
                                   uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1, uint8_t statusBar = 1,
                                   uint8_t progressBar = 0, bool hasSleepWallpaper = false,
                                   bool wallpaperFavorited = false, bool wallpaperPausable = false,
-                                  bool hasQuotes = false);
+                                  bool hasQuotes = false, bool hasReturn = false);
 
   void onEnter() override;
   void onExit() override;
@@ -112,7 +113,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // NOT Tab values and the Sleep tab simply is not there when no wallpaper is in play.
   static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
                                         uint8_t paragraphNumbering, uint8_t statusBar, bool hasSleepWallpaper,
-                                        bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes);
+                                        bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes,
+                                        bool hasReturn);
   // Adds or removes the Progress Bar row to match selectedStatusBar, in place, so the
   // row appears the moment the Status Bar row is switched off rather than on the next
   // menu open. Called under the render lock; the focused header and Status Bar
