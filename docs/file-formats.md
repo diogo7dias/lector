@@ -104,6 +104,13 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 61
+
+Adds the `wordSpacing` header byte after `paragraphSpacing` (100 = unchanged natural
+space advance). The header grows by one byte; pagination uses the adjusted baseline.
+Finalized sections use version 61; the derived partial version changes from 222 to 221.
+Old full and partial sections rebuild once on next open.
+
 ### Version 60
 
 Already-shaped Arabic presentation forms bypass font ligature substitution.
@@ -224,7 +231,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 60
+#define EXPECTED_VERSION 61
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -380,6 +387,7 @@ struct SectionBin {
     float lineCompression;
     bool extraParagraphSpacing;
     u8 paragraphSpacing [[comment("Extra block gap after a paragraph, percent of line height")]];
+    u8 wordSpacing [[comment("Baseline space advance percent, 100 = unchanged")]];
     u8 paragraphAlignment;
     u16 viewportWidth;
     u16 viewportHeight;

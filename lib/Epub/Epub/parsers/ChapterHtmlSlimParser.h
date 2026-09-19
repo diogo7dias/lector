@@ -86,6 +86,7 @@ class ChapterHtmlSlimParser {
   int fontId;
   float lineCompression;
   bool extraParagraphSpacing;
+  uint8_t wordSpacing;
   uint8_t paragraphSpacing;  // extra block gap after each paragraph, % of line height
   uint8_t paragraphAlignment;
   uint16_t viewportWidth;
@@ -231,13 +232,14 @@ class ChapterHtmlSlimParser {
  public:
   explicit ChapterHtmlSlimParser(
       Epub* epub, const std::string& filepath, GfxRenderer& renderer, const int fontId, const float lineCompression,
-      const bool extraParagraphSpacing, const uint8_t paragraphSpacing, const uint8_t paragraphAlignment,
-      const uint16_t viewportWidth, const uint16_t viewportHeight, const bool hyphenationEnabled,
-      const bool focusReadingEnabled, const uint8_t guideDotsMode, const uint8_t firstLineIndentMode,
-      const uint8_t firstLineIndentPercent, const PageCompleteFn completePageFn, void* const completePageCtx,
-      const bool embeddedTextStyle, const bool embeddedLayoutStyle, const std::string& contentBase,
-      const std::string& imageBasePath, const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
-      const PopupFn popupFn = nullptr, void* const popupCtx = nullptr, const CssParser* cssParser = nullptr)
+      const bool extraParagraphSpacing, const uint8_t paragraphSpacing, const uint8_t wordSpacing,
+      const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
+      const bool hyphenationEnabled, const bool focusReadingEnabled, const uint8_t guideDotsMode,
+      const uint8_t firstLineIndentMode, const uint8_t firstLineIndentPercent, const PageCompleteFn completePageFn,
+      void* const completePageCtx, const bool embeddedTextStyle, const bool embeddedLayoutStyle,
+      const std::string& contentBase, const std::string& imageBasePath, const uint8_t imageRendering = 0,
+      std::vector<uint64_t> tocAnchors = {}, const PopupFn popupFn = nullptr, void* const popupCtx = nullptr,
+      const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
@@ -245,6 +247,7 @@ class ChapterHtmlSlimParser {
         fontId(fontId),
         lineCompression(lineCompression),
         extraParagraphSpacing(extraParagraphSpacing),
+        wordSpacing(wordSpacing),
         paragraphSpacing(paragraphSpacing),
         paragraphAlignment(paragraphAlignment),
         viewportWidth(viewportWidth),

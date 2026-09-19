@@ -32,6 +32,8 @@ struct ReaderRenderSpec {
   // Extra block gap after each paragraph, as a percentage of the line height (0 = none).
   // Added on top of extraParagraphSpacing. Part of the cache key. Restored (old lector).
   uint8_t paragraphSpacing = 0;
+  // Baseline space-glyph advance, percent (100 = unchanged); justification adds on top.
+  uint8_t wordSpacing = 100;
   uint8_t paragraphAlignment = 0;
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;
@@ -48,9 +50,8 @@ struct ReaderRenderSpec {
   // breaks and page fill, and the dot itself is baked into the cached blocks, so the
   // mode is part of the cache key. Hidden mode keeps the widened gap and draws no dot.
   //
-  // Deliberately one byte holding three states rather than two bools: it keeps the
-  // section-file header the size it has been since v37, so adding Hidden Dots costs
-  // no format version bump and no cache rebuild for books that are not using dots.
+  // One byte holding three states rather than two bools: Hidden Dots itself adds
+  // no header bytes and needs no cache rebuild for books that are not using dots.
   uint8_t guideDotsMode = GUIDE_DOTS_OFF;
   // First-line paragraph indent (restored old-lector model). mode: 0 = Book (respect
   // the CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
@@ -65,7 +66,7 @@ struct ReaderRenderSpec {
 constexpr bool sectionCacheMatches(const ReaderRenderSpec& requested, const ReaderRenderSpec& cached) {
   return requested.fontId == cached.fontId && requested.lineCompression == cached.lineCompression &&
          requested.extraParagraphSpacing == cached.extraParagraphSpacing &&
-         requested.paragraphSpacing == cached.paragraphSpacing &&
+         requested.paragraphSpacing == cached.paragraphSpacing && requested.wordSpacing == cached.wordSpacing &&
          requested.paragraphAlignment == cached.paragraphAlignment && requested.viewportWidth == cached.viewportWidth &&
          requested.viewportHeight == cached.viewportHeight &&
          requested.hyphenationEnabled == cached.hyphenationEnabled &&

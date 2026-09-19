@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <limits>
 #include <vector>
@@ -69,16 +70,6 @@ constexpr uint32_t GUIDE_DOT_CODEPOINT = 0x00B7;
 // Advance width of the guide dot glyph itself (always drawn in the regular style).
 int guideDotAdvance(const GfxRenderer& renderer, const int fontId) {
   return renderer.getTextAdvanceX(fontId, GUIDE_DOT_UTF8, EpdFontFamily::REGULAR);
-}
-
-// The full widened gap that holds a guide dot: space(leftWord -> dot) + dot glyph +
-// space(dot -> rightWord). Replaces the plain inter-word space when a dot sits
-// between two words, using per-codepoint kerned space advances.
-int guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
-                       const std::string& rightWord, const EpdFontFamily::Style leftStyle) {
-  return renderer.getSpaceAdvance(fontId, lastCodepoint(leftWord), GUIDE_DOT_CODEPOINT, leftStyle) +
-         guideDotAdvance(renderer, fontId) +
-         renderer.getSpaceAdvance(fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
 }
 
 bool isNoBreakBeforeCjkPunctuation(const uint32_t cp) {
@@ -394,6 +385,26 @@ void ParsedText::eraseVisibleOffsetPrefix(const size_t count) {
   }
   visibleOffsetRebases.resize(writeIndex);
   visibleOffsetBase = newBase;
+}
+
+// Scale the natural pixel advance only; preserve the font's flanking kerning.
+// Shared by both line breakers and every positioning path. At 100 the delta is zero.
+int ParsedText::spaceAdvance(const GfxRenderer& renderer, const int fontId, const uint32_t leftCp,
+                             const uint32_t rightCp, const EpdFontFamily::Style style) const {
+  const int advance = renderer.getSpaceAdvance(fontId, leftCp, rightCp, style);
+  if (wordSpacing == 100) return advance;
+  const int natural = renderer.getSpaceWidth(fontId, style);
+  return advance + (natural * wordSpacing + 50) / 100 - natural;
+}
+
+// The full widened gap that holds a guide dot: space(leftWord -> dot) + dot glyph +
+// space(dot -> rightWord). Replaces the plain inter-word space when a dot sits
+// between two words. Scale each flanking space, leaving the dot glyph unchanged.
+int ParsedText::guideDotNaturalGap(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
+                                   const std::string& rightWord, const EpdFontFamily::Style leftStyle) const {
+  return spaceAdvance(renderer, fontId, lastCodepoint(leftWord), GUIDE_DOT_CODEPOINT, leftStyle) +
+         guideDotAdvance(renderer, fontId) +
+         spaceAdvance(renderer, fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
 }
 
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
@@ -855,7 +866,9 @@ std::vector<uint16_t> ParsedText::calculateWordWidths(const GfxRenderer& rendere
   wordWidths.reserve(words.size());
 
   for (size_t i = 0; i < words.size(); ++i) {
-    wordWidths.push_back(measureFocusWordWidth(renderer, fontId, words[i], wordStyles[i], wordFocusBoundary[i]));
+    const int width = measureFocusWordWidth(renderer, fontId, words[i], wordStyles[i], wordFocusBoundary[i]);
+    // NBSP is an attached space token, not an ordinary gap. Keep it unbreakable.
+    wordWidths.push_back(words[i] == " " ? (width * wordSpacing + 50) / 100 : width);
   }
 
   // Adjust widths for ruby groups to comply with JLReq standards
@@ -1008,8 +1021,8 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
         gap = 0;
       } else if (j > static_cast<size_t>(i)) {
         gap = guideOk ? guideDotNaturalGap(renderer, fontId, words[j - 1], words[j], wordStyles[j - 1])
-                      : renderer.getSpaceAdvance(fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
-                                                 wordStyles[j - 1]);
+                      : spaceAdvance(renderer, fontId, lastCodepoint(words[j - 1]), firstCodepoint(words[j]),
+                                     wordStyles[j - 1]);
       }
 
       // Calculate extraStartOffset for the first word on the line (i) (protect left margin)
@@ -1123,8 +1136,8 @@ std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& r
       } else if (!isFirstWord) {
         spacing = guideOk ? guideDotNaturalGap(renderer, fontId, words[currentIndex - 1], words[currentIndex],
                                                wordStyles[currentIndex - 1])
-                          : renderer.getSpaceAdvance(fontId, lastCodepoint(words[currentIndex - 1]),
-                                                     firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
+                          : spaceAdvance(renderer, fontId, lastCodepoint(words[currentIndex - 1]),
+                                         firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
       }
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
@@ -1346,12 +1359,11 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
     } else if (!noSpaceBeforeVec[boundaryIdx]) {
       // A guide dot sits in this gap and widens it, so the natural width has to be measured
       // with the dot in place or justification distributes against the wrong baseline.
-      totalNaturalGaps +=
-          guideDotBeforeLine(wordIdx)
-              ? guideDotNaturalGap(renderer, fontId, lineWords[wordIdx - 1], lineWords[wordIdx],
-                                   lineWordStyles[wordIdx - 1])
-              : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx - 1]),
-                                         firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
+      totalNaturalGaps += guideDotBeforeLine(wordIdx)
+                              ? guideDotNaturalGap(renderer, fontId, lineWords[wordIdx - 1], lineWords[wordIdx],
+                                                   lineWordStyles[wordIdx - 1])
+                              : spaceAdvance(renderer, fontId, lastCodepoint(lineWords[wordIdx - 1]),
+                                             firstCodepoint(lineWords[wordIdx]), lineWordStyles[wordIdx - 1]);
     }
   }
 
@@ -1435,9 +1447,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
         reorderedGapCount++;
       } else if (wordIdx > 0 && !reorderedContinuesScratch[wordIdx]) {
         reorderedGapCount++;
-        reorderedNaturalGaps += renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
-                                                         firstCodepoint(reorderedWordsScratch[wordIdx]),
-                                                         reorderedStylesScratch[wordIdx - 1]);
+        reorderedNaturalGaps +=
+            spaceAdvance(renderer, fontId, lastCodepoint(reorderedWordsScratch[wordIdx - 1]),
+                         firstCodepoint(reorderedWordsScratch[wordIdx]), reorderedStylesScratch[wordIdx - 1]);
       } else if (wordIdx > 0 && reorderedContinuesScratch[wordIdx]) {
         if (reorderedWordsScratch[wordIdx] == " ") {
           reorderedGapCount++;
@@ -1491,9 +1503,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
       } else if (wordIdx + 1 < reorderedWidthsScratch.size()) {
         const bool nextNoSpace = reorderedNoSpaceBeforeScratch[wordIdx + 1];
         int gap = nextNoSpace ? 0
-                              : renderer.getSpaceAdvance(fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
-                                                         firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
-                                                         reorderedStylesScratch[wordIdx]);
+                              : spaceAdvance(renderer, fontId, lastCodepoint(reorderedWordsScratch[wordIdx]),
+                                             firstCodepoint(reorderedWordsScratch[wordIdx + 1]),
+                                             reorderedStylesScratch[wordIdx]);
         if (effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
           gap += reorderedJustifySpacing.nextExtra();
         }
@@ -1536,10 +1548,9 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
           bool nextNoSpace = false;
           if (wordIdx + 1 < lineWordCount) {
             nextNoSpace = noSpaceBeforeVec[lastBreakAt + wordIdx + 1];
-            gap = nextNoSpace
-                      ? 0
-                      : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+            gap = nextNoSpace ? 0
+                              : spaceAdvance(renderer, fontId, lastCodepoint(lineWords[wordIdx]),
+                                             firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifySpacing.nextExtra();
@@ -1581,8 +1592,8 @@ void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const
                   : guideDotBeforeLine(wordIdx + 1)
                       ? guideDotNaturalGap(renderer, fontId, lineWords[wordIdx], lineWords[wordIdx + 1],
                                            lineWordStyles[wordIdx])
-                      : renderer.getSpaceAdvance(fontId, lastCodepoint(lineWords[wordIdx]),
-                                                 firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
+                      : spaceAdvance(renderer, fontId, lastCodepoint(lineWords[wordIdx]),
+                                     firstCodepoint(lineWords[wordIdx + 1]), lineWordStyles[wordIdx]);
           }
           if (wordIdx + 1 < lineWordCount && effectiveAlignment == CssTextAlign::Justify && !isLastLine) {
             gap += justifySpacing.nextExtra();

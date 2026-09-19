@@ -26,6 +26,7 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(lineCompression, 1.1f);
   CHECK_FIELD(extraParagraphSpacing, true);
   CHECK_FIELD(paragraphSpacing, 10);
+  CHECK_FIELD(wordSpacing, 125);
   CHECK_FIELD(paragraphAlignment, 1);
   CHECK_FIELD(viewportWidth, 440);
   CHECK_FIELD(viewportHeight, 720);

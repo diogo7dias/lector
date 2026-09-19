@@ -157,7 +157,7 @@ void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fon
   ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
                     SETTINGS.focusReadingEnabled != 0,
                     resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden), style,
-                    SETTINGS.firstLineIndentMode, SETTINGS.firstLineIndentPercent);
+                    SETTINGS.firstLineIndentMode, SETTINGS.firstLineIndentPercent, SETTINGS.wordSpacing);
   parsed.setHeading(heading);
   addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
@@ -241,6 +241,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
                        .hyphenation = SETTINGS.hyphenationEnabled != 0,
                        .embeddedLayoutStyle = SETTINGS.embeddedLayoutStyle != 0,
                        .paragraphSpacing = SETTINGS.paragraphSpacing,
+                       .wordSpacing = SETTINGS.wordSpacing,
                        .guideDotsMode = resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden),
                        .firstLineIndentMode = SETTINGS.firstLineIndentMode,
                        .firstLineIndentPercent = SETTINGS.firstLineIndentPercent};

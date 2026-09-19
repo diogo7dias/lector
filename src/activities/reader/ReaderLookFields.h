@@ -29,6 +29,7 @@
   X(paragraphAlignment)              \
   X(extraParagraphSpacing)           \
   X(paragraphSpacing)                \
+  X(wordSpacing)                     \
   X(screenMargin)                    \
   X(screenMarginTop)                 \
   X(screenMarginBottom)              \

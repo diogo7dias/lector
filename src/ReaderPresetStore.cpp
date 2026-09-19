@@ -28,6 +28,7 @@ constexpr PresetField FIELDS[] = {
     {"paragraphAlignment", &ReaderPrefs::paragraphAlignment},
     {"extraParagraphSpacing", &ReaderPrefs::extraParagraphSpacing},
     {"paragraphSpacing", &ReaderPrefs::paragraphSpacing},
+    {"wordSpacing", &ReaderPrefs::wordSpacing},
     {"screenMargin", &ReaderPrefs::screenMargin},
     {"screenMarginTop", &ReaderPrefs::screenMarginTop},
     {"screenMarginBottom", &ReaderPrefs::screenMarginBottom},

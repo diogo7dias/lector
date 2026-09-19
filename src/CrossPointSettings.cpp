@@ -428,6 +428,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.lineCompression = getReaderLineCompression();
   spec.extraParagraphSpacing = extraParagraphSpacing != 0;
   spec.paragraphSpacing = paragraphSpacing;
+  spec.wordSpacing = std::clamp(wordSpacing, MIN_WORD_SPACING, MAX_WORD_SPACING);
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
@@ -552,6 +553,7 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.lineCompression = resolveLineCompression(prefs.lineSpacingPercent);
   spec.extraParagraphSpacing = prefs.extraParagraphSpacing != 0;
   spec.paragraphSpacing = prefs.paragraphSpacing;
+  spec.wordSpacing = std::clamp(prefs.wordSpacing, MIN_WORD_SPACING, MAX_WORD_SPACING);
   spec.paragraphAlignment = prefs.paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
