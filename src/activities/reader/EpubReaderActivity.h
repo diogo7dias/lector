@@ -23,6 +23,10 @@ class Page;  // for drawParagraphNumbers (full type in the .cpp via <Epub/Page.h
 
 class EpubReaderActivity final : public Activity {
   std::unique_ptr<Epub> epub;
+  const bool sortesMode;
+  bool pendingSortesPage;
+  bool blockSortesAction();
+  uint32_t sortesEmptyChapters = 0;
   std::unique_ptr<Section> section = nullptr;
   // Per-book reader "look" settings. Loaded from <cachePath>/reader_override.bin on
   // enter if present (prefsCustom_ = true), else a snapshot of the global settings.
@@ -389,9 +393,11 @@ class EpubReaderActivity final : public Activity {
 
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
-                              int initialRefreshCountdown)
+                              int initialRefreshCountdown, bool sortesMode = false)
       : Activity("EpubReader", renderer, mappedInput),
         epub(std::move(epub)),
+        sortesMode(sortesMode),
+        pendingSortesPage(sortesMode),
         pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;
   void onExit() override;

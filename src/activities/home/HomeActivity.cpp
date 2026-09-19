@@ -10,6 +10,7 @@
 #include <I18n.h>
 #include <Utf8.h>
 #include <Xtc.h>
+#include <esp_random.h>
 
 #include <algorithm>
 #include <cstring>
@@ -93,6 +94,10 @@ void HomeActivity::onEnter() {
   DeferredFavorite::reconcile();
 
   hasOpdsServers = OPDS_STORE.hasServers();
+  if (SETTINGS.homeBackAction == CrossPointSettings::HOME_BACK_SORTES) {
+    BusyBanner banner(renderer, tr(STR_SORTES));
+    sortesResult = sortes::findBook(sortesBook, esp_random);
+  }
 
   // Load every recent (in-progress) book, up to the store cap; drawList pages them
   // (with up/down arrows) when there are more than fit the list area at once.
@@ -197,6 +202,18 @@ void HomeActivity::loop() {
           return;
         }
         break;
+      case CrossPointSettings::HOME_BACK_SORTES:
+        if (sortesResult == sortes::ScanResult::Found) {
+          BusyBanner banner(renderer, tr(STR_SORTES));
+          sortesResult = sortes::findBook(sortesBook, esp_random);
+          if (sortesResult == sortes::ScanResult::Found) {
+            activityManager.goToReader(sortesBook, false, false, true);
+          } else {
+            requestUpdate();
+          }
+          return;
+        }
+        break;
       case CrossPointSettings::HOME_BACK_NONE:
       default:
         break;
@@ -295,6 +312,11 @@ void HomeActivity::render(RenderLock&&) {
       // longer wording was the only label in the firmware wide enough to need wrapping.
       // The in-book menu row keeps the full name, where there is room for it.
       backLabel = recentBooks.empty() ? "" : tr(STR_STATS);
+      break;
+    case CrossPointSettings::HOME_BACK_SORTES:
+      backLabel = sortesResult == sortes::ScanResult::Found   ? tr(STR_SORTES)
+                  : sortesResult == sortes::ScanResult::Empty ? tr(STR_SORTES_EMPTY)
+                                                              : tr(STR_SORTES_UNAVAILABLE);
       break;
     case CrossPointSettings::HOME_BACK_NONE:
     default:

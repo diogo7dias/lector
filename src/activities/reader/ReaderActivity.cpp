@@ -22,6 +22,7 @@
 #include "activities/util/PxcViewerActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
+#include "util/BookProgressFile.h"
 
 bool ReaderActivity::isXtcFile(const std::string& path) { return FsHelpers::hasXtcExtension(path); }
 
@@ -136,8 +137,8 @@ void ReaderActivity::goToLibrary(const std::string& fromBookPath) {
 void ReaderActivity::onGoToEpubReader(std::unique_ptr<Epub> epub) {
   const auto epubPath = epub->getPath();
   currentBookPath = epubPath;
-  activityManager.replaceActivity(
-      std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub), initialRefreshCountdown()));
+  activityManager.replaceActivity(std::make_unique<EpubReaderActivity>(renderer, mappedInput, std::move(epub),
+                                                                       initialRefreshCountdown(), sortesMode));
 }
 
 void ReaderActivity::onGoToBmpViewer(const std::string& path) {
@@ -164,6 +165,15 @@ void ReaderActivity::onGoToTxtReader(std::unique_ptr<Txt> txt) {
 
 void ReaderActivity::onEnter() {
   Activity::onEnter();
+
+  if (sortesMode) {
+    book_progress::Marker marker;
+    if (!FsHelpers::hasEpubExtension(initialBookPath) || !book_progress::readForBook(initialBookPath, marker) ||
+        marker.percent != 100) {
+      activityManager.goHome();
+      return;
+    }
+  }
 
   if (initialBookPath.empty()) {
     goToLibrary();  // Start from root when entering via Browse

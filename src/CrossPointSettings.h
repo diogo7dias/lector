@@ -88,7 +88,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // STATS opens the Reading Stats screen for the most recent book, read straight off the
   // card — the home screen has no reading session, so the numbers are whatever the last
   // reading session saved.
-  enum HOME_BACK_ACTION { HOME_BACK_NONE = 0, HOME_BACK_RESUME = 1, HOME_BACK_STATS = 2, HOME_BACK_ACTION_COUNT };
+  enum HOME_BACK_ACTION {
+    HOME_BACK_NONE = 0,
+    HOME_BACK_RESUME = 1,
+    HOME_BACK_STATS = 2,
+    HOME_BACK_SORTES = 3,
+    HOME_BACK_ACTION_COUNT
+  };
   enum AUTHOR_DISPLAY { AUTHOR_INITIALS = 0, AUTHOR_FULL_NAME = 1, AUTHOR_DISPLAY_COUNT };
 
   // Which tab the in-book menu opens on. Index-aligned with the picker labels in

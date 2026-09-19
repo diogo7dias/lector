@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <esp_random.h>
 #include <esp_system.h>
 
 #include <algorithm>
@@ -31,7 +32,6 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
-#include "WatermarkBuildBail.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -50,6 +50,7 @@
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "StealLookActivity.h"
+#include "WatermarkBuildBail.h"
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "activities/settings/StatusBarSettingsActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
@@ -68,6 +69,7 @@
 #include "util/FavoriteImage.h"
 #include "util/OpenReadingStats.h"
 #include "util/ScreenshotUtil.h"
+#include "util/SortesSelection.h"
 
 namespace {
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
@@ -160,7 +162,7 @@ void EpubReaderActivity::onEnter() {
   // Reading stats. Latched here rather than read per event so a mid-book toggle
   // cannot produce a session that is half tracked. The cache dir must already
   // exist: this book's stats file lives inside it.
-  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
+  statsTrackingActive = !sortesMode && SETTINGS.readingStatsEnabled != 0;
   if (statsTrackingActive) {
     statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
                             .minimumPageSeconds = 2,
@@ -182,7 +184,7 @@ void EpubReaderActivity::onEnter() {
   loadQuoteAnchors();
 
   HalFile f;
-  if (Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
+  if (!sortesMode && Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
     int dataSize = f.read(data, sizeof(data));
     if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
@@ -208,7 +210,7 @@ void EpubReaderActivity::onEnter() {
   }
   // We may want a better condition to detect if we are opening for the first time.
   // This will trigger if the book is re-opened at Chapter 0.
-  if (currentSpineIndex == 0) {
+  if (!sortesMode && currentSpineIndex == 0) {
     int textSpineIndex = epub->getSpineIndexForTextReference();
     if (textSpineIndex != 0) {
       currentSpineIndex = textSpineIndex;
@@ -217,10 +219,18 @@ void EpubReaderActivity::onEnter() {
     }
   }
 
-  // Save current epub as last opened epub and add to recent books
-  APP_STATE.openEpubPath = epub->getPath();
-  APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  if (sortesMode) {
+    const auto count = epub->getSpineItemsCount();
+    if (count == 0) {
+      onGoHome();
+      return;
+    }
+    currentSpineIndex = sortes::below(count, esp_random);
+  } else {
+    APP_STATE.openEpubPath = epub->getPath();
+    APP_STATE.saveToFile();
+    RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+  }
 
   loadCachedBookmarks();
 
@@ -269,6 +279,15 @@ void EpubReaderActivity::onExit() {
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+
+  if (sortesMode) {
+    // Report how this session ended: a Sortes visit is not ordinary reading.
+    // This reports session state; it does not override sleep or wake policy.
+    APP_STATE.lastSleepFromReader = false;
+    section.reset();
+    epub.reset();
+    return;
+  }
 
   APP_STATE.readerActivityLoadCount = 0;
   // Claim this session's read-order stamp in the same write that clears the crash counter,
@@ -857,7 +876,7 @@ void EpubReaderActivity::loop() {
   // Drop this book from the Recent Books list; if the reader then pages back into the book,
   // re-add it. So removal only sticks if the reader leaves while still on the End-of-Book
   // screen. Acts only on the transition (guarded by recentsEntryRemoved) — no per-frame writes.
-  if (SETTINGS.removeReadBooksFromRecents) {
+  if (!sortesMode && SETTINGS.removeReadBooksFromRecents) {
     if (atEndOfBook && !recentsEntryRemoved) {
       // Only treat the book as "removed by us" if it was actually in the list, so the
       // re-add branch below doesn't insert a book the feature never removed.
@@ -874,7 +893,7 @@ void EpubReaderActivity::loop() {
   // finished). If removeReadBooksFromRecents also fired, RecentBooksStore::updatePath in the
   // move path becomes a safe no-op since the entry was already removed.
   if (atEndOfBook) {
-    pendingReadFolderMove = SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
+    pendingReadFolderMove = !sortesMode && SETTINGS.moveFinishedToReadFolder && !isInReadFolder(epub->getPath());
   } else {
     pendingReadFolderMove = false;
   }
@@ -971,6 +990,12 @@ void EpubReaderActivity::loop() {
       ignoreNextConfirmRelease = true;  // suppress the menu on the release that follows
       return;
     }
+  }
+
+  if (sortesMode && !mappedInput.wasBackGesture() &&
+      backLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Back))) {
+    onGoHome();
+    return;
   }
 
   // Short press Back restores position when viewing a footnote (takes priority over navigation)
@@ -1132,6 +1157,11 @@ void EpubReaderActivity::jumpToPercent(int percent) {
 }
 
 void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action) {
+  if (action == EpubReaderMenuActivity::MenuAction::DELETE_CACHE ||
+      action == EpubReaderMenuActivity::MenuAction::DELETE_BOOK ||
+      action == EpubReaderMenuActivity::MenuAction::REMOVE_FROM_RECENTS) {
+    if (blockSortesAction()) return;
+  }
   auto progressChangeResultHandler = [this](const ActivityResult& result) {
     loadCachedBookmarks();
     if (!result.isCancelled) {
@@ -1580,7 +1610,20 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   }
 }
 
+bool EpubReaderActivity::blockSortesAction() {
+  if (!sortesMode) return false;
+  auto message =
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SORTES), tr(STR_SORTES_OPEN_NORMALLY));
+  if (!message) {
+    LOG_ERR("SORTES", "OOM: unavailable action message");
+    return true;
+  }
+  startActivityForResult(std::move(message), [this](const ActivityResult&) { requestUpdate(); });
+  return true;
+}
+
 void EpubReaderActivity::launchNearbyBookSend() {
+  if (blockSortesAction()) return;
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
   const std::string savedEpubPath = epub->getPath();
@@ -1613,6 +1656,7 @@ void EpubReaderActivity::launchNearbyBookSend() {
 }
 
 void EpubReaderActivity::launchNearbyPositionSync() {
+  if (blockSortesAction()) return;
   const int currentPage = section ? section->currentPage : nextPageNumber;
   const int totalPages = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
   const std::optional<uint16_t> paragraphIndex = visibleParagraphIndex();
@@ -1656,6 +1700,7 @@ void EpubReaderActivity::launchNearbyPositionSync() {
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {
+  if (blockSortesAction()) return true;
   if (!KOREADER_STORE.hasCredentials()) return false;  // no-op: nothing to launch
 
   const int currentPage = section ? section->currentPage : nextPageNumber;
@@ -1810,6 +1855,7 @@ void EpubReaderActivity::loadReaderPrefs() {
 }
 
 bool EpubReaderActivity::writeReaderOverride(const ReaderPrefs& p) const {
+  if (sortesMode) return true;
   HalFile f;
   if (!Storage.openFileForWrite("ERS", readerOverridePath(), f)) {
     LOG_ERR("ERS", "Failed to open reader_override.bin for write");
@@ -1863,6 +1909,7 @@ void EpubReaderActivity::readerEditSinkThunk(void* ctx, const ReaderPrefs& live)
 }
 
 void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) const {
+  if (sortesMode) return;
   const ReaderOverrideDecision decision = decideReaderOverride(live, prefs_, prefsCustom_);
   switch (decision.action) {
     case ReaderOverrideAction::Write:
@@ -1916,7 +1963,7 @@ void EpubReaderActivity::applyStatusBarEdit() {
 }
 
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
-  Storage.remove(readerOverridePath().c_str());
+  if (!sortesMode) Storage.remove(readerOverridePath().c_str());
   // Not ReaderPrefs::fromGlobal(): this book's own status bar block is overlaid on the
   // live sb* fields for as long as the book is open, so that snapshot would hand the book
   // its own bar straight back and the reset would leave the bar exactly where it was.
@@ -2573,7 +2620,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       // page count). Anchor jumps (TOC / chapter select / footnotes) resolve incrementally below --
       // the anchor is recorded as its page is laid out, so a chapter-top anchor lands on page 0
       // without indexing the whole chapter.
-      const bool needsFullBuild = pendingPercentJump;
+      const bool needsFullBuild = pendingPercentJump || pendingSortesPage;
       if (needsFullBuild) {
         GUI.drawPopup(renderer, tr(STR_INDEXING));
         scheduleGhostCleanup();
@@ -2724,6 +2771,21 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
     } else {
       LOG_DBG("ERS", "Cache found, skipping build...");
+    }
+
+    if (pendingSortesPage) {
+      if (section->pageCount == 0) {
+        section.reset();
+        if (++sortesEmptyChapters >= epub->getSpineItemsCount()) {
+          onGoHome();
+          return;
+        }
+        currentSpineIndex = (currentSpineIndex + 1) % epub->getSpineItemsCount();
+        requestUpdate();
+        return;
+      }
+      nextPageNumber = sortes::below(section->pageCount, esp_random);
+      pendingSortesPage = false;
     }
 
     if (pendingPageJump.has_value()) {
@@ -3066,14 +3128,15 @@ uint32_t positionKeyFor(const int spineIndex, const int currentPage) {
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {
   std::optional<uint32_t> offset;
-  if (section && spineIndex == currentSpineIndex && currentPage >= 0 && currentPage < section->pageCount) {
+  if (!sortesMode && section && spineIndex == currentSpineIndex && currentPage >= 0 &&
+      currentPage < section->pageCount) {
     // The on-screen page's offset was captured at load; reuse it to avoid a fresh section-file
     // open on every page turn. Any other page (rare) falls back to a direct lookup.
     offset = (currentPage == section->currentPage && currentPageVisibleOffset.has_value())
                  ? currentPageVisibleOffset
                  : section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
   }
-  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset)) {
+  if (!EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset, sortesMode)) {
     return false;
   }
   // Every write clears the batch, whoever asked for it: an explicit save (sync, nearby

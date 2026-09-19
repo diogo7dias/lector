@@ -824,3 +824,8 @@ STR_FRONTLIGHT_BRIGHTNESS: "Brightness"
 STR_FRONTLIGHT_WARMTH: "Warmth"
 STR_FRONTLIGHT_RESTORE_ON_WAKE: "Restore Light on Wake"
 STR_GRP_FRONTLIGHT: "LIGHT"
+
+STR_SORTES: "Sortes"
+STR_SORTES_EMPTY: "No read books"
+STR_SORTES_UNAVAILABLE: "Unavailable"
+STR_SORTES_OPEN_NORMALLY: "Open this book normally to change its saved position or files."
