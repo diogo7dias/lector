@@ -121,7 +121,8 @@ class ActivityManager {
   void goToBrowser();
   // firstTurnCleans: the wake painted the first page with a drive-all FAST over the
   // sleep face, so the first page turn runs the clean pass (wake_face::firstPageTurnCleans).
-  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool firstTurnCleans = false);
+  void goToReader(std::string path, bool allowFastInitialRefresh = false, bool firstTurnCleans = false,
+                  bool sortesMode = false);
   void goToSleep(bool fromTimeout = false);
   // wallpaperPath: see BootActivity — a .pxc wallpaper to unlock over, or empty for the
   // plain logo boot screen.

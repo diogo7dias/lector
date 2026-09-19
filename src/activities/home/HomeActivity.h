@@ -5,6 +5,7 @@
 #include "./FileBrowserActivity.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
+#include "util/Sortes.h"
 
 struct RecentBook;
 struct Rect;
@@ -19,6 +20,8 @@ class HomeActivity final : public Activity {
   int firstVisibleBookIdx = 0;
   int lastVisibleBookIdx = 0;
   bool hasOpdsServers = false;
+  std::string sortesBook;
+  sortes::ScanResult sortesResult = sortes::ScanResult::Empty;
   std::vector<RecentBook> recentBooks;
   const HomeMenuItem initialMenuItem;
   // Cleared by the first render that consumes it, so only that paint pays for the

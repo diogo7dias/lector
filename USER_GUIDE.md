@@ -125,7 +125,17 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
-the current book, or open [Reading Stats](#7-bookmarks-quotes-and-reading-stats).
+the current book, open [Reading Stats](#7-bookmarks-quotes-and-reading-stats), or **Sortes**.
+Resume remains the default. Sortes opens a randomly chosen finished EPUB at a random page:
+a book counts as finished when its saved library badge is 100% (Read), wherever it is filed.
+The footer says **No read books** and does nothing when none qualify.
+
+Back or sleep ends the visit. Sortes leaves the saved reading position, Read status, filing
+and recents untouched, and records no reading statistics. Quotes and bookmarks can still
+be saved deliberately, and the reader menu works. Book look edits last for this visit;
+sync, sending the book, deleting its cache/book and removing it from recents require opening
+it normally. Selection covers the whole library; an unreadable or over-deep directory tree
+shows **Unavailable** instead of choosing from an incomplete scan.
 
 **Settings > Display > Author On Home** switches the author line between initials and the
 full name.
@@ -918,7 +928,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 **Back**
 
 - **Short Back to File Browser** — swap the short and long press of Back in a book.
-- **Home Back Button** — None, Resume or Reading Stats.
+- **Home Back Button** — None, Resume (default), Reading Stats or Sortes.
 
 ### 12.4 System
 

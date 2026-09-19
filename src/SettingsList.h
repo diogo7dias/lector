@@ -307,8 +307,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
 
     v.push_back(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
-                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_READING_STATS}, "homeBackAction",
-                                  StrId::STR_CAT_CONTROLS));
+                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_READING_STATS, StrId::STR_SORTES},
+                                  "homeBackAction", StrId::STR_CAT_CONTROLS));
 
     // --- Reader ---
     // Built-in font-family entry. Replaced per-call with a registry-aware
