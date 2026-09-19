@@ -104,6 +104,11 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 57
+
+Justification now distributes the integer-division remainder across eligible gaps.
+The binary layout is unchanged; cached word positions must be rebuilt.
+
 ### Version 56
 
 Version 56 balances full text pages vertically within the reading viewport.
