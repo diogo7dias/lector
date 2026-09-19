@@ -15,3 +15,7 @@ target_link_libraries(CssParserTest PRIVATE
 )
 
 gtest_discover_tests(CssParserTest)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME InlineDirectionRegression COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/check_inline_direction.py ${CMAKE_CXX_COMPILER})

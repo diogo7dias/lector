@@ -831,6 +831,8 @@ other numbers in Settings use the same band.
 - **Embedded Text Style** — honour the book's own CSS for how the words look: bold, italic,
   underline, superscript and subscript, writing direction, and passages the book marks as
   hidden. Bold and italic written as `<b>` or `<i>` tags are always honoured, switch or not.
+  An inline passage in another writing direction keeps the enclosing paragraph's base direction.
+  Arabic and Persian text is shaped once, preserving Alef and Lam order; Latin ligatures remain supported.
 - **Embedded Layout Style** — honour the book's own CSS for where blocks sit: alignment,
   first-line indent, margins, padding and image sizes. **Paragraph Alignment: Book's Style**
   and **First Line Indent: Book** both read the book's CSS, so they need this on.
@@ -839,6 +841,7 @@ other numbers in Settings use the same band.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Hyphenation**.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
+  When a nested block ends, the enclosing block's top and bottom spacing is not added again.
 - **Text Anti-Aliasing** — smoother edges, slightly slower page turns.
 - **Debug Layout Borders** — draws the layout boxes; a diagnostic, not a reading feature.
 
