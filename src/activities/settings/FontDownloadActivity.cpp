@@ -55,11 +55,12 @@ struct TransferFailure {
   bool framebufferLent = true;
   heap_probe::Record allocations;  // heap allocations that failed during the transfer
   uint32_t loanFallbacks = 0;      // wolfSSL allocations the lent framebuffer could not serve
-  uint32_t loanFallbackLargest = 0;
-  uint32_t tlsOoms = 0;         // wolfSSL allocations that came back null -- this is MEMORY_E (-125)
-  uint32_t tlsOomSize = 0;      // bytes the last of them asked for
-  uint32_t tlsOomFreeHeap = 0;  // free heap at that instant, read where it still meant something
-  uint32_t freeHeap = 0;        // free bytes once the transfer gave up, after the session was freed
+  uint32_t loanFallbackBytes = 0;  // what those came to, which is how much bigger the loan needs to be
+  uint32_t loanLowWater = 0;       // least the lent block ever held, read while it was still registered
+  uint32_t tlsOoms = 0;            // wolfSSL allocations that came back null -- this is MEMORY_E (-125)
+  uint32_t tlsOomSize = 0;         // bytes the last of them asked for
+  uint32_t tlsOomFreeHeap = 0;     // free heap at that instant, read where it still meant something
+  uint32_t freeHeap = 0;           // free bytes once the transfer gave up, after the session was freed
   uint32_t largestBlock = 0;
 
   bool ranOutOfMemory() const { return tlsOoms > 0 || allocations.failures > 0; }
@@ -76,7 +77,8 @@ TransferFailure captureFailure(const HttpDownloader::DownloadError error, const 
   failure.framebufferLent = framebufferLent;
   failure.allocations = heap_probe::read();
   failure.loanFallbacks = tls_scratch::heapFallbackCount();
-  failure.loanFallbackLargest = tls_scratch::heapFallbackLargest();
+  failure.loanFallbackBytes = tls_scratch::heapFallbackBytes();
+  failure.loanLowWater = static_cast<uint32_t>(tls_scratch::poolLowWaterBytes());
   failure.tlsOoms = tls_scratch::oomCount();
   failure.tlsOomSize = tls_scratch::oomSize();
   failure.tlsOomFreeHeap = tls_scratch::oomFreeHeap();
@@ -106,25 +108,38 @@ StrId transferErrorText(const TransferFailure& failure) {
 }
 
 // The numbers that tell those causes apart in a photograph of the screen.
-// Deliberately untranslated -- it is a code, not prose. Reading it:
+// Deliberately untranslated -- it is a code, not prose. Two lines, because one
+// did not fit: the X3 screen of 2026-09-19 cut at "oom 2x5368" and the numbers
+// that named the cause were the ones that fell off the right-hand edge.
 //
-//   E4 no reply heap 24244/12788 oom 1x2048 free9700 loan37
-//   |  |              |           |                  `- wolfSSL allocations the
-//   |  |              |           |                     lent framebuffer could
-//   |  |              |           |                     not serve
-//   |  |              |           `- one allocation came back null, asking 2048
-//   |  |              |              bytes, with 9700 free. That null is what
-//   |  |              |              wolfSSL returns as MEMORY_E (-125).
+// Line one, the transfer:
+//
+//   E4 no reply heap 24244/12788
 //   |  |              `- free / largest block once the transfer gave up. Higher
-//   |  |                 than the "free" above, because the session has been
-//   |  |                 freed by then -- which is exactly why both are printed
+//   |  |                 than the "f" below, because the session has been freed
+//   |  |                 by then -- which is exactly why both are printed
 //   |  `- no status line was ever read ("HTTP nnn" when one was)
 //   `- HttpDownloader::DownloadError, 4 = NO_CONNECTION
 //
-// No "oom" at all means no allocation failed anywhere during the transfer, and
-// the failure is the link or the far end. A trailing "nofb" means the
-// framebuffer was never lent, so wolfSSL had no 16 KB record buffer to work
-// with and fails for a reason that has nothing to do with the network.
+// A trailing "nofb" means the framebuffer was never lent, so wolfSSL had no
+// 16 KB record buffer to work with and fails for a reason that has nothing to
+// do with the network.
+//
+// Line two, the memory, printed only when something ran short:
+//
+//   oom 2x5368 f17820 sp33/23456 lw32
+//   |          |      |          `- fewest bytes the lent block ever held. A
+//   |          |      |             small number here is the loan running out,
+//   |          |      |             which is what sends allocations to "sp"
+//   |          |      `- allocations the loan could not serve, and their total.
+//   |          |         Zero means wolfSSL never touched the system heap
+//   |          `- free system heap at the failing call
+//   `- two allocations came back null, the last asking 5368 bytes. That null is
+//      what wolfSSL returns as MEMORY_E (-125) -- or, when it fails under
+//      certificate processing, as PEER_KEY_ERROR (-342) or MP_EXPTMOD_E (-112)
+//
+// No second line at all means no allocation failed and nothing spilled, and the
+// failure is the link or the far end.
 // The heap on its own, for a failure that never reached the network: the
 // manifest parser could not get a buffer, so there is no transfer to describe.
 std::string heapDetail() {
@@ -135,27 +150,36 @@ std::string heapDetail() {
 }
 
 std::string transferErrorDetail(const TransferFailure& failure) {
-  char buf[112];
-  char oom[40] = "";
+  char buf[64];
+  char reply[16] = "no reply";
+  if (failure.httpStatus > 0) snprintf(reply, sizeof(reply), "HTTP %d", failure.httpStatus);
+  snprintf(buf, sizeof(buf), "E%d %s heap %u/%u%s", static_cast<int>(failure.error), reply,
+           static_cast<unsigned>(failure.freeHeap), static_cast<unsigned>(failure.largestBlock),
+           failure.framebufferLent ? "" : " nofb");
+  return buf;
+}
+
+std::string transferMemoryDetail(const TransferFailure& failure) {
+  char oom[32] = "";
   if (failure.tlsOoms > 0) {
     // wolfSSL's own allocator saw it, so the size and the free heap are both
     // from the failing call rather than inferred afterwards.
-    snprintf(oom, sizeof(oom), " oom %ux%u free%u", static_cast<unsigned>(failure.tlsOoms),
+    snprintf(oom, sizeof(oom), "oom %ux%u f%u", static_cast<unsigned>(failure.tlsOoms),
              static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap));
   } else if (failure.allocations.failures > 0) {
     // Something outside wolfSSL ran out -- lwIP, the WiFi driver, this
     // firmware. The hook that counts those cannot read the heap from where it
-    // runs, so there is no "free" to print.
-    snprintf(oom, sizeof(oom), " oom %ux%u", static_cast<unsigned>(failure.allocations.failures),
+    // runs, so there is no "f" to print.
+    snprintf(oom, sizeof(oom), "oom %ux%u", static_cast<unsigned>(failure.allocations.failures),
              static_cast<unsigned>(failure.allocations.largestSize));
   }
-  char loan[16] = "";
-  if (failure.loanFallbacks > 0) snprintf(loan, sizeof(loan), " loan%u", static_cast<unsigned>(failure.loanFallbacks));
-  char reply[16] = "no reply";
-  if (failure.httpStatus > 0) snprintf(reply, sizeof(reply), "HTTP %d", failure.httpStatus);
-  snprintf(buf, sizeof(buf), "E%d %s heap %u/%u%s%s%s", static_cast<int>(failure.error), reply,
-           static_cast<unsigned>(failure.freeHeap), static_cast<unsigned>(failure.largestBlock), oom, loan,
-           failure.framebufferLent ? "" : " nofb");
+  char spill[32] = "";
+  if (failure.loanFallbacks > 0) {
+    snprintf(spill, sizeof(spill), "%ssp%u/%u lw%u", oom[0] ? " " : "", static_cast<unsigned>(failure.loanFallbacks),
+             static_cast<unsigned>(failure.loanFallbackBytes), static_cast<unsigned>(failure.loanLowWater));
+  }
+  char buf[72];
+  snprintf(buf, sizeof(buf), "%s%s", oom, spill);
   return buf;
 }
 
@@ -314,8 +338,9 @@ bool FontDownloadActivity::fetchAndParseManifest() {
       // fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004 bytes
       // free and the reader was unresponsive until the watchdog reset it.
       if (!gateAllowsTls("font list", framebufferLent)) {
-        setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY),
-                 transferErrorDetail(captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent)));
+        const TransferFailure gated = captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent);
+        setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY), transferErrorDetail(gated),
+                 transferMemoryDetail(gated));
         Storage.remove(MANIFEST_TMP);
         return false;
       }
@@ -337,11 +362,15 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     if (attempt < MAX_ATTEMPTS) waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt));
   }
   if (result != HttpDownloader::OK) {
-    LOG_ERR("FONT", "Failed to fetch manifest from %s (error %d, status %d, %u wolfSSL OOM asking %u with %u free)",
+    LOG_ERR("FONT",
+            "Failed to fetch manifest from %s (error %d, status %d, %u wolfSSL OOM asking %u with %u free, "
+            "%u spilled allocations totalling %u bytes, loan low-water %u)",
             FONT_MANIFEST_URL, static_cast<int>(result), failure.httpStatus, static_cast<unsigned>(failure.tlsOoms),
-            static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap));
+            static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap),
+            static_cast<unsigned>(failure.loanFallbacks), static_cast<unsigned>(failure.loanFallbackBytes),
+            static_cast<unsigned>(failure.loanLowWater));
     setError(StrId::STR_FONT_LIST_FAILED, trId(noWifi ? StrId::STR_FONT_ERR_NO_WIFI : transferErrorText(failure)),
-             transferErrorDetail(failure));
+             transferErrorDetail(failure), transferMemoryDetail(failure));
     Storage.remove(MANIFEST_TMP);
     return false;
   }
@@ -717,8 +746,9 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       // not fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004
       // bytes free and the reader was unresponsive until the watchdog reset it.
       if (!gateAllowsTls("font file", framebufferLent)) {
-        setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MEMORY),
-                 transferErrorDetail(captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent)));
+        const TransferFailure gated = captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent);
+        setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MEMORY), transferErrorDetail(gated),
+                 transferMemoryDetail(gated));
         drawingSuspended_ = false;
         return false;
       }
@@ -762,11 +792,15 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     }
 
     if (result != HttpDownloader::OK) {
-      LOG_ERR("FONT", "Download attempt %d failed for %s (%d, status %d, %u wolfSSL OOM asking %u with %u free)", total,
-              file.name, result, failure.httpStatus, static_cast<unsigned>(failure.tlsOoms),
-              static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap));
+      LOG_ERR("FONT",
+              "Download attempt %d failed for %s (%d, status %d, %u wolfSSL OOM asking %u with %u free, "
+              "%u spilled allocations totalling %u bytes, loan low-water %u)",
+              total, file.name, result, failure.httpStatus, static_cast<unsigned>(failure.tlsOoms),
+              static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap),
+              static_cast<unsigned>(failure.loanFallbacks), static_cast<unsigned>(failure.loanFallbackBytes),
+              static_cast<unsigned>(failure.loanLowWater));
       setError(StrId::STR_FONT_INSTALL_FAILED, std::string(trId(transferErrorText(failure))) + ": " + file.name,
-               transferErrorDetail(failure));
+               transferErrorDetail(failure), transferMemoryDetail(failure));
     } else {
       uint32_t actualCrc = 0;
       if (!computeFileCrc32(partPath, actualCrc)) {
@@ -1074,10 +1108,11 @@ void FontDownloadActivity::refreshProgressLines() {
 
 // Every failure path goes through here so none of them can leave a stale
 // headline, message or code behind from the previous one.
-void FontDownloadActivity::setError(const StrId headline, std::string message, std::string detail) {
+void FontDownloadActivity::setError(const StrId headline, std::string message, std::string detail, std::string memory) {
   errorHeadline_ = headline;
   errorMessage_ = std::move(message);
   errorDetail_ = std::move(detail);
+  errorMemory_ = std::move(memory);
 }
 
 // --- Screen ---
@@ -1127,11 +1162,13 @@ UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
       view.lines = {tr(STR_FONT_INSTALLED), nullptr, nullptr, nullptr};
       break;
     case ERROR:
-      // Headline, then what went wrong, then the numbers. A reader who cannot
-      // read a serial log photographs this screen, and those three lines are
-      // what has to say which failure it was.
+      // Headline, then what went wrong, then the numbers on two lines. A reader
+      // who cannot read a serial log photographs this screen, and those lines
+      // are what has to say which failure it was. Two lines and not one because
+      // the panel truncates: everything past about 38 characters is lost.
       view.lines = {trId(errorHeadline_), errorMessage_.empty() ? nullptr : errorMessage_.c_str(),
-                    errorDetail_.empty() ? nullptr : errorDetail_.c_str(), nullptr};
+                    errorDetail_.empty() ? nullptr : errorDetail_.c_str(),
+                    errorMemory_.empty() ? nullptr : errorMemory_.c_str()};
       view.confirmHint = tr(STR_RETRY);
       break;
   }

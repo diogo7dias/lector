@@ -5,47 +5,50 @@
 // How the lent framebuffer is divided up for wolfSSL. Kept free of ESP headers
 // so the arithmetic can be reasoned about (and tested) on the host.
 //
-// Two jobs come out of the same block:
+// There is no division any more, and that is the point. The block used to be
+// carved into two fixed 17408-byte slots for the large record buffers plus a
+// tail heap for everything else. The X3 log of 2026-09-19 measured what that
+// cost: "Scratch tail low-water 32 of 17456 bytes; 33 allocations fell back to
+// the heap (largest 5368)". The small allocations had 17456 bytes, used all but
+// 32 of them, and spilled 33 times onto a system heap holding 17820 fragmented
+// bytes -- where a 5368-byte ask came back null twice and the handshake died
+// with PEER_KEY_ERROR (-342) / MP_EXPTMOD_E (-112), wolfSSL's names for "the
+// peer's key could not be decoded" when the buffer behind the decode was never
+// allocated.
 //
-//  * The large record buffers. A peer that ignores the 2 KB
-//    max_fragment_length this firmware asks for sends 16 KB records, and
-//    wolfSSL sizes its receive buffer to the record: 16640 bytes plus its own
-//    headers, contiguous, held for the session. Two of those can be live at
-//    once (handshake buffer, then the first application record), so two fixed
-//    slots are reserved for them and nothing else may take one.
+// Meanwhile the slots were a standing reservation: 34816 bytes that only one
+// record buffer occupies outside the brief window where GrowInputBuffer fills a
+// new buffer before freeing the old. One heap over the whole block hands that
+// idle slot to the small allocations and keeps the record buffers served from
+// the same bytes:
 //
-//  * Everything else wolfSSL asks for -- the session, the decoded certificate,
-//    the bignum temporaries -- which is individually small and collectively
-//    large. Those used to fall through to the system heap, which on an X3 with
-//    WiFi up is where the handshake was left competing for 25544 free bytes in
-//    9204-byte pieces. The tail of the block is a heap of its own for them.
+//                         old tail   new pool, one record live   two live
+//   X3 (52272 bytes)         17456                       35632      18992
+//   X4 (48000 bytes)         13184                       31360      14720
+//
+// Strictly more room in every state, which is what "do not break the handshake
+// that already works" requires.
 namespace tls_scratch {
 
-// One slot. 16640 is the measured ask for a 16 KB record; 17408 covers it with
-// 768 bytes over for wolfSSL's own framing. Every byte above that is a byte the
-// tail does not get, and the tail is what this layout exists to provide: on the
-// smallest framebuffer this firmware runs on (48000 bytes on the X4; the X3's
-// is 52272) two 18432-byte slots left the tail at 11136, under the ~16 KB of
-// small allocations a handshake was measured making.
-constexpr size_t SLOT_BYTES = 17408;
-constexpr int NSLOTS = 2;
+// What wolfSSL asks for when a peer ignores the 2 KB max_fragment_length this
+// firmware requests and sends a 16 KB record: one contiguous buffer, sized to
+// the record and held for the session.
+constexpr size_t RECORD_BYTES = 16640;
 
-// At or above this an allocation is a record buffer and takes a slot; below it
-// the allocation goes to the tail heap. A 16 KB TLS record asks for 16640.
-constexpr size_t MIN_BLOCK_ALLOC = 8192;
+// Two record buffers can be live at once. GrowInputBuffer allocates the larger
+// buffer, copies into it, and only then frees the old one.
+constexpr int MAX_LIVE_RECORDS = 2;
 
-// The least the block may be for claim() to take it: both slots plus a tail
-// worth having.
+// The least the block may be for claim() to take it: both record buffers plus a
+// small-allocation pool worth having.
 constexpr size_t NEEDED = 40 * 1024;
 
-// Bytes left for the tail heap once both slots are carved out of a block of
-// `blockLen`. Zero means the block holds the slots and nothing more, which is
-// the behaviour this layout replaced.
-constexpr size_t tailBytes(const size_t blockLen) {
-  return blockLen > static_cast<size_t>(NSLOTS) * SLOT_BYTES ? blockLen - static_cast<size_t>(NSLOTS) * SLOT_BYTES : 0;
+// Bytes left for everything that is not a record buffer while both record
+// buffers are live -- the worst moment in a handshake, and the figure the old
+// fixed tail was stuck at permanently.
+constexpr size_t smallPoolBytes(const size_t blockLen) {
+  constexpr size_t records = static_cast<size_t>(MAX_LIVE_RECORDS) * RECORD_BYTES;
+  return blockLen > records ? blockLen - records : 0;
 }
-
-// Byte offset of the tail heap inside the block.
-constexpr size_t tailOffset() { return static_cast<size_t>(NSLOTS) * SLOT_BYTES; }
 
 }  // namespace tls_scratch

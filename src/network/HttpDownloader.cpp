@@ -14,6 +14,8 @@
 #if defined(FREEINK_NET_WOLFSSL)
 #include <SecureHttpClient.h>
 
+#include "TlsScratchHeap.h"
+
 extern "C" void wolfSSL_Arduino_Serial_Print(const char* const msg) { LOG_DBG("WOLFSSL", "%s", msg); }
 #else
 #include <esp_crt_bundle.h>
@@ -152,6 +154,18 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     }
     if (isRedirect(status)) {
       const std::string location = http.getHeader("location");
+      // One hop at a time. A 302 with keep-alive leaves the connection open, and
+      // that connection's wolfSSL session is holding the record buffer and every
+      // small allocation its handshake made. Destroying `http` at the end of the
+      // iteration would release them too, but only after the next URL has been
+      // resolved; releasing here makes "one handshake's worth of memory at a
+      // time" a property of this function rather than of its scoping.
+      http.end();
+      LOG_DBG("HTTP", "redirect hop %d: scratch free %u (low-water %u), %u spilled (%u bytes), heap %d/%d", hop + 1,
+              static_cast<unsigned>(tls_scratch::poolFreeBytes()),
+              static_cast<unsigned>(tls_scratch::poolLowWaterBytes()),
+              static_cast<unsigned>(tls_scratch::heapFallbackCount()),
+              static_cast<unsigned>(tls_scratch::heapFallbackBytes()), ESP.getFreeHeap(), ESP.getMaxAllocHeap());
       if (location.empty() || !freeink::SecureHttpClient::resolveUrl(url, location, url)) {
         LOG_ERR("HTTP", "wolfSSL bad redirect: %d", status);
         return HttpDownloader::SERVER_ERROR;
