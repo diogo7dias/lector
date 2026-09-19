@@ -20,10 +20,10 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
     const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
     const uint8_t paragraphNumbering, const uint8_t paragraphNumberSize, const uint8_t paperbackBody,
     const uint8_t paperbackStatus, const uint8_t statusBar, const uint8_t progressBar, const bool hasSleepWallpaper,
-    const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes)
+    const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes, const bool hasReturn)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
       items(flatten(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar,
-                              hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes))),
+                              hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes, hasReturn))),
       title(title),
       author(author),
       chapterName(chapterName),
@@ -55,7 +55,7 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::flatten(co
 
 std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, uint8_t statusBar,
-    bool hasSleepWallpaper, bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes) {
+    bool hasSleepWallpaper, bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes, bool hasReturn) {
   // Reserve every tab this menu can ever have, so no push_back below can reallocate.
   // That matters: page() hands back a reference INTO the vector, and a reallocation
   // would dangle it. Raise this with any new tab. (Each reference also dies at the end
@@ -132,6 +132,8 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     auto& items = page(Tab::Navigate, StrId::STR_SEC_NAVIGATE);
     std::vector<MenuItem> position{{MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER},
                                    {MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT}};
+    position.reserve(4);  // chapter, percentage, optional Return and paragraph
+    if (hasReturn) position.push_back({MenuAction::RETURN, StrId::STR_RETURN});
     // Jump to a paragraph number — only meaningful when this book shows paragraph
     // numbers. Toggle numbering on, reopen the menu, and this row appears.
     if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {

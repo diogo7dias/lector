@@ -1,0 +1,5 @@
+add_executable(ReaderReturnHistoryTest ReaderReturnHistoryTest.cpp)
+target_include_directories(ReaderReturnHistoryTest PRIVATE ${REPO_ROOT}/src)
+target_compile_options(ReaderReturnHistoryTest PRIVATE -fno-exceptions -fno-rtti)
+target_link_libraries(ReaderReturnHistoryTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(ReaderReturnHistoryTest)

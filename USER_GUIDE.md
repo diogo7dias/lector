@@ -284,6 +284,11 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 - **Select Chapter** — the table of contents. Chapters the book lists but cannot actually
   open are left out, so every row here goes somewhere.
 - **Go to %** — jump by percentage.
+- **Return** — go back to where you were before selecting a chapter, jumping by percentage,
+  or opening a bookmark. Keeps the last eight jump origins during this reading session;
+  ordinary page turns do not add entries. Shown only while there is somewhere to return to.
+  Changing text size still returns to the same passage. Leaving the book (including sleep)
+  clears this history; the Back button and footnote returns keep their usual behavior.
 - **Go to Paragraph** — jump by paragraph number, shown only while paragraph numbering is on.
 - **Bookmarks** — the list, shown once the book has one.
 - **Toggle Bookmark** — drop or lift a bookmark on this page.

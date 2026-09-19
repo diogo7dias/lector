@@ -401,7 +401,7 @@ void EpubReaderActivity::openReaderMenu() {
           bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
           prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
           prefs_.paperbackLookStatus, prefs_.statusBarEnabled, prefs_.sbOffBar, hasSleepWallpaper, wallpaperFavorited,
-          wallpaperPausable, hasQuotes),
+          wallpaperPausable, hasQuotes, !returnHistory.empty()),
       [this](const ActivityResult& result) {
         // Always apply orientation / paragraph-number / paperback changes even if cancelled
         const auto& menu = std::get<MenuResult>(result.data);
@@ -1032,6 +1032,40 @@ void EpubReaderActivity::loop() {
   }
 }
 
+void EpubReaderActivity::recordJumpOrigin(const bool accepted) {
+  if (currentPageSpineIndex >= 0 && currentPageVisibleOffset) {
+    returnHistory.recordJump({currentPageSpineIndex, *currentPageVisibleOffset}, accepted);
+  }
+  if (!accepted) return;
+  returnHistory.finishReturn(false);
+  pendingOrdinalAnchor_.reset();
+  pendingParagraphScan_.reset();
+  pendingPageJump.reset();
+  pendingAnchor.clear();
+  pendingPercentJump = false;
+  pendingOffsetJump.reset();
+}
+
+void EpubReaderActivity::jumpToContentOffset(const int spineIndex, const uint32_t offset, const int pageHint) {
+  // Caller holds RenderLock. Bookmarks and Return share the same incremental landing path.
+  clearDeferredReposition();
+  pendingOrdinalAnchor_.reset();
+  pendingParagraphScan_.reset();
+  pendingPageJump.reset();
+  pendingAnchor.clear();
+  pendingPercentJump = false;
+  pendingOffsetJump = offset;
+  nextPageNumber = std::max(0, pageHint);
+  if (section && currentSpineIndex == spineIndex) {
+    if (const auto page = section->getPageForVisibleTextOffset(offset)) {
+      section->currentPage = *page;
+      return;
+    }
+  }
+  currentSpineIndex = spineIndex;
+  section.reset();
+}
+
 // Translate an absolute percent into a spine index plus a normalized position
 // within that spine so we can jump after the section is loaded.
 void EpubReaderActivity::jumpToPercent(int percent) {
@@ -1088,6 +1122,7 @@ void EpubReaderActivity::jumpToPercent(int percent) {
   // Reset state so render() reloads and repositions on the target spine.
   {
     RenderLock lock(*this);
+    recordJumpOrigin();
     clearDeferredReposition();
     currentSpineIndex = targetSpineIndex;
     nextPageNumber = 0;
@@ -1107,18 +1142,8 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // possibly-different settings.
       if (sync.hasVisibleTextOffset && sync.spineIndex >= 0 && sync.spineIndex < epub->getSpineItemsCount()) {
         RenderLock lock(*this);
-        clearDeferredReposition();
-        if (section && currentSpineIndex == sync.spineIndex) {
-          // Already in this chapter and laid out: resolve straight away, no reload.
-          const auto page = section->getPageForVisibleTextOffset(sync.visibleTextOffset);
-          section->currentPage = page.value_or(std::max(0, sync.page));
-        } else {
-          // Different chapter: reload and let render() build to the offset before drawing.
-          currentSpineIndex = sync.spineIndex;
-          pendingOffsetJump = sync.visibleTextOffset;
-          nextPageNumber = std::max(0, sync.page);  // hint until the offset resolves
-          section.reset();
-        }
+        recordJumpOrigin();
+        jumpToContentOffset(sync.spineIndex, sync.visibleTextOffset, sync.page);
         return;
       }
 
@@ -1137,9 +1162,12 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
         targetPage = fallback.pageNumber;
       }
 
+      if (targetSpineIndex < 0 || targetSpineIndex >= epub->getSpineItemsCount()) return;
+
       // Any explicit selection supersedes the session-start resume/reflow anchor,
       // including a selection that is already active.
       RenderLock lock(*this);
+      recordJumpOrigin();
       clearDeferredReposition();
 
       if (currentSpineIndex != targetSpineIndex) {
@@ -1156,6 +1184,13 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
   };
 
   switch (action) {
+    case EpubReaderMenuActivity::MenuAction::RETURN: {
+      RenderLock lock(*this);
+      if (const auto origin = returnHistory.beginReturn()) {
+        jumpToContentOffset(origin->spineIndex, origin->contentOffset);
+      }
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::SELECT_CHAPTER: {
       const int spineIdx = currentSpineIndex;
       const std::string path = epub->getPath();
@@ -1178,10 +1213,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       startActivityForResult(
           std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, path, spineIdx),
           [this](const ActivityResult& result) {
+            RenderLock lock(*this);
             if (!result.isCancelled) {
               const auto& chapterResult = std::get<ChapterResult>(result.data);
-              RenderLock lock(*this);
-
+              if (chapterResult.spineIndex < 0 || chapterResult.spineIndex >= epub->getSpineItemsCount()) return;
+            }
+            recordJumpOrigin(!result.isCancelled);
+            if (!result.isCancelled) {
+              const auto& chapterResult = std::get<ChapterResult>(result.data);
               clearDeferredReposition();
               currentSpineIndex = chapterResult.spineIndex;
 
@@ -2006,11 +2045,15 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
     // Same chapter, section already loaded — scan and move within it.
     const int page = findPageForOrdinal(*section, localOrdinal);
     RenderLock lock(*this);
+    returnHistory.finishReturn(false);
+    pendingOffsetJump.reset();
     section->currentPage = page;
     nextPageNumber = page;
   } else {
     // Different chapter — switch spine and defer the page scan until it loads.
     RenderLock lock(*this);
+    returnHistory.finishReturn(false);
+    pendingOffsetJump.reset();
     currentSpineIndex = targetSpine;
     nextPageNumber = 0;
     pendingParagraphScan_ = localOrdinal;
@@ -2313,6 +2356,8 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   // at session start snap the reader back after the incremental build completes.
   {
     RenderLock lock(*this);
+    returnHistory.finishReturn(false);
+    pendingOffsetJump.reset();
     clearDeferredReposition();
   }
 
@@ -2392,6 +2437,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // write failed. See Section::BuildFailure.
   const auto showBuildError = [this](const Section::BuildFailure code, const uint32_t freeHeap,
                                      const uint32_t maxAlloc) {
+    returnHistory.finishReturn(false);
     renderer.clearScreen();
     char msg[96];
     if (code == Section::BuildFailure::None) {
@@ -2476,6 +2522,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     section = makeUniqueNoThrow<Section>(*epub, currentSpineIndex, renderer);
     if (!section) {
       LOG_ERR("ERS", "OOM: Section");
+      returnHistory.finishReturn(false);
       return;
     }
     // Fresh section, fresh chance: a failed lazy extension start in a previous
@@ -2570,8 +2617,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // the reader never nears the watermark this session. loop() starts it lazily once the
         // reader is within PARTIAL_REBUILD_START_MARGIN pages of the watermark.
         if (section->isPartial() &&
-            (anchorJump ? section->getPageForAnchor(pendingAnchor).has_value()
-                        : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
+            (anchorJump   ? section->getPageForAnchor(pendingAnchor).has_value()
+             : offsetJump ? section->getPageForVisibleTextOffset(*offsetJump).has_value()
+                          : target + PARTIAL_REBUILD_START_MARGIN < static_cast<int>(section->pageCount))) {
           LOG_DBG("ERS", "Partial covers target %d of %d; deferring extension build", target, section->pageCount);
         } else {
           const size_t spineBytes =
@@ -2699,15 +2747,18 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // applied again by applyDeferredReposition() after a background build
         // finishes, or it would undo page turns made during that build.
         clearDeferredReposition();
+      } else if (explicitOffsetJump) {
+        LOG_ERR("ERS", "Could not resolve content offset");
+        pendingOffsetJump.reset();
+        section.reset();
+        showBuildError(Section::BuildFailure::None, 0, 0);
+        return;
       }
     }
     if (explicitOffsetJump) {
-      // An explicit bookmark/sync target supersedes any stale session-start
-      // resume anchor even when its offset cannot be resolved (for example an
-      // empty chapter).
+      // A bookmark/Return target supersedes any stale session-start resume anchor.
       clearDeferredReposition();
     }
-    pendingOffsetJump.reset();  // one-shot explicit jump: consumed on this render
 
     if (pendingPrefsMigration_ && section->pageCount > 0) {
       // The chapter is now laid out under the book's old settings, so the paragraph the
@@ -2859,6 +2910,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   renderer.clearScreen();
 
   if (section->pageCount == 0) {
+    returnHistory.finishReturn(false);
     LOG_DBG("ERS", "No pages to render");
     renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_EMPTY_CHAPTER), true, EpdFontFamily::REGULAR);
     renderStatusBar();
@@ -2868,6 +2920,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   }
 
   if (section->currentPage < 0 || section->currentPage >= section->pageCount) {
+    returnHistory.finishReturn(false);
     LOG_DBG("ERS", "Page out of bounds: %d (max %d)", section->currentPage, section->pageCount);
     renderer.drawCenteredText(UI_10_FONT_ID, 300, tr(STR_OUT_OF_BOUNDS), true, EpdFontFamily::REGULAR);
     renderStatusBar();
@@ -2889,10 +2942,12 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       const bool giveUp = ++pageLoadRetryCount > MAX_PAGE_LOAD_RETRIES;
       // Abandon (not suspend) any active build BEFORE clearing: clearCache deletes the files,
       // and the destructor's suspend would otherwise commit tables into a deleted handle.
+      nextPageNumber = section->currentPage;  // retry the landing page, not a stale page hint
       section->abandonBuild();
       section->clearCache();
       section.reset();
       if (giveUp) {
+        returnHistory.finishReturn(false);
         LOG_ERR("ERS", "Page load retry limit reached, aborting");
         pageLoadRetryCount = 0;  // Reset so a later user-initiated navigation can try afresh
         renderer.clearScreen();
@@ -2910,6 +2965,9 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     // Cache this page's content offset (read alongside the page, no extra file open) so
     // saveProgress and addBookmark can use it without reopening section.bin.
     currentPageVisibleOffset = p->visibleTextOffset;
+    currentPageSpineIndex = currentSpineIndex;
+    pendingOffsetJump.reset();
+    returnHistory.finishReturn(true);
 
     // Collect footnotes from the loaded page
     currentPageFootnotes = std::move(p->footnotes);
@@ -3454,6 +3512,8 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
 
   {
     RenderLock lock(*this);
+    returnHistory.finishReturn(false);
+    pendingOffsetJump.reset();
     clearDeferredReposition();
     pendingAnchor = std::move(anchor);
     currentSpineIndex = targetSpineIndex;
@@ -3472,6 +3532,8 @@ void EpubReaderActivity::restoreSavedPosition() {
 
   {
     RenderLock lock(*this);
+    returnHistory.finishReturn(false);
+    pendingOffsetJump.reset();
     clearDeferredReposition();
     currentSpineIndex = pos.spineIndex;
     nextPageNumber = pos.pageNumber;
