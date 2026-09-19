@@ -145,6 +145,7 @@ TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
     case Row::DynamicMargins:
       return RowKind::Picker;
     case Row::LineSpacing:
+    case Row::WordSpacing:
     case Row::ParagraphSpacing:  // retired in 0.8.2; the row is still wired, just not listed
     case Row::IndentPercent:
     case Row::HorizontalMargin:
@@ -162,7 +163,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // The section headings the list used to carry are gone: a cell shows its own name, and
   // four bands would have cost two grid rows to say what the pairing already says.
   std::vector<Row> rows;
-  rows.reserve(24);
+  rows.reserve(25);
 
   rows.push_back(Row::Font);
   rows.push_back(Row::Size);
@@ -173,6 +174,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   rows.push_back(Row::LineSpacing);
   rows.push_back(Row::ExtraSpacing);
+  rows.push_back(Row::WordSpacing);
 
   rows.push_back(Row::Alignment);
   rows.push_back(Row::IndentMode);
@@ -229,6 +231,8 @@ StrId TextSettingsActivity::rowNameId(const Row row) const {
       return StrId::STR_EXTRA_SPACING;
     case Row::ParagraphSpacing:
       return StrId::STR_PARAGRAPH_SPACING;
+    case Row::WordSpacing:
+      return StrId::STR_WORD_SPACING;
     case Row::Alignment:
       return StrId::STR_ALIGNMENT;
     case Row::IndentMode:
@@ -277,6 +281,8 @@ uint8_t* TextSettingsActivity::numberField(const Row row) const {
       return &SETTINGS.lineSpacingPercent;
     case Row::ParagraphSpacing:
       return &SETTINGS.paragraphSpacing;
+    case Row::WordSpacing:
+      return &SETTINGS.wordSpacing;
     case Row::IndentPercent:
       return &SETTINGS.firstLineIndentPercent;
     case Row::HorizontalMargin:
@@ -296,6 +302,10 @@ void TextSettingsActivity::numberRange(const Row row, int& minValue, int& maxVal
     case Row::LineSpacing:
       minValue = CrossPointSettings::MIN_LINE_SPACING_PERCENT;
       maxValue = CrossPointSettings::MAX_LINE_SPACING_PERCENT;
+      break;
+    case Row::WordSpacing:
+      minValue = CrossPointSettings::MIN_WORD_SPACING;
+      maxValue = CrossPointSettings::MAX_WORD_SPACING;
       break;
     case Row::ParagraphSpacing:
       minValue = 0;
@@ -480,7 +490,7 @@ void TextSettingsActivity::activateRow(const Row row) {
       // the number gets a finger-sized track instead of a header's worth of it.
       auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
           renderer, mappedInput, "TextSettingNumber", rowNameId(row), field ? *field : minValue, minValue, maxValue,
-          /*smallStep=*/1, /*largeStep=*/5);
+          /*smallStep=*/row == Row::WordSpacing ? 5 : 1, /*largeStep=*/5);
       if (!dialog) {
         LOG_ERR("TXTSET", "OOM: IntervalSelectionActivity");
         return;

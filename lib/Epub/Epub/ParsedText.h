@@ -2,6 +2,7 @@
 
 #include <EpdFontFamily.h>
 
+#include <algorithm>
 #include <deque>
 #include <functional>
 #include <memory>
@@ -61,6 +62,7 @@ class ParsedText {
   // Guide Dots (LTR paragraphs only): GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE (widened gap
   // with a middle dot in it) or GUIDE_DOTS_HIDDEN (the same widened gap, no dot drawn).
   uint8_t guideDotsMode;
+  uint8_t wordSpacing;
   // First-line paragraph indent (restored old-lector model): mode 0 = Book (respect the
   // CSS indent), 1 = Custom % of the column width; percent applies in mode 1.
   uint8_t firstLineIndentMode;
@@ -79,6 +81,10 @@ class ParsedText {
   std::vector<uint8_t> reorderedFocusBoundaryScratch;
   std::vector<uint16_t> visualOrderScratch;
 
+  int spaceAdvance(const GfxRenderer& renderer, int fontId, uint32_t leftCp, uint32_t rightCp,
+                   EpdFontFamily::Style style) const;
+  int guideDotNaturalGap(const GfxRenderer& renderer, int fontId, const std::string& leftWord,
+                         const std::string& rightWord, EpdFontFamily::Style leftStyle) const;
   uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
   uint32_t visibleOffsetAt(size_t wordIndex) const;
   void pushVisibleOffset(uint32_t offset);
@@ -109,12 +115,13 @@ class ParsedText {
   explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
                       const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,
                       const BlockStyle& blockStyle = BlockStyle(), const uint8_t firstLineIndentMode = 0,
-                      const uint8_t firstLineIndentPercent = 0)
+                      const uint8_t firstLineIndentPercent = 0, const uint8_t wordSpacing = 100)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
         hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         guideDotsMode(guideDotsMode),
+        wordSpacing(std::clamp<uint8_t>(wordSpacing, 75, 150)),
         firstLineIndentMode(firstLineIndentMode),
         firstLineIndentPercent(firstLineIndentPercent),
         isNaturalAlign(false),

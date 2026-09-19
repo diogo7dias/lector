@@ -28,6 +28,7 @@ struct PreviewKey {
   // so Embedded Text Style leaves the preview untouched.
   bool embeddedLayoutStyle = false;
   uint8_t paragraphSpacing = 0xFF;
+  uint8_t wordSpacing = 0xFF;
   uint8_t guideDotsMode = 0xFF;
   uint8_t firstLineIndentMode = 0xFF;
   uint8_t firstLineIndentPercent = 0xFF;

@@ -169,3 +169,4 @@ add_subdirectory(watermark_build_bail)
 
 add_subdirectory(collapsible_sections)
 add_subdirectory(ligature_guard)
+add_subdirectory(word_spacing)

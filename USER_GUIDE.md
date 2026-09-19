@@ -842,6 +842,10 @@ other numbers in Settings use the same band.
   first-line indent, margins, padding and image sizes. **Paragraph Alignment: Book's Style**
   and **First Line Indent: Book** both read the book's CSS, so they need this on.
 - **Bionic Reading** — bolds the first part of each word as a fixation point.
+- **Word Spacing %** — sets the baseline gap between words, from 75% to 150% in steps of 5.
+  100% keeps the original spacing. Justified lines still stretch to the right margin;
+  this does not limit their gaps. With Guide Dots, it adjusts the spaces on both sides
+  of each dot, keeping the dot the same size. Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
 - **Hyphenation**.

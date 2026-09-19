@@ -108,7 +108,8 @@ namespace {
 // v58: closing a child block no longer reapplies the parent's vertical margins/padding (#3221).
 // v59: inline direction changes no longer replace the paragraph's base direction (#3198).
 // v60: font ligatures no longer collapse already-shaped Arabic presentation forms (#3294).
-constexpr uint8_t SECTION_FILE_VERSION = 60;
+// v61: wordSpacing enters the header; baseline gaps change pagination.
+constexpr uint8_t SECTION_FILE_VERSION = 61;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -126,10 +127,10 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 // only fails (noisily, via the block-decode error path) when a page is loaded.
 // Derived so the pairing can't be forgotten: 0xFE for v28, 0xFD for v29, ...
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
-constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) + sizeof(uint8_t) +
-                                 sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(uint16_t) +
-                                 sizeof(bool) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
-                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
+constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) +
+                                 sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
+                                 sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) +
+                                 sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }  // namespace
 
@@ -195,16 +196,16 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
     LOG_DBG("SCT", "File not open for writing header");
     return;
   }
-  static_assert(HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
-                                   sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) +
-                                   sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) +
-                                   sizeof(spec.viewportHeight) + sizeof(pageCount) + sizeof(spec.hyphenationEnabled) +
-                                   sizeof(spec.embeddedTextStyle) + sizeof(spec.embeddedLayoutStyle) +
-                                   sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) +
-                                   sizeof(spec.guideDotsMode) + sizeof(spec.firstLineIndentMode) +
-                                   sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) + sizeof(uint32_t) +
-                                   sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
-                "Header size mismatch");
+  static_assert(
+      HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
+                         sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) + sizeof(spec.wordSpacing) +
+                         sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
+                         sizeof(pageCount) + sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedTextStyle) +
+                         sizeof(spec.embeddedLayoutStyle) + sizeof(spec.imageRendering) +
+                         sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
+                         sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) +
+                         sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
+      "Header size mismatch");
   // Written as the incomplete sentinel; finalizeBuild() patches it to
   // SECTION_FILE_VERSION as the last step, committing the file.
   serialization::writePod(file, SECTION_FILE_INCOMPLETE_VERSION);
@@ -212,6 +213,7 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.lineCompression);
   serialization::writePod(file, spec.extraParagraphSpacing);
   serialization::writePod(file, spec.paragraphSpacing);
+  serialization::writePod(file, spec.wordSpacing);
   serialization::writePod(file, spec.paragraphAlignment);
   serialization::writePod(file, spec.viewportWidth);
   serialization::writePod(file, spec.viewportHeight);
@@ -255,6 +257,7 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, cached.lineCompression);
     serialization::readPod(file, cached.extraParagraphSpacing);
     serialization::readPod(file, cached.paragraphSpacing);
+    serialization::readPod(file, cached.wordSpacing);
     serialization::readPod(file, cached.paragraphAlignment);
     serialization::readPod(file, cached.viewportWidth);
     serialization::readPod(file, cached.viewportHeight);
@@ -494,10 +497,11 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
   ctxPtr->owner = this;
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       &epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
-      spec.paragraphSpacing, spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight, spec.hyphenationEnabled,
-      spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode, spec.firstLineIndentPercent,
-      &Section::appendPageToLut, ctxPtr, spec.embeddedTextStyle, spec.embeddedLayoutStyle, ctxPtr->contentBase,
-      ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors), popupFn, popupCtx, ctxPtr->cssParser);
+      spec.paragraphSpacing, spec.wordSpacing, spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight,
+      spec.hyphenationEnabled, spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode,
+      spec.firstLineIndentPercent, &Section::appendPageToLut, ctxPtr, spec.embeddedTextStyle, spec.embeddedLayoutStyle,
+      ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors), popupFn, popupCtx,
+      ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     noteBuildFailure(BuildFailure::OomParser);

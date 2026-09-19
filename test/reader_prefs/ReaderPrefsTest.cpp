@@ -51,6 +51,7 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.paragraphAlignment, b.paragraphAlignment);
   EXPECT_EQ(a.extraParagraphSpacing, b.extraParagraphSpacing);
   EXPECT_EQ(a.paragraphSpacing, b.paragraphSpacing);
+  EXPECT_EQ(a.wordSpacing, b.wordSpacing);
   EXPECT_EQ(a.screenMargin, b.screenMargin);
   EXPECT_EQ(a.screenMarginTop, b.screenMarginTop);
   EXPECT_EQ(a.screenMarginBottom, b.screenMarginBottom);
@@ -541,12 +542,14 @@ TEST(ReaderPrefs, EachVersionStopsBeforeTheFieldTheNextOneAppended) {
   EXPECT_EQ(offsetof(ReaderPrefs, embeddedLayoutStyle), READER_PREFS_V11_SIZE);
   EXPECT_EQ(offsetof(ReaderPrefs, sbParaPagesPos), READER_PREFS_V12_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE + 1, READER_PREFS_V12_SIZE);
-  EXPECT_EQ(READER_PREFS_V12_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V12_SIZE + 1, READER_PREFS_V13_SIZE);
+  EXPECT_EQ(READER_PREFS_V13_SIZE + 1, sizeof(ReaderPrefs));
+  EXPECT_EQ(READER_PREFS_V13_SIZE, readerPrefsRecordSize(13));
   EXPECT_LT(READER_PREFS_V10_SIZE, READER_PREFS_V11_SIZE);
   EXPECT_EQ(READER_PREFS_V11_SIZE, readerPrefsRecordSize(11));
   EXPECT_EQ(READER_PREFS_V12_SIZE, readerPrefsRecordSize(12));
   EXPECT_EQ(sizeof(ReaderPrefs), readerPrefsRecordSize(ReaderPrefs::VERSION));
-  EXPECT_EQ(13, ReaderPrefs::VERSION);
+  EXPECT_EQ(14, ReaderPrefs::VERSION);
 }
 
 TEST(ReaderPrefs, AV12RecordKeepsItsFieldsAndLeavesTheNewItemOff) {
@@ -656,4 +659,34 @@ TEST(ReaderPrefs, ReadReportsTheVersionTheRecordWasWrittenAt) {
   ASSERT_TRUE(readReaderPrefs(current, back, &migrated, &fromVersion));
   EXPECT_FALSE(migrated);
   EXPECT_EQ(ReaderPrefs::VERSION, fromVersion);
+}
+
+TEST(ReaderPrefs, OldSidecarsKeepTheirLookAndDefaultWordSpacingToHundred) {
+  for (uint8_t version = 9; version <= 13; ++version) {
+    auto old = makeSample();
+    old.wordSpacing = 150;  // outside the old record, must not be read
+    std::stringstream file;
+    file.put(static_cast<char>(version));
+    file.write(reinterpret_cast<const char*>(&old), readerPrefsRecordSize(version));
+    ReaderPrefs loaded;
+    bool migrated = false;
+    ASSERT_TRUE(readReaderPrefs(file, loaded, &migrated));
+    EXPECT_TRUE(migrated);
+    EXPECT_EQ(100, loaded.wordSpacing);
+    EXPECT_EQ(old.fontPointSize, loaded.fontPointSize);
+    EXPECT_EQ(old.paragraphSpacing, loaded.paragraphSpacing);
+    EXPECT_EQ(old.screenMargin, loaded.screenMargin);
+  }
+}
+
+TEST(ReaderPrefs, WordSpacingRoundTripsAtEverySetting) {
+  for (uint8_t percent = 75; percent <= 150; percent += 5) {
+    auto original = makeSample();
+    original.wordSpacing = percent;
+    std::stringstream file;
+    writeReaderPrefs(file, original);
+    ReaderPrefs loaded;
+    ASSERT_TRUE(readReaderPrefs(file, loaded));
+    expectEqual(original, loaded);
+  }
 }

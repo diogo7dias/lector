@@ -394,6 +394,11 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     "embeddedLayoutStyle", StrId::STR_CAT_READER)
                     .withTextSettings());
 
+    v.push_back(SettingInfo::Value(StrId::STR_WORD_SPACING, &CrossPointSettings::wordSpacing,
+                                   {CrossPointSettings::MIN_WORD_SPACING, CrossPointSettings::MAX_WORD_SPACING, 5},
+                                   "wordSpacing", StrId::STR_CAT_READER)
+                    .withTextSettings());
+
     // Retired in 0.8.2: the granular paragraph gap (% of line height) duplicated what
     // the Extra Paragraph Spacing toggle above already does. The field and its render
     // spec entry are kept (old caches and sidecars still carry it) but it is pinned to

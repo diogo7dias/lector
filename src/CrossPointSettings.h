@@ -424,6 +424,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // right edge of the line above.
   static constexpr uint8_t DEFAULT_PARAGRAPH_SPACING = reader_defaults::PARAGRAPH_SPACING_PERCENT;
   uint8_t paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
+  static constexpr uint8_t MIN_WORD_SPACING = 75;
+  static constexpr uint8_t MAX_WORD_SPACING = 150;
+  uint8_t wordSpacing = 100;  // percent of natural space advance; no limit on justification
   // Off by default, as in the old fork. The grayscale text pass is imperceptible on
   // this panel but costs a fading grey refresh on every page turn, which is very
   // perceptible. The toggle is kept so it can still be tried; only the default moved.
