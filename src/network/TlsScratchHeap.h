@@ -24,8 +24,7 @@
 namespace tls_scratch {
 
 /** True while a Session holds the lent framebuffer, so a heap gate can use the
- * lower floor (tls_heap::MIN_FREE_WITH_SCRATCH): the large record buffers are
- * not going to come off the heap. */
+ * pool-aware policy: all wolfSSL allocations try scratch first. */
 bool isActive();
 
 /**
@@ -46,10 +45,15 @@ uint32_t heapFallbackLargest();
  * Free bytes in the lent block right now, and the least it ever held during
  * this Session. Read between the hops of a redirect to see whether a finished
  * hop actually gave its memory back before the next handshake asked for it.
- * Both read 0 once the Session has ended.
+ * All read 0 once the Session has ended.
  */
 size_t poolFreeBytes();
+size_t poolLargestBlock();
 size_t poolLowWaterBytes();
+
+// Start scoped system-heap telemetry AFTER the gate passes. The SDK allocates
+// one word per registered heap for this monitor; never start it on a starved heap.
+void monitorSystemHeap();
 
 /**
  * The wolfSSL allocation that failed, if one did: how many failed, what the

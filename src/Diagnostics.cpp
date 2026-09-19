@@ -269,13 +269,15 @@ void recordOtaFailure(const char* step, const char* error, const char* screenLin
 }
 
 void recordTlsGate(const char* step, const uint32_t freeHeap, const uint32_t largestBlock, const bool framebufferLent,
-                   const uint32_t floorFree, const uint32_t floorBlock, const bool allowed) {
+                   const uint32_t floorFree, const uint32_t floorBlock, const bool allowed, const uint32_t poolFree,
+                   const uint32_t poolBlock) {
   char fields[40];
   snprintf(fields, sizeof(fields), "session=%04x step=%s", session(), step);
   diaglog::beginEntry("tls heap gate", fields, now());
   diaglog::note("  free=%u largest=%u framebuffer_lent=%s floor=%u/%u -> %s", static_cast<unsigned>(freeHeap),
                 static_cast<unsigned>(largestBlock), framebufferLent ? "yes" : "no", static_cast<unsigned>(floorFree),
                 static_cast<unsigned>(floorBlock), allowed ? "allowed" : "REFUSED");
+  diaglog::note("  scratch free=%u largest=%u", static_cast<unsigned>(poolFree), static_cast<unsigned>(poolBlock));
 }
 
 void flush() {

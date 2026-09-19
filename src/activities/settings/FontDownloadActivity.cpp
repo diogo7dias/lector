@@ -1,6 +1,5 @@
 #include "FontDownloadActivity.h"
 
-#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
@@ -183,22 +182,6 @@ std::string transferMemoryDetail(const TransferFailure& failure) {
   return buf;
 }
 
-// Drops every rebuildable font cache and says what that was worth. Three call
-// sites want it at three moments, and the number differs at each: nothing is
-// resident before anything has been drawn with an SD font, ~13 KB is resident
-// once the family list has been painted. A log line that prints the same
-// figure twice cannot tell those apart, so print the difference.
-void releaseFontCaches(GfxRenderer& renderer, const char* step) {
-  auto* fcm = renderer.getFontCacheManager();
-  if (!fcm) return;
-  const uint32_t before = ESP.getFreeHeap();
-  fcm->releaseSdFontCaches();
-  const uint32_t after = ESP.getFreeHeap();
-  LOG_DBG("FONT", "Font caches released at %s: %d bytes recovered, %u free, largest block %u", step,
-          static_cast<int>(after) - static_cast<int>(before), static_cast<unsigned>(after),
-          static_cast<unsigned>(ESP.getMaxAllocHeap()));
-}
-
 // The heap gate, and a record of what it saw. Both font transfers ask the same
 // question in the same place; the numbers also go to the diagnostics file, so a
 // failure that reaches the card does not depend on someone photographing the
@@ -207,13 +190,20 @@ void releaseFontCaches(GfxRenderer& renderer, const char* step) {
 bool gateAllowsTls(const char* step, const bool framebufferLent) {
   const uint32_t freeHeap = ESP.getFreeHeap();
   const uint32_t largestBlock = ESP.getMaxAllocHeap();
-  const bool allowed = tls_heap::canStartTls(freeHeap, largestBlock, framebufferLent);
+  const uint32_t poolFree = tls_scratch::poolFreeBytes();
+  const uint32_t poolBlock = tls_scratch::poolLargestBlock();
+  const bool allowed = tls_heap::canStartTls(freeHeap, largestBlock, framebufferLent, poolFree, poolBlock);
   diag::recordTlsGate(step, freeHeap, largestBlock, framebufferLent, tls_heap::minFree(framebufferLent),
-                      tls_heap::MIN_BLOCK, allowed);
+                      tls_heap::minBlock(framebufferLent), allowed, poolFree, poolBlock);
   LOG_INF("FONT", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
           static_cast<unsigned>(freeHeap), static_cast<unsigned>(largestBlock), framebufferLent ? "yes" : "no",
-          static_cast<unsigned>(tls_heap::minFree(framebufferLent)), static_cast<unsigned>(tls_heap::MIN_BLOCK));
-  if (!allowed) LOG_ERR("FONT", "Not enough heap for a secure connection at %s", step);
+          static_cast<unsigned>(tls_heap::minFree(framebufferLent)),
+          static_cast<unsigned>(tls_heap::minBlock(framebufferLent)));
+  LOG_INF("FONT", "TLS pool at %s: free %u, largest block %u, floor %u/%u -> %s", step, static_cast<unsigned>(poolFree),
+          static_cast<unsigned>(poolBlock), static_cast<unsigned>(tls_heap::MIN_POOL_FREE),
+          static_cast<unsigned>(tls_heap::MIN_POOL_BLOCK), allowed ? "allowed" : "REFUSED");
+  if (allowed) tls_scratch::monitorSystemHeap();
+  if (!allowed) LOG_ERR("FONT", "Not enough TLS memory at %s", step);
   return allowed;
 }
 
@@ -226,15 +216,6 @@ FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputMan
 
 void FontDownloadActivity::onEnter() {
   UiStatusActivity::onEnter();
-
-  // Heap-critical transition, the same one CrossPointWebServerActivity and
-  // CalibreConnectActivity already guard against: WiFi takes ~45 KB, and the
-  // manifest download then needs two TLS handshakes, because GitHub redirects
-  // release downloads to a second host. On a reader with a large SD font
-  // resident, the second handshake failed inside wolfSSL's big-integer maths
-  // (MP_EXPTMOD_E / PEER_KEY_ERROR) with 33908 bytes free and a 30708-byte
-  // largest block. These caches rebuild on demand; the download cannot.
-  releaseFontCaches(renderer, "font screen entry");
 
   WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
@@ -294,14 +275,6 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
 bool FontDownloadActivity::fetchAndParseManifest() {
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
-
-  // onEnter() released these, and then the WiFi picker drew a list of networks
-  // over the top and faulted them straight back in -- 13216 bytes on the reader
-  // this was measured on, taken from the heap the handshake below needs. This
-  // is what WifiSelectionActivity::onExit() cannot give back: the caches belong
-  // to the renderer, not to the picker. Same release that runs before every
-  // per-file transfer, for the same reason.
-  releaseFontCaches(renderer, "manifest fetch");
 
   // The font list is the first thing a reader hits after joining WiFi, and a
   // handshake that fails while the connection settles used to end the trip here.
@@ -407,6 +380,13 @@ void FontDownloadActivity::stampDiskState(void* context, ManifestFamily& family,
     const ManifestFile& file = files[i];
     char path[128];
     FontInstaller::buildFontPath(family.name, file.name, path, sizeof(path));
+    // A family can have other sizes installed. Absence here is an update,
+    // not a failed font load; report it once on the initial list, not on reloads.
+    if (!Storage.exists(path)) {
+      if (self->state_ == LOADING_MANIFEST) LOG_DBG("FONT", "Update available: catalog file not installed: %s", path);
+      family.hasUpdate = true;
+      return;
+    }
     HalFile f;
     if (Storage.openFileForRead("FONT", path, f)) {
       const size_t actual = f.fileSize();
@@ -416,7 +396,7 @@ void FontDownloadActivity::stampDiskState(void* context, ManifestFamily& family,
         return;
       }
     } else {
-      // File missing on disk but family dir exists — treat as update
+      // Present but unreadable (or removed since exists): HAL logged the read error.
       family.hasUpdate = true;
       return;
     }
@@ -656,6 +636,7 @@ bool FontDownloadActivity::waitForWifi() {
 }
 
 bool FontDownloadActivity::fileAlreadyInstalled(const ManifestFile& file, const char* destPath) {
+  if (!Storage.exists(destPath)) return false;
   HalFile f;
   if (!Storage.openFileForRead("FONT", destPath, f)) return false;
   const size_t actual = f.fileSize();
@@ -898,12 +879,6 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   }
   requestUpdateAndWait();
 
-  // Drawing the family list reloaded the SD font caches that onEnter had just
-  // released: 13216 bytes on this reader, taken back from the heap the per-file
-  // TLS session needs. They are released again here, on every family, because
-  // every repaint since the last download may have rebuilt them.
-  releaseFontCaches(renderer, "font file download");
-
   if (!fontInstaller_.ensureFamilyDir(familyName.c_str())) {
     setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MKDIR), "");
     return false;
@@ -963,8 +938,12 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
     // marks what is still missing as an update. Only a family that arrived
     // with nothing at all is cleared, so no empty directory is left behind.
     if (!wasInstalled && !fontInstaller_.isFamilyInstalled(familyName.c_str())) {
-      fontInstaller_.deleteFamily(familyName.c_str());
-      fontInstaller_.refreshRegistry();
+      // Discovery already excluded this empty family. Removing its directory
+      // cannot change the registry; do not scan every installed family again.
+      // rmdir also refuses a non-empty directory, preserving unrelated files.
+      char dirPath[128];
+      FontInstaller::buildFontPath(familyName.c_str(), "", dirPath, sizeof(dirPath));
+      if (!Storage.rmdir(dirPath)) LOG_DBG("FONT", "Kept non-empty or unreadable directory: %s", dirPath);
     }
   }
 

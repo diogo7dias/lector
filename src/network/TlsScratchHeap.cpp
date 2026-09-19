@@ -1,6 +1,7 @@
 #include "TlsScratchHeap.h"
 
 #include <Logging.h>
+#include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <multi_heap.h>
 
@@ -25,6 +26,8 @@ namespace {
 // and small allocations alike come out of it (TlsScratchLayout.h).
 // Set only while a loan is running.
 multi_heap_handle_t g_pool = nullptr;
+bool g_heapMonitor = false;
+uint32_t g_heapAtStart = 0;
 
 // The block's address range, kept FOREVER and deliberately so: wolfSSL can free
 // a buffer after the loan has ended, and handing the framebuffer's address to
@@ -138,7 +141,18 @@ uint32_t heapFallbackBytes() { return g_fallbackBytes; }
 uint32_t heapFallbackLargest() { return g_fallbackLargest; }
 
 size_t poolFreeBytes() { return g_pool ? multi_heap_free_size(g_pool) : 0; }
+size_t poolLargestBlock() {
+  multi_heap_info_t info = {};
+  if (g_pool) multi_heap_get_info(g_pool, &info);
+  return info.largest_free_block;
+}
 size_t poolLowWaterBytes() { return g_pool ? multi_heap_minimum_free_size(g_pool) : 0; }
+
+void monitorSystemHeap() {
+  if (!g_pool || g_heapMonitor) return;
+  g_heapAtStart = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
+  g_heapMonitor = heap_caps_monitor_local_minimum_free_size_start() == ESP_OK;
+}
 
 uint32_t oomCount() { return g_oomCount; }
 uint32_t oomSize() { return g_oomSize; }
@@ -210,6 +224,13 @@ Session::~Session() {
           static_cast<unsigned>(info.minimum_free_bytes), static_cast<unsigned>(g_len),
           static_cast<unsigned>(g_fallbackCount), static_cast<unsigned>(g_fallbackBytes),
           static_cast<unsigned>(g_fallbackLargest));
+  if (g_heapMonitor) {
+    const auto low = heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL);
+    heap_caps_monitor_local_minimum_free_size_stop();
+    g_heapMonitor = false;
+    LOG_DBG("TLS", "System heap during loan: start %u, low-water %u, end %u", static_cast<unsigned>(g_heapAtStart),
+            static_cast<unsigned>(low), static_cast<unsigned>(heap_caps_get_free_size(MALLOC_CAP_INTERNAL)));
+  }
   g_pool = nullptr;
   // g_base / g_len are deliberately left set: a free() that arrives after the
   // loan still has to be recognised as ours (see scratchFree).

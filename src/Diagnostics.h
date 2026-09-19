@@ -75,7 +75,7 @@ void recordOtaFailure(const char* step, const char* error, const char* screenLin
 // A TLS heap gate: the numbers the reader would otherwise have to read off
 // the screen. Informational: it reaches the card only if a failure follows.
 void recordTlsGate(const char* step, uint32_t freeHeap, uint32_t largestBlock, bool framebufferLent, uint32_t floorFree,
-                   uint32_t floorBlock, bool allowed);
+                   uint32_t floorBlock, bool allowed, uint32_t poolFree, uint32_t poolBlock);
 
 // Writes the buffer to the card, applying retention (lib/DiagLog): header,
 // surviving old entries, then the buffered lines. No-op when nothing is

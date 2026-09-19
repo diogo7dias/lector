@@ -71,17 +71,25 @@ bool OtaUpdater::heapAllowsTls(const char* step) {
   lastFreeHeap = ESP.getFreeHeap();
   lastLargestBlock = ESP.getMaxAllocHeap();
   const bool scratch = tls_scratch::isActive();
-  const bool allowed = tls_heap::canStartTls(lastFreeHeap, lastLargestBlock, scratch);
+  const uint32_t poolFree = tls_scratch::poolFreeBytes();
+  const uint32_t poolBlock = tls_scratch::poolLargestBlock();
+  const bool allowed = tls_heap::canStartTls(lastFreeHeap, lastLargestBlock, scratch, poolFree, poolBlock);
   // The same numbers into the diagnostics file: this is exactly what a user
   // was once asked to read off the screen and type into a chat.
-  diag::recordTlsGate(step, lastFreeHeap, lastLargestBlock, scratch, tls_heap::minFree(scratch), tls_heap::MIN_BLOCK,
-                      allowed);
+  diag::recordTlsGate(step, lastFreeHeap, lastLargestBlock, scratch, tls_heap::minFree(scratch),
+                      tls_heap::minBlock(scratch), allowed, poolFree, poolBlock);
   // One line per gate, INF so a default build reads it back without a debug
   // flag: the real numbers, not another guess about where the C3's heap went.
   LOG_INF("OTA", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
           static_cast<unsigned>(lastFreeHeap), static_cast<unsigned>(lastLargestBlock), scratch ? "yes" : "no",
-          static_cast<unsigned>(tls_heap::minFree(scratch)), static_cast<unsigned>(tls_heap::MIN_BLOCK));
-  if (allowed) return true;
+          static_cast<unsigned>(tls_heap::minFree(scratch)), static_cast<unsigned>(tls_heap::minBlock(scratch)));
+  LOG_INF("OTA", "TLS pool at %s: free %u, largest block %u, floor %u/%u -> %s", step, static_cast<unsigned>(poolFree),
+          static_cast<unsigned>(poolBlock), static_cast<unsigned>(tls_heap::MIN_POOL_FREE),
+          static_cast<unsigned>(tls_heap::MIN_POOL_BLOCK), allowed ? "allowed" : "REFUSED");
+  if (allowed) {
+    tls_scratch::monitorSystemHeap();
+    return true;
+  }
   // Below the floor wolfSSL fails mid-handshake and retries for a minute with
   // a few hundred bytes free, which reads as a hang; refuse and say so instead.
   LOG_ERR("OTA", "Not enough heap for a secure connection at %s", step);
