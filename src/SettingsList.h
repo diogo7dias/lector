@@ -291,10 +291,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   {StrId::STR_AUTHOR_INITIALS, StrId::STR_AUTHOR_FULL_NAME}, "authorDisplay",
                                   StrId::STR_CAT_DISPLAY));
 
-    // Free-text footer shown on the wake/unlock screen bottom banner.
-    v.push_back(SettingInfo::String(StrId::STR_SLEEP_FOOTER_TEXT, &SETTINGS.customFooter[0],
-                                    sizeof(SETTINGS.customFooter), "customFooter", StrId::STR_CAT_DISPLAY));
-
     v.push_back(SettingInfo::Enum(
         StrId::STR_TOUCH_READER_CONTROLS, &CrossPointSettings::touchReaderControls,
         {StrId::STR_STATE_OFF, StrId::STR_STATE_TAP, StrId::STR_STATE_SWIPE, StrId::STR_STATE_INVERTED_TAP},

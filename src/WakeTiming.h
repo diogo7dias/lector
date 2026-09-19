@@ -5,7 +5,7 @@
 
 // Where the seconds go on a wake.
 //
-// Milestones feed the optional previous-wake SD overlay. Current-wake serial
+// Milestones feed the optional previous-wake SD record. Current-wake serial
 // diagnostics run independently and measure through destination render completion.
 // Static RAM only; no additional SD writes or heap allocations.
 namespace WakeTiming {
@@ -30,9 +30,9 @@ enum class Stage : uint8_t {
   // display comes up INSIDE the button-ladder settle window rather than after it. These
   // must stay in chronological order — each stage is printed as a delta from the one
   // before, so a stamp out of order reports as zero and folds its cost into its neighbour.
-  DisplayReady = 6,  // setupDisplayAndFonts() returned
-  InputSettled = 7,  // power-button verify plus the recovery-mode button settle window
-  BannersUp = 8,     // the blank (with banners, if wanted) is on the panel
+  DisplayReady = 6,   // setupDisplayAndFonts() returned
+  InputSettled = 7,   // power-button verify plus the recovery-mode button settle window
+  WakeFaceReady = 8,  // splash finished, or painted-face clear strategy armed
   // The two below split the route into the reader. ReaderActivity::onEnter loads the
   // font and opens the book inline before ActivityUp; an SD font family is re-read from
   // the card on every wake (deep sleep is a chip reset), so this is where a slow unlock
@@ -74,14 +74,14 @@ void mark(Stage stage);
 void beginWake();
 
 // Read the previous wake's stamps from the SD card. Call once, right after the card is
-// mounted (Stage::SdReady) and before the unlock banners are drawn — the numbers cannot
+// mounted (Stage::SdReady) and before the wake diagnostics are logged — the numbers cannot
 // be reported before they have been loaded.
 //
 // The card, not RTC memory: the X3 cuts power to the RTC block on sleep, so nothing
 // stored there survives. See the note at the top of the .cpp.
 void loadPrevious();
 
-// Write this wake's stamps to the card, for the next wake to display. Call once at the
+// Write this wake's stamps to the card, for the next wake to log. Call once at the
 // end of the wake, after the last mark(). One 22-byte record, one write per wake.
 void persist();
 
@@ -98,18 +98,7 @@ void formatPrevious(char* out, size_t outLen);
 
 // Like formatPrevious, but NEVER returns an empty string.
 //
-// formatPrevious falls back to silence when it has nothing to report, and on the banner
-// that silence is indistinguishable from "the overlay was never compiled in". This one
-// always says something, so an empty-handed wake can be told apart from a missing build
-// flag, and the two ways of coming up empty can be told apart from each other:
-//
-//   "w4 sd 118 cfg 74 in 512 disp 96 ban 410 act 3180 = 4390"  numbers, wake 4
-//   "w0 rtc lost m=3f2a91cc"      the RTC magic word did not survive the sleep
-//   "w4 no stamps"                RTC survived, but no stage was ever marked
-//
-// The leading "wN" is a wake counter kept in the same RTC block. If it climbs across
-// sleeps, RTC memory is surviving and the fault is in the stamping; if it is always 0,
-// the memory itself is being cleared. That single digit decides where to look next.
+// Reports either the recorded timings or why no previous record is available.
 //
 // Pass at least 160 bytes.
 void formatDiagnostic(char* out, size_t outLen);

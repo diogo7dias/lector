@@ -4,9 +4,7 @@
 
 // The one black banner look in the firmware.
 //
-// Two draw paths produce it — the wake/unlock banners (UnlockBanners.cpp) and every
-// message popup (BaseTheme::drawBannerStrip) — and they must be indistinguishable, so
-// the numbers live here rather than being written out twice.
+// Message popups (BaseTheme::drawBannerStrip) and light panels share these metrics.
 //
 // A banner is a full-width black band that reaches the screen's physical edge, with a
 // white rule on the edge that faces the page and white centered text inside. It is
@@ -14,7 +12,7 @@
 // read as a heavy slab with a white gap above it.
 namespace banner {
 
-// UI_10, the size the wake banners use. UI_12 read as bolder and taller than the rest
+// UI_10 matches the UI text. UI_12 read as bolder and taller than the rest
 // of the chrome.
 constexpr int FONT_ID = UI_10_FONT_ID;
 

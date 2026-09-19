@@ -59,7 +59,7 @@ struct PxcRenderOptions {
 // through to another sleep screen.
 //
 // grayscale=false renders a single 1-bit (black/white) refresh of the wallpaper,
-// skipping the 3-pass grayscale pipeline (faster, for a wake banner). The two mid
+// skipping the 3-pass grayscale pipeline (faster, for a wake screen). The two mid
 // gray levels are ordered-dithered so tone survives in pure B&W. oneBitRefresh
 // selects that path's panel refresh (default HALF = clean base); it is ignored on
 // the grayscale path.
@@ -67,7 +67,7 @@ struct PxcRenderOptions {
 // overlay, when set, is called once per render pass, after the wallpaper has been
 // decoded into the framebuffer and before that pass is committed, so its drawing
 // composites on top of the wallpaper rather than arriving as a second refresh. On the
-// 1-bit path that is one call (the wake banners use this); on the grayscale path it is
+// 1-bit path that is one call; on the grayscale path it is
 // three — BW base, LSB plane, MSB plane — because a plane pass only carries the pixels
 // written during that pass, exactly like the wallpaper itself. An overlay that should
 // stay solid black-and-white must therefore check GfxRenderer::getRenderMode() and draw

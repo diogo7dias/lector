@@ -71,12 +71,12 @@ void startPerfLogSink(const char* device) {
   snprintf(header, sizeof(header), "# device=%s version=%s battery=%u%%\n", device, CROSSPOINT_VERSION,
            static_cast<unsigned>(powerManager.getBatteryPercentage()));
   writeLine(header);
+  // Keep the historical straightToBook field for log consumers; banners are gone.
   snprintf(header, sizeof(header),
            "# orientation=%u font=%u size=%upt sleepQuality=%u straightToBook=%u fastUnlock=%u refreshFreq=%u\n",
            static_cast<unsigned>(SETTINGS.orientation), static_cast<unsigned>(SETTINGS.fontFamily),
-           static_cast<unsigned>(SETTINGS.fontPointSize), static_cast<unsigned>(SETTINGS.sleepImageQuality),
-           static_cast<unsigned>(SETTINGS.wakeStraightToBook), static_cast<unsigned>(SETTINGS.fastUnlock),
-           static_cast<unsigned>(SETTINGS.refreshFrequency));
+           static_cast<unsigned>(SETTINGS.fontPointSize), static_cast<unsigned>(SETTINGS.sleepImageQuality), 1u,
+           static_cast<unsigned>(SETTINGS.fastUnlock), static_cast<unsigned>(SETTINGS.refreshFrequency));
   writeLine(header);
   // The book only affects what is drawn, not what a refresh costs — a refresh drives the
   // whole panel whatever is on it. Recorded so a surprising run can be traced back, not

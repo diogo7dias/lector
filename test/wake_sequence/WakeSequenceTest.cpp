@@ -318,14 +318,10 @@ TEST(WakeSequence, NoHomeRouteCarriesAReaderSideEffect) {
 // The clear strategy, including the state that was previously untestable.
 // ---------------------------------------------------------------------------
 
-// "DriveAll computed but never armed" is reachable: wakeClearFor answers DriveAll on
-// fastUnlock && straightToBook, but the arming site adds its own straightToBook gate. The
-// gate sat inline in setup() wrapped around the tested helper, so no test could see it.
-TEST(WakeSequence, DriveAllIsOnlyArmedOnAFastUnlockStraightToBookWake) {
+TEST(WakeSequence, DriveAllIsOnlyArmedOnAFastUnlockWake) {
   WakeInputs in;
   in.paintedFaceWake = true;
   in.fastUnlock = true;
-  in.wakeStraightToBook = true;
   EXPECT_EQ(wake_sequence::clearStrategy(in), wake_face::WakeClear::DriveAll);
   EXPECT_TRUE(wake_sequence::armsDriveAll(in));
   EXPECT_FALSE(wake_sequence::armsAsyncBlank(in));
@@ -335,21 +331,9 @@ TEST(WakeSequence, WithoutFastUnlockTheClearingBlankIsArmedInstead) {
   WakeInputs in;
   in.paintedFaceWake = true;
   in.fastUnlock = false;
-  in.wakeStraightToBook = true;
   EXPECT_EQ(wake_sequence::clearStrategy(in), wake_face::WakeClear::Blank);
   EXPECT_FALSE(wake_sequence::armsDriveAll(in));
   EXPECT_TRUE(wake_sequence::armsAsyncBlank(in));
-}
-
-// Banners wanted (straightToBook off): nothing is armed here at all, because the banner
-// path runs its own blocking pass further down setup().
-TEST(WakeSequence, TheBannerPathArmsNeitherClear) {
-  WakeInputs in;
-  in.paintedFaceWake = true;
-  in.fastUnlock = true;
-  in.wakeStraightToBook = false;
-  EXPECT_FALSE(wake_sequence::armsDriveAll(in));
-  EXPECT_FALSE(wake_sequence::armsAsyncBlank(in));
 }
 
 // Not a painted-face wake (a flash, a USB boot, a plain restart): no sleep face is on the
@@ -358,7 +342,6 @@ TEST(WakeSequence, ANonPaintedFaceWakeArmsNothing) {
   WakeInputs in;
   in.paintedFaceWake = false;
   in.fastUnlock = true;
-  in.wakeStraightToBook = true;
   EXPECT_EQ(wake_sequence::clearStrategy(in), wake_face::WakeClear::Blank);
   EXPECT_FALSE(wake_sequence::armsDriveAll(in));
   EXPECT_FALSE(wake_sequence::armsAsyncBlank(in));

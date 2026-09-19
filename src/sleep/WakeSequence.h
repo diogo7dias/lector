@@ -72,13 +72,12 @@ struct WakeInputs {
   // readerActivityLoadCount > 0: the reader failed to come up last boot. The crash-loop
   // guard's input.
   bool readerCrashed = false;
-  // A boot book was picked earlier in setup() (the unlock banner already named it).
+  // A boot book was picked earlier in setup().
   bool bootBookPicked = false;
 
   // Display state, for waitBeforeRoutePaint.
   bool paintedFaceWake = false;
   bool fastUnlock = false;
-  bool wakeStraightToBook = false;
   bool asyncBlankInFlight = false;
   bool driveAllArmed = false;
 };
@@ -115,20 +114,16 @@ struct WakePlan {
 // How a wake from a painted sleep face gets the page onto the panel. Unchanged rule,
 // moved here so the arming decision and the routing decision are read off one value.
 inline constexpr wake_face::WakeClear clearStrategy(const WakeInputs& in) {
-  return in.paintedFaceWake ? wake_face::wakeClearFor(in.fastUnlock, in.wakeStraightToBook)
-                            : wake_face::WakeClear::Blank;
+  return in.paintedFaceWake ? wake_face::wakeClearFor(in.fastUnlock) : wake_face::WakeClear::Blank;
 }
 
-// Whether the DriveAll one-shot is actually armed. Note the extra `wakeStraightToBook`
-// gate: wakeClearFor can answer DriveAll while this answers false, so "DriveAll computed
-// but never armed" is a real state. It was unreachable by any test before, because the
-// gate sat inline in setup() around a call to the tested helper.
+// Whether the DriveAll one-shot is armed for a painted-face wake.
 inline constexpr bool armsDriveAll(const WakeInputs& in) {
-  return in.paintedFaceWake && in.wakeStraightToBook && clearStrategy(in) == wake_face::WakeClear::DriveAll;
+  return in.paintedFaceWake && clearStrategy(in) == wake_face::WakeClear::DriveAll;
 }
 
 inline constexpr bool armsAsyncBlank(const WakeInputs& in) {
-  return in.paintedFaceWake && in.wakeStraightToBook && clearStrategy(in) == wake_face::WakeClear::Blank;
+  return in.paintedFaceWake && clearStrategy(in) == wake_face::WakeClear::Blank;
 }
 
 inline constexpr WakePlan plan(const WakeInputs& in) {

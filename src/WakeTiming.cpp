@@ -51,7 +51,7 @@ uint32_t wakeCount = 0;
 
 // Whether loadPrevious() ran, and whether it found a good record. The two are different
 // answers: "the card was never read" is a wiring mistake in the boot order, while "read,
-// found nothing" is a normal first run after a flash. The banner must not conflate them.
+// found nothing" is a normal first run after a flash. The diagnostic must not conflate them.
 bool loadAttempted = false;
 bool loadedOk = false;
 bool enabled = false;
@@ -165,8 +165,8 @@ void setEnabled(const bool value) { enabled = value; }
 void loadPrevious() {
   if (!enabled) return;
   // Called after the card is up (Stage::SdReady), not from beginWake(): at beginWake()
-  // time Storage has not been started yet, and the banner that reads these numbers is
-  // painted well after the card is mounted.
+  // time Storage has not been started yet, and the diagnostic that reads these numbers is
+  // logged well after the card is mounted.
   loadAttempted = true;
 
   HalFile file;
@@ -209,7 +209,7 @@ void formatDiagnostic(char* const out, const size_t outLen) {
   if (outLen == 0) return;
   out[0] = '\0';
 
-  // The banner was drawn before the card was read. That is a boot-order fault in this
+  // The diagnostic was requested before the card was read. That is a boot-order fault in this
   // firmware, not a fault on the device, and it must not masquerade as "no data yet".
   if (!loadAttempted) {
     snprintf(out, outLen, "wake: not read yet");

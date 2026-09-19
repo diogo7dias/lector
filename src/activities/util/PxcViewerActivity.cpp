@@ -202,9 +202,7 @@ void PxcViewerActivity::loop() {
                                return;
                              }
                              crosspoint::sleep::windex::commitDeletion(pendingDelete);
-                             // The wake path re-renders this file to composite the unlock banners
-                             // over it; leaving a dead path there means the next wake falls back to
-                             // the boot logo for no reason.
+                             // Clear references so later views cannot reopen the deleted wallpaper.
                              FavoriteImage::removePathReferences(filePath);
                              fileStillPresent = false;
                              activityManager.goToFileBrowser(folderOf(filePath));
