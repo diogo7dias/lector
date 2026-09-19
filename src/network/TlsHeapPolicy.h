@@ -28,24 +28,37 @@ constexpr uint32_t MIN_FREE_HEAP = 30000;
 constexpr uint32_t MIN_POOL_FREE = tls_scratch::NEEDED;
 constexpr uint32_t MIN_POOL_BLOCK = tls_scratch::RECORD_BYTES;
 
-// Non-wolfSSL heap: 26252 at the manifest gate -> 22360 at the redirect,
-// i.e. 3892 retained bytes. Round up to 4096 and budget two such chunks:
-// one for the observed HTTP/URL state, one for live transport/header churn.
-// This is a budget from a snapshot, NOT a measured peak; log3's
-// boot minimum includes the later manifest parse and cannot isolate TLS.
-// ponytail: 8192/4096 is specific to this streaming GitHub flow; use the
-// Session's scoped system-heap low-water to recalibrate for other workloads.
-constexpr uint32_t MIN_FREE_WITH_SCRATCH = 2 * 4096;
+// x3-log4-SUCCESS.log (2026-09-19), scoped INTERNAL heap minima:
+// manifest: 26460 -> 3556 = 22904 bytes; worst font: 18752 -> 1896 = 16856.
+// SecureClient now receives directly into wolfSSL's scratch-backed record:
+// NetworkClient's separate 1436-byte malloc/copy is gone. Credit only its
+// payload, not allocator overhead or any improvement in packet draining.
+// Projected demand: general 22904 - 1436 = 21468; font 16856 - 1436 = 15420.
+// Floors leave 25600 - 21468 = 4132 and 20480 - 15420 = 5060 bytes respectively.
+// FontDownload also releases its unused list capacities before the file gate;
+// without that reclamation the old 18752-byte admission WOULD be refused.
+// Pool floors stay 40960/16640: receive uses the existing wolfSSL allocation.
+// ponytail: these are measured-demand projections, not post-fix measurements
+// or bounds on other networks. Keep scoped minima; validate >=4096 on X3,
+// all nine CRC-verified downloads and zero spills before release. IDF sums
+// per-region minima, which need not occur simultaneously.
+enum class Transfer { General, FontFile };
+constexpr uint32_t MIN_FREE_WITH_SCRATCH = 25 * 1024;
+constexpr uint32_t MIN_FREE_FONT_FILE_WITH_SCRATCH = 20 * 1024;
 constexpr uint32_t MIN_BLOCK_WITH_SCRATCH = 4096;
 
 // Without scratch, preserve the existing heap-only protection.
 constexpr uint32_t MIN_BLOCK = 8192;
-constexpr uint32_t minFree(const bool scratchActive) { return scratchActive ? MIN_FREE_WITH_SCRATCH : MIN_FREE_HEAP; }
+constexpr uint32_t minFree(const bool scratchActive, const Transfer transfer = Transfer::General) {
+  if (!scratchActive) return MIN_FREE_HEAP;
+  return transfer == Transfer::FontFile ? MIN_FREE_FONT_FILE_WITH_SCRATCH : MIN_FREE_WITH_SCRATCH;
+}
 constexpr uint32_t minBlock(const bool scratchActive) { return scratchActive ? MIN_BLOCK_WITH_SCRATCH : MIN_BLOCK; }
 
 constexpr bool canStartTls(const uint32_t freeHeap, const uint32_t largestBlock, const bool scratchActive,
-                           const uint32_t poolFree, const uint32_t poolLargestBlock) {
-  return freeHeap >= minFree(scratchActive) && largestBlock >= minBlock(scratchActive) &&
+                           const uint32_t poolFree, const uint32_t poolLargestBlock,
+                           const Transfer transfer = Transfer::General) {
+  return freeHeap >= minFree(scratchActive, transfer) && largestBlock >= minBlock(scratchActive) &&
          (!scratchActive || (poolFree >= MIN_POOL_FREE && poolLargestBlock >= MIN_POOL_BLOCK));
 }
 

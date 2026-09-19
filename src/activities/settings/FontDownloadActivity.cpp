@@ -187,17 +187,18 @@ std::string transferMemoryDetail(const TransferFailure& failure) {
 // failure that reaches the card does not depend on someone photographing the
 // screen. Call INSIDE the framebuffer loan: the floor depends on whether the
 // record buffers are coming off the heap (TlsHeapPolicy.h).
-bool gateAllowsTls(const char* step, const bool framebufferLent) {
+bool gateAllowsTls(const char* step, const bool framebufferLent,
+                   const tls_heap::Transfer transfer = tls_heap::Transfer::General) {
   const uint32_t freeHeap = ESP.getFreeHeap();
   const uint32_t largestBlock = ESP.getMaxAllocHeap();
   const uint32_t poolFree = tls_scratch::poolFreeBytes();
   const uint32_t poolBlock = tls_scratch::poolLargestBlock();
-  const bool allowed = tls_heap::canStartTls(freeHeap, largestBlock, framebufferLent, poolFree, poolBlock);
-  diag::recordTlsGate(step, freeHeap, largestBlock, framebufferLent, tls_heap::minFree(framebufferLent),
+  const bool allowed = tls_heap::canStartTls(freeHeap, largestBlock, framebufferLent, poolFree, poolBlock, transfer);
+  diag::recordTlsGate(step, freeHeap, largestBlock, framebufferLent, tls_heap::minFree(framebufferLent, transfer),
                       tls_heap::minBlock(framebufferLent), allowed, poolFree, poolBlock);
   LOG_INF("FONT", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
           static_cast<unsigned>(freeHeap), static_cast<unsigned>(largestBlock), framebufferLent ? "yes" : "no",
-          static_cast<unsigned>(tls_heap::minFree(framebufferLent)),
+          static_cast<unsigned>(tls_heap::minFree(framebufferLent, transfer)),
           static_cast<unsigned>(tls_heap::minBlock(framebufferLent)));
   LOG_INF("FONT", "TLS pool at %s: free %u, largest block %u, floor %u/%u -> %s", step, static_cast<unsigned>(poolFree),
           static_cast<unsigned>(poolBlock), static_cast<unsigned>(tls_heap::MIN_POOL_FREE),
@@ -726,7 +727,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
       // will come from (TlsHeapPolicy.h). A handshake started below it does
       // not fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004
       // bytes free and the reader was unresponsive until the watchdog reset it.
-      if (!gateAllowsTls("font file", framebufferLent)) {
+      if (!gateAllowsTls("font file", framebufferLent, tls_heap::Transfer::FontFile)) {
         const TransferFailure gated = captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent);
         setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MEMORY), transferErrorDetail(gated),
                  transferMemoryDetail(gated));
@@ -914,9 +915,16 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   std::vector<ManifestFamily>().swap(families_);
   // The rows point into the list that was just released, and the failure paths
   // below can reach the list screen again without rebuilding them.
-  rows_.clear();
-  rowLabels_.clear();
-  rowValues_.clear();
+  // clear() destroys strings but keeps the three backing arrays. On C3 these
+  // otherwise pin 33 * (sizeof(ListItem) + 2 * sizeof(string)) = 3300 bytes
+  // through every transfer. The progress view never uses them; refreshRows()
+  // rebuilds them after reloadFamilies(), including cancel/error paths.
+  const size_t rowStorage = rows_.capacity() * sizeof(freeink::ui::ListItem) +
+                            (rowLabels_.capacity() + rowValues_.capacity()) * sizeof(std::string);
+  std::vector<freeink::ui::ListItem>().swap(rows_);
+  std::vector<std::string>().swap(rowLabels_);
+  std::vector<std::string>().swap(rowValues_);
+  LOG_DBG("FONT", "Released list storage: %u payload bytes", static_cast<unsigned>(rowStorage));
 
   bool ok = true;
   for (const auto& file : files) {
