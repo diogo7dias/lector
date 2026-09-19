@@ -36,56 +36,21 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(
       selectedProgressBar(progressBar),
       currentPage(currentPage),
       totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {
-  // The menu is one list, so the setting that used to pick a tab now picks the section
-  // the list opens on. A section with nothing to show is simply not in the list, and
-  // the lookup falls back to the first row.
-  preferredTab = tabForSetting(SETTINGS.bookMenuTab);
-}
-
-// The heading each section is built with, so a lookup by label can find it again in
-// the flattened list. Kept beside buildTabs: the two must name the same strings.
-static StrId labelForTab(const EpubReaderMenuActivity::Tab tab) {
-  switch (tab) {
-    case EpubReaderMenuActivity::Tab::ThisBook:
-      return StrId::STR_SEC_THIS_BOOK;
-    case EpubReaderMenuActivity::Tab::Look:
-      return StrId::STR_SEC_LOOK;
-    case EpubReaderMenuActivity::Tab::Sleep:
-      return StrId::STR_SEC_SLEEP_SCREEN;
-    case EpubReaderMenuActivity::Tab::Device:
-      return StrId::STR_SEC_DEVICE;
-    case EpubReaderMenuActivity::Tab::Navigate:
-    default:
-      return StrId::STR_SEC_NAVIGATE;
-  }
-}
+      bookProgressPercent(bookProgressPercent) {}
 
 // Section label first, then that section's rows. A section that built no rows
 // contributes nothing at all, heading included.
 std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::flatten(const std::vector<TabPage>& pages) {
   std::vector<MenuItem> flat;
+  size_t count = 0;
+  for (const auto& page : pages) count += page.items.empty() ? 0 : page.items.size() + 1;
+  flat.reserve(count + 1);  // one conditional Progress Bar row can arrive in place
   for (const auto& page : pages) {
     if (page.items.empty()) continue;
     flat.push_back(MenuItem::Header(page.labelId));
     flat.insert(flat.end(), page.items.begin(), page.items.end());
   }
   return flat;
-}
-
-EpubReaderMenuActivity::Tab EpubReaderMenuActivity::tabForSetting(const uint8_t setting) {
-  switch (setting) {
-    case CrossPointSettings::BOOK_MENU_TAB_THIS_BOOK:
-      return Tab::ThisBook;
-    case CrossPointSettings::BOOK_MENU_TAB_LOOK:
-      return Tab::Look;
-    case CrossPointSettings::BOOK_MENU_TAB_DEVICE:
-      return Tab::Device;
-    case CrossPointSettings::BOOK_MENU_TAB_SLEEP:
-      return Tab::Sleep;
-    default:
-      return Tab::Navigate;
-  }
 }
 
 std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
@@ -258,77 +223,67 @@ void EpubReaderMenuActivity::syncProgressBarRow() {
     items.insert(next, MenuItem{MenuAction::TOGGLE_PROGRESS_BAR, StrId::STR_PROGRESS_BAR});
   } else if (selectedStatusBar && present) {
     items.erase(next);
-    // The cursor sits on the Status Bar row when this runs, so it is always above the
-    // row being removed and does not move. Clamped anyway: a position past the end would
-    // index off the vector on the next render.
-    const int last = static_cast<int>(items.size()) - 1;
-    if (nav.selected > last) nav.selected = std::max(0, last);
   }
 }
 
-bool EpubReaderMenuActivity::isHeaderRow(const int index) const {
-  const size_t row = static_cast<size_t>(index);
-  return index >= 0 && row < items.size() && items[row].isHeader;
+void EpubReaderMenuActivity::updateRows() {
+  rows.resize(items.size());  // capacity for the conditional row was reserved on entry
+  for (size_t i = 0; i < items.size(); ++i) {
+    rows[i] = fui::ListItem{};
+    rows[i].label = I18N.get(items[i].labelId);
+    rows[i].value = rowValue(static_cast<int>(i));
+    rows[i].isHeader = items[i].isHeader;
+  }
 }
 
-int EpubReaderMenuActivity::stepPastHeaders(int index, const int direction) const {
-  const int count = static_cast<int>(items.size());
-  if (count <= 0) return 0;
-  // Bounded by the list so one made of nothing but headings cannot spin.
-  for (int guard = 0; guard < count && isHeaderRow(index); ++guard) {
-    index = direction >= 0 ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
+void EpubReaderMenuActivity::focusRow(const int index) {
+  {
+    RenderLock lock(*this);
+    const int previousHeader = sections.expandedHeader;
+    const int selected = sections.focus(rows.data(), static_cast<int>(rows.size()), index);
+    if (selected < 0) return;
+    // Published touch indexes belong to the old layout until renderUi() rebuilds it.
+    if (previousHeader != sections.expandedHeader) closeRouting();
+    nav.selected = selected;
+    nav.drawnRows = 0;  // the old viewport may contain rows that just disappeared
+    nav.follow(listCount());
   }
-  return index;
+  requestUpdate();
+}
+
+void EpubReaderMenuActivity::stepRow(const int direction, const int steps) {
+  for (int step = 0; step < steps; ++step) {
+    const int count = listCount();
+    if (count == 0) return;
+    focusRow(direction > 0 ? ButtonNavigator::nextIndex(nav.selected, count)
+                           : ButtonNavigator::previousIndex(nav.selected, count));
+  }
 }
 
 void EpubReaderMenuActivity::jumpSection(const bool forward) {
   const int count = static_cast<int>(items.size());
-  if (count <= 0) return;
-  // Walk to the next heading in that direction, then land on the row under it. Parking
-  // the window on the heading keeps the section's name on screen, so a jump reads as
-  // arriving somewhere rather than as the list sliding by an arbitrary amount.
-  int index = nav.selected;
+  int index = sections.itemIndex(rows.data(), count, nav.selected);
+  if (index < 0) return;
   for (int guard = 0; guard < count; ++guard) {
     index = forward ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
-    if (!isHeaderRow(index)) continue;
-    {
-      // The render task reads nav mid-build, so selection and viewport move together
-      // under one lock. Parking top ON the heading is the point of the jump, so the
-      // follow-on-build that would re-derive it is switched off for this move.
-      RenderLock lock(*this);
-      nav.selected = stepPastHeaders(index, 1);
-      nav.top = std::max(0, index);
-      nav.followOnBuild = false;
-      nav.followPending = false;
-    }
-    requestUpdate();
+    if (!items[index].isHeader) continue;
+    focusRow(sections.visibleIndex(rows.data(), count, index));
     return;
   }
 }
 
-int EpubReaderMenuActivity::firstRowOfPreferredSection() const {
-  // Headings carry no Tab value, so the section is found by its label: buildTabs gives
-  // each section the heading its own labelId names.
-  const StrId wanted = labelForTab(preferredTab);
-  for (int i = 0; i < static_cast<int>(items.size()); ++i) {
-    if (items[i].isHeader && items[i].labelId == wanted) return stepPastHeaders(i, 1);
-  }
-  return stepPastHeaders(0, 1);
-}
-
 void EpubReaderMenuActivity::onEnter() {
-  // The base resets the selection, so the opening row is chosen after it: the first row
-  // of the section the user picked in Settings. The viewport is parked on that section's
-  // heading, so the list reads from its name down rather than from an arbitrary row.
+  // Storage is allocated before the base starts rendering. Navigation and drawing
+  // borrow it, including the one row Status Bar can insert during this visit.
+  rows.reserve(items.size() + 1);
+  updateRows();
+  sections.expandedHeader = -1;
   UiListActivity::onEnter();
-  const int first = firstRowOfPreferredSection();
   {
-    // Written under the lock: the base already asked for the first paint, so the render
-    // task may be reading nav by now.
     RenderLock lock(*this);
-    nav.selected = first;
-    nav.top = std::max(0, first - 1);
-    nav.followOnBuild = false;
+    int first = 0;
+    while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
+    nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
   }
   requestUpdate();
 }
@@ -391,9 +346,23 @@ bool EpubReaderMenuActivity::handleCustomInput() {
 }
 
 bool EpubReaderMenuActivity::handleButtons() {
-  // Back closes the menu and carries no hold, so it goes on the press.
+  // Back first collapses to the open header; a second Back leaves the menu.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    closeCancelled();
+    int header;
+    {
+      RenderLock lock(*this);
+      header = sections.collapse(rows.data(), static_cast<int>(rows.size()));
+      if (header >= 0) {
+        closeRouting();
+        nav.selected = header;
+        nav.drawnRows = 0;
+        nav.follow(listCount());
+      }
+    }
+    if (header >= 0)
+      requestUpdate();
+    else
+      closeCancelled();
     return true;
   }
 
@@ -410,30 +379,24 @@ bool EpubReaderMenuActivity::handleButtons() {
 }
 
 void EpubReaderMenuActivity::navigateButtons() {
-  // One flat list of headings and rows: a press steps one row past any heading, and
-  // holding jumps to the next section instead of repeating — the fast travel the tab
-  // bar used to provide.
-  const int count = static_cast<int>(items.size());
-
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavNext, [this, count](const int rows) {
-    int index = nav.selected;
-    for (int row = 0; row < rows; ++row) index = stepPastHeaders(ButtonNavigator::nextIndex(index, count), 1);
-    moveSelectionTo(index);
-  });
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavPrevious, [this, count](const int rows) {
-    int index = nav.selected;
-    for (int row = 0; row < rows; ++row) index = stepPastHeaders(ButtonNavigator::previousIndex(index, count), -1);
-    moveSelectionTo(index);
-  });
+  buttonNavigator.onRowTap(MappedInputManager::Button::NavNext, [this](const int rows) { stepRow(1, rows); });
+  buttonNavigator.onRowTap(MappedInputManager::Button::NavPrevious, [this](const int rows) { stepRow(-1, rows); });
   buttonNavigator.onNextContinuous([this] { jumpSection(true); });
   buttonNavigator.onPreviousContinuous([this] { jumpSection(false); });
 }
 
-void EpubReaderMenuActivity::activateIndex(const int index) {
-  // Headings are never landable, so anything reaching this is a real row. A tap that
-  // hits one anyway is dropped rather than mapped onto a neighbour.
-  if (index < 0 || index >= static_cast<int>(items.size()) || isHeaderRow(index)) return;
+void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
+  const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visibleIndex);
+  if (index < 0) return;
   app.clearTapFlash();
+  if (items[index].isHeader) {
+    focusRow(visibleIndex);
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    nav.selected = visibleIndex;
+  }
   const auto selectedAction = items[index].action;
   if (selectedAction == MenuAction::ROTATE_SCREEN) {
     optionPopup.show(StrId::STR_ORIENTATION, orientationLabels.data(), static_cast<int>(orientationLabels.size()),
@@ -472,10 +435,14 @@ void EpubReaderMenuActivity::activateIndex(const int index) {
     return;
   }
   if (selectedAction == MenuAction::TOGGLE_STATUS_BAR) {
-    selectedStatusBar = selectedStatusBar ? 0 : 1;
-    // The Progress Bar row belongs to the OFF state, so it arrives and leaves with
-    // this toggle rather than waiting for the menu to be reopened.
-    syncProgressBarRow();
+    {
+      RenderLock lock(*this);
+      selectedStatusBar = selectedStatusBar ? 0 : 1;
+      // This insertion is after the focused row and its header: both stay valid.
+      syncProgressBarRow();
+      updateRows();
+      closeRouting();
+    }
     requestUpdate();
     return;
   }
@@ -548,20 +515,13 @@ ListChrome EpubReaderMenuActivity::chrome() const {
 }
 
 void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
-  const int count = static_cast<int>(items.size());
-  rows.assign(static_cast<size_t>(count), fui::ListItem{});
-  for (int i = 0; i < count; ++i) {
-    rows[i].label = I18N.get(items[i].labelId);
-    rows[i].value = rowValue(i);
-    // Section headings: drawn as a heading band, never selected and never activated.
-    rows[i].isHeader = items[i].isHeader;
-    rows[i].enabled = !items[i].isHeader;
-    rows[i].actionValue = static_cast<int16_t>(i);
-  }
+  // Navigation reads the header flags too; only values change during drawing.
+  for (size_t i = 0; i < rows.size(); ++i) rows[i].value = rowValue(static_cast<int>(i));
 
   fui::ListProps props{};
   props.items = rows.data();
-  props.count = static_cast<uint16_t>(count);
+  props.count = static_cast<uint16_t>(rows.size());
+  props.sections = &sections;
   props.action = ACTION_ROW;
   syncListViewport(screen, props);
   screen.list(props);
