@@ -2,6 +2,8 @@
 
 #include <cstdint>
 
+#include "TlsScratchLayout.h"
+
 // Whether a TLS session may be started on the heap the reader has right now.
 // Kept free of ESP headers so the numbers can be reasoned about (and tested)
 // on the host; the callers feed ESP.getFreeHeap() / ESP.getMaxAllocHeap().
@@ -19,23 +21,57 @@ namespace tls_heap {
 // 30000 is already the least that avoids the hang, not a comfortable margin.
 constexpr uint32_t MIN_FREE_HEAP = 30000;
 
-// Floor while the framebuffer is lent to wolfSSL (tls_scratch::Session active):
-// the two large record buffers are carved from the lent 48 KB and the heap only
-// carries the session, the HTTP client and the caller's parser. Measured on an
-// X4 (C3) OPDS fetch with one slot lent: from 38716 bytes free the transfer
-// reached 18116 before asking for its second record buffer, i.e. 20600 bytes
-// of heap for everything but the two large buffers. 24000 keeps 3 KB over that
-// on a fetch whose parser (ReleaseJsonParser) is smaller than OPDS's.
-constexpr uint32_t MIN_FREE_WITH_SCRATCH = 24000;
+// X3 log3 (2026-09-19): 51456 usable -> 18196 low-water = 33260 bytes
+// served by scratch, with ZERO wolfSSL spills. Require the existing 40 KiB
+// scratch budget as FREE bytes (7700 over that measured peak), and room for
+// one contiguous 16640-byte record. A claimed but depleted pool is not enough.
+constexpr uint32_t MIN_POOL_FREE = tls_scratch::NEEDED;
+constexpr uint32_t MIN_POOL_BLOCK = tls_scratch::RECORD_BYTES;
 
-// Largest contiguous block either way: wolfSSL's SP math temps are ~4 KB each
-// (SecureClient.cpp) and two can be live at once during the handshake.
+// x3-log4-SUCCESS.log (2026-09-19), scoped INTERNAL heap minima:
+// manifest: 26460 -> 3556 = 22904 bytes; worst font: 18752 -> 1896 = 16856.
+// SecureClient now receives directly into wolfSSL's scratch-backed record:
+// NetworkClient's separate 1436-byte malloc/copy is gone. Credit only its
+// payload, not allocator overhead or any improvement in packet draining.
+// Projected demand: general 22904 - 1436 = 21468; font 16856 - 1436 = 15420.
+// Floors leave 25600 - 21468 = 4132 and 20480 - 15420 = 5060 bytes respectively.
+// FontDownload also releases its unused list capacities before the file gate;
+// without that reclamation the old 18752-byte admission WOULD be refused.
+// Pool floors stay 40960/16640: receive uses the existing wolfSSL allocation.
+// ponytail: these are measured-demand projections, not post-fix measurements
+// or bounds on other networks. Keep scoped minima; validate >=4096 on X3,
+// all nine CRC-verified downloads and zero spills before release. IDF sums
+// per-region minima, which need not occur simultaneously.
+enum class Transfer { General, FontFile };
+// x3-log5-REFUSED.log (2026-09-19): the 25600 floor refused the font list at
+// 24528 free, and refused again at 24652 on the retry. The manifest fetch that
+// SUCCEEDED in log4 started from 26460, so free at this gate swings ~1900 bytes
+// run to run: a floor calibrated on one snapshot sits inside the noise. Drop to
+// 22 KiB, which clears both refused admissions and still leaves 22528 - 21468 =
+// 1060 bytes over measured demand.
+// ponytail: floor tuned against two device logs, not a bound. If a refusal
+// shows up again above this, the fix is to cut demand, not to keep lowering it.
+constexpr uint32_t MIN_FREE_WITH_SCRATCH = 22 * 1024;
+// Same trap on the font path: log4's nine successful downloads were admitted
+// from 18752 and 18704 free, so the 20480 floor would refuse every one of them
+// even though they ran to completion. 18 KiB clears both and stays 3012 bytes
+// over the 15420-byte measured demand.
+constexpr uint32_t MIN_FREE_FONT_FILE_WITH_SCRATCH = 18 * 1024;
+constexpr uint32_t MIN_BLOCK_WITH_SCRATCH = 4096;
+
+// Without scratch, preserve the existing heap-only protection.
 constexpr uint32_t MIN_BLOCK = 8192;
+constexpr uint32_t minFree(const bool scratchActive, const Transfer transfer = Transfer::General) {
+  if (!scratchActive) return MIN_FREE_HEAP;
+  return transfer == Transfer::FontFile ? MIN_FREE_FONT_FILE_WITH_SCRATCH : MIN_FREE_WITH_SCRATCH;
+}
+constexpr uint32_t minBlock(const bool scratchActive) { return scratchActive ? MIN_BLOCK_WITH_SCRATCH : MIN_BLOCK; }
 
-constexpr uint32_t minFree(const bool scratchActive) { return scratchActive ? MIN_FREE_WITH_SCRATCH : MIN_FREE_HEAP; }
-
-constexpr bool canStartTls(const uint32_t freeHeap, const uint32_t largestBlock, const bool scratchActive) {
-  return freeHeap >= minFree(scratchActive) && largestBlock >= MIN_BLOCK;
+constexpr bool canStartTls(const uint32_t freeHeap, const uint32_t largestBlock, const bool scratchActive,
+                           const uint32_t poolFree, const uint32_t poolLargestBlock,
+                           const Transfer transfer = Transfer::General) {
+  return freeHeap >= minFree(scratchActive, transfer) && largestBlock >= minBlock(scratchActive) &&
+         (!scratchActive || (poolFree >= MIN_POOL_FREE && poolLargestBlock >= MIN_POOL_BLOCK));
 }
 
 }  // namespace tls_heap

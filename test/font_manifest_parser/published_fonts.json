@@ -1,0 +1,1892 @@
+{
+ "version": 1,
+ "baseUrl": "https://github.com/diogo7dias/lector-fonts/releases/download/sd-fonts-m1-b4/",
+ "scriptGroups": [
+  {
+   "tag": "latin",
+   "label": "Latin"
+  },
+  {
+   "tag": "cyrillic",
+   "label": "Cyrillic"
+  },
+  {
+   "tag": "greek",
+   "label": "Greek"
+  },
+  {
+   "tag": "georgian",
+   "label": "Georgian"
+  },
+  {
+   "tag": "armenian",
+   "label": "Armenian"
+  },
+  {
+   "tag": "ethiopic",
+   "label": "Ethiopic"
+  },
+  {
+   "tag": "hangul",
+   "label": "Korean"
+  },
+  {
+   "tag": "cjk",
+   "label": "Chinese and Japanese"
+  }
+ ],
+ "families": [
+  {
+   "name": "Alegreya",
+   "description": "Calligraphic serif/display (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "Alegreya_10.cpfont",
+     "size": 474680,
+     "crc32": 3569130992
+    },
+    {
+     "name": "Alegreya_11.cpfont",
+     "size": 537269,
+     "crc32": 2455093511
+    },
+    {
+     "name": "Alegreya_12.cpfont",
+     "size": 603435,
+     "crc32": 2617668514
+    },
+    {
+     "name": "Alegreya_13.cpfont",
+     "size": 678577,
+     "crc32": 1673205039
+    },
+    {
+     "name": "Alegreya_14.cpfont",
+     "size": 755100,
+     "crc32": 2334803086
+    },
+    {
+     "name": "Alegreya_15.cpfont",
+     "size": 840706,
+     "crc32": 1170053564
+    },
+    {
+     "name": "Alegreya_16.cpfont",
+     "size": 927772,
+     "crc32": 3272697195
+    },
+    {
+     "name": "Alegreya_17.cpfont",
+     "size": 1026560,
+     "crc32": 3549661182
+    },
+    {
+     "name": "Alegreya_18.cpfont",
+     "size": 1124493,
+     "crc32": 2967636722
+    }
+   ]
+  },
+  {
+   "name": "AnonymousPro",
+   "description": "Fixed-width coding face (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "AnonymousPro_10.cpfont",
+     "size": 409638,
+     "crc32": 2725260392
+    },
+    {
+     "name": "AnonymousPro_11.cpfont",
+     "size": 469063,
+     "crc32": 2524332796
+    },
+    {
+     "name": "AnonymousPro_12.cpfont",
+     "size": 530486,
+     "crc32": 52769209
+    },
+    {
+     "name": "AnonymousPro_13.cpfont",
+     "size": 601423,
+     "crc32": 3674384188
+    },
+    {
+     "name": "AnonymousPro_14.cpfont",
+     "size": 674096,
+     "crc32": 2923562735
+    },
+    {
+     "name": "AnonymousPro_15.cpfont",
+     "size": 758906,
+     "crc32": 2272928906
+    },
+    {
+     "name": "AnonymousPro_16.cpfont",
+     "size": 838337,
+     "crc32": 3554504123
+    },
+    {
+     "name": "AnonymousPro_17.cpfont",
+     "size": 930459,
+     "crc32": 4277833421
+    },
+    {
+     "name": "AnonymousPro_18.cpfont",
+     "size": 1036631,
+     "crc32": 4268643192
+    }
+   ]
+  },
+  {
+   "name": "AtkinsonHyperlegibleNext",
+   "description": "Accessibility font for low vision (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "AtkinsonHyperlegibleNext_10.cpfont",
+     "size": 304505,
+     "crc32": 715351381
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_11.cpfont",
+     "size": 342881,
+     "crc32": 1870023951
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_12.cpfont",
+     "size": 381065,
+     "crc32": 1059064436
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_13.cpfont",
+     "size": 427051,
+     "crc32": 1349665330
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_14.cpfont",
+     "size": 475036,
+     "crc32": 3406782670
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_15.cpfont",
+     "size": 526067,
+     "crc32": 2343434703
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_16.cpfont",
+     "size": 576403,
+     "crc32": 3209416952
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_17.cpfont",
+     "size": 636925,
+     "crc32": 3679510179
+    },
+    {
+     "name": "AtkinsonHyperlegibleNext_18.cpfont",
+     "size": 697473,
+     "crc32": 1670447835
+    }
+   ]
+  },
+  {
+   "name": "Bitter",
+   "description": "Slab serif designed for e-ink (Latin, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic"
+   ],
+   "files": [
+    {
+     "name": "Bitter_10.cpfont",
+     "size": 458928,
+     "crc32": 3334555868
+    },
+    {
+     "name": "Bitter_11.cpfont",
+     "size": 515465,
+     "crc32": 4059786542
+    },
+    {
+     "name": "Bitter_12.cpfont",
+     "size": 572381,
+     "crc32": 249365228
+    },
+    {
+     "name": "Bitter_13.cpfont",
+     "size": 639918,
+     "crc32": 4114290004
+    },
+    {
+     "name": "Bitter_14.cpfont",
+     "size": 710035,
+     "crc32": 882179887
+    },
+    {
+     "name": "Bitter_15.cpfont",
+     "size": 783945,
+     "crc32": 3698844983
+    },
+    {
+     "name": "Bitter_16.cpfont",
+     "size": 862924,
+     "crc32": 1681704322
+    },
+    {
+     "name": "Bitter_17.cpfont",
+     "size": 950453,
+     "crc32": 371049857
+    },
+    {
+     "name": "Bitter_18.cpfont",
+     "size": 1040141,
+     "crc32": 1752162833
+    }
+   ]
+  },
+  {
+   "name": "ChareInk",
+   "description": "E-ink tuned Charis derivative (Latin, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic"
+   ],
+   "files": [
+    {
+     "name": "ChareInk_10.cpfont",
+     "size": 394398,
+     "crc32": 541574713
+    },
+    {
+     "name": "ChareInk_11.cpfont",
+     "size": 430798,
+     "crc32": 1609671321
+    },
+    {
+     "name": "ChareInk_12.cpfont",
+     "size": 484038,
+     "crc32": 3050089195
+    },
+    {
+     "name": "ChareInk_13.cpfont",
+     "size": 550107,
+     "crc32": 2309739779
+    },
+    {
+     "name": "ChareInk_14.cpfont",
+     "size": 615880,
+     "crc32": 968356578
+    },
+    {
+     "name": "ChareInk_15.cpfont",
+     "size": 685959,
+     "crc32": 3817257171
+    },
+    {
+     "name": "ChareInk_16.cpfont",
+     "size": 761281,
+     "crc32": 3240392674
+    },
+    {
+     "name": "ChareInk_17.cpfont",
+     "size": 835478,
+     "crc32": 35675934
+    },
+    {
+     "name": "ChareInk_18.cpfont",
+     "size": 976533,
+     "crc32": 3214802254
+    }
+   ]
+  },
+  {
+   "name": "ChareInkCJK",
+   "description": "ChareInk with Korean and Chinese (Latin, Cyrillic, Hangul, CJK)",
+   "styles": [
+    "regular",
+    "bold"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "hangul",
+    "cjk"
+   ],
+   "files": [
+    {
+     "name": "ChareInkCJK_12.cpfont",
+     "size": 11301434,
+     "crc32": 886724151
+    },
+    {
+     "name": "ChareInkCJK_13.cpfont",
+     "size": 12945091,
+     "crc32": 857869864
+    },
+    {
+     "name": "ChareInkCJK_14.cpfont",
+     "size": 15131039,
+     "crc32": 3596560449
+    },
+    {
+     "name": "ChareInkCJK_15.cpfont",
+     "size": 17021866,
+     "crc32": 933669914
+    },
+    {
+     "name": "ChareInkCJK_16.cpfont",
+     "size": 18576361,
+     "crc32": 3930989505
+    }
+   ]
+  },
+  {
+   "name": "Domitian",
+   "description": "A humanist serif for literary reading (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "Domitian_10.cpfont",
+     "size": 533742,
+     "crc32": 7982768
+    },
+    {
+     "name": "Domitian_11.cpfont",
+     "size": 600806,
+     "crc32": 1132385340
+    },
+    {
+     "name": "Domitian_12.cpfont",
+     "size": 669837,
+     "crc32": 1499199659
+    },
+    {
+     "name": "Domitian_13.cpfont",
+     "size": 754281,
+     "crc32": 3851061483
+    },
+    {
+     "name": "Domitian_14.cpfont",
+     "size": 835686,
+     "crc32": 3046203183
+    },
+    {
+     "name": "Domitian_15.cpfont",
+     "size": 929641,
+     "crc32": 1119592663
+    },
+    {
+     "name": "Domitian_16.cpfont",
+     "size": 1020561,
+     "crc32": 3934034283
+    },
+    {
+     "name": "Domitian_17.cpfont",
+     "size": 1128044,
+     "crc32": 3440033693
+    },
+    {
+     "name": "Domitian_18.cpfont",
+     "size": 1233556,
+     "crc32": 2172630524
+    }
+   ]
+  },
+  {
+   "name": "Gelasio",
+   "description": "Georgia-metric serif (Latin, Cyrillic, Greek)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "Gelasio_10.cpfont",
+     "size": 460948,
+     "crc32": 2790924253
+    },
+    {
+     "name": "Gelasio_11.cpfont",
+     "size": 530967,
+     "crc32": 2376275821
+    },
+    {
+     "name": "Gelasio_12.cpfont",
+     "size": 603167,
+     "crc32": 215643370
+    },
+    {
+     "name": "Gelasio_13.cpfont",
+     "size": 687836,
+     "crc32": 4237719094
+    },
+    {
+     "name": "Gelasio_14.cpfont",
+     "size": 772285,
+     "crc32": 1252363755
+    },
+    {
+     "name": "Gelasio_15.cpfont",
+     "size": 864793,
+     "crc32": 1427751922
+    },
+    {
+     "name": "Gelasio_16.cpfont",
+     "size": 963661,
+     "crc32": 1232617208
+    },
+    {
+     "name": "Gelasio_17.cpfont",
+     "size": 1072015,
+     "crc32": 2452056226
+    },
+    {
+     "name": "Gelasio_18.cpfont",
+     "size": 1185721,
+     "crc32": 1067311630
+    }
+   ]
+  },
+  {
+   "name": "GentiumBookPlus",
+   "description": "Scholarly serif with wide Unicode coverage (Latin, Greek, Cyrillic, IPA)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "GentiumBookPlus_10.cpfont",
+     "size": 451307,
+     "crc32": 2917391203
+    },
+    {
+     "name": "GentiumBookPlus_11.cpfont",
+     "size": 517806,
+     "crc32": 1078944426
+    },
+    {
+     "name": "GentiumBookPlus_12.cpfont",
+     "size": 586774,
+     "crc32": 3492250042
+    },
+    {
+     "name": "GentiumBookPlus_13.cpfont",
+     "size": 658438,
+     "crc32": 3279174295
+    },
+    {
+     "name": "GentiumBookPlus_14.cpfont",
+     "size": 729634,
+     "crc32": 1100564975
+    },
+    {
+     "name": "GentiumBookPlus_15.cpfont",
+     "size": 811911,
+     "crc32": 3889855720
+    },
+    {
+     "name": "GentiumBookPlus_16.cpfont",
+     "size": 904223,
+     "crc32": 3700025413
+    },
+    {
+     "name": "GentiumBookPlus_17.cpfont",
+     "size": 1009776,
+     "crc32": 15738614
+    },
+    {
+     "name": "GentiumBookPlus_18.cpfont",
+     "size": 1111296,
+     "crc32": 4040605121
+    }
+   ]
+  },
+  {
+   "name": "IBMPlexMono",
+   "description": "Monospace for code and technical reading (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "IBMPlexMono_10.cpfont",
+     "size": 450446,
+     "crc32": 220466787
+    },
+    {
+     "name": "IBMPlexMono_11.cpfont",
+     "size": 516786,
+     "crc32": 2117419805
+    },
+    {
+     "name": "IBMPlexMono_12.cpfont",
+     "size": 581486,
+     "crc32": 1833310906
+    },
+    {
+     "name": "IBMPlexMono_13.cpfont",
+     "size": 663538,
+     "crc32": 615685993
+    },
+    {
+     "name": "IBMPlexMono_14.cpfont",
+     "size": 742826,
+     "crc32": 2758668076
+    },
+    {
+     "name": "IBMPlexMono_15.cpfont",
+     "size": 834617,
+     "crc32": 3615863632
+    },
+    {
+     "name": "IBMPlexMono_16.cpfont",
+     "size": 922467,
+     "crc32": 2790216037
+    },
+    {
+     "name": "IBMPlexMono_17.cpfont",
+     "size": 1026508,
+     "crc32": 1420990988
+    },
+    {
+     "name": "IBMPlexMono_18.cpfont",
+     "size": 1150984,
+     "crc32": 1664279111
+    }
+   ]
+  },
+  {
+   "name": "IBMPlexSans",
+   "description": "IBM corporate sans-serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "IBMPlexSans_10.cpfont",
+     "size": 604961,
+     "crc32": 2790052671
+    },
+    {
+     "name": "IBMPlexSans_11.cpfont",
+     "size": 670458,
+     "crc32": 1360683743
+    },
+    {
+     "name": "IBMPlexSans_12.cpfont",
+     "size": 738789,
+     "crc32": 878563040
+    },
+    {
+     "name": "IBMPlexSans_13.cpfont",
+     "size": 819956,
+     "crc32": 1011394038
+    },
+    {
+     "name": "IBMPlexSans_14.cpfont",
+     "size": 898333,
+     "crc32": 365049024
+    },
+    {
+     "name": "IBMPlexSans_15.cpfont",
+     "size": 992674,
+     "crc32": 2691081545
+    },
+    {
+     "name": "IBMPlexSans_16.cpfont",
+     "size": 1079893,
+     "crc32": 359920446
+    },
+    {
+     "name": "IBMPlexSans_17.cpfont",
+     "size": 1184902,
+     "crc32": 3427278106
+    },
+    {
+     "name": "IBMPlexSans_18.cpfont",
+     "size": 1317334,
+     "crc32": 3924421361
+    }
+   ]
+  },
+  {
+   "name": "IBMPlexSerif",
+   "description": "Professional serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "IBMPlexSerif_10.cpfont",
+     "size": 551914,
+     "crc32": 239841579
+    },
+    {
+     "name": "IBMPlexSerif_11.cpfont",
+     "size": 618963,
+     "crc32": 3544912853
+    },
+    {
+     "name": "IBMPlexSerif_12.cpfont",
+     "size": 688565,
+     "crc32": 63003599
+    },
+    {
+     "name": "IBMPlexSerif_13.cpfont",
+     "size": 771485,
+     "crc32": 3330537710
+    },
+    {
+     "name": "IBMPlexSerif_14.cpfont",
+     "size": 855582,
+     "crc32": 3137453428
+    },
+    {
+     "name": "IBMPlexSerif_15.cpfont",
+     "size": 951568,
+     "crc32": 900664286
+    },
+    {
+     "name": "IBMPlexSerif_16.cpfont",
+     "size": 1042742,
+     "crc32": 2098991603
+    },
+    {
+     "name": "IBMPlexSerif_17.cpfont",
+     "size": 1150735,
+     "crc32": 1057100866
+    },
+    {
+     "name": "IBMPlexSerif_18.cpfont",
+     "size": 1280953,
+     "crc32": 1145584431
+    }
+   ]
+  },
+  {
+   "name": "Inter",
+   "description": "Modern sans-serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "Inter_10.cpfont",
+     "size": 621578,
+     "crc32": 1081364530
+    },
+    {
+     "name": "Inter_11.cpfont",
+     "size": 690128,
+     "crc32": 661970033
+    },
+    {
+     "name": "Inter_12.cpfont",
+     "size": 774751,
+     "crc32": 2822600154
+    },
+    {
+     "name": "Inter_13.cpfont",
+     "size": 853704,
+     "crc32": 3668040183
+    },
+    {
+     "name": "Inter_14.cpfont",
+     "size": 951629,
+     "crc32": 1190355961
+    },
+    {
+     "name": "Inter_15.cpfont",
+     "size": 1047923,
+     "crc32": 4212439711
+    },
+    {
+     "name": "Inter_16.cpfont",
+     "size": 1157624,
+     "crc32": 3616907771
+    },
+    {
+     "name": "Inter_17.cpfont",
+     "size": 1270110,
+     "crc32": 1738404052
+    },
+    {
+     "name": "Inter_18.cpfont",
+     "size": 1385752,
+     "crc32": 3278495591
+    }
+   ]
+  },
+  {
+   "name": "JetBrainsMono",
+   "description": "Developer monospace with tall x-height (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "files": [
+    {
+     "name": "JetBrainsMono_10.cpfont",
+     "size": 430519,
+     "crc32": 498673044
+    },
+    {
+     "name": "JetBrainsMono_11.cpfont",
+     "size": 492300,
+     "crc32": 1091081129
+    },
+    {
+     "name": "JetBrainsMono_12.cpfont",
+     "size": 559463,
+     "crc32": 1681457976
+    },
+    {
+     "name": "JetBrainsMono_13.cpfont",
+     "size": 637272,
+     "crc32": 382172658
+    },
+    {
+     "name": "JetBrainsMono_14.cpfont",
+     "size": 717153,
+     "crc32": 392554699
+    },
+    {
+     "name": "JetBrainsMono_15.cpfont",
+     "size": 802156,
+     "crc32": 1722609435
+    },
+    {
+     "name": "JetBrainsMono_16.cpfont",
+     "size": 888518,
+     "crc32": 821191787
+    },
+    {
+     "name": "JetBrainsMono_17.cpfont",
+     "size": 990157,
+     "crc32": 4263656495
+    },
+    {
+     "name": "JetBrainsMono_18.cpfont",
+     "size": 1092002,
+     "crc32": 2224750496
+    }
+   ]
+  },
+  {
+   "name": "LexendDeca",
+   "description": "Reading-fluency sans (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "LexendDeca_10.cpfont",
+     "size": 292904,
+     "crc32": 258622060
+    },
+    {
+     "name": "LexendDeca_11.cpfont",
+     "size": 330025,
+     "crc32": 3940139321
+    },
+    {
+     "name": "LexendDeca_12.cpfont",
+     "size": 369849,
+     "crc32": 2678368242
+    },
+    {
+     "name": "LexendDeca_13.cpfont",
+     "size": 414329,
+     "crc32": 224734131
+    },
+    {
+     "name": "LexendDeca_14.cpfont",
+     "size": 461007,
+     "crc32": 2258754849
+    },
+    {
+     "name": "LexendDeca_15.cpfont",
+     "size": 510931,
+     "crc32": 462443370
+    },
+    {
+     "name": "LexendDeca_16.cpfont",
+     "size": 564811,
+     "crc32": 166800868
+    },
+    {
+     "name": "LexendDeca_17.cpfont",
+     "size": 624001,
+     "crc32": 3607035874
+    },
+    {
+     "name": "LexendDeca_18.cpfont",
+     "size": 697226,
+     "crc32": 3534492094
+    }
+   ]
+  },
+  {
+   "name": "LexicaUltralegible",
+   "description": "Accessibility font for low vision / dyslexia (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "LexicaUltralegible_10.cpfont",
+     "size": 284350,
+     "crc32": 756829471
+    },
+    {
+     "name": "LexicaUltralegible_11.cpfont",
+     "size": 322645,
+     "crc32": 1336954536
+    },
+    {
+     "name": "LexicaUltralegible_12.cpfont",
+     "size": 360827,
+     "crc32": 3370381278
+    },
+    {
+     "name": "LexicaUltralegible_13.cpfont",
+     "size": 406992,
+     "crc32": 3820005140
+    },
+    {
+     "name": "LexicaUltralegible_14.cpfont",
+     "size": 454655,
+     "crc32": 2826440096
+    },
+    {
+     "name": "LexicaUltralegible_15.cpfont",
+     "size": 504920,
+     "crc32": 2026398834
+    },
+    {
+     "name": "LexicaUltralegible_16.cpfont",
+     "size": 557607,
+     "crc32": 3428308173
+    },
+    {
+     "name": "LexicaUltralegible_17.cpfont",
+     "size": 619277,
+     "crc32": 1506345673
+    },
+    {
+     "name": "LexicaUltralegible_18.cpfont",
+     "size": 674782,
+     "crc32": 4173163049
+    }
+   ]
+  },
+  {
+   "name": "LibreBaskerville",
+   "description": "A serif reimplementing the classic Baskerville (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "LibreBaskerville_10.cpfont",
+     "size": 374040,
+     "crc32": 2123578799
+    },
+    {
+     "name": "LibreBaskerville_11.cpfont",
+     "size": 437429,
+     "crc32": 3086116346
+    },
+    {
+     "name": "LibreBaskerville_12.cpfont",
+     "size": 483754,
+     "crc32": 536912809
+    },
+    {
+     "name": "LibreBaskerville_13.cpfont",
+     "size": 536979,
+     "crc32": 3464834925
+    },
+    {
+     "name": "LibreBaskerville_14.cpfont",
+     "size": 596671,
+     "crc32": 4055499434
+    },
+    {
+     "name": "LibreBaskerville_15.cpfont",
+     "size": 658937,
+     "crc32": 3128912938
+    },
+    {
+     "name": "LibreBaskerville_16.cpfont",
+     "size": 724702,
+     "crc32": 653567024
+    },
+    {
+     "name": "LibreBaskerville_17.cpfont",
+     "size": 794184,
+     "crc32": 766541095
+    },
+    {
+     "name": "LibreBaskerville_18.cpfont",
+     "size": 908530,
+     "crc32": 2140486618
+    }
+   ]
+  },
+  {
+   "name": "Literata",
+   "description": "Screen-optimized serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "Literata_10.cpfont",
+     "size": 667339,
+     "crc32": 2312381102
+    },
+    {
+     "name": "Literata_11.cpfont",
+     "size": 734779,
+     "crc32": 493633420
+    },
+    {
+     "name": "Literata_12.cpfont",
+     "size": 803706,
+     "crc32": 1307876380
+    },
+    {
+     "name": "Literata_13.cpfont",
+     "size": 887225,
+     "crc32": 3496664947
+    },
+    {
+     "name": "Literata_14.cpfont",
+     "size": 974173,
+     "crc32": 94803667
+    },
+    {
+     "name": "Literata_15.cpfont",
+     "size": 1067402,
+     "crc32": 3930301573
+    },
+    {
+     "name": "Literata_16.cpfont",
+     "size": 1167060,
+     "crc32": 2277033779
+    },
+    {
+     "name": "Literata_17.cpfont",
+     "size": 1289428,
+     "crc32": 357839424
+    },
+    {
+     "name": "Literata_18.cpfont",
+     "size": 1447349,
+     "crc32": 4241608423
+    }
+   ]
+  },
+  {
+   "name": "Lora",
+   "description": "Calligraphic serif for literary reading (Latin, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic"
+   ],
+   "files": [
+    {
+     "name": "Lora_10.cpfont",
+     "size": 407833,
+     "crc32": 486247361
+    },
+    {
+     "name": "Lora_11.cpfont",
+     "size": 459093,
+     "crc32": 1280435814
+    },
+    {
+     "name": "Lora_12.cpfont",
+     "size": 513477,
+     "crc32": 2161825598
+    },
+    {
+     "name": "Lora_13.cpfont",
+     "size": 574529,
+     "crc32": 618480628
+    },
+    {
+     "name": "Lora_14.cpfont",
+     "size": 640136,
+     "crc32": 3352268089
+    },
+    {
+     "name": "Lora_15.cpfont",
+     "size": 716717,
+     "crc32": 2808040183
+    },
+    {
+     "name": "Lora_16.cpfont",
+     "size": 788394,
+     "crc32": 1422755323
+    },
+    {
+     "name": "Lora_17.cpfont",
+     "size": 870191,
+     "crc32": 2901409303
+    },
+    {
+     "name": "Lora_18.cpfont",
+     "size": 981925,
+     "crc32": 1010292166
+    }
+   ]
+  },
+  {
+   "name": "Merriweather",
+   "description": "Warm serif for long-form reading (Latin, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic"
+   ],
+   "files": [
+    {
+     "name": "Merriweather_10.cpfont",
+     "size": 498250,
+     "crc32": 3905329729
+    },
+    {
+     "name": "Merriweather_11.cpfont",
+     "size": 560645,
+     "crc32": 566484017
+    },
+    {
+     "name": "Merriweather_12.cpfont",
+     "size": 621004,
+     "crc32": 4195627073
+    },
+    {
+     "name": "Merriweather_13.cpfont",
+     "size": 690891,
+     "crc32": 2504802320
+    },
+    {
+     "name": "Merriweather_14.cpfont",
+     "size": 763902,
+     "crc32": 1938129440
+    },
+    {
+     "name": "Merriweather_15.cpfont",
+     "size": 845958,
+     "crc32": 1853204731
+    },
+    {
+     "name": "Merriweather_16.cpfont",
+     "size": 928289,
+     "crc32": 377493088
+    },
+    {
+     "name": "Merriweather_17.cpfont",
+     "size": 1023973,
+     "crc32": 4132113282
+    },
+    {
+     "name": "Merriweather_18.cpfont",
+     "size": 1114530,
+     "crc32": 2206983897
+    }
+   ]
+  },
+  {
+   "name": "Newsreader",
+   "description": "Newspaper serif for screens (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "Newsreader_10.cpfont",
+     "size": 368337,
+     "crc32": 2037002567
+    },
+    {
+     "name": "Newsreader_11.cpfont",
+     "size": 403157,
+     "crc32": 435638456
+    },
+    {
+     "name": "Newsreader_12.cpfont",
+     "size": 440722,
+     "crc32": 3776237259
+    },
+    {
+     "name": "Newsreader_13.cpfont",
+     "size": 485610,
+     "crc32": 1366414010
+    },
+    {
+     "name": "Newsreader_14.cpfont",
+     "size": 531912,
+     "crc32": 1414341623
+    },
+    {
+     "name": "Newsreader_15.cpfont",
+     "size": 584160,
+     "crc32": 1292160006
+    },
+    {
+     "name": "Newsreader_16.cpfont",
+     "size": 632378,
+     "crc32": 2444895202
+    },
+    {
+     "name": "Newsreader_17.cpfont",
+     "size": 689276,
+     "crc32": 2443615503
+    },
+    {
+     "name": "Newsreader_18.cpfont",
+     "size": 745458,
+     "crc32": 3670245383
+    }
+   ]
+  },
+  {
+   "name": "NotoSansExtended",
+   "description": "Sans-serif (Latin, Greek, Cyrillic, Georgian, Armenian, Ethiopic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek",
+    "georgian",
+    "armenian",
+    "ethiopic"
+   ],
+   "files": [
+    {
+     "name": "NotoSansExtended_10.cpfont",
+     "size": 540091,
+     "crc32": 2378777991
+    },
+    {
+     "name": "NotoSansExtended_11.cpfont",
+     "size": 611969,
+     "crc32": 4023646200
+    },
+    {
+     "name": "NotoSansExtended_12.cpfont",
+     "size": 683134,
+     "crc32": 226707673
+    },
+    {
+     "name": "NotoSansExtended_13.cpfont",
+     "size": 771392,
+     "crc32": 1494446627
+    },
+    {
+     "name": "NotoSansExtended_14.cpfont",
+     "size": 860652,
+     "crc32": 497246336
+    },
+    {
+     "name": "NotoSansExtended_15.cpfont",
+     "size": 959951,
+     "crc32": 2386959263
+    },
+    {
+     "name": "NotoSansExtended_16.cpfont",
+     "size": 1060619,
+     "crc32": 815765497
+    },
+    {
+     "name": "NotoSansExtended_17.cpfont",
+     "size": 1175947,
+     "crc32": 2024430198
+    },
+    {
+     "name": "NotoSansExtended_18.cpfont",
+     "size": 1285029,
+     "crc32": 2314411641
+    }
+   ]
+  },
+  {
+   "name": "NotoSerifExtended",
+   "description": "Serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "NotoSerifExtended_10.cpfont",
+     "size": 563990,
+     "crc32": 2271043601
+    },
+    {
+     "name": "NotoSerifExtended_11.cpfont",
+     "size": 634879,
+     "crc32": 1729657017
+    },
+    {
+     "name": "NotoSerifExtended_12.cpfont",
+     "size": 703243,
+     "crc32": 3442775586
+    },
+    {
+     "name": "NotoSerifExtended_13.cpfont",
+     "size": 796177,
+     "crc32": 2193840688
+    },
+    {
+     "name": "NotoSerifExtended_14.cpfont",
+     "size": 879813,
+     "crc32": 3182266688
+    },
+    {
+     "name": "NotoSerifExtended_15.cpfont",
+     "size": 969877,
+     "crc32": 1972431930
+    },
+    {
+     "name": "NotoSerifExtended_16.cpfont",
+     "size": 1078614,
+     "crc32": 1682661732
+    },
+    {
+     "name": "NotoSerifExtended_17.cpfont",
+     "size": 1195407,
+     "crc32": 3709225613
+    },
+    {
+     "name": "NotoSerifExtended_18.cpfont",
+     "size": 1343672,
+     "crc32": 3053186668
+    }
+   ]
+  },
+  {
+   "name": "OpenDyslexic",
+   "description": "Dyslexia-friendly font (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "OpenDyslexic_10.cpfont",
+     "size": 386228,
+     "crc32": 3119945091
+    },
+    {
+     "name": "OpenDyslexic_11.cpfont",
+     "size": 444637,
+     "crc32": 119734916
+    },
+    {
+     "name": "OpenDyslexic_12.cpfont",
+     "size": 506114,
+     "crc32": 286091494
+    },
+    {
+     "name": "OpenDyslexic_13.cpfont",
+     "size": 570547,
+     "crc32": 3710891313
+    },
+    {
+     "name": "OpenDyslexic_14.cpfont",
+     "size": 646454,
+     "crc32": 342404641
+    },
+    {
+     "name": "OpenDyslexic_15.cpfont",
+     "size": 730151,
+     "crc32": 3084661566
+    },
+    {
+     "name": "OpenDyslexic_16.cpfont",
+     "size": 805156,
+     "crc32": 1075387474
+    },
+    {
+     "name": "OpenDyslexic_8.cpfont",
+     "size": 285759,
+     "crc32": 1341882208
+    },
+    {
+     "name": "OpenDyslexic_9.cpfont",
+     "size": 335168,
+     "crc32": 2978218934
+    }
+   ]
+  },
+  {
+   "name": "Signika",
+   "description": "Humanist sans, slightly narrow (Latin, Greek, Cyrillic) \u2014 no italic upstream",
+   "styles": [
+    "regular",
+    "bold"
+   ],
+   "files": [
+    {
+     "name": "Signika_10.cpfont",
+     "size": 255775,
+     "crc32": 1133328676
+    },
+    {
+     "name": "Signika_11.cpfont",
+     "size": 286351,
+     "crc32": 2353075658
+    },
+    {
+     "name": "Signika_12.cpfont",
+     "size": 318672,
+     "crc32": 1823622621
+    },
+    {
+     "name": "Signika_13.cpfont",
+     "size": 357066,
+     "crc32": 2419012641
+    },
+    {
+     "name": "Signika_14.cpfont",
+     "size": 395951,
+     "crc32": 1736653742
+    },
+    {
+     "name": "Signika_15.cpfont",
+     "size": 437647,
+     "crc32": 2186302697
+    },
+    {
+     "name": "Signika_16.cpfont",
+     "size": 480803,
+     "crc32": 71226119
+    },
+    {
+     "name": "Signika_17.cpfont",
+     "size": 529561,
+     "crc32": 1115208275
+    },
+    {
+     "name": "Signika_18.cpfont",
+     "size": 580147,
+     "crc32": 494732614
+    }
+   ]
+  },
+  {
+   "name": "SourceCodePro",
+   "description": "Adobe monospace with excellent hinting (Latin)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin"
+   ],
+   "files": [
+    {
+     "name": "SourceCodePro_10.cpfont",
+     "size": 255634,
+     "crc32": 394556287
+    },
+    {
+     "name": "SourceCodePro_11.cpfont",
+     "size": 294814,
+     "crc32": 605238031
+    },
+    {
+     "name": "SourceCodePro_12.cpfont",
+     "size": 334211,
+     "crc32": 3569326774
+    },
+    {
+     "name": "SourceCodePro_13.cpfont",
+     "size": 377034,
+     "crc32": 4025438701
+    },
+    {
+     "name": "SourceCodePro_14.cpfont",
+     "size": 423511,
+     "crc32": 233207847
+    },
+    {
+     "name": "SourceCodePro_15.cpfont",
+     "size": 473523,
+     "crc32": 1744604466
+    },
+    {
+     "name": "SourceCodePro_16.cpfont",
+     "size": 522249,
+     "crc32": 132871870
+    },
+    {
+     "name": "SourceCodePro_17.cpfont",
+     "size": 582937,
+     "crc32": 3219254673
+    },
+    {
+     "name": "SourceCodePro_18.cpfont",
+     "size": 639131,
+     "crc32": 629195963
+    }
+   ]
+  },
+  {
+   "name": "SourceSans3",
+   "description": "Adobe humanist sans-serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "SourceSans3_10.cpfont",
+     "size": 547087,
+     "crc32": 1424312586
+    },
+    {
+     "name": "SourceSans3_11.cpfont",
+     "size": 614260,
+     "crc32": 3142222093
+    },
+    {
+     "name": "SourceSans3_12.cpfont",
+     "size": 680385,
+     "crc32": 1220474829
+    },
+    {
+     "name": "SourceSans3_13.cpfont",
+     "size": 748322,
+     "crc32": 2301619288
+    },
+    {
+     "name": "SourceSans3_14.cpfont",
+     "size": 824067,
+     "crc32": 3355050147
+    },
+    {
+     "name": "SourceSans3_15.cpfont",
+     "size": 910123,
+     "crc32": 1810413774
+    },
+    {
+     "name": "SourceSans3_16.cpfont",
+     "size": 990424,
+     "crc32": 2707144020
+    },
+    {
+     "name": "SourceSans3_17.cpfont",
+     "size": 1088599,
+     "crc32": 1567537189
+    },
+    {
+     "name": "SourceSans3_18.cpfont",
+     "size": 1180871,
+     "crc32": 1225275632
+    }
+   ]
+  },
+  {
+   "name": "SourceSerif4",
+   "description": "Adobe transitional serif (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "SourceSerif4_10.cpfont",
+     "size": 562679,
+     "crc32": 2064532192
+    },
+    {
+     "name": "SourceSerif4_11.cpfont",
+     "size": 629524,
+     "crc32": 1272434788
+    },
+    {
+     "name": "SourceSerif4_12.cpfont",
+     "size": 698158,
+     "crc32": 1440570528
+    },
+    {
+     "name": "SourceSerif4_13.cpfont",
+     "size": 779765,
+     "crc32": 1929868051
+    },
+    {
+     "name": "SourceSerif4_14.cpfont",
+     "size": 863496,
+     "crc32": 3407161846
+    },
+    {
+     "name": "SourceSerif4_15.cpfont",
+     "size": 955443,
+     "crc32": 3688791551
+    },
+    {
+     "name": "SourceSerif4_16.cpfont",
+     "size": 1048594,
+     "crc32": 3522869836
+    },
+    {
+     "name": "SourceSerif4_17.cpfont",
+     "size": 1155552,
+     "crc32": 2339425850
+    },
+    {
+     "name": "SourceSerif4_18.cpfont",
+     "size": 1262778,
+     "crc32": 736347867
+    }
+   ]
+  },
+  {
+   "name": "Vollkorn",
+   "description": "A serif for bread and butter use by Friedrich Althausen (Latin, Greek, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "greek"
+   ],
+   "files": [
+    {
+     "name": "Vollkorn_10.cpfont",
+     "size": 603073,
+     "crc32": 3603371148
+    },
+    {
+     "name": "Vollkorn_11.cpfont",
+     "size": 670152,
+     "crc32": 2326397127
+    },
+    {
+     "name": "Vollkorn_12.cpfont",
+     "size": 739694,
+     "crc32": 352348276
+    },
+    {
+     "name": "Vollkorn_13.cpfont",
+     "size": 821022,
+     "crc32": 1557097751
+    },
+    {
+     "name": "Vollkorn_14.cpfont",
+     "size": 903563,
+     "crc32": 709501555
+    },
+    {
+     "name": "Vollkorn_15.cpfont",
+     "size": 998057,
+     "crc32": 1679216081
+    },
+    {
+     "name": "Vollkorn_16.cpfont",
+     "size": 1090758,
+     "crc32": 3747922404
+    },
+    {
+     "name": "Vollkorn_17.cpfont",
+     "size": 1203035,
+     "crc32": 3137982995
+    },
+    {
+     "name": "Vollkorn_18.cpfont",
+     "size": 1306713,
+     "crc32": 1901827267
+    }
+   ]
+  },
+  {
+   "name": "XCharter",
+   "description": "Bitstream Charter extension (Latin, Cyrillic)",
+   "styles": [
+    "regular",
+    "bold",
+    "italic",
+    "bolditalic"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic"
+   ],
+   "files": [
+    {
+     "name": "XCharter_10.cpfont",
+     "size": 375811,
+     "crc32": 417850152
+    },
+    {
+     "name": "XCharter_11.cpfont",
+     "size": 427769,
+     "crc32": 2444829043
+    },
+    {
+     "name": "XCharter_12.cpfont",
+     "size": 478400,
+     "crc32": 111039289
+    },
+    {
+     "name": "XCharter_13.cpfont",
+     "size": 537827,
+     "crc32": 1600480259
+    },
+    {
+     "name": "XCharter_14.cpfont",
+     "size": 597943,
+     "crc32": 1682157567
+    },
+    {
+     "name": "XCharter_15.cpfont",
+     "size": 666813,
+     "crc32": 2023228904
+    },
+    {
+     "name": "XCharter_16.cpfont",
+     "size": 736298,
+     "crc32": 2623194754
+    },
+    {
+     "name": "XCharter_17.cpfont",
+     "size": 818609,
+     "crc32": 2609967377
+    },
+    {
+     "name": "XCharter_18.cpfont",
+     "size": 899779,
+     "crc32": 1166318778
+    }
+   ]
+  },
+  {
+   "name": "XCharterCJK",
+   "description": "XCharter with Korean and Chinese (Latin, Cyrillic, Hangul, CJK)",
+   "styles": [
+    "regular",
+    "bold"
+   ],
+   "scripts": [
+    "latin",
+    "cyrillic",
+    "hangul",
+    "cjk"
+   ],
+   "files": [
+    {
+     "name": "XCharterCJK_12.cpfont",
+     "size": 11244468,
+     "crc32": 3071697477
+    },
+    {
+     "name": "XCharterCJK_13.cpfont",
+     "size": 12878045,
+     "crc32": 842556441
+    },
+    {
+     "name": "XCharterCJK_14.cpfont",
+     "size": 15053469,
+     "crc32": 3031156762
+    },
+    {
+     "name": "XCharterCJK_15.cpfont",
+     "size": 16935977,
+     "crc32": 948101444
+    },
+    {
+     "name": "XCharterCJK_16.cpfont",
+     "size": 18480575,
+     "crc32": 1667331888
+    }
+   ]
+  }
+ ]
+}

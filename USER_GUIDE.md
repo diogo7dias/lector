@@ -1,4 +1,4 @@
-<!-- lector-version: 0.31.19 -->
+<!-- lector-version: 0.31.20 -->
 
 # Lector User Guide
 
@@ -690,6 +690,14 @@ Three ways to install one:
    install and name the ones that failed at the end. A file is only put in place once it
    matches the checksum published for it, so an update that fails leaves the copy already
    on the card untouched.
+
+   When it does not work, the screen names the reason rather than saying only that it
+   failed: no Wi-Fi connection, could not reach the font server, the font server refused
+   the request, the download stopped before it finished, could not write to the SD card,
+   not enough memory, or a font list this firmware cannot read. Under that sits a short
+   code line such as `E4 no reply heap 28112/9216`, which grows an `oom` section when the
+   reader ran out of memory rather than out of network. That line is diagnostic, not
+   something to act on; photograph it if you report the problem.
 2. **From the web interface:** in File Transfer mode, open the **Fonts** page and upload
    `.cpfont` files.
 3. **From your computer:** copy fonts into `/.fonts/` (preferred) or `/fonts/` on the card.

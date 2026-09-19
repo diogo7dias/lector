@@ -16,11 +16,26 @@ class HttpDownloader {
   // streaming parser consume the response without buffering the whole body.
   using DataCallback = std::function<bool(const uint8_t* data, size_t len)>;
 
+  /**
+   * Why a transfer failed. HTTP_ERROR stays as the catch-all so callers that
+   * only test `!= OK` are unaffected, but the transport now says which kind of
+   * failure it was whenever it can tell: a reader who cannot open a serial log
+   * still has to be able to tell "the router is not there" from "the server
+   * said no" from "the card is full", because those need different actions.
+   */
   enum DownloadError {
     OK = 0,
     HTTP_ERROR,
     FILE_ERROR,
     ABORTED,
+    // TCP or TLS never came up: no HTTP response was read at all. Wrong access
+    // point, no route out, DNS, or a handshake that could not complete.
+    NO_CONNECTION,
+    // A response arrived carrying a status this transfer cannot use (404, 403,
+    // 5xx, a redirect with no usable Location, too many hops).
+    SERVER_ERROR,
+    // The body started and then stopped short of what was promised.
+    INCOMPLETE,
   };
 
   static constexpr uint32_t DEFAULT_TIMEOUT_MS = 60000;
@@ -71,10 +86,14 @@ class HttpDownloader {
    * of the final response, or stays untouched when the server sends none. Callers
    * that want a filename out of it parse it themselves (see FetchUrlPolicy.h);
    * the download itself always writes to `destPath`.
+   *
+   * `outStatus`, when given, receives the final response's HTTP status, or 0 when
+   * the request never got one. A screen that has to name a failure to someone who
+   * cannot read a serial log needs the number, not only the category.
    */
   static DownloadError downloadToFile(const std::string& url, const std::string& destPath,
                                       ProgressCallback progress = nullptr, bool* cancelFlag = nullptr,
                                       const std::string& username = "", const std::string& password = "",
                                       bool allowResume = false, std::string* contentDisposition = nullptr,
-                                      uint32_t timeoutMs = DEFAULT_TIMEOUT_MS);
+                                      uint32_t timeoutMs = DEFAULT_TIMEOUT_MS, int* outStatus = nullptr);
 };

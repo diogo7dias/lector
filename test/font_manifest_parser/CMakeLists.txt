@@ -9,6 +9,11 @@ target_include_directories(FontManifestParserTest PRIVATE
   ${REPO_ROOT}/lib/Memory
 )
 
+# The published fonts.json, parsed as a fixture: see the "Published" suite.
+target_compile_definitions(FontManifestParserTest PRIVATE
+  PUBLISHED_FONTS_JSON="${CMAKE_CURRENT_SOURCE_DIR}/published_fonts.json"
+)
+
 target_link_libraries(FontManifestParserTest PRIVATE
   crosspoint_test_common
   GTest::gtest_main

@@ -32,6 +32,7 @@ struct Function {
   bool lends = false;    // constructs a GfxRenderer::FrameBufferLoan
   bool scratch = false;  // constructs a tls_scratch::Session
   bool gates = false;    // consults tls_heap::canStartTls
+  bool probes = false;   // arms heap_probe, so a failure can name an OOM
   int lendLine = 0;
   int scratchLine = 0;
 };
@@ -53,7 +54,7 @@ std::vector<Function> functions(const std::string& path, const char* className) 
     if (!inside) {
       if (!line.empty() && line[0] != ' ' && line[0] != '}' && line[0] != '#' && line[0] != '/' &&
           contains(line, className) && contains(line, "(")) {
-        found.push_back(Function{path, line, number, false, false, false, false, 0, 0});
+        found.push_back(Function{path, line, number, false, false, false, false, false, 0, 0});
         inside = true;
       }
       continue;
@@ -74,7 +75,10 @@ std::vector<Function> functions(const std::string& path, const char* className) 
       fn.scratch = true;
       if (fn.scratchLine == 0) fn.scratchLine = number;
     }
-    if (contains(line, "tls_heap::canStartTls")) fn.gates = true;
+    // Either the policy call itself or gateAllowsTls(), the local helper that
+    // wraps it so both fetches record the same numbers to the diagnostics file.
+    if (contains(line, "tls_heap::canStartTls") || contains(line, "gateAllowsTls(")) fn.gates = true;
+    if (contains(line, "heap_probe::arm()")) fn.probes = true;
   }
   return found;
 }
@@ -120,6 +124,18 @@ TEST(TlsLoanAudit, EveryFetchGatesTheHandshake) {
     if (!fn.fetches) continue;
     EXPECT_TRUE(fn.gates) << fn.path << ":" << fn.startLine << " starts a handshake without tls_heap::canStartTls; "
                           << "on a starved heap wolfSSL hangs until the watchdog resets the device";
+  }
+}
+
+// "Could not reach the font server" is what NO_CONNECTION says, and
+// NO_CONNECTION is every way a request can end without a status line --
+// including a handshake that could not allocate. A fetch that does not arm the
+// probe cannot tell the reader which of those happened.
+TEST(TlsLoanAudit, EveryFetchArmsTheAllocationProbe) {
+  for (const auto& fn : auditedFunctions()) {
+    if (!fn.fetches) continue;
+    EXPECT_TRUE(fn.probes) << fn.path << ":" << fn.startLine << " fetches over TLS without heap_probe::arm(); "
+                           << "an out-of-memory failure will be reported as an unreachable server";
   }
 }
 

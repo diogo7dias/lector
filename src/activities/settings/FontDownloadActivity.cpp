@@ -1,6 +1,5 @@
 #include "FontDownloadActivity.h"
 
-#include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
@@ -11,6 +10,7 @@
 
 #include <algorithm>
 
+#include "Diagnostics.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
 #include "SdCardFontSystem.h"
@@ -19,6 +19,7 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/HeapFailureProbe.h"
 #include "network/HttpDownloader.h"
 #include "network/TlsHeapPolicy.h"
 #include "network/TlsScratchHeap.h"
@@ -29,6 +30,184 @@ namespace {
 // family's file names from it rather than holding every family's names in RAM.
 constexpr const char* MANIFEST_TMP = "/fonts_manifest.tmp";
 
+// What to put on the screen for a transfer that did not finish. The reader
+// cannot open a serial log, so the difference between "nothing answered",
+// "the server said no" and "the card would not take it" has to reach the
+// panel: each one needs a different thing done about it.
+// tr() pastes StrId:: onto a bare key name, so a StrId that was chosen at
+// runtime cannot go through it.
+const char* trId(const StrId id) { return I18n::getInstance().get(id); }
+
+// Everything known about a transfer that did not finish, gathered the moment it
+// gave up rather than read off the heap afterwards.
+//
+// HttpDownloader::NO_CONNECTION means only "no status line was ever read". That
+// covers a wrong access point, no route, DNS, a refused socket, a TLS alert --
+// AND a handshake that could not allocate what it needed. Those want opposite
+// things done about them, so the screen may not call them all "could not reach
+// the font server": heap_probe counts the allocations that actually failed
+// during the transfer, whoever asked for them, and that is what separates the
+// two.
+struct TransferFailure {
+  HttpDownloader::DownloadError error = HttpDownloader::OK;
+  int httpStatus = 0;
+  bool framebufferLent = true;
+  heap_probe::Record allocations;  // heap allocations that failed during the transfer
+  uint32_t loanFallbacks = 0;      // wolfSSL allocations the lent framebuffer could not serve
+  uint32_t loanFallbackBytes = 0;  // what those came to, which is how much bigger the loan needs to be
+  uint32_t loanLowWater = 0;       // least the lent block ever held, read while it was still registered
+  uint32_t tlsOoms = 0;            // wolfSSL allocations that came back null -- this is MEMORY_E (-125)
+  uint32_t tlsOomSize = 0;         // bytes the last of them asked for
+  uint32_t tlsOomFreeHeap = 0;     // free heap at that instant, read where it still meant something
+  uint32_t freeHeap = 0;           // free bytes once the transfer gave up, after the session was freed
+  uint32_t largestBlock = 0;
+
+  bool ranOutOfMemory() const { return tlsOoms > 0 || allocations.failures > 0; }
+};
+
+// Reads the probes. Call INSIDE the framebuffer loan, the instant the transfer
+// returns: once the loan ends and a retry runs, these numbers describe a
+// different moment than the one that failed.
+TransferFailure captureFailure(const HttpDownloader::DownloadError error, const int httpStatus,
+                               const bool framebufferLent) {
+  TransferFailure failure;
+  failure.error = error;
+  failure.httpStatus = httpStatus;
+  failure.framebufferLent = framebufferLent;
+  failure.allocations = heap_probe::read();
+  failure.loanFallbacks = tls_scratch::heapFallbackCount();
+  failure.loanFallbackBytes = tls_scratch::heapFallbackBytes();
+  failure.loanLowWater = static_cast<uint32_t>(tls_scratch::poolLowWaterBytes());
+  failure.tlsOoms = tls_scratch::oomCount();
+  failure.tlsOomSize = tls_scratch::oomSize();
+  failure.tlsOomFreeHeap = tls_scratch::oomFreeHeap();
+  failure.freeHeap = ESP.getFreeHeap();
+  failure.largestBlock = ESP.getMaxAllocHeap();
+  return failure;
+}
+
+StrId transferErrorText(const TransferFailure& failure) {
+  // An allocation failed during the transfer, so whatever else went wrong, the
+  // reader is not being told to check their router.
+  if (failure.ranOutOfMemory()) return StrId::STR_FONT_ERR_MEMORY;
+  switch (failure.error) {
+    case HttpDownloader::NO_CONNECTION:
+      return StrId::STR_FONT_ERR_NO_SERVER;
+    case HttpDownloader::SERVER_ERROR:
+      return StrId::STR_FONT_ERR_SERVER_REFUSED;
+    case HttpDownloader::INCOMPLETE:
+      return StrId::STR_FONT_ERR_INCOMPLETE;
+    case HttpDownloader::FILE_ERROR:
+      return StrId::STR_FONT_ERR_SD;
+    default:
+      // HTTP_ERROR is what the transport could not classify (a malformed URL,
+      // mostly). Nothing reached the far end either way.
+      return StrId::STR_FONT_ERR_NO_SERVER;
+  }
+}
+
+// The numbers that tell those causes apart in a photograph of the screen.
+// Deliberately untranslated -- it is a code, not prose. Two lines, because one
+// did not fit: the X3 screen of 2026-09-19 cut at "oom 2x5368" and the numbers
+// that named the cause were the ones that fell off the right-hand edge.
+//
+// Line one, the transfer:
+//
+//   E4 no reply heap 24244/12788
+//   |  |              `- free / largest block once the transfer gave up. Higher
+//   |  |                 than the "f" below, because the session has been freed
+//   |  |                 by then -- which is exactly why both are printed
+//   |  `- no status line was ever read ("HTTP nnn" when one was)
+//   `- HttpDownloader::DownloadError, 4 = NO_CONNECTION
+//
+// A trailing "nofb" means the framebuffer was never lent, so wolfSSL had no
+// 16 KB record buffer to work with and fails for a reason that has nothing to
+// do with the network.
+//
+// Line two, the memory, printed only when something ran short:
+//
+//   oom 2x5368 f17820 sp33/23456 lw32
+//   |          |      |          `- fewest bytes the lent block ever held. A
+//   |          |      |             small number here is the loan running out,
+//   |          |      |             which is what sends allocations to "sp"
+//   |          |      `- allocations the loan could not serve, and their total.
+//   |          |         Zero means wolfSSL never touched the system heap
+//   |          `- free system heap at the failing call
+//   `- two allocations came back null, the last asking 5368 bytes. That null is
+//      what wolfSSL returns as MEMORY_E (-125) -- or, when it fails under
+//      certificate processing, as PEER_KEY_ERROR (-342) or MP_EXPTMOD_E (-112)
+//
+// No second line at all means no allocation failed and nothing spilled, and the
+// failure is the link or the far end.
+// The heap on its own, for a failure that never reached the network: the
+// manifest parser could not get a buffer, so there is no transfer to describe.
+std::string heapDetail() {
+  char buf[32];
+  snprintf(buf, sizeof(buf), "heap %u/%u", static_cast<unsigned>(ESP.getFreeHeap()),
+           static_cast<unsigned>(ESP.getMaxAllocHeap()));
+  return buf;
+}
+
+std::string transferErrorDetail(const TransferFailure& failure) {
+  char buf[64];
+  char reply[16] = "no reply";
+  if (failure.httpStatus > 0) snprintf(reply, sizeof(reply), "HTTP %d", failure.httpStatus);
+  snprintf(buf, sizeof(buf), "E%d %s heap %u/%u%s", static_cast<int>(failure.error), reply,
+           static_cast<unsigned>(failure.freeHeap), static_cast<unsigned>(failure.largestBlock),
+           failure.framebufferLent ? "" : " nofb");
+  return buf;
+}
+
+std::string transferMemoryDetail(const TransferFailure& failure) {
+  char oom[32] = "";
+  if (failure.tlsOoms > 0) {
+    // wolfSSL's own allocator saw it, so the size and the free heap are both
+    // from the failing call rather than inferred afterwards.
+    snprintf(oom, sizeof(oom), "oom %ux%u f%u", static_cast<unsigned>(failure.tlsOoms),
+             static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap));
+  } else if (failure.allocations.failures > 0) {
+    // Something outside wolfSSL ran out -- lwIP, the WiFi driver, this
+    // firmware. The hook that counts those cannot read the heap from where it
+    // runs, so there is no "f" to print.
+    snprintf(oom, sizeof(oom), "oom %ux%u", static_cast<unsigned>(failure.allocations.failures),
+             static_cast<unsigned>(failure.allocations.largestSize));
+  }
+  char spill[32] = "";
+  if (failure.loanFallbacks > 0) {
+    snprintf(spill, sizeof(spill), "%ssp%u/%u lw%u", oom[0] ? " " : "", static_cast<unsigned>(failure.loanFallbacks),
+             static_cast<unsigned>(failure.loanFallbackBytes), static_cast<unsigned>(failure.loanLowWater));
+  }
+  char buf[72];
+  snprintf(buf, sizeof(buf), "%s%s", oom, spill);
+  return buf;
+}
+
+// The heap gate, and a record of what it saw. Both font transfers ask the same
+// question in the same place; the numbers also go to the diagnostics file, so a
+// failure that reaches the card does not depend on someone photographing the
+// screen. Call INSIDE the framebuffer loan: the floor depends on whether the
+// record buffers are coming off the heap (TlsHeapPolicy.h).
+bool gateAllowsTls(const char* step, const bool framebufferLent,
+                   const tls_heap::Transfer transfer = tls_heap::Transfer::General) {
+  const uint32_t freeHeap = ESP.getFreeHeap();
+  const uint32_t largestBlock = ESP.getMaxAllocHeap();
+  const uint32_t poolFree = tls_scratch::poolFreeBytes();
+  const uint32_t poolBlock = tls_scratch::poolLargestBlock();
+  const bool allowed = tls_heap::canStartTls(freeHeap, largestBlock, framebufferLent, poolFree, poolBlock, transfer);
+  diag::recordTlsGate(step, freeHeap, largestBlock, framebufferLent, tls_heap::minFree(framebufferLent, transfer),
+                      tls_heap::minBlock(framebufferLent), allowed, poolFree, poolBlock);
+  LOG_INF("FONT", "Heap at %s: free %u, largest block %u, framebuffer lent %s, floor %u/%u", step,
+          static_cast<unsigned>(freeHeap), static_cast<unsigned>(largestBlock), framebufferLent ? "yes" : "no",
+          static_cast<unsigned>(tls_heap::minFree(framebufferLent, transfer)),
+          static_cast<unsigned>(tls_heap::minBlock(framebufferLent)));
+  LOG_INF("FONT", "TLS pool at %s: free %u, largest block %u, floor %u/%u -> %s", step, static_cast<unsigned>(poolFree),
+          static_cast<unsigned>(poolBlock), static_cast<unsigned>(tls_heap::MIN_POOL_FREE),
+          static_cast<unsigned>(tls_heap::MIN_POOL_BLOCK), allowed ? "allowed" : "REFUSED");
+  if (allowed) tls_scratch::monitorSystemHeap();
+  if (!allowed) LOG_ERR("FONT", "Not enough TLS memory at %s", step);
+  return allowed;
+}
+
 }  // namespace
 
 FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -38,19 +217,6 @@ FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputMan
 
 void FontDownloadActivity::onEnter() {
   UiStatusActivity::onEnter();
-
-  // Heap-critical transition, the same one CrossPointWebServerActivity and
-  // CalibreConnectActivity already guard against: WiFi takes ~45 KB, and the
-  // manifest download then needs two TLS handshakes, because GitHub redirects
-  // release downloads to a second host. On a reader with a large SD font
-  // resident, the second handshake failed inside wolfSSL's big-integer maths
-  // (MP_EXPTMOD_E / PEER_KEY_ERROR) with 33908 bytes free and a 30708-byte
-  // largest block. These caches rebuild on demand; the download cannot.
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    LOG_DBG("FONT", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
-    fcm->releaseSdFontCaches();
-    LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes", ESP.getFreeHeap());
-  }
 
   WiFi.mode(WIFI_STA);
   startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput),
@@ -111,22 +277,16 @@ bool FontDownloadActivity::fetchAndParseManifest() {
   // Download manifest to a temp file on SD card to avoid holding both
   // TLS buffers and the full JSON string in RAM simultaneously.
 
-  // onEnter() released these, and then the WiFi picker drew a list over the top
-  // and loaded them straight back — 13216 bytes on the reader this was measured
-  // on, taken from the heap the handshake below needs. Same release that runs
-  // before every per-file transfer, for the same reason.
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    fcm->releaseSdFontCaches();
-    LOG_DBG("FONT", "Free heap before the manifest fetch: %d bytes, largest block %d bytes", ESP.getFreeHeap(),
-            ESP.getMaxAllocHeap());
-  }
-
   // The font list is the first thing a reader hits after joining WiFi, and a
   // handshake that fails while the connection settles used to end the trip here.
   auto result = HttpDownloader::OK;
+  bool noWifi = false;
+  TransferFailure failure;
   for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (!waitForWifi()) {
-      result = HttpDownloader::HTTP_ERROR;
+      result = HttpDownloader::NO_CONNECTION;
+      failure.error = result;
+      noWifi = true;
       break;
     }
 
@@ -143,21 +303,29 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     {
       GfxRenderer::FrameBufferLoan loan(renderer);
       const tls_scratch::Session tlsScratch;
-      if (!tlsScratch.active()) {
+      const bool framebufferLent = tlsScratch.active();
+      if (!framebufferLent) {
         LOG_ERR("FONT", "Framebuffer not lent; the manifest fetch runs on the heap alone");
       }
       // Gated after the loan, so the floor matches where the record buffers
       // will come from (TlsHeapPolicy.h). A handshake started below it does not
       // fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004 bytes
       // free and the reader was unresponsive until the watchdog reset it.
-      if (!tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), tlsScratch.active())) {
-        LOG_ERR("FONT", "Only %d bytes free (largest block %d), need %u for a secure connection", ESP.getFreeHeap(),
-                ESP.getMaxAllocHeap(), static_cast<unsigned>(tls_heap::minFree(tlsScratch.active())));
-        errorMessage_ = "Not enough memory for font list";
+      if (!gateAllowsTls("font list", framebufferLent)) {
+        const TransferFailure gated = captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent);
+        setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY), transferErrorDetail(gated),
+                 transferMemoryDetail(gated));
         Storage.remove(MANIFEST_TMP);
         return false;
       }
-      result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr);
+      // Armed inside the loan so it counts only what this handshake and this
+      // body could not allocate, and read below before the loan ends.
+      heap_probe::arm();
+      int httpStatus = 0;
+      result = HttpDownloader::downloadToFile(FONT_MANIFEST_URL, MANIFEST_TMP, nullptr, nullptr, "", "",
+                                              /*allowResume=*/false, nullptr, HttpDownloader::DEFAULT_TIMEOUT_MS,
+                                              &httpStatus);
+      failure = captureFailure(result, httpStatus, framebufferLent);
     }
     // The loan hands the framebuffer back white, so the next paint has to be a
     // full one rather than a difference against a screen that is no longer there.
@@ -168,8 +336,15 @@ bool FontDownloadActivity::fetchAndParseManifest() {
     if (attempt < MAX_ATTEMPTS) waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt));
   }
   if (result != HttpDownloader::OK) {
-    LOG_ERR("FONT", "Failed to fetch manifest from %s", FONT_MANIFEST_URL);
-    errorMessage_ = "Failed to fetch font list";
+    LOG_ERR("FONT",
+            "Failed to fetch manifest from %s (error %d, status %d, %u wolfSSL OOM asking %u with %u free, "
+            "%u spilled allocations totalling %u bytes, loan low-water %u)",
+            FONT_MANIFEST_URL, static_cast<int>(result), failure.httpStatus, static_cast<unsigned>(failure.tlsOoms),
+            static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap),
+            static_cast<unsigned>(failure.loanFallbacks), static_cast<unsigned>(failure.loanFallbackBytes),
+            static_cast<unsigned>(failure.loanLowWater));
+    setError(StrId::STR_FONT_LIST_FAILED, trId(noWifi ? StrId::STR_FONT_ERR_NO_WIFI : transferErrorText(failure)),
+             transferErrorDetail(failure), transferMemoryDetail(failure));
     Storage.remove(MANIFEST_TMP);
     return false;
   }
@@ -206,6 +381,13 @@ void FontDownloadActivity::stampDiskState(void* context, ManifestFamily& family,
     const ManifestFile& file = files[i];
     char path[128];
     FontInstaller::buildFontPath(family.name, file.name, path, sizeof(path));
+    // A family can have other sizes installed. Absence here is an update,
+    // not a failed font load; report it once on the initial list, not on reloads.
+    if (!Storage.exists(path)) {
+      if (self->state_ == LOADING_MANIFEST) LOG_DBG("FONT", "Update available: catalog file not installed: %s", path);
+      family.hasUpdate = true;
+      return;
+    }
     HalFile f;
     if (Storage.openFileForRead("FONT", path, f)) {
       const size_t actual = f.fileSize();
@@ -215,7 +397,7 @@ void FontDownloadActivity::stampDiskState(void* context, ManifestFamily& family,
         return;
       }
     } else {
-      // File missing on disk but family dir exists — treat as update
+      // Present but unreadable (or removed since exists): HAL logged the read error.
       family.hasUpdate = true;
       return;
     }
@@ -229,9 +411,12 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   HalFile manifestFile;
   if (!Storage.openFileForRead("FONT", MANIFEST_TMP, manifestFile)) {
     LOG_ERR("FONT", "Failed to open temp manifest");
-    errorMessage_ = "Failed to read font list";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_SD), "");
     return false;
   }
+
+  char manifestBytes[32];
+  snprintf(manifestBytes, sizeof(manifestBytes), "%u bytes", static_cast<unsigned>(manifestFile.fileSize()));
 
   out.clear();
   out.shrink_to_fit();
@@ -242,7 +427,7 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   if (!parserOwner) {
     manifestFile.close();
     LOG_ERR("FONT", "No room for the manifest parser");
-    errorMessage_ = "Not enough memory for font list";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY), heapDetail());
     return false;
   }
   FontManifestParser& parser = *parserOwner;
@@ -257,7 +442,7 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
     if (!buffer) {
       manifestFile.close();
       LOG_ERR("FONT", "No room for the manifest read buffer");
-      errorMessage_ = "Not enough memory for font list";
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY), heapDetail());
       return false;
     }
     while (true) {
@@ -270,29 +455,28 @@ bool FontDownloadActivity::parseManifest(const FontManifestParser::FileRetention
   manifestFile.close();
   parser.finish();
 
-  LOG_DBG("FONT", "Manifest parsed: free %d bytes, largest block %d bytes", ESP.getFreeHeap(),
-          ESP.getMaxAllocHeap());
+  LOG_DBG("FONT", "Manifest parsed: free %d bytes, largest block %d bytes", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
 
   if (parser.hasError()) {
     if (parser.outOfMemory()) {
       LOG_ERR("FONT", "Out of memory while reading the font manifest (free %d bytes, largest block %d bytes)",
               ESP.getFreeHeap(), ESP.getMaxAllocHeap());
-      errorMessage_ = "Not enough memory for font list";
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_MEMORY), heapDetail());
     } else if (parser.tooLarge()) {
       LOG_ERR("FONT", "Manifest exceeds the %u family / %u file limits",
               static_cast<unsigned>(FontManifestParser::MAX_FAMILIES),
               static_cast<unsigned>(FontManifestParser::MAX_FILES_PER_FAMILY));
-      errorMessage_ = "Font list too large";
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_LIST_TOO_LARGE), "");
     } else {
-      LOG_ERR("FONT", "Manifest parse error");
-      errorMessage_ = "Invalid font manifest";
+      LOG_ERR("FONT", "Manifest parse error after %s", manifestBytes);
+      setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), manifestBytes);
     }
     return false;
   }
 
   if (parser.version() != FONTS_MANIFEST_VERSION) {
     LOG_ERR("FONT", "Unsupported manifest version: %d", parser.version());
-    errorMessage_ = "Unsupported manifest version";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_OLD_FIRMWARE), "");
     return false;
   }
 
@@ -339,8 +523,9 @@ void FontDownloadActivity::runBatch(const std::function<bool(const ManifestFamil
     return;
   }
   state_ = ERROR;
-  errorMessage_ = "Could not install: " + failed.front();
-  for (size_t i = 1; i < failed.size(); i++) errorMessage_ += ", " + failed[i];
+  std::string names = failed.front();
+  for (size_t i = 1; i < failed.size(); i++) names += ", " + failed[i];
+  setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_INSTALL)) + ": " + names, "");
 }
 
 bool FontDownloadActivity::showDownloadAllRow() const {
@@ -452,6 +637,7 @@ bool FontDownloadActivity::waitForWifi() {
 }
 
 bool FontDownloadActivity::fileAlreadyInstalled(const ManifestFile& file, const char* destPath) {
+  if (!Storage.exists(destPath)) return false;
   HalFile f;
   if (!Storage.openFileForRead("FONT", destPath, f)) return false;
   const size_t actual = f.fileSize();
@@ -508,7 +694,7 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
         return false;
       }
       LOG_ERR("FONT", "No WiFi for attempt %d for %s", total, file.name);
-      errorMessage_ = "Lost WiFi connection";
+      setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_LOST_WIFI), "");
       fruitless++;
       if (fruitless < MAX_ATTEMPTS && total < MAX_TOTAL_ATTEMPTS &&
           !waitBeforeRetry(RETRY_DELAY_MS * static_cast<uint32_t>(attempt))) {
@@ -529,42 +715,49 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     // holds still until the file lands and the panel keeps the screen drawn above.
     drawingSuspended_ = true;
     HttpDownloader::DownloadError result;
+    TransferFailure failure;
     {
       GfxRenderer::FrameBufferLoan loan(renderer);
       const tls_scratch::Session tlsScratch;
-      if (!tlsScratch.active()) {
+      const bool framebufferLent = tlsScratch.active();
+      if (!framebufferLent) {
         LOG_ERR("FONT", "Framebuffer not lent; the transfer runs on the heap alone");
       }
       // Gated after the loan, so the floor matches where the record buffers
       // will come from (TlsHeapPolicy.h). A handshake started below it does
       // not fail cleanly: wolfSSL spent 60 seconds inside its retry with 1004
       // bytes free and the reader was unresponsive until the watchdog reset it.
-      if (!tls_heap::canStartTls(ESP.getFreeHeap(), ESP.getMaxAllocHeap(), tlsScratch.active())) {
-        LOG_ERR("FONT", "Only %d bytes free (largest block %d), need %u for a secure connection", ESP.getFreeHeap(),
-                ESP.getMaxAllocHeap(), static_cast<unsigned>(tls_heap::minFree(tlsScratch.active())));
-        errorMessage_ = "Not enough memory to download fonts";
+      if (!gateAllowsTls("font file", framebufferLent, tls_heap::Transfer::FontFile)) {
+        const TransferFailure gated = captureFailure(HttpDownloader::HTTP_ERROR, 0, framebufferLent);
+        setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MEMORY), transferErrorDetail(gated),
+                 transferMemoryDetail(gated));
         drawingSuspended_ = false;
         return false;
       }
+      // Armed inside the loan so it counts only what this handshake and this
+      // body could not allocate, and read below before the loan ends.
+      heap_probe::arm();
+      int httpStatus = 0;
       result = HttpDownloader::downloadToFile(
-        url, partPath,
-        [this](size_t downloaded, size_t total) {
-          fileProgress_ = downloaded;
-          fileTotal_ = total;
-          // Cancel is polled on every chunk; only the repaint is rationed.
-          mappedInput.update();
-          if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
-              mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-            cancelRequested_ = true;
-          }
-          if (drawingSuspended_) return;
-          const int percent = total > 0 ? static_cast<int>(downloaded * 100 / total) : 0;
-          const int step = percent / PROGRESS_STEP_PERCENT;
-          if (step == lastDrawnProgressStep_) return;
-          lastDrawnProgressStep_ = step;
-          requestUpdate(true);
-        },
-        &cancelRequested_, "", "", /*allowResume=*/true);
+          url, partPath,
+          [this](size_t downloaded, size_t total) {
+            fileProgress_ = downloaded;
+            fileTotal_ = total;
+            // Cancel is polled on every chunk; only the repaint is rationed.
+            mappedInput.update();
+            if (mappedInput.isPressed(MappedInputManager::Button::Back) ||
+                mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+              cancelRequested_ = true;
+            }
+            if (drawingSuspended_) return;
+            const int percent = total > 0 ? static_cast<int>(downloaded * 100 / total) : 0;
+            const int step = percent / PROGRESS_STEP_PERCENT;
+            if (step == lastDrawnProgressStep_) return;
+            lastDrawnProgressStep_ = step;
+            requestUpdate(true);
+          },
+          &cancelRequested_, "", "", /*allowResume=*/true, nullptr, HttpDownloader::DEFAULT_TIMEOUT_MS, &httpStatus);
+      failure = captureFailure(result, httpStatus, framebufferLent);
     }
     drawingSuspended_ = false;
     // The loan hands the framebuffer back white, so the next paint has to be a
@@ -581,24 +774,31 @@ bool FontDownloadActivity::downloadFileWithRetries(const ManifestFile& file, con
     }
 
     if (result != HttpDownloader::OK) {
-      LOG_ERR("FONT", "Download attempt %d failed for %s (%d)", total, file.name, result);
-      errorMessage_ = std::string("Download failed: ") + file.name;
+      LOG_ERR("FONT",
+              "Download attempt %d failed for %s (%d, status %d, %u wolfSSL OOM asking %u with %u free, "
+              "%u spilled allocations totalling %u bytes, loan low-water %u)",
+              total, file.name, result, failure.httpStatus, static_cast<unsigned>(failure.tlsOoms),
+              static_cast<unsigned>(failure.tlsOomSize), static_cast<unsigned>(failure.tlsOomFreeHeap),
+              static_cast<unsigned>(failure.loanFallbacks), static_cast<unsigned>(failure.loanFallbackBytes),
+              static_cast<unsigned>(failure.loanLowWater));
+      setError(StrId::STR_FONT_INSTALL_FAILED, std::string(trId(transferErrorText(failure))) + ": " + file.name,
+               transferErrorDetail(failure), transferMemoryDetail(failure));
     } else {
       uint32_t actualCrc = 0;
       if (!computeFileCrc32(partPath, actualCrc)) {
         LOG_ERR("FONT", "Failed to open file for CRC check: %s", partPath);
-        errorMessage_ = std::string("Failed to compute checksum: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_CHECKSUM_READ)) + ": " + file.name, "");
       } else if (actualCrc != file.crc32) {
         // A body that arrived corrupted is worth fetching again: the manifest
         // checksum is the only thing that separates a bad transfer from a font
         // the renderer would later choke on.
         LOG_ERR("FONT", "CRC32 mismatch for %s: got %08x expected %08x", file.name, actualCrc, file.crc32);
-        errorMessage_ = std::string("Checksum mismatch: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_CHECKSUM)) + ": " + file.name, "");
       } else if (!fontInstaller_.validateCpfontFile(partPath)) {
         LOG_ERR("FONT", "Invalid .cpfont: %s", partPath);
-        errorMessage_ = std::string("Invalid font file: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_BAD_FILE)) + ": " + file.name, "");
       } else if (!promoteStagedFile(partPath, destPath)) {
-        errorMessage_ = std::string("Failed to install: ") + file.name;
+        setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_INSTALL)) + ": " + file.name, "");
       } else {
         LOG_DBG("FONT", "Downloaded %s (size=%u crc32=%08x)", file.name, static_cast<unsigned>(file.size), actualCrc);
         RenderLock lock(*this);
@@ -664,7 +864,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   }
   if (familyIndex < 0) {
     LOG_ERR("FONT", "No family named %s in the manifest", familyName.c_str());
-    errorMessage_ = "Invalid font manifest";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), "");
     return false;
   }
 
@@ -680,18 +880,8 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   }
   requestUpdateAndWait();
 
-  // Drawing the family list reloaded the SD font caches that onEnter had just
-  // released: 13216 bytes on this reader, taken back from the heap the per-file
-  // TLS session needs. They are released again here, on every family, because
-  // every repaint since the last download may have rebuilt them.
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    fcm->releaseSdFontCaches();
-    LOG_DBG("FONT", "Free heap after SD font cache release: %d bytes, largest block %d bytes", ESP.getFreeHeap(),
-            ESP.getMaxAllocHeap());
-  }
-
   if (!fontInstaller_.ensureFamilyDir(familyName.c_str())) {
-    errorMessage_ = "Failed to create font directory";
+    setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_ERR_MKDIR), "");
     return false;
   }
 
@@ -711,7 +901,7 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   reread.shrink_to_fit();
   if (files.empty()) {
     LOG_ERR("FONT", "No files listed for %s in the manifest", familyName.c_str());
-    errorMessage_ = "Invalid font manifest";
+    setError(StrId::STR_FONT_LIST_FAILED, tr(STR_FONT_ERR_BAD_LIST), "");
     return false;
   }
 
@@ -725,9 +915,16 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
   std::vector<ManifestFamily>().swap(families_);
   // The rows point into the list that was just released, and the failure paths
   // below can reach the list screen again without rebuilding them.
-  rows_.clear();
-  rowLabels_.clear();
-  rowValues_.clear();
+  // clear() destroys strings but keeps the three backing arrays. On C3 these
+  // otherwise pin 33 * (sizeof(ListItem) + 2 * sizeof(string)) = 3300 bytes
+  // through every transfer. The progress view never uses them; refreshRows()
+  // rebuilds them after reloadFamilies(), including cancel/error paths.
+  const size_t rowStorage = rows_.capacity() * sizeof(freeink::ui::ListItem) +
+                            (rowLabels_.capacity() + rowValues_.capacity()) * sizeof(std::string);
+  std::vector<freeink::ui::ListItem>().swap(rows_);
+  std::vector<std::string>().swap(rowLabels_);
+  std::vector<std::string>().swap(rowValues_);
+  LOG_DBG("FONT", "Released list storage: %u payload bytes", static_cast<unsigned>(rowStorage));
 
   bool ok = true;
   for (const auto& file : files) {
@@ -749,8 +946,12 @@ bool FontDownloadActivity::downloadFamily(const std::string& familyName) {
     // marks what is still missing as an update. Only a family that arrived
     // with nothing at all is cleared, so no empty directory is left behind.
     if (!wasInstalled && !fontInstaller_.isFamilyInstalled(familyName.c_str())) {
-      fontInstaller_.deleteFamily(familyName.c_str());
-      fontInstaller_.refreshRegistry();
+      // Discovery already excluded this empty family. Removing its directory
+      // cannot change the registry; do not scan every installed family again.
+      // rmdir also refuses a non-empty directory, preserving unrelated files.
+      char dirPath[128];
+      FontInstaller::buildFontPath(familyName.c_str(), "", dirPath, sizeof(dirPath));
+      if (!Storage.rmdir(dirPath)) LOG_DBG("FONT", "Kept non-empty or unreadable directory: %s", dirPath);
     }
   }
 
@@ -810,7 +1011,7 @@ void FontDownloadActivity::onDeleteConfirmationResult(const ActivityResult& resu
   if (fontInstaller_.deleteFamily(family.name) != FontInstaller::Error::OK) {
     RenderLock lock(*this);
     state_ = ERROR;
-    errorMessage_ = "Failed to delete font";
+    setError(StrId::STR_FONT_INSTALL_FAILED, tr(STR_FONT_DELETE_FAILED), "");
   } else {
     fontInstaller_.refreshRegistry();
     family.installed = false;
@@ -892,6 +1093,15 @@ void FontDownloadActivity::refreshProgressLines() {
                                  : std::string();
 }
 
+// Every failure path goes through here so none of them can leave a stale
+// headline, message or code behind from the previous one.
+void FontDownloadActivity::setError(const StrId headline, std::string message, std::string detail, std::string memory) {
+  errorHeadline_ = headline;
+  errorMessage_ = std::move(message);
+  errorDetail_ = std::move(detail);
+  errorMemory_ = std::move(memory);
+}
+
 // --- Screen ---
 
 UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
@@ -923,7 +1133,7 @@ UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
       view.listItems = rows_.data();
       view.listCount = static_cast<int>(rows_.size());
       view.listHasSubtitle = true;
-      view.confirmHint = isSelectedFamilyDeletable()      ? tr(STR_DELETE)
+      view.confirmHint = isSelectedFamilyDeletable()       ? tr(STR_DELETE)
                          : isUpdateAllRow(listSelection()) ? tr(STR_UPDATE)
                                                            : tr(STR_DOWNLOAD);
       break;
@@ -939,8 +1149,13 @@ UiStatusActivity::StatusView FontDownloadActivity::statusView() const {
       view.lines = {tr(STR_FONT_INSTALLED), nullptr, nullptr, nullptr};
       break;
     case ERROR:
-      view.lines = {tr(STR_FONT_INSTALL_FAILED), errorMessage_.empty() ? nullptr : errorMessage_.c_str(), nullptr,
-                    nullptr};
+      // Headline, then what went wrong, then the numbers on two lines. A reader
+      // who cannot read a serial log photographs this screen, and those lines
+      // are what has to say which failure it was. Two lines and not one because
+      // the panel truncates: everything past about 38 characters is lost.
+      view.lines = {trId(errorHeadline_), errorMessage_.empty() ? nullptr : errorMessage_.c_str(),
+                    errorDetail_.empty() ? nullptr : errorDetail_.c_str(),
+                    errorMemory_.empty() ? nullptr : errorMemory_.c_str()};
       view.confirmHint = tr(STR_RETRY);
       break;
   }
