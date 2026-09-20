@@ -15,10 +15,12 @@ target_link_libraries(GridScreenAuditTest PRIVATE
 
 gtest_discover_tests(GridScreenAuditTest)
 
-# Compile the production grid/host/theme bodies against host adapters. Only include
+# Compile the production list/grid/host/theme bodies against host adapters. Only include
 # directives are removed: the firmware headers pull in Arduino/FreeRTOS. No UI,
 # selection, routing, or gate logic is copied into the test.
 foreach(source IN ITEMS activities/UiGridActivity.h activities/UiGridActivity.cpp
+                        activities/UiListActivity.h activities/UiListActivity.cpp
+                        util/ButtonNavigator.h util/ButtonNavigator.cpp
                         components/UiAppHost.h components/UiAppHost.cpp components/UIThemeTokens.h)
   set(path "${REPO_ROOT}/src/${source}")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${path}")
