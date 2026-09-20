@@ -62,6 +62,11 @@ inline TouchPageTurn detectTouchPageTurn(const GfxRenderer& renderer, const Mapp
       result.prev = true;
       return result;
     }
+    const auto turn = reader_touch::scrollAction(mode, input.wasListScrollSwipe());
+    if (turn != reader_touch::TapAction::None) {
+      (turn == reader_touch::TapAction::Next ? result.next : result.prev) = true;
+      return result;
+    }
   }
 
   int x = 0;

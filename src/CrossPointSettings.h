@@ -217,7 +217,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Short power button press actions
   // How touch drives the open page. Tap turns from the outer thirds, Inverted Tap
   // swaps the two sides, Swipe leaves the thirds quiet and turns on a horizontal
-  // swipe. Values match CrossPoint so a settings file moves between the two.
+  // or vertical swipe. Values match CrossPoint so a settings file moves between the two.
   enum TOUCH_READER_CONTROLS {
     TOUCH_READER_OFF = 0,
     TOUCH_READER_TAP = 1,
