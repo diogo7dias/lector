@@ -16,9 +16,7 @@
  *
  * Unlike KOSync, which asks a server where a book is, this talks straight to the
  * other device. And unlike CrossInk's version, neither side is locked into a
- * role: both readers open this screen, both announce themselves, and both are
- * then shown the same comparison with the same two choices. Pressing the button
- * on the wrong device cannot push an older position over a newer one.
+ * role: both announce, exchange positions, and keep the furthest one.
  *
  * The screens and the radio live here. What to send and when lives in
  * nearby_position::SyncSession, and the wire format in NearbyPositionProtocol,
@@ -44,16 +42,11 @@ class NearbyPositionSyncActivity final : public UiStatusActivity {
   bool handleCustomInput() override;
   void onBackButton() override;
   void onConfirmButton() override;
-  void onChoiceActivated(int index) override;
 
  private:
-  // Which of the two choices the comparison screen offers, in the order the
-  // base lists them.
-  enum Choice : int { TAKE_THEIRS = 0, SEND_MINE = 1 };
-
   void pumpRadio();
   void runSessionActions();
-  void applyPeerPosition();
+  bool applyPeerPosition();
   void returnToReader();
   /** Builds the position this device announces, or false when there is none to share. */
   bool prepareLocalPosition();
@@ -67,15 +60,9 @@ class NearbyPositionSyncActivity final : public UiStatusActivity {
    */
   void ensureEpubLoaded();
 
-  /** Builds the comparison screen's own text, once the peer position is mapped. */
-  void prepareComparison();
-  /** Chapter title for a spine index, falling back to "Section N". */
-  std::string chapterNameFor(int spineIndex) const;
-
   std::unique_ptr<Epub> epub;
   std::string epubPath;
   std::string documentHash;
-  std::string localChapterName;
   int currentSpineIndex;
   int currentPage;
   int totalPagesInSpine;
@@ -85,28 +72,13 @@ class NearbyPositionSyncActivity final : public UiStatusActivity {
   EspNowLink link;
   nearby_position::SyncSession session;
 
-  // statusView() only hands out pointers, so the comparison's lines have to
-  // outlive it.
-  std::string peerChapterLine;
-  std::string peerPageLine;
-  std::string peerDeviceLine;
-  std::string localChapterLine;
-  std::string localPageLine;
-  /** Peer name the lines were built from, so a late NAME packet rebuilds them. */
-  std::string renderedPeerName;
-
-  // Set once the peer's position has been mapped onto this device's layout, so
-  // the comparison screen can name their chapter and page in local terms.
-  CrossPointPosition peerLocalPosition = {};
-  bool peerPositionMapped = false;
+  bool saveFailed = false;
 
   bool radioFailed = false;
   bool noLocalPosition = false;
   // Tracks the state the screen was last drawn for, so the activity only
   // repaints an e-ink panel when something actually changed.
   nearby_position::SyncState renderedState = nearby_position::SyncState::SEARCHING;
-  bool renderedPeerPosition = false;
-  int renderedChoice = TAKE_THEIRS;
 
   unsigned long autoReturnAt = 0;
   static constexpr unsigned long AUTO_RETURN_DELAY_MS = 1400;

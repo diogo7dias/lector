@@ -31,7 +31,7 @@
  */
 class NearbyFileTransferActivity final : public UiStatusActivity {
  public:
-  enum class Mode : uint8_t { Send, Receive };
+  enum class Mode : uint8_t { Send, Receive, Choose };
 
   /**
    * `sourcePath` is the file to send, and is ignored when receiving.
@@ -123,6 +123,7 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
    * holds passwords in the clear and has no reason to stay on the card.
    */
   void importCredentialBundle();
+  bool restoreBookPosition();
   void closeFiles();
   void finishWithError(const char* message);
   /** Leaves the screen, back to the book when it was opened from one. */
@@ -149,6 +150,7 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
   std::string returnToReaderPath;
   std::string sourceName;
   uint64_t sourceSize = 0;
+  nearby_file::BookPosition sourcePosition;
 
   freeink::nearby::EspNowTransport transport;
   nearby_file::TransferSession session;

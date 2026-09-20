@@ -20,6 +20,7 @@
 #include "MappedInputManager.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
+#include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
 #include "components/icons/skull12.h"
@@ -249,7 +250,7 @@ void HomeActivity::render(RenderLock&&) {
   // no per-book cover generation, so the home stays fast. A menu selection passes -1
   // so no book row is highlighted.
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_FILE_TRANSFER), tr(STR_SETTINGS_TITLE)};
+  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_NEARBY_SYNC), tr(STR_SETTINGS_TITLE)};
   std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
 
   if (hasOpdsServers) {
@@ -344,6 +345,9 @@ void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
 
 void HomeActivity::onSettingsOpen() { activityManager.goToSettings(); }
 
-void HomeActivity::onFileTransferOpen() { activityManager.goToFileTransfer(); }
+void HomeActivity::onFileTransferOpen() {
+  activityManager.replaceActivity(
+      std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, NearbyFileTransferActivity::Mode::Choose));
+}
 
 void HomeActivity::onOpdsBrowserOpen() { activityManager.goToBrowser(); }

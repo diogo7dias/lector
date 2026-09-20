@@ -145,7 +145,7 @@ TEST(NearbyPositionSession, AcknowledgesAndStoresThePeerPosition) {
   EXPECT_TRUE(session.hasPeerPosition());
   EXPECT_EQ(session.peerPosition().spineIndex, 9);
   EXPECT_EQ(session.peerPosition().pageNumber, 12);
-  EXPECT_EQ(session.state(), SyncState::COMPARING);
+  EXPECT_EQ(session.state(), SyncState::EXCHANGING);
 }
 
 TEST(NearbyPositionSession, RemembersThePeerName) {
@@ -202,58 +202,76 @@ TEST(NearbyPositionSession, TimesOutWhenNoPeerAnswers) {
 
 TEST(NearbyPositionSession, ReportsAPeerThatGoesQuietMidSync) {
   uint32_t now = 1000;
-  SyncSession session = pairedSession(positionAt(OUR_HASH, 3, 10, 0.25f), positionAt(OUR_HASH, 9, 12, 0.62f), now);
-  ASSERT_EQ(session.state(), SyncState::COMPARING);
-
-  drain(session, now + PEER_TIMEOUT_MS - 1);
-  EXPECT_EQ(session.state(), SyncState::COMPARING);
-
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  auto hello = packetFrom(PEER_MAC, PacketType::HELLO);
+  hello.position = positionAt(OUR_HASH, 9, 12, 0.62f);
+  session.onPacket(hello, now);
+  drain(session, now);
+  EXPECT_EQ(session.state(), SyncState::EXCHANGING);
   drain(session, now + PEER_TIMEOUT_MS);
   EXPECT_EQ(session.state(), SyncState::PEER_LOST);
 }
 
-TEST(NearbyPositionSession, TakingThePeerPositionEndsTheSession) {
+TEST(NearbyPositionSession, FurthestWinsWhenPeerIsAhead) {
   uint32_t now = 1000;
-  SyncSession session = pairedSession(positionAt(OUR_HASH, 3, 10, 0.25f), positionAt(OUR_HASH, 9, 12, 0.62f), now);
-
-  session.takePeerPosition(now);
+  auto session = pairedSession(positionAt(OUR_HASH, 3, 10, 0.25f), positionAt(OUR_HASH, 9, 12, 0.62f), now);
+  EXPECT_EQ(session.resolution(), Resolution::TakePeer);
   EXPECT_EQ(session.state(), SyncState::APPLIED);
-  EXPECT_TRUE(drain(session, now + PEER_TIMEOUT_MS * 2).empty());
 }
 
-TEST(NearbyPositionSession, SharingPushesTheLocalPositionAndWaitsForTheAck) {
+TEST(NearbyPositionSession, FurthestWinsWhenPeerIsBehind) {
   uint32_t now = 1000;
-  SyncSession session = pairedSession(positionAt(OUR_HASH, 3, 10, 0.25f), positionAt(OUR_HASH, 9, 12, 0.62f), now);
-
-  session.sharePosition(now);
-  EXPECT_EQ(session.state(), SyncState::SHARING);
-  ASSERT_TRUE(contains(drain(session, now), ActionKind::SEND_APPLY));
-
-  // Unacknowledged, so it goes again rather than silently doing nothing.
-  now += POSITION_RETRY_INTERVAL_MS;
-  EXPECT_TRUE(contains(drain(session, now), ActionKind::SEND_APPLY));
-
-  PacketView ack = packetFrom(PEER_MAC, PacketType::ACK);
-  session.onPacket(ack, now);
+  auto session = pairedSession(positionAt(OUR_HASH, 9, 12, 0.62f), positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  EXPECT_EQ(session.resolution(), Resolution::KeepLocal);
   EXPECT_EQ(session.state(), SyncState::SHARED);
-  EXPECT_TRUE(drain(session, now + POSITION_RETRY_INTERVAL_MS * 3).empty());
 }
 
-TEST(NearbyPositionSession, AnIncomingApplyWaitsForTheReader) {
+TEST(NearbyPositionSession, FurthestWinsWhenPositionsAreEqual) {
   uint32_t now = 1000;
-  SyncSession session = pairedSession(positionAt(OUR_HASH, 3, 10, 0.25f), positionAt(OUR_HASH, 9, 12, 0.62f), now);
+  auto session = pairedSession(positionAt(OUR_HASH, 5, 5, 0.5f), positionAt(OUR_HASH, 5, 5, 0.5f), now);
+  EXPECT_EQ(session.resolution(), Resolution::Same);
+  EXPECT_EQ(session.state(), SyncState::SHARED);
+}
 
-  PacketView apply = packetFrom(PEER_MAC, PacketType::APPLY);
-  apply.position = positionAt(OUR_HASH, 14, 2, 0.81f);
+TEST(NearbyPositionSession, IncomingApplyCannotMoveUsBackwards) {
+  uint32_t now = 1000;
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 9, 12, 0.62f), now);
+  auto apply = packetFrom(PEER_MAC, PacketType::APPLY);
+  apply.position = positionAt(OUR_HASH, 3, 10, 0.25f);
   session.onPacket(apply, now);
-
-  // The sender is told the request arrived; the position still does not move
-  // until the reader on this device confirms it.
   EXPECT_TRUE(contains(drain(session, now), ActionKind::SEND_ACK));
-  EXPECT_EQ(session.state(), SyncState::APPLY_REQUESTED);
-  EXPECT_EQ(session.peerPosition().spineIndex, 14);
+  session.onPacket(packetFrom(PEER_MAC, PacketType::ACK), now);
+  drain(session, now);
+  EXPECT_EQ(session.state(), SyncState::SHARED);
+}
 
-  session.takePeerPosition(now);
+TEST(NearbyPositionSession, FinishedSessionAcknowledgesRetriesWithoutChangingWinner) {
+  uint32_t now = 1000;
+  auto session = pairedSession(positionAt(OUR_HASH, 3, 10, 0.25f), positionAt(OUR_HASH, 9, 12, 0.62f), now);
+  auto position = packetFrom(PEER_MAC, PacketType::POSITION);
+  position.position = positionAt(OUR_HASH, 9, 12, 0.62f);
+  session.onPacket(position, now + POSITION_RETRY_INTERVAL_MS);
+  EXPECT_TRUE(contains(drain(session, now + POSITION_RETRY_INTERVAL_MS), ActionKind::SEND_ACK));
+  EXPECT_EQ(session.state(), SyncState::APPLIED);
+}
+
+TEST(NearbyPositionSession, DoesNotFinishBeforeSendingAndAcknowledgingBothPositions) {
+  uint32_t now = 1000;
+  SyncSession session;
+  session.begin(positionAt(OUR_HASH, 3, 10, 0.25f), now);
+  auto position = packetFrom(PEER_MAC, PacketType::POSITION);
+  position.position = positionAt(OUR_HASH, 9, 12, 0.62f);
+  session.onPacket(position, now);
+  // A stray ACK before our position was ever sent cannot complete the exchange.
+  session.onPacket(packetFrom(PEER_MAC, PacketType::ACK), now);
+  const auto actions = drain(session, now);
+  EXPECT_TRUE(contains(actions, ActionKind::SEND_ACK));
+  EXPECT_TRUE(contains(actions, ActionKind::SEND_POSITION));
+  EXPECT_EQ(session.state(), SyncState::EXCHANGING);
+  session.onPacket(packetFrom(PEER_MAC, PacketType::ACK), now);
+  drain(session, now);
   EXPECT_EQ(session.state(), SyncState::APPLIED);
 }
 
@@ -344,7 +362,7 @@ TEST(NearbyPositionSession, PairsWithAReaderThatIsAlreadyTalkingToUs) {
 
   EXPECT_TRUE(session.hasPeer());
   EXPECT_TRUE(session.hasPeerPosition());
-  EXPECT_EQ(session.state(), SyncState::COMPARING);
+  EXPECT_EQ(session.state(), SyncState::EXCHANGING);
   EXPECT_TRUE(contains(drain(session, now), ActionKind::SEND_ACK));
 }
 
@@ -360,7 +378,7 @@ TEST(NearbyPositionSession, ARequestToMoveAlsoPairsAnUnpairedReader) {
   session.onPacket(apply, now);
 
   EXPECT_TRUE(session.hasPeer());
-  EXPECT_EQ(session.state(), SyncState::APPLY_REQUESTED);
+  EXPECT_EQ(session.state(), SyncState::EXCHANGING);
 }
 
 TEST(NearbyPositionSession, ADifferentBookIsStillRefusedWhenPairingOnAPosition) {
@@ -394,6 +412,8 @@ TEST(NearbyPositionSession, TwoReadersPairWhenOnlyOneOfThemHeardAnAnnouncement) 
   right.setLocalMac(RIGHT_MAC);
 
   bool leftHelloDelivered = false;
+  bool droppedLeftAck = false;
+  bool droppedRightAck = false;
   const auto deliver = [&](SyncSession& from, const std::array<uint8_t, MAC_BYTES>& fromMac, SyncSession& to) {
     for (const Action& action : drain(from, now)) {
       PacketView packet;
@@ -416,12 +436,17 @@ TEST(NearbyPositionSession, TwoReadersPairWhenOnlyOneOfThemHeardAnAnnouncement) 
         case ActionKind::SEND_POSITION:
           packet.type = PacketType::POSITION;
           break;
-        case ActionKind::SEND_ACK:
+        case ActionKind::SEND_ACK: {
+          // Each final ACK is lost once. A completed side must still answer
+          // retries while its outcome screen is visible.
+          bool& dropped = &from == &left ? droppedLeftAck : droppedRightAck;
+          if (!dropped) {
+            dropped = true;
+            continue;
+          }
           packet.type = PacketType::ACK;
           break;
-        case ActionKind::SEND_APPLY:
-          packet.type = PacketType::APPLY;
-          break;
+        }
       }
       to.onPacket(packet, now);
     }
@@ -430,12 +455,12 @@ TEST(NearbyPositionSession, TwoReadersPairWhenOnlyOneOfThemHeardAnAnnouncement) 
   for (int step = 0; step < 200; step++) {
     deliver(right, RIGHT_MAC, left);
     deliver(left, LEFT_MAC, right);
-    if (left.state() == SyncState::COMPARING && right.state() == SyncState::COMPARING) break;
+    if (left.state() == SyncState::APPLIED && right.state() == SyncState::SHARED) break;
     now += 100;
   }
 
-  EXPECT_EQ(left.state(), SyncState::COMPARING);
-  EXPECT_EQ(right.state(), SyncState::COMPARING);
+  EXPECT_EQ(left.state(), SyncState::APPLIED);
+  EXPECT_EQ(right.state(), SyncState::SHARED);
   EXPECT_TRUE(left.hasPeerPosition());
   EXPECT_TRUE(right.hasPeerPosition());
 }

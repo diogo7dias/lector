@@ -104,8 +104,8 @@ void applyGroups(std::vector<SettingInfo>& rows, const std::vector<SettingsGroup
 }  // namespace
 
 namespace {
-// Display, Reader, Controls, System, in the order the flat list used to concatenate them.
-constexpr int kCategoryCount = 4;
+// Four settings categories, then the File Transfer activity.
+constexpr int kCategoryCount = 5;
 }  // namespace
 
 std::string SettingsActivity::settingValueText(const SettingInfo& setting) const {
@@ -156,6 +156,8 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
 
 StrId SettingsActivity::categoryName(const int index) const {
   switch (index) {
+    case 4:
+      return StrId::STR_FILE_TRANSFER;
     case 0:
       return StrId::STR_CAT_DISPLAY;
     case 1:
@@ -209,6 +211,7 @@ const char* SettingsActivity::cellName(const int index) const {
 
 const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
+    if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
     char count[24];
     snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT),
@@ -407,7 +410,7 @@ void SettingsActivity::onEnter() {
   BusyBanner banner(renderer, tr(STR_BUSY_LOADING_SETTINGS));
 
   rebuildSettingsList();
-  // Opens on the hub: which four categories there are is the first thing to say now that
+  // Opens on the hub: the categories and File Transfer are the first thing to say now that
   // the group headings live inside them.
   mode = Mode::Hub;
   selectedCategory = 0;
@@ -427,6 +430,11 @@ bool SettingsActivity::handleCustomInput() {
 // on the setting.
 void SettingsActivity::activateCell(const int index) {
   if (mode == Mode::Hub) {
+    // File Transfer is a hub destination, not a category of persisted settings.
+    if (index == 4) {
+      activityManager.goToFileTransfer();
+      return;
+    }
     selectedCategory = index;
     selectCategory(index);
     mode = Mode::Category;

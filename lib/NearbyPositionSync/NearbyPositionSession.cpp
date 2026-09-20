@@ -39,6 +39,7 @@ bool SyncSession::sameBook(const CompactPosition& position) const {
 
 void SyncSession::pairWith(const PacketView& packet, const uint32_t nowMs) {
   hasPeer_ = true;
+  state_ = SyncState::EXCHANGING;
   peerMac_ = packet.deviceMac;
   namePending_ = true;
   positionSent_ = false;
@@ -47,7 +48,14 @@ void SyncSession::pairWith(const PacketView& packet, const uint32_t nowMs) {
 }
 
 void SyncSession::onPacket(const PacketView& packet, const uint32_t nowMs) {
-  if (isFinished()) return;
+  if (isFinished()) {
+    // Keep answering retries during the outcome screen if the last ACK was lost.
+    if ((state_ == SyncState::SHARED || state_ == SyncState::APPLIED) && packet.deviceMac == peerMac_ &&
+        (packet.type == PacketType::POSITION || packet.type == PacketType::APPLY) && sameBook(packet.position)) {
+      ackPending_ = true;
+    }
+    return;
+  }
   // The radio can hear this device's own broadcast; syncing with itself would
   // pair the session against its own position and never progress.
   if (packet.deviceMac == localMac_) {
@@ -87,15 +95,6 @@ void SyncSession::onPacket(const PacketView& packet, const uint32_t nowMs) {
       peerName_ = packet.deviceName;
       break;
     case PacketType::POSITION:
-      if (!sameBook(packet.position)) {
-        state_ = SyncState::BOOK_MISMATCH;
-        return;
-      }
-      peerPosition_ = packet.position;
-      hasPeerPosition_ = true;
-      ackPending_ = true;
-      if (state_ == SyncState::SEARCHING) state_ = SyncState::COMPARING;
-      break;
     case PacketType::APPLY:
       if (!sameBook(packet.position)) {
         state_ = SyncState::BOOK_MISMATCH;
@@ -104,22 +103,19 @@ void SyncSession::onPacket(const PacketView& packet, const uint32_t nowMs) {
       peerPosition_ = packet.position;
       hasPeerPosition_ = true;
       ackPending_ = true;
-      // Acknowledging tells the sender the request landed. It does not move this
-      // device: only the reader here can do that.
-      state_ = SyncState::APPLY_REQUESTED;
       break;
     case PacketType::ACK:
-      if (state_ == SyncState::SHARING) {
-        applyAcked_ = true;
-        state_ = SyncState::SHARED;
-      } else {
-        localPositionAcked_ = true;
-      }
+      if (positionSent_) localPositionAcked_ = true;
       break;
   }
 }
 
 bool SyncSession::nextAction(const uint32_t nowMs, Action& action) {
+  if (ackPending_) {
+    ackPending_ = false;
+    action = Action{ActionKind::SEND_ACK, peerMac_};
+    return true;
+  }
   if (isFinished()) return false;
 
   if (!hasPeer_) {
@@ -141,23 +137,9 @@ bool SyncSession::nextAction(const uint32_t nowMs, Action& action) {
     return false;
   }
 
-  if (ackPending_) {
-    ackPending_ = false;
-    action = Action{ActionKind::SEND_ACK, peerMac_};
-    return true;
-  }
-
   if (namePending_) {
     namePending_ = false;
     action = Action{ActionKind::SEND_NAME, peerMac_};
-    return true;
-  }
-
-  if (state_ == SyncState::SHARING && !applyAcked_ &&
-      (!applySent_ || elapsed(nowMs, lastApplySendMs_, POSITION_RETRY_INTERVAL_MS))) {
-    applySent_ = true;
-    lastApplySendMs_ = nowMs;
-    action = Action{ActionKind::SEND_APPLY, peerMac_};
     return true;
   }
 
@@ -168,21 +150,11 @@ bool SyncSession::nextAction(const uint32_t nowMs, Action& action) {
     return true;
   }
 
+  if (hasPeerPosition_ && localPositionAcked_) {
+    state_ = resolution() == Resolution::TakePeer ? SyncState::APPLIED : SyncState::SHARED;
+  }
+
   return false;
-}
-
-void SyncSession::takePeerPosition(const uint32_t nowMs) {
-  (void)nowMs;
-  if (!hasPeerPosition_) return;
-  state_ = SyncState::APPLIED;
-}
-
-void SyncSession::sharePosition(const uint32_t nowMs) {
-  if (!hasPeer_) return;
-  state_ = SyncState::SHARING;
-  applyAcked_ = false;
-  applySent_ = false;
-  lastApplySendMs_ = nowMs;
 }
 
 bool SyncSession::peerIsFurtherAlong() const {
