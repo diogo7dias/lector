@@ -568,17 +568,24 @@ Catalogs can also be managed from the web interface at `http://<device-ip>/setti
 
 ### Nearby Sync
 
-The fastest way to move a position between two Lector devices. Open the same book on both,
-then pick **Nearby Sync** from the in-book menu's Device tab on each. The devices find each
-other and show both pages, so you can **Take their page** or **Send my page**, chosen with the
-direction keys and Select or by tapping the row twice.
+To receive a position without opening a book, choose **Nearby Sync > Receive position** on
+Home. On the sending device, keep the book open and choose **Nearby Sync** from the in-book
+menu's Device tab. The receiver finds its own copy and shows the matched book's name. It
+keeps the furthest position, ready for the next time you open that book. No book file is sent.
 
-The screen says what happened: both on the same page, they are further ahead, moved to their
-page, and so on. It also says when the other reader has a different book open, when nothing
-answered, and when the radio is busy with Wi-Fi or File Transfer.
+Both devices must use the same **Document Matching** setting under **KOReader Sync**.
+The receiver checks recent books first, then other EPUBs with existing reading caches.
+It needs saved progress and a book metadata cache. Existing chapter caches must map the
+position exactly; a chapter with no cache is laid out at the received text offset when you
+next open the book. If the book was never opened, its metadata cache is missing, or the
+position cannot be mapped exactly, it refuses and leaves the saved place unchanged. Open the book and use in-book Nearby Sync in
+that case. Very large libraries can reach the search limit; the screen reports a refusal.
 
-The position that travels points at the last paragraph on the page you are looking at, so the
-other device opens where you were reading rather than a paragraph behind.
+For the existing two-way sync, open the same book on both devices and choose **Nearby Sync**
+in each in-book menu. Both keep the furthest position automatically.
+
+Home's Nearby Sync menu also offers **Receive from Nearby Reader** for file transfers and
+**Send** to browse files to send. File transfers keep duplicate files separate.
 
 ### KOReader sync
 
