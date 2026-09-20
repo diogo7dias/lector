@@ -5,6 +5,7 @@
 #include "ButtonMapping.h"
 #include "ListSwipeGesture.h"
 #include "components/HintBandGeometry.h"
+#include "components/TwoTapGate.h"
 #include "util/ReleaseGate.h"
 
 class GfxRenderer;
@@ -53,9 +54,19 @@ class MappedInputManager {
   bool hasTouch() const;
   // The front-button hardware id a tap on the hint band stands for, or -1. Non-consuming.
   int tappedHintHardware() const;
-  // The list item a tap landed on, out of the rows the last list draw painted. False when
-  // the tap was somewhere else, when nothing tappable was drawn, or on a button-only board.
-  bool wasRowTapped(int& item) const;
+  // The list item a tap landed on, out of the rows the last list draw painted, in two
+  // steps on a board with touch (see components/TwoTapGate.h). Armed = the first tap on a
+  // row: the caller moves its selection there and repaints, and runs nothing. Activate =
+  // a second tap on that same row. None = the tap was somewhere else, nothing tappable
+  // was drawn, or the board has no touch panel.
+  //
+  // This is the routing point for the screens that paint their own rows instead of going
+  // through FreeInkUI (home, the file browser, the end-of-book suggestions); every
+  // FreeInkUI screen is gated in UiAppHost instead.
+  enum class RowTap : uint8_t { None, Armed, Activate };
+  RowTap wasRowTapped(int& item) const;
+  // Drops the armed row: a screen change, a scroll, a physical key, a tap on nothing.
+  void clearRowTapArm() const;
   // True when a logical point sits in the button-hint band. A tap there belongs
   // to the button painted under it, so a screen that also routes taps of its own
   // (every FreeInkUI screen) has to leave it alone, or the row under the band
@@ -226,6 +237,9 @@ class MappedInputManager {
   mutable bool touchTapValid = false;
   mutable float touchTapX = 0.0f;
   mutable float touchTapY = 0.0f;
+
+  // Two-tap confirmation for the self-painted row lists. One armed row; no allocation.
+  mutable two_tap::Gate rowTapGate;
 
   mutable bool touchHeldOverrideValid = false;
   mutable unsigned long touchHeldOverrideMs = 0;

@@ -271,6 +271,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   static void choiceTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void listTrampoline(const freeink::ui::ActionEvent& event, void* user);
   static void sliderTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  // Two-tap confirmation armed a row or an answer instead of running it: move
+  // this screen's own selection under the highlight so the keys and the
+  // hint-band Confirm cannot act on something else.
+  static void armTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   // Set by the last build: a screen with a capsule needs the held contact
   // routed every frame, which no other shape wants.

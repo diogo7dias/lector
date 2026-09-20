@@ -22,6 +22,7 @@
 #include "components/ListScrollbar.h"
 #include "components/OptionPopupGeometry.h"
 #include "components/RowHitTest.h"
+#include "components/TwoTapGate.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
 #include "components/icons/bookmark.h"
@@ -379,13 +380,20 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans,
-                              const int spanCount) const {
+bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans, const int spanCount,
+                              const bool armed) const {
   // One highlight: the row filled, its text knocked out white. The spans a caller
   // measures are no longer read — they were what the retired bracket style bracketed —
   // but the parameters stay so every surface keeps calling one painter.
   (void)spans;
   (void)spanCount;
+  if (armed) {
+    // Two-tap confirmation: a row waiting for its confirming tap wears a 1px outline,
+    // never the filled band, so "armed" can never be misread as "already opened". Same
+    // rule and same shape as the FreeInkUI screens (components/UIThemeTokens.h).
+    renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+    return false;
+  }
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
   return true;
 }
@@ -767,7 +775,8 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
                static_cast<int>(row.lines.size()) * lineHeight),
           Rect(valueX, rowY + 3, row.valueW - valueGap, lineHeight),
       };
-      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), spans, row.valueW > 0 ? 2 : 1);
+      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), spans, row.valueW > 0 ? 2 : 1,
+                               row.index == two_tap::armedRow());
     }
     if (row.valueW > 0) {
       renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !inverted);
@@ -826,7 +835,7 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     bool inverted = false;
     if (selected) {
       const Rect labelSpan(textX, textY, textWidth, lineHeight);
-      inverted = drawSelection(renderer, tile, &labelSpan, 1);
+      inverted = drawSelection(renderer, tile, &labelSpan, 1, itemIndexBase + i == two_tap::armedRow());
       if (!inverted) renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
     } else {
       renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
@@ -1549,7 +1558,8 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
       const int titleX = contentX + (entry.badgeW > 0 ? entry.badgeW + 6 : 0);
       const Rect titleSpan(titleX, rowY + 3, rowX + rowW - titleX,
                            static_cast<int>(entry.lines.size()) * rowLineHeight);
-      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), &titleSpan, 1);
+      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), &titleSpan, 1,
+                               entry.bookIdx == two_tap::armedRow());
     }
 
     // [NN%] badge on line 0: an inverted chip that flips with row selection so it

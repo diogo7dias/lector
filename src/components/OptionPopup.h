@@ -71,6 +71,11 @@ class OptionPopup {
     if (isDisabled(selectedIndex)) selectedIndex = nextEnabled(selectedIndex, 1);
   }
 
+  // EXEMPT from two-tap confirmation (components/TwoTapGate.h): this popup IS the
+  // confirmation. It is opened to ask a question the reader has already been shown, so
+  // a confirming tap on each answer would cost four taps to answer one question. It
+  // routes its own contacts rather than going through UiAppHost, so the exemption is
+  // the code path itself; this note is here so it stays a decision, not an oversight.
   bool handleInput(MappedInputManager& input, const std::function<void()>& requestUpdate) {
     if (!active) return swallowClosingRelease(input);
 

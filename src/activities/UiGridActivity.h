@@ -87,6 +87,10 @@ class UiGridActivity : public Activity, protected UiAppHost {
   int tallestCellHeight() const;
   static void screenTrampoline(UiScreen& screen, void* user);
   static void cellTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  // Two-tap confirmation armed a cell instead of running it: move the grid's
+  // own selection under the highlight so the keys and the hint-band Confirm
+  // cannot act on a different cell.
+  static void cellArmTrampoline(const freeink::ui::ActionEvent& event, void* user);
 
   int selected_ = 0;
   int scrollRow_ = 0;

@@ -146,12 +146,18 @@ void HomeActivity::loop() {
     }
   };
 
-  // A tap picks the row it landed on and acts on it in one go — the selection moving
-  // first is what the paint after the action shows, so no extra refresh is spent on it.
+  // A tap picks the row it landed on; on a board with touch it takes a second tap on
+  // that same row to open it (components/TwoTapGate.h). The first tap only moves the
+  // selection under the outline the row is drawn with while it is armed.
   int tappedItem = 0;
-  if (mappedInput.wasRowTapped(tappedItem) && tappedItem >= 0 && tappedItem < menuCount) {
+  const auto rowTap = mappedInput.wasRowTapped(tappedItem);
+  if (rowTap != MappedInputManager::RowTap::None && tappedItem >= 0 && tappedItem < menuCount) {
     buttonNavigator.resetRowTap();
     selectorIndex = tappedItem;
+    if (rowTap == MappedInputManager::RowTap::Armed) {
+      requestUpdate();
+      return;
+    }
     activateSelection();
     return;
   }

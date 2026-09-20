@@ -115,6 +115,10 @@ class UiListActivity : public Activity, protected UiAppHost {
  private:
   static void screenTrampoline(UiScreen& screen, void* user);
   static void rowActionTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  // Two-tap confirmation armed a row instead of opening it: move the selection
+  // under the highlight so the side keys and the hint-band Confirm cannot act
+  // on a different row than the one outlined.
+  static void rowArmTrampoline(const freeink::ui::ActionEvent& event, void* user);
   // Named apart from UiAppHost::routeTouch so the host overload stays visible
   // (not name-hidden) to subclasses with extra touch surfaces.
   bool routeListTouch();

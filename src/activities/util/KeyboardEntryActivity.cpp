@@ -575,6 +575,11 @@ void KeyboardEntryActivity::loop() {
 // waiting for the release reads as a dead key next to a one-second panel
 // refresh, and it dispatches the key the press landed on when the release
 // drifts off it, which fingers on e-paper do.
+// EXEMPT from two-tap confirmation (components/TwoTapGate.h): a keyboard is typed,
+// not chosen from. A confirming tap per letter would double the taps in every word
+// and every one of them costs a panel refresh. The keys route against this activity's
+// own InteractionBuffer rather than through UiAppHost, so the exemption is the code
+// path itself; this note is here so it stays a decision rather than an oversight.
 bool KeyboardEntryActivity::routeKeyTouch() {
   if (!mappedInput.hasTouch()) return false;
 

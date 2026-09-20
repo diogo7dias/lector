@@ -140,15 +140,39 @@ bool MappedInputManager::isInHintBand(const int x, const int y) const {
   return hint_band::tappedSlot(painted.band, portraitX, portraitY, painted.labelled) >= 0;
 }
 
-bool MappedInputManager::wasRowTapped(int& item) const {
-  if (!gpio.hasTouch()) return false;
+// The (action, value) pair the gate needs. These rows are not FreeInkUI controls, so
+// they have no ActionId of their own; one constant plus the row index names them.
+static constexpr uint16_t kRowTapAction = 1;
+
+MappedInputManager::RowTap MappedInputManager::wasRowTapped(int& item) const {
+  if (!gpio.hasTouch()) {
+    rowTapGate.setEnabled(false);
+    return RowTap::None;
+  }
+  rowTapGate.setEnabled(true);
+  // A physical key moves the caller's own selection, so an arm left behind would be a
+  // second, stale highlight on another row.
+  if (gpio.wasAnyPressed()) clearRowTapArm();
   int x = 0;
   int y = 0;
-  if (!wasScreenTapped(x, y)) return false;
+  if (!wasScreenTapped(x, y)) return RowTap::None;
   const int hit = row_hit::lastRows().itemAt(x, y);
-  if (hit == row_hit::kNoItem) return false;
+  if (hit == row_hit::kNoItem) {
+    clearRowTapArm();  // a tap on empty space
+    return RowTap::None;
+  }
   item = hit;
-  return true;
+  if (rowTapGate.decide(kRowTapAction, static_cast<int16_t>(hit)) == two_tap::Decision::Act) {
+    two_tap::armedRow() = two_tap::kNoRow;
+    return RowTap::Activate;
+  }
+  two_tap::armedRow() = hit;
+  return RowTap::Armed;
+}
+
+void MappedInputManager::clearRowTapArm() const {
+  rowTapGate.clear();
+  two_tap::armedRow() = two_tap::kNoRow;
 }
 
 void MappedInputManager::rememberTouchHeldTime() const {
@@ -238,6 +262,8 @@ MappedInputManager::SwipeDir MappedInputManager::wasSwipe() const {
   if (!decodeSwipe(sx, sy, ex, ey)) return SwipeDir::None;
   const int dx = ex - sx;
   const int dy = ey - sy;
+  // Any swipe ends the arm, for the same reason a list scroll does.
+  clearRowTapArm();
   if (std::abs(dx) >= std::abs(dy)) {
     return dx < 0 ? SwipeDir::Left : SwipeDir::Right;
   }
@@ -391,7 +417,11 @@ list_swipe::Scroll MappedInputManager::wasListScrollSwipe() const {
   int ey = 0;
   if (!decodeSwipe(sx, sy, ex, ey)) return list_swipe::Scroll::None;
   const auto scroll = list_swipe::scrollFrom(renderer.getScreenWidth(), renderer.getScreenHeight(), sx, sy, ex, ey);
-  if (scroll != list_swipe::Scroll::None) rememberTouchHeldTime();
+  if (scroll != list_swipe::Scroll::None) {
+    rememberTouchHeldTime();
+    // Scrolling ends the arm: the row it named may not even be on screen now.
+    clearRowTapArm();
+  }
   return scroll;
 }
 

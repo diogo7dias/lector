@@ -5,6 +5,18 @@
 #include "UITheme.h"
 #include "UiRowHeight.h"
 
+// The look of a control a first tap armed: black 1px outline on white, text on
+// its normal ground. Shared by every control style so the highlight reads the
+// same whatever was tapped.
+inline void outlineArmedControl(freeink::ui::BoxStyle& style, const uint8_t radius) {
+  namespace fui = freeink::ui;
+  style.background = fui::Paint::solid(fui::Color::White);
+  style.foreground = fui::Paint::solid(fui::Color::Black);
+  style.border = fui::Paint::solid(fui::Color::Black);
+  style.borderWidth = 1;
+  style.radius = radius;
+}
+
 // Merges the active UITheme's shape (row gaps, radii, insets, selection
 // style) with the uiScale-derived sizes into FreeInkUI theme tokens: the
 // theme says what lists look like, the scale says how big they are.
@@ -77,6 +89,14 @@ inline freeink::ui::ThemeTokens uiThemeTokens(const freeink::ui::GfxRendererTarg
   // metrics.listSelectionStyle == 0 (InvertFill) already asks for, so it is
   // stated here only so a theme cannot leave the rows outlined instead.
   tokens.listSelectionStyle = fui::SelectionStyle::InvertFill;
+  // Two-tap confirmation (see components/TwoTapGate.h): a first tap arms a
+  // control and leaves it under a 1px outline, never the filled band a selected
+  // row wears, so "armed" can never be misread as "already done". Board-neutral
+  // by construction rather than by a board test: StateActive is only ever set
+  // by a touch contact, so a keys-only board never paints it and nothing here
+  // asks what the board is.
+  outlineArmedControl(tokens.listRow.active, tokens.listRowRadius);
+  outlineArmedControl(tokens.button.active, static_cast<uint8_t>(tokens.controlRadius));
   // No scroll track. Lists say "more" with the two chevrons UiListActivity draws
   // outside the row band (ListScrollbar.h), so the SDK draws no indicator and
   // the rows keep the width the track used to take.

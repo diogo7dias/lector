@@ -27,6 +27,7 @@ void UiListActivity::onEnter() {
   activeNav().reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
+  setArmHook(&UiListActivity::rowArmTrampoline, this);
   app.setScreen(&UiListActivity::screenTrampoline, this);
   requestUpdate();
 }
@@ -48,6 +49,13 @@ void UiListActivity::rowActionTrampoline(const fui::ActionEvent& event, void* us
   auto* self = static_cast<UiListActivity*>(user);
   if (event.value < 0 || event.value >= self->listCount()) return;
   self->onRowAction(event);
+}
+
+void UiListActivity::rowArmTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<UiListActivity*>(user);
+  if (event.action != ACTION_ROW) return;
+  if (event.value < 0 || event.value >= self->listCount()) return;
+  self->activeNav().selected = event.value;
 }
 
 void UiListActivity::onRowAction(const fui::ActionEvent& event) {
