@@ -3,6 +3,7 @@
 #include <FreeInkApp.h>
 
 #include <cstring>
+#include <functional>
 #include <vector>
 
 #include "ListSwipeGesture.h"
@@ -13,12 +14,15 @@
 #include "components/UiRowHeight.h"
 #include "components/UiRowWrap.h"
 #include "components/WrappedListWindow.h"
+#include "util/ButtonGestures.h"
+#include "util/HoldRepeat.h"
+#include "util/ListIndex.h"
 
 namespace fui = freeink::ui;
 using Rect = list_chrome::Rect;
 
 // Hardware, chrome, and task scheduling only. The generated includes below keep
-// the production UiGridActivity, UiAppHost, gate, theme, and SDK drawing/routing.
+// the production list/grid activities, navigation, host, gate and SDK drawing/routing.
 struct HalDisplay {
   enum RefreshMode { FAST_REFRESH };
   struct Profile {
@@ -32,7 +36,7 @@ struct GfxRenderer {
   int getScreenWidth() const { return 480; }
   int getScreenHeight() const { return 800; }
   void clearScreen() {}
-  void displayBuffer() { ++refreshes; }
+  void displayBuffer(HalDisplay::RefreshMode = HalDisplay::FAST_REFRESH) { ++refreshes; }
   int refreshes = 0;
 };
 
@@ -53,6 +57,7 @@ class GfxRendererTarget : public DrawTarget {
   std::vector<Stroke> strokes;
   std::vector<TextStyle> texts;
   explicit GfxRendererTarget(const GfxRenderer&) {}
+  void setFont(FontId, int) {}
   DeviceContext deviceContext() const {
     DeviceContext device;
     device.width = 480;
@@ -75,15 +80,25 @@ class GfxRendererTarget : public DrawTarget {
 }  // namespace freeink::ui
 
 struct MappedInputManager {
-  enum class Button { Confirm, Back, ScreenDown, ScreenUp, ScreenLeft, ScreenRight };
+  enum class Button { Confirm, Back, ScreenDown, ScreenUp, ScreenLeft, ScreenRight, NavNext, NavPrevious };
+  enum class SwipeDir { None, Up, Down, Left, Right };
   bool touch = true;
   bool key = false;
+  SwipeDir swipe = SwipeDir::None;
   fui::InputSnapshot snapshot;
   bool hasTouch() const { return touch; }
   bool wasPressed(Button) const { return false; }
+  bool wasReleased(Button) const { return false; }
+  bool isPressed(Button) const { return false; }
+  unsigned long getHeldTime() const { return 0; }
   bool wasAnyPressed() const { return key; }
   int tappedHintHardware() const { return -1; }
-  list_swipe::Scroll wasListScrollSwipe() const { return list_swipe::Scroll::None; }
+  SwipeDir wasSwipe() const { return touch ? swipe : SwipeDir::None; }
+  list_swipe::Scroll wasListScrollSwipe() const {
+    if (wasSwipe() == SwipeDir::Up) return list_swipe::Scroll::PageDown;
+    if (wasSwipe() == SwipeDir::Down) return list_swipe::Scroll::PageUp;
+    return list_swipe::Scroll::None;
+  }
 };
 
 struct RenderLock {
@@ -101,22 +116,14 @@ struct Activity {
   void requestUpdate() {}
   void finish() {}
 };
-struct ButtonNavigator {
-  void resetRowTap() {}
-  template <class F>
-  void onRowTap(MappedInputManager::Button, F) {}
-  template <class F>
-  void onContinuous(std::initializer_list<MappedInputManager::Button>, F) {}
-  template <class F>
-  void onPressAndContinuous(std::initializer_list<MappedInputManager::Button>, F) {}
-};
+inline unsigned long millis() { return 1000; }
 
 struct ThemeMetrics {
   int listRowGap = 4, listRowRadius = 0, listInset = 0, listSidePadding = 0;
   int listSelectionStyle = 0, listScrollWidth = 0, listScrollSide = 0;
   int headerHeight = 40, headerSidePadding = 0, headerUnderlineSize = 0, headerTitleAlign = 0;
   int controlRadius = 0, sheetRadius = 0, capsuleRadius = 0;
-  int listRowHeight = 40, verticalSpacing = 10;
+  int listRowHeight = 40, listWithSubtitleRowHeight = 60, verticalSpacing = 10;
 };
 struct UITheme {
   static UITheme& getInstance() {
@@ -162,7 +169,11 @@ inline void drawListChromeTop(const GfxRenderer&, const ListChrome&) {}
 inline void drawListChromeBottom(GfxRenderer&, const MappedInputManager&, const ListChrome&) {}
 
 // clang-format off: declarations must precede the production definitions.
+#include "ButtonNavigator.h.inc"
+#include "ButtonNavigator.cpp.inc"
 #include "UiGridActivity.h.inc"
+#include "UiListActivity.h.inc"
 #include "UiAppHost.cpp.inc"
 #include "UiGridActivity.cpp.inc"
+#include "UiListActivity.cpp.inc"
 // clang-format on
