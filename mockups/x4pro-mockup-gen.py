@@ -226,7 +226,7 @@ def home_le():
     menu_top = max(HOME_TOP_PADDING + HOME_TILE_H + HOME_MENU_OFFSET,
                    H - HINTS_H - MENU_SPACING - block)
     f.menu(menu_items, menu_top, selected=-1)
-    f.hints([S("STR_STATS"), S("STR_SELECT"), S("STR_DIR_UP"), S("STR_DIR_DOWN")])
+    f.hints([S("STR_RESUME"), S("STR_SELECT"), S("STR_DIR_UP"), S("STR_DIR_DOWN")])
     return f
 
 
@@ -353,7 +353,7 @@ def reader_menu(theme, caption, groups):
                 S("STR_SELECT_CHAPTER"),
                 S("STR_GRP_MARKS", "MARKS"), S("STR_BOOKMARKS"), S("STR_GRAB_QUOTE"),
                 S("STR_FOOTNOTES"),
-                S("STR_GRP_BOOK", "BOOK"), S("STR_READING_STATS", "Reading Stats"),
+                S("STR_GRP_BOOK", "BOOK"),
                 S("STR_TEXT_SETTINGS"), S("STR_CUSTOMISE_STATUS_BAR")]
         heads = {0, 4, 8}
     else:
@@ -368,8 +368,8 @@ def reader_menu(theme, caption, groups):
 
 
 section("Reader menu",
-        "Lector groups the in-book actions under section headings and adds Grab Quote, Reading "
-        "Stats and Customise Status Bar.",
+        "Lector groups the in-book actions under section headings and adds Grab Quote and "
+        "Customise Status Bar.",
         reader_menu(CP, "CrossPoint: flat action list", False),
         reader_menu(LE, "Lector: grouped, extra actions", True))
 
@@ -541,70 +541,6 @@ section("Chapter selection", "Lector carries each chapter's start percent on the
 
 
 # =========================================================================
-# 10. Sleep screen
-# =========================================================================
-def sleep_real():
-    """What stats_dashboard::render draws today: cover left (296x444 at x=20, y=70 from
-    reading_stats::dashboardLayout), a right-aligned column of 7 value/label rows, footer."""
-    f = Frame(LE, "Lector today: cover left, 7 stat rows right")
-    cw, ch = 296, 444
-    f.rect(20, 70, cw, ch, extra="border-radius:8px;")
-    f.small("cover", 20, 70 + ch // 2, w=cw, align="center", color="#888")
-    rx = W - 20
-    rows = [("42%", S("STR_STATS_COMPLETED")), ("4 h 12 m", S("STR_STATS_TIME_READ", "Time read")),
-            ("~5 h", S("STR_STATS_EST_FINISH")), ("22 min", S("STR_STATS_AVG_SESSION")),
-            ("0.8", "pages/min"), ("312", "pages"), ("9", "days")]
-    ry = 70
-    for val, lab in rows:
-        f.big(val, rx - 120, ry, w=120, align="right")
-        f.small(lab, rx - 120, ry + LE["big_lh"] + 1, w=120, align="right")
-        ry += LE["big_lh"] + LE["small_lh"] + 14
-    f.ui("The Left Hand of Darkness", SIDE_PAD, H - 97, w=W - SIDE_PAD * 2)
-    f.small("Ursula K. Le Guin  ·  Ch 4", SIDE_PAD, H - 97 + LE["ui_lh"] + 4)
-    return f
-
-
-def sleep_proposed():
-    f = Frame(LE, "Proposed: title block, progress rule, 4 stat cards, weekday bars")
-    f.big(S("STR_STATS_CURRENT_BOOK", "Current book"), 0, 44, w=W, align="center")
-    f.ui("The Left Hand of Darkness", 0, 84, w=W, align="center")
-    f.small("Ursula K. Le Guin  ·  Ch 4, The Nineteenth Day", 0, 116, w=W, align="center")
-    bar_x, bar_w = SIDE_PAD + 30, W - (SIDE_PAD + 30) * 2
-    f.rect(bar_x, 156, bar_w, 14)
-    f.rect(bar_x, 156, int(bar_w * 0.42), 14, fill=True)
-    f.small("42%  ·  4 h 12 m read  ·  ~5 h left", 0, 178, w=W, align="center")
-    boxes = [(S("STR_STATS_TODAY", "Today"), "38 min"), (S("STR_STATS_STREAK", "Streak"), "9 days"),
-             (S("STR_STATS_AVG_SESSION"), "22 min"), ("Pages", "312")]
-    bw = (W - SIDE_PAD * 2 - 12) // 2
-    for i, (lab, val) in enumerate(boxes):
-        bx = SIDE_PAD + (i % 2) * (bw + 12)
-        by = 226 + (i // 2) * 108
-        f.rect(bx, by, bw, 94)
-        f.small(lab, bx, by + 12, w=bw, align="center")
-        f.big(val, bx, by + 42, w=bw, align="center")
-    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-    heights = [30, 48, 22, 66, 40, 84, 58]
-    bwd = (W - SIDE_PAD * 2) // 7
-    base = 560
-    for i, (d, hgt) in enumerate(zip(days, heights)):
-        bx = SIDE_PAD + i * bwd
-        f.rect(bx + 4, base + 100 - hgt, bwd - 12, hgt, fill=True, stroke=False)
-        f.small(d, bx, base + 106, w=bwd - 8, align="center")
-    f.small("Evening reader  ·  best day Saturday", 0, base + 140, w=W, align="center")
-    f.small("Sleeping  ·  press power to wake", 0, H - 44, w=W, align="center")
-    return f
-
-
-section("Sleep screen (redesign)",
-        "Left is what stats_dashboard::render draws today: the cover on the left and a right-aligned "
-        "column of seven value-over-label rows (geometry from reading_stats::dashboardLayout — cover "
-        "296x444 at x=20, y=70, footer 97 px up). Right is the layout to build: a centred title "
-        "block, a progress rule, four stat cards and the weekday histogram, with the cover dropped "
-        "so nothing waits on cover generation.",
-        sleep_real(), sleep_proposed())
-
-
-# =========================================================================
 # 11. Boot splash
 # =========================================================================
 def boot(theme, caption, version):
@@ -687,7 +623,7 @@ def control_center_le():
         y += 56 + 16
     tiles = [(S("STR_NIGHT_MODE", "Night Mode"), True), (S("STR_FORCE_REFRESH", "Refresh"), False),
              (S("STR_PORTRAIT", "Portrait"), False), ("Touch On", False),
-             (S("STR_WIFI_NETWORKS", "Wi-Fi"), False), (S("STR_STATS", "Stats"), False)]
+             (S("STR_WIFI_NETWORKS", "Wi-Fi"), False)]
     tw = (W - m * 2 - 12) // 2
     for i, (t, on) in enumerate(tiles):
         tx = m + (i % 2) * (tw + 12)
@@ -780,39 +716,7 @@ def only_list(caption, title, rows, vals=None, hints=None, selected=0, heads=Non
     return f
 
 
-def stats_screen():
-    f = Frame(LE, "Lector only: BookStatsActivity")
-    top = LE["top_padding"]
-    f.header(S("STR_STATS_BOOK", "Book"))
-    y = top + HEADER_H + VSPACE
-    f.ui("The Left Hand of Darkness", SIDE_PAD, y)
-    f.small("Ursula K. Le Guin", SIDE_PAD, y + LE["ui_lh"] + 2)
-    y += LE["ui_lh"] + LE["small_lh"] + 16
-    pairs = [(S("STR_STATS_TIME_READ", "Time read"), "4 h 12 m"),
-             (S("STR_STATS_AVG_SESSION"), "22 min"),
-             (S("STR_STATS_EST_FINISH"), "~5 h 10 m"),
-             (S("STR_STATS_COMPLETED"), "42%"),
-             (S("STR_STATS_BEST"), "Evening"),
-             (S("STR_STATS_DAY_OF_WEEK"), "Sunday")]
-    for i, (k, v) in enumerate(pairs):
-        f.ui(k, SIDE_PAD, y + i * ROW_H)
-        f.ui(v, SIDE_PAD, y + i * ROW_H, align="right", w=W - SIDE_PAD * 2)
-    y += len(pairs) * ROW_H + 20
-    # weekday bars
-    days = [S("STR_STATS_MON", "Mon"), "Tue", "Wed", "Thu", S("STR_STATS_FRI", "Fri"), "Sat", "Sun"]
-    heights = [30, 48, 22, 66, 40, 84, 58]
-    bw = (W - SIDE_PAD * 2) // 7
-    for i, (d, hgt) in enumerate(zip(days, heights)):
-        bx = SIDE_PAD + i * bw
-        f.rect(bx + 4, y + 90 - hgt, bw - 12, hgt, fill=True, stroke=False)
-        f.small(d, bx, y + 96, w=bw - 8, align="center")
-    f.hints([S("STR_BACK"), "", S("STR_STATS_ALL_BOOKS"), S("STR_STATS_MORE")])
-    return f
-
-
 ONLY = [
-    ("Reading stats", "Per-book reading time, estimated finish, best time of day and a weekday "
-                      "histogram. No upstream equivalent.", stats_screen()),
     ("Quotes viewer", "Grabbed quotes for the open book, hold to delete.",
      only_list("Lector only: QuotesViewerActivity", S("STR_QUOTES", "Quotes"),
                ["“Light is the left hand of darkness…”", "“He was a man of the frozen world.”",

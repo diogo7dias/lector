@@ -49,7 +49,7 @@ bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t
   if (!_available) {
     // No RTC on this board. The system clock is only meaningful once something
     // has synced it, so reject anything before 2020-01-01 rather than hand back
-    // the epoch and let a caller record a reading day in 1970.
+    // the epoch as a valid timestamp.
     const time_t now = time(nullptr);
     if (now < SYSTEM_CLOCK_VALID_FROM) return false;
     struct tm utc;
@@ -63,8 +63,7 @@ bool HalClock::getDateTime(uint16_t& year, uint8_t& month, uint8_t& day, uint8_t
   }
 
   // Deliberately not sharing getTime()'s cache: that one only keeps hour/minute,
-  // and this is called once per reading session rather than once per status-bar
-  // repaint, so a direct read costs nothing worth optimising.
+  // while diagnostic timestamps need the date too.
   Rtc::DateTime dt;
   if (!_sdkRtc.now(dt)) return false;
   year = dt.year;
@@ -104,9 +103,9 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
 
 bool HalClock::syncFromNTP() {
   // Runs with or without an RTC. A board with none still gets its system clock set,
-  // which is what getDateTime() falls back to and what reading stats need to bucket a
-  // session by day and hour. That clock does not survive sleep on a board that latches
-  // its battery off, so the sync is repeated on later connects rather than once ever.
+  // which is what getDateTime() falls back to for diagnostic timestamps. That clock
+  // does not survive sleep on a board that latches its battery off, so the sync is
+  // repeated on later connects rather than once ever.
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
     return false;

@@ -58,7 +58,6 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "reading_stats/ReadingStatsClock.h"
 #include "sleep/SleepPauseToggle.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
@@ -67,7 +66,6 @@
 #include "util/BoundMenuLabels.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
-#include "util/OpenReadingStats.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SortesSelection.h"
 
@@ -158,17 +156,6 @@ void EpubReaderActivity::onEnter() {
   ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
   epub->setupCacheDir();
-
-  // Reading stats. Latched here rather than read per event so a mid-book toggle
-  // cannot produce a session that is half tracked. The cache dir must already
-  // exist: this book's stats file lives inside it.
-  statsTrackingActive = !sortesMode && SETTINGS.readingStatsEnabled != 0;
-  if (statsTrackingActive) {
-    statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
-                            .minimumPageSeconds = 2,
-                            .minimumSessionSeconds = 60});
-    statsSession.begin(epub->getCachePath(), reading_stats::currentLocalDateTime());
-  }
 
   // Load this book's per-book reader settings (or a snapshot of global) before any
   // layout, so the first render already paginates through the right ReaderPrefs.
@@ -267,11 +254,6 @@ void EpubReaderActivity::onExit() {
   // readerEditSink_ still points at this freed activity — the next saveToFile() would
   // call through it. onExit() is the one place every destruction path routes through.
   if (SETTINGS.readerEditOverlayActive()) SETTINGS.endReaderEditOverlay();
-
-  if (statsTrackingActive) {
-    statsSession.pause(millis());
-    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save EPUB reading stats");
-  }
 
   // The extractor holds a raw pointer to this activity's epub; drop it before
   // the activity (and the shared_ptr) goes away.
@@ -520,18 +502,6 @@ void EpubReaderActivity::openDictionaryWordSelect() {
                          [this](const ActivityResult&) { requestUpdate(); });
 }
 
-void EpubReaderActivity::openReadingStats() {
-  float bookProgress = 0.0f;
-  if (epub && epub->getBookSize() > 0 && section && section->estimatedTotalPages() > 0) {
-    const float chapterProgress =
-        static_cast<float>(section->currentPage) / static_cast<float>(section->estimatedTotalPages());
-    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
-  }
-  const uint8_t progress = static_cast<uint8_t>(clampPercent(static_cast<int>(bookProgress + 0.5f)));
-  launchLiveReadingStats(*this, renderer, mappedInput, statsSession, statsTrackingActive,
-                         epub ? epub->getTitle() : std::string{}, progress);
-}
-
 void EpubReaderActivity::openQuoteGrab() {
   if (!section) return;
 
@@ -601,8 +571,6 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
     // was remapped), paging is an action like any other and the reader can always run it.
     case CrossPointSettings::LP_MENU_PAGE_PREV:
     case CrossPointSettings::LP_MENU_PAGE_NEXT:
-      return true;
-    case CrossPointSettings::LP_MENU_READING_STATS:
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -687,9 +655,6 @@ bool EpubReaderActivity::runBoundMenuFunction(const uint8_t function) {
       return true;
     case CrossPointSettings::LP_MENU_PAGE_NEXT:
       pageTurn(true);
-      return true;
-    case CrossPointSettings::LP_MENU_READING_STATS:
-      openReadingStats();
       return true;
     case CrossPointSettings::LP_MENU_DISABLED:
     default:
@@ -1322,10 +1287,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
             loadQuoteAnchors();  // a delete in there rewrites the sidecar
             requestUpdate();
           });
-      break;
-    }
-    case EpubReaderMenuActivity::MenuAction::READING_STATS: {
-      openReadingStats();
       break;
     }
     case EpubReaderMenuActivity::MenuAction::WALLPAPER_FAVORITE: {
@@ -2402,25 +2363,12 @@ void EpubReaderActivity::pageTurn(bool isForwardTurn) {
   // at session start snap the reader back after the incremental build completes.
   {
     RenderLock lock(*this);
+    if (!sortesMode && isForwardTurn && sessionPages < std::numeric_limits<int>::max()) ++sessionPages;
     returnHistory.finishReturn(false);
     pendingOffsetJump.reset();
     clearDeferredReposition();
   }
 
-  if (statsTrackingActive) {
-    // Only forward turns count as reading. A backward turn is re-reading, so the
-    // page it leaves is closed out instead of being credited as progress.
-    if (isForwardTurn) {
-      statsSession.forwardTurn(millis());
-      if (section && section->currentPage >= section->pageCount - 1 && !section->isBuilding() && epub &&
-          currentSpineIndex >= epub->getSpineItemsCount() - 1) {
-        const auto now = reading_stats::currentLocalDateTime();
-        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
-      }
-    } else {
-      statsSession.pause(millis());
-    }
-  }
   if (isForwardTurn) {
     // Advance within the section while there are (or may still be) more pages: either a built
     // page ahead, or the section is still building (windowed), in which case more pages exist
@@ -3037,9 +2985,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     renderContents(std::move(p), orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
     LOG_DBG("ERS", "Rendered page in %dms", millis() - start);
     lastRenderCompleteMs = millis();
-    // A page is only "shown" once it has actually been drawn; the timer for how
-    // long it was read starts here, not at the button press.
-    if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   }
   // Observe every render so unchanged pages can still reach the time limit.
   queueProgressSave(currentSpineIndex, section->currentPage, section->estimatedTotalPages());
@@ -3502,6 +3447,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
 void EpubReaderActivity::renderStatusBar() const {
   StatusBarData d;
+  if (!sortesMode) d.sessionPages = sessionPages;
   d.hasChapters = true;  // EPUB spine sections + TOC always provide chapters
   d.chapterPage = section->currentPage + 1;
   // estimatedTotalPages() keeps "page X / Y" sane while a giant spine is still
@@ -3519,9 +3465,6 @@ void EpubReaderActivity::renderStatusBar() const {
     d.chapterNum = tocIndex + 1;
   }
   if (d.chapterTitle.empty()) d.chapterTitle = tr(STR_UNNAMED);
-  // Pages turned this sitting. Left at -1 when statistics tracking is off, which
-  // hides the item instead of showing a 0 that will never move.
-  if (statsTrackingActive) d.sessionPages = static_cast<int>(statsSession.currentSession().pagesTurned);
   // Read from the chapter's paragraph table, and only when the item is on: it costs
   // one section-file open, which is not worth paying on every page for a number
   // nobody asked to see.

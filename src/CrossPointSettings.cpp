@@ -329,7 +329,7 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Keep stored IDs stable while migrating retired sleep faces to Light.
+  // Keep stored IDs stable while migrating retired sleep faces to Custom.
   if (wake_face::migrateSleepScreen(sleepScreen) != sleepScreen) {
     sleepScreen = wake_face::migrateSleepScreen(sleepScreen);
     needsResave = true;
@@ -380,6 +380,27 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     btnBookPowerDouble = doubleClick;
     btnUiPowerDouble = bound_action::allowedOutsideBook(doubleClick) ? doubleClick : LP_MENU_DISABLED;
     needsResave = true;
+  }
+
+  // Retire stats only after legacy power bindings above have been copied across.
+  if (homeBackAction == HOME_BACK_STATS) {
+    homeBackAction = HOME_BACK_RESUME;
+    needsResave = true;
+  }
+  const auto retireStatsBinding = [&needsResave](uint8_t& binding) {
+    if (binding == LP_MENU_READING_STATS) {
+      binding = LP_MENU_DISABLED;
+      needsResave = true;
+    }
+  };
+  retireStatsBinding(longPressMenuFunction);
+  retireStatsBinding(menuHoldFunction);
+  for (const bool inBook : {false, true}) {
+    for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
+      for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
+        retireStatsBinding(*buttonBinding(inBook, button, gesture));
+      }
+    }
   }
 
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and

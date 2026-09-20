@@ -511,7 +511,7 @@ void WifiSelectionActivity::pollRadio() {
     // ~2 ppm so one sync is enough; users can force a re-sync from Settings > Customise
     // Status Bar > Sync clock now.
     //
-    // Without one, the system clock is all reading stats have to date a session by, and
+    // Without one, diagnostic timestamps use the system clock, and
     // it is lost every time the battery latch drops. So it is re-synced on any connect
     // that finds it unset, and clockHasBeenSynced stays untouched: nothing was retained.
     const bool needsSync = halClock.isAvailable() ? !SETTINGS.clockHasBeenSynced : !halClock.hasDate();

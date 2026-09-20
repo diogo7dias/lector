@@ -17,7 +17,7 @@ Contents:
 - [4. Browsing files](#4-browsing-files)
 - [5. Reading](#5-reading)
 - [6. The in-book menu](#6-the-in-book-menu)
-- [7. Bookmarks, quotes and reading stats](#7-bookmarks-quotes-and-reading-stats)
+- [7. Bookmarks and quotes](#7-bookmarks-and-quotes)
 - [8. Sleep screen and wallpapers](#8-sleep-screen-and-wallpapers)
 - [9. Getting books onto the device](#9-getting-books-onto-the-device)
 - [10. Syncing reading position](#10-syncing-reading-position)
@@ -141,14 +141,14 @@ The Home screen is the entry point. It lists the books you have been reading, an
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
-the current book, open [Reading Stats](#7-bookmarks-quotes-and-reading-stats), or **Sortes**.
+the current book, or open **Sortes**.
 Resume remains the default. Sortes opens a randomly chosen finished EPUB at a random page:
 a book counts as finished when its saved library badge is 100% (Read), wherever it is filed.
 The footer says **No read books** and does nothing when none qualify.
 
 Back or sleep ends the visit. Sortes leaves the saved reading position, Read status, filing
-and recents untouched, and records no reading statistics. Quotes and bookmarks can still
-be saved deliberately, and the reader menu works. Book look edits last for this visit;
+and recents untouched. Quotes and bookmarks can still be saved deliberately, and the reader
+menu works. Book look edits last for this visit;
 sync, sending the book, deleting its cache/book and removing it from recents require opening
 it normally. Selection covers the whole library; an unreadable or over-deep directory tree
 shows **Unavailable** instead of choosing from an incomplete scan.
@@ -322,7 +322,6 @@ on; on nights it has none, a menu set to open there opens on **Navigate**.
 
 ### This Book
 
-- **Reading Stats** — this book's numbers.
 - **Look Up** — pick a word on the page and read its definition. Needs a dictionary, see
   [section 11](#11-fonts-and-dictionaries).
 - **Lookup History** — the last 100 words you looked up, newest first. Pick one to read its
@@ -367,7 +366,7 @@ Press **Back** to close the menu.
 
 ---
 
-## 7. Bookmarks, quotes and reading stats
+## 7. Bookmarks and quotes
 
 ### Bookmarks
 
@@ -384,12 +383,6 @@ card as a plain-text sidecar named after the book, for example `Book_QUOTES.txt`
 chapter and anchor recorded next to each quote. **View Quotes** reads them back on the
 device.
 
-### Reading stats
-
-With **Settings > System > Track Reading Stats** on, Lector records reading time and pages.
-**Reading Idle Limit** sets how long a page can sit untouched before that time stops counting.
-Stats are visible from the Home screen and per book from the in-book menu.
-
 ---
 
 ## 8. Sleep screen and wallpapers
@@ -401,9 +394,8 @@ Stats are visible from the Home screen and per book from the in-book menu.
 | Custom         | A wallpaper from the SD card. When none is found, the open book's cover; with no book open, a white screen reading "Lector". |
 | Cover          | The open book's cover. With no book open, the white "Lector" screen.              |
 
-Custom is the default. Every sleep screen an earlier build offered (Light, Cover + Custom,
-Stats Dashboard, Transparent, Quick Resume) now uses Custom. Inactivity uses your selected
-sleep screen.
+Custom is the default. Retired sleep-screen choices now use Custom. Inactivity uses your
+selected sleep screen.
 
 ### Wallpaper files
 
@@ -907,6 +899,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 
 - **Title Source** — Book or Chapter, and **Truncate Title**.
 - **Page Format** — `N/M` or `N left`.
+- **Pages This Session** counts forward page turns in the open EPUB and resets when the book closes.
 - **Pages to Paragraph** shows `>P.0` on most pages: the paragraph you are in ends before the
   next one starts. `>P.2` means it runs two more pages.
 - **Book Bar** and **Chapter Bar** — Off, Top or Bottom, with **Bar Thickness** (Slim, Medium,
@@ -952,7 +945,7 @@ Session**, **Pages to Paragraph**. Alongside them:
 **Back**
 
 - **Short Back to File Browser** — swap the short and long press of Back in a book.
-- **Home Back Button** — None, Resume (default), Reading Stats or Sortes.
+- **Home Back Button** — None, Resume (default) or Sortes.
 
 ### 12.4 System
 
@@ -966,8 +959,6 @@ Session**, **Pages to Paragraph**. Alongside them:
 - **Clear Read Books from Recent List**.
 - **Move Finished Books to Read Folder**.
 - **Move Opened Books to Recents Folder**.
-
-**Stats** — **Track Reading Stats** and **Reading Idle Limit**.
 
 **Fast Page Turns** — on by default on the X4, where it is validated. Page turns and menu
 moves use the panel's cheapest waveform, which is several times quicker than the standard

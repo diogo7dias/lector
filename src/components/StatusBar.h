@@ -25,9 +25,8 @@ struct StatusBarData {
   int chapterPercent = 0;  // 0..100
   std::string bookTitle;
   std::string chapterTitle;
-  // Pages turned since this book was opened. -1 = not tracked (reading statistics
-  // off, or a reader with no session), which hides the item rather than parking a
-  // permanent 0 on the bar.
+  // Forward pages turned since this book was opened. -1 hides the item in readers
+  // without a session counter.
   int sessionPages = -1;
   // Pages after this one still inside the paragraph this page starts in, so 0 means
   // a new paragraph begins on the next page. -1 = the chapter cannot answer (no

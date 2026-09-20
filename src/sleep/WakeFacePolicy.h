@@ -18,9 +18,8 @@ inline constexpr unsigned long inputSettleMs(const bool isX4Pro, const bool fast
   return fastUnlock ? 100 : 500;
 }
 
-// How a wake from a painted sleep face (a wallpaper, a cover, the Lector fallback, the
-// stats dashboard, a transparent overlay: all arbitrary content) gets the page onto the
-// panel.
+// How a wake from a painted sleep face (a wallpaper, a cover, or the Lector fallback)
+// gets the page onto the panel.
 //
 // Blank: the clearing pass every wake used to run — a FULL request over a blanked
 // framebuffer (the SSD1677 promotes it to its HALF anyway), 710 ms on an X3 and

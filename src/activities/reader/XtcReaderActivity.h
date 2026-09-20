@@ -17,15 +17,8 @@
 #include "ReaderUtils.h"
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
-#include "reading_stats/ReaderStatsSession.h"
-#include "reading_stats/SdStatsFiles.h"
 
 class XtcReaderActivity final : public Activity {
-  // Reading statistics. This reader has no menu; bind LP_MENU_READING_STATS to open
-  // the stats screen. Time and pages read here still land in the all-books totals.
-  reading_stats::SdStatsFiles statsFiles;
-  reading_stats::ReaderStatsSession statsSession{statsFiles};
-  bool statsTrackingActive = false;
   std::unique_ptr<Xtc> xtc;
 
   uint32_t currentPage = 0;

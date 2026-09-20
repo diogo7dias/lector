@@ -12,3 +12,7 @@ target_link_libraries(BoundActionScopeTest PRIVATE
 )
 
 gtest_discover_tests(BoundActionScopeTest)
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME RetiredStatsSettings COMMAND ${Python3_EXECUTABLE}
+  ${CMAKE_CURRENT_SOURCE_DIR}/check_retired_stats.py ${CMAKE_CXX_COMPILER})

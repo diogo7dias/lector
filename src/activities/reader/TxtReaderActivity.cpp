@@ -20,11 +20,9 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "reading_stats/ReadingStatsClock.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
-#include "util/OpenReadingStats.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -49,17 +47,6 @@ void TxtReaderActivity::onEnter() {
 
   txt->setupCacheDir();
 
-  // Reading stats. Latched at open so a mid-book toggle cannot half-track a
-  // session; the cache dir must exist first because this book's stats file
-  // lives inside it.
-  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
-  if (statsTrackingActive) {
-    statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
-                            .minimumPageSeconds = 2,
-                            .minimumSessionSeconds = 60});
-    statsSession.begin(txt->getCachePath(), reading_stats::currentLocalDateTime());
-  }
-
   // Save current txt as last opened file and add to recent books
   auto filePath = txt->getPath();
   auto fileName = filePath.substr(filePath.rfind('/') + 1);
@@ -76,11 +63,6 @@ void TxtReaderActivity::onExit() {
 
   if (txt && progressSaveDebouncer.hasPending()) {
     saveProgress(progressSaveDebouncer.lastObservedPosition());
-  }
-
-  if (statsTrackingActive) {
-    statsSession.pause(millis());
-    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save TXT reading stats");
   }
 
   // Reset orientation back to portrait for the rest of the UI
@@ -163,20 +145,11 @@ void TxtReaderActivity::loop() {
 void TxtReaderActivity::pageTurn(const bool forward) {
   if (!forward) {
     if (currentPage == 0) return;
-    // Backward is re-reading, not progress: close the page out rather than credit it.
-    if (statsTrackingActive) statsSession.pause(millis());
     currentPage--;
     requestUpdate();
     return;
   }
   if (currentPage < totalPages - 1) {
-    if (statsTrackingActive) {
-      statsSession.forwardTurn(millis());
-      if (currentPage + 1 == totalPages - 1) {
-        const auto now = reading_stats::currentLocalDateTime();
-        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
-      }
-    }
     currentPage++;
     requestUpdate();
   } else {
@@ -475,8 +448,6 @@ void TxtReaderActivity::render(RenderLock&&) {
   // one extra panel update, but only while the popup is actually open.
   settingsPopup.processRender(renderer, mappedInput);
 
-  // The read timer starts when the page is actually on the panel, not at the press.
-  if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   // Save progress
   if (progressSaveDebouncer.observe(currentPage)) saveProgress(currentPage);
 }
@@ -607,12 +578,6 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
       return true;
     case simple_reader_shortcut::Action::None:
       break;
-  }
-  if (function == CrossPointSettings::LP_MENU_READING_STATS) {
-    const uint8_t progress = totalPages > 0 ? static_cast<uint8_t>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
-    launchLiveReadingStats(*this, renderer, mappedInput, statsSession, statsTrackingActive,
-                           txt ? txt->getTitle() : std::string{}, progress > 100 ? 100 : progress);
-    return true;
   }
   // Not runnable in this reader, or runnable only when a card read says so (Hold
   // Wallpaper checks the file is still there). Fall through to the shared handler, which

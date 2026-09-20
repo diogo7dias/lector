@@ -23,8 +23,6 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "reading_stats/ReadingStatsClock.h"
-#include "util/OpenReadingStats.h"
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -34,17 +32,6 @@ void XtcReaderActivity::onEnter() {
   }
 
   xtc->setupCacheDir();
-
-  // Reading stats. Latched at open so a mid-book toggle cannot half-track a
-  // session; the cache dir must exist first because this book's stats file
-  // lives inside it.
-  statsTrackingActive = SETTINGS.readingStatsEnabled != 0;
-  if (statsTrackingActive) {
-    statsSession.configure({.idleThresholdSeconds = SETTINGS.readingStatsIdleSeconds(),
-                            .minimumPageSeconds = 2,
-                            .minimumSessionSeconds = 60});
-    statsSession.begin(xtc->getCachePath(), reading_stats::currentLocalDateTime());
-  }
 
   // Load saved progress
   loadProgress();
@@ -61,18 +48,6 @@ void XtcReaderActivity::onEnter() {
 bool XtcReaderActivity::runBoundAction(const uint8_t function) {
   if (function == CrossPointSettings::LP_MENU_PAGE_PREV || function == CrossPointSettings::LP_MENU_PAGE_NEXT) {
     pageTurn(function == CrossPointSettings::LP_MENU_PAGE_NEXT);
-    return true;
-  }
-
-  if (function == CrossPointSettings::LP_MENU_READING_STATS) {
-    uint8_t progress = 0;
-    if (xtc) {
-      const uint32_t pageCount = xtc->getPageCount();
-      const uint32_t clampedPage = (pageCount > 0 && currentPage >= pageCount) ? pageCount - 1 : currentPage;
-      progress = pageCount > 0 ? static_cast<uint8_t>(xtc->calculateProgress(clampedPage)) : 0;
-    }
-    launchLiveReadingStats(*this, renderer, mappedInput, statsSession, statsTrackingActive,
-                           xtc ? xtc->getTitle() : std::string{}, progress);
     return true;
   }
 
@@ -95,11 +70,6 @@ void XtcReaderActivity::onExit() {
 
   if (xtc && progressSaveDebouncer.hasPending()) {
     saveProgress(progressSaveDebouncer.lastObservedPosition());
-  }
-
-  if (statsTrackingActive) {
-    statsSession.pause(millis());
-    if (!statsSession.finish()) LOG_ERR("RSTAT", "Failed to save XTC reading stats");
   }
 
   APP_STATE.readerActivityLoadCount = 0;
@@ -200,8 +170,6 @@ void XtcReaderActivity::pageTurn(const bool forward) {
   constexpr int skipAmount = 1;
 
   if (prevTriggered) {
-    // Backward is re-reading, not progress: close the page out rather than credit it.
-    if (statsTrackingActive) statsSession.pause(millis());
     if (currentPage >= static_cast<uint32_t>(skipAmount)) {
       currentPage -= skipAmount;
     } else {
@@ -209,13 +177,6 @@ void XtcReaderActivity::pageTurn(const bool forward) {
     }
     requestUpdate();
   } else if (nextTriggered) {
-    if (statsTrackingActive) {
-      statsSession.forwardTurn(millis());
-      if (currentPage + skipAmount >= xtc->getPageCount()) {
-        const auto now = reading_stats::currentLocalDateTime();
-        statsSession.markCompleted(now.valid ? now.dayIndex : 0);
-      }
-    }
     currentPage += skipAmount;
     if (currentPage >= xtc->getPageCount()) {
       currentPage = xtc->getPageCount();  // Allow showing "End of book"
@@ -241,8 +202,6 @@ void XtcReaderActivity::render(RenderLock&&) {
   }
 
   renderPage();
-  // The read timer starts when the page is actually on the panel, not at the press.
-  if (statsTrackingActive) statsSession.pageShown(millis(), reading_stats::currentLocalDateTime());
   if (progressSaveDebouncer.observe(currentPage)) saveProgress(currentPage);
 }
 
