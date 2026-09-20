@@ -50,6 +50,10 @@ with a thin outline and does nothing else. A second tap on that same control run
 on a different control moves the outline there instead of running anything, so only one
 control is ever highlighted and a mis-aimed tap costs nothing.
 
+In Settings and Text Settings, the outlined row is waiting for confirmation; it is
+never filled black. The first tap leaves the button selection where it was. The
+second tap selects and runs the outlined row.
+
 The highlight goes away when you scroll the list, leave the screen, or tap an empty part of
 the screen. Moving the selection with the side keys clears it too, and the on-screen Back and
 Select buttons along the bottom edge act on the first tap, as the physical buttons do.
