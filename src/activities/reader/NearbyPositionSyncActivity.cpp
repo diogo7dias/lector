@@ -4,7 +4,6 @@
 #include <Logging.h>
 #include <Memory.h>
 
-#include <cstdio>
 #include <utility>
 
 #include "CrossPointSettings.h"
@@ -35,11 +34,10 @@ NearbyPositionSyncActivity::NearbyPositionSyncActivity(GfxRenderer& renderer, Ma
                                                        const std::string& epubPath, const int currentSpineIndex,
                                                        const int currentPage, const int totalPagesInSpine,
                                                        SavedProgressPosition localProgress,
-                                                       std::string localChapterName,
+                                                       std::string /*localChapterName*/,
                                                        std::optional<uint16_t> currentParagraphIndex)
     : UiStatusActivity("NearbyPositionSync", renderer, mappedInput),
       epubPath(epubPath),
-      localChapterName(std::move(localChapterName)),
       currentSpineIndex(currentSpineIndex),
       currentPage(currentPage),
       totalPagesInSpine(totalPagesInSpine < 1 ? 1 : totalPagesInSpine),
@@ -130,18 +128,14 @@ void NearbyPositionSyncActivity::runSessionActions() {
       case ActionKind::SEND_ACK:
         link.send(PacketType::ACK, action.peerMac, session.localPosition(), deviceName);
         break;
-      case ActionKind::SEND_APPLY:
-        link.send(PacketType::APPLY, action.peerMac, session.localPosition(), deviceName);
-        break;
     }
   }
 }
 
-void NearbyPositionSyncActivity::applyPeerPosition() {
+bool NearbyPositionSyncActivity::applyPeerPosition() {
   ensureEpubLoaded();
   if (!epub) {
-    returnToReader();
-    return;
+    return false;
   }
 
   const CompactPosition& peer = session.peerPosition();
@@ -159,8 +153,9 @@ void NearbyPositionSyncActivity::applyPeerPosition() {
   if (mapped.hasVisibleTextOffset) offset = mapped.visibleTextOffset;
   if (!EpubReaderUtils::saveProgress(*epub, mapped.spineIndex, mapped.pageNumber, 0, offset)) {
     LOG_ERR(LOG_TAG, "Could not save the received position");
+    return false;
   }
-  returnToReader();
+  return true;
 }
 
 void NearbyPositionSyncActivity::returnToReader() {
@@ -168,39 +163,13 @@ void NearbyPositionSyncActivity::returnToReader() {
   activityManager.goToReader(epubPath);
 }
 
-std::string NearbyPositionSyncActivity::chapterNameFor(const int spineIndex) const {
-  if (epub) {
-    const int tocIndex = epub->getTocIndexForSpineIndex(spineIndex);
-    if (tocIndex >= 0) return epub->getTocItem(tocIndex).title;
-  }
-  return std::string(tr(STR_SECTION_PREFIX)) + std::to_string(spineIndex + 1);
-}
-
-void NearbyPositionSyncActivity::prepareComparison() {
-  peerChapterLine = chapterNameFor(peerLocalPosition.spineIndex);
-  localChapterLine = !localChapterName.empty()
-                         ? localChapterName
-                         : (std::string(tr(STR_SECTION_PREFIX)) + std::to_string(currentSpineIndex + 1));
-
-  char buffer[128];
-  std::snprintf(buffer, sizeof(buffer), tr(STR_PAGE_OVERALL_FORMAT), peerLocalPosition.pageNumber + 1,
-                percentageFromQ(session.peerPosition().percentageQ) * 100.0f);
-  peerPageLine = buffer;
-  if (!session.peerName().empty()) {
-    std::snprintf(buffer, sizeof(buffer), tr(STR_DEVICE_FROM_FORMAT), session.peerName().c_str());
-    peerDeviceLine = buffer;
-  } else {
-    peerDeviceLine.clear();
-  }
-
-  std::snprintf(buffer, sizeof(buffer), tr(STR_PAGE_TOTAL_OVERALL_FORMAT), currentPage + 1, totalPagesInSpine,
-                localProgress.percentage * 100.0f);
-  localPageLine = buffer;
-}
-
 UiStatusActivity::StatusView NearbyPositionSyncActivity::statusView() const {
   StatusView view;
   view.title = tr(STR_NEARBY_SYNC);
+  if (saveFailed) {
+    view.lines = {tr(STR_NEARBY_CANNOT_WRITE_FILE), nullptr, nullptr, nullptr};
+    return view;
+  }
   if (noLocalPosition) {
     view.lines = {tr(STR_NEARBY_NO_POSITION), nullptr, nullptr, nullptr};
     return view;
@@ -215,32 +184,15 @@ UiStatusActivity::StatusView NearbyPositionSyncActivity::statusView() const {
     case SyncState::SEARCHING:
       view.lines = {tr(STR_NEARBY_SEARCHING), tr(STR_NEARBY_SEARCHING_HINT), nullptr, nullptr};
       break;
-    case SyncState::COMPARING:
-    case SyncState::APPLY_REQUESTED:
-      // The same comparison either way; the headline says whether the other
-      // reader is asking for this device's page or simply offering its own.
-      view.comparisonHeadline = state == SyncState::APPLY_REQUESTED ? tr(STR_NEARBY_INCOMING) : tr(STR_NEARBY_FOUND);
-      view.comparison[0].label = tr(STR_NEARBY_THEIRS);
-      view.comparison[0].lines = {peerChapterLine.c_str(), peerPageLine.c_str(),
-                                  peerDeviceLine.empty() ? nullptr : peerDeviceLine.c_str()};
-      view.comparison[1].label = tr(STR_NEARBY_MINE);
-      view.comparison[1].lines = {localChapterLine.c_str(), localPageLine.c_str(), nullptr};
-      // Say plainly which side is ahead, so the choice does not rest on
-      // comparing two percentages by eye.
-      view.comparisonRelation = session.positionsMatch()       ? tr(STR_NEARBY_SAME_PAGE)
-                                : session.peerIsFurtherAlong() ? tr(STR_NEARBY_FURTHER_AHEAD)
-                                                               : nullptr;
-      view.choices = {tr(STR_NEARBY_TAKE_THEIRS), tr(STR_NEARBY_SEND_MINE)};
-      view.confirmHint = tr(STR_SELECT);
-      break;
-    case SyncState::SHARING:
+    case SyncState::EXCHANGING:
       view.lines = {tr(STR_NEARBY_SENDING), nullptr, nullptr, nullptr};
       break;
     case SyncState::SHARED:
-      view.lines = {tr(STR_NEARBY_SENT), nullptr, nullptr, nullptr};
+      view.lines = {session.positionsMatch() ? tr(STR_NEARBY_SAME_PAGE) : tr(STR_NEARBY_KEPT_POSITION), nullptr,
+                    nullptr, nullptr};
       break;
     case SyncState::APPLIED:
-      view.lines = {tr(STR_NEARBY_APPLIED), nullptr, nullptr, nullptr};
+      view.sections[0].paragraph = tr(STR_NEARBY_MOVED_TO_PEER);
       break;
     case SyncState::BOOK_MISMATCH:
       view.lines = {tr(STR_NEARBY_BOOK_MISMATCH), nullptr, nullptr, nullptr};
@@ -256,55 +208,24 @@ UiStatusActivity::StatusView NearbyPositionSyncActivity::statusView() const {
 }
 
 bool NearbyPositionSyncActivity::handleCustomInput() {
-  // Nothing left to run: the two failure screens only wait for a button, which
-  // the base reads.
-  if (noLocalPosition || radioFailed) return false;
-
-  if (autoReturnAt != 0) {
-    if (millis() >= autoReturnAt) returnToReader();
-    return true;
-  }
+  // Failure screens wait for a button, which the base reads.
+  if (noLocalPosition || radioFailed || saveFailed) return false;
 
   pumpRadio();
   runSessionActions();
 
   const SyncState state = session.state();
 
-  // Map the peer's position once it is known, so the comparison can name their
-  // chapter rather than only a raw section number.
-  if (session.hasPeerPosition() && !peerPositionMapped) {
-    ensureEpubLoaded();
-    if (epub) {
-      SavedProgressPosition peerSaved;
-      peerSaved.xpath = session.peerPosition().xpath.data();
-      peerSaved.percentage = percentageFromQ(session.peerPosition().percentageQ);
-      peerLocalPosition = ProgressMapper::toCrossPoint(*epub, peerSaved, renderer, currentSpineIndex, totalPagesInSpine,
-                                                       totalPagesInSpine);
-    } else {
-      // Nothing to resolve the xpath against, and toCrossPoint() dereferences the
-      // book on its first line. Show the raw numbers the peer sent instead.
-      peerLocalPosition.spineIndex = session.peerPosition().spineIndex;
-      peerLocalPosition.pageNumber = session.peerPosition().pageNumber;
-      peerLocalPosition.totalPages = session.peerPosition().totalPages;
-    }
-    peerPositionMapped = true;
-    prepareComparison();
+  if ((state == SyncState::SHARED || state == SyncState::APPLIED) && autoReturnAt == 0) {
+    if (state == SyncState::APPLIED && !applyPeerPosition()) saveFailed = true;
+    autoReturnAt = millis() + AUTO_RETURN_DELAY_MS;
+  }
+  if (!saveFailed && autoReturnAt != 0 && millis() >= autoReturnAt) {
+    returnToReader();
+    return true;
   }
 
-  // The peer names itself in its own packet, which can land after its position:
-  // rebuild the line and repaint when it does, or the comparison keeps saying
-  // nothing about who is on the other end.
-  if (peerPositionMapped && session.peerName() != renderedPeerName) {
-    renderedPeerName = session.peerName();
-    prepareComparison();
-    requestUpdate();
-  }
-
-  // The peer took our page, or the search ended: show the outcome briefly rather
-  // than snapping straight back into the book.
-  if (state == SyncState::SHARED && autoReturnAt == 0) autoReturnAt = millis() + AUTO_RETURN_DELAY_MS;
-
-  if (state != renderedState || session.hasPeerPosition() != renderedPeerPosition || choiceIndex() != renderedChoice) {
+  if (state != renderedState) {
     // The radio counts are worth one line when a sync ends badly: they say
     // whether nothing was heard, whether what arrived was not this protocol, and
     // who sent it. The readers are used away from a serial cable, so this is
@@ -315,8 +236,6 @@ bool NearbyPositionSyncActivity::handleCustomInput() {
               session.packetsFromOthers());
     }
     renderedState = state;
-    renderedPeerPosition = session.hasPeerPosition();
-    renderedChoice = choiceIndex();
     requestUpdate();
   }
   return false;
@@ -324,20 +243,7 @@ bool NearbyPositionSyncActivity::handleCustomInput() {
 
 void NearbyPositionSyncActivity::onBackButton() { returnToReader(); }
 
-// Confirm leaves only the two screens that have nothing else to offer: a device
-// with no position to share, and a radio that would not start.
+// Confirm dismisses a failure; successful sync returns automatically.
 void NearbyPositionSyncActivity::onConfirmButton() {
-  if (noLocalPosition || radioFailed) returnToReader();
-}
-
-void NearbyPositionSyncActivity::onChoiceActivated(const int index) {
-  const SyncState state = session.state();
-  if (state != SyncState::COMPARING && state != SyncState::APPLY_REQUESTED) return;
-  if (index == TAKE_THEIRS) {
-    session.takePeerPosition(millis());
-    applyPeerPosition();
-    return;
-  }
-  session.sharePosition(millis());
-  requestUpdate();
+  if (noLocalPosition || radioFailed || saveFailed) returnToReader();
 }

@@ -4,6 +4,8 @@
 #include <cstdint>
 #include <string>
 
+#include "NearbyBookPosition.h"
+
 /**
  * Payloads carried inside the SDK's transfer packets.
  *
@@ -46,6 +48,9 @@ struct OfferPayload {
   uint8_t groupCount = 1;
   /** Bytes across the whole group, so the prompt can state the real cost once. */
   uint64_t groupTotalBytes = 0;
+  // Optional tail after the unchanged legacy offer. Old receivers ignore it;
+  // old senders omit it. No paths or device-specific cache identity travel.
+  BookPosition position;
 };
 
 struct CompletePayload {

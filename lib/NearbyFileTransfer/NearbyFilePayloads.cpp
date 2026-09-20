@@ -72,7 +72,7 @@ bool decodeNamePayload(const uint8_t* data, const size_t length, std::string& de
 }
 
 bool encodeOfferPayload(const OfferPayload& offer, uint8_t* output, const size_t capacity, size_t& outputLength) {
-  if (!output || capacity < 8) return false;
+  if (!output || capacity < 8 || !offer.position.validFor(offer.fileName)) return false;
   uint8_t* cursor = output;
   const uint8_t* end = output + capacity;
 
@@ -84,12 +84,23 @@ bool encodeOfferPayload(const OfferPayload& offer, uint8_t* output, const size_t
   *cursor++ = offer.groupIndex;
   *cursor++ = offer.groupCount == 0 ? 1 : offer.groupCount;
   writeU64(cursor, offer.groupTotalBytes == 0 ? offer.fileSize : offer.groupTotalBytes);
+  if (offer.position.length != 0) {
+    if (static_cast<size_t>(end - cursor) < size_t{5} + offer.position.length) return false;
+    *cursor++ = 'P';
+    *cursor++ = 'O';
+    *cursor++ = 'S';
+    *cursor++ = 1;  // Version of the position tail, not the transport.
+    *cursor++ = offer.position.length;
+    std::memcpy(cursor, offer.position.bytes.data(), offer.position.length);
+    cursor += offer.position.length;
+  }
 
   outputLength = static_cast<size_t>(cursor - output);
   return true;
 }
 
 bool decodeOfferPayload(const uint8_t* data, const size_t length, OfferPayload& offer) {
+  offer.position = {};
   if (!data) return false;
   size_t remaining = length;
   if (!readU64(data, remaining, offer.fileSize)) return false;
@@ -113,6 +124,16 @@ bool decodeOfferPayload(const uint8_t* data, const size_t length, OfferPayload& 
   if (!readU64(data, remaining, offer.groupTotalBytes)) return false;
   if (offer.groupCount == 0) offer.groupCount = 1;
   if (offer.groupTotalBytes == 0) offer.groupTotalBytes = offer.fileSize;
+  if (remaining == 0) return true;
+  if (remaining < 5) return false;
+  // Unknown extensions remain ignorable, as they were in older receivers.
+  if (std::memcmp(data, "POS", 3) != 0 || data[3] != 1) return true;
+  BookPosition position;
+  position.length = data[4];
+  if (position.length == 0 || !position.validFor(offer.fileName) || remaining != size_t{5} + position.length)
+    return false;
+  std::memcpy(position.bytes.data(), data + 5, position.length);
+  offer.position = position;
   return true;
 }
 

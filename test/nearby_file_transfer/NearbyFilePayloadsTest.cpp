@@ -1,6 +1,7 @@
 #include <NearbyTransfer.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <string>
 #include <vector>
@@ -217,4 +218,122 @@ TEST(NearbyFilePayloads, TheLargestOfferStillFitsOnePacket) {
   size_t length = 0;
   ASSERT_TRUE(encodeOfferPayload(sent, buffer.data(), buffer.size(), length));
   EXPECT_LE(length + freeink::nearby::PACKET_HEADER_BYTES, freeink::nearby::MAX_PACKET_BYTES);
+}
+
+TEST(NearbyFilePayloads, CarriesEpubContentOffsetAndNativePageRecords) {
+  for (const std::string name :
+       {"Book.epub", "Book.EPUB", "Book.txt", "Book.md", "Book.xtc", "Book.xtch", "Book.pxc"}) {
+    OfferPayload sent;
+    sent.fileName = name;
+    sent.fileSize = 1234;
+    sent.position.bytes = {3, 0, 42, 0, 90, 0, 0x78, 0x56, 0x34, 0x12};
+    sent.position.length = name == "Book.epub" || name == "Book.EPUB" ? 10 : 4;
+    const auto packet = encodeOffer(sent);
+    OfferPayload got;
+    ASSERT_TRUE(decodeOfferPayload(packet.data(), packet.size(), got));
+    EXPECT_EQ(got.position.length, sent.position.length);
+    EXPECT_TRUE(std::equal(sent.position.bytes.begin(), sent.position.bytes.begin() + sent.position.length,
+                           got.position.bytes.begin()));
+  }
+}
+
+TEST(NearbyFilePayloads, NewOfferPreservesEveryByteReadByLegacyReceivers) {
+  OfferPayload sent;
+  sent.deviceName = "Reader";
+  sent.fileName = "Book.epub";
+  sent.fileSize = 1234;
+  const auto legacy = encodeOffer(sent);
+  sent.position.length = 10;
+  sent.position.bytes = {3, 0, 42, 0, 90, 0, 1, 2, 3, 4};
+  const auto packet = encodeOffer(sent);
+  ASSERT_EQ(packet.size(), legacy.size() + 15);
+  // The old decoder returns after the group total and ignores trailing bytes.
+  EXPECT_TRUE(std::equal(legacy.begin(), legacy.end(), packet.begin()));
+  OfferPayload got;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), legacy.size(), got));
+  EXPECT_EQ(got.fileName, sent.fileName);
+  EXPECT_EQ(got.fileSize, sent.fileSize);
+  EXPECT_EQ(got.position.length, 0);
+}
+
+TEST(NearbyFilePayloads, OldOfferClearsPositionFromPreviousDecode) {
+  OfferPayload sent;
+  sent.fileName = "Book.epub";
+  sent.fileSize = 1234;
+  const auto packet = encodeOffer(sent);
+  OfferPayload got;
+  got.position.length = 10;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), packet.size(), got));
+  EXPECT_EQ(got.position.length, 0);
+  got.position.length = 10;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), 8 + 1 + 1 + sent.fileName.size(), got));
+  EXPECT_EQ(got.position.length, 0);
+}
+
+TEST(NearbyFilePayloads, PositionRejectsEveryTruncatedTailAndOversizedLength) {
+  OfferPayload sent;
+  sent.fileName = "Book.epub";
+  sent.fileSize = 1234;
+  const size_t legacySize = encodeOffer(sent).size();
+  sent.position.length = 10;
+  auto packet = encodeOffer(sent);
+  OfferPayload got;
+  for (size_t length = legacySize + 1; length < packet.size(); ++length) {
+    EXPECT_FALSE(decodeOfferPayload(packet.data(), length, got)) << length;
+    EXPECT_EQ(got.position.length, 0);
+  }
+  packet[legacySize + 4] = 255;
+  EXPECT_FALSE(decodeOfferPayload(packet.data(), packet.size(), got));
+}
+
+TEST(NearbyFilePayloads, PositionRejectsWrongFileTypeAndRecordSize) {
+  OfferPayload sent;
+  sent.fileName = "Book.epub";
+  sent.fileSize = 1234;
+  sent.position.length = 10;
+  auto packet = encodeOffer(sent);
+  // Same-length extension replacement exercises the receive trust boundary.
+  const auto ext = std::search(packet.begin(), packet.end(), sent.fileName.begin(), sent.fileName.end());
+  ASSERT_NE(ext, packet.end());
+  std::copy_n("Face.font", 9, ext);
+  OfferPayload got;
+  EXPECT_FALSE(decodeOfferPayload(packet.data(), packet.size(), got));
+  std::array<uint8_t, 256> buffer{};
+  size_t length = 0;
+  for (const std::string name : {"Book.txt", "Book.xtc", "Face.cpfont", "Picture.png", "Keys.cpcred"}) {
+    sent.fileName = name;
+    EXPECT_FALSE(encodeOfferPayload(sent, buffer.data(), buffer.size(), length));
+  }
+  sent.fileName = "Book.epub";
+  for (const uint8_t invalid : {1, 3, 5, 7, 9, 11, 255}) {
+    sent.position.length = invalid;
+    EXPECT_FALSE(encodeOfferPayload(sent, buffer.data(), buffer.size(), length));
+  }
+}
+
+TEST(NearbyFilePayloads, PositionTailChecksCapacityAndFitsTransport) {
+  OfferPayload sent;
+  sent.fileName = std::string(MAX_OFFER_NAME_BYTES - 5, 'b') + ".epub";
+  sent.deviceName = std::string(MAX_NAME_BYTES, 'n');
+  sent.fileSize = 1234;
+  const size_t legacySize = encodeOffer(sent).size();
+  sent.position.length = 10;
+  std::array<uint8_t, freeink::nearby::MAX_PACKET_BYTES> buffer{};
+  size_t length = 0;
+  EXPECT_FALSE(encodeOfferPayload(sent, buffer.data(), legacySize + 14, length));
+  ASSERT_TRUE(encodeOfferPayload(sent, buffer.data(), buffer.size(), length));
+  EXPECT_LE(length + freeink::nearby::PACKET_HEADER_BYTES, buffer.size());
+}
+
+TEST(NearbyFilePayloads, UnknownPositionVersionLeavesBookTransferUsable) {
+  OfferPayload sent;
+  sent.fileName = "Book.epub";
+  const size_t legacySize = encodeOffer(sent).size();
+  sent.position.length = 10;
+  auto packet = encodeOffer(sent);
+  packet[legacySize + 3] = 2;
+  OfferPayload got;
+  ASSERT_TRUE(decodeOfferPayload(packet.data(), packet.size(), got));
+  EXPECT_EQ(got.position.length, 0);
+  EXPECT_EQ(got.fileName, sent.fileName);
 }

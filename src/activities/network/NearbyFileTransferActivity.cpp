@@ -18,6 +18,8 @@
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/ActivityManager.h"
+#include "activities/reader/ProgressFile.h"
+#include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BusyTick.h"
 #include "util/CredentialBundle.h"
@@ -73,6 +75,11 @@ void NearbyFileTransferActivity::leave() {
 void NearbyFileTransferActivity::onEnter() {
   UiStatusActivity::onEnter();
 
+  if (mode == Mode::Choose) {
+    requestUpdate(true);
+    return;
+  }
+
   // The web server and this cannot hold the radio at the same time.
   if (WiFi.getMode() != WIFI_OFF) {
     radioFailed = true;
@@ -124,7 +131,30 @@ bool NearbyFileTransferActivity::openCurrentSource() {
     outgoing.close();
     return false;
   }
+  sourcePosition = {};
+  const std::string cacheDir = bookCacheDirForPath(path);
+  if (!cacheDir.empty()) {
+    HalFile progress = Storage.open((cacheDir + "/progress.bin").c_str());
+    if (progress && progress.fileSize() <= sourcePosition.bytes.size()) {
+      sourcePosition.length = static_cast<uint8_t>(progress.fileSize());
+      if (!sourcePosition.validFor(sourceName) ||
+          progress.read(sourcePosition.bytes.data(), sourcePosition.length) != sourcePosition.length) {
+        sourcePosition = {};
+      }
+    }
+  }
   return true;
+}
+
+bool NearbyFileTransferActivity::restoreBookPosition() {
+  const auto& position = pendingOffer.position;
+  if (position.length == 0) return true;
+  if (!position.validFor(destinationPath)) return false;
+  const std::string cacheDir = bookCacheDirForPath(destinationPath);
+  if (cacheDir.empty()) return false;
+  if (!Storage.exists("/.crosspoint") && !Storage.mkdir("/.crosspoint")) return false;
+  if (!Storage.exists(cacheDir.c_str()) && !Storage.mkdir(cacheDir.c_str())) return false;
+  return ProgressFile::writeAtomic(cacheDir, position.bytes.data(), position.length);
 }
 
 void NearbyFileTransferActivity::advanceToNextSource() {
@@ -161,6 +191,10 @@ void NearbyFileTransferActivity::awaitNextGroupFile() {
 }
 
 void NearbyFileTransferActivity::onExit() {
+  if (mode == Mode::Choose) {
+    Activity::onExit();
+    return;
+  }
   // Order matters: stop the radio before touching the card, so no chunk can
   // arrive for a file that is already closed.
   transport.end();
@@ -663,6 +697,7 @@ void NearbyFileTransferActivity::runSessionActions() {
         offer.groupIndex = static_cast<uint8_t>(sourceIndex);
         offer.groupCount = static_cast<uint8_t>(sourcePaths.size());
         offer.groupTotalBytes = sendTotalBytes;
+        offer.position = sourcePosition;
         if (encodeOfferPayload(offer, payload.data(), payload.size(), payloadLength)) {
           sendPacket(PacketType::Offer, action.peerMac, 0, payload.data(), payloadLength);
         }
@@ -787,6 +822,13 @@ void NearbyFileTransferActivity::refreshDoneLine() {
 UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
   StatusView view;
   view.title = tr(STR_NEARBY_TRANSFER);
+  if (mode == Mode::Choose) {
+    view.title = tr(STR_NEARBY_SYNC);
+    view.sections[0].paragraph = tr(STR_NEARBY_SEND_HINT);
+    view.choices = {tr(STR_NEARBY_RECEIVE), tr(STR_NEARBY_SEND)};
+    view.confirmHint = tr(STR_SELECT);
+    return view;
+  }
   if (radioFailed || sourceUnreadable) {
     view.lines = {errorMessage.c_str(), nullptr, nullptr, nullptr};
     return view;
@@ -826,7 +868,8 @@ UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
       view.backHint = tr(STR_CANCEL);
       break;
     case TransferState::DONE:
-      view.lines = {tr(STR_NEARBY_TRANSFER_DONE), doneLine.empty() ? nullptr : doneLine.c_str(), nullptr, nullptr};
+      view.lines = {errorMessage.empty() ? tr(STR_NEARBY_TRANSFER_DONE) : errorMessage.c_str(),
+                    doneLine.empty() ? nullptr : doneLine.c_str(), nullptr, nullptr};
       break;
     case TransferState::REJECTED:
       view.lines = {errorMessage.empty() ? tr(STR_NEARBY_OFFER_DECLINED) : errorMessage.c_str(), nullptr, nullptr,
@@ -844,6 +887,15 @@ UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
 }
 
 void NearbyFileTransferActivity::onChoiceActivated(const int index) {
+  if (mode == Mode::Choose) {
+    if (index == 0) {
+      activityManager.replaceActivity(
+          std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, Mode::Receive));
+    } else if (index == 1) {
+      activityManager.goToFileBrowser();
+    }
+    return;
+  }
   const TransferState state = session.state();
   if (state == TransferState::PEERS_FOUND) {
     if (index < 0 || index >= static_cast<int>(session.peerCount())) return;
@@ -866,21 +918,20 @@ void NearbyFileTransferActivity::onChoiceActivated(const int index) {
 // Back during a live transfer tells the other reader rather than just
 // vanishing, so it stops waiting instead of timing out.
 void NearbyFileTransferActivity::onBackButton() {
-  if (!radioFailed && !sourceUnreadable) {
+  if (mode != Mode::Choose && !radioFailed && !sourceUnreadable) {
     session.cancel(millis());
     runSessionActions();
   }
   leave();
 }
 
-// Confirm only leaves the two screens that have nothing to offer: a radio that
-// would not start, and a file that cannot be read.
+// Confirm dismisses startup failures and a completed file whose progress could not be saved.
 void NearbyFileTransferActivity::onConfirmButton() {
-  if (radioFailed || sourceUnreadable) leave();
+  if (radioFailed || sourceUnreadable || (session.state() == TransferState::DONE && !errorMessage.empty())) leave();
 }
 
 bool NearbyFileTransferActivity::handleCustomInput() {
-  if (radioFailed || sourceUnreadable) return false;
+  if (mode == Mode::Choose || radioFailed || sourceUnreadable) return false;
 
   pumpRadio();
   runSessionActions();
@@ -904,7 +955,13 @@ bool NearbyFileTransferActivity::handleCustomInput() {
     incoming.flush();
     // The file takes its real name only here, with every byte written and the
     // sender's checksum matched. Until this point the library cannot see it.
-    finishIncomingFile();
+    if (finishIncomingFile()) {
+      if (!restoreBookPosition()) {
+        errorMessage = tr(STR_NEARBY_CANNOT_WRITE_FILE);
+      } else if (!bookCacheDirForPath(destinationPath).empty()) {
+        returnToReaderPath = destinationPath;
+      }
+    }
     // A credential bundle is not a file the reader keeps: it is read, applied, and
     // removed. Doing it the moment the bytes land means the passwords sit on the
     // card for as short a time as possible.
@@ -943,7 +1000,7 @@ bool NearbyFileTransferActivity::handleCustomInput() {
 
   if ((state == TransferState::DONE || state == TransferState::REJECTED || state == TransferState::CANCELLED ||
        state == TransferState::FAILED) &&
-      autoReturnAt == 0) {
+      autoReturnAt == 0 && (state != TransferState::DONE || errorMessage.empty())) {
     autoReturnAt = millis() + AUTO_RETURN_DELAY_MS;
   }
   if (autoReturnAt != 0 && millis() >= autoReturnAt) {

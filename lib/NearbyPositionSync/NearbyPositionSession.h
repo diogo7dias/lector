@@ -5,6 +5,7 @@
 #include <string>
 
 #include "NearbyPositionProtocol.h"
+#include "NearbyPositionResolve.h"
 
 /**
  * The conversation half of Nearby Position Sync: what to send, what to expect
@@ -16,15 +17,13 @@
  * reachable from host tests, where the radio is not.
  *
  * Both readers run an identical session and both announce themselves; neither is
- * the server. Once they have each other's position, either reader can take the
- * other's place in the book, or push its own across. A position never moves
- * without the reader on the receiving device confirming it.
+ * the server. Both exchange their position and keep whichever is further ahead.
  */
 namespace nearby_position {
 
 /** How often an unpaired session announces itself. */
 constexpr uint32_t HELLO_INTERVAL_MS = 750;
-/** How often an unacknowledged POSITION or APPLY is sent again. */
+/** How often an unacknowledged POSITION is sent again. */
 constexpr uint32_t POSITION_RETRY_INTERVAL_MS = 750;
 /** How long to look for a peer before giving up. */
 constexpr uint32_t SEARCH_TIMEOUT_MS = 30000;
@@ -32,15 +31,13 @@ constexpr uint32_t SEARCH_TIMEOUT_MS = 30000;
 constexpr uint32_t PEER_TIMEOUT_MS = 15000;
 
 enum class SyncState : uint8_t {
-  SEARCHING,        // Announcing, no peer yet
-  COMPARING,        // Both positions known, waiting on the reader to choose
-  APPLY_REQUESTED,  // The peer pushed its position; the reader must confirm
-  SHARING,          // Our position was pushed, waiting for their acknowledgement
-  SHARED,           // They accepted our position
-  APPLIED,          // We took theirs
-  BOOK_MISMATCH,    // A peer answered, but it has a different book open
-  PEER_LOST,        // Paired, then silence
-  TIMED_OUT,        // Nobody answered
+  SEARCHING,      // Announcing, no peer yet
+  EXCHANGING,     // Paired, exchanging and acknowledging positions
+  SHARED,         // Kept our position (or both already matched)
+  APPLIED,        // The peer's position won; the activity persists it
+  BOOK_MISMATCH,  // A peer answered, but it has a different book open
+  PEER_LOST,      // Paired, then silence
+  TIMED_OUT,      // Nobody answered
 };
 
 enum class ActionKind : uint8_t {
@@ -48,7 +45,6 @@ enum class ActionKind : uint8_t {
   SEND_NAME,
   SEND_POSITION,
   SEND_ACK,
-  SEND_APPLY,
 };
 
 struct Action {
@@ -77,10 +73,7 @@ class SyncSession {
    */
   bool nextAction(uint32_t nowMs, Action& action);
 
-  /** The reader accepted the peer's position. */
-  void takePeerPosition(uint32_t nowMs);
-  /** The reader chose to push this device's position to the peer instead. */
-  void sharePosition(uint32_t nowMs);
+  Resolution resolution() const { return resolvePosition(positionsMatch(), peerIsFurtherAlong()); }
 
   SyncState state() const { return state_; }
   bool hasPeer() const { return hasPeer_; }
@@ -119,21 +112,18 @@ class SyncSession {
   bool hasPeer_ = false;
   bool hasPeerPosition_ = false;
   bool localPositionAcked_ = false;
-  bool applyAcked_ = false;
   bool namePending_ = false;
   bool ackPending_ = false;
 
   uint32_t startedMs_ = 0;
   uint32_t lastHelloMs_ = 0;
   uint32_t lastPositionSendMs_ = 0;
-  uint32_t lastApplySendMs_ = 0;
   uint32_t lastPeerPacketMs_ = 0;
   uint16_t packetsFromSelf_ = 0;
   uint16_t packetsFromOthers_ = 0;
   uint16_t packetsFromPeer_ = 0;
   bool helloSent_ = false;
   bool positionSent_ = false;
-  bool applySent_ = false;
 };
 
 }  // namespace nearby_position
