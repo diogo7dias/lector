@@ -51,6 +51,10 @@ void ClockOffsetActivity::onEnter() {
   Activity::onEnter();
   resetUi();
   app.on(ACTION_FIELD, &ClockOffsetActivity::fieldTrampoline, this);
+  // EXEMPT from two-tap confirmation: the field row is already two-step by
+  // hand (see onFieldTapped) — the first tap moves the edit onto a field, the
+  // second steps its value. Gating it would cost four taps per step.
+  exemptFromTwoTap(ACTION_FIELD);
   app.setScreen(&ClockOffsetActivity::screenTrampoline, this);
   loadFromSettings();
   activeField = FIELD_HOURS;

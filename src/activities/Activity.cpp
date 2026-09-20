@@ -11,6 +11,10 @@ void Activity::onEnter() {
   // brought this screen up, the release belongs to the screen that handled it, not
   // to whatever this one has selected.
   mappedInput.clearHintTap();
+  // Leaving a screen ends any two-tap arm it left behind (components/TwoTapGate.h).
+  // The FreeInkUI hosts clear their own with the activity they belong to; the
+  // self-painted row lists share one gate, so it is cleared here.
+  mappedInput.clearRowTapArm();
 }
 
 void Activity::becameTopmost() {

@@ -43,6 +43,22 @@ bottom-edge buttons **Back**, **Confirm**, **Left** and **Right**.
 The four bottom-edge buttons can be reassigned in **Settings > Controls > Remap Front Buttons**,
 and the side buttons can be swapped or disabled with **Side Button Layout (reader)**.
 
+### Tapping, on a device with a touch screen
+
+A tap takes two steps. The first tap on a row, a button or any other control highlights it
+with a thin outline and does nothing else. A second tap on that same control runs it. A tap
+on a different control moves the outline there instead of running anything, so only one
+control is ever highlighted and a mis-aimed tap costs nothing.
+
+The highlight goes away when you scroll the list, leave the screen, or tap an empty part of
+the screen. Moving the selection with the side keys clears it too, and the on-screen Back and
+Select buttons along the bottom edge act on the first tap, as the physical buttons do.
+
+Three things are deliberately left on a single tap, because a confirming tap would get in the
+way: the on-screen keyboard, sliders (brightness, text size and the rest, which are dragged or
+stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
+tap while reading are unchanged.
+
 ### Taking a screenshot
 
 Hold **Power** and **Volume Down** together. The image is written to `/screenshots/` on the
@@ -510,7 +526,8 @@ that does not match is discarded rather than left in the library. Font families 
 exception: a family that does not finish is removed whole and sent again from the start.
 
 The list of readers found, and the accept/decline question, are chosen with the direction keys
-and Select, or by tapping the row on a device with a touch screen.
+and Select, or by tapping the row twice on a device with a touch screen (see
+[Tapping](#1-buttons)).
 
 A font family goes over the same way, from **Settings > Reader > Installed Fonts > Send font**.
 The faces of the family are sent one after another and the receiving device asks once, naming
@@ -554,7 +571,7 @@ Catalogs can also be managed from the web interface at `http://<device-ip>/setti
 The fastest way to move a position between two Lector devices. Open the same book on both,
 then pick **Nearby Sync** from the in-book menu's Device tab on each. The devices find each
 other and show both pages, so you can **Take their page** or **Send my page**, chosen with the
-direction keys and Select or by tapping the row.
+direction keys and Select or by tapping the row twice.
 
 The screen says what happened: both on the same page, they are further ahead, moved to their
 page, and so on. It also says when the other reader has a different book open, when nothing

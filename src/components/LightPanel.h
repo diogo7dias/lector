@@ -93,6 +93,10 @@ class LightPanel {
       return true;
     }
 
+    // EXEMPT from two-tap confirmation (components/TwoTapGate.h): the panel's tracks
+    // are sliders, which are dragged, and its action buttons already carry the guard a
+    // confirming tap buys — the action fires only when the finger comes up inside the
+    // same button it went down in, so a drifting or mis-aimed contact fires nothing.
     int tx = 0;
     int ty = 0;
     const bool down = input.wasScreenTouchDown(tx, ty);

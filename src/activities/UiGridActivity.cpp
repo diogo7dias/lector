@@ -24,6 +24,7 @@ void UiGridActivity::onEnter() {
   buttonNavigator.resetRowTap();
   resetUi();
   app.on(ACTION_CELL, &UiGridActivity::cellTrampoline, this);
+  setArmHook(&UiGridActivity::cellArmTrampoline, this);
   app.setScreen(&UiGridActivity::screenTrampoline, this);
   requestUpdate();
 }
@@ -160,6 +161,16 @@ void UiGridActivity::moveSelection(const int deltaRows, const int deltaCells) {
 
 void UiGridActivity::screenTrampoline(UiScreen& screen, void* user) {
   static_cast<UiGridActivity*>(user)->buildScreen(screen);
+}
+
+void UiGridActivity::cellArmTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<UiGridActivity*>(user);
+  if (event.action != ACTION_CELL) return;
+  if (event.value < 0 || event.value >= self->cellCount()) return;
+  // Assigned rather than routed through setSelected(): the tapped cell is on
+  // screen already, so no scroll follows, and setSelected() takes the render
+  // lock this dispatch is running under.
+  self->selected_ = event.value;
 }
 
 void UiGridActivity::cellTrampoline(const fui::ActionEvent& event, void* user) {

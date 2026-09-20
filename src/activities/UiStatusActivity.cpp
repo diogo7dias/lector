@@ -35,6 +35,12 @@ void UiStatusActivity::onEnter() {
   app.on(ACTION_CHOICE, &UiStatusActivity::choiceTrampoline, this);
   app.on(ACTION_LIST, &UiStatusActivity::listTrampoline, this);
   app.on(ACTION_SLIDER, &UiStatusActivity::sliderTrampoline, this);
+  // EXEMPT from two-tap confirmation: a slider is a continuous value, not a
+  // discrete choice. Its capsule is dragged and its two step buttons are
+  // pressed repeatedly, so a confirming tap per step would make brightness and
+  // font size unusable, and a drag has no discrete control to arm at all.
+  exemptFromTwoTap(ACTION_SLIDER);
+  setArmHook(&UiStatusActivity::armTrampoline, this);
   app.setScreen(&UiStatusActivity::screenTrampoline, this);
   requestUpdate();
 }
@@ -56,6 +62,17 @@ void UiStatusActivity::choiceTrampoline(const fui::ActionEvent& event, void* use
   if (event.value < 0 || event.value >= self->choiceCount_) return;
   self->choiceIndex_ = event.value;
   self->onChoiceActivated(event.value);
+}
+
+void UiStatusActivity::armTrampoline(const fui::ActionEvent& event, void* user) {
+  auto* self = static_cast<UiStatusActivity*>(user);
+  if (event.action == ACTION_LIST) {
+    if (event.value >= 0 && event.value < self->listCount_) self->listNav_.selected = event.value;
+    return;
+  }
+  if (event.action == ACTION_CHOICE) {
+    if (event.value >= 0 && event.value < self->choiceCount_) self->choiceIndex_ = event.value;
+  }
 }
 
 void UiStatusActivity::listTrampoline(const fui::ActionEvent& event, void* user) {

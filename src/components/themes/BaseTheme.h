@@ -258,7 +258,10 @@ class BaseTheme {
   // than the whole row, which is what makes a value like ON read as picked. Surfaces
   // with nothing to measure -- a book cover, a tab -- pass none and get the row
   // bracketed instead. The solid and caret styles ignore spans entirely.
-  bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0) const;
+  // armed = this row is the one a first tap armed (components/TwoTapGate.h): it is
+  // outlined rather than filled, and returns false so its text keeps its normal ground.
+  bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0,
+                     bool armed = false) const;
 
   // Greedy word-wrap in the one UI face. Line 0 is wrapped to firstLineMaxWidth (room
   // for an inline badge or a right-hand label), later lines to restMaxWidth. A word
