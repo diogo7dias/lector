@@ -20,6 +20,10 @@
 #include "TlsHeapPolicy.h"
 #include "TlsScratchHeap.h"
 
+#if CONFIG_IDF_TARGET_ESP32C3
+#include "HeapFailureProbe.h"
+#endif
+
 namespace {
 // This fork's own releases, NOT upstream's. Pointed at crosspoint-reader until 0.24.1,
 // which meant Check for Updates offered upstream CrossPoint builds: a different firmware,
@@ -41,6 +45,27 @@ constexpr char upstreamReleaseUrl[] =
     "https://api.github.com/repos/crosspoint-reader/crosspoint-reader/releases/latest";
 
 bool isHttps(const std::string& url) { return url.rfind("https://", 0) == 0; }
+
+#if CONFIG_IDF_TARGET_ESP32C3
+// Read before the framebuffer loan ends. Admission numbers alone cannot tell
+// a failed handshake from an allocation failure after an allowed gate. These
+// notes use the existing static diagnostics buffer; no card I/O during TLS.
+void recordTransferMemory(const char* step) {
+  const auto failed = heap_probe::read();
+  diag::note("  transfer=%s heap free=%u largest=%u alloc_failures=%u first=%u largest_failed=%u", step,
+             static_cast<unsigned>(ESP.getFreeHeap()), static_cast<unsigned>(ESP.getMaxAllocHeap()),
+             static_cast<unsigned>(failed.failures), static_cast<unsigned>(failed.firstSize),
+             static_cast<unsigned>(failed.largestSize));
+  // Scratch counters are cumulative within this loan (including redirects and
+  // retries), and are only meaningful when a Session actually claimed it.
+  if (!tls_scratch::isActive()) return;
+  diag::note("  scratch low=%u spills=%u spill_bytes=%u tls_oom=%u last_oom_size=%u last_oom_free=%u",
+             static_cast<unsigned>(tls_scratch::poolLowWaterBytes()),
+             static_cast<unsigned>(tls_scratch::heapFallbackCount()),
+             static_cast<unsigned>(tls_scratch::heapFallbackBytes()), static_cast<unsigned>(tls_scratch::oomCount()),
+             static_cast<unsigned>(tls_scratch::oomSize()), static_cast<unsigned>(tls_scratch::oomFreeHeap()));
+}
+#endif
 }  // namespace
 
 const char* OtaUpdater::errorName(const OtaUpdaterError error) {
@@ -127,6 +152,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrerele
   if (includePrereleases) candidateUrls[numCandidates++] = upstreamReleaseUrl;
 
   bool ok = false;
+#if CONFIG_IDF_TARGET_ESP32C3
+  heap_probe::arm();  // Keep failures across candidate URLs and internal retries.
+#endif
   for (size_t i = 0; i < numCandidates; ++i) {
     releaseParser.reset();
 #ifdef FREEINK_DEVICE_X4PRO
@@ -148,6 +176,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::checkForUpdate(const bool includePrerele
   }
 
   if (!ok) {
+#if CONFIG_IDF_TARGET_ESP32C3
+    recordTransferMemory("check");
+#endif
     LOG_ERR("OTA", "Release check fetch failed");
     return HTTP_ERROR;
   }
@@ -245,6 +276,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   // a fair test. The partition keeps what was already written, so an attempt
   // that stopped at 80% keeps its 80% and the next one asks the server for the
   // rest; only a link failure is worth another go (see OtaRetryPolicy.h).
+#if CONFIG_IDF_TARGET_ESP32C3
+  heap_probe::arm();  // Keep failures across all download attempts.
+#endif
   for (int attempt = 1; attempt <= ota_retry::MAX_ATTEMPTS; ++attempt) {
     bool wrongChip = false;
     bool flashOk = true;
@@ -292,7 +326,14 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
               }
             }
           }
+#if CONFIG_IDF_TARGET_ESP32C3
+          const auto writeResult = installer.feed(data, len);
+          if (writeResult != firmware_flash::Result::OK) {
+            diag::note("  flash feed: %s written=%zu capacity=%zu", firmware_flash::resultName(writeResult),
+                       installer.written(), installer.capacity());
+#else
           if (installer.feed(data, len) != firmware_flash::Result::OK) {
+#endif
             flashOk = false;
             return false;  // abort the transfer
           }
@@ -342,6 +383,9 @@ OtaUpdater::OtaUpdaterError OtaUpdater::installUpdate(ProgressCallback onProgres
   }
 
   if (!installed) {
+#if CONFIG_IDF_TARGET_ESP32C3
+    recordTransferMemory("install");
+#endif
     if (failure == ota_retry::Failure::WRONG_CHIP) {
       LOG_ERR("OTA", "Firmware install aborted: wrong device");
       diag::endAttempt(errorName(WRONG_DEVICE_ERROR), "download");

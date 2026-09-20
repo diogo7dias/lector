@@ -182,6 +182,40 @@ TEST(WifiSessionJoin, GivesUpOnAnAutomaticJoinSooner) {
   EXPECT_EQ(actions[1].kind, wifi_session::ActionKind::START_SCAN);
 }
 
+TEST(WifiSessionAutoConnect, SilentJoinsAndRepeatedScanResultsCannotRetryForever) {
+  // Exercise the complete timeout -> disconnect -> scan -> next join cycle,
+  // including millis() rollover. No radio failure event is needed to finish.
+  for (const uint32_t start : {1000u, UINT32_MAX - 1000u}) {
+    WifiSession session;
+    wifi_session::Startup startup;
+    startup.savedSsids = {"home", "cafe"};
+    startup.lastConnectedSsid = "home";
+    session.begin(startup, start);
+    ASSERT_EQ(drain(session, start).size(), 1u);
+
+    const std::vector<Network> found = {seen("home", -40), seen("cafe", -50)};
+    uint32_t now = start;
+    for (int attempt = 0; attempt < 2; ++attempt) {
+      now += wifi_session::AUTO_JOIN_TIMEOUT_MS;
+      const auto timedOut = drain(session, now);
+      ASSERT_EQ(timedOut.size(), 2u);
+      EXPECT_EQ(timedOut[0].kind, wifi_session::ActionKind::DISCONNECT);
+      EXPECT_EQ(timedOut[1].kind, wifi_session::ActionKind::START_SCAN);
+      session.onScanResults(found.data(), found.size(), ++now);
+      const auto next = drain(session, now);
+      if (attempt == 0) {
+        ASSERT_EQ(next.size(), 1u);
+        EXPECT_EQ(next[0].kind, wifi_session::ActionKind::JOIN);
+        EXPECT_EQ(next[0].ssid, "cafe");
+      } else {
+        EXPECT_TRUE(next.empty());
+      }
+    }
+    EXPECT_EQ(session.state(), wifi_session::State::NETWORK_LIST);
+    EXPECT_TRUE(drain(session, now + wifi_session::SCAN_TIMEOUT_MS).empty());
+  }
+}
+
 WifiSession atNetworkList(const std::vector<Network>& found) {
   WifiSession session;
   session.begin({}, 1000);
