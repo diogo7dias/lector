@@ -63,6 +63,8 @@ class OtaUpdateActivity : public UiStatusActivity {
   // The release check, with the framebuffer lent to wolfSSL for its length.
   // Every check goes through here so no path can run it on the heap alone.
   OtaUpdater::OtaUpdaterError runUpdateCheck();
+  // Called under RenderLock after leaving any state that displays these strings.
+  void releaseStatusStorage(const char* step);
   void runUpdateInstall();
   // Runs the check, then the install, from the FAILED screen. The Wi-Fi link is
   // still up (onExit is what tears it down), so a retry costs only the step

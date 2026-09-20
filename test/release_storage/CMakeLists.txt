@@ -1,0 +1,4 @@
+add_executable(ReleaseStorageTest ReleaseStorageTest.cpp)
+target_include_directories(ReleaseStorageTest PRIVATE ${REPO_ROOT}/src)
+target_link_libraries(ReleaseStorageTest PRIVATE crosspoint_test_common GTest::gtest_main)
+gtest_discover_tests(ReleaseStorageTest)

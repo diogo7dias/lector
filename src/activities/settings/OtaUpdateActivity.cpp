@@ -14,6 +14,7 @@
 #include "network/FirmwareSwitchAudit.h"
 #include "network/OtaUpdater.h"
 #include "network/TlsScratchHeap.h"
+#include "util/ReleaseStorage.h"
 
 // Hold after requestUpdateAndWait() so the success screen is readable. That wait
 // already finished the blocking e-ink refresh (UiStatusActivity::render ->
@@ -321,6 +322,7 @@ OtaUpdater::OtaUpdaterError OtaUpdateActivity::runUpdateCheck() {
   {
     RenderLock lock(*this);
     state = CHECKING_FOR_UPDATE;
+    releaseStatusStorage("check");
   }
   requestUpdateAndWait();
   // The release JSON is ~32 KB over TLS, and this was the one fetch on this
@@ -336,11 +338,21 @@ OtaUpdater::OtaUpdaterError OtaUpdateActivity::runUpdateCheck() {
   return updater.checkForUpdate(allowAnyVersion);
 }
 
+void OtaUpdateActivity::releaseStatusStorage(const char* step) {
+  const uint32_t before = ESP.getFreeHeap();
+  for (auto* line : {&currentVersionLine, &newVersionLine, &failedExtra, &failedHint, &retryLine, &bytesLine}) {
+    releaseStorage(*line);
+  }
+  const uint32_t after = ESP.getFreeHeap();
+  diag::recordHeapReclaim(step, before, after);
+}
+
 void OtaUpdateActivity::runUpdateInstall() {
   LOG_DBG("OTA", "New update available, starting download...");
   {
     RenderLock lock(*this);
     state = UPDATE_IN_PROGRESS;
+    releaseStatusStorage("install");
   }
   requestUpdateAndWait();
   // A TLS record buffer needs room the reader does not have with WiFi up, so the

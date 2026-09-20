@@ -16,6 +16,7 @@
 #include "CleanStorageActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
+#include "Diagnostics.h"
 #include "FontDownloadActivity.h"
 #include "InstalledFontsActivity.h"
 #include "KOReaderSettingsActivity.h"
@@ -41,6 +42,7 @@
 #include "fontIds.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/CredentialBundle.h"
+#include "util/ReleaseStorage.h"
 
 namespace {
 
@@ -186,13 +188,16 @@ std::vector<SettingInfo>& SettingsActivity::categoryRows(const int index) {
 // rebuildSettingsList, which ordered each category by group; a cell names itself, so a
 // heading band would cost a whole grid row to repeat what the order already says.
 void SettingsActivity::selectCategory(const int index) {
-  selectedCategory = std::clamp(index, 0, kCategoryCount - 1);
-  settings.clear();
-  for (const auto& row : categoryRows(selectedCategory)) {
-    if (row.isHeader) continue;
-    settings.push_back(row);
+  {
+    RenderLock lock(*this);
+    selectedCategory = std::clamp(index, 0, kCategoryCount - 1);
+    settings.clear();
+    for (const auto& row : categoryRows(selectedCategory)) {
+      if (row.isHeader) continue;
+      settings.push_back(row);
+    }
+    settingsCount = static_cast<int>(settings.size());
   }
-  settingsCount = static_cast<int>(settings.size());
   setSelected(0);
 }
 
@@ -421,6 +426,42 @@ void SettingsActivity::onEnter() {
 }
 
 void SettingsActivity::onExit() { Activity::onExit(); }
+
+void SettingsActivity::startDownloadActivity(std::unique_ptr<Activity> activity) {
+  if (!activity) {
+    LOG_ERR("SET", "No memory for download activity");
+    return;
+  }
+  {
+    RenderLock lock(*this);
+    const uint32_t before = ESP.getFreeHeap();
+    size_t capacity = 0;
+    // Settings stays on the activity stack. None of these cached rows is used
+    // by OTA/fonts, and settings retains capacity for ALL categories even when
+    // it only displays System. Destruction also frees each row's enum/callback data.
+    closeRouting();
+    for (auto* rows : {&settings, &displaySettings, &readerSettings, &controlsSettings, &systemSettings}) {
+      capacity += rows->capacity();
+      releaseStorage(*rows);
+    }
+    settingsCount = 0;
+    releaseStorage(cellNameScratch);
+    releaseStorage(cellValueScratch);
+    releaseStorage(optionPopup);
+    const uint32_t after = ESP.getFreeHeap();
+    diag::recordHeapReclaim("settings", before, after, capacity, sizeof(SettingInfo));
+  }
+  // Persist before Wi-Fi checkpoints can fill the bounded diagnostics buffer.
+  diag::flush();
+  startActivityForResult(std::move(activity), [this](const ActivityResult&) {
+    SETTINGS.saveToFile();
+    {
+      RenderLock lock(*this);
+      rebuildSettingsList();
+    }
+    restoreCursorAfterRebuild();
+  });
+}
 
 bool SettingsActivity::handleCustomInput() {
   return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
@@ -674,22 +715,17 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CheckForUpdates:
-        startActivityForResult(std::make_unique<OtaUpdateActivity>(renderer, mappedInput), resultHandler);
+        startDownloadActivity(makeUniqueNoThrow<OtaUpdateActivity>(renderer, mappedInput));
         break;
       case SettingAction::InstallOtherFirmware:
-        startActivityForResult(
-            std::make_unique<OtaUpdateActivity>(renderer, mappedInput, /*installOtherFirmware=*/true), resultHandler);
+        startDownloadActivity(
+            makeUniqueNoThrow<OtaUpdateActivity>(renderer, mappedInput, /*installOtherFirmware=*/true));
         break;
       case SettingAction::SdFirmwareUpdate:
         startActivityForResult(std::make_unique<SdFirmwareUpdateActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::DownloadFonts:
-        startActivityForResult(std::make_unique<FontDownloadActivity>(renderer, mappedInput),
-                               [this](const ActivityResult&) {
-                                 SETTINGS.saveToFile();
-                                 rebuildSettingsList();
-                                 restoreCursorAfterRebuild();
-                               });
+        startDownloadActivity(makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInput));
         break;
       case SettingAction::InstalledFonts:
         startActivityForResult(std::make_unique<InstalledFontsActivity>(renderer, mappedInput),
