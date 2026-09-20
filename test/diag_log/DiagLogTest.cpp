@@ -193,4 +193,38 @@ TEST_F(DiagLogTest, TwoAttemptsAreDistinguishableWithOffsetAndBattery) {
   EXPECT_EQ(file.find("size=0 "), std::string::npos);
 }
 
+TEST_F(DiagLogTest, TenMinutesOfWifiCheckpointsRetainNewestWithinWholeFileCap) {
+  std::string file;
+  for (uint32_t ms = 0; ms <= 600000; ms += 5000) {
+    diaglog::clear();
+    diaglog::beginEntry("wifi connect", "session=1234", {0, ms / 1000});
+    for (int line = 0; line < 12; ++line) diaglog::note("  heartbeat t=%u loop=%u line=%d", ms, ms / 10, line);
+    const size_t room = diaglog::kFileCapBytes - diaglog::kHeaderReserveBytes - diaglog::size();
+    file.resize(diaglog::retain(file.data(), file.size(), 0, room));
+    file.append(diaglog::data(), diaglog::size());
+    EXPECT_LE(file.size() + diaglog::kHeaderReserveBytes, diaglog::kFileCapBytes);
+    EXPECT_EQ(diaglog::droppedLines(), 0u);
+  }
+  EXPECT_NE(file.find("t=600000"), std::string::npos);
+  EXPECT_EQ(file.find("t=0 "), std::string::npos);
+}
+
+TEST_F(DiagLogTest, WifiWriteBudgetBoundsEvenAHotRetryLoopAcrossClockWrap) {
+  for (const uint32_t start : {0u, UINT32_MAX - 2000u}) {
+    uint32_t writes = 0;
+    uint32_t last = start;
+    for (uint32_t elapsed = 0; elapsed <= 600000; elapsed += 10) {
+      const uint32_t now = start + elapsed;
+      if (diaglog::wifiCheckpointDue(writes, now, last, true)) {
+        ++writes;
+        last = now;
+      }
+    }
+    EXPECT_LE(writes, 48u + 600000u / 5000u);
+    EXPECT_GE(writes, 48u + 600000u / 5000u - 1);
+    EXPECT_FALSE(diaglog::wifiCheckpointDue(writes, last + 4999, last, true));
+    EXPECT_TRUE(diaglog::wifiCheckpointDue(writes, last + 5000, last, false));
+  }
+}
+
 }  // namespace

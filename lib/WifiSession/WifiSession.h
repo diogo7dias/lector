@@ -130,6 +130,9 @@ class WifiSession {
   bool nextAction(uint32_t nowMs, Action& action);
 
   State state() const { return state_; }
+  static const char* stateName(State state);
+  // RAM-only diagnostics; called by the activity outside the render lock.
+  void noteDiagnostics(uint32_t nowMs) const;
   /**
    * True while the screen should ask whether to remember the password. Only a
    * password the reader typed is worth offering; a stored one is already saved.
@@ -141,6 +144,22 @@ class WifiSession {
 
  private:
   void checkTimeouts(uint32_t nowMs);
+  void setState(State state);
+  bool begun_ = false;
+  uint32_t stateSinceMs_ = 0;
+  uint32_t transitions_ = 0;
+  uint32_t drains_ = 0;
+  uint32_t lastDrainMs_ = 0;
+  uint32_t maxDrainGapMs_ = 0;
+  uint32_t joins_ = 0;
+  uint32_t scans_ = 0;
+  uint32_t timeouts_ = 0;
+  bool lastJoinAutomatic_ = false;
+  bool lastJoinSaved_ = false;
+  int targetIndex_ = -1;
+  int32_t targetRssi_ = 0;
+  int scanCount_ = -1;
+  int scannedTarget_ = -1;
   bool isSaved(const char* ssid) const;
   bool alreadyTriedAutomatically(const char* ssid) const;
   void queue(ActionKind kind, const std::string& ssid = {});

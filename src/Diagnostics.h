@@ -20,10 +20,13 @@
 // addresses, server URLs, serial numbers. A firmware image path is reduced to
 // its name when it sits at the card root and to "(file in a folder)" otherwise.
 //
+// Wi-Fi join checkpoints also record session/radio progress before OTA starts.
 // Cost: recording is a memcpy into a 2 KB static buffer (lib/DiagLog). The card
 // is written only by flush(), which runs when an attempt ends, an update
 // fails, an abnormal boot is seen, the file is downloaded, or the reader locks
-// with something still unflushed. A page turn, wake or render never calls in.
+// with something still unflushed. Wi-Fi adds at most 48 immediate checkpoints
+// per screen entry, then one per 5 seconds. A page turn, wake or render never
+// calls in.
 //
 // Every value printed is measured at the moment it is printed, or says
 // "unknown". The old file printed a placeholder size=0 for an image it had not
@@ -81,6 +84,8 @@ void recordTlsGate(const char* step, uint32_t freeHeap, uint32_t largestBlock, b
 // surviving old entries, then the buffered lines. No-op when nothing is
 // buffered or the card is not mounted.
 void flush();
+// Starts a retained Wi-Fi checkpoint entry in the SAME buffer/file. RAM only.
+void beginWifiCheckpoint();
 // flush() only when something worth keeping was recorded. The lock path and
 // the web download call this.
 void flushIfPending();

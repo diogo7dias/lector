@@ -280,6 +280,13 @@ void recordTlsGate(const char* step, const uint32_t freeHeap, const uint32_t lar
   diaglog::note("  scratch free=%u largest=%u", static_cast<unsigned>(poolFree), static_cast<unsigned>(poolBlock));
 }
 
+void beginWifiCheckpoint() {
+  char fields[32];
+  snprintf(fields, sizeof(fields), "session=%04x", session());
+  diaglog::beginEntry("wifi connect", fields, now());
+  diaglog::markPending();
+}
+
 void flush() {
   if (diaglog::size() == 0) return;
   if (!Storage.ready()) {
@@ -302,20 +309,21 @@ void flush() {
       const int got = in.read(old.get(), diaglog::kFileCapBytes);
       oldLen = got > 0 ? static_cast<size_t>(got) : 0;
     }
-    const size_t room = diaglog::kFileCapBytes > diaglog::size() ? diaglog::kFileCapBytes - diaglog::size() : 0;
+    // Reserve both file header lines and the optional dropped-lines notice.
+    const size_t room = diaglog::kFileCapBytes - diaglog::kHeaderReserveBytes - diaglog::size();
     oldLen = diaglog::retain(old.get(), oldLen, at.utc, room);
   } else {
-    // No 6 KB for the rewrite: append instead. Retention runs on the next flush.
-    LOG_ERR(kTag, "OOM: %u bytes; appending without retention", static_cast<unsigned>(diaglog::kFileCapBytes));
+    // Keep the newest evidence even under heap pressure; never append without a cap.
+    LOG_ERR(kTag, "OOM: %u bytes; retaining current buffer only", static_cast<unsigned>(diaglog::kFileCapBytes));
   }
 
-  HalFile out = Storage.open(kFilePath, old ? (O_WRONLY | O_CREAT | O_TRUNC) : (O_WRONLY | O_CREAT | O_APPEND));
+  HalFile out = Storage.open(kFilePath, O_WRONLY | O_CREAT | O_TRUNC);
   if (!out) {
     LOG_ERR(kTag, "cannot open %s", kFilePath);
     return;
   }
   bool ok = true;
-  if (old) {
+  {
     char when[24];
     diaglog::formatUtc(at.utc, when, sizeof(when));
     char line[160];
@@ -326,7 +334,10 @@ void flush() {
     n = snprintf(line, sizeof(line),
                  "# newest entry last; send this whole file. Nothing here names a book, network or device.\n");
     ok = ok && n > 0 && writeAll(out, line, static_cast<size_t>(n));
-    ok = ok && writeAll(out, old.get(), oldLen);
+    if (old)
+      ok = ok && writeAll(out, old.get(), oldLen);
+    else
+      diaglog::note("  retention: low heap, earlier file entries discarded");
   }
   if (diaglog::droppedLines() > 0) {
     char lost[48];

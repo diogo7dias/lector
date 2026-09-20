@@ -10,9 +10,10 @@
 //
 // Nothing here touches storage. The card is only written by the owner of this
 // buffer (src/Diagnostics.cpp) at a handful of flush points: an install attempt
-// ending, an update failure, an abnormal boot, a deep sleep with unflushed lines,
-// or the file being downloaded. Recording a line is a memcpy into a static
-// buffer, so nothing on a page turn, a wake or a render can cost a card write.
+// ending, an update failure, an abnormal boot, bounded Wi-Fi checkpoints,
+// a deep sleep with unflushed lines, or the file being downloaded. Recording a
+// line is a memcpy into a static buffer, so nothing on a page turn, a wake or a
+// render can cost a card write.
 //
 // Why a text buffer rather than structs: the file is the product. Formatting
 // once, at record time, into the bytes that will be written keeps the flush a
@@ -32,6 +33,16 @@ constexpr size_t kLineBytes = 192;
 // attempts with partition tables and a handful of OTA failures, small enough to
 // paste whole into a chat.
 constexpr size_t kFileCapBytes = 6144;
+// Both on-card header lines plus the optional RAM-drop notice.
+constexpr size_t kHeaderReserveBytes = 320;
+// Wi-Fi checkpoints: a finite burst to locate the first blocked call, then a
+// shared rate limit for boundaries and heartbeat, including millis() rollover.
+constexpr uint32_t kWifiImmediateWrites = 48;
+constexpr uint32_t kWifiIntervalMs = 5000;
+constexpr bool wifiCheckpointDue(uint32_t writes, uint32_t nowMs, uint32_t lastMs, bool boundary) {
+  return (boundary && writes < kWifiImmediateWrites) || nowMs - lastMs >= kWifiIntervalMs;
+}
+static_assert(kRingBytes + kHeaderReserveBytes < kFileCapBytes);
 // Entries older than this are dropped when the file is rewritten.
 constexpr uint32_t kRetainSeconds = 2u * 24u * 3600u;
 // Seconds since 1970 for 2020-01-01T00:00:00Z. Anything earlier is an unset clock.
