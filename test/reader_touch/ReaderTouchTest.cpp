@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 
-#include "ListSwipeGesture.h"
 #include "activities/reader/ReaderTouchZones.h"
 
 namespace {
@@ -65,38 +64,6 @@ TEST(ReaderTouch, OnlySwipeModeTurnsPagesOnASwipe) {
 
 TEST(ReaderTouch, ADegenerateScreenNeverReportsAnAction) {
   EXPECT_EQ(reader_touch::tapAction(Mode::Tap, MenuMode::Tap, 0, 0, 0, 0), TapAction::None);
-}
-
-// A vertical swipe on the open page, as ReaderUtils reads it: the list-scroll bands decide
-// whether it counts, the reader mode decides what it does.
-TapAction vertical(Mode mode, int sx, int sy, int ex, int ey) {
-  return reader_touch::scrollAction(mode, list_swipe::scrollFrom(W, H, sx, sy, ex, ey));
-}
-
-TEST(ReaderTouch, SwipeUpInTheBodyTurnsToTheNextPage) {
-  EXPECT_EQ(vertical(Mode::Swipe, 240, 600, 240, 300), TapAction::Next);
-}
-
-TEST(ReaderTouch, SwipeDownInTheBodyTurnsToThePreviousPage) {
-  EXPECT_EQ(vertical(Mode::Swipe, 240, 300, 240, 600), TapAction::Prev);
-}
-
-TEST(ReaderTouch, ATopEdgeDownSwipeStaysTheMenuGesture) {
-  EXPECT_EQ(vertical(Mode::Swipe, 240, 40, 240, 400), TapAction::None);
-}
-
-TEST(ReaderTouch, ABottomEdgeUpSwipeStaysTheHomeGesture) {
-  EXPECT_EQ(vertical(Mode::Swipe, 240, H - 40, 240, 300), TapAction::None);
-}
-
-TEST(ReaderTouch, VerticalSwipesTurnNothingOutsideSwipeMode) {
-  EXPECT_EQ(vertical(Mode::Tap, 240, 600, 240, 300), TapAction::None);
-  EXPECT_EQ(vertical(Mode::InvertedTap, 240, 300, 240, 600), TapAction::None);
-  EXPECT_EQ(vertical(Mode::Off, 240, 600, 240, 300), TapAction::None);
-}
-
-TEST(ReaderTouch, AHorizontalSwipeIsNotAVerticalPageTurn) {
-  EXPECT_EQ(vertical(Mode::Swipe, 100, 400, 400, 460), TapAction::None);
 }
 
 }  // namespace

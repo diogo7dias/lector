@@ -63,10 +63,6 @@ way: the on-screen keyboard, sliders (brightness, text size and the rest, which 
 stepped), and the Yes/No pop-ups, which are already a question being answered. Page turns by
 tap while reading are unchanged.
 
-With **Touch Reader Controls** set to **Swipe**, swiping up over the page turns to the next page
-and swiping down turns back, as well as swiping left and right. A swipe that starts in the top or
-bottom edge of the screen keeps its own job: the reader menu or Home.
-
 ### Taking a screenshot
 
 Hold **Power** and **Volume Down** together. The image is written to `/screenshots/` on the
