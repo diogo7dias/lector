@@ -154,8 +154,7 @@ BlockStyle bodyStyle(int fontId, const GfxRenderer& renderer) {
 // separates it from the paragraph above.
 void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, const char* text,
                      const BlockStyle& style, bool heading, int gapBefore) {
-  ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.hyphenationEnabled != 0,
-                    SETTINGS.focusReadingEnabled != 0,
+  ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.focusReadingEnabled != 0,
                     resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden), style,
                     SETTINGS.firstLineIndentMode, SETTINGS.firstLineIndentPercent, SETTINGS.wordSpacing);
   parsed.setHeading(heading);
@@ -238,7 +237,6 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
                        .alignment = SETTINGS.paragraphAlignment,
                        .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
                        .focusReading = SETTINGS.focusReadingEnabled != 0,
-                       .hyphenation = SETTINGS.hyphenationEnabled != 0,
                        .embeddedLayoutStyle = SETTINGS.embeddedLayoutStyle != 0,
                        .paragraphSpacing = SETTINGS.paragraphSpacing,
                        .wordSpacing = SETTINGS.wordSpacing,

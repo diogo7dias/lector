@@ -7,7 +7,6 @@
 
 #include "Epub/css/CssParser.h"
 #include "Page.h"
-#include "hyphenation/Hyphenator.h"
 #include "parsers/ChapterHtmlSlimParser.h"
 
 namespace {
@@ -109,7 +108,8 @@ namespace {
 // v59: inline direction changes no longer replace the paragraph's base direction (#3198).
 // v60: font ligatures no longer collapse already-shaped Arabic presentation forms (#3294).
 // v61: wordSpacing enters the header; baseline gaps change pagination.
-constexpr uint8_t SECTION_FILE_VERSION = 61;
+// v62: remove the hyphenation header byte and automatic word splitting.
+constexpr uint8_t SECTION_FILE_VERSION = 62;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
@@ -129,8 +129,8 @@ constexpr uint8_t SECTION_FILE_INCOMPLETE_VERSION = 0;
 constexpr uint8_t SECTION_FILE_PARTIAL_VERSION = 0xFE - (SECTION_FILE_VERSION - 28);
 constexpr uint32_t HEADER_SIZE = sizeof(uint8_t) + sizeof(uint8_t) + sizeof(int) + sizeof(float) + sizeof(bool) +
                                  sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint16_t) + sizeof(uint16_t) +
-                                 sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) +
-                                 sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
+                                 sizeof(uint16_t) + sizeof(bool) + sizeof(bool) + sizeof(uint8_t) + sizeof(bool) +
+                                 sizeof(bool) + sizeof(uint8_t) + sizeof(uint8_t) + sizeof(uint32_t) +
                                  sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t);
 }  // namespace
 
@@ -200,9 +200,8 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
       HEADER_SIZE == sizeof(SECTION_FILE_VERSION) + sizeof(spec.fontId) + sizeof(spec.lineCompression) +
                          sizeof(spec.extraParagraphSpacing) + sizeof(spec.paragraphSpacing) + sizeof(spec.wordSpacing) +
                          sizeof(spec.paragraphAlignment) + sizeof(spec.viewportWidth) + sizeof(spec.viewportHeight) +
-                         sizeof(pageCount) + sizeof(spec.hyphenationEnabled) + sizeof(spec.embeddedTextStyle) +
-                         sizeof(spec.embeddedLayoutStyle) + sizeof(spec.imageRendering) +
-                         sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
+                         sizeof(pageCount) + sizeof(spec.embeddedTextStyle) + sizeof(spec.embeddedLayoutStyle) +
+                         sizeof(spec.imageRendering) + sizeof(spec.focusReadingEnabled) + sizeof(spec.guideDotsMode) +
                          sizeof(spec.firstLineIndentMode) + sizeof(spec.firstLineIndentPercent) + sizeof(uint32_t) +
                          sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t) + sizeof(uint32_t),
       "Header size mismatch");
@@ -217,7 +216,6 @@ void Section::writeSectionFileHeader(const ReaderRenderSpec& spec) {
   serialization::writePod(file, spec.paragraphAlignment);
   serialization::writePod(file, spec.viewportWidth);
   serialization::writePod(file, spec.viewportHeight);
-  serialization::writePod(file, spec.hyphenationEnabled);
   serialization::writePod(file, spec.embeddedTextStyle);
   serialization::writePod(file, spec.embeddedLayoutStyle);
   serialization::writePod(file, spec.imageRendering);
@@ -261,7 +259,6 @@ bool Section::loadSectionFile(const ReaderRenderSpec& spec) {
     serialization::readPod(file, cached.paragraphAlignment);
     serialization::readPod(file, cached.viewportWidth);
     serialization::readPod(file, cached.viewportHeight);
-    serialization::readPod(file, cached.hyphenationEnabled);
     serialization::readPod(file, cached.embeddedTextStyle);
     serialization::readPod(file, cached.embeddedLayoutStyle);
     serialization::readPod(file, cached.imageRendering);
@@ -498,10 +495,9 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
       &epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
       spec.paragraphSpacing, spec.wordSpacing, spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight,
-      spec.hyphenationEnabled, spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode,
-      spec.firstLineIndentPercent, &Section::appendPageToLut, ctxPtr, spec.embeddedTextStyle, spec.embeddedLayoutStyle,
-      ctxPtr->contentBase, ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors), popupFn, popupCtx,
-      ctxPtr->cssParser);
+      spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode, spec.firstLineIndentPercent,
+      &Section::appendPageToLut, ctxPtr, spec.embeddedTextStyle, spec.embeddedLayoutStyle, ctxPtr->contentBase,
+      ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors), popupFn, popupCtx, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     noteBuildFailure(BuildFailure::OomParser);
@@ -512,7 +508,6 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
     return false;
   }
 
-  Hyphenator::setPreferredLanguage(epub.getLanguage());
   build_ = std::move(ctx);
 
   if (!build_->parser->beginParse()) {

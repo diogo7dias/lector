@@ -5,7 +5,7 @@
 .DESCRIPTION
     Formats all C/C++ source and header files in the repository, excluding
     generated, vendored, and build directories (freeink-sdk, builtinFonts,
-    hyphenation tries, uzlib, .pio, *.generated.h).
+    uzlib, .pio, *.generated.h).
 
     The clang-format binary path is resolved once and cached in
     bin/clang-format-fix.local. On first run it checks a default path,
@@ -94,7 +94,6 @@ $clangFormat = Resolve-ClangFormat
 $exclude = @(
     'freeink-sdk'
     'lib\EpdFont\builtinFonts'
-    'lib\Epub\Epub\hyphenation\generated'
     'lib\uzlib'
     '.pio'
     '.venv'

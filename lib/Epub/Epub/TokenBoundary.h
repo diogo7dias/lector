@@ -2,8 +2,6 @@
 
 #include <cstdint>
 
-#include "hyphenation/HyphenationCommon.h"
-
 // ParsedText stores each boundary in two bit-packed vectors. Together the bits distinguish
 // ordinary word gaps, CJK-style stretchable zero-width gaps, unbreakable attachment, and
 // breakable attachment after visible hyphens/dashes.
@@ -19,11 +17,32 @@ constexpr bool isJustifiableGap(const bool continues, const bool noSpaceBefore, 
   return !continues || (isSpaceToken && !noSpaceBefore);
 }
 
-// Soft hyphens become visible only when their conditional break is taken. U+2011 exists to forbid
-// a break. Every other character classified by isExplicitHyphen is a visible break opportunity.
+// Authored visible punctuation remains breakable. Soft and non-breaking hyphens do not.
 inline bool allowsBreakAfterExplicitHyphen(const uint32_t cp) {
-  constexpr uint32_t NON_BREAKING_HYPHEN_CP = 0x2011;
-  return isExplicitHyphen(cp) && !isSoftHyphen(cp) && cp != NON_BREAKING_HYPHEN_CP;
+  switch (cp) {
+    case '-':
+    case 0x058A:  // Armenian hyphen
+    case 0x2010:  // hyphen
+    case 0x2012:  // figure dash
+    case 0x2013:  // en dash
+    case 0x2014:  // em dash
+    case 0x2015:  // horizontal bar
+    case 0x2043:  // hyphen bullet
+    case 0x207B:  // superscript minus
+    case 0x208B:  // subscript minus
+    case 0x2212:  // minus sign
+    case 0x2E17:  // double oblique hyphen
+    case 0x2E3A:  // two-em dash
+    case 0x2E3B:  // three-em dash
+    case 0xFE58:  // small em dash
+    case 0xFE63:  // small hyphen-minus
+    case 0xFF0D:  // fullwidth hyphen-minus
+    case 0x005F:  // Underscore
+    case 0x2026:  // Ellipsis
+      return true;
+    default:
+      return false;
+  }
 }
 
 }  // namespace TokenBoundary

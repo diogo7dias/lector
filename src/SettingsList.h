@@ -338,10 +338,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "paragraphAlignment", StrId::STR_CAT_READER)
                     .withTextSettings());
 
-    v.push_back(SettingInfo::Toggle(StrId::STR_HYPHENATION, &CrossPointSettings::hyphenationEnabled,
-                                    "hyphenationEnabled", StrId::STR_CAT_READER)
-                    .withTextSettings());
-
     // First-line indent (restored old-lector model): Book (respect CSS) vs Custom %.
     v.push_back(SettingInfo::Enum(StrId::STR_FIRST_LINE_INDENT, &CrossPointSettings::firstLineIndentMode,
                                   {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT}, "firstLineIndentMode",

@@ -57,12 +57,12 @@ std::set<std::string> statusBarFieldNames() {
   return names;
 }
 
-TEST(ReaderLookFields, EveryPrefsByteIsNamedByExactlyOneList) {
+TEST(ReaderLookFields, EveryLivePrefsByteIsNamedByExactlyOneList) {
   const size_t named = screenFieldNames().size() + bookFieldNames().size() + statusBarFieldNames().size();
   // Set sizes, so a name repeated inside one list collapses and fails here.
   EXPECT_EQ(named, reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT +
                        reader_look::STATUS_BAR_FIELD_COUNT);
-  EXPECT_EQ(named + sizeof(ReaderPrefs::sdFontFamilyName), sizeof(ReaderPrefs));
+  EXPECT_EQ(named + sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14), sizeof(ReaderPrefs));
 }
 
 TEST(ReaderLookFields, TheListsDoNotOverlap) {
@@ -75,12 +75,13 @@ TEST(ReaderLookFields, TheListsDoNotOverlap) {
   EXPECT_EQ(all.size(), inserted);
 }
 
-TEST(ReaderLookFields, SettingTheWholeListTouchesEveryByte) {
+TEST(ReaderLookFields, SettingTheWholeListTouchesEveryLiveByte) {
   const ReaderPrefs p = makeAllDistinct();
   const auto* bytes = reinterpret_cast<const uint8_t*>(&p);
-  // The font name is the only run of bytes the lists do not name; every uint8_t field
-  // got a distinct non-zero value, so a byte left at zero means an unnamed field.
+  // Apart from the font name and retired byte, every field gets a distinct non-zero value.
+  EXPECT_EQ(0, p.reserved14);
   for (size_t i = 0; i < sizeof(ReaderPrefs); ++i) {
+    if (i == offsetof(ReaderPrefs, reserved14)) continue;
     if (i >= offsetof(ReaderPrefs, sdFontFamilyName) &&
         i < offsetof(ReaderPrefs, sdFontFamilyName) + sizeof(ReaderPrefs::sdFontFamilyName)) {
       continue;

@@ -66,7 +66,6 @@ class TextSettingsActivity final : public UiGridActivity {
     FocusReading,
     GuideDots,
     HiddenDots,  // sub-option of GuideDots: only listed while Guide Dots is on
-    Hyphenation,
     EmbeddedTextStyle,
     EmbeddedLayoutStyle,
     AntiAliasing,

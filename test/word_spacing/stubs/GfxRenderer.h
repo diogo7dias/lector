@@ -26,6 +26,6 @@ class GfxRenderer {
     return width;
   }
   bool isSdCardFont(int) const { return false; }
-  void ensureSdCardFontReady(int, const std::deque<std::string>&, bool, uint8_t) const {}
+  void ensureSdCardFontReady(int, const std::deque<std::string>&, uint8_t) const {}
   void ensureSdCardFontReady(int, const char*, uint8_t) const {}
 };

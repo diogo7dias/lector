@@ -15,8 +15,6 @@
 
 #include "JustifySpacing.h"
 #include "TokenBoundary.h"
-#include "hyphenation/HyphenationCommon.h"
-#include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
 
@@ -209,32 +207,26 @@ void stripSoftHyphensInPlace(std::string& word) {
   }
 }
 
-// Returns the advance width for a word while ignoring soft hyphen glyphs and optionally appending a visible hyphen.
+// Returns the advance width for a word while ignoring soft hyphen glyphs.
 // Uses advance width (sum of glyph advances + kerning) rather than bounding box width so that italic glyph overhangs
 // don't inflate inter-word spacing.
 uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                          const EpdFontFamily::Style style, const bool appendHyphen = false) {
-  if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
+                          const EpdFontFamily::Style style) {
+  if (word.size() == 1 && word[0] == ' ') {
     return renderer.getSpaceWidth(fontId, style);
   }
   const bool hasSoftHyphen = containsSoftHyphen(word);
-  if (!hasSoftHyphen && !appendHyphen) {
+  if (!hasSoftHyphen) {
     return renderer.getTextAdvanceX(fontId, word.c_str(), style);
   }
 
   std::string sanitized = word;
-  if (hasSoftHyphen) {
-    stripSoftHyphensInPlace(sanitized);
-  }
-  if (appendHyphen) {
-    sanitized.push_back('-');
-  }
+  stripSoftHyphensInPlace(sanitized);
   return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
 }
 
 // True when a token ends with a hyphen or dash that allows a line break after it. U+00AD is
-// excluded because it renders as nothing, so only a hyphenation break -- which substitutes a
-// visible '-' -- may use it; U+2011 because forbidding that break is its purpose.
+// excluded because it renders as nothing; U+2011 because forbidding that break is its purpose.
 bool endsWithBreakableHyphen(const std::string& token) {
   if (token.empty()) return false;
   return TokenBoundary::allowsBreakAfterExplicitHyphen(lastCodepoint(token));
@@ -263,28 +255,17 @@ uint16_t measureFocusPrefixAdvance(const GfxRenderer& renderer, const int fontId
 
 // Advance width of a whole token, accounting for a bold focus prefix when it has one.
 uint16_t measureFocusWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                               const EpdFontFamily::Style style, const uint8_t focusBoundary,
-                               const bool appendHyphen = false) {
+                               const EpdFontFamily::Style style, const uint8_t focusBoundary) {
   if (focusBoundary == 0) {
-    return measureWordWidth(renderer, fontId, word, style, appendHyphen);
+    return measureWordWidth(renderer, fontId, word, style);
   }
   if (focusBoundary >= word.size()) {
-    // The bold run covers the whole token, as for a split candidate ending on the boundary.
-    return measureWordWidth(renderer, fontId, word, static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD),
-                            appendHyphen);
+    // The bold run covers the whole token.
+    return measureWordWidth(renderer, fontId, word, static_cast<EpdFontFamily::Style>(style | EpdFontFamily::BOLD));
   }
   const uint16_t suffixWidth =
-      appendHyphen ? measureWordWidth(renderer, fontId, word.substr(focusBoundary), style, true)
-                   : static_cast<uint16_t>(renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style));
+      static_cast<uint16_t>(renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style));
   return measureFocusPrefixAdvance(renderer, fontId, word, style, focusBoundary) + suffixWidth;
-}
-
-// Focus boundaries for the two halves of a token split at `splitOffset`.
-uint8_t focusBoundaryBefore(const uint8_t focusBoundary, const size_t splitOffset) {
-  return static_cast<uint8_t>(std::min<size_t>(focusBoundary, splitOffset));
-}
-uint8_t focusBoundaryAfter(const uint8_t focusBoundary, const size_t splitOffset) {
-  return focusBoundary > splitOffset ? static_cast<uint8_t>(focusBoundary - splitOffset) : 0;
 }
 
 // Checks if a UTF-8 codepoint should be counted as part of a word for Focus Reading
@@ -350,23 +331,6 @@ void ParsedText::pushVisibleOffset(const uint32_t offset) {
   wordVisibleOffsetDeltas.push_back(static_cast<uint16_t>(offset - base));
 }
 
-void ParsedText::insertVisibleOffset(const size_t wordIndex, const uint32_t offset) {
-  const uint32_t base = wordIndex > 0 ? visibleOffsetBaseAt(wordIndex - 1) : visibleOffsetBase;
-  for (auto& rebase : visibleOffsetRebases) {
-    if (rebase.wordIndex >= wordIndex) rebase.wordIndex++;
-  }
-
-  uint32_t insertionBase = base;
-  if (offset < base || offset - base > std::numeric_limits<uint16_t>::max()) {
-    const auto rebaseIt = std::find_if(visibleOffsetRebases.begin(), visibleOffsetRebases.end(),
-                                       [wordIndex](const auto& rebase) { return rebase.wordIndex > wordIndex; });
-    visibleOffsetRebases.insert(rebaseIt, {wordIndex, offset});
-    insertionBase = offset;
-  }
-  wordVisibleOffsetDeltas.insert(wordVisibleOffsetDeltas.begin() + wordIndex,
-                                 static_cast<uint16_t>(offset - insertionBase));
-}
-
 void ParsedText::eraseVisibleOffsetPrefix(const size_t count) {
   if (count >= wordVisibleOffsetDeltas.size()) {
     wordVisibleOffsetDeltas.clear();
@@ -388,7 +352,7 @@ void ParsedText::eraseVisibleOffsetPrefix(const size_t count) {
 }
 
 // Scale the natural pixel advance only; preserve the font's flanking kerning.
-// Shared by both line breakers and every positioning path. At 100 the delta is zero.
+// Shared by the line breaker and every positioning path. At 100 the delta is zero.
 int ParsedText::spaceAdvance(const GfxRenderer& renderer, const int fontId, const uint32_t leftCp,
                              const uint32_t rightCp, const EpdFontFamily::Style style) const {
   const int advance = renderer.getSpaceAdvance(fontId, leftCp, rightCp, style);
@@ -573,7 +537,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
         size_t splitByteOffset = countPtr - reinterpret_cast<const unsigned char*>(segment.data());
 
         // One token carrying the emphasis as a byte boundary, so the word stays whole for the
-        // hyphenator and the line breaker. The renderer applies BOLD to bytes [0, splitByteOffset).
+        // line breaker. The renderer applies BOLD to bytes [0, splitByteOffset).
         words.emplace_back(segment);
         wordStyles.push_back(baseStyle);
         wordContinues.push_back(attach);
@@ -743,7 +707,7 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
       styleMask |= static_cast<uint8_t>(1u << (static_cast<uint8_t>(s) & 0x03));
     }
     if (styleMask == 0) styleMask = 0x01;  // defensive: regular only
-    renderer.ensureSdCardFontReady(fontId, words, hyphenationEnabled, styleMask);
+    renderer.ensureSdCardFontReady(fontId, words, styleMask);
     // The guide dot glyph is always drawn in the regular style; preload it too so
     // the widened-gap measurement and draw never trigger on-demand SD I/O.
     // Needed in hidden mode too: the widened gap is measured from the dot's advance.
@@ -755,14 +719,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
   const int pageWidth = viewportWidth;
   auto wordWidths = calculateWordWidths(renderer, fontId);
 
-  std::vector<size_t> lineBreakIndices;
-  if (hyphenationEnabled) {
-    // Use greedy layout that can split words mid-loop when a hyphenated prefix fits.
-    lineBreakIndices =
-        computeHyphenatedLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
-  } else {
-    lineBreakIndices = computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
-  }
+  const auto lineBreakIndices =
+      computeLineBreaks(renderer, fontId, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore);
   const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
 
   for (size_t i = 0; i < lineCount; ++i) {
@@ -977,17 +935,6 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
 
   const int firstLineIndent = resolveFirstLineIndent(true, pageWidth, renderer, fontId);
 
-  // Ensure any word that would overflow even as the first entry on a line is split using fallback hyphenation.
-  for (size_t i = 0; i < wordWidths.size(); ++i) {
-    // First word needs to fit in reduced width if there's an indent
-    const int effectiveWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
-    while (wordWidths[i] > effectiveWidth) {
-      if (!hyphenateWordAtIndex(i, effectiveWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true)) {
-        break;
-      }
-    }
-  }
-
   const size_t totalWordCount = words.size();
 
   // Guide dots only apply to pure-LTR paragraphs (they never coexist with BiDi
@@ -1100,200 +1047,6 @@ std::vector<size_t> ParsedText::computeLineBreaks(const GfxRenderer& renderer, c
   }
 
   return lineBreakIndices;
-}
-
-// Builds break indices while opportunistically splitting the word that would overflow the current line.
-std::vector<size_t> ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const int fontId,
-                                                            const int pageWidth, std::vector<uint16_t>& wordWidths,
-                                                            std::vector<bool>& continuesVec,
-                                                            std::vector<bool>& noSpaceBeforeVec) {
-  const int firstLineIndent = resolveFirstLineIndent(true, pageWidth, renderer, fontId);
-
-  std::vector<size_t> lineBreakIndices;
-  size_t currentIndex = 0;
-  bool isFirstLine = true;
-
-  // Guide dots only apply to pure-LTR paragraphs; see computeLineBreaks.
-  const bool guideOk = guideDotsMode != GUIDE_DOTS_OFF && !blockStyle.isRtl && !hasRtlWord;
-
-  while (currentIndex < wordWidths.size()) {
-    const size_t lineStart = currentIndex;
-    int lineWidth = 0;
-
-    // First line has reduced width due to text-indent
-    const int effectivePageWidth = isFirstLine ? pageWidth - firstLineIndent : pageWidth;
-
-    // Consume as many words as possible for current line, splitting when prefixes fit
-    while (currentIndex < wordWidths.size()) {
-      const bool isFirstWord = currentIndex == lineStart;
-      int spacing = 0;
-      if (!isFirstWord && continuesVec[currentIndex]) {
-        // Attached and breakable-attached boundaries both use kerning when kept on one line.
-        spacing = renderer.getKerning(fontId, lastCodepoint(words[currentIndex - 1]),
-                                      firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
-      } else if (!isFirstWord && noSpaceBeforeVec[currentIndex]) {
-        spacing = 0;
-      } else if (!isFirstWord) {
-        spacing = guideOk ? guideDotNaturalGap(renderer, fontId, words[currentIndex - 1], words[currentIndex],
-                                               wordStyles[currentIndex - 1])
-                          : spaceAdvance(renderer, fontId, lastCodepoint(words[currentIndex - 1]),
-                                         firstCodepoint(words[currentIndex]), wordStyles[currentIndex - 1]);
-      }
-      const int candidateWidth = spacing + wordWidths[currentIndex];
-
-      // Word fits on current line
-      if (lineWidth + candidateWidth <= effectivePageWidth) {
-        lineWidth += candidateWidth;
-        ++currentIndex;
-        continue;
-      }
-
-      // Word would overflow — try to split based on hyphenation points
-      const int availableWidth = effectivePageWidth - lineWidth - spacing;
-      const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
-
-      if (availableWidth > 0 &&
-          hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
-        // Prefix now fits; append it to this line and move to next line
-        lineWidth += spacing + wordWidths[currentIndex];
-        ++currentIndex;
-        break;
-      }
-
-      // Could not split: force at least one word per line to avoid infinite loop
-      if (currentIndex == lineStart) {
-        lineWidth += candidateWidth;
-        ++currentIndex;
-      }
-      break;
-    }
-
-    // Don't break before a continuation word (e.g., orphaned "?" after "question").
-    // Backtrack to the start of the continuation group so the whole group moves to the next line.
-    while (currentIndex > lineStart + 1 && currentIndex < wordWidths.size() &&
-           !TokenBoundary::allowsBreak(continuesVec[currentIndex], noSpaceBeforeVec[currentIndex])) {
-      --currentIndex;
-    }
-
-    lineBreakIndices.push_back(currentIndex);
-    isFirstLine = false;
-  }
-
-  return lineBreakIndices;
-}
-
-// Splits words[wordIndex] into prefix (adding a hyphen only when needed) and remainder when a legal breakpoint fits the
-// available width.
-bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availableWidth, const GfxRenderer& renderer,
-                                      const int fontId, std::vector<uint16_t>& wordWidths,
-                                      const bool allowFallbackBreaks) {
-  // Guard against invalid indices or zero available width before attempting to split.
-  if (availableWidth <= 0 || wordIndex >= words.size()) {
-    return false;
-  }
-
-  const std::string& word = words[wordIndex];
-  const auto style = wordStyles[wordIndex];
-
-  const uint8_t focusBoundary = wordFocusBoundary[wordIndex];
-
-  // Collect candidate breakpoints (byte offsets and hyphen requirements). Focus emphasis is a byte
-  // annotation, so the hyphenator sees the whole word and every legal break is reachable.
-  auto breakInfos = Hyphenator::breakOffsets(word, allowFallbackBreaks);
-  if (breakInfos.empty()) {
-    return false;
-  }
-
-  size_t chosenOffset = 0;
-  int chosenWidth = -1;
-  bool chosenNeedsHyphen = true;
-
-  // Iterate over each legal breakpoint and retain the widest prefix that still fits.
-  for (const auto& info : breakInfos) {
-    const size_t offset = info.byteOffset;
-    if (offset == 0 || offset >= word.size()) {
-      continue;
-    }
-
-    const bool needsHyphen = info.requiresInsertedHyphen;
-    const int prefixWidth = measureFocusWordWidth(renderer, fontId, word.substr(0, offset), style,
-                                                  focusBoundaryBefore(focusBoundary, offset), needsHyphen);
-    if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
-      continue;  // Skip if too wide or not an improvement
-    }
-
-    chosenWidth = prefixWidth;
-    chosenOffset = offset;
-    chosenNeedsHyphen = needsHyphen;
-  }
-
-  if (chosenWidth < 0) {
-    // No hyphenation point produced a prefix that fits in the remaining space.
-    return false;
-  }
-
-  uint32_t remainderOffset = visibleOffsetAt(wordIndex);
-  const unsigned char* offsetPtr = reinterpret_cast<const unsigned char*>(word.data());
-  const unsigned char* splitPtr = offsetPtr + chosenOffset;
-  while (offsetPtr < splitPtr) {
-    utf8NextCodepoint(&offsetPtr);
-    remainderOffset++;
-  }
-
-  // Split the word at the selected breakpoint and append a hyphen if required.
-  std::string remainder = word.substr(chosenOffset);
-  words[wordIndex].resize(chosenOffset);
-  if (chosenNeedsHyphen) {
-    words[wordIndex].push_back('-');
-  }
-
-  // Insert the remainder word (with matching style and continuation flag) directly after the prefix.
-  words.insert(words.begin() + wordIndex + 1, remainder);
-  wordStyles.insert(wordStyles.begin() + wordIndex + 1, style);
-  insertVisibleOffset(wordIndex + 1, remainderOffset);
-  // Emphasis follows the text across the split, so a break at or after the boundary leaves the
-  // remainder fully regular.
-  wordFocusBoundary.insert(wordFocusBoundary.begin() + wordIndex + 1, focusBoundaryAfter(focusBoundary, chosenOffset));
-  wordFocusBoundary[wordIndex] = focusBoundaryBefore(focusBoundary, chosenOffset);
-  // Invariant: a boundary is always strictly inside its token, so an all-bold part carries BOLD in
-  // its style with boundary 0 and nothing downstream special-cases boundary == size.
-  if (wordFocusBoundary[wordIndex] >= words[wordIndex].size()) {
-    wordStyles[wordIndex] = static_cast<EpdFontFamily::Style>(wordStyles[wordIndex] | EpdFontFamily::BOLD);
-    wordFocusBoundary[wordIndex] = 0;
-  }
-  if (wordIndex + 1 <= rubyTexts.size()) {
-    rubyTexts.insert(rubyTexts.begin() + wordIndex + 1, "");
-  }
-
-  // Continuation flag handling after splitting a word into prefix + remainder.
-  //
-  // The prefix keeps the original word's continuation flag so that no-break-space groups
-  // stay linked. The remainder always gets continues=false because it starts on the next
-  // line and is not attached to the prefix.
-  //
-  // Example: "200&#xA0;Quadratkilometer" produces tokens:
-  //   [0] "200"               continues=false
-  //   [1] " "                 continues=true
-  //   [2] "Quadratkilometer"  continues=true   <-- the word being split
-  //
-  // After splitting "Quadratkilometer" at "Quadrat-" / "kilometer":
-  //   [0] "200"         continues=false
-  //   [1] " "           continues=true
-  //   [2] "Quadrat-"    continues=true   (KEPT — still attached to the no-break group)
-  //   [3] "kilometer"   continues=false  (NEW — starts fresh on the next line)
-  //
-  // This lets the backtracking loop keep the entire prefix group ("200 Quadrat-") on one
-  // line, while "kilometer" moves to the next line.
-  // wordContinues[wordIndex] is intentionally left unchanged — the prefix keeps its original attachment.
-  wordContinues.insert(wordContinues.begin() + wordIndex + 1, false);
-  wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, false);
-
-  // Update cached widths to reflect the new prefix/remainder pairing.
-  wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
-  const uint16_t remainderWidth =
-      measureFocusWordWidth(renderer, fontId, remainder, style, wordFocusBoundary[wordIndex + 1]);
-  wordWidths.insert(wordWidths.begin() + wordIndex + 1, remainderWidth);
-  return true;
 }
 
 void ParsedText::extractLine(const size_t breakIndex, const int pageWidth, const std::vector<uint16_t>& wordWidths,

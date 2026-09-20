@@ -23,14 +23,14 @@ constexpr const char* PROSE =
     "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau";
 
 void layout(const std::string& text, int percent, int width, CssTextAlign align = CssTextAlign::Left,
-            bool hyphenate = false, uint8_t dots = GUIDE_DOTS_OFF, bool rtl = false, bool styled = false) {
+            uint8_t dots = GUIDE_DOTS_OFF, bool rtl = false, bool styled = false) {
   lines.clear();
   BlockStyle style;
   style.alignment = align;
   style.textAlignDefined = true;
   style.directionDefined = true;
   style.isRtl = rtl;
-  ParsedText parsed(false, hyphenate, false, dots, style, 1, 0, percent);
+  ParsedText parsed(false, false, dots, style, 1, 0, percent);
   std::istringstream input(text);
   std::string word;
   int i = 0;
@@ -87,19 +87,17 @@ TEST_P(WordSpacing, MeasurementAndPositioningAgree) {
   const int percent = GetParam();
   const int gap = (7 * percent + 50) / 100 - 2;  // a -> space -> b kerning remains -2
   const int measured = 10 + gap + 10;
-  for (bool hyphenate : {false, true}) {
-    // First line keeps the existing three-space indent (21px).
-    layout("a b", percent, measured + 21, CssTextAlign::Left, hyphenate);
-    ASSERT_EQ(1u, lines.size());
-    EXPECT_EQ(measured + 21, rightEdge(lines[0]));
-    EXPECT_EQ(gap, lines[0].x[1] - lines[0].x[0] - 10);
-    layout("a b", percent, measured + 20, CssTextAlign::Left, hyphenate);
-    EXPECT_EQ(2u, lines.size());  // one pixel less cannot hold the measured line
-    layout("a b", percent, 200, CssTextAlign::Right, hyphenate);
-    ASSERT_EQ(1u, lines.size());
-    EXPECT_EQ(200, rightEdge(lines[0]));
-    EXPECT_EQ(200 - measured, lines[0].x[0]);
-  }
+  // First line keeps the existing three-space indent (21px).
+  layout("a b", percent, measured + 21, CssTextAlign::Left);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_EQ(measured + 21, rightEdge(lines[0]));
+  EXPECT_EQ(gap, lines[0].x[1] - lines[0].x[0] - 10);
+  layout("a b", percent, measured + 20, CssTextAlign::Left);
+  EXPECT_EQ(2u, lines.size());  // one pixel less cannot hold the measured line
+  layout("a b", percent, 200, CssTextAlign::Right);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_EQ(200, rightEdge(lines[0]));
+  EXPECT_EQ(200 - measured, lines[0].x[0]);
 }
 
 TEST(WordSpacing, WiderSettingMeasuresWider) {
@@ -110,16 +108,14 @@ TEST(WordSpacing, WiderSettingMeasuresWider) {
 }
 
 TEST_P(WordSpacing, JustificationFlushAndLastLineNatural) {
-  for (bool hyphenate : {false, true}) {
-    for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
-      layout(PROSE, GetParam(), 260, CssTextAlign::Justify, hyphenate, dots, false, true);
-      ASSERT_GT(lines.size(), 2u);
-      for (size_t i = 0; i + 1 < lines.size(); ++i) {
-        ASSERT_GT(lines[i].words.size(), 1u);
-        EXPECT_EQ(260, rightEdge(lines[i])) << "line=" << i << " hyphenate=" << hyphenate << " dots=" << int(dots);
-      }
-      EXPECT_LT(rightEdge(lines.back()), 260);
+  for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
+    layout(PROSE, GetParam(), 260, CssTextAlign::Justify, dots, false, true);
+    ASSERT_GT(lines.size(), 2u);
+    for (size_t i = 0; i + 1 < lines.size(); ++i) {
+      ASSERT_GT(lines[i].words.size(), 1u);
+      EXPECT_EQ(260, rightEdge(lines[i])) << "line=" << i << " dots=" << int(dots);
     }
+    EXPECT_LT(rightEdge(lines.back()), 260);
   }
   layout("a b", GetParam(), 200, CssTextAlign::Justify);
   EXPECT_EQ(21 + 20 + (7 * GetParam() + 50) / 100 - 2, rightEdge(lines[0]));
@@ -127,40 +123,36 @@ TEST_P(WordSpacing, JustificationFlushAndLastLineNatural) {
 
 TEST_P(WordSpacing, GuideDotsScaleSpacesAndHiddenMatchesVisible) {
   const int gap = 2 * ((7 * GetParam() + 50) / 100) - 2 + 3;
-  for (bool hyphenate : {false, true}) {
-    layout("a b", GetParam(), 41 + gap, CssTextAlign::Left, hyphenate, GUIDE_DOTS_VISIBLE);
-    ASSERT_EQ(1u, lines.size());
-    EXPECT_EQ(41 + gap, rightEdge(lines[0]));
-    EXPECT_EQ(10 + (gap - 3) / 2, lines[0].dots[0]);
-    const auto positions = lines[0].x;
-    layout("a b", GetParam(), 41 + gap, CssTextAlign::Left, hyphenate, GUIDE_DOTS_HIDDEN);
-    ASSERT_EQ(1u, lines.size());
-    EXPECT_EQ(positions, lines[0].x);
-    EXPECT_TRUE(lines[0].dots.empty());
-    layout("a b", GetParam(), 40 + gap, CssTextAlign::Left, hyphenate, GUIDE_DOTS_VISIBLE);
-    EXPECT_EQ(2u, lines.size());
-  }
+  layout("a b", GetParam(), 41 + gap, CssTextAlign::Left, GUIDE_DOTS_VISIBLE);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_EQ(41 + gap, rightEdge(lines[0]));
+  EXPECT_EQ(10 + (gap - 3) / 2, lines[0].dots[0]);
+  const auto positions = lines[0].x;
+  layout("a b", GetParam(), 41 + gap, CssTextAlign::Left, GUIDE_DOTS_HIDDEN);
+  ASSERT_EQ(1u, lines.size());
+  EXPECT_EQ(positions, lines[0].x);
+  EXPECT_TRUE(lines[0].dots.empty());
+  layout("a b", GetParam(), 40 + gap, CssTextAlign::Left, GUIDE_DOTS_VISIBLE);
+  EXPECT_EQ(2u, lines.size());
 }
 
 TEST_P(WordSpacing, NbspStaysAttachedAndScales) {
   const int measured = 20 + (7 * GetParam() + 50) / 100 - 2;
-  for (bool hyphenate : {false, true}) {
-    layout(
-        "a\xC2\xA0"
-        "b",
-        GetParam(), measured + 21, CssTextAlign::Left, hyphenate);
-    ASSERT_EQ(1u, lines.size());
-    ASSERT_EQ(3u, lines[0].words.size());
-    EXPECT_EQ(" ", lines[0].words[1]);
-    EXPECT_EQ(measured + 21, rightEdge(lines[0]));
-    layout(
-        "x a\xC2\xA0"
-        "b",
-        GetParam(), measured + 21, CssTextAlign::Left, hyphenate);
-    ASSERT_EQ(2u, lines.size());
-    EXPECT_EQ("a", lines[1].words.front());
-    EXPECT_EQ("b", lines[1].words.back());
-  }
+  layout(
+      "a\xC2\xA0"
+      "b",
+      GetParam(), measured + 21, CssTextAlign::Left);
+  ASSERT_EQ(1u, lines.size());
+  ASSERT_EQ(3u, lines[0].words.size());
+  EXPECT_EQ(" ", lines[0].words[1]);
+  EXPECT_EQ(measured + 21, rightEdge(lines[0]));
+  layout(
+      "x a\xC2\xA0"
+      "b",
+      GetParam(), measured + 21, CssTextAlign::Left);
+  ASSERT_EQ(2u, lines.size());
+  EXPECT_EQ("a", lines[1].words.front());
+  EXPECT_EQ("b", lines[1].words.back());
   layout(
       "a\xC2\xA0"
       "b c d e f g h i j k",
@@ -170,23 +162,21 @@ TEST_P(WordSpacing, NbspStaysAttachedAndScales) {
 }
 
 TEST_P(WordSpacing, CjkKeepsZeroWidthBoundariesAndFlushJustification) {
-  for (bool hyphenate : {false, true}) {
-    for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
-      layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", 100, 103, CssTextAlign::Justify, hyphenate, dots);
-      const auto unchanged = snapshot();
-      layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", GetParam(), 103, CssTextAlign::Justify, hyphenate, dots);
-      EXPECT_EQ(unchanged, snapshot());
-      ASSERT_GT(lines.size(), 1u);
-      for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_EQ(103, rightEdge(lines[i]));
-      EXPECT_TRUE(lines.back().dots.empty());
-    }
+  for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
+    layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", 100, 103, CssTextAlign::Justify, dots);
+    const auto unchanged = snapshot();
+    layout("天地玄黃宇宙洪荒日月盈昃辰宿列張", GetParam(), 103, CssTextAlign::Justify, dots);
+    EXPECT_EQ(unchanged, snapshot());
+    ASSERT_GT(lines.size(), 1u);
+    for (size_t i = 0; i + 1 < lines.size(); ++i) EXPECT_EQ(103, rightEdge(lines[i]));
+    EXPECT_TRUE(lines.back().dots.empty());
   }
 }
 
 TEST_P(WordSpacing, RtlAndBidiKeepFlushMargins) {
   for (bool rtl : {false, true}) {
     for (const char* text : {PROSE, "אחד two שלוש four חמש six שבע eight תשע ten אחד two שלוש four"}) {
-      layout(text, GetParam(), 200, CssTextAlign::Justify, false, GUIDE_DOTS_VISIBLE, rtl);
+      layout(text, GetParam(), 200, CssTextAlign::Justify, GUIDE_DOTS_VISIBLE, rtl);
       ASSERT_GT(lines.size(), 1u);
       for (size_t i = 0; i + 1 < lines.size(); ++i) {
         // The existing first-line indent reduces RTL's effective right edge.
@@ -206,16 +196,14 @@ TEST(WordSpacing, HundredPercentIsByteIdenticalToPreChangeLayout) {
                            "b c d e f g h i j k",
                            "天地玄黃宇宙洪荒日月盈昃辰宿列張", "אחד two שלוש four חמש six שבע eight תשע ten"}) {
     for (auto align : {CssTextAlign::Left, CssTextAlign::Right, CssTextAlign::Center, CssTextAlign::Justify}) {
-      for (bool hyphenate : {false, true}) {
-        for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
-          layout(text, 100, 203, align, hyphenate, dots, false, true);
-          bytes += snapshot() + "---\n";
-        }
+      for (uint8_t dots : {GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE, GUIDE_DOTS_HIDDEN}) {
+        layout(text, 100, 203, align, dots, false, true);
+        bytes += snapshot() + "---\n";
       }
     }
   }
   // Captured with this harness and ParsedText.cpp/.h from c9b81d375f7e5cd0b604b60e54121d79176b1d08.
-  // Only the old constructor's signature accepted an extra ignored argument; its layout code was unchanged.
+  // Retain only the non-hyphenating cases from that snapshot.
   std::ifstream baseline(WORD_SPACING_BASELINE);
   ASSERT_TRUE(baseline.good());
   const std::string expected{std::istreambuf_iterator<char>(baseline), std::istreambuf_iterator<char>()};
@@ -231,4 +219,14 @@ TEST(WordSpacing, InvalidPercentagesClampBeforeLayout) {
   const auto maximum = snapshot();
   layout("a b", 255, 200);
   EXPECT_EQ(maximum, snapshot());
+}
+
+TEST(WordSpacing, WordsStayWholeAndSoftHyphensStayInvisible) {
+  for (const char* text : {"extraordinary", "extra\xC2\xADordinary", "extra-ordinary"}) {
+    // A word wider than the column must not invoke the old fallback splitter.
+    layout(text, 100, 70);
+    ASSERT_EQ(1u, lines.size());
+    ASSERT_EQ(1u, lines[0].words.size());
+    EXPECT_EQ(std::string(text).find('-') == std::string::npos ? "extraordinary" : "extra-ordinary", lines[0].words[0]);
+  }
 }

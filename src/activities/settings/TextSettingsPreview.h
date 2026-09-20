@@ -22,7 +22,6 @@ struct PreviewKey {
   uint8_t alignment = 0xFF;
   bool extraParagraphSpacing = false;
   bool focusReading = false;
-  bool hyphenation = false;
   // Only the layout switch changes the sample: its stylesheet sets a first-line indent
   // and puts a centred heading on the page. The sample has no CSS-driven bold or italic,
   // so Embedded Text Style leaves the preview untouched.

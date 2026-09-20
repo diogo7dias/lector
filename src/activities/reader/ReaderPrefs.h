@@ -95,7 +95,8 @@ struct ReaderPrefs {
   uint8_t focusReadingEnabled = 0;
   uint8_t guideDotsEnabled = 0;  // middle dot between words (restored)
   uint8_t guideDotsHidden = 0;   // keep the widened guide-dot gap, draw no dot in it
-  uint8_t hyphenationEnabled = 0;
+  // Retired setting byte: preserve every later offset in v5-v14 binary sidecars.
+  uint8_t reserved14 = 0;
   uint8_t embeddedTextStyle = 1;
   uint8_t textAntiAliasing = 0;  // see CrossPointSettings: the grey fade per page is not worth it
   // Fed into the render spec (edited from the Reader settings category, snapshotted here).
@@ -215,6 +216,7 @@ inline constexpr uint8_t FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR = 11;
 // does carry its own layout switch: seeding it from the text switch there would throw
 // away a choice the reader made.
 inline void migrateReaderPrefsFields(const uint8_t version, ReaderPrefs& p, const bool layoutStyleAlreadyRead = false) {
+  p.reserved14 = 0;  // Canonical padding for whole-blob change detection.
   if (version == 5) p.fontPointSize = foldLegacyReaderFontSize(p.fontPointSize);
   if (!layoutStyleAlreadyRead && version < FIRST_VERSION_WITH_SPLIT_EMBEDDED_STYLE) {
     p.embeddedLayoutStyle = p.embeddedTextStyle;
@@ -272,7 +274,7 @@ static_assert(sizeof(ReaderPrefs) == READER_PREFS_V13_SIZE + 1,
               "this firmware misreads every sidecar written by the version before it");
 
 // ── The field lists cover the struct ──────────────────────────────────────────
-// Every byte of ReaderPrefs is either the fixed-width font name or a uint8_t named by
+// Every live byte of ReaderPrefs is either the fixed-width font name or a uint8_t named by
 // exactly one of the three lists in ReaderLookFields.h. That is what makes a missed
 // copier impossible: a field added to the struct and to no list fails this assert, and
 // a field added to two lists fails it as well.
@@ -285,7 +287,7 @@ inline constexpr size_t STATUS_BAR_FIELD_COUNT = 0 READER_STATUS_BAR_FIELDS(CP_C
 }  // namespace reader_look
 
 static_assert(reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT +
-                      sizeof(ReaderPrefs::sdFontFamilyName) ==
+                      sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14) ==
                   sizeof(ReaderPrefs),
               "every ReaderPrefs field must appear in exactly one list in ReaderLookFields.h, or "
               "some copier will silently drop it");

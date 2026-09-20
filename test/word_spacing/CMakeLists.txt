@@ -1,10 +1,6 @@
 add_executable(WordSpacingTest
   WordSpacingTest.cpp
   ${REPO_ROOT}/lib/Epub/Epub/ParsedText.cpp
-  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/Hyphenator.cpp
-  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/LanguageRegistry.cpp
-  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/LiangHyphenation.cpp
-  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/HyphenationCommon.cpp
   ${REPO_ROOT}/lib/MiniBidi/BidiUtils.cpp
   ${REPO_ROOT}/lib/MiniBidi/minibidi.c
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp

@@ -37,7 +37,6 @@ constexpr PresetField FIELDS[] = {
     {"focusReadingEnabled", &ReaderPrefs::focusReadingEnabled},
     {"guideDotsEnabled", &ReaderPrefs::guideDotsEnabled},
     {"guideDotsHidden", &ReaderPrefs::guideDotsHidden},
-    {"hyphenationEnabled", &ReaderPrefs::hyphenationEnabled},
     {"embeddedStyle", &ReaderPrefs::embeddedTextStyle},
     {"embeddedLayoutStyle", &ReaderPrefs::embeddedLayoutStyle},
     {"textAntiAliasing", &ReaderPrefs::textAntiAliasing},

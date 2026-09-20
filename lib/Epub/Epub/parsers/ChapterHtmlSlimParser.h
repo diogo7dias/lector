@@ -91,7 +91,6 @@ class ChapterHtmlSlimParser {
   uint8_t paragraphAlignment;
   uint16_t viewportWidth;
   uint16_t viewportHeight;
-  bool hyphenationEnabled;
   bool focusReadingEnabled;
   uint8_t guideDotsMode;  // GuideDotsMode: off / visible dots / hidden dots (gap only)
   uint8_t firstLineIndentMode;
@@ -234,12 +233,11 @@ class ChapterHtmlSlimParser {
       Epub* epub, const std::string& filepath, GfxRenderer& renderer, const int fontId, const float lineCompression,
       const bool extraParagraphSpacing, const uint8_t paragraphSpacing, const uint8_t wordSpacing,
       const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
-      const bool hyphenationEnabled, const bool focusReadingEnabled, const uint8_t guideDotsMode,
-      const uint8_t firstLineIndentMode, const uint8_t firstLineIndentPercent, const PageCompleteFn completePageFn,
-      void* const completePageCtx, const bool embeddedTextStyle, const bool embeddedLayoutStyle,
-      const std::string& contentBase, const std::string& imageBasePath, const uint8_t imageRendering = 0,
-      std::vector<uint64_t> tocAnchors = {}, const PopupFn popupFn = nullptr, void* const popupCtx = nullptr,
-      const CssParser* cssParser = nullptr)
+      const bool focusReadingEnabled, const uint8_t guideDotsMode, const uint8_t firstLineIndentMode,
+      const uint8_t firstLineIndentPercent, const PageCompleteFn completePageFn, void* const completePageCtx,
+      const bool embeddedTextStyle, const bool embeddedLayoutStyle, const std::string& contentBase,
+      const std::string& imageBasePath, const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
+      const PopupFn popupFn = nullptr, void* const popupCtx = nullptr, const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
@@ -252,7 +250,6 @@ class ChapterHtmlSlimParser {
         paragraphAlignment(paragraphAlignment),
         viewportWidth(viewportWidth),
         viewportHeight(viewportHeight),
-        hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         guideDotsMode(guideDotsMode),
         firstLineIndentMode(firstLineIndentMode),

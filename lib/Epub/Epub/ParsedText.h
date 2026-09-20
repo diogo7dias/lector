@@ -40,7 +40,7 @@ class ParsedText {
   std::vector<bool> wordContinues;
   std::vector<bool> wordNoSpaceBefore;
   // Focus Reading emphasis: bytes [0, wordFocusBoundary) render bold, the rest at wordStyles.
-  // 0 = none. An annotation rather than a token split, so the hyphenator and line breaker still
+  // 0 = none. An annotation rather than a token split, so the line breaker still
   // see whole words; TextBlock stores emphasis the same way, so extractLine passes it through.
   std::vector<uint8_t> wordFocusBoundary;
   // Zero-based visible Unicode-codepoint offsets in the spine body, stored as
@@ -57,7 +57,6 @@ class ParsedText {
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
   bool extraParagraphSpacing;
-  bool hyphenationEnabled;
   bool focusReadingEnabled;
   // Guide Dots (LTR paragraphs only): GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE (widened gap
   // with a middle dot in it) or GUIDE_DOTS_HIDDEN (the same widened gap, no dot drawn).
@@ -88,7 +87,6 @@ class ParsedText {
   uint32_t visibleOffsetBaseAt(size_t wordIndex) const;
   uint32_t visibleOffsetAt(size_t wordIndex) const;
   void pushVisibleOffset(uint32_t offset);
-  void insertVisibleOffset(size_t wordIndex, uint32_t offset);
   void eraseVisibleOffsetPrefix(size_t count);
   // Space a ruby annotation needs beyond its base word, on each side of the line. Layout
   // reserves it so the centered annotation cannot spill past the margin; the renderer then
@@ -100,11 +98,6 @@ class ParsedText {
   std::vector<size_t> computeLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
                                         std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
                                         std::vector<bool>& noSpaceBeforeVec);
-  std::vector<size_t> computeHyphenatedLineBreaks(const GfxRenderer& renderer, int fontId, int pageWidth,
-                                                  std::vector<uint16_t>& wordWidths, std::vector<bool>& continuesVec,
-                                                  std::vector<bool>& noSpaceBeforeVec);
-  bool hyphenateWordAtIndex(size_t wordIndex, int availableWidth, const GfxRenderer& renderer, int fontId,
-                            std::vector<uint16_t>& wordWidths, bool allowFallbackBreaks);
   void extractLine(size_t breakIndex, int pageWidth, const std::vector<uint16_t>& wordWidths,
                    const std::vector<bool>& continuesVec, const std::vector<bool>& noSpaceBeforeVec,
                    const std::vector<size_t>& lineBreakIndices, LineSinkFn processLine, void* processLineCtx,
@@ -112,13 +105,12 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
-  explicit ParsedText(const bool extraParagraphSpacing, const bool hyphenationEnabled = false,
-                      const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,
-                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t firstLineIndentMode = 0,
-                      const uint8_t firstLineIndentPercent = 0, const uint8_t wordSpacing = 100)
+  explicit ParsedText(const bool extraParagraphSpacing, const bool focusReadingEnabled = false,
+                      const uint8_t guideDotsMode = GUIDE_DOTS_OFF, const BlockStyle& blockStyle = BlockStyle(),
+                      const uint8_t firstLineIndentMode = 0, const uint8_t firstLineIndentPercent = 0,
+                      const uint8_t wordSpacing = 100)
       : blockStyle(blockStyle),
         extraParagraphSpacing(extraParagraphSpacing),
-        hyphenationEnabled(hyphenationEnabled),
         focusReadingEnabled(focusReadingEnabled),
         guideDotsMode(guideDotsMode),
         wordSpacing(std::clamp<uint8_t>(wordSpacing, 75, 150)),
