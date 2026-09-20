@@ -1069,6 +1069,8 @@ connection. Attach that file to any bug report.
 `lector-flash-diagnostics.txt` at the root of the card: every install attempt from the card or
 over the air, where it stopped and at which byte, the battery and memory at the time, the
 partition table and boot record, the boot after an install, and any crash or watchdog restart.
+It also records Wi-Fi connection progress, so a stall at **Connecting...** leaves evidence
+even before an update starts. Leave it for two minutes, then send the same file.
 Send that whole file. It names no book, network or device. It is kept to the last two days and a
 few kilobytes, and the web interface home page links to it (the *Diagnostics* link).
 

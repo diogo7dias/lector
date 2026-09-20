@@ -91,6 +91,26 @@ class WifiSelectionActivity final : public UiStatusActivity {
 
   /** Hands the session everything the radio has to say, then runs what it asks for. */
   void pumpSession();
+  // Fixed-size diagnostics only: no task, timer, or extra heap buffer.
+  void checkpoint(const char* phase, bool boundary = true);
+  void observeStatus(int status);
+  uint32_t loopCount = 0;
+  uint32_t lastLoopMs = 0;
+  uint32_t maxLoopGapMs = 0;
+  uint32_t lastCheckpointMs = 0;
+  uint32_t checkpointWrites = 0;
+  uint32_t statusPolls = 0;
+  uint32_t statusChanges = 0;
+  uint32_t statusSinceMs = 0;
+  uint32_t statusLastMs = 0;
+  uint32_t statusSeenMask = 0;
+  uint32_t statusDwellMs[9] = {};  // 0..6, STOPPED(254), NO_SHIELD(255)
+  int lastStatus = -1;
+  uint32_t joinFreeHeap = 0;
+  uint32_t joinLargestHeap = 0;
+  int rawScanCount = -1;
+  int lastAction = -1;
+  bool actionRunning = false;
   void runAction(const wifi_session::Action& action);
   void pollRadio();
   void rebuildNetworkView();

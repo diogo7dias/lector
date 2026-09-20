@@ -1,15 +1,78 @@
 #include "WifiSession.h"
 
+#include <DiagLog.h>
+
 #include <algorithm>
 #include <cstring>
 
 namespace wifi_session {
+
+const char* WifiSession::stateName(const State state) {
+  switch (state) {
+    case State::AUTO_CONNECTING:
+      return "AUTO_CONNECTING";
+    case State::SCANNING:
+      return "SCANNING";
+    case State::NETWORK_LIST:
+      return "NETWORK_LIST";
+    case State::CONNECTING:
+      return "CONNECTING";
+    case State::CONNECTED:
+      return "CONNECTED";
+    case State::FAILED:
+      return "FAILED";
+  }
+  return "unknown";
+}
+
+void WifiSession::setState(const State state) {
+  if (state == state_) return;
+  diaglog::note("  t=%u state %s -> %s previous_ms=%u", clockMs_, stateName(state_), stateName(state),
+                clockMs_ - stateSinceMs_);
+  state_ = state;
+  stateSinceMs_ = clockMs_;
+  ++transitions_;
+}
+
+void WifiSession::noteDiagnostics(const uint32_t nowMs) const {
+  if (!begun_) {
+    diaglog::note("  t=%u session=not_started state=%s", nowMs, stateName(state_));
+    return;
+  }
+  diaglog::note("  t=%u state=%s since=%u transitions=%u joins=%u scans=%u fired=%u", nowMs, stateName(state_),
+                stateSinceMs_, transitions_, joins_, scans_, timeouts_);
+  diaglog::note("  nextAction/checkTimeouts=%u last=%u age_ms=%u max_gap_ms=%u queued=%u auto_tried=%u", drains_,
+                lastDrainMs_, nowMs - lastDrainMs_, maxDrainGapMs_, static_cast<unsigned>(pending_.size()),
+                static_cast<unsigned>(autoAttemptedSsids_.size()));
+  if (joins_ != 0) {
+    diaglog::note("  last_join auto=%d saved=%d at=%u target_index=%d strongest_rssi=%d scan_count=%d target_seen=%d",
+                  lastJoinAutomatic_, lastJoinSaved_, joinStartedMs_, targetIndex_, targetRssi_, scanCount_,
+                  scannedTarget_);
+  } else {
+    diaglog::note("  last_join=none");
+  }
+  const bool joining = !joiningSsid_.empty() && (state_ == State::CONNECTING || state_ == State::AUTO_CONNECTING);
+  const bool scanning = state_ == State::SCANNING || (state_ == State::AUTO_CONNECTING && joiningSsid_.empty());
+  const uint32_t budget =
+      joining ? (state_ == State::AUTO_CONNECTING ? AUTO_JOIN_TIMEOUT_MS : JOIN_TIMEOUT_MS) : SCAN_TIMEOUT_MS;
+  const uint32_t started = joining ? joinStartedMs_ : scanStartedMs_;
+  diaglog::note("  timer=%s budget=%u armed=%u expires=%u elapsed=%u due=%d",
+                joining    ? "join"
+                : scanning ? "scan"
+                           : "off",
+                budget, started, started + budget, nowMs - started, (joining || scanning) && nowMs - started >= budget);
+}
 
 void WifiSession::queue(const ActionKind kind, const std::string& ssid) {
   Action action;
   action.kind = kind;
   action.ssid = ssid;
   pending_.push_back(action);
+  if (kind == ActionKind::START_SCAN) {
+    ++scans_;
+    diaglog::note("  t=%u scan arm budget=%u expires=%u scan=%u", clockMs_, SCAN_TIMEOUT_MS, clockMs_ + SCAN_TIMEOUT_MS,
+                  scans_);
+  }
 }
 
 void WifiSession::checkTimeouts(const uint32_t nowMs) {
@@ -17,8 +80,10 @@ void WifiSession::checkTimeouts(const uint32_t nowMs) {
   if (scanning && nowMs - scanStartedMs_ >= SCAN_TIMEOUT_MS) {
     // A scan that answers neither way leaves the reader looking at an empty list
     // rather than at a spinner that never stops.
+    ++timeouts_;
+    diaglog::note("  t=%u timeout fired scan elapsed=%u", nowMs, nowMs - scanStartedMs_);
     networks_.clear();
-    state_ = State::NETWORK_LIST;
+    setState(State::NETWORK_LIST);
     return;
   }
 
@@ -33,6 +98,9 @@ void WifiSession::checkTimeouts(const uint32_t nowMs) {
     return;
   }
 
+  ++timeouts_;
+  diaglog::note("  t=%u timeout fired %s budget=%u elapsed=%u", nowMs, automatic ? "auto" : "manual", budget,
+                nowMs - joinStartedMs_);
   joiningSsid_.clear();
   if (automatic) {
     queue(ActionKind::DISCONNECT);
@@ -41,11 +109,14 @@ void WifiSession::checkTimeouts(const uint32_t nowMs) {
     return;
   }
   queue(ActionKind::DISCONNECT);
-  state_ = State::FAILED;
+  setState(State::FAILED);
 }
 
 bool WifiSession::nextAction(const uint32_t nowMs, Action& action) {
   clockMs_ = nowMs;
+  if (drains_ != 0) maxDrainGapMs_ = std::max(maxDrainGapMs_, nowMs - lastDrainMs_);
+  lastDrainMs_ = nowMs;
+  ++drains_;
   checkTimeouts(nowMs);
   if (pending_.empty()) {
     return false;
@@ -59,11 +130,36 @@ void WifiSession::queueJoin(const std::string& ssid, const bool useSavedPassword
   joiningSsid_ = ssid;
   activeSsid_ = ssid;
   joinStartedMs_ = clockMs_;
+  ++joins_;
+  const uint32_t budget = state_ == State::AUTO_CONNECTING ? AUTO_JOIN_TIMEOUT_MS : JOIN_TIMEOUT_MS;
+  diaglog::note("  t=%u join=%u mode=%s saved=%d budget=%u expires=%u", clockMs_, joins_,
+                state_ == State::AUTO_CONNECTING ? "auto" : "manual", useSavedPassword, budget, clockMs_ + budget);
+  lastJoinAutomatic_ = state_ == State::AUTO_CONNECTING;
+  lastJoinSaved_ = useSavedPassword;
+  targetIndex_ = -1;
+  targetRssi_ = 0;
+  for (size_t i = 0; i < networks_.size(); ++i) {
+    if (ssid == networks_[i].ssid) {
+      targetIndex_ = static_cast<int>(i);
+      targetRssi_ = networks_[i].rssi;
+      break;
+    }
+  }
+  scannedTarget_ = targetIndex_ >= 0 ? 1 : scanCount_ < 0 ? -1 : 0;
   queue(ActionKind::JOIN, ssid);
   pending_.back().useSavedPassword = useSavedPassword;
 }
 
 void WifiSession::begin(const Startup& startup, const uint32_t nowMs) {
+  begun_ = true;
+  stateSinceMs_ = nowMs;
+  scanCount_ = scannedTarget_ = targetIndex_ = -1;
+  targetRssi_ = 0;
+  lastJoinAutomatic_ = lastJoinSaved_ = false;
+  transitions_ = drains_ = maxDrainGapMs_ = joins_ = scans_ = timeouts_ = 0;
+  lastDrainMs_ = nowMs;
+  diaglog::note("  t=%u session begin state=%s auto_allowed=%d saved_count=%u", nowMs, stateName(state_),
+                startup.allowAutoConnect, static_cast<unsigned>(startup.savedSsids.size()));
   startup_ = startup;
   clockMs_ = nowMs;
   scanStartedMs_ = nowMs;
@@ -75,15 +171,15 @@ void WifiSession::begin(const Startup& startup, const uint32_t nowMs) {
 
   const bool canAutoConnect = startup_.allowAutoConnect && !startup_.savedSsids.empty();
   if (canAutoConnect && isSaved(startup_.lastConnectedSsid.c_str())) {
-    state_ = State::AUTO_CONNECTING;
+    setState(State::AUTO_CONNECTING);
     autoAttemptedSsids_.push_back(startup_.lastConnectedSsid);
     queueJoin(startup_.lastConnectedSsid, true);
     return;
   }
 
-  state_ = State::SCANNING;
+  setState(State::SCANNING);
   if (canAutoConnect) {
-    state_ = State::AUTO_CONNECTING;
+    setState(State::AUTO_CONNECTING);
   }
   queue(ActionKind::START_SCAN);
 }
@@ -111,9 +207,10 @@ bool WifiSession::tryNextSavedNetworkFromScan() {
 
 void WifiSession::onJoinFailed(const uint32_t nowMs) {
   clockMs_ = nowMs;
+  diaglog::note("  t=%u join failed (radio)", nowMs);
   joiningSsid_.clear();
   if (state_ != State::AUTO_CONNECTING) {
-    state_ = State::FAILED;
+    setState(State::FAILED);
     return;
   }
 
@@ -131,7 +228,7 @@ void WifiSession::joinOrAskForPassword(const std::string& ssid, const bool hasSa
     queue(ActionKind::ASK_FOR_PASSWORD, activeSsid_);
     return;
   }
-  state_ = State::CONNECTING;
+  setState(State::CONNECTING);
   queueJoin(ssid, hasSavedPassword);
 }
 
@@ -155,15 +252,16 @@ void WifiSession::selectHiddenNetwork(const std::string& ssid, const uint32_t no
 }
 
 void WifiSession::startScan(const uint32_t nowMs) {
-  state_ = State::SCANNING;
+  setState(State::SCANNING);
   scanStartedMs_ = nowMs;
   queue(ActionKind::START_SCAN);
 }
 
 void WifiSession::onScanFailed(const uint32_t nowMs) {
   clockMs_ = nowMs;
+  diaglog::note("  t=%u scan failed (radio)", nowMs);
   networks_.clear();
-  state_ = State::NETWORK_LIST;
+  setState(State::NETWORK_LIST);
 }
 
 void WifiSession::showNetworkList(const uint32_t nowMs) {
@@ -200,7 +298,7 @@ void WifiSession::dismissFailure(const uint32_t nowMs) {
   // Back to the list, whatever failed. A failure is usually the router, not the
   // password, and offering to delete the credential every time trains the reader
   // to throw away a working password over a passing failure.
-  state_ = State::NETWORK_LIST;
+  setState(State::NETWORK_LIST);
 }
 
 void WifiSession::cancel(const uint32_t nowMs) {
@@ -211,19 +309,19 @@ void WifiSession::cancel(const uint32_t nowMs) {
 void WifiSession::abandonPasswordEntry(const uint32_t nowMs) {
   clockMs_ = nowMs;
   typedPasswordPending_ = false;
-  state_ = State::NETWORK_LIST;
+  setState(State::NETWORK_LIST);
 }
 
 void WifiSession::onPasswordEntered(const uint32_t nowMs) {
   clockMs_ = nowMs;
-  state_ = State::CONNECTING;
+  setState(State::CONNECTING);
   queueJoin(activeSsid_, false);
 }
 
 void WifiSession::onJoinSucceeded(const uint32_t nowMs) {
   clockMs_ = nowMs;
   joiningSsid_.clear();
-  state_ = State::CONNECTED;
+  setState(State::CONNECTED);
   if (typedPasswordPending_) {
     offersToSave_ = true;
     return;
@@ -254,6 +352,15 @@ bool WifiSession::isSaved(const char* ssid) const {
 
 void WifiSession::onScanResults(const Network* found, const size_t count, const uint32_t nowMs) {
   clockMs_ = nowMs;
+  bool targetSeen = false;
+  for (size_t i = 0; i < count; ++i)
+    if (activeSsid_ == found[i].ssid) targetSeen = true;
+  scanCount_ = static_cast<int>(count);
+  scannedTarget_ = activeSsid_.empty() ? -1 : targetSeen ? 1 : 0;
+  diaglog::note("  t=%u scan results=%u previous_target=%s", nowMs, static_cast<unsigned>(count),
+                activeSsid_.empty() ? "none"
+                : targetSeen        ? "present"
+                                    : "absent");
   networks_.clear();
   for (size_t i = 0; i < count; ++i) {
     const Network& sighting = found[i];
@@ -286,7 +393,7 @@ void WifiSession::onScanResults(const Network* found, const size_t count, const 
     return;
   }
   if (state_ == State::SCANNING || state_ == State::AUTO_CONNECTING) {
-    state_ = State::NETWORK_LIST;
+    setState(State::NETWORK_LIST);
   }
 }
 

@@ -1,3 +1,4 @@
+#include <DiagLog.h>
 #include <gtest/gtest.h>
 
 #include <vector>
@@ -472,6 +473,70 @@ TEST(WifiSessionScan, DoesNotAutoJoinFromScanWhenAutoConnectDisabled) {
   EXPECT_EQ(actions[0].kind, wifi_session::ActionKind::JOIN);
   EXPECT_EQ(actions[0].ssid, "home");
   EXPECT_TRUE(actions[0].useSavedPassword);
+}
+
+// Exercise the file-producing diagnostics, including a clock wrap and a stopped
+// drain. No radio or secret is needed to distinguish an overdue timer from one
+// actually evaluated and fired.
+TEST(WifiSessionDiagnostics, UndrainedAutomaticJoinThenTimeoutAndExhaustion) {
+  for (const uint32_t start : {1000u, UINT32_MAX - 1000u}) {
+    diaglog::clear();
+    WifiSession session;
+    wifi_session::Startup startup;
+    startup.savedSsids = {"PRIVATE_NETWORK"};
+    startup.lastConnectedSsid = "PRIVATE_NETWORK";
+    session.begin(startup, start);
+    drain(session, start);
+    std::string trace(diaglog::data(), diaglog::size());
+    EXPECT_NE(trace.find("SCANNING -> AUTO_CONNECTING"), std::string::npos);
+    EXPECT_NE(trace.find("mode=auto saved=1 budget=7000"), std::string::npos);
+    EXPECT_EQ(trace.find("PRIVATE_NETWORK"), std::string::npos);
+
+    diaglog::clear();
+    session.noteDiagnostics(start + 8000);
+    trace.assign(diaglog::data(), diaglog::size());
+    EXPECT_NE(trace.find("nextAction/checkTimeouts=2"), std::string::npos);
+    EXPECT_NE(trace.find("age_ms=8000"), std::string::npos);
+    EXPECT_NE(trace.find("elapsed=8000 due=1"), std::string::npos);
+    EXPECT_NE(trace.find("fired=0"), std::string::npos);
+    drain(session, start + 8000);
+    trace.assign(diaglog::data(), diaglog::size());
+    EXPECT_NE(trace.find("timeout fired auto budget=7000 elapsed=8000"), std::string::npos);
+
+    diaglog::clear();
+    const auto network = seen("PRIVATE_NETWORK", -42);
+    session.onScanResults(&network, 1, start + 8100);
+    session.noteDiagnostics(start + 8100);
+    trace.assign(diaglog::data(), diaglog::size());
+    EXPECT_NE(trace.find("AUTO_CONNECTING -> NETWORK_LIST"), std::string::npos);
+    EXPECT_NE(trace.find("joins=1 scans=1 fired=1"), std::string::npos);
+    EXPECT_NE(trace.find("scan_count=1 target_seen=1"), std::string::npos);
+    EXPECT_EQ(trace.find("PRIVATE_NETWORK"), std::string::npos);
+  }
+}
+
+TEST(WifiSessionDiagnostics, ManualJoinKeepsStrongestTargetAndFailureInSnapshot) {
+  WifiSession session;
+  session.begin({}, 100);
+  drain(session, 100);
+  const std::vector<Network> found = {seen("PRIVATE_NETWORK", -80, false), seen("PRIVATE_NETWORK", -35, false)};
+  session.onScanResults(found.data(), found.size(), 200);
+  diaglog::clear();
+  session.selectNetwork(0, 300);
+  drain(session, 300);
+  std::string trace(diaglog::data(), diaglog::size());
+  EXPECT_NE(trace.find("mode=manual saved=0 budget=15000 expires=15300"), std::string::npos);
+  drain(session, 15300);
+  trace.assign(diaglog::data(), diaglog::size());
+  EXPECT_NE(trace.find("timeout fired manual budget=15000 elapsed=15000"), std::string::npos);
+  EXPECT_NE(trace.find("CONNECTING -> FAILED"), std::string::npos);
+  // After old entries have rolled away, a heartbeat still explains the attempt.
+  diaglog::clear();
+  session.noteDiagnostics(600300);
+  trace.assign(diaglog::data(), diaglog::size());
+  EXPECT_NE(trace.find("state=FAILED since=15300"), std::string::npos);
+  EXPECT_NE(trace.find("target_index=0 strongest_rssi=-35 scan_count=2 target_seen=1"), std::string::npos);
+  EXPECT_EQ(trace.find("PRIVATE_NETWORK"), std::string::npos);
 }
 
 }  // namespace
