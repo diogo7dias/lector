@@ -233,6 +233,7 @@ class SettingsActivity final : public UiGridActivity {
    */
   void shareCredentials();
   void rebuildSettingsList();
+  void startDownloadActivity(std::unique_ptr<Activity> activity);
   // The active category's rows, with its group headings dropped: a cell names itself, and
   // a heading band would cost a whole grid row to repeat what the order already says.
   void selectCategory(int index);

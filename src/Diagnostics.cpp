@@ -280,6 +280,18 @@ void recordTlsGate(const char* step, const uint32_t freeHeap, const uint32_t lar
   diaglog::note("  scratch free=%u largest=%u", static_cast<unsigned>(poolFree), static_cast<unsigned>(poolBlock));
 }
 
+void recordHeapReclaim(const char* step, const uint32_t before, const uint32_t after, const size_t capacity,
+                       const size_t elementSize) {
+  char fields[64];
+  snprintf(fields, sizeof(fields), "session=%04x step=%s", session(), step);
+  begin("heap reclaim", fields);
+  diaglog::note("  free_before=%u free_after=%u delta=%d", static_cast<unsigned>(before), static_cast<unsigned>(after),
+                static_cast<int>(after) - static_cast<int>(before));
+  diaglog::note("  capacity=%u element=%u vector_bytes=%u", static_cast<unsigned>(capacity),
+                static_cast<unsigned>(elementSize), static_cast<unsigned>(capacity * elementSize));
+  diaglog::markPending();
+}
+
 void beginWifiCheckpoint() {
   char fields[32];
   snprintf(fields, sizeof(fields), "session=%04x", session());

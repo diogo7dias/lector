@@ -80,6 +80,10 @@ void recordOtaFailure(const char* step, const char* error, const char* screenLin
 void recordTlsGate(const char* step, uint32_t freeHeap, uint32_t largestBlock, bool framebufferLent, uint32_t floorFree,
                    uint32_t floorBlock, bool allowed, uint32_t poolFree, uint32_t poolBlock);
 
+// RAM only. Signed heap delta includes allocator overhead and concurrent heap
+// activity; vector payload is separately calculated from capacity * element size.
+void recordHeapReclaim(const char* step, uint32_t before, uint32_t after, size_t capacity = 0, size_t elementSize = 0);
+
 // Writes the buffer to the card, applying retention (lib/DiagLog): header,
 // surviving old entries, then the buffered lines. No-op when nothing is
 // buffered or the card is not mounted.
