@@ -75,6 +75,7 @@ class NearbyFileTransferActivity final : public UiStatusActivity {
   void onChoiceActivated(int index) override;
 
  private:
+  mutable std::array<const char*, 3> chooseLabels{};
   void pumpRadio();
   void runSessionActions();
   bool sendPacket(freeink::nearby::PacketType type, const std::array<uint8_t, 6>& peerMac, uint32_t sequence,

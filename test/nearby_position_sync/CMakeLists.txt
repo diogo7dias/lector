@@ -1,6 +1,7 @@
 add_executable(NearbyPositionSyncTest
   NearbyPositionProtocolTest.cpp
   NearbyPositionSessionTest.cpp
+  NearbyPositionReceiveTest.cpp
   ${REPO_ROOT}/lib/NearbyPositionSync/NearbyPositionProtocol.cpp
   ${REPO_ROOT}/lib/NearbyPositionSync/NearbyPositionSession.cpp
 )

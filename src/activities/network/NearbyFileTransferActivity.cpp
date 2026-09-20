@@ -18,6 +18,7 @@
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
 #include "activities/ActivityManager.h"
+#include "activities/reader/NearbyPositionReceiveActivity.h"
 #include "activities/reader/ProgressFile.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
@@ -825,7 +826,9 @@ UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
   if (mode == Mode::Choose) {
     view.title = tr(STR_NEARBY_SYNC);
     view.sections[0].paragraph = tr(STR_NEARBY_SEND_HINT);
-    view.choices = {tr(STR_NEARBY_RECEIVE), tr(STR_NEARBY_SEND)};
+    chooseLabels = {tr(STR_NEARBY_RECEIVE_POSITION), tr(STR_NEARBY_RECEIVE_FILE), tr(STR_NEARBY_SEND)};
+    view.choiceList = chooseLabels.data();
+    view.choiceListCount = chooseLabels.size();
     view.confirmHint = tr(STR_SELECT);
     return view;
   }
@@ -889,9 +892,16 @@ UiStatusActivity::StatusView NearbyFileTransferActivity::statusView() const {
 void NearbyFileTransferActivity::onChoiceActivated(const int index) {
   if (mode == Mode::Choose) {
     if (index == 0) {
+      auto receive = makeUniqueNoThrow<NearbyPositionReceiveActivity>(renderer, mappedInput);
+      if (!receive) {
+        LOG_ERR(LOG_TAG, "OOM: position receiver");
+        return;
+      }
+      activityManager.replaceActivity(std::move(receive));
+    } else if (index == 1) {
       activityManager.replaceActivity(
           std::make_unique<NearbyFileTransferActivity>(renderer, mappedInput, Mode::Receive));
-    } else if (index == 1) {
+    } else if (index == 2) {
       activityManager.goToFileBrowser();
     }
     return;
