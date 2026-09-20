@@ -412,8 +412,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
   currentTextBlock =
-      makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, hyphenationEnabled, focusReadingEnabled, guideDotsMode,
-                                    blockStyle, firstLineIndentMode, firstLineIndentPercent, wordSpacing);
+      makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, focusReadingEnabled, guideDotsMode, blockStyle,
+                                    firstLineIndentMode, firstLineIndentPercent, wordSpacing);
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText");
     return;
@@ -899,8 +899,8 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
 
     self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
-        self->extraParagraphSpacing, self->hyphenationEnabled, self->focusReadingEnabled, self->guideDotsMode,
-        tableCellBlockStyle, self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+        self->extraParagraphSpacing, self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle,
+        self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
       self->skipUntilDepth = self->depth;
@@ -1587,9 +1587,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   if (!self->currentTextBlock) {
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
-        self->extraParagraphSpacing, self->hyphenationEnabled, self->focusReadingEnabled, self->guideDotsMode,
-        flowStyle, self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->focusReadingEnabled,
+                                                           self->guideDotsMode, flowStyle, self->firstLineIndentMode,
+                                                           self->firstLineIndentPercent, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
       return;
@@ -1658,9 +1658,7 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
     //     [2] "Quadratkilometer"  continues=true   (attaches to " ", no gap)
     //
     //   The continuation flags prevent the line-breaker from inserting a line break
-    //   between "200" and "Quadratkilometer". However, "Quadratkilometer" is now a
-    //   standalone word for hyphenation purposes, so Liang patterns can produce
-    //   "200 Quadrat-" / "kilometer" instead of the unusable "200" / "Quadratkilometer".
+    //   between "200" and "Quadratkilometer".
     if (static_cast<uint8_t>(s[i]) == 0xC2 && i + 1 < len && static_cast<uint8_t>(s[i + 1]) == 0xA0) {
       if (self->partWordBufferIndex > 0) {
         self->flushPartWordBuffer();
@@ -1943,9 +1941,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
-        self->extraParagraphSpacing, self->hyphenationEnabled, self->focusReadingEnabled, self->guideDotsMode,
-        flowStyle, self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->focusReadingEnabled,
+                                                           self->guideDotsMode, flowStyle, self->firstLineIndentMode,
+                                                           self->firstLineIndentPercent, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block after table");
     }

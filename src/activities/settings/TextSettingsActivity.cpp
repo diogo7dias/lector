@@ -203,7 +203,6 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
       break;
   }
 
-  rows.push_back(Row::Hyphenation);
   rows.push_back(Row::FocusReading);
 
   rows.push_back(Row::GuideDots);
@@ -260,8 +259,6 @@ StrId TextSettingsActivity::rowNameId(const Row row) const {
       return StrId::STR_GUIDE_DOTS;
     case Row::HiddenDots:
       return StrId::STR_HIDDEN_DOTS;
-    case Row::Hyphenation:
-      return StrId::STR_HYPHENATION;
     case Row::EmbeddedTextStyle:
       return StrId::STR_EMBEDDED_TEXT_STYLE;
     case Row::EmbeddedLayoutStyle:
@@ -405,8 +402,6 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
       return onOff(SETTINGS.guideDotsEnabled);
     case Row::HiddenDots:
       return onOff(SETTINGS.guideDotsHidden);
-    case Row::Hyphenation:
-      return onOff(SETTINGS.hyphenationEnabled);
     case Row::EmbeddedTextStyle:
       return onOff(SETTINGS.embeddedTextStyle);
     case Row::EmbeddedLayoutStyle:
@@ -568,9 +563,6 @@ void TextSettingsActivity::activateRow(const Row row) {
       break;
     case Row::HiddenDots:
       SETTINGS.guideDotsHidden = !SETTINGS.guideDotsHidden;
-      break;
-    case Row::Hyphenation:
-      SETTINGS.hyphenationEnabled = !SETTINGS.hyphenationEnabled;
       break;
     case Row::EmbeddedTextStyle:
       SETTINGS.embeddedTextStyle = !SETTINGS.embeddedTextStyle;

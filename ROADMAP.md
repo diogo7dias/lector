@@ -57,11 +57,6 @@ flash.
 * Better font support and custom fonts.
 * UI languages and localization.
 * Moving themes off-firmware to SD-loaded assets (see SCOPE.md Section 6).
-* **Moving hyphenation files off-firmware.** Hyphenation rules vary per language and the files are large (German
-  alone is ~200KB). Today these eat flash budget that should be available for the reader core. The plan is to build
-  a downloader analogous to the existing font downloader and store the dictionaries on SD / SPIFFS, loading on
-  demand. This unlocks better hyphenation for long-word languages (German, Finnish, Norwegian, etc.) without paying
-  the flash cost up front.
 
 This phase depends on Phase 1 cleanup landing first; otherwise we generalize a moving target.
 

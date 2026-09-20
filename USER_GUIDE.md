@@ -878,7 +878,6 @@ other numbers in Settings use the same band.
   of each dot, keeping the dot the same size. Changing it re-paginates the book.
 - **Guide Dots** — draws a middle dot in a widened gap between words.
 - **Hidden Dots** — only listed while Guide Dots is on: keeps the widened gaps and draws no dot in them.
-- **Hyphenation**.
 - **Extra Paragraph Spacing** — space between paragraphs instead of a first-line indent.
   When a nested block ends, the enclosing block's top and bottom spacing is not added again.
 - **Text Anti-Aliasing** — smoother edges, slightly slower page turns.

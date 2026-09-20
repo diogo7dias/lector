@@ -476,7 +476,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
-  uint8_t hyphenationEnabled = 0;
 
   // Reader screen margins. screenMargin is the horizontal (left/right) margin, shared by
   // both sides. The vertical margins always live in screenMarginTop/Bottom;

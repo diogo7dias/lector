@@ -25,7 +25,7 @@ During this period, the priorities are:
 * **Memory footprint:** Reducing DRAM usage and heap fragmentation. The ESP32-C3 is the tightest target and sets the ceiling, but the gains benefit every ESP32 variant we run on. 
 * **Flash footprint:** Trimming binary size to leave room for additional device targets and features. 
 * **Code cleanup:** Refactoring, removing dead code, tightening abstractions, and improving readability. 
-* **Reading experience:** EPUB parsing and rendering, typography, hyphenation, line spacing, font handling, and legibility improvements.
+* **Reading experience:** EPUB parsing and rendering, typography, line spacing, font handling, and legibility improvements.
 
 ### Temporarily Closed Areas
 
@@ -43,7 +43,7 @@ If you are unsure whether your idea falls into one of these categories, open a D
 *Features that directly improve the core reading experience or the firmware's maintainability.*
 
 * **EPUB Rendering & Optimization:** Improvements to the rendering engine, CSS/image handling, and parsing performance. 
-* **Typography & Legibility:** Custom font support, hyphenation, line and paragraph spacing, margins. 
+* **Typography & Legibility:** Custom font support, line and paragraph spacing, margins.
 * **E-Ink Driver Refinement:** Reducing full-screen flashes (ghosting management) and improving general rendering. 
 * **Reading UX:** Bookmarks, progress tracking, button mapping, page navigation, and other in-reader interactions. 
 * **Library Management:** Simple, intuitive ways to organize and navigate a local book collection. 

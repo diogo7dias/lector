@@ -13,10 +13,9 @@
 // coordinates, and it is self-validating — either the text is on this page or
 // nothing is drawn.
 //
-// Comparison ignores every space and every hyphen on both sides. Hyphenation
-// inserts a token when a word is broken across lines (ParsedText splits
-// "example" into "exam-" + "ple"), so a quote saved with one hyphenation
-// setting must still match the same passage laid out with another.
+// Comparison ignores every space and every hyphen on both sides. Quotes saved by
+// older firmware may contain inserted hyphens ("exam-" + "ple"); they must still
+// match the same passage after relayout.
 namespace quote_underline {
 
 // A quote longer than this is never underlined: the scratch buffer that holds it

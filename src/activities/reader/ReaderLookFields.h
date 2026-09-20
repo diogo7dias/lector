@@ -40,7 +40,6 @@
   X(focusReadingEnabled)             \
   X(guideDotsEnabled)                \
   X(guideDotsHidden)                 \
-  X(hyphenationEnabled)              \
   X(embeddedTextStyle)               \
   X(embeddedLayoutStyle)             \
   X(textAntiAliasing)                \

@@ -71,7 +71,7 @@ class SdCardFont {
   // (e.g. shaped Arabic presentation forms the measurement path will look up).
   // Returns number of codepoints not found in font coverage.
   int buildAdvanceTable(const char* utf8Text, uint8_t styleMask = 0x0F, const char* extraText = nullptr);
-  int buildAdvanceTable(const std::deque<std::string>& words, bool includeHyphen, uint8_t styleMask = 0x0F,
+  int buildAdvanceTable(const std::deque<std::string>& words, uint8_t styleMask = 0x0F,
                         const char* extraText = nullptr);
 
   // Look up advanceX for a codepoint from the advance table.
@@ -320,7 +320,7 @@ class SdCardFont {
   int32_t findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const;
   int fetchAdvancesForCodepoints(uint32_t* codepoints, uint32_t cpCount, uint8_t styleMask);
   template <typename Iter>
-  int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, bool includeHyphen, uint8_t styleMask,
+  int buildAdvanceTableRange(Iter begin, Iter end, bool includeSpace, uint8_t styleMask,
                              const char* extraText = nullptr);
   int prewarmStyle(uint8_t styleIdx, const uint32_t* codepoints, uint32_t cpCount, bool metadataOnly, bool loadKernLig);
 

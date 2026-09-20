@@ -28,7 +28,6 @@ ReaderPrefs makeSample() {
   p.focusReadingEnabled = 1;
   p.guideDotsEnabled = 1;
   p.guideDotsHidden = 1;
-  p.hyphenationEnabled = 1;
   p.embeddedTextStyle = 0;
   p.embeddedLayoutStyle = 0;
   p.textAntiAliasing = 0;
@@ -60,7 +59,6 @@ void expectEqual(const ReaderPrefs& a, const ReaderPrefs& b) {
   EXPECT_EQ(a.focusReadingEnabled, b.focusReadingEnabled);
   EXPECT_EQ(a.guideDotsEnabled, b.guideDotsEnabled);
   EXPECT_EQ(a.guideDotsHidden, b.guideDotsHidden);
-  EXPECT_EQ(a.hyphenationEnabled, b.hyphenationEnabled);
   EXPECT_EQ(a.embeddedTextStyle, b.embeddedTextStyle);
   EXPECT_EQ(a.embeddedLayoutStyle, b.embeddedLayoutStyle);
   EXPECT_EQ(a.textAntiAliasing, b.textAntiAliasing);
@@ -689,4 +687,27 @@ TEST(ReaderPrefs, WordSpacingRoundTripsAtEverySetting) {
     ASSERT_TRUE(readReaderPrefs(file, loaded));
     expectEqual(original, loaded);
   }
+}
+
+TEST(ReaderPrefs, RetiredByteKeepsLegacyOffsetsAndDoesNotAffectComparisons) {
+  // Frozen v14 layout: the retired toggle sat at byte 14, text style at 15,
+  // font name at 23, and word spacing at 76. Do not derive these from offsetof.
+  std::string record(78, '\0');
+  record[0] = 14;
+  record[1 + 14] = 1;
+  record[1 + 15] = 1;
+  record.replace(1 + 23, 8, "Bookerly");
+  record[1 + 76] = 125;
+  std::stringstream in(record);
+  ReaderPrefs loaded;
+  ASSERT_TRUE(readReaderPrefs(in, loaded));
+  EXPECT_EQ(0, loaded.reserved14);
+  EXPECT_EQ(1, loaded.embeddedTextStyle);
+  EXPECT_STREQ("Bookerly", loaded.sdFontFamilyName);
+  EXPECT_EQ(125, loaded.wordSpacing);
+  record[1 + 14] = 0;
+  std::stringstream disabled(record);
+  ReaderPrefs other;
+  ASSERT_TRUE(readReaderPrefs(disabled, other));
+  EXPECT_EQ(0, std::memcmp(&loaded, &other, sizeof(loaded)));
 }

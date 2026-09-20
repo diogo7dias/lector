@@ -37,7 +37,6 @@ struct ReaderRenderSpec {
   uint8_t paragraphAlignment = 0;
   uint16_t viewportWidth = 0;
   uint16_t viewportHeight = 0;
-  bool hyphenationEnabled = false;
   // Two independent switches. Text = weight, slant, decoration, super/sub, direction and
   // display:none. Layout = alignment, indent, margins, padding and book-set image sizes.
   // Both off means the stylesheet is never even parsed.
@@ -69,7 +68,6 @@ constexpr bool sectionCacheMatches(const ReaderRenderSpec& requested, const Read
          requested.paragraphSpacing == cached.paragraphSpacing && requested.wordSpacing == cached.wordSpacing &&
          requested.paragraphAlignment == cached.paragraphAlignment && requested.viewportWidth == cached.viewportWidth &&
          requested.viewportHeight == cached.viewportHeight &&
-         requested.hyphenationEnabled == cached.hyphenationEnabled &&
          requested.embeddedTextStyle == cached.embeddedTextStyle &&
          requested.embeddedLayoutStyle == cached.embeddedLayoutStyle &&
          requested.imageRendering == cached.imageRendering &&

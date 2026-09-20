@@ -38,14 +38,12 @@ fi
 # --modified: files tracked by git that have been modified (staged or unstaged)
 # --exclude-standard: ignores files in .gitignore
 # Additionally exclude files in 'lib/EpdFont/builtinFonts/' as they are script-generated.
-# Also exclude files in 'lib/Epub/Epub/hyphenation/generated/' as they are script-generated.
 # Keep the no-match case non-fatal: grep returns 1 when no files match,
 # which is expected when there are no modified C/C++ files.
 set +o pipefail
 git ls-files  --exclude-standard ${GIT_LS_FILES_FLAGS} \
     | grep -E '\.(c|cpp|h|hpp)$' \
     | grep -v -E '^lib/EpdFont/builtinFonts/' \
-    | grep -v -E '^lib/Epub/Epub/hyphenation/generated/' \
     | grep -v -E '^lib/uzlib/' \
     | grep -v -E '^lib/miniz/third_party/' \
     | xargs -r "${CLANG_FORMAT_BIN}" -style=file -i

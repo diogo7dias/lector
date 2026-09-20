@@ -453,7 +453,6 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.paragraphAlignment = paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
-  spec.hyphenationEnabled = hyphenationEnabled != 0;
   spec.embeddedTextStyle = embeddedTextStyle != 0;
   spec.embeddedLayoutStyle = embeddedLayoutStyle != 0;
   // Hard-set, not read: see the note on IMAGE_RENDERING. This is the choke point that
@@ -578,7 +577,6 @@ ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWid
   spec.paragraphAlignment = prefs.paragraphAlignment;
   spec.viewportWidth = viewportWidth;
   spec.viewportHeight = viewportHeight;
-  spec.hyphenationEnabled = prefs.hyphenationEnabled != 0;
   spec.embeddedTextStyle = prefs.embeddedTextStyle != 0;
   spec.embeddedLayoutStyle = prefs.embeddedLayoutStyle != 0;
   spec.imageRendering = IMAGES_DISPLAY;  // see the matching note in the global builder above

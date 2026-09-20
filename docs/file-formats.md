@@ -104,6 +104,18 @@ if (parsedSize != fileSize) {
 
 ## `section.bin`
 
+### Version 62
+
+Hyphenation is removed. The section header loses its one-byte toggle (47 → 46 bytes),
+shifting every later field and LUT offset. Finalized version 61 and partial version 221
+are rejected before reading the render spec; new files use 62 and 220 respectively.
+Sections rebuild on demand, including those previously built with hyphenation off
+(the oversized-word fallback is also removed). Book metadata stays at version 12.
+
+Global settings and reader presets use JSON keys; old hyphenation keys are ignored.
+Per-book `readerprefs` remain binary version 14: byte offset 14 is reserved and zeroed
+on read, keeping all following fields and older supported record lengths unchanged.
+
 ### Version 61
 
 Adds the `wordSpacing` header byte after `paragraphSpacing` (100 = unchanged natural
@@ -209,7 +221,7 @@ match what `drawText` renders.
 Version 28 introduced serialized word style bits for underline, strikethrough,
 superscript, and subscript. The format also includes:
 
-- cache-busting fields for paragraph alignment, hyphenation, embedded CSS,
+- cache-busting fields for paragraph alignment, embedded CSS,
   image rendering mode, and Focus Reading
 - page offset LUT
 - per-page visible-text offset LUT (zero-based Unicode codepoints in `<body>`)
@@ -231,7 +243,7 @@ import std.mem;
 import std.string;
 import std.core;
 
-#define EXPECTED_VERSION 61
+#define EXPECTED_VERSION 62
 #define MAX_STRING_LENGTH 65535
 #define FOOTNOTE_NUMBER_LEN 32
 #define FOOTNOTE_HREF_LEN 256
@@ -391,7 +403,6 @@ struct SectionBin {
     u8 paragraphAlignment;
     u16 viewportWidth;
     u16 viewportHeight;
-    bool hyphenationEnabled;
     bool embeddedTextStyle [[comment("Weight, slant, decoration, super/sub, direction, display:none")]];
     bool embeddedLayoutStyle [[comment("Alignment, indent, margins, padding, book-set image sizes")]];
     u8 imageRendering;

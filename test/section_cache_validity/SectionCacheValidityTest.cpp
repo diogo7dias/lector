@@ -30,7 +30,6 @@ TEST(SectionCacheValidity, EveryLayoutFieldInvalidatesIndependently) {
   CHECK_FIELD(paragraphAlignment, 1);
   CHECK_FIELD(viewportWidth, 440);
   CHECK_FIELD(viewportHeight, 720);
-  CHECK_FIELD(hyphenationEnabled, true);
   CHECK_FIELD(embeddedTextStyle, false);
   CHECK_FIELD(embeddedLayoutStyle, false);
   CHECK_FIELD(imageRendering, 1);

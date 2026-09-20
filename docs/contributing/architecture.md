@@ -16,7 +16,7 @@ graph TD
     E --> G[Reader flows]
     E --> H[Home/Library/Settings flows]
     E --> I[Network/Web server flows]
-    G --> J[lib/Epub parsing + layout + hyphenation]
+    G --> J[lib/Epub parsing + layout]
     J --> K[SD cache in .crosspoint]
     E --> L[GfxRenderer]
     L --> M[E-ink display buffer]
@@ -106,7 +106,7 @@ flowchart TD
     I --> J{Section cache exists for current settings?}
     J -->|Yes| K[Read section bin from SD cache]
     J -->|No| L[Parse chapter HTML and layout text]
-    L --> M[Apply typography settings and hyphenation]
+    L --> M[Apply typography settings]
     M --> N[Write section cache bin]
 
     K --> O[Build page model]
@@ -127,7 +127,7 @@ Notes:
   streaming ZIP paths under the OPF content base directory; the firmware avoids
   preloading the full ZIP central directory for large books.
 - "section cache exists" depends on cache-busting parameters such as font,
-  viewport size, paragraph alignment, hyphenation, embedded CSS, image rendering,
+  viewport size, paragraph alignment, embedded CSS, image rendering,
   and Focus Reading settings
 - rendering favors reusing precomputed layout data to keep page turns responsive on constrained hardware
 - progress/session state is persisted so the reader can reopen at the last position after reboot/sleep
@@ -188,7 +188,6 @@ Some sources are generated and should not be edited manually.
 
 - `scripts/build_html.py` generates `src/network/html/*.generated.h` from HTML files
 - `scripts/gen_i18n.py` generates `lib/I18n/I18nKeys.h`, `I18nStrings.h`, and `I18nStrings.cpp`
-- `scripts/generate_hyphenation_trie.py` generates hyphenation headers under `lib/Epub/Epub/hyphenation/generated/`
 
 When editing related source assets, regenerate via normal build steps/scripts.
 
@@ -198,7 +197,7 @@ When editing related source assets, regenerate via normal build steps/scripts.
 - `src/network/`: web server and OTA/update networking
 - `src/components/`: theming and shared UI components
 - `lib/hal/`: hardware abstraction wrappers around freeink-sdk
-- `lib/Epub/`: EPUB parser, layout, CSS handling, and hyphenation
+- `lib/Epub/`: EPUB parser, layout, and CSS handling
 - `lib/`: supporting libraries (fonts, text, filesystem helpers, etc.)
 - `freeink-sdk/`: hardware SDK submodule (display, input, storage, battery). Docs: https://freeink.org/docs
 - `docs/`: user and technical documentation

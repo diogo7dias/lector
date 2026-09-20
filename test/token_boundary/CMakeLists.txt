@@ -1,6 +1,5 @@
 add_executable(TokenBoundaryTest
   TokenBoundaryTest.cpp
-  ${REPO_ROOT}/lib/Epub/Epub/hyphenation/HyphenationCommon.cpp
   ${REPO_ROOT}/lib/Utf8/Utf8.cpp
 )
 
