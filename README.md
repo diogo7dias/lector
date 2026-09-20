@@ -43,12 +43,10 @@ E-reader firmware for the Xteink X3 and X4.
 - Browse, favourite, pause and triage sleep wallpapers on the device.
 - Hold the current wallpaper instead of rotating it.
 - `.pxc` wallpapers accepted.
-- Stats Dashboard and Freeze sleep faces.
 - [Wallpaper Converter](https://diogo7dias.github.io/lector-xteink-firmware/): turn any image into an X3/X4 wallpaper in your browser, or pick one from the gallery there.
 
 ### Elsewhere
 
-- Reading statistics and a Reading Stats screen.
 - Tabbed in-book reader menu, sectioned, with Menu Hold to open it.
 - Status bar customised per item, and per book on or off.
 - Firmware version on the home header.

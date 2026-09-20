@@ -27,7 +27,6 @@
 #include "fontIds.h"
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
-#include "util/OpenReadingStats.h"
 
 int HomeActivity::menuRowCount() const {
   int count = 3;  // File Browser, File transfer, Settings
@@ -203,12 +202,6 @@ void HomeActivity::loop() {
           return;
         }
         break;
-      case CrossPointSettings::HOME_BACK_STATS:
-        if (!recentBooks.empty()) {
-          openRecentBookStats();
-          return;
-        }
-        break;
       case CrossPointSettings::HOME_BACK_SORTES:
         if (sortesResult == sortes::ScanResult::Found) {
           BusyBanner banner(renderer, tr(STR_SORTES));
@@ -231,8 +224,6 @@ void HomeActivity::loop() {
     activateSelection();
   }
 }
-
-void HomeActivity::openRecentBookStats() { launchRecentBookStats(*this, renderer, mappedInput); }
 
 void HomeActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -313,12 +304,6 @@ void HomeActivity::render(RenderLock&&) {
   switch (SETTINGS.homeBackAction) {
     case CrossPointSettings::HOME_BACK_RESUME:
       backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
-      break;
-    case CrossPointSettings::HOME_BACK_STATS:
-      // "Stats", not "Reading Stats": a button hint has one small box to live in, and the
-      // longer wording was the only label in the firmware wide enough to need wrapping.
-      // The in-book menu row keeps the full name, where there is room for it.
-      backLabel = recentBooks.empty() ? "" : tr(STR_STATS);
       break;
     case CrossPointSettings::HOME_BACK_SORTES:
       backLabel = sortesResult == sortes::ScanResult::Found   ? tr(STR_SORTES)

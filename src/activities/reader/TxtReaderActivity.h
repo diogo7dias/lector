@@ -10,15 +10,8 @@
 #include "SimpleReaderShortcut.h"
 #include "activities/Activity.h"
 #include "components/OptionPopup.h"
-#include "reading_stats/ReaderStatsSession.h"
-#include "reading_stats/SdStatsFiles.h"
 
 class TxtReaderActivity final : public Activity {
-  // Reading statistics. This reader has only the small Confirm popup below, not the
-  // EPUB reader's tabbed menu. Bind LP_MENU_READING_STATS to open the stats screen.
-  reading_stats::SdStatsFiles statsFiles;
-  reading_stats::ReaderStatsSession statsSession{statsFiles};
-  bool statsTrackingActive = false;
   std::unique_ptr<Txt> txt;
 
   int currentPage = 0;
@@ -62,7 +55,7 @@ class TxtReaderActivity final : public Activity {
   void relayoutForFontChange();
 
   void renderPage();
-  // One page forward or back, with the reading-stats bookkeeping a turn carries. Shared
+  // One page forward or back. Shared
   // by the side keys and by a paging action bound to any other button.
   void pageTurn(bool forward);
   void renderStatusBar() const;

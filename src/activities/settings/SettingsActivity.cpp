@@ -128,17 +128,6 @@ std::string SettingsActivity::settingValueText(const SettingInfo& setting) const
   }
   if (setting.type == SettingType::VALUE && setting.valuePtr != nullptr) {
     char valueBuffer[32];
-    if (setting.nameId == StrId::STR_READING_IDLE_LIMIT) {
-      // Stored in 10-second units, which means nothing on screen. Whole minutes read as
-      // minutes; the steps between them read as seconds.
-      const unsigned seconds = SETTINGS.readingStatsIdleSeconds();
-      if (seconds % 60 == 0) {
-        snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT), seconds / 60);
-      } else {
-        snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SECONDS_VALUE_FORMAT), seconds);
-      }
-      return valueBuffer;
-    }
     if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {
       if (SETTINGS.sleepTimeoutMinutes >= CrossPointSettings::SLEEP_TIMEOUT_NEVER_MINUTES) return tr(STR_SLEEP_NEVER);
       snprintf(valueBuffer, sizeof(valueBuffer), tr(STR_SLEEP_TIMER_VALUE_FORMAT),
@@ -373,7 +362,6 @@ void SettingsActivity::rebuildSettingsList() {
           {StrId::STR_GRP_LIBRARY,
            {StrId::STR_SHOW_HIDDEN_FILES, StrId::STR_BOOK_BROWSER_ORDER, StrId::STR_OPEN_BOOK_ON_BOOT,
             StrId::STR_REMOVE_READ_FROM_RECENTS, StrId::STR_MOVE_FINISHED_TO_READ, StrId::STR_MOVE_OPENED_TO_RECENTS}},
-          {StrId::STR_GRP_STATS, {StrId::STR_TRACK_READING_STATS, StrId::STR_READING_IDLE_LIMIT}},
           // Device Name leads: it is the name this reader broadcasts to another one during
           // Nearby Position Sync, so it belongs with the network rows rather than stranded
           // at the bottom of the category, which is where it sat.

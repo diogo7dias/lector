@@ -28,7 +28,7 @@
 // binding rows so one of them cannot quietly go on offering a retired action.
 inline std::vector<uint8_t> retiredBoundFunctions() {
   return {CrossPointSettings::LP_MENU_SELECT_CHAPTER, CrossPointSettings::LP_MENU_GO_TO_PERCENT,
-          CrossPointSettings::LP_MENU_TEXT_SETTINGS};
+          CrossPointSettings::LP_MENU_TEXT_SETTINGS, CrossPointSettings::LP_MENU_READING_STATS};
 }
 
 inline std::vector<StrId> boundFunctionLabels() {
@@ -303,8 +303,9 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                   "tapForReaderMenu", StrId::STR_CAT_CONTROLS));
 
     v.push_back(SettingInfo::Enum(StrId::STR_HOME_BACK_ACTION, &CrossPointSettings::homeBackAction,
-                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_READING_STATS, StrId::STR_SORTES},
-                                  "homeBackAction", StrId::STR_CAT_CONTROLS));
+                                  {StrId::STR_NONE_OPT, StrId::STR_RESUME, StrId::STR_NONE_OPT, StrId::STR_SORTES},
+                                  "homeBackAction", StrId::STR_CAT_CONTROLS)
+                    .withHiddenEnumValues({CrossPointSettings::HOME_BACK_STATS}));
 
     // --- Reader ---
     // Built-in font-family entry. Replaced per-call with a registry-aware
@@ -639,16 +640,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     v.push_back(SettingInfo::Enum(StrId::STR_OPDS_FILENAME_FORMAT, &CrossPointSettings::opdsFilenameFormat,
                                   {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                                   "opdsFilenameFormat"));
-
-    // Reading statistics: whether to track at all, and how long a page can sit
-    // untouched before the session stops counting it as reading time.
-    v.push_back(SettingInfo::Toggle(StrId::STR_TRACK_READING_STATS, &CrossPointSettings::readingStatsEnabled,
-                                    "readingStatsEnabled", StrId::STR_CAT_SYSTEM));
-
-    v.push_back(SettingInfo::Value(
-        StrId::STR_READING_IDLE_LIMIT, &CrossPointSettings::readingStatsIdleUnits,
-        {CrossPointSettings::MIN_READING_STATS_IDLE_UNITS, CrossPointSettings::MAX_READING_STATS_IDLE_UNITS, 1},
-        "readingStatsIdleUnits", StrId::STR_CAT_SYSTEM));
 
     // Measurement, off by default and free while it is off. On, the device times every
     // refresh, draws the previous one's cost in a corner of the screen, and writes a CSV

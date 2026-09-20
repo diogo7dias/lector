@@ -46,10 +46,9 @@ TEST(BoundActionScope, TheReaderQuickMenuIsRefusedOutsideABook) {
 
 TEST(BoundActionScope, ForceRefreshWorksAnywhere) { EXPECT_TRUE(allowedOutsideBook(LP_MENU_FORCE_REFRESH)); }
 
-TEST(BoundActionScope, ReadingStatsWorksAnywhere) {
-  // Same screen Home Back already opens from recents, so the binding is offered
-  // outside a book rather than greyed there.
-  EXPECT_TRUE(allowedOutsideBook(LP_MENU_READING_STATS));
+TEST(BoundActionScope, RetiredReadingStatsIsUnavailable) {
+  EXPECT_EQ(LP_MENU_READING_STATS, 31);
+  EXPECT_FALSE(allowedOutsideBook(LP_MENU_READING_STATS));
 }
 
 TEST(BoundActionScope, DeletingAWallpaperNeedsAnOpenBook) {

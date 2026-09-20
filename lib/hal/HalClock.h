@@ -16,8 +16,7 @@ class HalClock {
   mutable unsigned long _lastPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds
-  // 2020-01-01T00:00:00Z. An unsynced system clock starts at the epoch, and a reading
-  // day recorded in 1970 is worse than no reading day at all.
+  // 2020-01-01T00:00:00Z. Reject the epoch from an unsynced system clock.
   static constexpr time_t SYSTEM_CLOCK_VALID_FROM = 1577836800;
 
  public:
@@ -31,8 +30,7 @@ class HalClock {
   // Returns false if RTC is not available.
   bool getTime(uint8_t& hour, uint8_t& minute) const;
 
-  // Full calendar date plus time, in UTC as the RTC holds it. Reading stats need
-  // a date, not just a clock, to bucket by weekday and count reading streaks.
+  // Full calendar date plus time in UTC, also used for diagnostic timestamps.
   // Falls back to the system clock on boards with no RTC, which is only useful
   // after an NTP sync; an unset system clock is rejected rather than reported as
   // the year 1970.

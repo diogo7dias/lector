@@ -40,7 +40,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     CUSTOMISE_STATUS_BAR,       // open the full per-item status bar screen for this book
     GO_TO_PARAGRAPH,            // jump to a paragraph number (only when numbering is on)
     GRAB_QUOTE,                 // pick a passage on the page and save it to <book>_QUOTES.txt
-    READING_STATS,              // per-book and all-books reading statistics
     STEAL_LOOK,                 // copy another book's reader settings onto this one
     READING_THEMES,             // saved reader looks: apply one to this book, or save this one
     WALLPAPER_FAVORITE,         // star/unstar the wallpaper the lock screen last showed

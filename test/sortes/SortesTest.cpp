@@ -124,7 +124,6 @@ TEST(SortesRandom, RejectsBiasedTailAndReturnsRealPageIndices) {
 TEST(SortesWiring, EntryExitSleepAndMenuWritesAreGated) {
   const auto source = bytes(std::string(SORTES_REPO) + "/src/activities/reader/EpubReaderActivity.cpp");
   EXPECT_NE(source.find("pageCount, offset, sortesMode)"), std::string::npos);
-  EXPECT_NE(source.find("statsTrackingActive = !sortesMode &&"), std::string::npos);
   EXPECT_NE(source.find("if (!sortesMode && SETTINGS.removeReadBooksFromRecents)"), std::string::npos);
   const auto exit = source.substr(source.find("void EpubReaderActivity::onExit()"));
   const auto gate = exit.find("if (sortesMode)");

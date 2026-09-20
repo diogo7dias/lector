@@ -84,14 +84,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   };
 
   // Action for a short Back press on the home menu, where Back has no navigation target.
-  // What a short Back press does on the home screen, where Back has no navigation target.
-  // STATS opens the Reading Stats screen for the most recent book, read straight off the
-  // card — the home screen has no reading session, so the numbers are whatever the last
-  // reading session saved.
   enum HOME_BACK_ACTION {
     HOME_BACK_NONE = 0,
     HOME_BACK_RESUME = 1,
-    HOME_BACK_STATS = 2,
+    HOME_BACK_STATS = 2,  // Retired: migrate to HOME_BACK_RESUME; keep persisted numbering.
     HOME_BACK_SORTES = 3,
     HOME_BACK_ACTION_COUNT
   };
@@ -758,13 +754,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // wrapped lines, and the list is read title-first.
   uint8_t authorDisplay = AUTHOR_INITIALS;
   // Image rendering mode in EPUB reader
-  // Reading statistics. The idle threshold is stored in 10-second units so the
-  // full 30-second to 10-minute range fits in one persisted byte.
-  uint8_t readingStatsEnabled = 1;
-  uint8_t readingStatsIdleUnits = 30;
-  static constexpr uint8_t MIN_READING_STATS_IDLE_UNITS = 3;
-  static constexpr uint8_t MAX_READING_STATS_IDLE_UNITS = 60;
-  uint16_t readingStatsIdleSeconds() const { return static_cast<uint16_t>(readingStatsIdleUnits) * 10u; }
   // Retired: no Settings row, so nothing persists or changes it. Kept as the source the
   // per-book ReaderPrefs snapshot copies, so that field starts at IMAGES_DISPLAY too.
   uint8_t imageRendering = IMAGES_DISPLAY;
