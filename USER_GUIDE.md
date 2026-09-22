@@ -1,4 +1,4 @@
-<!-- lector-version: 0.32.0 -->
+<!-- lector-version: 0.33.0 -->
 
 # Lector User Guide
 
@@ -780,10 +780,8 @@ Settings are one scrolling list. Rows are grouped under section headings such as
 Reader, Controls, System. Those four names order the list; they are not printed on screen,
 and a row is found by scrolling to its section heading.
 
-Step through the list a row at a time; hold the same button to jump a whole section. Held
-forward lands on the next section's first row; held backward goes to the first row of the
-section you are in, then to the section above it. Either way the heading is shown above the
-row you land on.
+Step through the list a row at a time. Hold the same button to scroll: it moves a row at a
+time, speeds up to five rows at a time after about a second, and stops at the end of the list.
 
 Paths in this reference, such as **Settings > Reader > Dictionary**, name the block a row
 belongs to, so the rows here appear in the same order as on the device.
