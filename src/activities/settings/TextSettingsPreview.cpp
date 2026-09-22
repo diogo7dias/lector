@@ -107,8 +107,8 @@ int drawStatusBarEdge(const GfxRenderer& renderer, const StatusBarBlock& sb, boo
 // does for the page: Dynamic Margins replaces the fixed margin with a width aimed at ~62
 // characters per line. Measured against the FULL screen, which is also the pane's width,
 // so the margin drawn here is the margin the page will get.
-int resolveHorizontalMargin(const GfxRenderer& renderer, int fontId) {
-  if (!SETTINGS.dynamicMargins) return SETTINGS.screenMargin;
+int resolveHorizontalMargin(const ReaderPrefs& look, const GfxRenderer& renderer, int fontId) {
+  if (!look.dynamicMargins) return look.screenMargin;
 
   int viewableTop, viewableRight, viewableBottom, viewableLeft;
   renderer.getOrientedViewableTRBL(&viewableTop, &viewableRight, &viewableBottom, &viewableLeft);
@@ -116,7 +116,7 @@ int resolveHorizontalMargin(const GfxRenderer& renderer, int fontId) {
   const int avgCharWidth = (sampleWidth > 0) ? sampleWidth / 26 : 8;
   const int targetTextWidth = 62 * avgCharWidth;
   const int availableWidth = renderer.getScreenWidth() - viewableLeft - viewableRight;
-  const int minDynamicMargin = (SETTINGS.dynamicMargins >= 2) ? 20 : 10;
+  const int minDynamicMargin = (look.dynamicMargins >= 2) ? 20 : 10;
   return std::max(minDynamicMargin, std::min(55, (availableWidth - targetTextWidth) / 2));
 }
 
@@ -136,11 +136,11 @@ void addWords(ParsedText& parsed, const char* text, EpdFontFamily::Style style) 
   }
 }
 
-BlockStyle bodyStyle(int fontId, const GfxRenderer& renderer) {
+BlockStyle bodyStyle(const ReaderPrefs& look, int fontId, const GfxRenderer& renderer) {
   BlockStyle style;
-  style.alignment = toCssAlign(SETTINGS.paragraphAlignment);
+  style.alignment = toCssAlign(look.paragraphAlignment);
   style.textAlignDefined = true;  // honor the user's choice; RTL auto-detected from text
-  if (SETTINGS.embeddedLayoutStyle) {
+  if (look.embeddedLayoutStyle) {
     // The sample's own stylesheet. First Line Indent: Book defers to exactly this, so
     // without it that mode would look identical to a 0% custom indent.
     const int em = std::max(1, renderer.getTextHeight(fontId));
@@ -152,11 +152,11 @@ BlockStyle bodyStyle(int fontId, const GfxRenderer& renderer) {
 
 // Lays one paragraph out and appends its lines, the first of them carrying the gap that
 // separates it from the paragraph above.
-void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, const char* text,
-                     const BlockStyle& style, bool heading, int gapBefore) {
-  ParsedText parsed(SETTINGS.extraParagraphSpacing != 0, SETTINGS.focusReadingEnabled != 0,
-                    resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden), style,
-                    SETTINGS.firstLineIndentMode, SETTINGS.firstLineIndentPercent, SETTINGS.wordSpacing);
+void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId,
+                     int textWidth, const char* text, const BlockStyle& style, bool heading, int gapBefore) {
+  ParsedText parsed(look.extraParagraphSpacing != 0, look.focusReadingEnabled != 0,
+                    resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden), style, look.firstLineIndentMode,
+                    look.firstLineIndentPercent, look.wordSpacing);
   parsed.setHeading(heading);
   addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
@@ -178,51 +178,53 @@ void appendParagraph(PreviewLayout& layout, const GfxRenderer& renderer, int fon
 // Lay the whole sample page out: pretend chapter heading (only while Embedded Layout Style
 // is on, since it is the sample's CSS that puts it there), then two body paragraphs so the
 // paragraph gap is visible and the bottom of the page holds different text from the top.
-void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth, int lineAdvance,
-              int paragraphGap) {
+void relayout(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId, int textWidth,
+              int lineAdvance, int paragraphGap) {
   layout.lines.clear();
   layout.secondParagraphLine = 0;
 
-  const BlockStyle body = bodyStyle(fontId, renderer);
-  if (SETTINGS.embeddedLayoutStyle) {
+  const BlockStyle body = bodyStyle(look, fontId, renderer);
+  if (look.embeddedLayoutStyle) {
     BlockStyle heading;
     heading.alignment = CssTextAlign::Center;
     heading.textAlignDefined = true;
-    appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), heading, true, 0);
-    appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false,
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_HEADING), heading, true, 0);
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false,
                     lineAdvance / 2);
   } else {
-    appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
+    appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_FONT_PREVIEW_TEXT), body, false, 0);
   }
   layout.secondParagraphLine = static_cast<int>(layout.lines.size());
-  appendParagraph(layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_TEXT_2), body, false, paragraphGap);
+  appendParagraph(look, layout, renderer, fontId, textWidth, I18N.get(StrId::STR_PREVIEW_TEXT_2), body, false,
+                  paragraphGap);
 }
 
 }  // namespace
 
-void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const StatusBarBlock& sb, const int top,
+void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const ReaderPrefs& look, const int top,
                    const int height) {
+  const StatusBarBlock sb = statusBarOf(look);
   const int paneLeft = 0;
   const int paneWidth = renderer.getScreenWidth();
   if (paneWidth <= 0 || height <= 0) return;
 
-  const int fontId = SETTINGS.getReaderFontId();
+  const int fontId = SETTINGS.getReaderFontId(look);
   if (fontId == 0) return;
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
 
-  const int marginH = resolveHorizontalMargin(renderer, fontId);
+  const int marginH = resolveHorizontalMargin(look, renderer, fontId);
   const int textLeft = paneLeft + marginH;
   const int textWidth = paneWidth - 2 * marginH;
   if (textWidth <= 0) return;
 
-  const float compression = SETTINGS.getReaderLineCompression();
+  const float compression = SETTINGS.getReaderLineCompression(look);
   const int lineAdvance = std::max(1, renderer.getLineHeight(fontId, compression));
   // Same stack the parser applies after each paragraph: the Extra Spacing toggle adds half
   // a line, the Paragraph Spacing percentage adds its share on top of it.
   // See ChapterHtmlSlimParser.cpp finishParagraph.
   const int paragraphGap =
-      (SETTINGS.extraParagraphSpacing ? lineAdvance / 2 : 0) + lineAdvance * SETTINGS.paragraphSpacing / 100;
+      (look.extraParagraphSpacing ? lineAdvance / 2 : 0) + lineAdvance * look.paragraphSpacing / 100;
 
   // Re-lay-out (and re-prewarm glyphs) only when a layout-affecting setting or the
   // geometry changed; else reuse the cache. The prewarm inputs are (fontId, constant
@@ -231,19 +233,19 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Sta
   // glyph cache while this activity is up — true today: the only evictor is
   // FontCacheManager::PrewarmScope, used solely by the reader/dictionary activities.
   const PreviewKey key{.fontId = fontId,
-                       .fontPointSize = SETTINGS.fontPointSize,
+                       .fontPointSize = look.fontPointSize,
                        .screenMargin = marginH,
                        .textWidth = textWidth,
                        .lineCompression = compression,
-                       .alignment = SETTINGS.paragraphAlignment,
-                       .extraParagraphSpacing = SETTINGS.extraParagraphSpacing != 0,
-                       .focusReading = SETTINGS.focusReadingEnabled != 0,
-                       .embeddedLayoutStyle = SETTINGS.embeddedLayoutStyle != 0,
-                       .paragraphSpacing = SETTINGS.paragraphSpacing,
-                       .wordSpacing = SETTINGS.wordSpacing,
-                       .guideDotsMode = resolveGuideDotsMode(SETTINGS.guideDotsEnabled, SETTINGS.guideDotsHidden),
-                       .firstLineIndentMode = SETTINGS.firstLineIndentMode,
-                       .firstLineIndentPercent = SETTINGS.firstLineIndentPercent};
+                       .alignment = look.paragraphAlignment,
+                       .extraParagraphSpacing = look.extraParagraphSpacing != 0,
+                       .focusReading = look.focusReadingEnabled != 0,
+                       .embeddedLayoutStyle = look.embeddedLayoutStyle != 0,
+                       .paragraphSpacing = look.paragraphSpacing,
+                       .wordSpacing = look.wordSpacing,
+                       .guideDotsMode = resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden),
+                       .firstLineIndentMode = look.firstLineIndentMode,
+                       .firstLineIndentPercent = look.firstLineIndentPercent};
   if (key != layout.key) {
     if (auto* fcm = renderer.getFontCacheManager()) {
       // The guide dot is not in the sample sentence, so it has to be prewarmed
@@ -251,13 +253,13 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Sta
       std::string prewarmText = I18N.get(StrId::STR_FONT_PREVIEW_TEXT);
       prewarmText += I18N.get(StrId::STR_PREVIEW_TEXT_2);
       prewarmText += I18N.get(StrId::STR_PREVIEW_HEADING);
-      if (SETTINGS.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
+      if (look.guideDotsEnabled) prewarmText += GUIDE_DOT_UTF8;
       // Bit 1 is the bold mask the heading needs; bit 0 the regular body.
-      uint8_t styleMask = SETTINGS.focusReadingEnabled ? 0x03 : 0x01;
-      if (SETTINGS.embeddedLayoutStyle) styleMask |= 0x02;
+      uint8_t styleMask = look.focusReadingEnabled ? 0x03 : 0x01;
+      if (look.embeddedLayoutStyle) styleMask |= 0x02;
       fcm->prewarmCache(fontId, prewarmText.c_str(), styleMask);
     }
-    relayout(layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);
+    relayout(look, layout, renderer, fontId, textWidth, lineAdvance, paragraphGap);
     layout.key = key;
   }
   if (layout.lines.empty()) return;
@@ -273,7 +275,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Sta
 
   // First paragraph with the smear, second without it. No labels at the seam: the
   // paragraph gap is the seam, and a label would cost a line of the passage being judged.
-  const int textTop = top + topBarHeight + SETTINGS.screenMarginTop;
+  const int textTop = top + topBarHeight + look.screenMarginTop;
   const int textLimit = top + height;
   int y = textTop;
   int drawn = 0;

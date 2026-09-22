@@ -26,9 +26,12 @@
 
 class TextSettingsActivity final : public UiGridActivity {
  public:
-  // `statusBar` is the bar the preview draws: the book's own when editing a book.
+  // Edits a copy of `start`, a book's look or the global one, and hands every change to
+  // `sink` at once so the owner keeps it on the card: powering off inside the screen
+  // keeps the change.
+  using Sink = void (*)(void* ctx, const ReaderPrefs& edited);
   TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
-                       const StatusBarBlock& statusBar);
+                       const ReaderPrefs& start, Sink sink, void* sinkCtx);
 
   void onEnter() override;
   void onExit() override;
@@ -85,7 +88,8 @@ class TextSettingsActivity final : public UiGridActivity {
   StrId rowNameId(Row row) const;
   std::string rowValueText(Row row) const;
   // Numeric rows share one editing path; these give it the field and its range.
-  uint8_t* numberField(Row row) const;
+  uint8_t* numberField(Row row);
+  const uint8_t* numberField(Row row) const { return const_cast<TextSettingsActivity*>(this)->numberField(row); }
   void numberRange(Row row, int& minValue, int& maxValue) const;
   void setEditedValue(Row row, int value);
   void applyNumber(Row row, int value);
@@ -111,7 +115,11 @@ class TextSettingsActivity final : public UiGridActivity {
   };
 
   const SdCardFontRegistry* registry_;
-  StatusBarBlock statusBar_;
+  ReaderPrefs look_;
+  Sink sink_;
+  void* sinkCtx_;
+  void commit();
+  void loadLookFont();
   OptionPopup optionPopup_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;

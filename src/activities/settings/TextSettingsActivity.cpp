@@ -65,8 +65,13 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const SdCardFontRegistry* registry, const StatusBarBlock& statusBar)
-    : UiGridActivity("TextSettings", renderer, mappedInput), registry_(registry), statusBar_(statusBar) {}
+                                           const SdCardFontRegistry* registry, const ReaderPrefs& start,
+                                           const Sink sink, void* sinkCtx)
+    : UiGridActivity("TextSettings", renderer, mappedInput),
+      registry_(registry),
+      look_(start),
+      sink_(sink),
+      sinkCtx_(sinkCtx) {}
 
 void TextSettingsActivity::onEnter() {
   UiGridActivity::onEnter();
@@ -87,7 +92,7 @@ void TextSettingsActivity::onEnter() {
   }
 
   rebuildSizeList();
-  currentFamilyIndex_ = findCurrentFontIndex(registry_, SETTINGS.sdFontFamilyName, SETTINGS.fontFamily);
+  currentFamilyIndex_ = findCurrentFontIndex(registry_, look_.sdFontFamilyName, look_.fontFamily);
   setSelected(0);
 
   requestUpdate();
@@ -99,16 +104,16 @@ void TextSettingsActivity::onExit() {
 }
 
 // The selectable sizes belong to the active family, so this runs on entry and again after
-// every family change. A family change goes through ensureLoaded(), which snaps
-// SETTINGS.fontPointSize into the new family's set — but entry does not, so the highlight
+// every family change. A family change goes through loadLookFont(), which snaps
+// look_.fontPointSize into the new family's set — but entry does not, so the highlight
 // is resolved by snapping rather than by exact match.
 void TextSettingsActivity::rebuildSizeList() {
-  const std::vector<uint8_t> points = readerFontPointSizes(registry_, SETTINGS.sdFontFamilyName);
+  const std::vector<uint8_t> points = readerFontPointSizes(registry_, look_.sdFontFamilyName);
 
   // The stored size can still sit outside this family's set — e.g. the family was deleted
   // while selected, or the card was swapped. Highlight the size the reader actually
   // renders, which getReaderFontId() resolves the same way.
-  const uint8_t selectedPt = snapToNearestPointSize(points, SETTINGS.fontPointSize);
+  const uint8_t selectedPt = snapToNearestPointSize(points, look_.fontPointSize);
 
   sizes_.clear();
   sizes_.reserve(points.size());
@@ -131,7 +136,7 @@ int TextSettingsActivity::reservedHeight() const {
 void TextSettingsActivity::drawReserved(const Rect& rect) {
   // The preview is a real page rendered by the reader engine, so it stays a raw
   // painter; the base only decides where it goes.
-  textsettings::renderPreview(renderer, previewLayout_, statusBar_, rect.y, rect.height - metrics_.verticalSpacing);
+  textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
 TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
@@ -180,7 +185,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   rows.push_back(Row::IndentMode);
   // The custom-% value only applies in Custom% mode; in Book mode the indent comes from
   // the EPUB's own CSS, so there is nothing to tune.
-  if (SETTINGS.firstLineIndentMode == CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
+  if (look_.firstLineIndentMode == CrossPointSettings::FIRST_LINE_INDENT_PERCENT) {
     rows.push_back(Row::IndentPercent);
   }
 
@@ -189,7 +194,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
   // own and leave left/right disagreeing with top/bottom.
   rows.push_back(Row::HorizontalMargin);
   rows.push_back(Row::MarginLink);
-  switch (margin_link::toMode(SETTINGS.marginLinkMode)) {
+  switch (margin_link::toMode(look_.marginLinkMode)) {
     case margin_link::Mode::AllSides:
       break;
     case margin_link::Mode::TopBottom:
@@ -207,7 +212,7 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 
   rows.push_back(Row::GuideDots);
   // Hidden Dots only says anything about a page that is already drawing guide dots.
-  if (SETTINGS.guideDotsEnabled) rows.push_back(Row::HiddenDots);
+  if (look_.guideDotsEnabled) rows.push_back(Row::HiddenDots);
 
   rows.push_back(Row::EmbeddedTextStyle);
   rows.push_back(Row::EmbeddedLayoutStyle);
@@ -241,8 +246,8 @@ StrId TextSettingsActivity::rowNameId(const Row row) const {
     case Row::HorizontalMargin:
       // In All Sides this row is the only margin there is, so naming it "Horizontal"
       // would be describing a side rather than what it does.
-      return margin_link::toMode(SETTINGS.marginLinkMode) == margin_link::Mode::AllSides ? StrId::STR_MARGIN
-                                                                                         : StrId::STR_HORIZONTAL_MARGIN;
+      return margin_link::toMode(look_.marginLinkMode) == margin_link::Mode::AllSides ? StrId::STR_MARGIN
+                                                                                      : StrId::STR_HORIZONTAL_MARGIN;
     case Row::MarginLink:
       return StrId::STR_LINK_MARGINS;
     case Row::VerticalMargin:
@@ -272,23 +277,23 @@ StrId TextSettingsActivity::rowNameId(const Row row) const {
 
 // The vertical margins are two stored fields even while they are linked, so the linked row
 // edits the top one and applyNumber() mirrors it into the bottom.
-uint8_t* TextSettingsActivity::numberField(const Row row) const {
+uint8_t* TextSettingsActivity::numberField(const Row row) {
   switch (row) {
     case Row::LineSpacing:
-      return &SETTINGS.lineSpacingPercent;
+      return &look_.lineSpacingPercent;
     case Row::ParagraphSpacing:
-      return &SETTINGS.paragraphSpacing;
+      return &look_.paragraphSpacing;
     case Row::WordSpacing:
-      return &SETTINGS.wordSpacing;
+      return &look_.wordSpacing;
     case Row::IndentPercent:
-      return &SETTINGS.firstLineIndentPercent;
+      return &look_.firstLineIndentPercent;
     case Row::HorizontalMargin:
-      return &SETTINGS.screenMargin;
+      return &look_.screenMargin;
     case Row::VerticalMargin:
     case Row::TopMargin:
-      return &SETTINGS.screenMarginTop;
+      return &look_.screenMarginTop;
     case Row::BottomMargin:
-      return &SETTINGS.screenMarginBottom;
+      return &look_.screenMarginBottom;
     default:
       return nullptr;
   }
@@ -322,12 +327,12 @@ void TextSettingsActivity::numberRange(const Row row, int& minValue, int& maxVal
 void TextSettingsActivity::applyNumber(const Row row, const int value) {
   uint8_t* field = numberField(row);
   if (!field) return;
-  const margin_link::Margins current{SETTINGS.screenMargin, SETTINGS.screenMarginTop, SETTINGS.screenMarginBottom};
-  const margin_link::Mode mode = margin_link::toMode(SETTINGS.marginLinkMode);
-  const auto write = [](const margin_link::Margins next) {
-    SETTINGS.screenMargin = next.horizontal;
-    SETTINGS.screenMarginTop = next.top;
-    SETTINGS.screenMarginBottom = next.bottom;
+  const margin_link::Margins current{look_.screenMargin, look_.screenMarginTop, look_.screenMarginBottom};
+  const margin_link::Mode mode = margin_link::toMode(look_.marginLinkMode);
+  const auto write = [this](const margin_link::Margins next) {
+    look_.screenMargin = next.horizontal;
+    look_.screenMarginTop = next.top;
+    look_.screenMarginBottom = next.bottom;
   };
   switch (row) {
     // Every margin row writes through the same rule the migration and the mode picker
@@ -356,7 +361,18 @@ void TextSettingsActivity::applyNumber(const Row row, const int value) {
 void TextSettingsActivity::commitSettings() {
   if (!settingsDirty_) return;
   settingsDirty_ = false;
-  SETTINGS.saveToFile();
+  commit();
+}
+
+void TextSettingsActivity::commit() { sink_(sinkCtx_, look_); }
+
+// Makes the resident SD font the one look_ names. A family change can leave the size
+// outside the new family's set, so it is snapped in first: the reader resolves the
+// resident size whatever size is stored, and the stored one has to say the same.
+void TextSettingsActivity::loadLookFont() {
+  look_.fontPointSize =
+      snapToNearestPointSize(readerFontPointSizes(registry_, look_.sdFontFamilyName), look_.fontPointSize);
+  sdFontSystem.ensureLoadedFor(renderer, look_.sdFontFamilyName, look_.fontPointSize);
 }
 
 std::string TextSettingsActivity::rowValueText(const Row row) const {
@@ -371,45 +387,45 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
                  ? sizes_[currentSizeIndex_].name
                  : "";
     case Row::ExtraSpacing:
-      return onOff(SETTINGS.extraParagraphSpacing);
+      return onOff(look_.extraParagraphSpacing);
     case Row::Alignment: {
-      const uint8_t v = SETTINGS.paragraphAlignment;
+      const uint8_t v = look_.paragraphAlignment;
       const std::string label =
           v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
       // "Book's Style" reads the alignment out of the book's own CSS, which is exactly what
       // Embedded Layout Style switches off. Saying so on the row beats a setting that looks
       // chosen and does nothing.
-      return (v == ALIGNMENT_BOOK_INDEX && !SETTINGS.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
+      return (v == ALIGNMENT_BOOK_INDEX && !look_.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
     }
     case Row::IndentMode: {
-      const uint8_t v = SETTINGS.firstLineIndentMode;
+      const uint8_t v = look_.firstLineIndentMode;
       const std::string label =
           v < std::size(INDENT_MODE_IDS) ? I18N.get(INDENT_MODE_IDS[v]) : I18N.get(StrId::STR_INDENT_BOOK);
-      return (v == INDENT_MODE_BOOK_INDEX && !SETTINGS.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
+      return (v == INDENT_MODE_BOOK_INDEX && !look_.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
     }
     case Row::MarginLink: {
-      const uint8_t v = SETTINGS.marginLinkMode;
+      const uint8_t v = look_.marginLinkMode;
       return v < std::size(MARGIN_LINK_IDS) ? I18N.get(MARGIN_LINK_IDS[v]) : I18N.get(StrId::STR_MARGIN_LINK_OFF);
     }
     case Row::DynamicMargins: {
-      const uint8_t v = SETTINGS.dynamicMargins;
+      const uint8_t v = look_.dynamicMargins;
       return v < std::size(DYNAMIC_MARGINS_IDS) ? I18N.get(DYNAMIC_MARGINS_IDS[v])
                                                 : I18N.get(StrId::STR_DYNAMIC_MARGINS_OFF);
     }
     case Row::FocusReading:
-      return onOff(SETTINGS.focusReadingEnabled);
+      return onOff(look_.focusReadingEnabled);
     case Row::GuideDots:
-      return onOff(SETTINGS.guideDotsEnabled);
+      return onOff(look_.guideDotsEnabled);
     case Row::HiddenDots:
-      return onOff(SETTINGS.guideDotsHidden);
+      return onOff(look_.guideDotsHidden);
     case Row::EmbeddedTextStyle:
-      return onOff(SETTINGS.embeddedTextStyle);
+      return onOff(look_.embeddedTextStyle);
     case Row::EmbeddedLayoutStyle:
-      return onOff(SETTINGS.embeddedLayoutStyle);
+      return onOff(look_.embeddedLayoutStyle);
     case Row::AntiAliasing:
-      return onOff(SETTINGS.textAntiAliasing);
+      return onOff(look_.textAntiAliasing);
     case Row::PaperbackLook:
-      return onOff(SETTINGS.paperbackLookBody);
+      return onOff(look_.paperbackLookBody);
     case Row::DebugBorders:
       return onOff(SETTINGS.debugBorders);
     default:
@@ -508,40 +524,49 @@ void TextSettingsActivity::activateRow(const Row row) {
           break;
         case Row::Alignment:
           optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
-                            SETTINGS.paragraphAlignment, [](int idx) {
+                            look_.paragraphAlignment, [this](int idx) {
                               const auto next = static_cast<uint8_t>(idx);
-                              if (next == SETTINGS.paragraphAlignment) return;  // re-picking costs no erase cycle
-                              SETTINGS.paragraphAlignment = next;
-                              SETTINGS.saveToFile();
+                              if (next == look_.paragraphAlignment) return;  // re-picking costs no erase cycle
+                              look_.paragraphAlignment = next;
+                              commit();
                             });
           break;
         case Row::IndentMode:
           optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, INDENT_MODE_IDS, static_cast<int>(std::size(INDENT_MODE_IDS)),
-                            SETTINGS.firstLineIndentMode, [](int idx) {
+                            look_.firstLineIndentMode, [this](int idx) {
                               const auto next = static_cast<uint8_t>(idx);
-                              if (next == SETTINGS.firstLineIndentMode) return;  // re-picking costs no erase cycle
-                              SETTINGS.firstLineIndentMode = next;
-                              SETTINGS.saveToFile();
+                              if (next == look_.firstLineIndentMode) return;  // re-picking costs no erase cycle
+                              look_.firstLineIndentMode = next;
+                              commit();
                             });
           break;
         case Row::MarginLink:
           optionPopup_.show(StrId::STR_LINK_MARGINS, MARGIN_LINK_IDS, static_cast<int>(std::size(MARGIN_LINK_IDS)),
-                            SETTINGS.marginLinkMode, [](int idx) {
+                            look_.marginLinkMode, [this](int idx) {
                               const auto next = static_cast<uint8_t>(idx);
-                              if (next == SETTINGS.marginLinkMode) return;  // re-picking costs no erase cycle
+                              if (next == look_.marginLinkMode) return;  // re-picking costs no erase cycle
                               // The mode carries its own consequences: All Sides adopts the
                               // horizontal margin everywhere and turns Dynamic Margins off.
-                              SETTINGS.setMarginLinkMode(margin_link::toMode(next));
-                              SETTINGS.saveToFile();
+                              const margin_link::State linked = margin_link::applyMode(
+                                  {{look_.screenMargin, look_.screenMarginTop, look_.screenMarginBottom},
+                                   look_.dynamicMargins,
+                                   margin_link::toMode(look_.marginLinkMode)},
+                                  margin_link::toMode(next));
+                              look_.screenMargin = linked.margins.horizontal;
+                              look_.screenMarginTop = linked.margins.top;
+                              look_.screenMarginBottom = linked.margins.bottom;
+                              look_.dynamicMargins = linked.dynamicMargins;
+                              look_.marginLinkMode = margin_link::toStored(linked.mode);
+                              commit();
                             });
           break;
         default:
           optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
-                            static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), SETTINGS.dynamicMargins, [](int idx) {
+                            static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), look_.dynamicMargins, [this](int idx) {
                               const auto next = static_cast<uint8_t>(idx);
-                              if (next == SETTINGS.dynamicMargins) return;  // re-picking costs no erase cycle
-                              SETTINGS.dynamicMargins = next;
-                              SETTINGS.saveToFile();
+                              if (next == look_.dynamicMargins) return;  // re-picking costs no erase cycle
+                              look_.dynamicMargins = next;
+                              commit();
                             });
           break;
       }
@@ -553,36 +578,39 @@ void TextSettingsActivity::activateRow(const Row row) {
 
   switch (row) {
     case Row::ExtraSpacing:
-      SETTINGS.extraParagraphSpacing = !SETTINGS.extraParagraphSpacing;
+      look_.extraParagraphSpacing = !look_.extraParagraphSpacing;
       break;
     case Row::FocusReading:
-      SETTINGS.focusReadingEnabled = !SETTINGS.focusReadingEnabled;
+      look_.focusReadingEnabled = !look_.focusReadingEnabled;
       break;
     case Row::GuideDots:
-      SETTINGS.guideDotsEnabled = !SETTINGS.guideDotsEnabled;
+      look_.guideDotsEnabled = !look_.guideDotsEnabled;
       break;
     case Row::HiddenDots:
-      SETTINGS.guideDotsHidden = !SETTINGS.guideDotsHidden;
+      look_.guideDotsHidden = !look_.guideDotsHidden;
       break;
     case Row::EmbeddedTextStyle:
-      SETTINGS.embeddedTextStyle = !SETTINGS.embeddedTextStyle;
+      look_.embeddedTextStyle = !look_.embeddedTextStyle;
       break;
     case Row::EmbeddedLayoutStyle:
-      SETTINGS.embeddedLayoutStyle = !SETTINGS.embeddedLayoutStyle;
+      look_.embeddedLayoutStyle = !look_.embeddedLayoutStyle;
       break;
     case Row::AntiAliasing:
-      SETTINGS.textAntiAliasing = !SETTINGS.textAntiAliasing;
+      look_.textAntiAliasing = !look_.textAntiAliasing;
       break;
     case Row::PaperbackLook:
-      SETTINGS.paperbackLookBody = !SETTINGS.paperbackLookBody;
+      look_.paperbackLookBody = !look_.paperbackLookBody;
       break;
     case Row::DebugBorders:
+      // A developer switch, not part of any book's look: always the global setting.
       SETTINGS.debugBorders = !SETTINGS.debugBorders;
-      break;
+      SETTINGS.saveToFile();
+      requestUpdate();
+      return;
     default:
       return;
   }
-  SETTINGS.saveToFile();
+  commit();
   requestUpdate();
 }
 
@@ -640,23 +668,24 @@ ListChrome TextSettingsActivity::chrome() const {
 void TextSettingsActivity::applyFamily(int listIndex) {
   // Saved on the way out of every path below, for the same reason applySize() does.
   struct SaveOnReturn {
-    ~SaveOnReturn() { SETTINGS.saveToFile(); }
-  } saveOnReturn;
+    TextSettingsActivity& self;
+    ~SaveOnReturn() { self.commit(); }
+  } saveOnReturn{*this};
 
   RenderLock lock;
   const auto& font = fonts_[listIndex];
   if (font.isBuiltin) {
-    SETTINGS.fontFamily = font.settingIndex;
-    SETTINGS.sdFontFamilyName[0] = '\0';
-    sdFontSystem.ensureLoaded(renderer);  // unloads the previously resident SD font
+    look_.fontFamily = font.settingIndex;
+    look_.sdFontFamilyName[0] = '\0';
+    loadLookFont();  // unloads the previously resident SD font
     currentFamilyIndex_ = listIndex;
   } else if (registry_) {
     const int sdIdx = font.settingIndex - CrossPointSettings::BUILTIN_FONT_COUNT;
     const auto& families = registry_->getFamilies();
     if (sdIdx < static_cast<int>(families.size())) {
-      strncpy(SETTINGS.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(SETTINGS.sdFontFamilyName) - 1);
-      SETTINGS.sdFontFamilyName[sizeof(SETTINGS.sdFontFamilyName) - 1] = '\0';
-      sdFontSystem.ensureLoaded(renderer);
+      strncpy(look_.sdFontFamilyName, families[sdIdx].name.c_str(), sizeof(look_.sdFontFamilyName) - 1);
+      look_.sdFontFamilyName[sizeof(look_.sdFontFamilyName) - 1] = '\0';
+      loadLookFont();
       currentFamilyIndex_ = listIndex;
     }
   }
@@ -675,11 +704,11 @@ void TextSettingsActivity::applySize(int listIndex) {
     RenderLock lock;
 
     currentSizeIndex_ = listIndex;
-    SETTINGS.fontPointSize = sizes_[listIndex].pointSize;
-    sdFontSystem.ensureLoaded(renderer);
+    look_.fontPointSize = sizes_[listIndex].pointSize;
+    loadLookFont();
   }
   // Persist outside the render lock, like the toggle rows do: the size is otherwise only
   // written when the screen is left, so powering off from inside Text Settings lost the
   // change (upstream #2806).
-  SETTINGS.saveToFile();
+  commit();
 }

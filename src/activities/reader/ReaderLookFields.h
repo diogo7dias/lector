@@ -19,8 +19,8 @@
 //
 // This header deliberately includes nothing and declares nothing.
 
-// Rows of the in-book Reader Settings screen. These are the fields the edit overlay
-// round-trips through the global singleton, so they travel in both directions.
+// Rows of the Reader Settings screen. The global screen writes them onto the singleton
+// (applyReaderPrefs), so they travel in both directions.
 // X(name) — the member name is identical on ReaderPrefs and CrossPointSettings.
 #define READER_LOOK_SCREEN_FIELDS(X) \
   X(fontFamily)                      \
@@ -46,8 +46,8 @@
   X(imageRendering)
 
 // Per-book toggles that live in the in-book menu, not on the Reader Settings screen.
-// The edit overlay does not carry them, so after an edit the book's own values must be
-// restored over the overlaid globals — see restoreBookOnlyFields() in ReaderPrefs.h.
+// The Reader Settings screen never edits them, so after an edit the book's own values
+// are what stands — see restoreBookOnlyFields() in ReaderPrefs.h.
 // X(name) — identical on both structs. statusBarEnabled is book-only too, but it rides
 // with the status bar block below, which is where its global counterpart is named.
 #define READER_LOOK_BOOK_FIELDS(X) \

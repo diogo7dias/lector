@@ -611,65 +611,14 @@ void CrossPointSettings::setStatusBar(const StatusBarBlock& b) {
 #undef CP_APPLY_SB
 }
 
-ReaderPrefs CrossPointSettings::trueGlobalReaderPrefs() const {
-  // The live reader fields, unless the Reader Settings screen is open on a book, in
-  // which case the live fields are that book's and the backup holds the global ones.
-  // The status bar is never overlaid, so the live sb* fields are always the global bar.
-  ReaderPrefs p = readerEditOverlayActive_ ? readerEditBackup_ : ReaderPrefs::fromGlobal();
-  setStatusBarOf(p, statusBar());
-  return p;
-}
-
-void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues, const ReaderEditSink sink,
-                                                void* sinkCtx) {
-  if (!readerEditOverlayActive_) {
-    readerEditBackup_ = ReaderPrefs::fromGlobal();  // the true global reader values
-    readerEditOverlayActive_ = true;
-  }
-  readerEditSink_ = sink;
-  readerEditSinkCtx_ = sinkCtx;
-  applyReaderPrefs(startValues);  // editor starts from the book's current values
-}
-
-ReaderPrefs CrossPointSettings::endReaderEditOverlay() {
-  const ReaderPrefs edited = ReaderPrefs::fromGlobal();  // whatever the editor left on the live fields
-  if (readerEditOverlayActive_) {
-    applyReaderPrefs(readerEditBackup_);  // restore the true global values
-    readerEditOverlayActive_ = false;
-  }
-  // Cleared unconditionally: the sink points into the activity that opened the
-  // overlay, and must never outlive it.
-  readerEditSink_ = nullptr;
-  readerEditSinkCtx_ = nullptr;
-  return edited;
-}
-
 bool CrossPointSettings::saveToFile() const {
   // Re-assert the margin link mode before anything is written. The web settings API can
   // write screenMargin or a vertical margin straight into its field, so this is where a
-  // page whose sides disagree with its mode is brought back in line. const_cast is safe
-  // for the same reason it is below: the singleton is a non-const object.
+  // page whose sides disagree with its mode is brought back in line. const_cast is safe:
+  // the singleton is a non-const object.
   const_cast<CrossPointSettings*>(this)->normalizeMargins();
 
-  if (!readerEditOverlayActive_) {
-    return PersistableStore<CrossPointSettings>::saveToFile();
-  }
-  // A per-book reader edit is overlaid on the live reader fields. Persist the
-  // GLOBAL values (the backup) so settings.json never captures a book's per-book
-  // settings, even if a background task saves mid-edit. const_cast is safe: the
-  // singleton is a non-const object; this only transiently swaps its reader fields
-  // out for the write, then restores the overlay.
-  auto* self = const_cast<CrossPointSettings*>(this);
-  const ReaderPrefs overlaid = ReaderPrefs::fromGlobal();
-  self->applyReaderPrefs(readerEditBackup_);
-  const bool ok = PersistableStore<CrossPointSettings>::saveToFile();
-  self->applyReaderPrefs(overlaid);
-  // The overlaid values are the book's, and this is the only moment the settings
-  // screen tells anyone it changed something. Hand them to the owner so the book's
-  // sidecar is current on the card before the next button press — otherwise the
-  // edit lives only in RAM until the screen is left, and a power-off loses it.
-  if (readerEditSink_) readerEditSink_(readerEditSinkCtx_, overlaid);
-  return ok;
+  return PersistableStore<CrossPointSettings>::saveToFile();
 }
 
 // ReaderPrefs.h is host-buildable and cannot see this class, so it carries its own copies.

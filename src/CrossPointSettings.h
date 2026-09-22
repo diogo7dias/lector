@@ -862,6 +862,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static uint8_t sleepTimeoutEnumToMinutes(uint8_t legacyValue);
 
   float getReaderLineCompression() const;
+  float getReaderLineCompression(const ReaderPrefs& prefs) const {
+    return resolveLineCompression(prefs.lineSpacingPercent);
+  }
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
 
@@ -874,36 +877,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
    */
   const char* getEffectiveDeviceName() const;
 
-  // ── Per-book reader-settings edit overlay ──────────────────────────────────
-  // Overlays a book's ReaderPrefs onto the live reader fields so the existing
-  // TextSettingsActivity edits them in place; endReaderEditOverlay() captures the
-  // result and restores the true global values. While an overlay is active,
-  // saveToFile() persists the global backup, never the book's overlaid values.
-  //
-  // The optional sink is how a per-book edit survives a power-off from inside the
-  // settings screen: every saveToFile() during the overlay hands the live overlaid
-  // values to it, so the owner can write the book's sidecar there and then. Plain
-  // function pointer + context, not std::function — no closure allocation.
-  //
-  // The sink fires when saveToFile() does, which is not on every keypress: a numeric
-  // row is written when its slider dialog closes. Every graceful exit — Back, Confirm,
-  // Home, sleep — commits first, so only a battery pull or a crash can lose a change.
-  using ReaderEditSink = void (*)(void* ctx, const ReaderPrefs& live);
+  // Writes the Text Settings rows of a look onto the global reader fields. The in-book
+  // toggles and the status bar block are per-book and are never pushed from here.
   void applyReaderPrefs(const ReaderPrefs& p);
-  void beginReaderEditOverlay(const ReaderPrefs& startValues, ReaderEditSink sink = nullptr, void* sinkCtx = nullptr);
-  ReaderPrefs endReaderEditOverlay();
-  bool readerEditOverlayActive() const { return readerEditOverlayActive_; }
 
-  // Shadows PersistableStore::saveToFile so an active reader-edit overlay can never
-  // leak a book's per-book values into the global settings.json.
+  // Shadows PersistableStore::saveToFile to re-assert the margin link mode first.
   bool saveToFile() const;
 
-  // The global reader settings with every live overlay unwound. ReaderPrefs::fromGlobal()
-  // reads the live fields, and while a book is open its own status bar block sits on those
-  // fields (and, inside the Reader Settings screen, its font and margins too), so a book
-  // asking "what is global?" through fromGlobal() gets its own values handed back. Anything
-  // that means the user's global settings -- Reset Reader Settings above all -- must ask here.
-  ReaderPrefs trueGlobalReaderPrefs() const;
   // The global status bar: for every screen that is not a book with its own bar.
   StatusBarBlock statusBar() const;
   void setStatusBar(const StatusBarBlock& b);
@@ -923,11 +903,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Line-height multiplier from a line-spacing percentage (100 = natural). Clamped
   // to [MIN..MAX]_LINE_SPACING_PERCENT. Restored granular model (old lector).
   static float resolveLineCompression(uint8_t lineSpacingPercent);
-
-  bool readerEditOverlayActive_ = false;
-  ReaderPrefs readerEditBackup_;
-  ReaderEditSink readerEditSink_ = nullptr;
-  void* readerEditSinkCtx_ = nullptr;
 };
 
 // Helper macro to access settings

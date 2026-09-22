@@ -730,8 +730,13 @@ void SettingsActivity::toggleCurrentSetting() {
                                });
         break;
       case SettingAction::TextSettings:
-        startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
-                                                                      SETTINGS.statusBar()),
+        startActivityForResult(std::make_unique<TextSettingsActivity>(
+                                   renderer, mappedInput, &sdFontSystem.registry(), ReaderPrefs::fromGlobal(),
+                                   [](void*, const ReaderPrefs& edited) {
+                                     SETTINGS.applyReaderPrefs(edited);
+                                     SETTINGS.saveToFile();
+                                   },
+                                   nullptr),
                                [this](const ActivityResult&) {
                                  // TextSettingsActivity saves on each change; no save needed here.
                                  rebuildSettingsList();

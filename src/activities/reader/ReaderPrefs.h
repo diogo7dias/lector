@@ -294,10 +294,7 @@ static_assert(reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + 
               "every ReaderPrefs field must appear in exactly one list in ReaderLookFields.h, or "
               "some copier will silently drop it");
 
-// Restore the fields the Reader Settings screen never edits.
-//
-// While that screen is open the edited values live on the global reader fields, so a
-// snapshot taken when it closes carries the GLOBAL values for the in-book toggles and
+// Restore the fields the Reader Settings screen never edits: the in-book toggles and
 // the status bar switch. The book's own must survive the edit; this is the one place
 // that says which fields those are.
 inline void restoreBookOnlyFields(ReaderPrefs& target, const ReaderPrefs& book) {
@@ -392,14 +389,13 @@ inline void settleSidecarPrefs(ReaderPrefs& p, const uint8_t fromVersion, const 
 }
 
 // ── Mid-edit override decision ────────────────────────────────────────────────
-// While the in-book Reader Settings screen is open, the edited values live on the
-// global reader fields (see CrossPointSettings::beginReaderEditOverlay). Every row
-// change must land on the card straight away, so switching the reader off inside
-// that screen keeps the change instead of losing it.
+// While the in-book Reader Settings screen is open, every row change must land on the
+// card straight away, so switching the reader off inside that screen keeps the change
+// instead of losing it.
 //
 // This is the pure rule behind that write, split out from the storage call so the
-// host tests can exercise it: it takes the live overlaid values, the book's current
-// prefs, and whether the book already has a sidecar, and says what to do with it.
+// host tests can exercise it: it takes the edited values, the book's current prefs,
+// and whether the book already has a sidecar, and says what to do with it.
 enum class ReaderOverrideAction : uint8_t {
   Keep,    // the file on the card already says this — leave it alone
   Write,   // persist these prefs as the book's override
@@ -414,8 +410,8 @@ struct ReaderOverrideDecision {
 inline ReaderOverrideDecision decideReaderOverride(const ReaderPrefs& live, const ReaderPrefs& book,
                                                    const bool bookIsCustom) {
   ReaderOverrideDecision decision{ReaderOverrideAction::Keep, live};
-  // `live` holds the GLOBAL values for the in-book toggles and the status bar switch,
-  // because the overlay does not carry them. The book's own must survive the edit.
+  // The screen never edits the in-book toggles or the status bar switch; the book's own
+  // must survive the edit whatever `live` carries for them.
   restoreBookOnlyFields(decision.prefs, book);
 
   if (std::memcmp(&decision.prefs, &book, sizeof(ReaderPrefs)) != 0) {

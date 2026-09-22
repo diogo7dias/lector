@@ -342,14 +342,14 @@ class EpubReaderActivity final : public Activity {
   bool writeReaderOverride(const ReaderPrefs& p) const;
   // Capture the in-book Reader Settings edit back into this book's override.
   void applyReaderSettingsEdit();
-  // Called on every row change inside the Reader Settings screen, via the overlay
+  // Called on every row change inside the Reader Settings screen, via the screen's
   // sink, so the book's sidecar is already correct if the reader is switched off in
   // there. Writes only: prefs_ still holds what the page was laid out with, so the
   // re-layout decision at applyReaderSettingsEdit() is unaffected.
   void persistReaderSettingsEdit(const ReaderPrefs& live) const;
+  // The book's look while the Reader Settings screen edits it (a copy of prefs_).
+  ReaderPrefs readerEdit_{};
   static void readerEditSinkThunk(void* ctx, const ReaderPrefs& live);
-  // Delete this book's override and follow the global settings again.
-  // Reads the Customise Status Bar screen's result back into this book's override.
   // The light panel's aux row is this book's text size. Only the sizes actually installed
   // for the active family are reachable, so on a device carrying only the built-in
   // ChareInk (one compiled-in size) the row shows the size and the steppers do nothing.
@@ -360,7 +360,9 @@ class EpubReaderActivity final : public Activity {
   StatusBarBlock statusBarEdit_{};
   static void statusBarEditSinkThunk(void* ctx, const StatusBarBlock& edited);
   void persistStatusBarEdit(const StatusBarBlock& edited);
+  // Reads the Customise Status Bar screen's result back into this book's override.
   void applyStatusBarEdit();
+  // Delete this book's override and follow the global settings again.
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.
   void reloadForReaderPrefsChange();

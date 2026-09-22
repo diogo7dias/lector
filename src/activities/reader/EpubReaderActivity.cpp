@@ -243,15 +243,6 @@ void EpubReaderActivity::onExit() {
   // this exit's own card work instead of ever standing between a press and a page.
   DeferredFavorite::flush();
 
-  // Same for an open Reader Settings edit. The result handler that normally ends the
-  // overlay (applyReaderSettingsEdit) only runs on the POP path; Home and sleep
-  // REPLACE the stack, which destroys this activity without ever running it
-  // (ActivityManager::loop, PendingAction::Replace). Left set, two things outlive the
-  // book: the live reader fields keep its font and margins as if they were global, and
-  // readerEditSink_ still points at this freed activity — the next saveToFile() would
-  // call through it. onExit() is the one place every destruction path routes through.
-  if (SETTINGS.readerEditOverlayActive()) SETTINGS.endReaderEditOverlay();
-
   // The extractor holds a raw pointer to this activity's epub; drop it before
   // the activity (and the shared_ptr) goes away.
   ImageBlock::setExtractor(nullptr, nullptr);
@@ -1531,12 +1522,14 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       break;
     }
     case EpubReaderMenuActivity::MenuAction::READER_SETTINGS: {
-      // Overlay this book's values onto the live settings so the existing text
-      // settings screen edits them in place (guarded so global settings.json is
-      // untouched); the result callback captures the edits into the book override.
-      SETTINGS.beginReaderEditOverlay(prefs_, &EpubReaderActivity::readerEditSinkThunk, this);
+      // The screen edits a copy of this book's look; each change lands on the card through
+      // the sink, and the result callback relays the book out once at the end. Leaving by
+      // Home or sleep skips that callback, but the screen commits on its way out and this
+      // activity is still alive then (the top of the stack exits first).
+      readerEdit_ = prefs_;
       startActivityForResult(
-          std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(), statusBarOf(prefs_)),
+          std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(), prefs_,
+                                                 &EpubReaderActivity::readerEditSinkThunk, this),
           [this](const ActivityResult&) { applyReaderSettingsEdit(); });
       break;
     }
@@ -1773,7 +1766,7 @@ bool EpubReaderActivity::lightPanelStepAux(const int delta) {
 }
 
 void EpubReaderActivity::loadReaderPrefs() {
-  const BookReaderPrefs book = loadBookReaderPrefs(epub->getCachePath(), SETTINGS.trueGlobalReaderPrefs());
+  const BookReaderPrefs book = loadBookReaderPrefs(epub->getCachePath(), ReaderPrefs::fromGlobal());
   prefs_ = book.prefs;
   prefsCustom_ = book.custom;
   prefsFromVersion_ = book.fromVersion;
@@ -1843,7 +1836,9 @@ void EpubReaderActivity::dropSectionForRelayout() {
 }
 
 void EpubReaderActivity::readerEditSinkThunk(void* ctx, const ReaderPrefs& live) {
-  static_cast<const EpubReaderActivity*>(ctx)->persistReaderSettingsEdit(live);
+  auto* self = static_cast<EpubReaderActivity*>(ctx);
+  self->readerEdit_ = live;
+  self->persistReaderSettingsEdit(live);
 }
 
 void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) const {
@@ -1862,9 +1857,9 @@ void EpubReaderActivity::persistReaderSettingsEdit(const ReaderPrefs& live) cons
 }
 
 void EpubReaderActivity::applyReaderSettingsEdit() {
-  ReaderPrefs edited = SETTINGS.endReaderEditOverlay();
+  ReaderPrefs edited = readerEdit_;
   // The in-book toggles are not part of the Reader Settings screen, so they are not in
-  // the overlay round-trip; carry the book's values across so editing font or margins
+  // the screen's round-trip; carry the book's values across so editing font or margins
   // never resets them.
   restoreBookOnlyFields(edited, prefs_);
   if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
@@ -1918,7 +1913,7 @@ void EpubReaderActivity::resetReaderPrefsToGlobal() {
   if (!sortesMode) Storage.remove(readerOverridePath().c_str());
   // Not ReaderPrefs::fromGlobal(): inside the Reader Settings screen the live reader
   // fields hold this book's values, not the global ones.
-  prefs_ = SETTINGS.trueGlobalReaderPrefs();
+  prefs_ = ReaderPrefs::fromGlobal();
   prefsCustom_ = false;
   // An SD family keeps exactly one size resident and the id resolver returns whichever that
   // is, whatever size is asked for, so the global size has to be made resident before the

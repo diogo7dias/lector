@@ -80,8 +80,7 @@ std::unique_ptr<Epub> ReaderActivity::loadEpub(const std::string& path) {
     // The stylesheet is only worth parsing if at least one of the two switches still
     // honours something from it. The book's own switches decide, not the global ones:
     // a book with its own look can turn embedded style on while global has it off.
-    const bool skipCss =
-        !wantsBookCss(loadBookReaderPrefs(epub->getCachePath(), SETTINGS.trueGlobalReaderPrefs()).prefs);
+    const bool skipCss = !wantsBookCss(loadBookReaderPrefs(epub->getCachePath(), ReaderPrefs::fromGlobal()).prefs);
     loaded = epub->load(true, skipCss);
   }
   if (loaded) {
