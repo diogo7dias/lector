@@ -65,8 +65,8 @@ int findCurrentFontIndex(const SdCardFontRegistry* registry, const char* sdFontF
 }  // namespace
 
 TextSettingsActivity::TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                           const SdCardFontRegistry* registry)
-    : UiGridActivity("TextSettings", renderer, mappedInput), registry_(registry) {}
+                                           const SdCardFontRegistry* registry, const StatusBarBlock& statusBar)
+    : UiGridActivity("TextSettings", renderer, mappedInput), registry_(registry), statusBar_(statusBar) {}
 
 void TextSettingsActivity::onEnter() {
   UiGridActivity::onEnter();
@@ -131,7 +131,7 @@ int TextSettingsActivity::reservedHeight() const {
 void TextSettingsActivity::drawReserved(const Rect& rect) {
   // The preview is a real page rendered by the reader engine, so it stays a raw
   // painter; the base only decides where it goes.
-  textsettings::renderPreview(renderer, previewLayout_, rect.y, rect.height - metrics_.verticalSpacing);
+  textsettings::renderPreview(renderer, previewLayout_, statusBar_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
 TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {

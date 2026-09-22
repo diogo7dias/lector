@@ -105,26 +105,26 @@ std::string anchorRowValue(uint8_t v) {
 uint8_t cycle(uint8_t v, int count) { return static_cast<uint8_t>((v + 1) % count); }
 }  // namespace
 
-uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) const {
+uint8_t* StatusBarSettingsActivity::anchorFieldFor(int itemId) {
   switch (itemId) {
     case ITEM_BATTERY:
-      return &SETTINGS.sbBatteryPos;
+      return &sb.batteryPos;
     case ITEM_CLOCK:
-      return &SETTINGS.sbClockPos;
+      return &sb.clockPos;
     case ITEM_TITLE:
-      return &SETTINGS.sbTitlePos;
+      return &sb.titlePos;
     case ITEM_PAGE:
-      return &SETTINGS.sbPagePos;
+      return &sb.pagePos;
     case ITEM_BOOK_PCT:
-      return &SETTINGS.sbBookPctPos;
+      return &sb.bookPctPos;
     case ITEM_CHAPTER_PCT:
-      return &SETTINGS.sbChapterPctPos;
+      return &sb.chapterPctPos;
     case ITEM_CHAPTER_NUM:
-      return &SETTINGS.sbChapterNumPos;
+      return &sb.chapterNumPos;
     case ITEM_SESSION_PAGES:
-      return &SETTINGS.sbSessionPagesPos;
+      return &sb.sessionPagesPos;
     case ITEM_PARA_PAGES:
-      return &SETTINGS.sbParaPagesPos;
+      return &sb.paraPagesPos;
     default:
       return nullptr;
   }
@@ -136,7 +136,7 @@ void StatusBarSettingsActivity::rebuildVisibleItems() {
     if (id == ITEM_CLOCK && !halClock.isAvailable()) continue;
     // The hidden-bar progress row is dead weight while the status bar is on: the bar
     // already draws from Book Bar / Chapter Bar + Bar Thickness there.
-    if (id == ITEM_OFF_BAR && SETTINGS.sbEnabled) continue;
+    if (id == ITEM_OFF_BAR && sb.enabled) continue;
     visibleItems.push_back(id);
   }
 }
@@ -148,21 +148,21 @@ void StatusBarSettingsActivity::onEnter() {
   auto clampField = [](uint8_t& f, int count) {
     if (f >= count) f = 0;
   };
-  clampField(SETTINGS.sbBatteryPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbClockPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbTitlePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbPagePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbBookPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbChapterPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbChapterNumPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbSessionPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbParaPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
-  clampField(SETTINGS.sbTitleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
-  clampField(SETTINGS.sbPageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
-  clampField(SETTINGS.sbBookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
-  clampField(SETTINGS.sbChapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
-  clampField(SETTINGS.sbBarThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
-  clampField(SETTINGS.sbOffBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
+  clampField(sb.batteryPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.clockPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.titlePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.pagePos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.bookPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.chapterPctPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.chapterNumPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.sessionPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.paraPagesPos, CrossPointSettings::STATUS_BAR_ANCHOR_COUNT);
+  clampField(sb.titleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
+  clampField(sb.pageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
+  clampField(sb.bookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
+  clampField(sb.chapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
+  clampField(sb.barThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
+  clampField(sb.offBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
 
   // Last: it resets the selection and asks for the first paint, so the rows and the
   // clamped values must already be settled.
@@ -191,7 +191,7 @@ void StatusBarSettingsActivity::handleSelection(const int index) {
                      [this, field](const int choice) {
                        if (choice >= 0 && choice < CrossPointSettings::STATUS_BAR_ANCHOR_COUNT) {
                          *field = static_cast<uint8_t>(choice);
-                         SETTINGS.saveToFile();
+                         sink(sinkCtx, sb);
                        }
                        requestUpdate();
                      });
@@ -200,43 +200,43 @@ void StatusBarSettingsActivity::handleSelection(const int index) {
 
   switch (id) {
     case ITEM_ENABLED:
-      SETTINGS.sbEnabled = cycle(SETTINGS.sbEnabled, 2);
+      sb.enabled = cycle(sb.enabled, 2);
       // Turning the bar off reveals the hidden-bar progress row directly below this
       // one; turning it back on hides it again. Rebuild before the selection can point
       // past the shortened list. This row is index 0, so the cursor stays put.
       rebuildVisibleItems();
       break;
     case ITEM_OFF_BAR:
-      SETTINGS.sbOffBar = cycle(SETTINGS.sbOffBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
+      sb.offBar = cycle(sb.offBar, CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT);
       break;
     case ITEM_TITLE_SOURCE:
-      SETTINGS.sbTitleSource = cycle(SETTINGS.sbTitleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
+      sb.titleSource = cycle(sb.titleSource, CrossPointSettings::STATUS_BAR_TITLE_SOURCE_COUNT);
       break;
     case ITEM_TITLE_TRUNCATE:
-      SETTINGS.sbTitleTruncate = cycle(SETTINGS.sbTitleTruncate, 2);
+      sb.titleTruncate = cycle(sb.titleTruncate, 2);
       break;
     case ITEM_PAGE_FORMAT:
-      SETTINGS.sbPageFormat = cycle(SETTINGS.sbPageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
+      sb.pageFormat = cycle(sb.pageFormat, CrossPointSettings::STATUS_BAR_PAGE_FORMAT_COUNT);
       break;
     case ITEM_BOOK_BAR:
-      SETTINGS.sbBookBar = cycle(SETTINGS.sbBookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
+      sb.bookBar = cycle(sb.bookBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
       break;
     case ITEM_CHAPTER_BAR:
-      SETTINGS.sbChapterBar = cycle(SETTINGS.sbChapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
+      sb.chapterBar = cycle(sb.chapterBar, CrossPointSettings::STATUS_BAR_EDGE_COUNT);
       break;
     case ITEM_BAR_THICKNESS:
-      SETTINGS.sbBarThickness = cycle(SETTINGS.sbBarThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
+      sb.barThickness = cycle(sb.barThickness, CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT);
       break;
     case ITEM_FLOATING_BAR:
-      SETTINGS.sbFloatingBar = cycle(SETTINGS.sbFloatingBar, 2);
+      sb.floatingBar = cycle(sb.floatingBar, 2);
       break;
     case ITEM_BAR_OUTLINE:
-      SETTINGS.sbBarOutline = cycle(SETTINGS.sbBarOutline, 2);
+      sb.barOutline = cycle(sb.barOutline, 2);
       break;
     default:
       return;
   }
-  SETTINGS.saveToFile();
+  sink(sinkCtx, sb);
 }
 
 void StatusBarSettingsActivity::activateIndex(const int index) {
@@ -249,33 +249,32 @@ void StatusBarSettingsActivity::activateIndex(const int index) {
 // otherwise whatever that row cycles through. Pulled out of the old drawList callback
 // unchanged, so the rows read exactly as they did.
 std::string StatusBarSettingsActivity::rowValue(const int id) const {
-  if (const uint8_t* field = anchorFieldFor(id)) return anchorRowValue(*field);
+  // anchorFieldFor() only hands out a pointer into sb; nothing is written through it here.
+  if (const uint8_t* field = const_cast<StatusBarSettingsActivity*>(this)->anchorFieldFor(id)) {
+    return anchorRowValue(*field);
+  }
   switch (id) {
     case ITEM_ENABLED:
-      return SETTINGS.sbEnabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return sb.enabled ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_OFF_BAR:
-      return I18N.get(
-          offBarNames[SETTINGS.sbOffBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? SETTINGS.sbOffBar : 0]);
+      return I18N.get(offBarNames[sb.offBar < CrossPointSettings::STATUS_BAR_OFF_BAR_COUNT ? sb.offBar : 0]);
     case ITEM_TITLE_SOURCE:
-      return SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER ? tr(STR_CHAPTER) : tr(STR_BOOK);
+      return sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER ? tr(STR_CHAPTER) : tr(STR_BOOK);
     case ITEM_TITLE_TRUNCATE:
-      return SETTINGS.sbTitleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return sb.titleTruncate ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_PAGE_FORMAT:
-      return SETTINGS.sbPageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT) : tr(STR_PAGE_FRACTION);
+      return sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT ? tr(STR_PAGE_LEFT) : tr(STR_PAGE_FRACTION);
     case ITEM_BOOK_BAR:
-      return I18N.get(edgeNames[SETTINGS.sbBookBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? SETTINGS.sbBookBar
-                                                                                              : 0]);
+      return I18N.get(edgeNames[sb.bookBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? sb.bookBar : 0]);
     case ITEM_CHAPTER_BAR:
-      return I18N.get(
-          edgeNames[SETTINGS.sbChapterBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? SETTINGS.sbChapterBar : 0]);
+      return I18N.get(edgeNames[sb.chapterBar < CrossPointSettings::STATUS_BAR_EDGE_COUNT ? sb.chapterBar : 0]);
     case ITEM_BAR_THICKNESS:
-      return I18N.get(thicknessNames[SETTINGS.sbBarThickness < CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT
-                                         ? SETTINGS.sbBarThickness
-                                         : 0]);
+      return I18N.get(
+          thicknessNames[sb.barThickness < CrossPointSettings::STATUS_BAR_BAR_THICKNESS_COUNT ? sb.barThickness : 0]);
     case ITEM_FLOATING_BAR:
-      return SETTINGS.sbFloatingBar ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return sb.floatingBar ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     case ITEM_BAR_OUTLINE:
-      return SETTINGS.sbBarOutline ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      return sb.barOutline ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
     default:
       return std::string();
   }

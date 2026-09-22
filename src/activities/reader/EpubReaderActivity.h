@@ -356,6 +356,10 @@ class EpubReaderActivity final : public Activity {
   bool lightPanelAuxText(char* out, size_t length) const override;
   bool lightPanelStepAux(int delta) override;
 
+  // The book's bar while the Customise Status Bar screen edits it (a copy of prefs_'s).
+  StatusBarBlock statusBarEdit_{};
+  static void statusBarEditSinkThunk(void* ctx, const StatusBarBlock& edited);
+  void persistStatusBarEdit(const StatusBarBlock& edited);
   void applyStatusBarEdit();
   void resetReaderPrefsToGlobal();
   // Drop the section so the next render re-paginates with the new prefs, keeping position.

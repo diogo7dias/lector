@@ -53,15 +53,14 @@ int anchorSlot(uint8_t anchor) { return (anchor - CrossPointSettings::SB_ANCHOR_
 // Fills slots[3] with the sample text of every status bar item anchored to the requested
 // edge, in the same left/centre/right slots the reader uses. Items sharing a slot are
 // joined with a space, exactly as the bar itself packs them.
-void collectStatusBarSlots(bool top, std::string slots[3]) {
+void collectStatusBarSlots(const StatusBarBlock& sb, bool top, std::string slots[3]) {
   const struct {
     uint8_t anchor;
     const char* text;
   } items[] = {
-      {SETTINGS.sbBatteryPos, SAMPLE_BATTERY},    {SETTINGS.sbClockPos, SAMPLE_CLOCK},
-      {SETTINGS.sbPagePos, SAMPLE_PAGE},          {SETTINGS.sbBookPctPos, SAMPLE_PERCENT},
-      {SETTINGS.sbChapterPctPos, SAMPLE_PERCENT}, {SETTINGS.sbChapterNumPos, "Ch 2/14"},
-      {SETTINGS.sbSessionPagesPos, "+8"},         {SETTINGS.sbParaPagesPos, ">P.0"},
+      {sb.batteryPos, SAMPLE_BATTERY}, {sb.clockPos, SAMPLE_CLOCK},        {sb.pagePos, SAMPLE_PAGE},
+      {sb.bookPctPos, SAMPLE_PERCENT}, {sb.chapterPctPos, SAMPLE_PERCENT}, {sb.chapterNumPos, "Ch 2/14"},
+      {sb.sessionPagesPos, "+8"},      {sb.paraPagesPos, ">P.0"},
   };
   for (const auto& item : items) {
     if (item.anchor == CrossPointSettings::SB_ANCHOR_OFF) continue;
@@ -71,8 +70,8 @@ void collectStatusBarSlots(bool top, std::string slots[3]) {
     slot += item.text;
   }
   // The title is the one item with its own text, and it is the only one worth truncating.
-  if (SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF && anchorIsTop(SETTINGS.sbTitlePos) == top) {
-    std::string& slot = slots[anchorSlot(SETTINGS.sbTitlePos)];
+  if (sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && anchorIsTop(sb.titlePos) == top) {
+    std::string& slot = slots[anchorSlot(sb.titlePos)];
     if (!slot.empty()) slot += " ";
     slot += I18N.get(StrId::STR_PREVIEW_HEADING);
   }
@@ -80,11 +79,12 @@ void collectStatusBarSlots(bool top, std::string slots[3]) {
 
 // Draws one edge of the status bar and returns the height it occupied, which is the part
 // of the vertical margin the page does not get to use.
-int drawStatusBarEdge(const GfxRenderer& renderer, bool top, int edgeY, int paneLeft, int paneWidth) {
-  if (!SETTINGS.statusBarEnabled()) return 0;
+int drawStatusBarEdge(const GfxRenderer& renderer, const StatusBarBlock& sb, bool top, int edgeY, int paneLeft,
+                      int paneWidth) {
+  if (!sb.textOn()) return 0;
 
   std::string slots[3];
-  collectStatusBarSlots(top, slots);
+  collectStatusBarSlots(sb, top, slots);
   if (slots[0].empty() && slots[1].empty() && slots[2].empty()) return 0;
 
   const int lineH = renderer.getTextHeight(UI_10_FONT_ID);
@@ -200,7 +200,8 @@ void relayout(PreviewLayout& layout, const GfxRenderer& renderer, int fontId, in
 
 }  // namespace
 
-void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int top, const int height) {
+void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const StatusBarBlock& sb, const int top,
+                   const int height) {
   const int paneLeft = 0;
   const int paneWidth = renderer.getScreenWidth();
   if (paneWidth <= 0 || height <= 0) return;
@@ -261,7 +262,7 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const int
   }
   if (layout.lines.empty()) return;
 
-  const int topBarHeight = drawStatusBarEdge(renderer, /*top=*/true, top, paneLeft, paneWidth);
+  const int topBarHeight = drawStatusBarEdge(renderer, sb, /*top=*/true, top, paneLeft, paneWidth);
 
   // The smear is renderer state, so it must be cleared on every exit path below —
   // otherwise the row grid and the button hints would render thickened too.

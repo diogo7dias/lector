@@ -302,21 +302,20 @@ void SettingsActivity::rebuildSettingsList() {
   // Frontlight leads: brightness and warmth are reached for daily, the rest of this
   // category once in a while. Then the screen itself, then the two sleep-screen groups,
   // which are set up once and revisited only when the wallpapers change.
-  applyGroups(displaySettings,
-              {
-                  // Absent on a board with no frontlight, and applyGroups draws no
-                  // heading for a group whose rows are all missing.
-                  {StrId::STR_GRP_FRONTLIGHT,
-                   {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS, StrId::STR_FRONTLIGHT_WARMTH,
-                    StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
-                  {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
-                  {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN}},
-                  {StrId::STR_GRP_WALLPAPER,
-                   {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER, StrId::STR_SHOW_SLEEP_IMAGE_FILENAME,
-                    StrId::STR_SHOW_SLEEP_FAVORITE_BADGE, StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION,
-                    StrId::STR_SHUFFLE_WALLPAPERS}},
-                  {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
-              });
+  applyGroups(displaySettings, {
+                                   // Absent on a board with no frontlight, and applyGroups draws no
+                                   // heading for a group whose rows are all missing.
+                                   {StrId::STR_GRP_FRONTLIGHT,
+                                    {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
+                                     StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE}},
+                                   {StrId::STR_GRP_SCREEN, {StrId::STR_REFRESH_FREQ, StrId::STR_SUNLIGHT_FADING_FIX}},
+                                   {StrId::STR_GRP_SLEEP_SCREEN, {StrId::STR_SLEEP_SCREEN}},
+                                   {StrId::STR_GRP_WALLPAPER,
+                                    {StrId::STR_SLEEP_COVER_MODE, StrId::STR_SLEEP_COVER_FILTER,
+                                     StrId::STR_SHOW_SLEEP_IMAGE_FILENAME, StrId::STR_SHOW_SLEEP_FAVORITE_BADGE,
+                                     StrId::STR_SHOW_SLEEP_WALLPAPER_POSITION, StrId::STR_SHUFFLE_WALLPAPERS}},
+                                   {StrId::STR_GRP_HOME, {StrId::STR_AUTHOR_DISPLAY}},
+                               });
 
   applyGroups(
       readerSettings,
@@ -668,7 +667,14 @@ void SettingsActivity::toggleCurrentSetting() {
         startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::CustomiseStatusBar:
-        startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(std::make_unique<StatusBarSettingsActivity>(
+                                   renderer, mappedInput, SETTINGS.statusBar(),
+                                   [](void*, const StatusBarBlock& b) {
+                                     SETTINGS.setStatusBar(b);
+                                     SETTINGS.saveToFile();
+                                   },
+                                   nullptr),
+                               resultHandler);
         break;
       case SettingAction::Buttons:
         startActivityForResult(std::make_unique<ButtonBindingsActivity>(renderer, mappedInput), resultHandler);
@@ -724,7 +730,8 @@ void SettingsActivity::toggleCurrentSetting() {
                                });
         break;
       case SettingAction::TextSettings:
-        startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
+        startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(),
+                                                                      SETTINGS.statusBar()),
                                [this](const ActivityResult&) {
                                  // TextSettingsActivity saves on each change; no save needed here.
                                  rebuildSettingsList();

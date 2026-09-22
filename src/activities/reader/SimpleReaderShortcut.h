@@ -30,7 +30,7 @@ enum class Action : uint8_t {
 };
 
 // supportsStatusBarToggle: the TXT reader draws the shared status bar and honours
-// SETTINGS.statusBarEnabled(), so the toggle means something there. The XTC reader has its
+// the global SETTINGS.sbEnabled, so the toggle means something there. The XTC reader has its
 // own three-way xtcStatusBarMode instead, which a two-state toggle cannot express, so it
 // passes false and the binding reports itself unavailable rather than flipping a switch
 // that reader never reads.

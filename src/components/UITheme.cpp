@@ -93,16 +93,6 @@ UIIcon UITheme::getFileIcon(const std::string& filename) {
   return File;
 }
 
-int UITheme::getProgressBarHeight() {
-  const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const bool showProgressBar =
-      SETTINGS.progressBarsVisible() && (SETTINGS.sbBookBar != CrossPointSettings::SB_EDGE_OFF ||
-                                         SETTINGS.sbChapterBar != CrossPointSettings::SB_EDGE_OFF);
-  return showProgressBar ? (statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), SETTINGS.sbBarOutline != 0) +
-                            metrics.progressBarMarginTop + SETTINGS.floatingBarMarginPx())
-                         : 0;
-}
-
 namespace {
 bool sbAnchorTop(uint8_t a) {
   return a == CrossPointSettings::SB_ANCHOR_TL || a == CrossPointSettings::SB_ANCHOR_TC ||
@@ -120,19 +110,19 @@ bool sbItemOn(uint8_t anchor, bool chapterOnly, bool hasChapters) {
 // pushes a top item down to the bottom band is not reflected here (device-tuned
 // later), so a reserved band never disappears — at worst a bumped item may draw in
 // a band that was already reserved for its native residents.
-bool sbBandHasText(bool top, bool hasChapters) {
+bool sbBandHasText(const StatusBarBlock& sb, bool top, bool hasChapters) {
   const bool clockAvailable = halClock.isAvailable();
   const struct {
     uint8_t anchor;
     bool chapterOnly;
     bool applicable;
   } items[] = {
-      {SETTINGS.sbBatteryPos, false, true},   {SETTINGS.sbClockPos, false, clockAvailable},
-      {SETTINGS.sbTitlePos, false, true},  // title falls back to book title on chapterless books
-      {SETTINGS.sbPagePos, false, true},   // page falls back to book pages on chapterless books
-      {SETTINGS.sbBookPctPos, false, true},   {SETTINGS.sbChapterPctPos, true, true},
-      {SETTINGS.sbChapterNumPos, true, true}, {SETTINGS.sbSessionPagesPos, false, true},
-      {SETTINGS.sbParaPagesPos, false, true},
+      {sb.batteryPos, false, true},   {sb.clockPos, false, clockAvailable},
+      {sb.titlePos, false, true},  // title falls back to book title on chapterless books
+      {sb.pagePos, false, true},   // page falls back to book pages on chapterless books
+      {sb.bookPctPos, false, true},   {sb.chapterPctPos, true, true},
+      {sb.chapterNumPos, true, true}, {sb.sessionPagesPos, false, true},
+      {sb.paraPagesPos, false, true},
   };
   for (const auto& it : items) {
     if (!it.applicable) continue;
@@ -143,32 +133,32 @@ bool sbBandHasText(bool top, bool hasChapters) {
 }
 }  // namespace
 
-int UITheme::getStatusBarV2TopHeight(bool hasChapters, int extraTitleHeightPx) {
+int UITheme::getStatusBarV2TopHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx) {
   // The bars can outlive the text: with the status bar hidden and sbOffBar set, this
-  // band reserves the bar only. See CrossPointSettings::progressBarsVisible().
-  if (!SETTINGS.progressBarsVisible()) return 0;
+  // band reserves the bar only. See StatusBarBlock::progressBarsVisible().
+  if (!sb.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), SETTINGS.sbBarOutline != 0);
+  const int barPx = statusBarDrawThicknessPx(sb.activeBarThickness(), sb.barOutline != 0);
   int bars = 0;
-  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
-  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
-  const bool hasText = SETTINGS.statusBarEnabled() && sbBandHasText(true, hasChapters);
+  if (sb.bookBar == CrossPointSettings::SB_EDGE_TOP) bars += barPx;
+  if (sb.chapterBar == CrossPointSettings::SB_EDGE_TOP && hasChapters) bars += barPx;
+  const bool hasText = sb.textOn() && sbBandHasText(sb, true, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
   // The floating margin is the gap ABOVE the topmost bar, so it is paid once per
   // band, not once per bar.
-  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + SETTINGS.floatingBarMarginPx() : 0);
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + sb.floatingBarMarginPx() : 0);
 }
 
-int UITheme::getStatusBarV2BottomHeight(bool hasChapters, int extraTitleHeightPx) {
-  if (!SETTINGS.progressBarsVisible()) return 0;
+int UITheme::getStatusBarV2BottomHeight(const StatusBarBlock& sb, bool hasChapters, int extraTitleHeightPx) {
+  if (!sb.progressBarsVisible()) return 0;
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
-  const int barPx = statusBarDrawThicknessPx(SETTINGS.activeBarThickness(), SETTINGS.sbBarOutline != 0);
+  const int barPx = statusBarDrawThicknessPx(sb.activeBarThickness(), sb.barOutline != 0);
   int bars = 0;
-  if (SETTINGS.sbBookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
-  if (SETTINGS.sbChapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
-  const bool hasText = SETTINGS.statusBarEnabled() && sbBandHasText(false, hasChapters);
+  if (sb.bookBar == CrossPointSettings::SB_EDGE_BOTTOM) bars += barPx;
+  if (sb.chapterBar == CrossPointSettings::SB_EDGE_BOTTOM && hasChapters) bars += barPx;
+  const bool hasText = sb.textOn() && sbBandHasText(sb, false, hasChapters);
   const int text = hasText ? metrics.statusBarVerticalMargin + (extraTitleHeightPx > 0 ? extraTitleHeightPx : 0) : 0;
-  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + SETTINGS.floatingBarMarginPx() : 0);
+  return text + (bars > 0 ? bars + metrics.progressBarMarginTop + sb.floatingBarMarginPx() : 0);
 }
 
 int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
@@ -180,9 +170,9 @@ int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
   return rightEdge - leftEdge;
 }
 
-int UITheme::getStatusBarV2TitleLines(const GfxRenderer& renderer, const char* title) {
-  if (!SETTINGS.statusBarEnabled() || SETTINGS.sbTitlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
-  if (SETTINGS.sbTitleTruncate != 0) return 1;  // a clipping title stays one line
+int UITheme::getStatusBarV2TitleLines(const StatusBarBlock& sb, const GfxRenderer& renderer, const char* title) {
+  if (!sb.textOn() || sb.titlePos == CrossPointSettings::SB_ANCHOR_OFF) return 1;
+  if (sb.titleTruncate != 0) return 1;  // a clipping title stays one line
   if (!title || title[0] == '\0') return 1;
   const int bandWidth = getStatusBarV2BandWidth(renderer);
   if (bandWidth <= 0) return 1;

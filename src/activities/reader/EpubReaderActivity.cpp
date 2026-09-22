@@ -243,10 +243,6 @@ void EpubReaderActivity::onExit() {
   // this exit's own card work instead of ever standing between a press and a page.
   DeferredFavorite::flush();
 
-  // Stop speaking for this book: everything outside the reader follows the global
-  // status bar setting again.
-  SETTINGS.clearStatusBarOverride();
-
   // Same for an open Reader Settings edit. The result handler that normally ends the
   // overlay (applyReaderSettingsEdit) only runs on the POP path; Home and sleep
   // REPLACE the stack, which destroys this activity without ever running it
@@ -1539,16 +1535,19 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // settings screen edits them in place (guarded so global settings.json is
       // untouched); the result callback captures the edits into the book override.
       SETTINGS.beginReaderEditOverlay(prefs_, &EpubReaderActivity::readerEditSinkThunk, this);
-      startActivityForResult(std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry()),
-                             [this](const ActivityResult&) { applyReaderSettingsEdit(); });
+      startActivityForResult(
+          std::make_unique<TextSettingsActivity>(renderer, mappedInput, &sdFontSystem.registry(), statusBarOf(prefs_)),
+          [this](const ActivityResult&) { applyReaderSettingsEdit(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::CUSTOMISE_STATUS_BAR: {
-      // The book's own bar values are already overlaid on the live sb* fields, so the
-      // existing Customise Status Bar screen edits THIS BOOK in place, and the result
-      // callback captures them back into the override.
-      startActivityForResult(std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput),
-                             [this](const ActivityResult&) { applyStatusBarEdit(); });
+      // The screen edits a copy of THIS BOOK's bar; each change lands on the card through
+      // the sink, and the result callback relays the book out once at the end.
+      statusBarEdit_ = statusBarOf(prefs_);
+      startActivityForResult(
+          std::make_unique<StatusBarSettingsActivity>(renderer, mappedInput, statusBarEdit_,
+                                                      &EpubReaderActivity::statusBarEditSinkThunk, this),
+          [this](const ActivityResult&) { applyStatusBarEdit(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::RESET_READER_SETTINGS: {
@@ -1880,21 +1879,35 @@ void EpubReaderActivity::applyReaderSettingsEdit() {
   requestUpdate();
 }
 
+void EpubReaderActivity::statusBarEditSinkThunk(void* ctx, const StatusBarBlock& edited) {
+  static_cast<EpubReaderActivity*>(ctx)->persistStatusBarEdit(edited);
+}
+
+void EpubReaderActivity::persistStatusBarEdit(const StatusBarBlock& edited) {
+  statusBarEdit_ = edited;
+  if (sortesMode) return;
+  // Every change lands on the card straight away, so switching the reader off inside
+  // the screen keeps it. Same rule as the Reader Settings edit: a book that was
+  // following global and has been put back exactly as it was keeps following global.
+  ReaderPrefs p = prefs_;
+  setStatusBarOf(p, edited);
+  if (std::memcmp(&p, &prefs_, sizeof(ReaderPrefs)) != 0) {
+    writeReaderOverride(p);
+  } else if (!prefsCustom_) {
+    Storage.remove(readerOverridePath().c_str());
+  }
+}
+
 void EpubReaderActivity::applyStatusBarEdit() {
-  // Only the status bar block is read back: the screen edits nothing else, and pulling a
-  // whole ReaderPrefs::fromGlobal() here would overwrite this book's font and margins
-  // with the global ones.
   ReaderPrefs edited = prefs_;
-#define CP_READ_BACK_SB(prefsName, settingsName, blockName) edited.prefsName = SETTINGS.settingsName;
-  READER_STATUS_BAR_FIELDS(CP_READ_BACK_SB)
-#undef CP_READ_BACK_SB
+  setStatusBarOf(edited, statusBarEdit_);
   if (std::memcmp(&edited, &prefs_, sizeof(ReaderPrefs)) == 0) {
     requestUpdate();
     return;
   }
+  // Already on the card: persistStatusBarEdit() wrote it with the change that made it.
   prefs_ = edited;
   prefsCustom_ = true;
-  writeReaderOverride(prefs_);
   // The bar's height and edges decide the reserved bands, so the viewport changed and
   // the chapter has to be laid out again — the same path any margin change takes.
   reloadForReaderPrefsChange();
@@ -1903,9 +1916,8 @@ void EpubReaderActivity::applyStatusBarEdit() {
 
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
   if (!sortesMode) Storage.remove(readerOverridePath().c_str());
-  // Not ReaderPrefs::fromGlobal(): this book's own status bar block is overlaid on the
-  // live sb* fields for as long as the book is open, so that snapshot would hand the book
-  // its own bar straight back and the reset would leave the bar exactly where it was.
+  // Not ReaderPrefs::fromGlobal(): inside the Reader Settings screen the live reader
+  // fields hold this book's values, not the global ones.
   prefs_ = SETTINGS.trueGlobalReaderPrefs();
   prefsCustom_ = false;
   // An SD family keeps exactly one size resident and the id resolver returns whichever that
@@ -1937,8 +1949,6 @@ void EpubReaderActivity::applyStatusBar(const uint8_t enabled, const uint8_t pro
   prefs_.sbOffBar = progressBar;
   prefsCustom_ = true;
   writeReaderOverride(prefs_);
-  // Republish so everything that measures the bar sees this book's new values.
-  SETTINGS.setStatusBarOverride(prefs_);
   // Unlike the toggles above these change the reserved top/bottom bands, so the viewport
   // changes and the chapter has to be laid out again. Same path as any margin change: the
   // reading position is held as a paragraph across the rebuild. Both are applied before
@@ -2444,10 +2454,8 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
-  // Publish this book's status bar switch before anything measures or draws the bar.
-  // Set here rather than beside each `prefs_ =` assignment so it cannot fall out of
-  // step with the prefs the layout below is about to use. Cleared in onExit().
-  SETTINGS.setStatusBarOverride(prefs_);
+  // This book's own bar: everything below measures with the same prefs it lays out with.
+  const StatusBarBlock sb = statusBarOf(prefs_);
 
   // Apply screen viewable areas and additional padding
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
@@ -2461,23 +2469,22 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   // A greedy (truncate-off) title can wrap to several lines; reserve the extra band
   // height in whichever edge holds the title so the reading text is pushed clear.
   int sbTitleExtraPx = 0;
-  if (SETTINGS.statusBarEnabled() && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
-      SETTINGS.sbTitleTruncate == 0) {
+  if (sb.textOn() && sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && sb.titleTruncate == 0) {
     std::string sbTitle;
-    if (SETTINGS.sbTitleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
+    if (sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER) {
       const int tocIndex = epub->getTocIndexForSpineIndex(currentSpineIndex);
       if (tocIndex != -1) sbTitle = epub->getTocItem(tocIndex).title;
       if (sbTitle.empty()) sbTitle = tr(STR_UNNAMED);
     } else {
       sbTitle = epub->getTitle();
     }
-    const int lines = UITheme::getStatusBarV2TitleLines(renderer, sbTitle.c_str());
+    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, sbTitle.c_str());
     sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   }
-  const bool sbTitleTop = SETTINGS.sbTitlePos >= CrossPointSettings::SB_ANCHOR_TL &&
-                          SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(true, sbTitleTop ? sbTitleExtraPx : 0);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(true, sbTitleTop ? 0 : sbTitleExtraPx);
+  const bool sbTitleTop =
+      sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, true, sbTitleTop ? sbTitleExtraPx : 0);
+  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, true, sbTitleTop ? 0 : sbTitleExtraPx);
   orientedMarginTop += sbTop;
   orientedMarginBottom += sbBottom;
 
@@ -3447,7 +3454,8 @@ void EpubReaderActivity::renderStatusBar() const {
   // Read from the chapter's paragraph table, and only when the item is on: it costs
   // one section-file open, which is not worth paying on every page for a number
   // nobody asked to see.
-  if (SETTINGS.sbParaPagesPos != CrossPointSettings::SB_ANCHOR_OFF) {
+  const StatusBarBlock sb = statusBarOf(prefs_);
+  if (sb.paraPagesPos != CrossPointSettings::SB_ANCHOR_OFF) {
     if (const auto left = section->pagesUntilNextParagraph(section->currentPage)) {
       d.paragraphPagesLeft = static_cast<int>(*left);
     }
@@ -3457,7 +3465,7 @@ void EpubReaderActivity::renderStatusBar() const {
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so
   // nothing drawn afterwards inherits the smear.
   renderer.setPaperbackLook(prefs_.paperbackLookStatus);
-  GUI.drawStatusBarV2(renderer, d);
+  GUI.drawStatusBarV2(renderer, d, sb);
   renderer.setPaperbackLook(false);
 }
 

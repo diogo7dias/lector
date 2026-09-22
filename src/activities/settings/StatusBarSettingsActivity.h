@@ -1,9 +1,9 @@
 #pragma once
 #include <cstdint>
+#include <string>
 #include <vector>
 
-#include <string>
-
+#include "CrossPointSettings.h"
 #include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
 
@@ -11,10 +11,15 @@
 // parked at one of six anchors (or Off) via a small in-place position picker; the
 // progress bars, thickness and title/page sub-options cycle in place. A live
 // preview of the real status bar is drawn at the bottom.
+//
+// It edits a copy of the bar it is handed and passes every change to `sink` at once, so
+// the owner keeps it on the card: the global settings, or one book's own look.
 class StatusBarSettingsActivity final : public UiListActivity {
  public:
-  explicit StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiListActivity("StatusBarSettings", renderer, mappedInput) {}
+  using Sink = void (*)(void* ctx, const StatusBarBlock& edited);
+  StatusBarSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const StatusBarBlock& start,
+                            Sink sink, void* sinkCtx)
+      : UiListActivity("StatusBarSettings", renderer, mappedInput), sb(start), sink(sink), sinkCtx(sinkCtx) {}
 
   void onEnter() override;
   void onExit() override;
@@ -30,6 +35,10 @@ class StatusBarSettingsActivity final : public UiListActivity {
   bool drawOverlay() override;
 
  private:
+  StatusBarBlock sb;
+  Sink sink;
+  void* sinkCtx;
+
   // The item ids that apply to this device (clock is X3-only), in display order.
   std::vector<int> visibleItems;
 
@@ -43,8 +52,8 @@ class StatusBarSettingsActivity final : public UiListActivity {
   // the hidden-bar progress row, which only makes sense while the status bar is off.
   // Called again whenever the master toggle flips so that row appears/disappears live.
   void rebuildVisibleItems();
-  // Returns the SETTINGS anchor field for a position item, or nullptr for non-anchor items.
-  uint8_t* anchorFieldFor(int itemId) const;
+  // Returns the anchor field of sb for a position item, or nullptr for non-anchor items.
+  uint8_t* anchorFieldFor(int itemId);
   // The value column text for one item id.
   std::string rowValue(int id) const;
 

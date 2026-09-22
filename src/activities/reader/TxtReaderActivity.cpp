@@ -182,17 +182,17 @@ void TxtReaderActivity::initializeReader() {
   // items), overlapping the reading margin (max, not sum) like the old bottom bar.
   // TXT has no chapters, so chapter-only items are hidden. A greedy (truncate-off)
   // book-source title wraps, needing extra band height.
+  const StatusBarBlock sb = SETTINGS.statusBar();
   int sbTitleExtraPx = 0;
-  if (SETTINGS.statusBarEnabled() && SETTINGS.sbTitlePos != CrossPointSettings::SB_ANCHOR_OFF &&
-      SETTINGS.sbTitleTruncate == 0) {
+  if (sb.textOn() && sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && sb.titleTruncate == 0) {
     // TXT resolves any title source to the book title (no chapters to fall back from).
-    const int lines = UITheme::getStatusBarV2TitleLines(renderer, txt->getTitle().c_str());
+    const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, txt->getTitle().c_str());
     sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
   }
-  const bool sbTitleTop = SETTINGS.sbTitlePos >= CrossPointSettings::SB_ANCHOR_TL &&
-                          SETTINGS.sbTitlePos <= CrossPointSettings::SB_ANCHOR_TR;
-  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(false, sbTitleTop ? sbTitleExtraPx : 0);
-  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(false, sbTitleTop ? 0 : sbTitleExtraPx);
+  const bool sbTitleTop =
+      sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;
+  const int sbTop = UITheme::getInstance().getStatusBarV2TopHeight(sb, false, sbTitleTop ? sbTitleExtraPx : 0);
+  const int sbBottom = UITheme::getInstance().getStatusBarV2BottomHeight(sb, false, sbTitleTop ? 0 : sbTitleExtraPx);
   cachedOrientedMarginTop += std::max<int>(topMargin, sbTop);
   cachedOrientedMarginLeft += cachedScreenMargin;
   cachedOrientedMarginRight += cachedScreenMargin;
@@ -687,7 +687,7 @@ void TxtReaderActivity::renderStatusBar() const {
   d.bookTitle = txt->getTitle();
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
   renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
-  GUI.drawStatusBarV2(renderer, d);
+  GUI.drawStatusBarV2(renderer, d, SETTINGS.statusBar());
   renderer.setPaperbackLook(false);
 }
 

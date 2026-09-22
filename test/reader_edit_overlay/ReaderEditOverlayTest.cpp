@@ -168,6 +168,4 @@ TEST(ReaderEditOverlayLifetime, TheReaderStillEndsTheOverlayOnExit) {
       << "onExit() no longer ends the reader-edit overlay: leaving via Home or sleep "
          "will strand the book's look on the global reader fields and leave the sink "
          "pointing at a destroyed activity.";
-  EXPECT_NE(body.find("clearStatusBarOverride"), std::string::npos)
-      << "onExit() no longer clears the status-bar override.";
 }

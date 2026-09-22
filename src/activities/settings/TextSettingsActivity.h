@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "CrossPointSettings.h"
 #include "TextSettingsPreview.h"
 #include "activities/UiGridActivity.h"
 #include "components/OptionPopup.h"
@@ -25,7 +26,9 @@
 
 class TextSettingsActivity final : public UiGridActivity {
  public:
-  TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry);
+  // `statusBar` is the bar the preview draws: the book's own when editing a book.
+  TextSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const SdCardFontRegistry* registry,
+                       const StatusBarBlock& statusBar);
 
   void onEnter() override;
   void onExit() override;
@@ -108,6 +111,7 @@ class TextSettingsActivity final : public UiGridActivity {
   };
 
   const SdCardFontRegistry* registry_;
+  StatusBarBlock statusBar_;
   OptionPopup optionPopup_;
   std::vector<FontEntry> fonts_;
   std::vector<SizeEntry> sizes_;

@@ -747,3 +747,28 @@ TEST(ReaderPrefs, SettleSidecarSeedsStatusBarOnlyForRecordsWithoutOne) {
   settleSidecarPrefs(current, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR, global);
   EXPECT_EQ(1, current.sbBatteryPos);
 }
+
+// Every status bar field survives a trip from a book's look to a block and back, so a
+// field added to the list but missed by a copier fails here.
+TEST(StatusBarBlock, RoundTripsThroughABooksLook) {
+  StatusBarBlock b;
+  uint8_t* bytes = reinterpret_cast<uint8_t*>(&b);
+  for (size_t i = 0; i < sizeof(b); ++i) bytes[i] = static_cast<uint8_t>(i + 1);
+  ReaderPrefs p;
+  setStatusBarOf(p, b);
+  const StatusBarBlock back = statusBarOf(p);
+  EXPECT_EQ(0, std::memcmp(&b, &back, sizeof(b)));
+}
+
+TEST(StatusBarBlock, HiddenBarKeepsItsProgressBarsOnlyWhenAsked) {
+  StatusBarBlock b;
+  b.enabled = 0;
+  b.barThickness = 2;
+  b.offBar = StatusBarBlock::OFF_BAR_OFF;
+  EXPECT_FALSE(b.progressBarsVisible());
+  b.offBar = 1;  // Slim
+  EXPECT_TRUE(b.progressBarsVisible());
+  EXPECT_EQ(0, b.activeBarThickness());  // the hidden-bar size, not the bar's own
+  b.enabled = 1;
+  EXPECT_EQ(2, b.activeBarThickness());
+}

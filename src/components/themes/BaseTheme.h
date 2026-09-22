@@ -12,6 +12,7 @@
 #include "fontIds.h"
 
 class GfxRenderer;
+struct StatusBarBlock;
 struct RecentBook;
 
 // Which item indices a variable-height list actually rendered this frame, so the caller
@@ -337,7 +338,7 @@ class BaseTheme {
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
-  void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data) const;
+  void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data, const StatusBarBlock& sb) const;
   // Centred lines of help text, wrapped to the rect's width and never cut. The caller
   // reserves helpTextLines() lines; every line is drawn.
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;

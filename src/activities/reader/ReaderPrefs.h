@@ -307,6 +307,71 @@ inline void restoreBookOnlyFields(ReaderPrefs& target, const ReaderPrefs& book) 
   target.statusBarEnabled = book.statusBarEnabled;
 }
 
+// The whole status bar configuration as one value. Everything that draws or measures
+// the bar is handed the block it should use: a book's own, or the global one.
+struct StatusBarBlock {
+  uint8_t enabled = 1;
+  uint8_t batteryPos = 0;
+  uint8_t clockPos = 0;
+  uint8_t titlePos = 0;
+  uint8_t titleSource = 0;
+  uint8_t titleTruncate = 0;
+  uint8_t pagePos = 0;
+  uint8_t pageFormat = 0;
+  uint8_t bookPctPos = 0;
+  uint8_t chapterPctPos = 0;
+  uint8_t chapterNumPos = 0;
+  uint8_t sessionPagesPos = 0;
+  uint8_t paraPagesPos = 0;
+  uint8_t bookBar = 0;
+  uint8_t chapterBar = 0;
+  uint8_t barThickness = 0;
+  uint8_t floatingBar = 0;
+  uint8_t barOutline = 0;
+  uint8_t offBar = 0;
+
+  bool textOn() const { return enabled != 0; }
+  // ── Progress bars while the status bar is hidden ───────────────────────────
+  // The Book Bar / Chapter Bar edges are part of the status bar, so hiding the bar
+  // used to hide them as well. offBar keeps them alive on their own: the edges,
+  // the percentages and the draw path stay exactly as they are with the bar showing,
+  // only the visibility gate and the thickness come from a different field.
+  //
+  // Everything that draws or reserves space for a progress bar must ask
+  // progressBarsVisible() + activeBarThickness(), never textOn() + barThickness, or
+  // the reserved band and the drawn bar disagree and the bar paints over the text.
+  bool progressBarsVisible() const { return textOn() || offBar != OFF_BAR_OFF; }
+  uint8_t activeBarThickness() const {
+    if (textOn() || offBar == OFF_BAR_OFF) return barThickness;
+    return static_cast<uint8_t>(offBar - 1);  // Slim/Medium/Fat -> 0/1/2
+  }
+  // Gap between a floating progress bar and the screen edge, in pixels. Every site that
+  // draws OR reserves space for a bar must add it, or the two disagree.
+  static constexpr int FLOATING_BAR_MARGIN_PX = 12;
+  int floatingBarMarginPx() const { return floatingBar ? FLOATING_BAR_MARGIN_PX : 0; }
+  // CrossPointSettings::SB_OFFBAR_OFF, asserted equal there.
+  static constexpr uint8_t OFF_BAR_OFF = 0;
+};
+
+// The block and the field list must agree: the three copiers below expand the list, so a
+// field added to StatusBarBlock alone would never be copied anywhere.
+static_assert(sizeof(StatusBarBlock) == reader_look::STATUS_BAR_FIELD_COUNT,
+              "every StatusBarBlock field must appear in READER_STATUS_BAR_FIELDS");
+
+// A book's status bar, and writing one back into its look.
+inline StatusBarBlock statusBarOf(const ReaderPrefs& p) {
+  StatusBarBlock b;
+#define CP_SB_FROM_PREFS(prefsName, settingsName, blockName) b.blockName = p.prefsName;
+  READER_STATUS_BAR_FIELDS(CP_SB_FROM_PREFS)
+#undef CP_SB_FROM_PREFS
+  return b;
+}
+inline void setStatusBarOf(ReaderPrefs& p, const StatusBarBlock& b) {
+#define CP_SB_TO_PREFS(prefsName, settingsName, blockName) p.prefsName = b.blockName;
+  READER_STATUS_BAR_FIELDS(CP_SB_TO_PREFS)
+#undef CP_SB_TO_PREFS
+}
+
 // ── A book's look on open ─────────────────────────────────────────────────────
 // Whether the book's stylesheet has to be parsed. Decided from the book's own look:
 // a book with either embedded switch on needs its CSS even when both global switches

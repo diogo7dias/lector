@@ -9,35 +9,6 @@
 #include "util/BoundMenuActions.h"
 #include "util/MarginLink.h"
 
-// The whole status bar configuration as one value, so it can be swapped in and out
-// atomically while a book with its own bar is open.
-struct StatusBarBlock {
-  uint8_t enabled = 1;
-  uint8_t batteryPos = 0;
-  uint8_t clockPos = 0;
-  uint8_t titlePos = 0;
-  uint8_t titleSource = 0;
-  uint8_t titleTruncate = 0;
-  uint8_t pagePos = 0;
-  uint8_t pageFormat = 0;
-  uint8_t bookPctPos = 0;
-  uint8_t chapterPctPos = 0;
-  uint8_t chapterNumPos = 0;
-  uint8_t sessionPagesPos = 0;
-  uint8_t paraPagesPos = 0;
-  uint8_t bookBar = 0;
-  uint8_t chapterBar = 0;
-  uint8_t barThickness = 0;
-  uint8_t floatingBar = 0;
-  uint8_t barOutline = 0;
-  uint8_t offBar = 0;
-};
-
-// The block and the field list must agree: the three copiers below expand the list, so a
-// field added to StatusBarBlock alone would never be copied anywhere.
-static_assert(sizeof(StatusBarBlock) == reader_look::STATUS_BAR_FIELD_COUNT,
-              "every StatusBarBlock field must appear in READER_STATUS_BAR_FIELDS");
-
 class CrossPointSettings : public PersistableStore<CrossPointSettings> {
  private:
   // Private constructor for singleton
@@ -927,48 +898,20 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // leak a book's per-book values into the global settings.json.
   bool saveToFile() const;
 
-  // ── Per-book status bar ────────────────────────────────────────────────────
-  // The EPUB reader owns a book with its own status bar: master switch, and where
-  // every item sits (ReaderPrefs, the sb* block). While that book is open the book's
-  // values are overlaid onto the live sb* fields, so the hundred-odd places that draw
-  // or measure the bar keep reading the same fields and cannot drift from each other.
-  //
-  // Runtime only. The global values are backed up on the way in, restored on the way
-  // out, and swapped back for the duration of any saveToFile() that lands mid-book, so
-  // a book's layout can never leak into settings.json and silently become the user's
-  // global setting. Same guarantee the reader-edit overlay gives, same mechanism.
-  void setStatusBarOverride(const ReaderPrefs& prefs);
-  void clearStatusBarOverride();
   // The global reader settings with every live overlay unwound. ReaderPrefs::fromGlobal()
   // reads the live fields, and while a book is open its own status bar block sits on those
   // fields (and, inside the Reader Settings screen, its font and margins too), so a book
   // asking "what is global?" through fromGlobal() gets its own values handed back. Anything
   // that means the user's global settings -- Reset Reader Settings above all -- must ask here.
   ReaderPrefs trueGlobalReaderPrefs() const;
-  bool statusBarEnabled() const { return sbEnabled != 0; }
+  // The global status bar: for every screen that is not a book with its own bar.
+  StatusBarBlock statusBar() const;
+  void setStatusBar(const StatusBarBlock& b);
 
-  // ── Progress bars while the status bar is hidden ───────────────────────────
-  // The Book Bar / Chapter Bar edges are part of the status bar, so hiding the bar
-  // used to hide them as well. sbOffBar keeps them alive on their own: the edges,
-  // the percentages and the draw path stay exactly as they are with the bar showing,
-  // only the visibility gate and the thickness come from a different field.
-  //
-  // Everything that draws or reserves space for a progress bar must ask
-  // progressBarsVisible() + activeBarThickness(), never statusBarEnabled() +
-  // sbBarThickness, or the reserved band and the drawn bar disagree and the bar
-  // paints over the reading text.
-  bool progressBarsVisible() const { return statusBarEnabled() || sbOffBar != SB_OFFBAR_OFF; }
   // Gap between a floating progress bar and the screen edge, in pixels. Applied
   // to the outer edge and to both ends. Twelve reads clearly as a lifted pill on
-  // the panel; six was too close to the bezel to be seen as deliberate. Every site
-  // that draws OR reserves space for a bar must add it, or the two disagree and
-  // the bar paints over the reading text.
-  static constexpr int SB_FLOATING_BAR_MARGIN_PX = 12;
-  int floatingBarMarginPx() const { return sbFloatingBar ? SB_FLOATING_BAR_MARGIN_PX : 0; }
-  uint8_t activeBarThickness() const {
-    if (statusBarEnabled() || sbOffBar == SB_OFFBAR_OFF) return sbBarThickness;
-    return static_cast<uint8_t>(sbOffBar - 1);  // Slim/Medium/Fat -> 0/1/2
-  }
+  // the panel; six was too close to the bezel to be seen as deliberate.
+  static constexpr int SB_FLOATING_BAR_MARGIN_PX = StatusBarBlock::FLOATING_BAR_MARGIN_PX;
 
  private:
   // Runs after current fields are decoded; reports whether the legacy document needs a resave.
@@ -982,14 +925,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   static float resolveLineCompression(uint8_t lineSpacingPercent);
 
   bool readerEditOverlayActive_ = false;
-  // The global status bar block, held while a book's own layout is overlaid on it.
-  bool sbOverrideActive_ = false;
-  StatusBarBlock sbGlobalBackup_{};
-  // Reads the live sb* fields into a block, and writes one back over them.
-  StatusBarBlock captureStatusBarBlock() const;
-  void applyStatusBarBlock(const StatusBarBlock& b);
-  // Writes a status bar block into the matching ReaderPrefs fields.
-  static void applyStatusBarBlockTo(const StatusBarBlock& b, ReaderPrefs& p);
   ReaderPrefs readerEditBackup_;
   ReaderEditSink readerEditSink_ = nullptr;
   void* readerEditSinkCtx_ = nullptr;

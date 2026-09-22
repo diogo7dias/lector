@@ -5,6 +5,7 @@
 #include <vector>
 
 class GfxRenderer;
+struct StatusBarBlock;
 class TextBlock;
 
 namespace textsettings {
@@ -61,6 +62,6 @@ struct PreviewLayout {
 //
 // The pane spans the full screen width with no padding of its own, so the horizontal
 // margin is drawn at exactly the value the page will use.
-void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, int top, int height);
+void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const StatusBarBlock& sb, int top, int height);
 
 }  // namespace textsettings

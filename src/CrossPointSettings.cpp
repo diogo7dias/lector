@@ -597,7 +597,7 @@ void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
   std::strncpy(sdFontFamilyName, p.sdFontFamilyName, sizeof(sdFontFamilyName) - 1);
 }
 
-StatusBarBlock CrossPointSettings::captureStatusBarBlock() const {
+StatusBarBlock CrossPointSettings::statusBar() const {
   StatusBarBlock b;
 #define CP_CAPTURE_SB(prefsName, settingsName, blockName) b.blockName = settingsName;
   READER_STATUS_BAR_FIELDS(CP_CAPTURE_SB)
@@ -605,51 +605,19 @@ StatusBarBlock CrossPointSettings::captureStatusBarBlock() const {
   return b;
 }
 
-void CrossPointSettings::applyStatusBarBlock(const StatusBarBlock& b) {
+void CrossPointSettings::setStatusBar(const StatusBarBlock& b) {
 #define CP_APPLY_SB(prefsName, settingsName, blockName) settingsName = b.blockName;
   READER_STATUS_BAR_FIELDS(CP_APPLY_SB)
 #undef CP_APPLY_SB
 }
 
-void CrossPointSettings::applyStatusBarBlockTo(const StatusBarBlock& b, ReaderPrefs& p) {
-#define CP_APPLY_SB_TO_PREFS(prefsName, settingsName, blockName) p.prefsName = b.blockName;
-  READER_STATUS_BAR_FIELDS(CP_APPLY_SB_TO_PREFS)
-#undef CP_APPLY_SB_TO_PREFS
-}
-
 ReaderPrefs CrossPointSettings::trueGlobalReaderPrefs() const {
-  // Reader fields: the live ones, unless the Reader Settings screen is open on a book,
-  // in which case the live fields are that book's and the backup holds the global ones.
+  // The live reader fields, unless the Reader Settings screen is open on a book, in
+  // which case the live fields are that book's and the backup holds the global ones.
+  // The status bar is never overlaid, so the live sb* fields are always the global bar.
   ReaderPrefs p = readerEditOverlayActive_ ? readerEditBackup_ : ReaderPrefs::fromGlobal();
-  // The status bar block is resolved separately because applyReaderPrefs() never touches
-  // the sb* fields: readerEditBackup_ carries whichever bar was live when the editor
-  // opened, which is the book's own whenever a book is open.
-  if (sbOverrideActive_) {
-    applyStatusBarBlockTo(sbGlobalBackup_, p);
-  } else if (readerEditOverlayActive_) {
-    applyStatusBarBlockTo(captureStatusBarBlock(), p);
-  }
+  setStatusBarOf(p, statusBar());
   return p;
-}
-
-void CrossPointSettings::setStatusBarOverride(const ReaderPrefs& prefs) {
-  // Back up the true global block once: reopening the menu re-publishes the book's
-  // values, and a second capture would back up the book's own layout as "global".
-  if (!sbOverrideActive_) {
-    sbGlobalBackup_ = captureStatusBarBlock();
-    sbOverrideActive_ = true;
-  }
-  StatusBarBlock b;
-#define CP_CAPTURE_SB_FROM_PREFS(prefsName, settingsName, blockName) b.blockName = prefs.prefsName;
-  READER_STATUS_BAR_FIELDS(CP_CAPTURE_SB_FROM_PREFS)
-#undef CP_CAPTURE_SB_FROM_PREFS
-  applyStatusBarBlock(b);
-}
-
-void CrossPointSettings::clearStatusBarOverride() {
-  if (!sbOverrideActive_) return;
-  applyStatusBarBlock(sbGlobalBackup_);
-  sbOverrideActive_ = false;
 }
 
 void CrossPointSettings::beginReaderEditOverlay(const ReaderPrefs& startValues, const ReaderEditSink sink,
@@ -683,19 +651,6 @@ bool CrossPointSettings::saveToFile() const {
   // for the same reason it is below: the singleton is a non-const object.
   const_cast<CrossPointSettings*>(this)->normalizeMargins();
 
-  // A book's own status bar layout is overlaid on the live sb* fields. Swap the true
-  // global block back for the write, exactly as the reader-edit overlay below does for
-  // the reader fields, so a book's bar can never become the global one.
-  if (sbOverrideActive_) {
-    auto* self = const_cast<CrossPointSettings*>(this);
-    const StatusBarBlock booksBlock = captureStatusBarBlock();
-    self->applyStatusBarBlock(sbGlobalBackup_);
-    self->sbOverrideActive_ = false;
-    const bool ok = self->saveToFile();
-    self->applyStatusBarBlock(booksBlock);
-    self->sbOverrideActive_ = true;
-    return ok;
-  }
   if (!readerEditOverlayActive_) {
     return PersistableStore<CrossPointSettings>::saveToFile();
   }
@@ -716,3 +671,8 @@ bool CrossPointSettings::saveToFile() const {
   if (readerEditSink_) readerEditSink_(readerEditSinkCtx_, overlaid);
   return ok;
 }
+
+// ReaderPrefs.h is host-buildable and cannot see this class, so it carries its own copies.
+static_assert(CrossPointSettings::SB_OFFBAR_OFF == StatusBarBlock::OFF_BAR_OFF, "off-bar Off value drifted");
+static_assert(CrossPointSettings::PARAGRAPH_NUMBERING_COUNT == reader_defaults::PARAGRAPH_NUMBERING_COUNT,
+              "paragraph numbering count drifted");
