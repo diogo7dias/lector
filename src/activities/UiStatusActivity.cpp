@@ -100,12 +100,11 @@ void UiStatusActivity::setListSelectionLocked(const int index) {
 }
 
 void UiStatusActivity::setListSelection(const int index) {
-  {
-    // The render task reads the nav mid-build; a press landing during a render
-    // would otherwise tear the selection against the viewport.
-    RenderLock lock(*this);
-    setListSelectionLocked(index);
-  }
+  // No render lock, same as UiListActivity::moveSelectionTo: blocking here parked
+  // the main loop for a whole e-ink refresh and dropped presses inside it. The
+  // viewport pull is deferred to the next build (syncToProps).
+  listNav_.selected = index;
+  listNav_.followOnBuild = true;
   requestUpdate();
 }
 
