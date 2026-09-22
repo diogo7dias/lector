@@ -116,10 +116,6 @@ void HomeActivity::onEnter() {
 void HomeActivity::onExit() { Activity::onExit(); }
 
 void HomeActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    buttonNavigator.resetRowTap();
-  }
   const int menuCount = getMenuItemCount();
 
   auto activateSelection = [this] {
@@ -152,7 +148,6 @@ void HomeActivity::loop() {
   int tappedItem = 0;
   const auto rowTap = mappedInput.wasRowTapped(tappedItem);
   if (rowTap != MappedInputManager::RowTap::None && tappedItem >= 0 && tappedItem < menuCount) {
-    buttonNavigator.resetRowTap();
     selectorIndex = tappedItem;
     if (rowTap == MappedInputManager::RowTap::Armed) {
       requestUpdate();
@@ -165,8 +160,8 @@ void HomeActivity::loop() {
   const int bookCount = static_cast<int>(recentBooks.size());
   // Keep the selected book within the list's visible window as it moves. drawList
   // clamps and reports the true firstVisible each render, so this only nudges.
-  const auto moveNext = [this, menuCount, bookCount](const int rows) {
-    selectorIndex = ButtonNavigator::nextIndex(selectorIndex, menuCount, rows);
+  const auto moveTo = [this, bookCount](const int index) {
+    selectorIndex = index;
     if (selectorIndex < bookCount) {
       if (selectorIndex > lastVisibleBookIdx) scrollOffset += selectorIndex - lastVisibleBookIdx;
       if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
@@ -174,20 +169,11 @@ void HomeActivity::loop() {
     }
     requestUpdate();
   };
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavNext, moveNext);
-  buttonNavigator.onNextContinuous([&] { moveNext(1); });
-
-  const auto movePrevious = [this, menuCount, bookCount](const int rows) {
-    selectorIndex = ButtonNavigator::previousIndex(selectorIndex, menuCount, rows);
-    if (selectorIndex < bookCount) {
-      if (selectorIndex > lastVisibleBookIdx) scrollOffset += selectorIndex - lastVisibleBookIdx;
-      if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
-      scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
-    }
-    requestUpdate();
-  };
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavPrevious, movePrevious);
-  buttonNavigator.onPreviousContinuous([&] { movePrevious(1); });
+  // A tap wraps; a hold stops at the ends, since a hold that wraps never ends.
+  buttonNavigator.onNextStep([&] { moveTo(ButtonNavigator::nextIndex(selectorIndex, menuCount)); });
+  buttonNavigator.onPreviousStep([&] { moveTo(ButtonNavigator::previousIndex(selectorIndex, menuCount)); });
+  buttonNavigator.onNextContinuous([&] { moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, 1)); });
+  buttonNavigator.onPreviousContinuous([&] { moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, -1)); });
 
   // Back is otherwise unused on the home menu, so it runs the user's configured
   // action. A Back still held from the screen that was left is handled centrally

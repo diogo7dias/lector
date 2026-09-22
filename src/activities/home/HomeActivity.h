@@ -11,7 +11,7 @@ struct RecentBook;
 struct Rect;
 
 class HomeActivity final : public Activity {
-  ButtonNavigator buttonNavigator;
+  ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
   int selectorIndex = 0;
   // In-progress list scroll state: scrollOffset is the first index drawList starts
   // from; firstVisible/lastVisible are the range it actually rendered this frame

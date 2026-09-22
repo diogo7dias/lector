@@ -6,8 +6,6 @@
 
 using settings_nav::firstLandableRow;
 using settings_nav::nextRow;
-using settings_nav::nextSection;
-using settings_nav::sectionStarts;
 
 namespace {
 
@@ -48,70 +46,6 @@ TEST(SettingsListNav, SteppingHoldsStillWhenNoRowIsLandable) {
   EXPECT_EQ(nextRow(0, headingsOnly, true), 0);
   EXPECT_EQ(nextRow(0, headingsOnly, false), 0);
   EXPECT_EQ(nextRow(0, {}, true), 0);
-}
-
-TEST(SettingsListNav, SectionForwardLandsOnTheFirstRowUnderTheNextHeading) {
-  EXPECT_EQ(nextSection(1, kList, true), 4);
-  EXPECT_EQ(nextSection(2, kList, true), 4);
-  EXPECT_EQ(nextSection(4, kList, true), 6);
-}
-
-TEST(SettingsListNav, SectionForwardWrapsToTheFirstSection) {
-  EXPECT_EQ(nextSection(6, kList, true), 1);
-  EXPECT_EQ(nextSection(7, kList, true), 1);
-}
-
-TEST(SettingsListNav, SectionBackwardSnapsToTheStartOfTheCurrentSection) {
-  // From mid-section the first press goes to the section's own first row, so a
-  // long list can be walked back without overshooting the section just entered.
-  EXPECT_EQ(nextSection(2, kList, false), 1);
-  EXPECT_EQ(nextSection(7, kList, false), 6);
-}
-
-TEST(SettingsListNav, SectionBackwardFromASectionStartGoesToThePreviousSection) {
-  EXPECT_EQ(nextSection(6, kList, false), 4);
-  EXPECT_EQ(nextSection(4, kList, false), 1);
-}
-
-TEST(SettingsListNav, SectionBackwardWrapsToTheLastSection) { EXPECT_EQ(nextSection(1, kList, false), 6); }
-
-TEST(SettingsListNav, SectionJumpsHoldAtTheOnlySectionWithoutHeadings) {
-  // No headings means one section that starts at row 0, so a jump either way lands
-  // there and a jump from there has nowhere else to go.
-  const std::vector<bool> flat = {false, false, false};
-  EXPECT_EQ(nextSection(0, flat, true), 0);
-  EXPECT_EQ(nextSection(1, flat, false), 0);
-}
-
-TEST(SettingsListNav, SectionStartsAreTheFirstRowUnderEachHeading) {
-  EXPECT_EQ(sectionStarts(kList), (std::vector<int>{1, 4, 6}));
-  // Leading rows with no heading above them still open a section.
-  EXPECT_EQ(sectionStarts({false, false, true, false}), (std::vector<int>{0, 3}));
-}
-
-TEST(SettingsListNav, HeadingsWithNoRowUnderThemAreNotSectionStarts) {
-  // A list ending on a heading, and two headings in a row: neither opens a section.
-  EXPECT_EQ(sectionStarts({true, false, true}), (std::vector<int>{1}));
-  EXPECT_EQ(sectionStarts({true, true, false}), (std::vector<int>{2}));
-  EXPECT_EQ(sectionStarts({true, true}), (std::vector<int>{}));
-}
-
-TEST(SettingsListNav, SectionForwardFromBeforeTheFirstSectionStartLandsOnIt) {
-  // Index 0 is the opening heading; the cursor never rests there, but a stale index
-  // must still resolve forward rather than wrap past the first section.
-  EXPECT_EQ(nextSection(0, kList, true), 1);
-}
-
-TEST(SettingsListNav, SectionJumpsIgnoreATrailingHeading) {
-  // 0:H 1:. 2:H — the trailing heading is not a section, so both jumps stay put.
-  const std::vector<bool> trailing = {true, false, true};
-  EXPECT_EQ(nextSection(1, trailing, true), 1);
-  EXPECT_EQ(nextSection(1, trailing, false), 1);
-}
-
-TEST(SettingsListNav, SectionJumpsHoldStillWhenNoRowIsLandable) {
-  EXPECT_EQ(nextSection(0, {true, true}, true), 0);
-  EXPECT_EQ(nextSection(0, {}, false), 0);
 }
 
 }  // namespace

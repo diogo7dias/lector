@@ -125,8 +125,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // Refresh borrowed labels/values in the storage reserved on entry.
   void updateRows();
   void focusRow(int index);
-  void stepRow(int direction, int steps);
-  void jumpSection(bool forward);
   void closeCancelled();
   // The block's strings, held so the ListChrome can borrow them. Mutable because
   // chrome() is const: rebuilding the block changes nothing about the screen.

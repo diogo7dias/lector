@@ -76,7 +76,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // Puts the cursor back inside the grid after a rebuild changed its size.
   void clampSelection();
 
-  ButtonNavigator buttonNavigator;
+  ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
 
  private:
   void buildScreen(UiScreen& screen);

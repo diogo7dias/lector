@@ -13,6 +13,7 @@
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
 #include "components/UiRowWrap.h"
+#include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
 
@@ -21,7 +22,6 @@ UiGridActivity::UiGridActivity(const char* name, GfxRenderer& renderer, MappedIn
 
 void UiGridActivity::onEnter() {
   Activity::onEnter();
-  buttonNavigator.resetRowTap();
   resetUi();
   app.on(ACTION_CELL, &UiGridActivity::cellTrampoline, this);
   app.setScreen(&UiGridActivity::screenTrampoline, this);
@@ -315,23 +315,13 @@ void UiGridActivity::loop() {
   // Read each edge ONCE per pass and reuse the answer. A hint-band tap is synthesized by
   // TapStroke, which is CONSUMING: the first wasPressed() for that hardware id spends the
   // tap, so asking a second time further down answered false and the band's Back/Toggle
-  // did nothing while the physical keys (non-consuming edge flags) worked. The grid asked
-  // twice — once here to cancel row-tap state, once at the dispatch below.
+  // did nothing while the physical keys (non-consuming edge flags) worked.
   const bool confirmPressed = mappedInput.wasPressed(MappedInputManager::Button::Confirm);
   const bool backPressed = mappedInput.wasPressed(MappedInputManager::Button::Back);
-  if (confirmPressed || backPressed) {
-    buttonNavigator.resetRowTap();
-  }
-  if (handleCustomInput()) {
-    buttonNavigator.resetRowTap();
-    return;
-  }
+  if (handleCustomInput()) return;
   const auto route = UiAppHost::routeTouch(mappedInput);
   if (route.routed && app.invalidated()) requestUpdate();
-  if (route) {
-    buttonNavigator.resetRowTap();
-    return;
-  }
+  if (route) return;
 
   if (confirmPressed) {
     if (selected_ >= 0 && selected_ < cellCount()) activateCell(selected_);
@@ -345,27 +335,22 @@ void UiGridActivity::loop() {
   // Rows on the side pair, cells on the front pair, and each press counted once.
   // ScreenUp/ScreenDown/ScreenLeft/ScreenRight rather than the raw buttons, so a
   // rotated screen keeps moving the way the hints under it say it does.
-  buttonNavigator.onRowTap(MappedInputManager::Button::ScreenDown, [this](const int rows) { moveSelection(rows, 0); });
-  buttonNavigator.onRowTap(MappedInputManager::Button::ScreenUp, [this](const int rows) { moveSelection(-rows, 0); });
-  buttonNavigator.onContinuous({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
-  buttonNavigator.onContinuous({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] {
-    buttonNavigator.resetRowTap();
-    moveSelection(0, -1);
-  });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] {
-    buttonNavigator.resetRowTap();
-    moveSelection(0, 1);
-  });
+  // A hold ramps the same way a list's does (util/HoldRepeat.h).
+  buttonNavigator.onStep({MappedInputManager::Button::ScreenDown}, [this] { moveSelection(1, 0); });
+  buttonNavigator.onStep({MappedInputManager::Button::ScreenUp}, [this] { moveSelection(-1, 0); });
+  buttonNavigator.onContinuous({MappedInputManager::Button::ScreenDown},
+                               [this] { moveSelection(holdRepeatStep(buttonNavigator.repeats()), 0); });
+  buttonNavigator.onContinuous({MappedInputManager::Button::ScreenUp},
+                               [this] { moveSelection(-holdRepeatStep(buttonNavigator.repeats()), 0); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenLeft}, [this] { moveSelection(0, -1); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::ScreenRight}, [this] { moveSelection(0, 1); });
 
   // A swipe scrolls the grid by a row.
   switch (mappedInput.wasListScrollSwipe()) {
     case list_swipe::Scroll::PageDown:
-      buttonNavigator.resetRowTap();
       moveSelection(1, 0);
       break;
     case list_swipe::Scroll::PageUp:
-      buttonNavigator.resetRowTap();
       moveSelection(-1, 0);
       break;
     default:

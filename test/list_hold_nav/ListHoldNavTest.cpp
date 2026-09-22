@@ -116,8 +116,8 @@ TEST(ListHoldNav, PagingAnEmptyOrUnmeasuredListIsNeverIndexed) {
 TEST(ListHoldNav, TheHoldRateIsSlowEnoughToRead) {
   // Mirrors ButtonNavigator::LIST_REPEAT_INTERVAL_MS / LIST_REPEAT_START_MS.
   // The audit test below ties these numbers to the header.
-  constexpr int kIntervalMs = 200;
-  constexpr int kStartMs = 400;
+  constexpr int kIntervalMs = 150;
+  constexpr int kStartMs = 300;
   // Faster than ~120 ms and the panel cannot show the rows going past, which is
   // exactly how a hold turns into a blur; slower than 400 and a long list is a
   // chore.
@@ -129,7 +129,8 @@ TEST(ListHoldNav, TheHoldRateIsSlowEnoughToRead) {
 }
 
 TEST(ListHoldNav, OneSecondOfHoldingCoversAReadableNumberOfRows) {
-  // 5 repeats at 200 ms, all still fine-grained: five rows in the first second.
+  // About 5 repeats in the first second (300 ms wait, then 150 ms each), all still
+  // fine-grained: five rows.
   // A page-per-repeat hold covered ~70 in the same time.
   int index = 0;
   for (unsigned repeat = 0; repeat < 5; ++repeat) index = heldIndex(index, 500, holdRepeatStep(repeat));
@@ -157,9 +158,9 @@ bool contains(const std::string& haystack, const char* needle) { return haystack
 
 TEST(ListHoldNav, TheRepeatRatesMatchTheHeader) {
   const std::string header = readSource(BUTTON_NAVIGATOR_HEADER);
-  EXPECT_TRUE(contains(header, "LIST_REPEAT_INTERVAL_MS = 200"))
+  EXPECT_TRUE(contains(header, "LIST_REPEAT_INTERVAL_MS = 150"))
       << "the interval this test asserts on is no longer the one ButtonNavigator declares";
-  EXPECT_TRUE(contains(header, "LIST_REPEAT_START_MS = 400"))
+  EXPECT_TRUE(contains(header, "LIST_REPEAT_START_MS = 300"))
       << "the start delay this test asserts on is no longer the one ButtonNavigator declares";
 }
 

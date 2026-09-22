@@ -28,7 +28,6 @@ UiStatusActivity::UiStatusActivity(const char* name, GfxRenderer& renderer, Mapp
 
 void UiStatusActivity::onEnter() {
   Activity::onEnter();
-  listButtons_.resetRowTap();
   resetUi();
   app.on(ACTION_ACCEPT, &UiStatusActivity::acceptTrampoline, this);
   app.on(ACTION_CANCEL, &UiStatusActivity::cancelTrampoline, this);
@@ -580,14 +579,8 @@ bool UiStatusActivity::navigateList() {
     setListSelection(index);
     moved = true;
   };
-  listButtons_.onRowTap(
-      MappedInputManager::Button::NavNext,
-      [&](const int rows) { step(ButtonNavigator::nextIndex(listNav_.selected, listCount_, rows)); },
-      /*onRelease=*/true);
-  listButtons_.onRowTap(
-      MappedInputManager::Button::NavPrevious,
-      [&](const int rows) { step(ButtonNavigator::previousIndex(listNav_.selected, listCount_, rows)); },
-      /*onRelease=*/true);
+  listButtons_.onNextRelease([&] { step(ButtonNavigator::nextIndex(listNav_.selected, listCount_)); });
+  listButtons_.onPreviousRelease([&] { step(ButtonNavigator::previousIndex(listNav_.selected, listCount_)); });
   // Rows per repeat, ramping via holdRepeatStep, and clamped at the ends: same
   // hold behaviour as UiListActivity, for the same reason (see there). A swipe
   // comes through here too and stays a page.
@@ -605,23 +598,13 @@ bool UiStatusActivity::navigateList() {
 }
 
 void UiStatusActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    listButtons_.resetRowTap();
-  }
-  if (handleCustomInput()) {
-    listButtons_.resetRowTap();
-    return;
-  }
+  if (handleCustomInput()) return;
 
   // The screen's own buttons, when it drew any: the interaction table the last
   // render published is what a tap is measured against.
   const auto route = UiAppHost::routeTouch(mappedInput, /*withLongPress=*/false, /*routeHeld=*/hasSlider_);
   if (route.routed && app.invalidated()) requestUpdate();
-  if (route) {
-    listButtons_.resetRowTap();
-    return;
-  }
+  if (route) return;
 
   // Any direction steps between the answers: with two of them there is no
   // meaningful difference between next and previous, and both readers reach for

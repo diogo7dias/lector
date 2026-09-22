@@ -11,6 +11,7 @@
 #include "components/UITheme.h"
 #include "util/BoundActionScope.h"
 #include "util/BoundMenuLabels.h"
+#include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
 
@@ -165,26 +166,21 @@ void ButtonBindingsActivity::navigateButtons() {
   std::vector<bool> headerFlags;
   headerFlags.reserve(bindingRows.size());
   for (const auto& row : bindingRows) headerFlags.push_back(row.isHeader);
-  buttonNavigator.onRowTap(
-      MappedInputManager::Button::NavNext,
-      [this, &headerFlags](const int rows) {
-        int index = nav.selected;
-        for (int row = 0; row < rows; ++row) index = settings_nav::nextRow(index, headerFlags, true);
-        moveSelectionTo(index);
-      },
-      /*onRelease=*/true);
-  buttonNavigator.onRowTap(
-      MappedInputManager::Button::NavPrevious,
-      [this, &headerFlags](const int rows) {
-        int index = nav.selected;
-        for (int row = 0; row < rows; ++row) index = settings_nav::nextRow(index, headerFlags, false);
-        moveSelectionTo(index);
-      },
-      /*onRelease=*/true);
+  // Taps wrap; a hold ramps and stops at the last row either way.
+  const auto stepFrom = [&headerFlags](int index, const int rows, const bool forward, const bool clamp) {
+    for (int row = 0; row < rows; ++row) {
+      const int next = settings_nav::nextRow(index, headerFlags, forward);
+      if (clamp && (forward ? next < index : next > index)) break;
+      index = next;
+    }
+    return index;
+  };
+  buttonNavigator.onNextRelease([&] { moveSelectionTo(stepFrom(nav.selected, 1, true, false)); });
+  buttonNavigator.onPreviousRelease([&] { moveSelectionTo(stepFrom(nav.selected, 1, false, false)); });
   buttonNavigator.onNextContinuous(
-      [this, &headerFlags] { moveSelectionTo(settings_nav::nextSection(nav.selected, headerFlags, true)); });
+      [&] { moveSelectionTo(stepFrom(nav.selected, holdRepeatStep(buttonNavigator.repeats()), true, true)); });
   buttonNavigator.onPreviousContinuous(
-      [this, &headerFlags] { moveSelectionTo(settings_nav::nextSection(nav.selected, headerFlags, false)); });
+      [&] { moveSelectionTo(stepFrom(nav.selected, holdRepeatStep(buttonNavigator.repeats()), false, true)); });
 }
 
 void ButtonBindingsActivity::onBackButton() {

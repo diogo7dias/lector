@@ -563,16 +563,9 @@ void FileBrowserActivity::confirmDelete(const std::string& fullPath) {
 }
 
 void FileBrowserActivity::loop() {
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm) ||
-      mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    buttonNavigator.resetRowTap();
-  }
   // While the file-action pop-up is up it owns every button, so nothing below
   // can move the selection or open a file underneath it.
-  if (fileActionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
-    buttonNavigator.resetRowTap();
-    return;
-  }
+  if (fileActionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 
   // Rows have variable heights now, so a fixed items-per-page is meaningless.
   // The swipe jump steps by however many rows the last draw actually fit.
@@ -680,7 +673,6 @@ void FileBrowserActivity::loop() {
     int tappedRow = 0;
     const auto rowTap = mappedInput.wasRowTapped(tappedRow);
     if (rowTap != MappedInputManager::RowTap::None && tappedRow >= 0 && tappedRow < totalRowCount()) {
-      buttonNavigator.resetRowTap();
       selectorIndex = static_cast<size_t>(tappedRow);
       lock.unlock();  // Activation can reload the listing and acquire its own lock.
       if (rowTap == MappedInputManager::RowTap::Activate) activateSelected(/*holdAction=*/false);
@@ -775,14 +767,14 @@ void FileBrowserActivity::loop() {
     scrollOffset = std::clamp(scrollOffset, 0, std::max(0, listSize - 1));
   };
 
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavNext, [this, listSize, followSelection](const int rows) {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize, rows);
+  buttonNavigator.onNextStep([this, listSize, followSelection] {
+    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
     followSelection();
     requestUpdate();
   });
 
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavPrevious, [this, listSize, followSelection](const int rows) {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize, rows);
+  buttonNavigator.onPreviousStep([this, listSize, followSelection] {
+    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
     followSelection();
     requestUpdate();
   });

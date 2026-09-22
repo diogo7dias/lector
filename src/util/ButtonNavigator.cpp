@@ -80,40 +80,6 @@ void ButtonNavigator::onStep(const Buttons& buttons, const Callback& callback) {
   }
 }
 
-void ButtonNavigator::resetRowTap() {
-  rowTapDetector_.reset();
-  rowTapSteps_ = 1;
-}
-
-void ButtonNavigator::onRowTap(const MappedInputManager::Button button, const std::function<void(int)>& callback,
-                               const bool onRelease) {
-  if (mappedInput == nullptr) return;
-  const bool pressed = mappedInput->wasPressed(button);
-  const bool released = mappedInput->wasReleased(button);
-  if (!pressed && !released) return;
-  if (rowTapButton_ != button) resetRowTap();
-  rowTapButton_ = button;
-  rowTapDetector_.configure(true, false);
-  int steps = 0;
-  if (pressed) {
-    rowTapSteps_ = rowTapDetector_.onPress(millis()) == button_gestures::Event::Double ? 4 : 1;
-    if (!onRelease) steps = rowTapSteps_;
-  }
-  if (released) {
-    if (lastContinuousNavTime == 0) {
-      if (onRelease) steps = rowTapSteps_;
-      rowTapDetector_.onRelease(millis());
-    }
-    // A hold cannot seed a double tap, even if its release arrived before the
-    // loop had a chance to repeat. Its existing movement is left alone.
-    if (lastContinuousNavTime != 0 || mappedInput->getHeldTime() > continuousStartMs) resetRowTap();
-    lastContinuousNavTime = 0;
-    repeatIndex_ = 0;
-    rowTapSteps_ = 1;
-  }
-  if (steps != 0) callback(steps);
-}
-
 // A body swipe drives the same movement the nav buttons do, so every list screen
 // scrolls under the finger without its own coordinate handling. It is wired to the
 // continuous step (a page or a section on the screens that define one) because a
@@ -132,7 +98,6 @@ bool ButtonNavigator::swipeMatches(const Buttons& buttons) {
 
 void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callback) {
   if (swipeMatches(buttons)) {
-    resetRowTap();
     callback();
     return;
   }
@@ -141,7 +106,6 @@ void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callb
   });
 
   if (isPressed) {
-    resetRowTap();
     callback();
     lastContinuousNavTime = millis();
     // Counted after the callback, so the first repeat of a hold is index 0 and

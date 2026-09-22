@@ -11,6 +11,7 @@
 #include "ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
 
@@ -227,27 +228,6 @@ void EpubReaderMenuActivity::focusRow(const int index) {
   requestUpdate();
 }
 
-void EpubReaderMenuActivity::stepRow(const int direction, const int steps) {
-  for (int step = 0; step < steps; ++step) {
-    const int count = listCount();
-    if (count == 0) return;
-    focusRow(direction > 0 ? ButtonNavigator::nextIndex(nav.selected, count)
-                           : ButtonNavigator::previousIndex(nav.selected, count));
-  }
-}
-
-void EpubReaderMenuActivity::jumpSection(const bool forward) {
-  const int count = static_cast<int>(items.size());
-  int index = sections.itemIndex(rows.data(), count, nav.selected);
-  if (index < 0) return;
-  for (int guard = 0; guard < count; ++guard) {
-    index = forward ? ButtonNavigator::nextIndex(index, count) : ButtonNavigator::previousIndex(index, count);
-    if (!items[index].isHeader) continue;
-    focusRow(sections.visibleIndex(rows.data(), count, index));
-    return;
-  }
-}
-
 void EpubReaderMenuActivity::onEnter() {
   // Storage is allocated before the base starts rendering. Navigation and drawing
   // borrow it, including the one row Status Bar can insert during this visit.
@@ -355,10 +335,15 @@ bool EpubReaderMenuActivity::handleButtons() {
 }
 
 void EpubReaderMenuActivity::navigateButtons() {
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavNext, [this](const int rows) { stepRow(1, rows); });
-  buttonNavigator.onRowTap(MappedInputManager::Button::NavPrevious, [this](const int rows) { stepRow(-1, rows); });
-  buttonNavigator.onNextContinuous([this] { jumpSection(true); });
-  buttonNavigator.onPreviousContinuous([this] { jumpSection(false); });
+  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount())); });
+  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount())); });
+  // A hold ramps through rows and stops at the ends, like every other list.
+  buttonNavigator.onNextContinuous([this] {
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())));
+  });
+  buttonNavigator.onPreviousContinuous([this] {
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())));
+  });
 }
 
 void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
