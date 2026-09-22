@@ -114,6 +114,9 @@ class MappedInputManager {
   list_swipe::Scroll wasListScrollSwipe() const;
   bool wasAnyPressed() const;
   bool wasAnyReleased() const;
+  // The user is interacting right now: a press/release edge this pass, a button
+  // down, or a finger on the panel. Background layout defers on it.
+  bool isInputActive() const;
   unsigned long getHeldTime() const;
   const GfxRenderer& getRenderer() const { return renderer; }
   Labels mapLabels(const char* back, const char* confirm, const char* previous, const char* next) const;

@@ -458,6 +458,12 @@ bool MappedInputManager::isAnyPressed() const {
 
 bool MappedInputManager::wasAnyPressed() const { return gpio.wasAnyPressed(); }
 
+bool MappedInputManager::isInputActive() const {
+  float nx, ny;
+  return gpio.wasAnyPressed() || gpio.wasAnyReleased() || gpio.wasTouchActivity() || isAnyPressed() ||
+         gpio.isTouchHeldAt(nx, ny);
+}
+
 bool MappedInputManager::wasAnyReleased() const { return gpio.wasAnyReleased(); }
 
 unsigned long MappedInputManager::getHeldTime() const {
