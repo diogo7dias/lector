@@ -45,6 +45,11 @@ class Epub {
   ~Epub() = default;
   std::string& getBasePath() { return contentBasePath; }
   bool load(bool buildIfMissing = true, bool skipLoadingCss = false);
+  // For a book that skipped its stylesheet at load and now wants it: parses the CSS into
+  // its cache when the cache is missing or stale, and drops the section caches laid out
+  // without it. Only valid after a successful load().
+  bool ensureCssCache();
+  bool hasCssCache() const { return cssParser && cssParser->hasCache(); }
   bool clearCache() const;
   void setupCacheDir() const;
   const std::string& getCachePath() const;

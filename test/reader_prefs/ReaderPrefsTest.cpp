@@ -711,3 +711,39 @@ TEST(ReaderPrefs, RetiredByteKeepsLegacyOffsetsAndDoesNotAffectComparisons) {
   ASSERT_TRUE(readReaderPrefs(disabled, other));
   EXPECT_EQ(0, std::memcmp(&loaded, &other, sizeof(loaded)));
 }
+
+// The EPUB loader decides whether to parse a book's stylesheet from the book's own
+// look, not the global one: a book with either embedded switch on needs its CSS even
+// when both global switches are off.
+TEST(ReaderPrefs, WantsBookCssWhenEitherEmbeddedSwitchIsOn) {
+  ReaderPrefs p;
+  p.embeddedTextStyle = 0;
+  p.embeddedLayoutStyle = 0;
+  EXPECT_FALSE(wantsBookCss(p));
+  p.embeddedTextStyle = 1;
+  EXPECT_TRUE(wantsBookCss(p));
+  p.embeddedTextStyle = 0;
+  p.embeddedLayoutStyle = 1;
+  EXPECT_TRUE(wantsBookCss(p));
+}
+
+TEST(ReaderPrefs, SettleSidecarFoldsRetiredWholeBookNumbering) {
+  ReaderPrefs p = makeSample();
+  p.paragraphNumbering = 2;  // whole-book numbering, removed
+  settleSidecarPrefs(p, ReaderPrefs::VERSION, ReaderPrefs{});
+  EXPECT_EQ(reader_defaults::PARAGRAPH_NUMBERING, p.paragraphNumbering);
+}
+
+TEST(ReaderPrefs, SettleSidecarSeedsStatusBarOnlyForRecordsWithoutOne) {
+  ReaderPrefs global;
+  global.sbBatteryPos = 3;
+  ReaderPrefs old;
+  old.sbBatteryPos = 1;
+  settleSidecarPrefs(old, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR - 1, global);
+  EXPECT_EQ(3, old.sbBatteryPos);
+
+  ReaderPrefs current;
+  current.sbBatteryPos = 1;
+  settleSidecarPrefs(current, FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR, global);
+  EXPECT_EQ(1, current.sbBatteryPos);
+}

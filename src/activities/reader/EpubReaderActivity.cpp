@@ -32,6 +32,7 @@
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
 #include "IdlePrewarmNeighbour.h"
+#include "components/BusyBanner.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
@@ -1742,7 +1743,7 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
   }
 }
 
-std::string EpubReaderActivity::readerOverridePath() const { return epub->getCachePath() + "/reader_override.bin"; }
+std::string EpubReaderActivity::readerOverridePath() const { return readerSidecarPath(epub->getCachePath()); }
 
 bool EpubReaderActivity::lightPanelAuxText(char* out, const size_t length) const {
   snprintf(out, length, "%s %u", I18N.get(StrId::STR_TEXT_SIZE), static_cast<unsigned>(prefs_.fontPointSize));
@@ -1773,45 +1774,16 @@ bool EpubReaderActivity::lightPanelStepAux(const int delta) {
 }
 
 void EpubReaderActivity::loadReaderPrefs() {
-  prefsCustom_ = false;
-  HalFile f;
-  if (Storage.openFileForRead("ERS", readerOverridePath(), f)) {
-    ReaderPrefs loaded;
-    bool migrated = false;
-    // The version the record was written at, not just "was it upgraded": which fields a
-    // sidecar actually carried is what decides whether seeding them is a repair or the
-    // silent loss of a choice the reader made.
-    uint8_t fromVersion = ReaderPrefs::VERSION;
-    if (readReaderPrefs(f, loaded, &migrated, &fromVersion)) {
-      prefsFromVersion_ = fromVersion;
-      prefs_ = loaded;
-      // A sidecar written before whole-book numbering was removed still says 2. The
-      // Settings row and the menu cycle can no longer produce it, so this is the only
-      // place a retired value can still enter the reader.
-      if (prefs_.paragraphNumbering >= CrossPointSettings::PARAGRAPH_NUMBERING_COUNT) {
-        prefs_.paragraphNumbering = CrossPointSettings::PARA_NUM_CHAPTER;
-      }
-      // A sidecar older than v11 stops before the status bar block, so those fields
-      // came back as this firmware's shipped defaults rather than the layout the user
-      // configured. Seed them from the global settings, which is the bar every other
-      // book already shows. Applied straight away, unlike the reading defaults below:
-      // it is what stops an old book silently rearranging its status bar on first open.
-      if (fromVersion < FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR) {
-        prefs_.adoptStatusBarFrom(SETTINGS.trueGlobalReaderPrefs());
-      }
-      prefsCustom_ = true;
-      // An upgraded sidecar is not applied here. The saved page number was produced by
-      // the OLD layout, so the chapter is laid out that way first, the reading position
-      // is read off it as a paragraph, and only then do the new defaults go in — see
-      // applyPendingPrefsMigration(). Applying them now would land the reader on a page
-      // number that no longer means anything.
-      pendingPrefsMigration_ = migrated;
-      LOG_DBG("ERS", "Loaded per-book reader override%s", migrated ? " (defaults upgrade pending)" : "");
-      return;
-    }
-    LOG_ERR("ERS", "reader_override.bin present but unreadable; using global settings");
-  }
-  prefs_ = SETTINGS.trueGlobalReaderPrefs();
+  const BookReaderPrefs book = loadBookReaderPrefs(epub->getCachePath(), SETTINGS.trueGlobalReaderPrefs());
+  prefs_ = book.prefs;
+  prefsCustom_ = book.custom;
+  prefsFromVersion_ = book.fromVersion;
+  // An upgraded sidecar is not applied here. The saved page number was produced by
+  // the OLD layout, so the chapter is laid out that way first, the reading position
+  // is read off it as a paragraph, and only then do the new defaults go in — see
+  // applyPendingPrefsMigration(). Applying them now would land the reader on a page
+  // number that no longer means anything.
+  pendingPrefsMigration_ = book.migrated;
 }
 
 bool EpubReaderActivity::writeReaderOverride(const ReaderPrefs& p) const {
@@ -1834,6 +1806,13 @@ void EpubReaderActivity::reloadForReaderPrefsChange() {
   // cache re-keys on the changed spec automatically — no cache machinery of ours).
   RenderLock lock(*this);
   dropSectionForRelayout();
+  // The loader skips a book's stylesheet when its look had both embedded switches off,
+  // so a book that has just turned one on may have no CSS cache to lay out with.
+  if (wantsBookCss(prefs_) && !epub->hasCssCache()) {
+    BusyBanner banner(renderer, tr(STR_INDEXING));
+    banner.showNow();
+    epub->ensureCssCache();
+  }
 }
 
 void EpubReaderActivity::dropSectionForRelayout() {

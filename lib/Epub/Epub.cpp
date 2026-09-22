@@ -393,6 +393,35 @@ void Epub::parseCssFiles() const {
 }
 
 // load in the meta data for the epub file
+bool Epub::ensureCssCache() {
+  // Rebuild CSS cache when missing or when cache version changed (loadFromCache removes stale file)
+  if (cssParser->hasCache() && cssParser->loadFromCache()) return true;
+  LOG_DBG("EBP", "CSS rules cache missing or stale, attempting to parse CSS files");
+  cssParser->deleteCache();
+
+  BookMetadataCache::BookMetadata cachedMetadata = bookMetadataCache->coreMetadata;
+  if (!parseContentOpf(cachedMetadata, /*writeSpineEntries=*/false)) {
+    LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
+    // continue anyway - book will work without CSS and we'll still load any inline style CSS
+  } else {
+    discoverCssFilesFromZip();
+  }
+  bookMetadataCache.reset();
+  parseCssFiles();
+  bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
+  if (!bookMetadataCache) {
+    LOG_ERR("EBP", "OOM: BookMetadataCache");
+    return false;
+  }
+  if (!bookMetadataCache->load()) {
+    LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
+    return false;
+  }
+  // Invalidate section caches so they are rebuilt with the new CSS
+  Storage.removeDir((cachePath + "/sections").c_str());
+  return true;
+}
+
 bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   LOG_DBG("EBP", "Loading ePub: %s", filepath.c_str());
 
@@ -411,34 +440,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
 
   // Try to load existing cache first
   if (bookMetadataCache->load()) {
-    if (!skipLoadingCss) {
-      // Rebuild CSS cache when missing or when cache version changed (loadFromCache removes stale file)
-      if (!cssParser->hasCache() || !cssParser->loadFromCache()) {
-        LOG_DBG("EBP", "CSS rules cache missing or stale, attempting to parse CSS files");
-        cssParser->deleteCache();
-
-        BookMetadataCache::BookMetadata cachedMetadata = bookMetadataCache->coreMetadata;
-        if (!parseContentOpf(cachedMetadata, /*writeSpineEntries=*/false)) {
-          LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
-          // continue anyway - book will work without CSS and we'll still load any inline style CSS
-        } else {
-          discoverCssFilesFromZip();
-        }
-        bookMetadataCache.reset();
-        parseCssFiles();
-        bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
-        if (!bookMetadataCache) {
-          LOG_ERR("EBP", "OOM: BookMetadataCache");
-          return false;
-        }
-        if (!bookMetadataCache->load()) {
-          LOG_ERR("EBP", "Failed to reload cache after CSS rebuild");
-          return false;
-        }
-        // Invalidate section caches so they are rebuilt with the new CSS
-        Storage.removeDir((cachePath + "/sections").c_str());
-      }
-    }
+    if (!skipLoadingCss && !ensureCssCache()) return false;
     // Release the resolved CSS rule map: it is only needed transiently while building
     // section caches, and createSectionFile reloads it from cache on demand. Holding it
     // resident pins tens of KB for the whole reading session (more on warm resume into

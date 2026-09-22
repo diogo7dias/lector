@@ -1,6 +1,7 @@
 #include "ReaderPrefs.h"
 
 #include <HalStorage.h>
+#include <Logging.h>
 
 #include <cstring>
 
@@ -63,4 +64,18 @@ bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated, uint8_t* fromV
   if (ver < ReaderPrefs::VERSION && migrated) *migrated = true;
   p = tmp;
   return true;
+}
+
+BookReaderPrefs loadBookReaderPrefs(const std::string& cachePath, const ReaderPrefs& global) {
+  BookReaderPrefs book;
+  HalFile f;
+  if (Storage.openFileForRead("ERS", readerSidecarPath(cachePath), f)) {
+    if (readReaderPrefs(f, book.prefs, &book.migrated, &book.fromVersion)) {
+      settleSidecarPrefs(book.prefs, book.fromVersion, global);
+      book.custom = true;
+      return book;
+    }
+    LOG_ERR("ERS", "reader_override.bin present but unreadable; using global settings");
+  }
+  return BookReaderPrefs{global};
 }

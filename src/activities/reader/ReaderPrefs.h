@@ -4,6 +4,7 @@
 #include <cstring>
 #include <istream>
 #include <ostream>
+#include <string>
 
 #include "ReaderLookFields.h"
 
@@ -47,6 +48,7 @@ inline constexpr uint8_t EXTRA_PARAGRAPH_SPACING = 1;     // half a line of air 
 inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column width
 inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
 inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
+inline constexpr uint8_t PARAGRAPH_NUMBERING_COUNT = 2;   // CrossPointSettings::PARAGRAPH_NUMBERING_COUNT
 inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
 }  // namespace reader_defaults
 
@@ -305,6 +307,25 @@ inline void restoreBookOnlyFields(ReaderPrefs& target, const ReaderPrefs& book) 
   target.statusBarEnabled = book.statusBarEnabled;
 }
 
+// ── A book's look on open ─────────────────────────────────────────────────────
+// Whether the book's stylesheet has to be parsed. Decided from the book's own look:
+// a book with either embedded switch on needs its CSS even when both global switches
+// are off, and the loader never builds the CSS cache for a book that skipped it.
+inline bool wantsBookCss(const ReaderPrefs& p) { return p.embeddedTextStyle || p.embeddedLayoutStyle; }
+
+// Brings a sidecar record read at `fromVersion` in line with this firmware.
+// - A record written before whole-book numbering was removed can still say 2; the
+//   Settings row and the menu cycle can no longer produce it.
+// - A record older than v11 stops before the status bar block, so those fields came
+//   back as this firmware's shipped defaults rather than the layout the user
+//   configured. They are seeded from the global look, the bar every other book shows.
+inline void settleSidecarPrefs(ReaderPrefs& p, const uint8_t fromVersion, const ReaderPrefs& global) {
+  if (p.paragraphNumbering >= reader_defaults::PARAGRAPH_NUMBERING_COUNT) {
+    p.paragraphNumbering = reader_defaults::PARAGRAPH_NUMBERING;
+  }
+  if (fromVersion < FIRST_VERSION_WITH_PER_BOOK_STATUS_BAR) p.adoptStatusBarFrom(global);
+}
+
 // ── Mid-edit override decision ────────────────────────────────────────────────
 // While the in-book Reader Settings screen is open, the edited values live on the
 // global reader fields (see CrossPointSettings::beginReaderEditOverlay). Every row
@@ -396,3 +417,16 @@ inline bool readReaderPrefs(std::istream& in, ReaderPrefs& p, bool* migrated = n
 class HalFile;
 bool writeReaderPrefs(HalFile& out, const ReaderPrefs& p);
 bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated = nullptr, uint8_t* fromVersion = nullptr);
+
+// Where a book keeps its own look, beside the rest of its cache.
+inline std::string readerSidecarPath(const std::string& cachePath) { return cachePath + "/reader_override.bin"; }
+
+// A book's look as it opens: its sidecar when one is on the card and readable, else
+// `global`. Defined in ReaderPrefs.cpp (reads the SD card).
+struct BookReaderPrefs {
+  ReaderPrefs prefs;
+  bool custom = false;    // the book has its own sidecar
+  bool migrated = false;  // that sidecar was upgraded on the way in
+  uint8_t fromVersion = ReaderPrefs::VERSION;
+};
+BookReaderPrefs loadBookReaderPrefs(const std::string& cachePath, const ReaderPrefs& global);
