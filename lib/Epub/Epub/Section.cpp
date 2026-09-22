@@ -1177,6 +1177,12 @@ std::optional<uint16_t> Section::getPageForVisibleTextOffset(const uint32_t offs
     }
   }
 
+  // A from-scratch build (no partial loaded) has nothing readable at filePath yet: the
+  // build writes the tmp .bin, so the open below would fail every call until it commits.
+  if (build_ && !partial_) {
+    return std::nullopt;
+  }
+
   HalFile f;
   if (!Storage.openFileForRead("SCT", filePath, f) || f.size() < HEADER_SIZE) {
     return std::nullopt;
