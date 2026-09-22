@@ -585,12 +585,10 @@ void setup() {
     APP_STATE.saveToFile();
   }
   I18N.setLanguage(static_cast<Language>(SETTINGS.language));
-  KOREADER_STORE.loadFromFile();
   OPDS_STORE.loadFromFile();
   // Adds the shipped library entry on a card that has never seen it, so it is there
   // to fill credentials into rather than typed out on a five-button keyboard.
   OPDS_STORE.seedBuiltInServers();
-  READER_PRESETS.loadFromFile();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
   WakeTiming::noteCost(WakeTiming::Cost::Config, millis() - configStartedMs);
   WakeTiming::mark(WakeTiming::Stage::ConfigReady);

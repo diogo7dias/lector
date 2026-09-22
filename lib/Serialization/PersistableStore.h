@@ -99,6 +99,14 @@ class PersistableStore : public PersistableStoreBase {
     return instance;
   }
 
+  // getInstance() that reads the file on first use instead of at boot, for stores only a
+  // few screens touch: every deep-sleep wake is a boot. Loads once, even with no file.
+  static T& lazyInstance() {
+    static const bool loaded = getInstance().loadFromFile() || true;
+    (void)loaded;
+    return getInstance();
+  }
+
   bool saveToFile() const {
     std::lock_guard<std::mutex> lock(storeMutex);
     JsonDocument doc;

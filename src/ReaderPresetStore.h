@@ -56,4 +56,4 @@ class ReaderPresetStore : public PersistableStore<ReaderPresetStore> {
   bool remove(size_t index);
 };
 
-#define READER_PRESETS ReaderPresetStore::getInstance()
+#define READER_PRESETS ReaderPresetStore::lazyInstance()
