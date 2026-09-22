@@ -109,7 +109,8 @@ namespace {
 // v60: font ligatures no longer collapse already-shaped Arabic presentation forms (#3294).
 // v61: wordSpacing enters the header; baseline gaps change pagination.
 // v62: remove the hyphenation header byte and automatic word splitting.
-constexpr uint8_t SECTION_FILE_VERSION = 62;
+// v63: a soft-flushed long paragraph no longer re-indents its continuation lines.
+constexpr uint8_t SECTION_FILE_VERSION = 63;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects

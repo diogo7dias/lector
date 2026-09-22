@@ -647,7 +647,7 @@ static constexpr int MIN_FIRST_LINE_INDENT_SPACES = 3;
 
 int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const int pageWidth, const GfxRenderer& renderer,
                                        const int fontId) const {
-  if (!isFirstLine || !isNaturalAlign) {
+  if (!isFirstLine || paragraphContinues || !isNaturalAlign) {
     return 0;
   }
   const int floorIndent = renderer.getSpaceWidth(fontId, EpdFontFamily::REGULAR) * MIN_FIRST_LINE_INDENT_SPACES;
@@ -727,6 +727,8 @@ void ParsedText::layoutAndExtractLines(const GfxRenderer& renderer, const int fo
     extractLine(i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, lineBreakIndices, processLine,
                 processLineCtx, renderer, fontId);
   }
+  // A full pass ends the paragraph; the block may then be reused for the next one.
+  paragraphContinues = !includeLastLine && (paragraphContinues || lineCount > 0);
 
   // Remove consumed words so size() reflects only remaining words
   if (lineCount > 0) {

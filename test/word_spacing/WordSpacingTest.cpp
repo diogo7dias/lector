@@ -230,3 +230,24 @@ TEST(WordSpacing, WordsStayWholeAndSoftHyphensStayInvisible) {
     EXPECT_EQ(std::string(text).find('-') == std::string::npos ? "extraordinary" : "extra-ordinary", lines[0].words[0]);
   }
 }
+
+TEST(WordSpacing, SoftFlushedParagraphIndentsOnlyItsFirstLine) {
+  // ChapterHtmlSlimParser flushes a long paragraph in pieces (includeLastLine=false),
+  // then appends more words and lays the rest out with a final full pass.
+  lines.clear();
+  BlockStyle style;
+  style.alignment = CssTextAlign::Left;
+  style.textAlignDefined = true;
+  style.directionDefined = true;
+  ParsedText parsed(false, false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  const auto sink = [](void*, std::shared_ptr<TextBlock>, uint32_t) {};
+  for (int pass = 0; pass < 3; ++pass) {
+    std::istringstream input(PROSE);
+    std::string word;
+    while (input >> word) parsed.addWord(word, EpdFontFamily::REGULAR);
+    parsed.layoutAndExtractLines(renderer, FONT, 200, sink, nullptr, pass == 2);
+  }
+  ASSERT_GT(lines.size(), 4u);
+  EXPECT_EQ(21, lines[0].x[0]);
+  for (size_t i = 1; i < lines.size(); ++i) EXPECT_EQ(0, lines[i].x[0]) << "line=" << i;
+}

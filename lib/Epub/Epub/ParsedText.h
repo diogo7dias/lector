@@ -72,6 +72,9 @@ class ParsedText {
   // the parser: a block is laid out when the NEXT element opens, by which point any parser
   // state describing it has already moved on to the new element.
   bool isHeading;
+  // Set once a soft-flush pass (includeLastLine=false) has emitted lines, so later passes
+  // over the same paragraph do not indent a mid-paragraph line as a first line.
+  bool paragraphContinues = false;
   std::vector<std::string> reorderedWordsScratch;
   std::vector<EpdFontFamily::Style> reorderedStylesScratch;
   std::vector<uint16_t> reorderedWidthsScratch;
