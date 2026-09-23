@@ -286,8 +286,14 @@ HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
 
   const bool usbConnected = isUsbConnected();
 
-  if (resetReason == ESP_RST_DEEPSLEEP &&
-      (wakeupCause == ESP_SLEEP_WAKEUP_GPIO || wakeupCause == ESP_SLEEP_WAKEUP_EXT1)) {
+  // Every deep-sleep exit is a power-button wake: the button is the only source
+  // startDeepSleep() arms. The reported cause cannot be trusted to say so: an X4 Pro
+  // trace (lector.exp.54) recorded a real button unlock as rst=DEEPSLEEP cause=TIMER,
+  // and esp_sleep_get_wakeup_cause() reports TIMER ahead of every other bit. Classed as
+  // Other, that unlock skipped the painted-face path and drew the boot splash before
+  // the book. A wake without a press is still caught: verifyPowerButtonWakeup() sends
+  // it back to sleep.
+  if (resetReason == ESP_RST_DEEPSLEEP) {
     return WakeupReason::PowerButton;
   }
   if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected &&

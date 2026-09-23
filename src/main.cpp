@@ -630,6 +630,7 @@ void setup() {
       LOG_DBG("MAIN", "Verifying the power button is still held");
       if (!gpio.verifyPowerButtonWakeup()) {
         LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
+        debug_trace::note("wake press not held, back to sleep");
         logFlush();
         powerManager.startDeepSleep(gpio);
       }
