@@ -5,6 +5,7 @@
 
 #include "PxcSleepRenderer.h"
 #include "fontIds.h"
+#include "util/DebugTrace.h"
 
 void BootActivity::onEnter() {
   Activity::onEnter();
@@ -20,6 +21,7 @@ void BootActivity::onEnter() {
     return;
   }
 
+  debug_trace::note("boot face: Lector, wallpaper=%s", wallpaperPath_.empty() ? "none" : "failed");
   const auto pageHeight = renderer.getScreenHeight();
 
   renderer.clearScreen();

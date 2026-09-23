@@ -326,6 +326,7 @@ void ActivityManager::loop() {
       currentActivity = std::move(pendingActivity);
 
       lock.unlock();  // onEnter may acquire its own lock
+      debug_trace::note("enter %s", currentActivity->name.c_str());
       currentActivity->onEnter();
 
       // onEnter may request another pending action, we will handle it in the next loop iteration
@@ -367,6 +368,7 @@ void ActivityManager::replaceActivity(std::unique_ptr<Activity>&& newActivity) {
   } else {
     // No current activity, safe to launch immediately
     currentActivity = std::move(newActivity);
+    debug_trace::note("enter %s", currentActivity->name.c_str());
     currentActivity->onEnter();
   }
 }

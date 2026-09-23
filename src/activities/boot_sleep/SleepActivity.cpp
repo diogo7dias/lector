@@ -27,6 +27,7 @@
 #include "sleep/DirSlotProbe.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperNames.h"
+#include "util/DebugTrace.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
 #include "util/TaskWatchdog.h"
@@ -531,6 +532,7 @@ void SleepActivity::renderCustomSleepScreen() const {
 // other faces, so all three read as one table instead of three literals in three
 // functions.
 void SleepActivity::renderDefaultSleepScreen() const {
+  debug_trace::note("sleep face: Lector fallback");
   renderer.clearScreen();
   const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
   renderer.drawCenteredText(UI_10_FONT_ID, (renderer.getScreenHeight() - lineHeight) / 2, tr(STR_LECTOR));

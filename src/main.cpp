@@ -19,6 +19,7 @@
 #include <WiFi.h>
 #include <builtinFonts/all.h>
 #include <esp_random.h>
+#include <esp_sleep.h>
 #include <esp_system.h>
 
 #include <cstring>
@@ -625,6 +626,9 @@ void setup() {
   // from the gaps in a capture. See the AfterUSBPower branch below.
   static constexpr const char* kWakeReasonNames[] = {"PowerButton", "AfterFlash", "AfterUSBPower", "Other"};
   LOG_INF("SLP", "Wake reason %s", kWakeReasonNames[static_cast<int>(wakeupReason)]);
+  debug_trace::note("wake reason=%s rst=%d cause=%d usb=%d", kWakeReasonNames[static_cast<int>(wakeupReason)],
+                    static_cast<int>(esp_reset_reason()), static_cast<int>(esp_sleep_get_wakeup_cause()),
+                    gpio.isUsbConnected() ? 1 : 0);
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       LOG_DBG("MAIN", "Verifying the power button is still held");
@@ -813,6 +817,10 @@ void setup() {
   wakeInputs.asyncBlankInFlight = asyncBlankInFlight;
   wakeInputs.driveAllArmed = driveAllArmed;
   const wake_sequence::WakePlan wakePlan = wake_sequence::plan(wakeInputs);
+  debug_trace::note("wake silent=%d paintedFace=%d fastUnlock=%d target=%d book=%d fromReader=%d",
+                    resume == BootResume::Silent ? 1 : 0, paintedFaceWake ? 1 : 0, SETTINGS.fastUnlock,
+                    static_cast<int>(wakePlan.target), APP_STATE.openEpubPath.empty() ? 0 : 1,
+                    APP_STATE.lastSleepFromReader ? 1 : 0);
 
   // Whether the reader's first page turn has to clean up after a drive-all first paint.
   const bool firstTurnCleans = driveAllArmed && wake_face::firstPageTurnCleans(wakeClear, gpio.deviceIsX3());
