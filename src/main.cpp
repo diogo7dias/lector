@@ -345,8 +345,8 @@ bool recoveryChordHeld(const unsigned long inputStartedMs) {
   return chordConfirmed();
 }
 
-static void setupDisplay(bool seamless = false) {
-  display.begin(seamless);
+static void setupDisplay(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
+  display.begin(seamless, wakeupReason);
   renderer.begin();
   // Only this file can put the device down, so the light panel's Sleep button is handed
   // the same entry point every other sleep route uses.
@@ -378,8 +378,8 @@ static void setupBuiltinFonts() {
   bindUiFontsForLanguage(renderer);
 }
 
-void setupDisplayAndFonts(bool seamless = false) {
-  setupDisplay(seamless);
+void setupDisplayAndFonts(const bool seamless, const HalGPIO::WakeupReason wakeupReason) {
+  setupDisplay(seamless, wakeupReason);
   setupBuiltinFonts();
   // Discover and load SD card fonts
   sdFontSystem.begin(renderer);
@@ -441,10 +441,10 @@ void setup() {
   // Not paid on a wake. That is the path a reader takes every time it is unlocked,
   // several times an hour, and it was 250 ms of a measured ~2400 ms wake spent waiting
   // for a host that is usually not there: the device is on battery in someone's hands.
-  // A wake is a deep-sleep reset on the X3 and the X4 Pro, but a POWERON on the X4: its
-  // lock drives the battery latch low (HalPowerManager::startDeepSleep), so every X4
-  // unlock is a cold boot and used to pay this on every press. A POWERON with the cable
-  // in is a charge-sleep boot (HalGPIO::getWakeupReason, AfterUSBPower) that prints one
+  // A wake is a deep-sleep reset on the X3 and the X4 Pro but a POWERON on the X4 (see
+  // lib/hal/WakeClassify.h), so every X4 unlock used to pay this. The full classifier
+  // cannot answer here: it needs the board and USB state, and gpio is not up yet.
+  // A POWERON with the cable in is a charge-sleep boot (HalGPIO::getWakeupReason, AfterUSBPower) that prints one
   // line and sleeps again. A fresh flash (RST_UNKNOWN), a panic reboot and a software
   // restart still pay it, because those are the boots a developer is watching. The cost
   // of being wrong is log lines missing from a boot nobody is watching, and replugging
@@ -506,12 +506,15 @@ void setup() {
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
     diag::recordSdMountFailure();  // reaches the card only if a retry mounts it
-    setupDisplayAndFonts(isSilentReboot);
+    // Classified here because the panel comes up before the main classification below.
+    // That one still reads afresh: the retry loop can hold the boot for minutes first.
+    const auto earlyWakeupReason = gpio.getWakeupReason();
+    setupDisplayAndFonts(isSilentReboot, earlyWakeupReason);
     // The firmware picker lives on the SD card, so a card that will not mount
     // used to end the boot right here -- on a device whose USB flashing the
     // vendor locked, that is the last way off this firmware gone. When the
     // recovery chord is held, keep asking for the card instead of giving up.
-    sdRecoveryChord = gpio.getWakeupReason() == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
+    sdRecoveryChord = earlyWakeupReason == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
     if (!sdRecoveryChord) {
       activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
       return;
@@ -662,11 +665,16 @@ void setup() {
   const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
 
   const bool paintedFaceWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton;
+  // Started here because the clear below is armed before routing is known; the routing
+  // fields are filled in once they are.
+  wake_sequence::WakeInputs wakeInputs;
+  wakeInputs.paintedFaceWake = paintedFaceWake;
+  wakeInputs.fastUnlock = SETTINGS.fastUnlock != 0;
 
-  setupDisplay(resume != BootResume::Splash || paintedFaceWake);
+  setupDisplay(resume != BootResume::Splash || paintedFaceWake, wakeupReason);
   setupBuiltinFonts();
 
-  // How the page gets over the painted sleep face; see wake_face::wakeClearFor.
+  // How the page gets over the painted sleep face; see wake_sequence::clearStrategy.
   //
   // DriveAll: no pass runs here at all. The reader's own first FAST is asked to drive
   // every pixel, so the wallpaper (or cover, or whatever the lock painted) is driven out
@@ -679,22 +687,10 @@ void setup() {
   // underneath it. Nothing draws until it completes: BusyBanner, the framebuffer loan
   // and ReaderActivity each wait before their first pixel, and every non-reader route
   // below waits before it paints.
-  const wake_face::WakeClear wakeClear =
-      paintedFaceWake ? wake_face::wakeClearFor(SETTINGS.fastUnlock != 0) : wake_face::WakeClear::Blank;
-  bool asyncBlankInFlight = false;
-  bool driveAllArmed = false;
-  if (paintedFaceWake) {
-    switch (wakeClear) {
-      case wake_face::WakeClear::DriveAll:
-        display.driveAllPixelsNextFast();
-        driveAllArmed = true;
-        break;
-      case wake_face::WakeClear::Blank:
-        renderer.clearScreen();
-        renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
-        asyncBlankInFlight = true;
-        break;
-    }
+  if (wake_sequence::armsDriveAll(wakeInputs)) display.driveAllPixelsNextFast();
+  if (wake_sequence::armsAsyncBlank(wakeInputs)) {
+    renderer.clearScreen();
+    renderer.displayBufferAsync(HalDisplay::FULL_REFRESH);
   }
   // SD card families after the blank is in flight, so a family read off the card
   // (seconds for a CJK one) costs that wake nothing.
@@ -762,10 +758,9 @@ void setup() {
 
   WakeTiming::mark(WakeTiming::Stage::WakeFaceReady);
 
-  // Wallpaper index reconcile. A battery lock on the Xteink boards is a full
-  // power cut (battery latch), so every unlock arrives as ESP_RST_POWERON —
-  // reset reason alone cannot separate "wake" from "the card was out". The
-  // walk therefore runs only when something says the folder changed: a
+  // Wallpaper index reconcile. An X4 unlock arrives as ESP_RST_POWERON (see
+  // lib/hal/WakeClassify.h), so reset reason alone cannot separate "wake" from
+  // "the card was out". The walk therefore runs only when something says the folder changed: a
   // persisted dirty mark (WiFi file browser, pause moves, deletes), the pick's
   // needs-rebuild flag, or the millisecond folder probe seeing the last live
   // directory slot move or the folder's own timestamp change (either one means
@@ -796,7 +791,6 @@ void setup() {
   // untested layers wrapped around it. wake_sequence::plan() folds all three together, so
   // the overrides are arms of the same decision rather than a correction applied to it.
   const std::string forcedBookPath = pendingWakeBookPath.empty() ? APP_STATE.openEpubPath : pendingWakeBookPath;
-  wake_sequence::WakeInputs wakeInputs;
   wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
@@ -809,14 +803,11 @@ void setup() {
   wakeInputs.bookOnBoot = SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF;
   wakeInputs.readerCrashed = APP_STATE.readerActivityLoadCount > 0;
   wakeInputs.bootBookPicked = !bootBookPath.empty();
-  wakeInputs.paintedFaceWake = paintedFaceWake;
-  wakeInputs.fastUnlock = SETTINGS.fastUnlock != 0;
-  wakeInputs.asyncBlankInFlight = asyncBlankInFlight;
-  wakeInputs.driveAllArmed = driveAllArmed;
   const wake_sequence::WakePlan wakePlan = wake_sequence::plan(wakeInputs);
 
   // Whether the reader's first page turn has to clean up after a drive-all first paint.
-  const bool firstTurnCleans = driveAllArmed && wake_face::firstPageTurnCleans(wakeClear, gpio.deviceIsX3());
+  const bool firstTurnCleans =
+      wake_face::firstPageTurnCleans(wake_sequence::clearStrategy(wakeInputs), gpio.deviceIsX3());
 
   if (oneShotWakeFlagsSet) APP_STATE.saveToFile();
 

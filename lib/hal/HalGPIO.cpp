@@ -272,39 +272,20 @@ bool HalGPIO::isUsbConnected() const {
 }
 
 bool HalGPIO::coldBootImpliesPowerButton() const {
-  // Xteink-style power topology: the power button energizes the rail until
-  // firmware latches it, so a no-USB POWERON can only be a still-held button
-  // boot, and plugging USB into an off device should charge-sleep, not boot.
-  // Everything else boots on any cold boot: boards with no USB detection at
-  // all would misread USB and post-flash boots as battery button boots.
+  // See wake_classify::BootFacts::coldBootImpliesPowerButton for why these boards.
   return isXteinkDevice() || BoardConfig::isPaperMono() || BoardConfig::isSticky();
 }
 
 HalGPIO::WakeupReason HalGPIO::getWakeupReason() const {
-  const auto wakeupCause = esp_sleep_get_wakeup_cause();
-  const auto resetReason = esp_reset_reason();
-
-  const bool usbConnected = isUsbConnected();
-
-  // Every deep-sleep exit is a power-button wake: the button is the only source
-  // startDeepSleep() arms. The reported cause cannot be trusted to say so: an X4 Pro
-  // trace (lector.exp.54) recorded a real button unlock as rst=DEEPSLEEP cause=TIMER,
-  // and esp_sleep_get_wakeup_cause() reports TIMER ahead of every other bit. Classed as
-  // Other, that unlock skipped the painted-face path and drew the boot splash before
-  // the book. A wake without a press is still caught: verifyPowerButtonWakeup() sends
-  // it back to sleep.
-  if (resetReason == ESP_RST_DEEPSLEEP) {
-    return WakeupReason::PowerButton;
-  }
-  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && !usbConnected &&
-      coldBootImpliesPowerButton()) {
-    return WakeupReason::PowerButton;
-  }
-  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_UNKNOWN && usbConnected) {
-    return WakeupReason::AfterFlash;
-  }
-  if (wakeupCause == ESP_SLEEP_WAKEUP_UNDEFINED && resetReason == ESP_RST_POWERON && usbConnected) {
-    return WakeupReason::AfterUSBPower;
-  }
-  return WakeupReason::Other;
+  using wake_classify::Reset;
+  const esp_reset_reason_t rst = esp_reset_reason();
+  wake_classify::BootFacts facts;
+  facts.reset = rst == ESP_RST_DEEPSLEEP ? Reset::DeepSleep
+                : rst == ESP_RST_POWERON ? Reset::PowerOn
+                : rst == ESP_RST_UNKNOWN ? Reset::Unknown
+                                         : Reset::Other;
+  facts.wakeCauseReported = esp_sleep_get_wakeup_cause() != ESP_SLEEP_WAKEUP_UNDEFINED;
+  facts.usbConnected = isUsbConnected();
+  facts.coldBootImpliesPowerButton = coldBootImpliesPowerButton();
+  return wake_classify::classify(facts);
 }
