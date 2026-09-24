@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Epub/ReaderRenderSpec.h>
+
 #include <cstdint>
 #include <memory>
 #include <vector>
@@ -11,27 +13,15 @@ class TextBlock;
 namespace textsettings {
 
 // Settings + geometry that determine the laid-out lines; used to invalidate the cache.
-// Draw-only settings (vertical margins, the status bar, debug borders, the Paperback Look
-// smear) are deliberately NOT here: they change where the cached lines are painted, not
-// what the lines are.
+// The render spec is the reader's own (makeRenderSpec), so a field the reader lays out
+// with cannot be missed here. Its viewportWidth carries the text column width and its
+// height is unused. Draw-only settings (vertical margins, the status bar, debug borders,
+// the Paperback Look smear) are deliberately NOT here: they change where the cached lines
+// are painted, not what the lines are.
 struct PreviewKey {
-  int fontId = -1;
+  ReaderRenderSpec spec;
   int fontPointSize = -1;
   int screenMargin = -1;
-  int textWidth = -1;
-  float lineCompression = -1.0f;
-  uint8_t alignment = 0xFF;
-  bool extraParagraphSpacing = false;
-  bool focusReading = false;
-  // Only the layout switch changes the sample: its stylesheet sets a first-line indent
-  // and puts a centred heading on the page. The sample has no CSS-driven bold or italic,
-  // so Embedded Text Style leaves the preview untouched.
-  bool embeddedLayoutStyle = false;
-  uint8_t paragraphSpacing = 0xFF;
-  uint8_t wordSpacing = 0xFF;
-  uint8_t guideDotsMode = 0xFF;
-  uint8_t firstLineIndentMode = 0xFF;
-  uint8_t firstLineIndentPercent = 0xFF;
   bool operator==(const PreviewKey&) const = default;
 };
 

@@ -4,6 +4,7 @@ add_executable(ReaderLookFieldsTest
 
 target_include_directories(ReaderLookFieldsTest PRIVATE
   ${REPO_ROOT}/src/activities/reader
+  ${REPO_ROOT}/lib/Epub
 )
 
 target_link_libraries(ReaderLookFieldsTest PRIVATE

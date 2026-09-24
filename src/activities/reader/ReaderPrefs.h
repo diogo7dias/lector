@@ -1,4 +1,7 @@
 #pragma once
+#include <Epub/ReaderRenderSpec.h>
+
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -50,6 +53,12 @@ inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings:
 inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
 inline constexpr uint8_t PARAGRAPH_NUMBERING_COUNT = 2;   // CrossPointSettings::PARAGRAPH_NUMBERING_COUNT
 inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
+// Ranges the render spec clamps to, shared with the settings rows that edit them.
+inline constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
+inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
+inline constexpr uint8_t MIN_WORD_SPACING = 75;
+inline constexpr uint8_t MAX_WORD_SPACING = 150;
+inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural space advance
 }  // namespace reader_defaults
 
 struct ReaderPrefs {
@@ -176,7 +185,7 @@ struct ReaderPrefs {
   uint8_t sbParaPagesPos = 0;  // SB_ANCHOR_OFF
 
   // Appended so v5-v13 sidecars retain every existing field and default to unchanged spacing.
-  uint8_t wordSpacing = 100;
+  uint8_t wordSpacing = reader_defaults::WORD_SPACING;
 
   // Copy the status bar block from `source`.
   //
@@ -195,6 +204,43 @@ struct ReaderPrefs {
   // trailing bytes are canonical and whole-blob memcmp change-detection is exact.
   static ReaderPrefs fromGlobal();
 };
+
+// ── The render spec a look produces ───────────────────────────────────────────
+// Line-height multiplier from a line-spacing percentage (100 = natural), clamped to the
+// range the settings row offers.
+inline float readerLineCompression(const uint8_t lineSpacingPercent) {
+  return static_cast<float>(std::clamp(lineSpacingPercent, reader_defaults::MIN_LINE_SPACING_PERCENT,
+                                       reader_defaults::MAX_LINE_SPACING_PERCENT)) /
+         100.0f;
+}
+
+// The one builder for every ReaderRenderSpec: the reader and the Text Settings preview
+// both go through it. The font id is resolved by the caller because an SD family needs
+// the live font registry; everything else comes from the look.
+inline ReaderRenderSpec makeRenderSpec(const ReaderPrefs& p, const int fontId, const uint16_t viewportWidth,
+                                       const uint16_t viewportHeight) {
+  ReaderRenderSpec spec;
+  spec.fontId = fontId;
+  spec.lineCompression = readerLineCompression(p.lineSpacingPercent);
+  spec.extraParagraphSpacing = p.extraParagraphSpacing != 0;
+  spec.paragraphSpacing = p.paragraphSpacing;
+  spec.wordSpacing = std::clamp(p.wordSpacing, reader_defaults::MIN_WORD_SPACING, reader_defaults::MAX_WORD_SPACING);
+  spec.paragraphAlignment = p.paragraphAlignment;
+  spec.viewportWidth = viewportWidth;
+  spec.viewportHeight = viewportHeight;
+  spec.embeddedTextStyle = p.embeddedTextStyle != 0;
+  spec.embeddedLayoutStyle = p.embeddedLayoutStyle != 0;
+  // Hard-set to CrossPointSettings::IMAGES_DISPLAY, not read: see the note on
+  // IMAGE_RENDERING. This is the choke point that makes a stored placeholder or suppress
+  // value in a per-book override or a reader preset irrelevant without touching the
+  // section file format.
+  spec.imageRendering = 0;
+  spec.focusReadingEnabled = p.focusReadingEnabled != 0;
+  spec.guideDotsMode = resolveGuideDotsMode(p.guideDotsEnabled, p.guideDotsHidden);
+  spec.firstLineIndentMode = p.firstLineIndentMode;
+  spec.firstLineIndentPercent = p.firstLineIndentPercent;
+  return spec;
+}
 
 // On-card size of each older blob: this struct truncated at the field the next version
 // appended. They live out here because offsetof needs the completed type.
