@@ -20,11 +20,11 @@ constexpr uint8_t resolveGuideDotsMode(const uint8_t dotsEnabled, const uint8_t 
 // engine. Section-cache validation keys on every field: a section file built
 // with a different spec is discarded and rebuilt.
 //
-// Build one via CrossPointSettings::readerRenderSpec(width, height), which
-// fills every field: the settings-derived ones from the store, the viewport
-// from the caller. Taking the viewport as arguments is what keeps a spec from
-// existing in a half-filled state — the 0 defaults below are a last-resort
-// backstop (a 0x0 viewport lays out nothing), not an invitation to omit it.
+// Build one via makeRenderSpec() in ReaderPrefs.h, which fills every field:
+// the look-derived ones from a ReaderPrefs, the font id and viewport from the
+// caller. Taking those as arguments is what keeps a spec from existing in a
+// half-filled state — the 0 defaults below are a last-resort backstop (a 0x0
+// viewport lays out nothing), not an invitation to omit them.
 struct ReaderRenderSpec {
   int fontId = 0;
   float lineCompression = 1.0f;
@@ -57,22 +57,13 @@ struct ReaderRenderSpec {
   // Both are part of the cache key.
   uint8_t firstLineIndentMode = 0;
   uint8_t firstLineIndentPercent = 0;
+
+  // Memberwise: padding is ignored and float equality keeps its usual semantics.
+  constexpr bool operator==(const ReaderRenderSpec&) const = default;
 };
 
-// Compare decoded section-cache parameters field by field: the struct's padding
-// is not serialized, and floating-point equality must retain its existing semantics.
-// Version/trailer validation and the on-disk byte order remain owned by Section.
+// Compare decoded section-cache parameters. Version/trailer validation and the
+// on-disk byte order remain owned by Section.
 constexpr bool sectionCacheMatches(const ReaderRenderSpec& requested, const ReaderRenderSpec& cached) {
-  return requested.fontId == cached.fontId && requested.lineCompression == cached.lineCompression &&
-         requested.extraParagraphSpacing == cached.extraParagraphSpacing &&
-         requested.paragraphSpacing == cached.paragraphSpacing && requested.wordSpacing == cached.wordSpacing &&
-         requested.paragraphAlignment == cached.paragraphAlignment && requested.viewportWidth == cached.viewportWidth &&
-         requested.viewportHeight == cached.viewportHeight &&
-         requested.embeddedTextStyle == cached.embeddedTextStyle &&
-         requested.embeddedLayoutStyle == cached.embeddedLayoutStyle &&
-         requested.imageRendering == cached.imageRendering &&
-         requested.focusReadingEnabled == cached.focusReadingEnabled &&
-         requested.guideDotsMode == cached.guideDotsMode &&
-         requested.firstLineIndentMode == cached.firstLineIndentMode &&
-         requested.firstLineIndentPercent == cached.firstLineIndentPercent;
+  return requested == cached;
 }

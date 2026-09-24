@@ -218,7 +218,13 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   const int textWidth = paneWidth - 2 * marginH;
   if (textWidth <= 0) return;
 
-  const float compression = SETTINGS.getReaderLineCompression(look);
+  PreviewKey key{.spec = makeRenderSpec(look, fontId, static_cast<uint16_t>(textWidth), 0),
+                 .fontPointSize = look.fontPointSize,
+                 .screenMargin = marginH};
+  // The sample has no CSS-driven bold or italic, so Embedded Text Style leaves it untouched;
+  // only the layout switch (a first-line indent and a centred heading) changes it.
+  key.spec.embeddedTextStyle = false;
+  const float compression = key.spec.lineCompression;
   const int lineAdvance = std::max(1, renderer.getLineHeight(fontId, compression));
   // Same stack the parser applies after each paragraph: the Extra Spacing toggle adds half
   // a line, the Paragraph Spacing percentage adds its share on top of it.
@@ -232,20 +238,6 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   // key means an identical prewarm call. This relies on nothing else evicting the SD
   // glyph cache while this activity is up — true today: the only evictor is
   // FontCacheManager::PrewarmScope, used solely by the reader/dictionary activities.
-  const PreviewKey key{.fontId = fontId,
-                       .fontPointSize = look.fontPointSize,
-                       .screenMargin = marginH,
-                       .textWidth = textWidth,
-                       .lineCompression = compression,
-                       .alignment = look.paragraphAlignment,
-                       .extraParagraphSpacing = look.extraParagraphSpacing != 0,
-                       .focusReading = look.focusReadingEnabled != 0,
-                       .embeddedLayoutStyle = look.embeddedLayoutStyle != 0,
-                       .paragraphSpacing = look.paragraphSpacing,
-                       .wordSpacing = look.wordSpacing,
-                       .guideDotsMode = resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden),
-                       .firstLineIndentMode = look.firstLineIndentMode,
-                       .firstLineIndentPercent = look.firstLineIndentPercent};
   if (key != layout.key) {
     if (auto* fcm = renderer.getFontCacheManager()) {
       // The guide dot is not in the sample sentence, so it has to be prewarmed

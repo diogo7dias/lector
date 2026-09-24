@@ -5,6 +5,7 @@ add_executable(ReaderPresetMigrationTest
 target_include_directories(ReaderPresetMigrationTest PRIVATE
   ${REPO_ROOT}/src
   ${REPO_ROOT}/src/activities/reader
+  ${REPO_ROOT}/lib/Epub
   ${REPO_ROOT}
 )
 

@@ -283,7 +283,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // The values, the ReaderRenderSpec field and the parser branches that read it all stay.
   // spec.imageRendering is serialised into every cached section and compared on load, so
   // deleting it would change the section file format and force every book on the card to
-  // re-index. Both spec builders now hard-set IMAGES_DISPLAY instead, which reaches stored
+  // re-index. The spec builder (makeRenderSpec) now hard-sets IMAGES_DISPLAY instead, which reaches stored
   // per-book overrides and reader presets as well as the global value — and which makes a
   // section cached under the old placeholder layout mismatch and rebuild, but only for the
   // books that actually used it.
@@ -397,8 +397,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // right edge of the line above.
   static constexpr uint8_t DEFAULT_PARAGRAPH_SPACING = reader_defaults::PARAGRAPH_SPACING_PERCENT;
   uint8_t paragraphSpacing = DEFAULT_PARAGRAPH_SPACING;
-  static constexpr uint8_t MIN_WORD_SPACING = 75;
-  static constexpr uint8_t MAX_WORD_SPACING = 150;
+  static constexpr uint8_t MIN_WORD_SPACING = reader_defaults::MIN_WORD_SPACING;
+  static constexpr uint8_t MAX_WORD_SPACING = reader_defaults::MAX_WORD_SPACING;
   uint8_t wordSpacing = 100;  // percent of natural space advance; no limit on justification
   // Off by default, as in the old fork. The grayscale text pass is imperceptible on
   // this panel but costs a fading grey refresh on every page turn, which is very
@@ -434,13 +434,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
   // Legacy coarse line-spacing enum (TIGHT/NORMAL/WIDE). Superseded by
   // lineSpacingPercent below; retained so old saves still load and existing
-  // references stay valid. resolveLineCompression now reads the percent.
+  // references stay valid. readerLineCompression now reads the percent.
   uint8_t lineSpacing = NORMAL;
   // Reader line spacing as a percentage of the font's natural line height (100 =
   // natural). Restored granular control (old lector). The resolved line-compression
   // float is part of the cache key, so a change rebuilds the section cache.
-  static constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
-  static constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
+  static constexpr uint8_t MIN_LINE_SPACING_PERCENT = reader_defaults::MIN_LINE_SPACING_PERCENT;
+  static constexpr uint8_t MAX_LINE_SPACING_PERCENT = reader_defaults::MAX_LINE_SPACING_PERCENT;
   uint8_t lineSpacingPercent = 95;
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
@@ -841,17 +841,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // offering a size nothing renders at. Both fields are persisted in one write.
   void clearSdFontFamily();
 
-  // Resolved text-rendering configuration for the Epub layout engine. The
-  // viewport is renderer/orientation-derived, so the caller supplies it —
-  // passing it in keeps a spec from ever existing in a half-filled state.
-  // Deliberately unlocked: every field it reads is a single byte, so a
-  // concurrent settings write can at worst produce a snapshot mixing pre- and
-  // post-change fields, self-correcting on the next refresh. Locking here would
-  // put a mutex on the render path and stall it behind saveToFile()'s SD write.
-  ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight) const;
-  // Per-book override: build the spec from a ReaderPrefs snapshot. Every field the
-  // section cache keys on comes from prefs, so a custom book's cache is validated
-  // and rebuilt against its own settings by CrossPoint's own indexing.
+  // Resolved text-rendering configuration for the Epub layout engine, built from a
+  // ReaderPrefs snapshot (makeRenderSpec) with the font id resolved here. The viewport
+  // is renderer/orientation-derived, so the caller supplies it. Every field the section
+  // cache keys on comes from prefs, so a custom book's cache is validated and rebuilt
+  // against its own settings by CrossPoint's own indexing.
   ReaderRenderSpec readerRenderSpec(uint16_t viewportWidth, uint16_t viewportHeight, const ReaderPrefs& prefs) const;
 
   static const char* getFilePath() { return "/.crosspoint/settings.json"; }
@@ -863,7 +857,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   float getReaderLineCompression() const;
   float getReaderLineCompression(const ReaderPrefs& prefs) const {
-    return resolveLineCompression(prefs.lineSpacingPercent);
+    return readerLineCompression(prefs.lineSpacingPercent);
   }
   unsigned long getSleepTimeoutMs() const;
   int getRefreshFrequency() const;
@@ -897,12 +891,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Runs after current fields are decoded; reports whether the legacy document needs a resave.
   bool migrateFromJson(JsonVariantConst doc);
 
-  // Shared resolvers so getReaderFontId()/getReaderLineCompression() and their
-  // ReaderPrefs overloads compute font id / line compression from one code path.
+  // Shared resolver so getReaderFontId() and its ReaderPrefs overload compute the font
+  // id from one code path.
   int resolveReaderFontId(uint8_t fontFamily, uint8_t fontSize, const char* sdFontFamilyName) const;
-  // Line-height multiplier from a line-spacing percentage (100 = natural). Clamped
-  // to [MIN..MAX]_LINE_SPACING_PERCENT. Restored granular model (old lector).
-  static float resolveLineCompression(uint8_t lineSpacingPercent);
 };
 
 // Helper macro to access settings

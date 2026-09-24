@@ -442,38 +442,7 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   return needsResave;
 }
 
-ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth,
-                                                      const uint16_t viewportHeight) const {
-  ReaderRenderSpec spec;
-  spec.fontId = getReaderFontId();
-  spec.lineCompression = getReaderLineCompression();
-  spec.extraParagraphSpacing = extraParagraphSpacing != 0;
-  spec.paragraphSpacing = paragraphSpacing;
-  spec.wordSpacing = std::clamp(wordSpacing, MIN_WORD_SPACING, MAX_WORD_SPACING);
-  spec.paragraphAlignment = paragraphAlignment;
-  spec.viewportWidth = viewportWidth;
-  spec.viewportHeight = viewportHeight;
-  spec.embeddedTextStyle = embeddedTextStyle != 0;
-  spec.embeddedLayoutStyle = embeddedLayoutStyle != 0;
-  // Hard-set, not read: see the note on IMAGE_RENDERING. This is the choke point that
-  // makes a stored placeholder or suppress value in a per-book override or a reader preset
-  // irrelevant without touching the section file format.
-  spec.imageRendering = IMAGES_DISPLAY;
-  spec.focusReadingEnabled = focusReadingEnabled != 0;
-  spec.guideDotsMode = ::resolveGuideDotsMode(guideDotsEnabled, guideDotsHidden);
-  spec.firstLineIndentMode = firstLineIndentMode;
-  spec.firstLineIndentPercent = firstLineIndentPercent;
-  return spec;
-}
-
-float CrossPointSettings::resolveLineCompression(const uint8_t lineSpacingPercent) {
-  uint8_t pct = lineSpacingPercent;
-  if (pct < MIN_LINE_SPACING_PERCENT) pct = MIN_LINE_SPACING_PERCENT;
-  if (pct > MAX_LINE_SPACING_PERCENT) pct = MAX_LINE_SPACING_PERCENT;
-  return static_cast<float>(pct) / 100.0f;
-}
-
-float CrossPointSettings::getReaderLineCompression() const { return resolveLineCompression(lineSpacingPercent); }
+float CrossPointSettings::getReaderLineCompression() const { return readerLineCompression(lineSpacingPercent); }
 
 unsigned long CrossPointSettings::getSleepTimeoutMs() const {
   // The floor first: with Sleep bound to nothing, auto-sleep is the only thing left that
@@ -568,23 +537,7 @@ int CrossPointSettings::getReaderFontId(const ReaderPrefs& prefs) const {
 
 ReaderRenderSpec CrossPointSettings::readerRenderSpec(const uint16_t viewportWidth, const uint16_t viewportHeight,
                                                       const ReaderPrefs& prefs) const {
-  ReaderRenderSpec spec;
-  spec.fontId = resolveReaderFontId(prefs.fontFamily, prefs.fontPointSize, prefs.sdFontFamilyName);
-  spec.lineCompression = resolveLineCompression(prefs.lineSpacingPercent);
-  spec.extraParagraphSpacing = prefs.extraParagraphSpacing != 0;
-  spec.paragraphSpacing = prefs.paragraphSpacing;
-  spec.wordSpacing = std::clamp(prefs.wordSpacing, MIN_WORD_SPACING, MAX_WORD_SPACING);
-  spec.paragraphAlignment = prefs.paragraphAlignment;
-  spec.viewportWidth = viewportWidth;
-  spec.viewportHeight = viewportHeight;
-  spec.embeddedTextStyle = prefs.embeddedTextStyle != 0;
-  spec.embeddedLayoutStyle = prefs.embeddedLayoutStyle != 0;
-  spec.imageRendering = IMAGES_DISPLAY;  // see the matching note in the global builder above
-  spec.focusReadingEnabled = prefs.focusReadingEnabled != 0;
-  spec.guideDotsMode = ::resolveGuideDotsMode(prefs.guideDotsEnabled, prefs.guideDotsHidden);
-  spec.firstLineIndentMode = prefs.firstLineIndentMode;
-  spec.firstLineIndentPercent = prefs.firstLineIndentPercent;
-  return spec;
+  return makeRenderSpec(prefs, getReaderFontId(prefs), viewportWidth, viewportHeight);
 }
 
 void CrossPointSettings::applyReaderPrefs(const ReaderPrefs& p) {
@@ -623,5 +576,6 @@ bool CrossPointSettings::saveToFile() const {
 
 // ReaderPrefs.h is host-buildable and cannot see this class, so it carries its own copies.
 static_assert(CrossPointSettings::SB_OFFBAR_OFF == StatusBarBlock::OFF_BAR_OFF, "off-bar Off value drifted");
+static_assert(CrossPointSettings::IMAGES_DISPLAY == 0, "makeRenderSpec hard-sets imageRendering to 0");
 static_assert(CrossPointSettings::PARAGRAPH_NUMBERING_COUNT == reader_defaults::PARAGRAPH_NUMBERING_COUNT,
               "paragraph numbering count drifted");
