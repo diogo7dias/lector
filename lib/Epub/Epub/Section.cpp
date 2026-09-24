@@ -468,7 +468,17 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
 
   if (spec.embeddedTextStyle || spec.embeddedLayoutStyle) {
     ctx->cssParser = epub.getCssParser();
-    if (ctx->cssParser && !ctx->cssParser->loadFromCache()) {
+    const auto cssLoad = ctx->cssParser ? ctx->cssParser->loadFromCache() : CssParser::CacheLoad::Ok;
+    if (cssLoad == CssParser::CacheLoad::NoMemory) {
+      // Building without the rules would bake an unstyled chapter into the section cache.
+      LOG_ERR("SCT", "OOM: CSS rules, deferring section build");
+      noteBuildFailure(BuildFailure::OomContext);
+      file.close();
+      Storage.remove(binTmpPath().c_str());
+      if (!reusedHtml) Storage.remove(tmpHtmlPath.c_str());
+      return false;
+    }
+    if (cssLoad == CssParser::CacheLoad::Invalid) {
       LOG_ERR("SCT", "Failed to load CSS from cache");
     }
   }

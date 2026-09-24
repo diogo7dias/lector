@@ -35,7 +35,7 @@ class Epub {
   bool parseTocNcxFile() const;
   bool parseTocNavFile() const;
   void discoverCssFilesFromZip();
-  void parseCssFiles() const;
+  bool parseCssFiles() const;  // true when the CSS rules cache was (re)written
 
  public:
   explicit Epub(std::string filepath, const std::string& cacheDir) : filepath(std::move(filepath)) {

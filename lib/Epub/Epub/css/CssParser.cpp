@@ -332,6 +332,7 @@ bool CssParser::ensureEntryCapacity(const size_t needed) {
   auto grown = makeUniqueNoThrow<SelectorEntry[]>(newCap);
   if (!grown) {
     LOG_ERR("CSS", "OOM: selector index (%zu entries)", newCap);
+    partial_ = true;
     return false;
   }
   if (entryCount_ > 0) memcpy(grown.get(), entries_.get(), entryCount_ * sizeof(SelectorEntry));
@@ -352,6 +353,7 @@ bool CssParser::ensurePoolCapacity(const size_t needed) {
   auto grown = makeUniqueNoThrow<char[]>(newCap);
   if (!grown) {
     LOG_ERR("CSS", "OOM: selector pool (%zu bytes)", newCap);
+    partial_ = true;
     return false;
   }
   if (poolSize_ > 0) memcpy(grown.get(), selectorPool_.get(), poolSize_);
@@ -373,6 +375,7 @@ bool CssParser::ensureStyleCapacity(const size_t needed) {
   auto grownHashes = makeUniqueNoThrow<uint32_t[]>(newCap);
   if (!grownStyles || !grownHashes) {
     LOG_ERR("CSS", "OOM: style pool (%zu styles)", newCap);
+    partial_ = true;
     return false;
   }
   for (size_t i = 0; i < styleCount_; ++i) grownStyles[i] = stylePool_[i];
@@ -903,6 +906,7 @@ CssStyle CssParser::parseInlineStyle(std::string_view styleValue) { return parse
 
 // Cache file name (version is CssParser::CSS_CACHE_VERSION)
 constexpr char rulesCache[] = "/css_rules.cache";
+constexpr uint8_t CACHE_FLAG_PARTIAL = 0x01;
 
 bool CssParser::hasCache() const { return Storage.exists((cachePath + rulesCache).c_str()); }
 
@@ -910,13 +914,14 @@ void CssParser::deleteCache() const {
   if (hasCache()) Storage.remove((cachePath + rulesCache).c_str());
 }
 
-// Cache format v8:
+// Cache format v10:
 //   u8  version
+//   u8  flags (bit0 = partial: built under OOM, rebuild when heap allows)
 //   u16 entryCount E, u16 styleCount S, u32 stringPoolBytes P
 //   E*8  SelectorEntry records (persisted sorted — load never sorts)
 //   S*66 style wire records (encodeStyleWire layout)
 //   P    case-folded selector chars, no separators
-// File size must equal 9 + 8E + 66S + P exactly.
+// File size must equal 10 + 8E + 66S + P exactly.
 
 bool CssParser::saveToCache() const {
   if (cachePath.empty()) {
@@ -930,11 +935,12 @@ bool CssParser::saveToCache() const {
 
   // Header fields are memcpy'd into place: both targets are little-endian and
   // RISC-V faults on unaligned stores through cast pointers.
-  uint8_t header[9];
+  uint8_t header[10];
   header[0] = CssParser::CSS_CACHE_VERSION;
-  memcpy(header + 1, &entryCount_, sizeof(entryCount_));
-  memcpy(header + 3, &styleCount_, sizeof(styleCount_));
-  memcpy(header + 5, &poolSize_, sizeof(poolSize_));
+  header[1] = partial_ ? CACHE_FLAG_PARTIAL : 0;
+  memcpy(header + 2, &entryCount_, sizeof(entryCount_));
+  memcpy(header + 4, &styleCount_, sizeof(styleCount_));
+  memcpy(header + 6, &poolSize_, sizeof(poolSize_));
   file.write(header, sizeof(header));
 
   if (entryCount_ > 0) {
@@ -951,18 +957,18 @@ bool CssParser::saveToCache() const {
     file.write(selectorPool_.get(), poolSize_);
   }
 
-  LOG_DBG("CSS", "Saved %u rules to cache", entryCount_);
+  LOG_DBG("CSS", "Saved %u rules to cache%s", entryCount_, partial_ ? " (partial)" : "");
   return true;
 }
 
-bool CssParser::loadFromCache() {
+CssParser::CacheLoad CssParser::loadFromCache() {
   if (cachePath.empty()) {
-    return false;
+    return CacheLoad::Invalid;
   }
 
   HalFile file;
   if (!Storage.openFileForRead("CSS", cachePath + rulesCache, file)) {
-    return false;
+    return CacheLoad::Invalid;
   }
 
   // Clear existing rules
@@ -976,31 +982,32 @@ bool CssParser::loadFromCache() {
     // Explicitly close() file before calling Storage.remove()
     file.close();
     Storage.remove((cachePath + rulesCache).c_str());
-    return false;
+    return CacheLoad::Invalid;
   }
 
-  uint8_t header[8];
+  uint8_t header[9];
   if (file.read(header, sizeof(header)) != sizeof(header)) {
-    return false;
+    return CacheLoad::Invalid;
   }
+  const bool partial = (header[0] & CACHE_FLAG_PARTIAL) != 0;
   uint16_t entryCount = 0;
   uint16_t styleCount = 0;
   uint32_t poolBytes = 0;
-  memcpy(&entryCount, header, sizeof(entryCount));
-  memcpy(&styleCount, header + 2, sizeof(styleCount));
-  memcpy(&poolBytes, header + 4, sizeof(poolBytes));
+  memcpy(&entryCount, header + 1, sizeof(entryCount));
+  memcpy(&styleCount, header + 3, sizeof(styleCount));
+  memcpy(&poolBytes, header + 5, sizeof(poolBytes));
 
   if (entryCount > MAX_RULES || styleCount > MAX_UNIQUE_STYLES || poolBytes > STRING_POOL_CAP) {
     LOG_DBG("CSS", "Invalid cache header (%u rules, %u styles, %u pool bytes)", entryCount, styleCount,
             static_cast<unsigned>(poolBytes));
-    return false;
+    return CacheLoad::Invalid;
   }
 
   // The remaining payload size must match the header exactly
   const size_t expectedBytes = entryCount * sizeof(SelectorEntry) + styleCount * STYLE_WIRE_BYTES + poolBytes;
   if (static_cast<size_t>(file.available()) != expectedBytes) {
     LOG_DBG("CSS", "CSS cache size mismatch");
-    return false;
+    return CacheLoad::Invalid;
   }
 
   if (entryCount > 0) {
@@ -1008,12 +1015,12 @@ bool CssParser::loadFromCache() {
     if (!entries_) {
       LOG_ERR("CSS", "OOM: selector index (%u entries)", entryCount);
       clear();
-      return false;
+      return CacheLoad::NoMemory;
     }
     const size_t entryBytes = entryCount * sizeof(SelectorEntry);
     if (file.read(entries_.get(), entryBytes) != static_cast<int>(entryBytes)) {
       clear();
-      return false;
+      return CacheLoad::Invalid;
     }
   }
 
@@ -1023,13 +1030,13 @@ bool CssParser::loadFromCache() {
     if (!stylePool_ || !styleHashes_) {
       LOG_ERR("CSS", "OOM: style pool (%u styles)", styleCount);
       clear();
-      return false;
+      return CacheLoad::NoMemory;
     }
     for (uint16_t i = 0; i < styleCount; ++i) {
       uint8_t wire[STYLE_WIRE_BYTES];
       if (file.read(wire, STYLE_WIRE_BYTES) != static_cast<int>(STYLE_WIRE_BYTES)) {
         clear();
-        return false;
+        return CacheLoad::Invalid;
       }
       decodeStyleWire(wire, stylePool_[i]);
       styleHashes_[i] = hashStyleWire(wire);
@@ -1041,11 +1048,11 @@ bool CssParser::loadFromCache() {
     if (!selectorPool_) {
       LOG_ERR("CSS", "OOM: selector pool (%u bytes)", static_cast<unsigned>(poolBytes));
       clear();
-      return false;
+      return CacheLoad::NoMemory;
     }
     if (file.read(selectorPool_.get(), poolBytes) != static_cast<int>(poolBytes)) {
       clear();
-      return false;
+      return CacheLoad::Invalid;
     }
   }
 
@@ -1055,6 +1062,7 @@ bool CssParser::loadFromCache() {
   styleCapacity_ = styleCount;
   poolSize_ = poolBytes;
   poolCapacity_ = poolBytes;
+  partial_ = partial;
 
   // Validate every entry so a corrupt cache cannot break binary search or
   // index out of bounds: offsets/lengths in range, style indices valid, and
@@ -1066,7 +1074,7 @@ bool CssParser::loadFromCache() {
         static_cast<size_t>(entry.offset) + entry.length > poolBytes || entry.styleIdx >= styleCount) {
       LOG_DBG("CSS", "Invalid cache entry %u", i);
       clear();
-      return false;
+      return CacheLoad::Invalid;
     }
     if (i > 0) {
       const SelectorEntry& prev = entries_[i - 1];
@@ -1075,11 +1083,11 @@ bool CssParser::loadFromCache() {
       if (cmp > 0 || (cmp == 0 && prev.length >= entry.length)) {
         LOG_DBG("CSS", "Cache entries not sorted at %u", i);
         clear();
-        return false;
+        return CacheLoad::Invalid;
       }
     }
   }
 
-  LOG_DBG("CSS", "Loaded %u rules from cache", entryCount);
-  return true;
+  LOG_DBG("CSS", "Loaded %u rules from cache%s", entryCount, partial ? " (partial)" : "");
+  return CacheLoad::Ok;
 }

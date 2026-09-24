@@ -276,7 +276,7 @@ void Epub::discoverCssFilesFromZip() {
   }
 }
 
-void Epub::parseCssFiles() const {
+bool Epub::parseCssFiles() const {
   // Maximum CSS file size we'll attempt to parse (uncompressed)
   // Larger files risk memory exhaustion on ESP32
   constexpr size_t MAX_CSS_FILE_SIZE = 128 * 1024;  // 128KB
@@ -288,12 +288,6 @@ void Epub::parseCssFiles() const {
   }
 
   LOG_DBG("EBP", "CSS files to parse: %zu", cssFiles.size());
-
-  // See if we have a cached version of the CSS rules
-  if (cssParser->hasCache()) {
-    LOG_DBG("EBP", "CSS cache exists, skipping parseCssFiles");
-    return;
-  }
 
   // Some converters emit one byte-identical stylesheet per chapter (100+ .css
   // entries), and each parse costs a zip locate plus an SD extract round-trip.
@@ -340,6 +334,7 @@ void Epub::parseCssFiles() const {
     if (freeHeap < MIN_HEAP_FOR_CSS_PARSING) {
       LOG_ERR("EBP", "Insufficient heap for CSS parsing (%u bytes free, need %zu), skipping: %s", freeHeap,
               MIN_HEAP_FOR_CSS_PARSING, cssPath.c_str());
+      cssParser->markPartial();
       continue;
     }
 
@@ -382,32 +377,56 @@ void Epub::parseCssFiles() const {
     Storage.remove(tmpCssPath.c_str());
   }
 
-  // Save to cache for next time
-  if (!cssParser->saveToCache()) {
-    LOG_ERR("EBP", "Failed to save CSS rules to cache");
+  // Save to cache for next time. The only cache still on disk here is a partial
+  // one (stale/corrupt ones were deleted), so a retry that is itself partial keeps
+  // it rather than churning the file and every section built from it.
+  bool saved = false;
+  if (cssParser->isPartial() && cssParser->hasCache()) {
+    LOG_DBG("EBP", "CSS retry still partial, keeping previous cache");
+  } else {
+    saved = cssParser->saveToCache();
+    if (!saved) LOG_ERR("EBP", "Failed to save CSS rules to cache");
   }
 
-  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files (%zu identical duplicates skipped)", cssParser->ruleCount(),
-          cssFiles.size(), skippedDuplicates);
+  LOG_DBG("EBP", "Loaded %zu CSS style rules from %zu files (%zu identical duplicates skipped%s)",
+          cssParser->ruleCount(), cssFiles.size(), skippedDuplicates, cssParser->isPartial() ? ", partial" : "");
   cssParser->clear();
+  return saved;
 }
 
 // load in the meta data for the epub file
 bool Epub::ensureCssCache() {
-  // Rebuild CSS cache when missing or when cache version changed (loadFromCache removes stale file)
-  if (cssParser->hasCache() && cssParser->loadFromCache()) return true;
-  LOG_DBG("EBP", "CSS rules cache missing or stale, attempting to parse CSS files");
-  cssParser->deleteCache();
+  // Rebuild CSS cache when missing, stale/corrupt, or built under low heap (partial).
+  // A load that fails for lack of heap keeps the cache: re-parsing on the same low
+  // heap would only replace good rules with fewer.
+  if (cssParser->hasCache()) {
+    switch (cssParser->loadFromCache()) {
+      case CssParser::CacheLoad::Ok:
+        if (!cssParser->isPartial()) return true;
+        LOG_DBG("EBP", "CSS rules cache is partial, retrying CSS parse");
+        cssParser->clear();
+        break;
+      case CssParser::CacheLoad::NoMemory:
+        LOG_ERR("EBP", "Low heap loading CSS rules cache, keeping it for a later retry");
+        return true;
+      case CssParser::CacheLoad::Invalid:
+        LOG_DBG("EBP", "CSS rules cache stale or corrupt, attempting to parse CSS files");
+        cssParser->deleteCache();
+        break;
+    }
+  }
 
   BookMetadataCache::BookMetadata cachedMetadata = bookMetadataCache->coreMetadata;
   if (!parseContentOpf(cachedMetadata, /*writeSpineEntries=*/false)) {
     LOG_ERR("EBP", "Could not parse content.opf from cached bookMetadata for CSS files");
-    // continue anyway - book will work without CSS and we'll still load any inline style CSS
+    // continue anyway - book will work without CSS and we'll still load any inline style CSS.
+    // Marked partial so the stylesheet list is retried on a later load.
+    cssParser->markPartial();
   } else {
     discoverCssFilesFromZip();
   }
   bookMetadataCache.reset();
-  parseCssFiles();
+  const bool cssCacheWritten = parseCssFiles();
   bookMetadataCache = makeUniqueNoThrow<BookMetadataCache>(cachePath);
   if (!bookMetadataCache) {
     LOG_ERR("EBP", "OOM: BookMetadataCache");
@@ -418,7 +437,7 @@ bool Epub::ensureCssCache() {
     return false;
   }
   // Invalidate section caches so they are rebuilt with the new CSS
-  Storage.removeDir((cachePath + "/sections").c_str());
+  if (cssCacheWritten) Storage.removeDir((cachePath + "/sections").c_str());
   return true;
 }
 
@@ -572,7 +591,7 @@ bool Epub::load(const bool buildIfMissing, const bool skipLoadingCss) {
   if (!skipLoadingCss) {
     // Parse CSS before reloading book.bin to leave more heap for CSS rule-table growth.
     bookMetadataCache.reset();
-    parseCssFiles();
+    if (!cssParser->hasCache()) parseCssFiles();
     Storage.removeDir((cachePath + "/sections").c_str());
   }
 
