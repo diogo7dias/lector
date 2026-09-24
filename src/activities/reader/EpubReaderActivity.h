@@ -316,6 +316,34 @@ class EpubReaderActivity final : public Activity {
   // entry point for callers that do not.
   void dropSectionForRelayout();
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  // Reader-menu actions, one per row; onReaderMenuConfirm routes to them.
+  // Navigation
+  void openChapterSelection();
+  void openFootnotes();
+  void openPercentSelection();
+  void openParagraphEntry();
+  void openBookmarks();
+  // A bookmark picked in the list: jump to it by content offset, else by saved page.
+  void onBookmarkJumpResult(const ActivityResult& result);
+  // Reading tools
+  void openDictionaryHistory();
+  void openQuotesViewer();
+  void openPageQr();
+  // Lock-screen wallpaper
+  void toggleWallpaperFavorite();
+  void toggleWallpaperHold();
+  void toggleWallpaperPause();
+  void confirmWallpaperDelete();
+  // This book's look
+  void openStealLook();
+  void openReadingThemes();
+  void openReaderSettings();
+  void openStatusBarSettings();
+  void confirmResetReaderSettings();
+  // The book file; each leaves the reader. onReaderMenuConfirm refuses them in Sortes mode.
+  void removeFromRecents();
+  void confirmDeleteBook();
+  void deleteCacheAndGoHome();
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
   void openDictionaryWordSelect();
