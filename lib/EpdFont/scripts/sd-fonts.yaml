@@ -353,6 +353,10 @@ families:
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
 
   # ── Korean ─────────────────────────────────────────────────────────────
+  # TODO: not yet published. Pretendard, RIDIBatang and MaruBuri were added in 0.34.0, but
+  # release-fonts.yml needs the FONTS_REPO_TOKEN repo secret, which is not set, so the
+  # lector-fonts release (still sd-fonts-m1-b4-r2) does not carry them. Add the secret and
+  # rerun the workflow, or build and upload a new sd-fonts release by hand.
   # Five sizes, as for the CJK families above: hangul alone is ~11,000 glyphs a style.
 
   - name: Pretendard
