@@ -2307,7 +2307,7 @@ void GfxRenderer::copyGrayscaleMsbBuffers() const {
   display.copyGrayscaleMsbBuffers(frameBuffer);
 }
 
-void GfxRenderer::displayGrayBuffer() const { display.displayGrayBuffer(fadingFix); }
+void GfxRenderer::displayGrayBuffer(const bool fullTone) const { display.displayGrayBuffer(fadingFix, fullTone); }
 
 void GfxRenderer::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* scratch, int yStart, int numRows) const {
   // Guard the uint16_t casts below: a negative would wrap to a huge length.

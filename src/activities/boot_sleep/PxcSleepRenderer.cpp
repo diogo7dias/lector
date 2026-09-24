@@ -256,7 +256,7 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   stage("copyMSB");
   SleepTiming::mark("msb");
 
-  renderer.displayGrayBuffer();
+  renderer.displayGrayBuffer(/*fullTone=*/true);
   renderer.setRenderMode(GfxRenderer::BW);
   stage("grayBuffer done");
   return true;
