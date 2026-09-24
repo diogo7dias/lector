@@ -120,7 +120,6 @@ void feedChunked(ReleaseJsonParser& p, const char* json, size_t chunkSize) {
   }
 }
 
-
 // Per-device assets. The X4 Pro is an ESP32-S3; the release's plain
 // "firmware.bin" is the C3 build and would be refused by the chip-id gate, so
 // that build asks for its own asset name and falls back only when the release
@@ -185,7 +184,6 @@ TEST(ReleaseJsonParser, WithoutAPreferenceTheDeviceAssetIsIgnored) {
   ASSERT_TRUE(parser.foundFirmware());
   EXPECT_STREQ(parser.getFirmwareUrl(), "https://example.test/c3.bin");
 }
-
 
 // List mode: GitHub's /releases returns an array, newest first, and unlike
 // /releases/latest it includes prereleases.

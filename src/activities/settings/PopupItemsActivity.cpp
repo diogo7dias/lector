@@ -36,8 +36,8 @@ void PopupItemsActivity::buildScreen(UiScreen& screen) {
     const uint8_t function = CrossPointSettings::POPUP_ITEM_FUNCTIONS[i];
     // The box sits on the left, in a fixed-width column, so ticking a row never
     // shifts its label sideways.
-    labels[i] = std::string(SETTINGS.isPopupItem(function) ? "[x]  " : "[ ]  ") +
-                I18N.get(boundMenuActionLabel(function));
+    labels[i] =
+        std::string(SETTINGS.isPopupItem(function) ? "[x]  " : "[ ]  ") + I18N.get(boundMenuActionLabel(function));
     rows[i].label = labels[i].c_str();
     rows[i].actionValue = static_cast<int16_t>(i);
   }

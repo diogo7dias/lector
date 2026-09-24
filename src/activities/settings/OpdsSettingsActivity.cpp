@@ -111,7 +111,7 @@ void OpdsSettingsActivity::activateIndex(const int index) {
     // One handler for all four fields: they differ only in where the text lands, what
     // the keyboard is titled, how long it may be, and which keyboard it opens.
     struct FieldSpec {
-      std::string OpdsServer::*target;
+      std::string OpdsServer::* target;
       StrId title;
       uint16_t maxLength;
       InputType type;
@@ -137,8 +137,8 @@ void OpdsSettingsActivity::activateIndex(const int index) {
       saveServer();
       requestUpdate();
     };
-    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(field.title), prefill,
-                                                                   field.maxLength, field.type),
+    startActivityForResult(std::make_unique<KeyboardEntryActivity>(renderer, mappedInput, I18N.get(field.title),
+                                                                   prefill, field.maxLength, field.type),
                            handler);
     return;
   }

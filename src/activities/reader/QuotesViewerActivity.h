@@ -25,8 +25,7 @@ class QuotesViewerActivity final : public UiListActivity {
   };
 
   QuotesViewerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& quotesFilePath)
-      : UiListActivity("QuotesViewer", renderer, mappedInput, /*wantsTouchLongPress=*/true),
-        filePath(quotesFilePath) {}
+      : UiListActivity("QuotesViewer", renderer, mappedInput, /*wantsTouchLongPress=*/true), filePath(quotesFilePath) {}
 
   void onEnter() override;
   void onExit() override;

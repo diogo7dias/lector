@@ -19,8 +19,8 @@ struct Metrics {
 // total matters here — the draw decides the order.
 struct Content {
   int lineCount = 0;
-  int qrSize = 0;       // the square's side; 0 when the screen shows no code
-  int qrLineCount = 0;  // lines under the code (the address it encodes)
+  int qrSize = 0;        // the square's side; 0 when the screen shows no code
+  int qrLineCount = 0;   // lines under the code (the address it encodes)
   int sliderHeight = 0;  // the slider band's height; 0 when the screen has none
   bool showProgress = false;
 };

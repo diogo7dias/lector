@@ -61,10 +61,9 @@ bool isComment(const std::string& text) {
 TEST(GridScreenAudit, NoGridScreenDrawsForItself) {
   for (const Line& line : sourceLines()) {
     if (isComment(line.text)) continue;
-    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect",
-                             "renderer.drawRect", "GUI.drawHeader", "GUI.drawButtonHints", "GUI.drawList",
-                             "GUI.drawWrappedList", "GUI.drawSelection", "renderer.displayBuffer",
-                             "settings_grid::cellAt"}) {
+    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect", "renderer.drawRect",
+                             "GUI.drawHeader", "GUI.drawButtonHints", "GUI.drawList", "GUI.drawWrappedList",
+                             "GUI.drawSelection", "renderer.displayBuffer", "settings_grid::cellAt"}) {
       EXPECT_FALSE(contains(line.text, call))
           << line.path << ":" << line.number << " calls " << call
           << ". A UiGridActivity screen names its cells and lets the base draw them.";

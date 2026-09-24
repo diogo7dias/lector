@@ -35,6 +35,7 @@ struct LookField {
 };
 constexpr LookField LOOK_FIELDS[] = {
 #define CP_LOOK_FIELD(name) {&CrossPointSettings::name, &ReaderPrefs::name},
+    // cppcheck-suppress unknownMacro
     READER_LOOK_SCREEN_FIELDS(CP_LOOK_FIELD) READER_LOOK_BOOK_FIELDS(CP_LOOK_FIELD)
 #undef CP_LOOK_FIELD
 };

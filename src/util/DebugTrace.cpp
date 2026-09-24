@@ -4,10 +4,10 @@
 #include <HalStorage.h>
 #include <PerfLog.h>
 
-#include "CrossPointSettings.h"
-
 #include <cstdarg>
 #include <cstdio>
+
+#include "CrossPointSettings.h"
 
 namespace {
 

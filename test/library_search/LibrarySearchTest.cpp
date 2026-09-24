@@ -41,9 +41,7 @@ TEST(ScoreEntry, PunctuationAndUnderscoresStartWords) {
   EXPECT_EQ(scoreOf("brave-new-world.epub", "new").tier, 1);
 }
 
-TEST(ScoreEntry, LettersInOrderWithGapsAreTierTwo) {
-  EXPECT_EQ(scoreOf("The Great Gatsby.epub", "gtg").tier, 2);
-}
+TEST(ScoreEntry, LettersInOrderWithGapsAreTierTwo) { EXPECT_EQ(scoreOf("The Great Gatsby.epub", "gtg").tier, 2); }
 
 TEST(ScoreEntry, OutOfOrderLettersDoNotMatch) { EXPECT_FALSE(matches("The Great Gatsby.epub", "ytg")); }
 

@@ -17,10 +17,10 @@ struct __attribute__((packed)) SelectEntry {
 };
 static_assert(sizeof(SelectEntry) == 32, "SelectEntry must be 32 bytes");
 
-constexpr uint32_t kOtaImgNew = 0;              // ESP_OTA_IMG_NEW
-constexpr uint32_t kOtaImgPendingVerify = 1;    // ESP_OTA_IMG_PENDING_VERIFY
-constexpr uint32_t kOtaImgInvalid = 3;          // ESP_OTA_IMG_INVALID
-constexpr uint32_t kOtaImgAborted = 4;          // ESP_OTA_IMG_ABORTED
+constexpr uint32_t kOtaImgNew = 0;                  // ESP_OTA_IMG_NEW
+constexpr uint32_t kOtaImgPendingVerify = 1;        // ESP_OTA_IMG_PENDING_VERIFY
+constexpr uint32_t kOtaImgInvalid = 3;              // ESP_OTA_IMG_INVALID
+constexpr uint32_t kOtaImgAborted = 4;              // ESP_OTA_IMG_ABORTED
 constexpr uint32_t kOtaImgUndefined = 0xFFFFFFFFu;  // ESP_OTA_IMG_UNDEFINED
 constexpr size_t kOtaSeqCrcLen = 4;
 

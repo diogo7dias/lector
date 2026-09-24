@@ -21,9 +21,7 @@ TEST(SleepTimeoutGuard, WithNoSleepBoundALongTimeoutIsCappedAtThreeMinutes) {
   EXPECT_EQ(sleep_guard::effectiveMinutes(30, false, NEVER), 3);
 }
 
-TEST(SleepTimeoutGuard, NeverIsCappedToo) {
-  EXPECT_EQ(sleep_guard::effectiveMinutes(NEVER, false, NEVER), 3);
-}
+TEST(SleepTimeoutGuard, NeverIsCappedToo) { EXPECT_EQ(sleep_guard::effectiveMinutes(NEVER, false, NEVER), 3); }
 
 TEST(SleepTimeoutGuard, ATimeoutAlreadyShorterThanTheCapIsLeftAlone) {
   EXPECT_EQ(sleep_guard::effectiveMinutes(1, false, NEVER), 1);

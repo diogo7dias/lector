@@ -30,34 +30,22 @@ TEST(OtaRetryPolicy, BackoffGrowsWithEachAttempt) {
   EXPECT_LT(backoffMs(2), backoffMs(3));
 }
 
-TEST(OtaRetryPolicy, TheFirstBackoffIsShortEnoughToFeelLikeARetry) {
-  EXPECT_LE(backoffMs(1), 2000u);
-}
+TEST(OtaRetryPolicy, TheFirstBackoffIsShortEnoughToFeelLikeARetry) { EXPECT_LE(backoffMs(1), 2000u); }
 
-TEST(OtaRetryPolicy, ARetryResumesWhereTheTransferStopped) {
-  EXPECT_EQ(resumeOffset(4096), 4096u);
-}
+TEST(OtaRetryPolicy, ARetryResumesWhereTheTransferStopped) { EXPECT_EQ(resumeOffset(4096), 4096u); }
 
-TEST(OtaRetryPolicy, ARetryThatGotNothingStartsFromTheBeginning) {
-  EXPECT_EQ(resumeOffset(0), 0u);
-}
+TEST(OtaRetryPolicy, ARetryThatGotNothingStartsFromTheBeginning) { EXPECT_EQ(resumeOffset(0), 0u); }
 
 TEST(OtaRetryPolicy, AHeaderTooShortToJudgeIsNotAWrongChip) {
   // The chip id sits at offset 12; fewer bytes than that decide nothing.
   EXPECT_FALSE(isWrongChip(0x0005, 0xFFFF));
 }
 
-TEST(OtaRetryPolicy, AnUnknownDeviceChipAcceptsAnyImage) {
-  EXPECT_FALSE(isWrongChip(0x0009, 0xFFFF));
-}
+TEST(OtaRetryPolicy, AnUnknownDeviceChipAcceptsAnyImage) { EXPECT_FALSE(isWrongChip(0x0009, 0xFFFF)); }
 
-TEST(OtaRetryPolicy, AMatchingChipIsAccepted) {
-  EXPECT_FALSE(isWrongChip(0x0005, 0x0005));
-}
+TEST(OtaRetryPolicy, AMatchingChipIsAccepted) { EXPECT_FALSE(isWrongChip(0x0005, 0x0005)); }
 
-TEST(OtaRetryPolicy, AMismatchedChipIsRefused) {
-  EXPECT_TRUE(isWrongChip(0x0009, 0x0005));
-}
+TEST(OtaRetryPolicy, AMismatchedChipIsRefused) { EXPECT_TRUE(isWrongChip(0x0009, 0x0005)); }
 
 // --- a transfer that ended clean but short ---------------------------------
 //
@@ -70,9 +58,7 @@ TEST(OtaRetryPolicy, ATransferThatStoppedShortOfTheImageIsNotComplete) {
   EXPECT_TRUE(isShortTransfer(0, 4096));
 }
 
-TEST(OtaRetryPolicy, AFullTransferIsComplete) {
-  EXPECT_FALSE(isShortTransfer(4096, 4096));
-}
+TEST(OtaRetryPolicy, AFullTransferIsComplete) { EXPECT_FALSE(isShortTransfer(4096, 4096)); }
 
 TEST(OtaRetryPolicy, MoreBytesThanExpectedIsNotCalledShort) {
   // Not this predicate's call to make: commit() validates the image itself.

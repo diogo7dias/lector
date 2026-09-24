@@ -137,7 +137,7 @@ std::string KOReaderSettingsActivity::statusFor(const int index) const {
   }
   if (index == 5) {
     return KOREADER_STORE.getSyncBehavior() == KOReaderSyncBehavior::SMART ? std::string(tr(STR_SMART_SYNC))
-                                                                          : std::string(tr(STR_ASK_EVERY_TIME));
+                                                                           : std::string(tr(STR_ASK_EVERY_TIME));
   }
   if (index == 6 || index == 7) {
     // Both need credentials; saying so on the row beats a press that does nothing.

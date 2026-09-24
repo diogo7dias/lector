@@ -2,7 +2,6 @@
 
 #include <functional>
 #include <string>
-
 #include <vector>
 
 #include "activities/UiListActivity.h"

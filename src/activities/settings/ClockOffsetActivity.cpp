@@ -271,9 +271,9 @@ void ClockOffsetActivity::buildScreen(UiScreen& screen) {
   if (!previewLine.empty()) {
     freeink::ui::TextStyle preview = theme.smallText;
     preview.align = freeink::ui::TextAlign::Center;
-    target.text(freeink::ui::Rect{body.x, static_cast<int16_t>(rowY + fieldHeight + theme.spaceLg), body.width,
-                                  lineHeight},
-                previewLine.c_str(), preview);
+    target.text(
+        freeink::ui::Rect{body.x, static_cast<int16_t>(rowY + fieldHeight + theme.spaceLg), body.width, lineHeight},
+        previewLine.c_str(), preview);
   }
 }
 

@@ -31,8 +31,8 @@ TEST(TlsHeapPolicy, SuccessLogStillAdmitsManifestAndEveryFontAfterReclaimingRows
 
 TEST(TlsHeapPolicy, FloorsBudgetMeasuredDemandAndAdmitEveryObservedTransfer) {
   constexpr uint32_t removedRxBuffer = 1436;
-  constexpr uint32_t generalDemand = 26460u - 3556u - removedRxBuffer;   // 21468
-  constexpr uint32_t fontDemand = 18752u - 1896u - removedRxBuffer;      // 15420
+  constexpr uint32_t generalDemand = 26460u - 3556u - removedRxBuffer;  // 21468
+  constexpr uint32_t fontDemand = 18752u - 1896u - removedRxBuffer;     // 15420
   // A floor below measured demand runs the transfer out of heap mid-handshake.
   EXPECT_GT(minFree(true), generalDemand);
   EXPECT_GT(minFree(true, Transfer::FontFile), fontDemand);

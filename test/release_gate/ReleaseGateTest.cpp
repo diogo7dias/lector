@@ -1,6 +1,6 @@
-#include "util/ReleaseGate.h"
-
 #include <gtest/gtest.h>
+
+#include "util/ReleaseGate.h"
 
 using input_gate::ReleaseGate;
 

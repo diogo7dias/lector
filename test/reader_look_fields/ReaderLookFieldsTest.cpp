@@ -60,8 +60,8 @@ std::set<std::string> statusBarFieldNames() {
 TEST(ReaderLookFields, EveryLivePrefsByteIsNamedByExactlyOneList) {
   const size_t named = screenFieldNames().size() + bookFieldNames().size() + statusBarFieldNames().size();
   // Set sizes, so a name repeated inside one list collapses and fails here.
-  EXPECT_EQ(named, reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT +
-                       reader_look::STATUS_BAR_FIELD_COUNT);
+  EXPECT_EQ(named,
+            reader_look::SCREEN_FIELD_COUNT + reader_look::BOOK_FIELD_COUNT + reader_look::STATUS_BAR_FIELD_COUNT);
   EXPECT_EQ(named + sizeof(ReaderPrefs::sdFontFamilyName) + sizeof(ReaderPrefs::reserved14), sizeof(ReaderPrefs));
 }
 
@@ -121,9 +121,9 @@ TEST(ReaderLookFields, RestoreBookOnlyFieldsLeavesTheStatusBarLayoutAlone) {
 
   // statusBarEnabled is the one field of that list restoreBookOnlyFields does carry: the
   // bar's on/off switch is per book, its layout follows whatever the bar editor left.
-#define CP_EXPECT_SB_UNCHANGED(prefsName, settingsName, blockName)     \
-  if (std::string(#prefsName) != "statusBarEnabled") {                 \
-    EXPECT_EQ(target.prefsName, untouched.prefsName) << #prefsName;    \
+#define CP_EXPECT_SB_UNCHANGED(prefsName, settingsName, blockName)  \
+  if (std::string(#prefsName) != "statusBarEnabled") {              \
+    EXPECT_EQ(target.prefsName, untouched.prefsName) << #prefsName; \
   }
   READER_STATUS_BAR_FIELDS(CP_EXPECT_SB_UNCHANGED)
 #undef CP_EXPECT_SB_UNCHANGED
@@ -134,7 +134,8 @@ TEST(ReaderLookFields, AdoptStatusBarFromTakesTheWholeBlock) {
   ReaderPrefs target;
   target.adoptStatusBarFrom(source);
 
-#define CP_EXPECT_SB_ADOPTED(prefsName, settingsName, blockName) EXPECT_EQ(target.prefsName, source.prefsName) << #prefsName;
+#define CP_EXPECT_SB_ADOPTED(prefsName, settingsName, blockName) \
+  EXPECT_EQ(target.prefsName, source.prefsName) << #prefsName;
   READER_STATUS_BAR_FIELDS(CP_EXPECT_SB_ADOPTED)
 #undef CP_EXPECT_SB_ADOPTED
 }

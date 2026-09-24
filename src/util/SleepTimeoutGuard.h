@@ -20,8 +20,7 @@ constexpr uint8_t NO_SLEEP_BINDING_MAX_MINUTES = 3;
 
 // `neverValue` is the stored value that means "never sleep"; it is capped like any other,
 // because "never" is exactly the case this guards against.
-inline uint8_t effectiveMinutes(const uint8_t storedMinutes, const bool sleepBoundSomewhere,
-                                const uint8_t neverValue) {
+inline uint8_t effectiveMinutes(const uint8_t storedMinutes, const bool sleepBoundSomewhere, const uint8_t neverValue) {
   if (sleepBoundSomewhere) return storedMinutes;
   if (storedMinutes >= neverValue) return NO_SLEEP_BINDING_MAX_MINUTES;
   return storedMinutes < NO_SLEEP_BINDING_MAX_MINUTES ? storedMinutes : NO_SLEEP_BINDING_MAX_MINUTES;

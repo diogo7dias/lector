@@ -75,8 +75,7 @@ void SyncSession::onPacket(const PacketView& packet, const uint32_t nowMs) {
     // holding out for another HELLO leaves both sides searching until they give
     // up. NAME and ACK carry no book, and the sender repeats its position until
     // acknowledged, so ignoring those costs nothing.
-    if (packet.type != PacketType::HELLO && packet.type != PacketType::POSITION &&
-        packet.type != PacketType::APPLY) {
+    if (packet.type != PacketType::HELLO && packet.type != PacketType::POSITION && packet.type != PacketType::APPLY) {
       return;
     }
     if (!sameBook(packet.position)) {

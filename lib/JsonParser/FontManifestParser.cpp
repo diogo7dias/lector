@@ -23,7 +23,6 @@ uint32_t parseUnsigned(const char* value, size_t len) {
 // probed allocation instead of a doubling nobody checked.
 constexpr size_t FAMILY_GROWTH_STEP = 16;
 
-
 }  // namespace
 
 FontManifestParser::FontManifestParser()

@@ -66,8 +66,8 @@ TEST(CredentialBundle, DropsEntriesMissingTheirIdentity) {
 
 TEST(CredentialBundle, IgnoresFieldsItDoesNotKnow) {
   Bundle parsed;
-  ASSERT_TRUE(parse(R"({"version": 1, "extra": {"a": [1, 2]}, "wifi": [{"ssid": "S", "future": 3}], "opds": []})",
-                    parsed));
+  ASSERT_TRUE(
+      parse(R"({"version": 1, "extra": {"a": [1, 2]}, "wifi": [{"ssid": "S", "future": 3}], "opds": []})", parsed));
   ASSERT_EQ(parsed.wifi.size(), 1u);
   EXPECT_EQ(parsed.wifi[0].ssid, "S");
 }

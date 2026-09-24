@@ -17,8 +17,6 @@ TEST(HeaderTitle, LeavesAnEmptyTitleAlone) {
 }
 
 // Idempotent: a caller that already bracketed its own title must not end up double-wrapped.
-TEST(HeaderTitle, DoesNotBracketATitleThatAlreadyIs) {
-  EXPECT_EQ(header_title::decorate("[Settings]"), "[Settings]");
-}
+TEST(HeaderTitle, DoesNotBracketATitleThatAlreadyIs) { EXPECT_EQ(header_title::decorate("[Settings]"), "[Settings]"); }
 
 }  // namespace

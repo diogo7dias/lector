@@ -1,6 +1,6 @@
-#include "util/DoubleClickDetector.h"
-
 #include <gtest/gtest.h>
+
+#include "util/DoubleClickDetector.h"
 
 using reader_input::DoubleClickDetector;
 using Event = DoubleClickDetector::Event;

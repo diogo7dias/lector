@@ -35,7 +35,7 @@ struct Metrics {
 struct Content {
   bool hasHeader = false;
   bool hasSubHeader = false;
-  int headerLines = 0;  // centred lines under the title band
+  int headerLines = 0;    // centred lines under the title band
   int noteLines = 0;      // left-aligned lines under everything above
   int footnoteLines = 0;  // lines between the body and the button hints
 };
@@ -90,9 +90,7 @@ inline Bands bandsFor(const Metrics& metrics, const Content& content) {
 
 // The insets a screen's content margin needs, which is the same arithmetic seen
 // from the other end.
-inline int topInsetFor(const Metrics& metrics, const Content& content) {
-  return bandsFor(metrics, content).contentTop;
-}
+inline int topInsetFor(const Metrics& metrics, const Content& content) { return bandsFor(metrics, content).contentTop; }
 
 inline int bottomInsetFor(const Metrics& metrics, const Content& content) {
   const Bands bands = bandsFor(metrics, content);

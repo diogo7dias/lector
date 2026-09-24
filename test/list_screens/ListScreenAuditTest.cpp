@@ -58,12 +58,11 @@ bool isComment(const std::string& text) {
 TEST(ListScreenAudit, NoListScreenDrawsForItself) {
   for (const Line& line : sourceLines()) {
     if (isComment(line.text)) continue;
-    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect",
-                             "renderer.drawRect", "GUI.drawHeader", "GUI.drawButtonHints", "GUI.drawList",
-                             "GUI.drawWrappedList", "GUI.drawSelection", "renderer.displayBuffer"}) {
-      EXPECT_FALSE(contains(line.text, call))
-          << line.path << ":" << line.number << " calls " << call
-          << ". A UiListActivity screen builds rows and lets the base draw them.";
+    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect", "renderer.drawRect",
+                             "GUI.drawHeader", "GUI.drawButtonHints", "GUI.drawList", "GUI.drawWrappedList",
+                             "GUI.drawSelection", "renderer.displayBuffer"}) {
+      EXPECT_FALSE(contains(line.text, call)) << line.path << ":" << line.number << " calls " << call
+                                              << ". A UiListActivity screen builds rows and lets the base draw them.";
     }
   }
 }

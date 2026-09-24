@@ -60,8 +60,7 @@ TEST(ComparisonHeight, ASideWithFewerLinesIsShorter) {
 TEST(ComparisonTop, TheBlockIsCentredInTheBand) {
   const comparison_layout::Content content = bothSides(3, 2, true, true);
   const int height = comparison_layout::heightFor(metrics(), content);
-  EXPECT_EQ(comparison_layout::topFor(metrics(), kBodyY, kBodyHeight, content),
-            kBodyY + (kBodyHeight - height) / 2);
+  EXPECT_EQ(comparison_layout::topFor(metrics(), kBodyY, kBodyHeight, content), kBodyY + (kBodyHeight - height) / 2);
 }
 
 TEST(ComparisonTop, TheHeadlineIsNeverPushedAboveTheBand) {

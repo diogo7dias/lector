@@ -119,8 +119,8 @@ inline bool insideRect(const Rect& rect, const int x, const int y) {
          y < rect.y + rect.height;
 }
 
-inline Layout forScreen(const int screenWidth, const int lineHeight, const int readoutLineHeight,
-                        const bool hasWarmth, const bool hasAux, const int actionCount) {
+inline Layout forScreen(const int screenWidth, const int lineHeight, const int readoutLineHeight, const bool hasWarmth,
+                        const bool hasAux, const int actionCount) {
   // The steppers give way before the track does: a track too thin to drag would leave the
   // row with nothing the steppers do not already do.
   const int stepsWidth = [&] {

@@ -97,8 +97,8 @@ TEST(KeyboardFieldAudit, TheFieldDrawsThroughTheSharedTarget) {
     ++number;
     const std::size_t first = line.find_first_not_of(" \t");
     if (first != std::string::npos && line.compare(first, 2, "//") == 0) continue;
-    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect",
-                             "renderer.drawRect", "renderer.drawLine"}) {
+    for (const char* call : {"renderer.drawText", "renderer.drawCenteredText", "renderer.fillRect", "renderer.drawRect",
+                             "renderer.drawLine"}) {
       EXPECT_EQ(line.find(call), std::string::npos)
           << KEYBOARD_SOURCE << ":" << number << " calls " << call
           << ". The field draws through the FreeInkUI target, placed by keyboard_field.";

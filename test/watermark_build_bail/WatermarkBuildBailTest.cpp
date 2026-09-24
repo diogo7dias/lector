@@ -10,9 +10,7 @@ TEST(WatermarkBuildBail, DoesNotYieldOnceTheRequestedPageExists) {
   EXPECT_FALSE(watermarkBuildShouldYield(50, 51, false));
 }
 
-TEST(WatermarkBuildBail, DoesNotYieldWhenTheBuildHasFinished) {
-  EXPECT_FALSE(watermarkBuildShouldYield(50, 40, true));
-}
+TEST(WatermarkBuildBail, DoesNotYieldWhenTheBuildHasFinished) { EXPECT_FALSE(watermarkBuildShouldYield(50, 40, true)); }
 
 TEST(WatermarkBuildBail, ATickThatCrossesTheWaitingPageIsReadable) {
   EXPECT_TRUE(waitingPageBecameReadable(50, 50, 52));
