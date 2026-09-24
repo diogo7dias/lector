@@ -2,6 +2,8 @@
 
 #include <GfxRenderer.h>
 #include <I18n.h>
+#include <Logging.h>
+#include <Memory.h>
 
 #include <cstring>
 
@@ -46,11 +48,9 @@ StrId opdsFormatLabel(uint8_t format) {
 
 int OpdsServerListActivity::getItemCount() const {
   int count = static_cast<int>(OPDS_STORE.getCount());
-  // Settings mode appends three virtual items: "Add Server", "Download folder"
+  // Picker mode appends "Add Server"; settings mode also adds "Download folder"
   // and "Filename format".
-  if (!pickerMode) {
-    count += 3;
-  }
+  count += pickerMode ? 1 : 3;
   return count;
 }
 
@@ -91,6 +91,17 @@ void OpdsServerListActivity::activateIndex(const int index) {
       if (server) {
         activityManager.replaceActivity(std::make_unique<OpdsBookBrowserActivity>(renderer, mappedInput, *server));
       }
+    } else {
+      auto editor = makeUniqueNoThrow<OpdsSettingsActivity>(renderer, mappedInput, -1);
+      if (!editor) {
+        LOG_ERR("OPS", "OOM: OPDS settings activity");
+        return;
+      }
+      startActivityForResult(std::move(editor), [this](const ActivityResult&) {
+        OPDS_STORE.loadFromFile();
+        nav.reset();
+        requestUpdate();
+      });
     }
     return;
   }

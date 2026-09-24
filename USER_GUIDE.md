@@ -552,7 +552,8 @@ are done with it. Share when you mean to, not out of habit.
 catalog root URL (for a Calibre Content Server, usually ending in `/opds`), and optional
 username and password. Authentication is HTTP Basic; set Calibre to Basic rather than Digest.
 
-Browse and download from **Home > OPDS Browser**. Where downloads land (**Download folder**)
+Browse and download from **Home > OPDS Browser**. With more than one catalog saved it opens a
+server picker, whose last row, **Add Server**, adds another. Where downloads land (**Download folder**)
 and how they are named (**Filename format**: Author - Title, Title - Author, or Title) are set
 from the OPDS screens and the web interface, not from the on-device Settings menu.
 
