@@ -80,6 +80,7 @@ class Reader {
       const size_t batch = (count - done) < kReadChunkRecords ? (count - done) : kReadChunkRecords;
       const int want = static_cast<int>(batch * kRecordBytes);
       if (file.read(chunk, want) != want) return false;
+      // cppcheck-suppress knownConditionTrueFalse ; batch is at least 1 here
       for (size_t i = 0; i < batch; ++i) {
         char* record = chunk + i * kRecordBytes;
         record[kRecordBytes - 1] = '\0';

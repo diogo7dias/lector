@@ -214,7 +214,7 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
 void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings_grid::Rect& rect) {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
-  const bool selected = index == selected_;
+  const bool isSelected = index == selected_;
   const fui::Rect box{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
                       static_cast<int16_t>(rect.height)};
 
@@ -226,7 +226,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   fui::ButtonProps props;
   props.action = ACTION_CELL;
   props.value = static_cast<int16_t>(index);
-  props.state = selected ? fui::StateChecked : fui::StateNormal;
+  props.state = isSelected ? fui::StateChecked : fui::StateNormal;
   props.styles = theme.button;
   props.radius = static_cast<uint8_t>(theme.controlRadius);
   props.minTouchSize = screen.frame().device().minTouchSize;
@@ -236,7 +236,7 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
   // cell on the screen, so every name and value has the lines it needs.
   fui::TextStyle name = wrappingStyle(theme);
   name.align = fui::TextAlign::Center;
-  name.inverted = selected && !fui::hasState(screen.frame().stateFor(ACTION_CELL, index), fui::StateActive);
+  name.inverted = isSelected && !fui::hasState(screen.frame().stateFor(ACTION_CELL, index), fui::StateActive);
   fui::TextStyle value = name;
 
   const int16_t inset = theme.spaceSm;
@@ -262,12 +262,12 @@ void UiGridActivity::buildCell(UiScreen& screen, const int index, const settings
 void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect& box) {
   const auto& theme = screen.theme();
   auto& target = screen.frame().target();
-  const bool selected = index == selected_;
+  const bool isSelected = index == selected_;
 
   fui::ButtonProps props;
   props.action = ACTION_CELL;
   props.value = static_cast<int16_t>(index);
-  props.state = selected ? fui::StateChecked : fui::StateNormal;
+  props.state = isSelected ? fui::StateChecked : fui::StateNormal;
   props.styles = fui::plainStyles();
   props.styles.active = theme.listRow.active;
   props.styles.selected.background = fui::Paint::solid(fui::Color::Black);
@@ -295,7 +295,7 @@ void UiGridActivity::buildRow(UiScreen& screen, const int index, const fui::Rect
   name.align = fui::TextAlign::Left;
   // button() has registered this row, so stateFor() now sees its active touch
   // across rebuilds. An armed row keeps dark text even if it was already selected.
-  name.inverted = selected && !fui::hasState(screen.frame().stateFor(ACTION_CELL, index), fui::StateActive);
+  name.inverted = isSelected && !fui::hasState(screen.frame().stateFor(ACTION_CELL, index), fui::StateActive);
   fui::TextStyle value = style;
   value.align = fui::TextAlign::Right;
   value.inverted = name.inverted;

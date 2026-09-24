@@ -4,6 +4,7 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 
+// cppcheck-suppress constParameterReference ; clearScreen/displayBuffer are non-const
 uint32_t sleepPreClear(GfxRenderer& renderer, const DeviceProfile& dev) {
   const uint32_t startMs = millis();
 

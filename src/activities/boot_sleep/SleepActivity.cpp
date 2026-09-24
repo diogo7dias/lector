@@ -363,8 +363,7 @@ void SleepActivity::renderCustomSleepScreen() const {
                                             liveInFolder, counterpart);
         // Within a lap repeats are impossible by construction; only a reseed
         // boundary can land on the wallpaper already holding the panel.
-        if (!heldByPause && !result.basename.empty() && reader.recordCount() > 1 &&
-            prefix + result.basename == previousWallpaper) {
+        if (!result.basename.empty() && reader.recordCount() > 1 && prefix + result.basename == previousWallpaper) {
           auto again = sleep_queue::pickNext(queueState, reader.recordCount(), esp_random(), esp_random(), nameAt,
                                              liveInFolder, counterpart);
           const bool wrapped = result.lapWrapped || again.lapWrapped;
