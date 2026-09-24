@@ -8,6 +8,7 @@ using Random = uint32_t (*)();
 // Rejection sampling: every value below bound has the same probability.
 inline uint32_t below(uint32_t bound, Random random) {
   if (bound == 0) return 0;
+  // cppcheck-suppress oppositeExpression ; (2^32 - bound) % bound, the rejection threshold
   const uint32_t threshold = -bound % bound;
   uint32_t value;
   do {

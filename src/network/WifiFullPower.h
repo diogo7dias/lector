@@ -18,6 +18,7 @@
 class WifiFullPower {
  public:
   WifiFullPower() {
+    // cppcheck-suppress knownConditionTrueFalse ; depth is a static refcount
     if (depth++ == 0) {
 #ifndef SIMULATOR
       esp_wifi_set_ps(WIFI_PS_NONE);
@@ -26,6 +27,7 @@ class WifiFullPower {
   }
 
   ~WifiFullPower() {
+    // cppcheck-suppress knownConditionTrueFalse ; depth is a static refcount
     if (--depth == 0) {
 #ifndef SIMULATOR
       esp_wifi_set_ps(WIFI_PS_MIN_MODEM);

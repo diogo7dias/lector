@@ -36,11 +36,12 @@ void UiListActivity::screenTrampoline(UiScreen& screen, void* user) {
   // The body is reserved from the same bands the chrome paints, so a screen
   // cannot draw a header the list then runs under. A screen wanting a different
   // band still calls setContentMargin itself; this only sets the default.
-  const ListChrome chrome = self->chrome();
-  const list_chrome::Bands bands = listChromeBands(self->renderer, chrome);
-  screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop), static_cast<int16_t>(chrome.sideInset),
+  const ListChrome listChrome = self->chrome();
+  const list_chrome::Bands bands = listChromeBands(self->renderer, listChrome);
+  screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop),
+                                      static_cast<int16_t>(listChrome.sideInset),
                                       static_cast<int16_t>(self->renderer.getScreenHeight() - bands.contentBottom),
-                                      static_cast<int16_t>(chrome.sideInset)});
+                                      static_cast<int16_t>(listChrome.sideInset)});
   self->buildScreen(screen);
 }
 
