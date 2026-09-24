@@ -75,11 +75,9 @@ struct WakeInputs {
   // A boot book was picked earlier in setup().
   bool bootBookPicked = false;
 
-  // Display state, for waitBeforeRoutePaint.
+  // Display state, for clearStrategy() and the arming it decides.
   bool paintedFaceWake = false;
   bool fastUnlock = false;
-  bool asyncBlankInFlight = false;
-  bool driveAllArmed = false;
 };
 
 struct WakePlan {
