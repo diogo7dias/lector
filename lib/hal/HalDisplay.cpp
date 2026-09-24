@@ -12,7 +12,7 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
-void HalDisplay::begin(bool seamless) {
+void HalDisplay::begin(bool seamless, const wake_classify::WakeupReason wakeupReason) {
   // The one read of the hardware detect. Everything below, and the two other X3 branches
   // in this file, take their answer from this latched value rather than the global.
   deviceProfile = deviceProfileFromHardware();
@@ -32,9 +32,9 @@ void HalDisplay::begin(bool seamless) {
     return;
   }
   // Request resync after specific wakeup events to ensure clean display state.
-  const auto wakeupReason = gpio.getWakeupReason();
-  if (wakeupReason == HalGPIO::WakeupReason::PowerButton || wakeupReason == HalGPIO::WakeupReason::AfterFlash ||
-      wakeupReason == HalGPIO::WakeupReason::Other) {
+  using wake_classify::WakeupReason;
+  if (wakeupReason == WakeupReason::PowerButton || wakeupReason == WakeupReason::AfterFlash ||
+      wakeupReason == WakeupReason::Other) {
     einkDisplay.requestResync();
   }
 }

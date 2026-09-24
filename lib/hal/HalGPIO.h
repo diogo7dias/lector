@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <InputManager.h>
+#include <WakeClassify.h>
 
 // Display SPI pins (custom pins for XteinkX4, not hardware SPI defaults)
 #define EPD_SCLK 8   // SPI Clock
@@ -125,7 +126,7 @@ class HalGPIO {
   // Returns true once per edge (plug or unplug) since the last update()
   bool wasUsbStateChanged() const;
 
-  enum class WakeupReason { PowerButton, AfterFlash, AfterUSBPower, Other };
+  using WakeupReason = wake_classify::WakeupReason;
 
   WakeupReason getWakeupReason() const;
 

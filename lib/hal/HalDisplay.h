@@ -4,6 +4,7 @@
 #include <DisplayRefreshPolicy.h>
 #include <EInkDisplay.h>
 #include <FrameInkMetrics.h>
+#include <WakeClassify.h>
 
 class HalDisplay {
  public:
@@ -25,8 +26,9 @@ class HalDisplay {
   // sleep-wake with a restored buffer). Skips the wakeup-gated
   // requestResync() and defuses the SDK's X3 _x3InitialFullSyncsRemaining
   // counter; otherwise the first two paints get promoted to FULL
-  // (~770ms each on X3).
-  void begin(bool seamless = false);
+  // (~770ms each on X3). wakeupReason is setup()'s classification, passed in
+  // so the boot is classified once rather than again here.
+  void begin(bool seamless, wake_classify::WakeupReason wakeupReason);
 
   // Display dimensions
   static constexpr uint16_t DISPLAY_WIDTH = EInkDisplay::DISPLAY_WIDTH;
