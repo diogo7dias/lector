@@ -2606,7 +2606,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         // a deep resume/jump that must lay out many pages to reach the landing page. Tiny sections
         // build in a blink and stay popup-free.
         const int target = pendingPageJump.has_value() ? *pendingPageJump : (nextPageNumber < 0 ? 0 : nextPageNumber);
-        const bool anchorJump = !pendingAnchor.empty();
+        // What the build must reach is named in ReaderLanding.h: the fragment anchor, else the
+        // offsetJump above, else `target`.
+        const bool anchorJump =
+            reader_landing::forIncrementalBuild(pendingLanding) == reader_landing::Anchor::FragmentAnchor;
 
         // Landing well inside a partial: the page (or anchor, via the on-disk map) is already
         // servable, so don't restart the extension build now -- it re-lays out the WHOLE chapter
@@ -2827,11 +2830,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
     if (pendingPercentJump && section->pageCount > 0) {
       // Apply the pending percent jump now that we know the new section's page count.
-      int newPage = static_cast<int>(pendingSpineProgress * static_cast<float>(section->pageCount));
-      if (newPage >= section->pageCount) {
-        newPage = section->pageCount - 1;
-      }
-      section->currentPage = newPage;
+      section->currentPage = reader_landing::percentPage(pendingSpineProgress, section->pageCount);
       pendingPercentJump = false;
     }
 

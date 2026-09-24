@@ -144,3 +144,52 @@ TEST(ReaderLanding, AnUnresolvedResumeAnchorSurvivesToBeRetried) {
 }
 
 TEST(ReaderLanding, NothingPendingRetiresNothing) { EXPECT_FALSE(retiresDeferredReposition(sameChapter())); }
+
+// --- What the incremental build must reach -------------------------------------------
+
+namespace {
+struct BuildStopCase {
+  const char* name;
+  bool explicitOffset, resumeOffset, pageJump, fragmentAnchor, sameSpine;
+  Anchor expected;
+};
+
+constexpr BuildStopCase BUILD_STOP_CASES[] = {
+    {"nothing pending builds to the saved page", false, false, false, false, true, Anchor::None},
+    {"a page jump builds to its page", false, false, true, false, true, Anchor::None},
+    {"a fragment anchor builds to the anchor", false, false, false, true, true, Anchor::FragmentAnchor},
+    {"a fragment anchor outranks an explicit offset", true, false, false, true, true, Anchor::FragmentAnchor},
+    {"an explicit offset builds to its content", true, true, true, false, false, Anchor::ExplicitOffset},
+    {"a resume offset builds to its content", false, true, false, false, true, Anchor::ResumeOffset},
+    {"a page jump outranks the resume offset", false, true, true, false, true, Anchor::None},
+    {"a resume offset from another chapter is ignored", false, true, false, false, false, Anchor::None},
+};
+}  // namespace
+
+TEST(ReaderLanding, TheIncrementalBuildStopsAtTheWinningTarget) {
+  for (const auto& c : BUILD_STOP_CASES) {
+    Pending pending;
+    pending.explicitOffset = c.explicitOffset;
+    pending.resumeOffset = c.resumeOffset;
+    pending.pageJump = c.pageJump;
+    pending.fragmentAnchor = c.fragmentAnchor;
+    pending.sameSpineAsCapture = c.sameSpine;
+    EXPECT_EQ(forIncrementalBuild(pending), c.expected) << c.name;
+  }
+}
+
+// --- Where a percent jump lands ------------------------------------------------------
+
+TEST(ReaderLanding, APercentJumpLandsOnTheMatchingPageClampedToTheLast) {
+  struct Case {
+    float progress;
+    int pageCount;
+    int expected;
+  };
+  constexpr Case CASES[] = {
+      {0.0f, 10, 0}, {0.5f, 10, 5}, {0.99f, 10, 9}, {1.0f, 10, 9}, {1.0f, 1, 0}, {0.25f, 3, 0},
+  };
+  for (const auto& c : CASES) {
+    EXPECT_EQ(percentPage(c.progress, c.pageCount), c.expected) << c.progress << " of " << c.pageCount;
+  }
+}

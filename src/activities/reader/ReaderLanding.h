@@ -91,6 +91,25 @@ constexpr Anchor forDeferredReposition(const Pending& pending) {
 // the real page count is known, so neither blocks the first page.
 constexpr bool needsFullBuild(const Pending& pending) { return pending.percentJump || pending.sortesPage; }
 
+// What the incremental (non-blocking) build must lay out before the first page can be
+// drawn — and, on a partial cache, whether that is already on disk so the extension build
+// can wait. The same answer decides both, so it is asked once.
+//
+// A fragment anchor wins: it is where a TOC / footnote jump lands, and it names its page
+// as soon as that page is laid out. Otherwise the content-offset landing, if one applies
+// (forOffsetLanding). None means a plain page target: the page jump, or the saved page.
+constexpr Anchor forIncrementalBuild(const Pending& pending) {
+  if (pending.fragmentAnchor) return Anchor::FragmentAnchor;
+  return forOffsetLanding(pending);
+}
+
+// The page a percent jump lands on, once the chapter's final page count is known.
+// pageCount must be > 0; the progress is clamped onto the last page.
+constexpr int percentPage(const float spineProgress, const int pageCount) {
+  const int page = static_cast<int>(spineProgress * static_cast<float>(pageCount));
+  return page >= pageCount ? pageCount - 1 : page;
+}
+
 // True when the landing retires the deferred reposition outright. Only an explicit
 // bookmark/sync/Return target does: it supersedes a stale session-start resume anchor.
 // (An explicit offset that cannot be resolved is reported as a build error by the caller
