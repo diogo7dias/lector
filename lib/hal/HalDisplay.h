@@ -128,7 +128,10 @@ class HalDisplay {
   // clearing pass plus a paint. See PanelDriver::requestDriveAllNextFast.
   void driveAllPixelsNextFast();
 
-  void displayGrayBuffer(bool turnOffScreen = false);
+  // fullTone: the pass is a whole-screen image (sleep wallpaper or cover) whose two mid
+  // levels must stay apart. On the X4 Pro's UC8279 that swaps in a waveform with a
+  // distinct dark and light grey; everywhere else it is ignored.
+  void displayGrayBuffer(bool turnOffScreen = false, bool fullTone = false);
 
   // Tiled grayscale: stream one band of a plane (lsbPlane selects LSB/MSB RAM)
   // straight to the controller; supportsStripGrayscale() gates the path. See

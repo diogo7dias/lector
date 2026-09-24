@@ -3,6 +3,12 @@
 #include <PerfLog.h>
 #include <PerfStats.h>
 
+#if FREEINK_DEVICE_X4PRO
+#include <BoardConfig.h>
+
+#include <array>
+#endif
+
 // Global HalDisplay instance
 HalDisplay display;
 
@@ -321,16 +327,102 @@ void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.
 
 void HalDisplay::driveAllPixelsNextFast() { einkDisplay.requestDriveAllNextFast(); }
 
+#if FREEINK_DEVICE_X4PRO
+// X4 Pro UC8279: a separate dark and light grey for whole-screen images.
+//
+// The stock AA waveform (kXtfAa02 / kXtfAa68, freeink-sdk Uc8279X4Driver.cpp:57-70) gives
+// its two mixed-plane tables, 0x22 and 0x23, byte-identical data. Those are exactly the
+// tables the driver's absolute fold sends level 1 (dark) and level 2 (light) to
+// (Uc8279X4Driver.h:89-95), and both levels start from the same black base pixel, so they
+// get the same drive and land on the same grey: a .pxc or cover shows three tones, not
+// four. Fine for text anti-aliasing, which is what that waveform was cut for.
+//
+// The split keeps the stock bytes and gives the dark grey its white push in phase D
+// (stock: one idle frame on every table); light keeps phase B. The two greys cannot differ
+// by frame count inside one phase: a phase's frame count is shared by all five tables (the
+// stock tables agree column by column), only the level bits are per table. Layout of each
+// 49-byte table: [0]=0x01, [1..4]=phases A-D (bits 7:6 level, 0x80 white push, 0x40 black
+// push; bits 5:0 frames), [5],[6],[12],[13]=0x01, the rest 0.
+//
+// Calibration knobs, per build with -D:
+//   LECTOR_X4PRO_DARK_FRAMES  white-push frames for the dark grey. 0 = stock tables (A/B).
+//   LECTOR_X4PRO_LIGHT_FRAMES white-push frames for the light grey. 0 = the stock phase-B
+//                             count (2 on LUT_VER 0x02, 3 on 0x68).
+//   LECTOR_X4PRO_SWAP_MIDS    1 if the panel shows the two greys the wrong way round.
+#ifndef LECTOR_X4PRO_DARK_FRAMES
+#define LECTOR_X4PRO_DARK_FRAMES 1
+#endif
+#ifndef LECTOR_X4PRO_LIGHT_FRAMES
+#define LECTOR_X4PRO_LIGHT_FRAMES 0
+#endif
+#ifndef LECTOR_X4PRO_SWAP_MIDS
+#define LECTOR_X4PRO_SWAP_MIDS 0
+#endif
+static_assert(LECTOR_X4PRO_DARK_FRAMES >= 0 && LECTOR_X4PRO_DARK_FRAMES < 64, "6-bit frame count");
+static_assert(LECTOR_X4PRO_LIGHT_FRAMES >= 0 && LECTOR_X4PRO_LIGHT_FRAMES < 64, "6-bit frame count");
+
+namespace {
+constexpr size_t kAaLen = 49;
+using SplitGrayLut = std::array<uint8_t, 5 * kAaLen>;
+
+// Rows in register order 0x20..0x24: VCOM, then the black, dark, light and white pixels'
+// tables under the driver's inverted absolute planes.
+constexpr SplitGrayLut splitGrayLut(const uint8_t light, const uint8_t dark) {
+  constexpr uint8_t phaseC[5] = {0x01, 0x41, 0x01, 0x01, 0x81};  // stock endpoint pushes
+  constexpr size_t darkRow = LECTOR_X4PRO_SWAP_MIDS ? 3 : 2;
+  constexpr size_t lightRow = LECTOR_X4PRO_SWAP_MIDS ? 2 : 3;
+  SplitGrayLut t{};
+  for (size_t r = 0; r < 5; r++) {
+    const size_t o = r * kAaLen;
+    t[o + 0] = 0x01;
+    t[o + 1] = 0x02;
+    t[o + 2] = static_cast<uint8_t>((r == lightRow ? 0x80 : 0x00) | light);
+    t[o + 3] = phaseC[r];
+    t[o + 4] = static_cast<uint8_t>((r == darkRow ? 0x80 : 0x00) | dark);
+    t[o + 5] = t[o + 6] = t[o + 12] = t[o + 13] = 0x01;
+  }
+  return t;
+}
+
+// Flash-resident, one per LUT_VER stock phase-B count.
+constexpr SplitGrayLut kSplitGray02 =
+    splitGrayLut(LECTOR_X4PRO_LIGHT_FRAMES ? LECTOR_X4PRO_LIGHT_FRAMES : 2, LECTOR_X4PRO_DARK_FRAMES);
+constexpr SplitGrayLut kSplitGray68 =
+    splitGrayLut(LECTOR_X4PRO_LIGHT_FRAMES ? LECTOR_X4PRO_LIGHT_FRAMES : 3, LECTOR_X4PRO_DARK_FRAMES);
+
+// The load-bearing invariant: each phase runs one frame count on all five tables, and the
+// two mid rows really differ.
+constexpr bool phasesAgree(const SplitGrayLut& t) {
+  for (size_t p = 1; p <= 4; p++)
+    for (size_t r = 1; r < 5; r++)
+      if ((t[r * kAaLen + p] & 0x3F) != (t[p] & 0x3F)) return false;
+  return t[2 * kAaLen + 2] != t[3 * kAaLen + 2] && t[2 * kAaLen + 4] != t[3 * kAaLen + 4];
+}
+static_assert(LECTOR_X4PRO_DARK_FRAMES == 0 || (phasesAgree(kSplitGray02) && phasesAgree(kSplitGray68)),
+              "split grey LUT breaks the shared per-phase frame count");
+}  // namespace
+#endif
+
 // The grayscale planes go straight to the driver: there is no refresh mode to choose,
 // the waveform is the gray nudge. They still drive the panel and still leave charge, so
 // they spend the same anti-ghost budget a FAST pass does — otherwise a page with images
 // or text anti-aliasing ages the panel while the budget stands still.
-void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+void HalDisplay::displayGrayBuffer(bool turnOffScreen, bool fullTone) {
   EInkDisplay::resetRefreshAccounting();
   const uint32_t startUs = micros();
   const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
   refreshPolicy.noteExternalFastPass();
-  einkDisplay.displayGrayBuffer(turnOffScreen);
+  // Null keeps the driver's own waveform. The override is UC8279-X4 bytes only: an X4 Pro
+  // that probes as SSD1677 must never be handed it.
+  const unsigned char* lut = nullptr;
+#if FREEINK_DEVICE_X4PRO
+  if (LECTOR_X4PRO_DARK_FRAMES != 0 && fullTone && deviceProfile.controllerIsUc8279 && !deviceProfile.isX3) {
+    lut = (BoardConfig::ACTIVE.displayControllerVariant == 0x02 ? kSplitGray02 : kSplitGray68).data();
+  }
+#else
+  (void)fullTone;
+#endif
+  einkDisplay.displayGrayBuffer(turnOffScreen, lut);
   // Recorded as FAST/FAST: there is no mode to choose here, and charging it to the same
   // bucket keeps the per-mode totals comparable with a text page turn.
   noteRefreshTiming(RefreshMode::FAST_REFRESH, RefreshMode::FAST_REFRESH, micros() - startUs, 0, thinkMs,

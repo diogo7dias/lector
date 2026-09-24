@@ -607,7 +607,7 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const sleep_fa
     drawSleepInfoOverlay(renderer);
     renderer.copyGrayscaleMsbBuffers();
 
-    renderer.displayGrayBuffer();
+    renderer.displayGrayBuffer(/*fullTone=*/true);
     renderer.setRenderMode(GfxRenderer::BW);
   }
 }
