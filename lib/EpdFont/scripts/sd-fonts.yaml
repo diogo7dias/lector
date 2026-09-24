@@ -352,3 +352,29 @@ families:
       italic:     {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-Italic.ttf"}
       bolditalic: {url: "https://raw.githubusercontent.com/jacobxperez/lexica-ultralegible/main/fonts/ttf/LexicaUltralegible-BoldItalic.ttf"}
 
+  # ── Korean ─────────────────────────────────────────────────────────────
+  # Five sizes, as for the CJK families above: hangul alone is ~11,000 glyphs a style.
+
+  - name: Pretendard
+    description: "Modern Korean sans-serif (Hangul, Latin)"
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [12, 13, 14, 15, 16]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Regular.otf"}
+      bold:       {url: "https://raw.githubusercontent.com/orioncactus/pretendard/v1.3.9/packages/pretendard/dist/public/static/Pretendard-Bold.otf"}
+
+  - name: RIDIBatang
+    description: "RIDI's e-book serif, single weight (Hangul, Latin)"
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [12, 13, 14, 15, 16]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/fonts-archive/RIDIBatang/f1628238e56fd41c12451dfc7d975527b61ebfc7/RIDIBatang.otf"}
+
+  - name: MaruBuri
+    description: "Naver's serif for screen reading (Hangul, Latin)"
+    intervals: hangul,latin-ext,punctuation,reading,symbols
+    sizes: [12, 13, 14, 15, 16]
+    styles:
+      regular:    {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Regular.otf"}
+      bold:       {url: "https://raw.githubusercontent.com/fonts-archive/MaruBuri/977eeff68d1d40bcef341f09c1f56cce1903bb8a/MaruBuri-Bold.otf"}
+

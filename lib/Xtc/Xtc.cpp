@@ -8,6 +8,7 @@
 #include "Xtc.h"
 
 #include <Bitmap.h>
+#include <BmpWriter.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -188,37 +189,34 @@ bool Xtc::generateCoverBmp() const {
     return false;
   }
 
-  // Write 1-bit BMP header (top-down row order)
-  BmpHeader bmpHeader;
-  createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
-  coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
-
-  const uint32_t rowSize = ((pageInfo.width + 31) / 32) * 4;
-
-  // Write bitmap data
-  // BMP requires 4-byte row alignment
-  const size_t dstRowSize = (pageInfo.width + 7) / 8;  // 1-bit destination row size
-
   if (bitDepth == 2) {
-    // XTH 2-bit mode: Two bit planes, column-major order
+    // XTH 2-bit mode: keep all 4 gray levels in a 2-bit BMP so the sleep screen's
+    // grayscale pass can render them (a 1-bit cover silently disables it).
+    // Source is two bit planes, column-major order:
     // - Columns scanned right to left (x = width-1 down to 0)
     // - 8 vertical pixels per byte (MSB = topmost pixel in group)
     // - First plane: Bit1, Second plane: Bit2
-    // - Pixel value = (bit1 << 1) | bit2
+    // - Pixel value = (bit1 << 1) | bit2: 0=white, 1=dark gray, 2=light gray, 3=black
+    bmp_writer::writeHeader2bit(coverBmp, pageInfo.width, pageInfo.height);
+
     const size_t planeSize = (static_cast<size_t>(pageInfo.width) * pageInfo.height + 7) / 8;
     const uint8_t* plane1 = pageBuffer;                 // Bit1 plane
     const uint8_t* plane2 = pageBuffer + planeSize;     // Bit2 plane
     const size_t colBytes = (pageInfo.height + 7) / 8;  // Bytes per column
 
-    // Allocate a row buffer for 1-bit output
-    uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(dstRowSize));
+    // 2 bits per pixel, MSB first, rows padded to 4 bytes
+    const uint32_t rowSize = ((static_cast<uint32_t>(pageInfo.width) * 2 + 31) / 32) * 4;
+    uint8_t* rowBuffer = static_cast<uint8_t*>(malloc(rowSize));
     if (!rowBuffer) {
       free(pageBuffer);
       return false;
     }
 
+    // XTH value -> BMP palette index (palette: 0=black, 1=dark, 2=light, 3=white)
+    static constexpr uint8_t kXthToBmp[4] = {3, 1, 2, 0};
+
     for (uint16_t y = 0; y < pageInfo.height; y++) {
-      memset(rowBuffer, 0xFF, dstRowSize);  // Start with all white
+      memset(rowBuffer, 0x00, rowSize);
 
       for (uint16_t x = 0; x < pageInfo.width; x++) {
         // Column-major, right to left: column index = (width - 1 - x)
@@ -231,28 +229,21 @@ bool Xtc::generateCoverBmp() const {
         const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
         const uint8_t pixelValue = (bit1 << 1) | bit2;
 
-        // Threshold: 0=white (1); 1,2,3=black (0)
-        if (pixelValue >= 1) {
-          // Set bit to 0 (black) in BMP format
-          const size_t dstByte = x / 8;
-          const size_t dstBit = 7 - (x % 8);
-          rowBuffer[dstByte] &= ~(1 << dstBit);
-        }
+        rowBuffer[x / 4] |= kXthToBmp[pixelValue] << (6 - (x % 4) * 2);
       }
 
-      // Write converted row
-      coverBmp.write(rowBuffer, dstRowSize);
-
-      // Pad to 4-byte boundary
-      uint8_t padding[4] = {0, 0, 0, 0};
-      size_t paddingSize = rowSize - dstRowSize;
-      if (paddingSize > 0) {
-        coverBmp.write(padding, paddingSize);
-      }
+      // Row buffer is already zero-padded to rowSize, write it whole
+      coverBmp.write(rowBuffer, rowSize);
     }
 
     free(rowBuffer);
   } else {
+    // Write 1-bit BMP header (top-down row order)
+    BmpHeader bmpHeader;
+    createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
+    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+
+    const uint32_t rowSize = ((pageInfo.width + 31) / 32) * 4;
     // 1-bit source: write directly with proper padding
     const size_t srcRowSize = (pageInfo.width + 7) / 8;
 
@@ -438,9 +429,10 @@ bool Xtc::generateThumbBmp(int height) const {
                 const uint8_t bit1 = (plane1[byteOffset] >> bitInByte) & 1;
                 const uint8_t bit2 = (plane2[byteOffset] >> bitInByte) & 1;
                 const uint8_t pixelValue = (bit1 << 1) | bit2;
-                // Convert 2-bit (0-3) to grayscale: 0=black, 3=white
-                // pixelValue: 0=white, 1=light gray, 2=dark gray, 3=black (XTC polarity)
-                grayValue = (3 - pixelValue) * 85;  // 0->255, 1->170, 2->85, 3->0
+                // pixelValue: 0=white, 1=dark gray, 2=light gray, 3=black,
+                // same semantics as the cover's kXthToBmp mapping
+                static constexpr uint8_t kXthToGray[4] = {255, 85, 170, 0};
+                grayValue = kXthToGray[pixelValue];
               }
             }
           } else {
