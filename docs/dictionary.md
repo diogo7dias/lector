@@ -32,7 +32,7 @@ Two ways to start a lookup while reading:
 
 One word on the page becomes highlighted:
 
-1. Use **Left/Right** to move between words in reading order, and the side **Up/Down** buttons to jump between lines.
+1. Use **Left/Right** to move between words in reading order (hold to keep moving), and the side **Up/Down** buttons to jump between lines.
 2. Press **Confirm** to look up the highlighted word.
 3. Press **Back** to return to the reader.
 
