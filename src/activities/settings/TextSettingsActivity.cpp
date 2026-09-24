@@ -16,6 +16,7 @@
 #include "MappedInputManager.h"
 #include "ReaderFontSizes.h"
 #include "SdCardFontSystem.h"
+#include "SettingsList.h"
 #include "TextSettingsPreview.h"
 #include "activities/settings/FontPickerActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
@@ -25,13 +26,18 @@
 #include "util/MarginLink.h"
 
 namespace {
-constexpr StrId ALIGNMENT_IDS[] = {StrId::STR_JUSTIFY, StrId::STR_ALIGN_LEFT, StrId::STR_CENTER, StrId::STR_ALIGN_RIGHT,
-                                   StrId::STR_BOOK_S_STYLE};
-constexpr StrId MARGIN_LINK_IDS[] = {StrId::STR_MARGIN_LINK_OFF, StrId::STR_MARGIN_LINK_TOP_BOTTOM,
-                                     StrId::STR_MARGIN_LINK_ALL};
-constexpr StrId DYNAMIC_MARGINS_IDS[] = {StrId::STR_DYNAMIC_MARGINS_OFF, StrId::STR_DYNAMIC_MARGINS_10,
-                                         StrId::STR_DYNAMIC_MARGINS_20};
-constexpr StrId INDENT_MODE_IDS[] = {StrId::STR_INDENT_BOOK, StrId::STR_INDENT_PERCENT};
+// Look fields by their CrossPointSettings member, so a row finds the ReaderPrefs byte
+// behind its SettingInfo entry. Generated from the field lists: the names are identical on
+// both structs, which is what lets one list serve both sides.
+struct LookField {
+  uint8_t CrossPointSettings::* setting;
+  uint8_t ReaderPrefs::* look;
+};
+constexpr LookField LOOK_FIELDS[] = {
+#define CP_LOOK_FIELD(name) {&CrossPointSettings::name, &ReaderPrefs::name},
+    READER_LOOK_SCREEN_FIELDS(CP_LOOK_FIELD) READER_LOOK_BOOK_FIELDS(CP_LOOK_FIELD)
+#undef CP_LOOK_FIELD
+};
 
 // The two options that defer to the book's own CSS, and so go inert when Embedded Layout
 // Style is off.
@@ -139,24 +145,64 @@ void TextSettingsActivity::drawReserved(const Rect& rect) {
   textsettings::renderPreview(renderer, previewLayout_, look_, rect.y, rect.height - metrics_.verticalSpacing);
 }
 
+namespace {
+// Each cell's SettingInfo entry, by the CrossPointSettings field it edits. Everything else
+// about the cell (name, kind, range, step, option labels) is read from that entry, so a
+// look setting added to SettingsList.h needs only a Row, a line here and a place in
+// visibleRows(). The grid shortens a few names, and Word Spacing moves by its full step
+// on Up/Down as well as on the large step.
+struct RowSpec {
+  uint8_t CrossPointSettings::* setting;  // nullptr: Font and Size, fed by the font registry
+  StrId shortName;                        // STR_NONE_OPT: the entry's own name
+  bool coarseSteps;
+};
+constexpr RowSpec ROW_SPECS[] = {
+    {nullptr, StrId::STR_FONT, false},                                          // Font
+    {nullptr, StrId::STR_SIZE, false},                                          // Size
+    {&CrossPointSettings::paperbackLookBody, StrId::STR_NONE_OPT, false},       // PaperbackLook
+    {&CrossPointSettings::lineSpacingPercent, StrId::STR_NONE_OPT, false},      // LineSpacing
+    {&CrossPointSettings::extraParagraphSpacing, StrId::STR_NONE_OPT, false},   // ExtraSpacing
+    {&CrossPointSettings::wordSpacing, StrId::STR_NONE_OPT, true},              // WordSpacing
+    {&CrossPointSettings::paragraphAlignment, StrId::STR_ALIGNMENT, false},     // Alignment
+    {&CrossPointSettings::firstLineIndentMode, StrId::STR_NONE_OPT, false},     // IndentMode
+    {&CrossPointSettings::firstLineIndentPercent, StrId::STR_NONE_OPT, false},  // IndentPercent
+    {&CrossPointSettings::screenMargin, StrId::STR_NONE_OPT, false},            // HorizontalMargin
+    {&CrossPointSettings::marginLinkMode, StrId::STR_NONE_OPT, false},          // MarginLink
+    {&CrossPointSettings::screenMarginTop, StrId::STR_VERTICAL_MARGIN, false},  // VerticalMargin
+    {&CrossPointSettings::screenMarginTop, StrId::STR_NONE_OPT, false},         // TopMargin
+    {&CrossPointSettings::screenMarginBottom, StrId::STR_NONE_OPT, false},      // BottomMargin
+    {&CrossPointSettings::dynamicMargins, StrId::STR_NONE_OPT, false},          // DynamicMargins
+    {&CrossPointSettings::focusReadingEnabled, StrId::STR_NONE_OPT, false},     // FocusReading
+    {&CrossPointSettings::guideDotsEnabled, StrId::STR_NONE_OPT, false},        // GuideDots
+    {&CrossPointSettings::guideDotsHidden, StrId::STR_NONE_OPT, false},         // HiddenDots
+    {&CrossPointSettings::embeddedTextStyle, StrId::STR_NONE_OPT, false},       // EmbeddedTextStyle
+    {&CrossPointSettings::embeddedLayoutStyle, StrId::STR_NONE_OPT, false},     // EmbeddedLayoutStyle
+    {&CrossPointSettings::textAntiAliasing, StrId::STR_NONE_OPT, false},        // AntiAliasing
+    {&CrossPointSettings::debugBorders, StrId::STR_NONE_OPT, false},            // DebugBorders
+};
+}  // namespace
+
+const SettingInfo* TextSettingsActivity::settingOf(const Row row) {
+  static_assert(std::size(ROW_SPECS) == static_cast<size_t>(Row::Count),
+                "every Row needs exactly one ROW_SPECS line, in Row order");
+  const auto member = ROW_SPECS[static_cast<size_t>(row)].setting;
+  if (!member) return nullptr;
+  // The static list itself, not getSettingsList(): that copies all ~90 entries.
+  for (const SettingInfo& info : settingsBaseList()) {
+    if (info.valuePtr == member) return &info;
+  }
+  return nullptr;
+}
+
 TextSettingsActivity::RowKind TextSettingsActivity::kindOf(const Row row) {
-  switch (row) {
-    case Row::Font:
-      return RowKind::FontList;
-    case Row::Size:
-    case Row::Alignment:
-    case Row::IndentMode:
-    case Row::MarginLink:
-    case Row::DynamicMargins:
+  if (row == Row::Font) return RowKind::FontList;
+  if (row == Row::Size) return RowKind::Picker;
+  const SettingInfo* info = settingOf(row);
+  if (!info) return RowKind::Toggle;
+  switch (info->type) {
+    case SettingType::ENUM:
       return RowKind::Picker;
-    case Row::LineSpacing:
-    case Row::WordSpacing:
-    case Row::ParagraphSpacing:  // retired in 0.8.2; the row is still wired, just not listed
-    case Row::IndentPercent:
-    case Row::HorizontalMargin:
-    case Row::VerticalMargin:
-    case Row::TopMargin:
-    case Row::BottomMargin:
+    case SettingType::VALUE:
       return RowKind::Number;
     default:
       return RowKind::Toggle;
@@ -222,110 +268,30 @@ std::vector<TextSettingsActivity::Row> TextSettingsActivity::visibleRows() const
 }
 
 StrId TextSettingsActivity::rowNameId(const Row row) const {
-  switch (row) {
-    case Row::Font:
-      return StrId::STR_FONT;
-    case Row::Size:
-      return StrId::STR_SIZE;
-    case Row::PaperbackLook:
-      return StrId::STR_PAPERBACK_LOOK;
-    case Row::LineSpacing:
-      return StrId::STR_LINE_SPACING;
-    case Row::ExtraSpacing:
-      return StrId::STR_EXTRA_SPACING;
-    case Row::ParagraphSpacing:
-      return StrId::STR_PARAGRAPH_SPACING;
-    case Row::WordSpacing:
-      return StrId::STR_WORD_SPACING;
-    case Row::Alignment:
-      return StrId::STR_ALIGNMENT;
-    case Row::IndentMode:
-      return StrId::STR_FIRST_LINE_INDENT;
-    case Row::IndentPercent:
-      return StrId::STR_FIRST_LINE_INDENT_PERCENT;
-    case Row::HorizontalMargin:
-      // In All Sides this row is the only margin there is, so naming it "Horizontal"
-      // would be describing a side rather than what it does.
-      return margin_link::toMode(look_.marginLinkMode) == margin_link::Mode::AllSides ? StrId::STR_MARGIN
-                                                                                      : StrId::STR_HORIZONTAL_MARGIN;
-    case Row::MarginLink:
-      return StrId::STR_LINK_MARGINS;
-    case Row::VerticalMargin:
-      return StrId::STR_VERTICAL_MARGIN;
-    case Row::TopMargin:
-      return StrId::STR_SCREEN_MARGIN_TOP;
-    case Row::BottomMargin:
-      return StrId::STR_SCREEN_MARGIN_BOTTOM;
-    case Row::DynamicMargins:
-      return StrId::STR_DYNAMIC_MARGINS;
-    case Row::FocusReading:
-      return StrId::STR_FOCUS_READING;
-    case Row::GuideDots:
-      return StrId::STR_GUIDE_DOTS;
-    case Row::HiddenDots:
-      return StrId::STR_HIDDEN_DOTS;
-    case Row::EmbeddedTextStyle:
-      return StrId::STR_EMBEDDED_TEXT_STYLE;
-    case Row::EmbeddedLayoutStyle:
-      return StrId::STR_EMBEDDED_LAYOUT_STYLE;
-    case Row::AntiAliasing:
-      return StrId::STR_TEXT_AA;
-    default:
-      return StrId::STR_DEBUG_BORDERS;
+  // In All Sides this row is the only margin there is, so naming it "Horizontal" would be
+  // describing a side rather than what it does.
+  if (row == Row::HorizontalMargin && margin_link::toMode(look_.marginLinkMode) == margin_link::Mode::AllSides) {
+    return StrId::STR_MARGIN;
   }
+  const StrId shortName = ROW_SPECS[static_cast<size_t>(row)].shortName;
+  if (shortName != StrId::STR_NONE_OPT) return shortName;
+  const SettingInfo* info = settingOf(row);
+  return info ? info->nameId : StrId::STR_NONE_OPT;
 }
 
 // The vertical margins are two stored fields even while they are linked, so the linked row
 // edits the top one and applyNumber() mirrors it into the bottom.
-uint8_t* TextSettingsActivity::numberField(const Row row) {
-  switch (row) {
-    case Row::LineSpacing:
-      return &look_.lineSpacingPercent;
-    case Row::ParagraphSpacing:
-      return &look_.paragraphSpacing;
-    case Row::WordSpacing:
-      return &look_.wordSpacing;
-    case Row::IndentPercent:
-      return &look_.firstLineIndentPercent;
-    case Row::HorizontalMargin:
-      return &look_.screenMargin;
-    case Row::VerticalMargin:
-    case Row::TopMargin:
-      return &look_.screenMarginTop;
-    case Row::BottomMargin:
-      return &look_.screenMarginBottom;
-    default:
-      return nullptr;
+uint8_t* TextSettingsActivity::lookField(const Row row) {
+  const auto member = ROW_SPECS[static_cast<size_t>(row)].setting;
+  if (!member) return nullptr;
+  for (const LookField& field : LOOK_FIELDS) {
+    if (field.setting == member) return &(look_.*(field.look));
   }
-}
-
-void TextSettingsActivity::numberRange(const Row row, int& minValue, int& maxValue) const {
-  switch (row) {
-    case Row::LineSpacing:
-      minValue = CrossPointSettings::MIN_LINE_SPACING_PERCENT;
-      maxValue = CrossPointSettings::MAX_LINE_SPACING_PERCENT;
-      break;
-    case Row::WordSpacing:
-      minValue = CrossPointSettings::MIN_WORD_SPACING;
-      maxValue = CrossPointSettings::MAX_WORD_SPACING;
-      break;
-    case Row::ParagraphSpacing:
-      minValue = 0;
-      maxValue = CrossPointSettings::MAX_PARAGRAPH_SPACING;
-      break;
-    case Row::IndentPercent:
-      minValue = 0;
-      maxValue = CrossPointSettings::MAX_FIRST_LINE_INDENT_PERCENT;
-      break;
-    default:
-      minValue = CrossPointSettings::SCREEN_MARGIN_MIN;
-      maxValue = CrossPointSettings::SCREEN_MARGIN_MAX;
-      break;
-  }
+  return nullptr;
 }
 
 void TextSettingsActivity::applyNumber(const Row row, const int value) {
-  uint8_t* field = numberField(row);
+  uint8_t* field = lookField(row);
   if (!field) return;
   const margin_link::Margins current{look_.screenMargin, look_.screenMarginTop, look_.screenMarginBottom};
   const margin_link::Mode mode = margin_link::toMode(look_.marginLinkMode);
@@ -386,53 +352,31 @@ std::string TextSettingsActivity::rowValueText(const Row row) const {
       return (currentSizeIndex_ >= 0 && currentSizeIndex_ < static_cast<int>(sizes_.size()))
                  ? sizes_[currentSizeIndex_].name
                  : "";
-    case Row::ExtraSpacing:
-      return onOff(look_.extraParagraphSpacing);
-    case Row::Alignment: {
-      const uint8_t v = look_.paragraphAlignment;
-      const std::string label =
-          v < std::size(ALIGNMENT_IDS) ? I18N.get(ALIGNMENT_IDS[v]) : I18N.get(StrId::STR_JUSTIFY);
-      // "Book's Style" reads the alignment out of the book's own CSS, which is exactly what
-      // Embedded Layout Style switches off. Saying so on the row beats a setting that looks
-      // chosen and does nothing.
-      return (v == ALIGNMENT_BOOK_INDEX && !look_.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
-    }
-    case Row::IndentMode: {
-      const uint8_t v = look_.firstLineIndentMode;
-      const std::string label =
-          v < std::size(INDENT_MODE_IDS) ? I18N.get(INDENT_MODE_IDS[v]) : I18N.get(StrId::STR_INDENT_BOOK);
-      return (v == INDENT_MODE_BOOK_INDEX && !look_.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
-    }
-    case Row::MarginLink: {
-      const uint8_t v = look_.marginLinkMode;
-      return v < std::size(MARGIN_LINK_IDS) ? I18N.get(MARGIN_LINK_IDS[v]) : I18N.get(StrId::STR_MARGIN_LINK_OFF);
-    }
-    case Row::DynamicMargins: {
-      const uint8_t v = look_.dynamicMargins;
-      return v < std::size(DYNAMIC_MARGINS_IDS) ? I18N.get(DYNAMIC_MARGINS_IDS[v])
-                                                : I18N.get(StrId::STR_DYNAMIC_MARGINS_OFF);
-    }
-    case Row::FocusReading:
-      return onOff(look_.focusReadingEnabled);
-    case Row::GuideDots:
-      return onOff(look_.guideDotsEnabled);
-    case Row::HiddenDots:
-      return onOff(look_.guideDotsHidden);
-    case Row::EmbeddedTextStyle:
-      return onOff(look_.embeddedTextStyle);
-    case Row::EmbeddedLayoutStyle:
-      return onOff(look_.embeddedLayoutStyle);
-    case Row::AntiAliasing:
-      return onOff(look_.textAntiAliasing);
-    case Row::PaperbackLook:
-      return onOff(look_.paperbackLookBody);
     case Row::DebugBorders:
       return onOff(SETTINGS.debugBorders);
     default:
       break;
   }
-  if (const uint8_t* field = numberField(row)) return std::to_string(*field);
-  return "";
+  const uint8_t* field = lookField(row);
+  const SettingInfo* info = settingOf(row);
+  if (!field || !info) return "";
+  switch (kindOf(row)) {
+    case RowKind::Toggle:
+      return onOff(*field);
+    case RowKind::Number:
+      return std::to_string(*field);
+    default:
+      break;
+  }
+  const uint8_t v = *field;
+  if (info->enumValues.empty()) return "";
+  const std::string label = I18N.get(v < info->enumValues.size() ? info->enumValues[v] : info->enumValues[0]);
+  // "Book's Style" and First Line Indent: Book read the book's own CSS, which is exactly
+  // what Embedded Layout Style switches off. Saying so on the row beats a setting that
+  // looks chosen and does nothing.
+  const bool defersToBook =
+      (row == Row::Alignment && v == ALIGNMENT_BOOK_INDEX) || (row == Row::IndentMode && v == INDENT_MODE_BOOK_INDEX);
+  return (defersToBook && !look_.embeddedLayoutStyle) ? needsLayoutLabel(label) : label;
 }
 
 // Up and Down move a whole grid row so the column is kept; Left and Right move one cell,
@@ -492,16 +436,16 @@ void TextSettingsActivity::activateRow(const Row row) {
       return;
     }
     case RowKind::Number: {
-      int minValue = 0;
-      int maxValue = 0;
-      numberRange(row, minValue, maxValue);
-      const uint8_t* field = numberField(row);
+      const SettingInfo* info = settingOf(row);
+      const uint8_t* field = lookField(row);
+      if (!info || !field) return;
+      const SettingInfo::ValueRange range = info->valueRange;
       // A dedicated slider screen rather than a band over this list. The live
       // preview under the band is lost, but the row is only two taps away and
       // the number gets a finger-sized track instead of a header's worth of it.
       auto dialog = makeUniqueNoThrow<IntervalSelectionActivity>(
-          renderer, mappedInput, "TextSettingNumber", rowNameId(row), field ? *field : minValue, minValue, maxValue,
-          /*smallStep=*/row == Row::WordSpacing ? 5 : 1, /*largeStep=*/5);
+          renderer, mappedInput, "TextSettingNumber", rowNameId(row), *field, range.min, range.max,
+          /*smallStep=*/ROW_SPECS[static_cast<size_t>(row)].coarseSteps ? range.step : 1, /*largeStep=*/range.step);
       if (!dialog) {
         LOG_ERR("TXTSET", "OOM: IntervalSelectionActivity");
         return;
@@ -517,99 +461,60 @@ void TextSettingsActivity::activateRow(const Row row) {
       requestUpdate();
       return;
     }
-    case RowKind::Picker:
-      switch (row) {
-        case Row::Size:
-          openSizePicker();
-          break;
-        case Row::Alignment:
-          optionPopup_.show(StrId::STR_ALIGNMENT, ALIGNMENT_IDS, static_cast<int>(std::size(ALIGNMENT_IDS)),
-                            look_.paragraphAlignment, [this](int idx) {
-                              const auto next = static_cast<uint8_t>(idx);
-                              if (next == look_.paragraphAlignment) return;  // re-picking costs no erase cycle
-                              look_.paragraphAlignment = next;
-                              commit();
-                            });
-          break;
-        case Row::IndentMode:
-          optionPopup_.show(StrId::STR_FIRST_LINE_INDENT, INDENT_MODE_IDS, static_cast<int>(std::size(INDENT_MODE_IDS)),
-                            look_.firstLineIndentMode, [this](int idx) {
-                              const auto next = static_cast<uint8_t>(idx);
-                              if (next == look_.firstLineIndentMode) return;  // re-picking costs no erase cycle
-                              look_.firstLineIndentMode = next;
-                              commit();
-                            });
-          break;
-        case Row::MarginLink:
-          optionPopup_.show(StrId::STR_LINK_MARGINS, MARGIN_LINK_IDS, static_cast<int>(std::size(MARGIN_LINK_IDS)),
-                            look_.marginLinkMode, [this](int idx) {
-                              const auto next = static_cast<uint8_t>(idx);
-                              if (next == look_.marginLinkMode) return;  // re-picking costs no erase cycle
-                              // The mode carries its own consequences: All Sides adopts the
-                              // horizontal margin everywhere and turns Dynamic Margins off.
-                              const margin_link::State linked = margin_link::applyMode(
-                                  {{look_.screenMargin, look_.screenMarginTop, look_.screenMarginBottom},
-                                   look_.dynamicMargins,
-                                   margin_link::toMode(look_.marginLinkMode)},
-                                  margin_link::toMode(next));
-                              look_.screenMargin = linked.margins.horizontal;
-                              look_.screenMarginTop = linked.margins.top;
-                              look_.screenMarginBottom = linked.margins.bottom;
-                              look_.dynamicMargins = linked.dynamicMargins;
-                              look_.marginLinkMode = margin_link::toStored(linked.mode);
-                              commit();
-                            });
-          break;
-        default:
-          optionPopup_.show(StrId::STR_DYNAMIC_MARGINS, DYNAMIC_MARGINS_IDS,
-                            static_cast<int>(std::size(DYNAMIC_MARGINS_IDS)), look_.dynamicMargins, [this](int idx) {
-                              const auto next = static_cast<uint8_t>(idx);
-                              if (next == look_.dynamicMargins) return;  // re-picking costs no erase cycle
-                              look_.dynamicMargins = next;
-                              commit();
-                            });
-          break;
+    case RowKind::Picker: {
+      if (row == Row::Size) {
+        openSizePicker();
+        requestUpdate();
+        return;
+      }
+      const SettingInfo* info = settingOf(row);
+      uint8_t* field = lookField(row);
+      if (!info || !field) return;
+      const StrId* labels = info->enumValues.data();
+      const int labelCount = static_cast<int>(info->enumValues.size());
+      if (row == Row::MarginLink) {
+        optionPopup_.show(rowNameId(row), labels, labelCount, look_.marginLinkMode, [this](int idx) {
+          const auto next = static_cast<uint8_t>(idx);
+          if (next == look_.marginLinkMode) return;  // re-picking costs no erase cycle
+          // The mode carries its own consequences: All Sides adopts the
+          // horizontal margin everywhere and turns Dynamic Margins off.
+          const margin_link::State linked =
+              margin_link::applyMode({{look_.screenMargin, look_.screenMarginTop, look_.screenMarginBottom},
+                                      look_.dynamicMargins,
+                                      margin_link::toMode(look_.marginLinkMode)},
+                                     margin_link::toMode(next));
+          look_.screenMargin = linked.margins.horizontal;
+          look_.screenMarginTop = linked.margins.top;
+          look_.screenMarginBottom = linked.margins.bottom;
+          look_.dynamicMargins = linked.dynamicMargins;
+          look_.marginLinkMode = margin_link::toStored(linked.mode);
+          commit();
+        });
+      } else {
+        optionPopup_.show(rowNameId(row), labels, labelCount, *field, [this, field](int idx) {
+          const auto next = static_cast<uint8_t>(idx);
+          if (next == *field) return;  // re-picking costs no erase cycle
+          *field = next;
+          commit();
+        });
       }
       requestUpdate();
       return;
+    }
     case RowKind::Toggle:
       break;
   }
 
-  switch (row) {
-    case Row::ExtraSpacing:
-      look_.extraParagraphSpacing = !look_.extraParagraphSpacing;
-      break;
-    case Row::FocusReading:
-      look_.focusReadingEnabled = !look_.focusReadingEnabled;
-      break;
-    case Row::GuideDots:
-      look_.guideDotsEnabled = !look_.guideDotsEnabled;
-      break;
-    case Row::HiddenDots:
-      look_.guideDotsHidden = !look_.guideDotsHidden;
-      break;
-    case Row::EmbeddedTextStyle:
-      look_.embeddedTextStyle = !look_.embeddedTextStyle;
-      break;
-    case Row::EmbeddedLayoutStyle:
-      look_.embeddedLayoutStyle = !look_.embeddedLayoutStyle;
-      break;
-    case Row::AntiAliasing:
-      look_.textAntiAliasing = !look_.textAntiAliasing;
-      break;
-    case Row::PaperbackLook:
-      look_.paperbackLookBody = !look_.paperbackLookBody;
-      break;
-    case Row::DebugBorders:
-      // A developer switch, not part of any book's look: always the global setting.
-      SETTINGS.debugBorders = !SETTINGS.debugBorders;
-      SETTINGS.saveToFile();
-      requestUpdate();
-      return;
-    default:
-      return;
+  if (row == Row::DebugBorders) {
+    // A developer switch, not part of any book's look: always the global setting.
+    SETTINGS.debugBorders = !SETTINGS.debugBorders;
+    SETTINGS.saveToFile();
+    requestUpdate();
+    return;
   }
+  uint8_t* field = lookField(row);
+  if (!field) return;
+  *field = !*field;
   commit();
   requestUpdate();
 }
@@ -617,12 +522,11 @@ void TextSettingsActivity::activateRow(const Row row) {
 // The dialog hands the value back once, when it closes, so there is nothing to
 // debounce any more: apply it and let the caller write it.
 void TextSettingsActivity::setEditedValue(const Row row, const int value) {
-  const uint8_t* field = numberField(row);
-  if (!field) return;
+  const uint8_t* field = lookField(row);
+  const SettingInfo* info = settingOf(row);
+  if (!field || !info) return;
 
-  int minValue = 0, maxValue = 0;
-  numberRange(row, minValue, maxValue);
-  const int next = std::clamp(value, minValue, maxValue);
+  const int next = std::clamp(value, static_cast<int>(info->valueRange.min), static_cast<int>(info->valueRange.max));
   if (next == *field) return;
   applyNumber(row, next);
   requestUpdate();

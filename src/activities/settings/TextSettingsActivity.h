@@ -13,6 +13,8 @@
 #include "components/themes/BaseTheme.h"
 #include "util/HoldRepeat.h"
 
+struct SettingInfo;
+
 // Reader text settings: a live page preview over ONE scrolling list of every setting,
 // banded into sections (Type / Spacing / Margins / Reading aids). The tab bar this screen
 // used to carry is gone — the sections are drawList's own heading rows, which navigation
@@ -58,7 +60,6 @@ class TextSettingsActivity final : public UiGridActivity {
     PaperbackLook,
     LineSpacing,
     ExtraSpacing,
-    ParagraphSpacing,
     WordSpacing,
     Alignment,
     IndentMode,
@@ -76,21 +77,24 @@ class TextSettingsActivity final : public UiGridActivity {
     EmbeddedLayoutStyle,
     AntiAliasing,
     DebugBorders,
+    Count,
   };
 
   // What Confirm does on a cell, and therefore what the button hint says.
   enum class RowKind : uint8_t { Toggle, Picker, Number, FontList };
 
+  // The SettingInfo entry behind a row: its name, kind, range, step and option labels.
+  // nullptr for Font and Size, whose options come from the font registry.
+  static const SettingInfo* settingOf(Row row);
   static RowKind kindOf(Row row);
   // The rows that apply right now, in draw order. Rebuilt from the live settings because
   // three rows come and go (indent %, the linked/split vertical margins, hidden dots).
   std::vector<Row> visibleRows() const;
   StrId rowNameId(Row row) const;
   std::string rowValueText(Row row) const;
-  // Numeric rows share one editing path; these give it the field and its range.
-  uint8_t* numberField(Row row);
-  const uint8_t* numberField(Row row) const { return const_cast<TextSettingsActivity*>(this)->numberField(row); }
-  void numberRange(Row row, int& minValue, int& maxValue) const;
+  // The byte of look_ a row edits; nullptr for Font, Size and Debug Borders.
+  uint8_t* lookField(Row row);
+  const uint8_t* lookField(Row row) const { return const_cast<TextSettingsActivity*>(this)->lookField(row); }
   void setEditedValue(Row row, int value);
   void applyNumber(Row row, int value);
 

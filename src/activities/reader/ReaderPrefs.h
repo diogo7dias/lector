@@ -58,6 +58,7 @@ inline constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
 inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
 inline constexpr uint8_t MIN_WORD_SPACING = 75;
 inline constexpr uint8_t MAX_WORD_SPACING = 150;
+inline constexpr uint8_t WORD_SPACING = 100;  // percent of the font's natural space advance
 }  // namespace reader_defaults
 
 struct ReaderPrefs {
@@ -184,7 +185,7 @@ struct ReaderPrefs {
   uint8_t sbParaPagesPos = 0;  // SB_ANCHOR_OFF
 
   // Appended so v5-v13 sidecars retain every existing field and default to unchanged spacing.
-  uint8_t wordSpacing = 100;
+  uint8_t wordSpacing = reader_defaults::WORD_SPACING;
 
   // Copy the status bar block from `source`.
   //

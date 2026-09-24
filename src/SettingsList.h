@@ -210,8 +210,12 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
 // the font-family entry is replaced in that copy with a registry-aware version.
 // The font-size entry is always rebuilt, since its options are point sizes read
 // from the active family rather than a fixed enum.
-inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+//
+// settingsBaseList() is that static itself, for callers that only read the fixed entries
+// (the Text Settings screen) and must not pay for a copy of the whole list. noinline so
+// every translation unit shares the one out-of-line copy of the ~15 KB builder below
+// instead of inlining it into each caller.
+[[gnu::noinline]] inline const std::vector<SettingInfo>& settingsBaseList() {
   static const std::vector<SettingInfo> baseList = [] {
     // Enum settings are persisted as numeric values. Assign these labels by enum
     // value so a reordered menu or enum cannot silently swap their behavior.
@@ -823,8 +827,12 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     "clockHasBeenSynced", StrId::STR_CUSTOMISE_STATUS_BAR));
     return v;
   }();
+  return baseList;
+}
 
-  std::vector<SettingInfo> v = baseList;
+inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+  std::vector<SettingInfo> v = settingsBaseList();
   // The status-bar clock reads the RTC, which only the X3 carries. HalClock does have
   // a system-clock fallback for boards without one, but deep sleep here is a full chip
   // reset, so that clock would be lost every time the reader sleeps — a clock that is
