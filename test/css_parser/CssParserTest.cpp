@@ -3,12 +3,25 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <new>
 #include <string>
 #include <vector>
 
 #include "CssParser.h"
 
 namespace fs = std::filesystem;
+
+// Every CssParser pool allocation goes through makeUniqueNoThrow<T[]>, i.e. the
+// nothrow array new. Replacing it lets tests simulate device heap exhaustion.
+static bool gFailNothrowArrayNew = false;
+void* operator new[](std::size_t size, const std::nothrow_t&) noexcept {
+  if (gFailNothrowArrayNew) return nullptr;
+  try {
+    return ::operator new[](size);
+  } catch (...) {
+    return nullptr;
+  }
+}
 
 namespace {
 
@@ -174,7 +187,7 @@ TEST_F(CssParserTest, SaveLoadRoundTrip) {
 
   CssParser reader(cachePath());
   ASSERT_TRUE(reader.hasCache());
-  ASSERT_TRUE(reader.loadFromCache());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
 
   EXPECT_EQ(reader.ruleCount(), writer.ruleCount());
   EXPECT_EQ(reader.uniqueStyleCount(), writer.uniqueStyleCount());
@@ -194,7 +207,7 @@ TEST_F(CssParserTest, EmptyRuleSetRoundTrips) {
   ASSERT_TRUE(writer.saveToCache());
 
   CssParser reader(cachePath());
-  ASSERT_TRUE(reader.loadFromCache());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
   EXPECT_EQ(reader.ruleCount(), 0u);
   EXPECT_TRUE(reader.empty());
 }
@@ -208,7 +221,7 @@ TEST_F(CssParserTest, OldCacheVersionRejectedAndDeleted) {
   writeFile(cacheFilePath(), stale);
 
   CssParser parser(cachePath());
-  EXPECT_FALSE(parser.loadFromCache());
+  EXPECT_EQ(parser.loadFromCache(), CssParser::CacheLoad::Invalid);
   EXPECT_FALSE(parser.hasCache());
 }
 
@@ -222,12 +235,12 @@ TEST_F(CssParserTest, TruncatedCacheRejected) {
   fs::resize_file(cacheFilePath(), size - 4);
 
   CssParser reader(cachePath());
-  EXPECT_FALSE(reader.loadFromCache());
+  EXPECT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Invalid);
   EXPECT_EQ(reader.ruleCount(), 0u);
 }
 
 TEST_F(CssParserTest, UnsortedCacheEntriesRejected) {
-  // Hand-craft a v8 cache whose two entries are in descending selector order.
+  // Hand-craft a cache whose two entries are in descending selector order.
   std::vector<uint8_t> buf;
   auto push16 = [&buf](uint16_t v) {
     buf.push_back(static_cast<uint8_t>(v & 0xFF));
@@ -237,9 +250,10 @@ TEST_F(CssParserTest, UnsortedCacheEntriesRejected) {
     for (int i = 0; i < 4; ++i) buf.push_back(static_cast<uint8_t>((v >> (8 * i)) & 0xFF));
   };
   buf.push_back(CssParser::CSS_CACHE_VERSION);
-  push16(2);  // entryCount
-  push16(1);  // styleCount
-  push32(2);  // poolBytes ("ab")
+  buf.push_back(0);  // flags
+  push16(2);         // entryCount
+  push16(1);         // styleCount
+  push32(2);         // poolBytes ("ab")
   // entry 0 -> "b", entry 1 -> "a": descending, must be rejected
   push32(1);
   push16(0);
@@ -256,7 +270,7 @@ TEST_F(CssParserTest, UnsortedCacheEntriesRejected) {
   out.close();
 
   CssParser parser(cachePath());
-  EXPECT_FALSE(parser.loadFromCache());
+  EXPECT_EQ(parser.loadFromCache(), CssParser::CacheLoad::Invalid);
   EXPECT_EQ(parser.ruleCount(), 0u);
 }
 
@@ -329,7 +343,7 @@ TEST_F(CssParserTest, PerChapterConvertedBookFullyResolves) {
   // And the whole set survives a cache round trip.
   ASSERT_TRUE(parser.saveToCache());
   CssParser reader(cachePath());
-  ASSERT_TRUE(reader.loadFromCache());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
   EXPECT_EQ(reader.ruleCount(), static_cast<size_t>(kFiles * kClassesPerFile));
   EXPECT_EQ(reader.resolveStyle("div", "class-125-0").fontWeight, CssFontWeight::Bold);
 }
@@ -345,6 +359,66 @@ TEST_F(CssParserTest, ClearReleasesAllRules) {
   // Parser stays usable after clear()
   loadCss(parser, ".b { font-style: italic; }\n");
   EXPECT_EQ(parser.resolveStyle("p", "b").fontStyle, CssFontStyle::Italic);
+}
+
+TEST_F(CssParserTest, OomLoadKeepsCache) {
+  CssParser writer(cachePath());
+  loadCss(writer, ".a { font-weight: bold; }\n");
+  ASSERT_TRUE(writer.saveToCache());
+
+  CssParser reader(cachePath());
+  gFailNothrowArrayNew = true;
+  const CssParser::CacheLoad oom = reader.loadFromCache();
+  gFailNothrowArrayNew = false;
+  EXPECT_EQ(oom, CssParser::CacheLoad::NoMemory);
+  EXPECT_TRUE(reader.empty());
+  // Low heap is not corruption: the cache must survive for a later retry.
+  ASSERT_TRUE(reader.hasCache());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
+  EXPECT_EQ(reader.resolveStyle("p", "a").fontWeight, CssFontWeight::Bold);
+}
+
+TEST_F(CssParserTest, PartialFlagRoundTrips) {
+  CssParser writer(cachePath());
+  loadCss(writer, ".a { font-weight: bold; }\n");
+  EXPECT_FALSE(writer.isPartial());
+  writer.markPartial();
+  ASSERT_TRUE(writer.saveToCache());
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
+  EXPECT_TRUE(reader.isPartial());
+  EXPECT_EQ(reader.resolveStyle("p", "a").fontWeight, CssFontWeight::Bold);  // still usable meanwhile
+  reader.clear();
+  EXPECT_FALSE(reader.isPartial());
+
+  // A complete rebuild overwrites the flag, so the retry loop ends.
+  CssParser rebuilt(cachePath());
+  loadCss(rebuilt, ".a { font-weight: bold; }\n.b { font-style: italic; }\n");
+  ASSERT_TRUE(rebuilt.saveToCache());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
+  EXPECT_FALSE(reader.isPartial());
+  EXPECT_EQ(reader.ruleCount(), 2u);
+}
+
+TEST_F(CssParserTest, OomDuringParseMarksCachePartial) {
+  // Epub::ensureCssCache rebuilds whenever a loaded cache isPartial(), so a rule
+  // set truncated by OOM must carry the flag through the cache file.
+  CssParser writer(cachePath());
+  loadCss(writer, ".a { font-weight: bold; }\n");
+  ASSERT_FALSE(writer.isPartial());
+  gFailNothrowArrayNew = true;
+  std::string css;
+  for (int i = 0; i < 300; ++i) css += ".c" + std::to_string(i) + " { font-style: italic; }\n";
+  loadCss(writer, css);  // entry index must grow past 256 and cannot
+  gFailNothrowArrayNew = false;
+  EXPECT_TRUE(writer.isPartial());
+  EXPECT_LT(writer.ruleCount(), 301u);
+  ASSERT_TRUE(writer.saveToCache());
+
+  CssParser reader(cachePath());
+  ASSERT_EQ(reader.loadFromCache(), CssParser::CacheLoad::Ok);
+  EXPECT_TRUE(reader.isPartial());
 }
 
 TEST_F(CssParserTest, InlineStyleParsingUnchanged) {

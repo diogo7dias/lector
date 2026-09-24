@@ -23,7 +23,7 @@ class Section {
     None = 0,
     HtmlStream = 1,  // could not spool the spine item out of the zip to SD
     OpenTmpBin = 2,  // could not open the layout .bin for writing
-    OomContext = 3,  // BuildContext allocation failed
+    OomContext = 3,  // BuildContext or CSS rules allocation failed
     OomParser = 4,   // ChapterHtmlSlimParser allocation failed
     BeginParse = 5,  // expat/parser start failed
     ParseStep = 6,   // parse error or SD read error mid-chapter

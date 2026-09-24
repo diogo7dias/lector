@@ -39,7 +39,11 @@
 class CssParser {
  public:
   // Bump when CSS cache format or rules change; section caches are invalidated when this changes
-  static constexpr uint8_t CSS_CACHE_VERSION = 9;
+  static constexpr uint8_t CSS_CACHE_VERSION = 10;
+
+  // Outcome of loadFromCache. NoMemory means the cache may be fine but the heap
+  // could not hold it: keep the file and retry later, never delete or rebuild.
+  enum class CacheLoad : uint8_t { Ok, Invalid, NoMemory };
 
   explicit CssParser(std::string cachePath) : cachePath(std::move(cachePath)) {}
   ~CssParser() = default;
@@ -100,7 +104,15 @@ class CssParser {
     entryCount_ = entryCapacity_ = 0;
     poolSize_ = poolCapacity_ = 0;
     styleCount_ = styleCapacity_ = 0;
+    partial_ = false;
   }
+
+  /**
+   * True when the rules are known incomplete because heap ran out while building
+   * them (here or in the caller). Persisted by saveToCache so a later load retries.
+   */
+  [[nodiscard]] bool isPartial() const { return partial_; }
+  void markPartial() { partial_ = true; }
 
   /**
    * Check if CSS rules cache file exists
@@ -120,10 +132,9 @@ class CssParser {
 
   /**
    * Load CSS rules from a cache file.
-   * Clears any existing rules before loading.
-   * @return true if cache was loaded successfully
+   * Clears any existing rules before loading. isPartial() reflects the cache's flag.
    */
-  bool loadFromCache();
+  CacheLoad loadFromCache();
 
  private:
   // One rule in the selector index. 8 bytes with no padding; the in-memory
@@ -150,6 +161,7 @@ class CssParser {
   uint32_t poolCapacity_ = 0;
   uint16_t styleCount_ = 0;
   uint16_t styleCapacity_ = 0;
+  bool partial_ = false;
 
   std::string cachePath;
 
