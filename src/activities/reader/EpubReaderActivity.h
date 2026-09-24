@@ -10,6 +10,7 @@
 #include "EndOfBookOptions.h"
 #include "EpubReaderMenuActivity.h"
 #include "ProgressMapper.h"
+#include "ReaderLanding.h"
 #include "ReaderPrefs.h"
 #include "ReaderProgressSaveDebouncer.h"
 #include "ReaderReturnHistory.h"
@@ -287,6 +288,9 @@ class EpubReaderActivity final : public Activity {
   // initial landing page. Later user navigation must never be overwritten when
   // a background section build finishes.
   void clearDeferredReposition();
+  // Which landing anchors are pending. reader_landing decides which of them wins; this
+  // only reports what is set. See ReaderLanding.h.
+  reader_landing::Pending landingPending() const;
   void rememberCurrentContentOffset();
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   // Ordinary renders, including changed pagination, wait until the batch is due.
@@ -312,6 +316,34 @@ class EpubReaderActivity final : public Activity {
   // entry point for callers that do not.
   void dropSectionForRelayout();
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
+  // Reader-menu actions, one per row; onReaderMenuConfirm routes to them.
+  // Navigation
+  void openChapterSelection();
+  void openFootnotes();
+  void openPercentSelection();
+  void openParagraphEntry();
+  void openBookmarks();
+  // A bookmark picked in the list: jump to it by content offset, else by saved page.
+  void onBookmarkJumpResult(const ActivityResult& result);
+  // Reading tools
+  void openDictionaryHistory();
+  void openQuotesViewer();
+  void openPageQr();
+  // Lock-screen wallpaper
+  void toggleWallpaperFavorite();
+  void toggleWallpaperHold();
+  void toggleWallpaperPause();
+  void confirmWallpaperDelete();
+  // This book's look
+  void openStealLook();
+  void openReadingThemes();
+  void openReaderSettings();
+  void openStatusBarSettings();
+  void confirmResetReaderSettings();
+  // The book file; each leaves the reader. onReaderMenuConfirm refuses them in Sortes mode.
+  void removeFromRecents();
+  void confirmDeleteBook();
+  void deleteCacheAndGoHome();
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
   void openDictionaryWordSelect();
