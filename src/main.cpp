@@ -292,6 +292,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   diag::flushIfPending();
 
   display.deepSleep();
+  Storage.prepareForDeepSleep();
   const unsigned long sleepTPanel = millis();
   // INF, not DBG: a release kit runs at LOG_LEVEL 1 and this is the one line that says
   // what a lock cost.
@@ -635,6 +636,7 @@ void setup() {
         LOG_INF("SLP", "Wake press not held through debounce, back to sleep");
         debug_trace::note("wake press not held, back to sleep");
         logFlush();
+        Storage.prepareForDeepSleep();
         powerManager.startDeepSleep(gpio);
       }
       wakePowerReleasePending = true;
@@ -643,6 +645,7 @@ void setup() {
       // If USB power caused a cold boot, go back to sleep
       LOG_INF("SLP", "USB power cold boot, back to sleep");
       logFlush();
+      Storage.prepareForDeepSleep();
       powerManager.startDeepSleep(gpio);
       break;
     case HalGPIO::WakeupReason::AfterFlash:
