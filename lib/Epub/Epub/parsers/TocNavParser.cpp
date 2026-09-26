@@ -58,18 +58,18 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
   auto* self = static_cast<TocNavParser*>(userData);
 
   // Track HTML structure loosely - we mainly care about finding <nav epub:type="toc">
-  if (strcmp(name, "html") == 0) {
+  if (xmlLocalNameEquals(name, "html")) {
     self->state = IN_HTML;
     return;
   }
 
-  if (self->state == IN_HTML && strcmp(name, "body") == 0) {
+  if (self->state == IN_HTML && xmlLocalNameEquals(name, "body")) {
     self->state = IN_BODY;
     return;
   }
 
   // Look for <nav epub:type="toc"> anywhere in body (or nested elements)
-  if (self->state >= IN_BODY && strcmp(name, "nav") == 0) {
+  if (self->state >= IN_BODY && xmlLocalNameEquals(name, "nav")) {
     for (int i = 0; atts[i]; i += 2) {
       if ((strcmp(atts[i], "epub:type") == 0 || strcmp(atts[i], "type") == 0) && strcmp(atts[i + 1], "toc") == 0) {
         self->state = IN_NAV_TOC;
@@ -85,20 +85,20 @@ void XMLCALL TocNavParser::startElement(void* userData, const XML_Char* name, co
     return;
   }
 
-  if (strcmp(name, "ol") == 0) {
+  if (xmlLocalNameEquals(name, "ol")) {
     self->olDepth++;
     self->state = IN_OL;
     return;
   }
 
-  if (self->state == IN_OL && strcmp(name, "li") == 0) {
+  if (self->state == IN_OL && xmlLocalNameEquals(name, "li")) {
     self->state = IN_LI;
     self->currentLabel.clear();
     self->currentHref.clear();
     return;
   }
 
-  if (self->state == IN_LI && strcmp(name, "a") == 0) {
+  if (self->state == IN_LI && xmlLocalNameEquals(name, "a")) {
     self->state = IN_ANCHOR;
     // Get href attribute
     for (int i = 0; atts[i]; i += 2) {
@@ -123,7 +123,7 @@ void XMLCALL TocNavParser::characterData(void* userData, const XML_Char* s, cons
 void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
   auto* self = static_cast<TocNavParser*>(userData);
 
-  if (strcmp(name, "a") == 0 && self->state == IN_ANCHOR) {
+  if (xmlLocalNameEquals(name, "a") && self->state == IN_ANCHOR) {
     // Create TOC entry when closing anchor tag (we have all data now)
     if (!self->currentLabel.empty() && !self->currentHref.empty()) {
       const std::string rawTarget = self->baseContentPath + self->currentHref;
@@ -148,12 +148,12 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
     return;
   }
 
-  if (strcmp(name, "li") == 0 && (self->state == IN_LI || self->state == IN_OL)) {
+  if (xmlLocalNameEquals(name, "li") && (self->state == IN_LI || self->state == IN_OL)) {
     self->state = IN_OL;
     return;
   }
 
-  if (strcmp(name, "ol") == 0 && self->state >= IN_NAV_TOC) {
+  if (xmlLocalNameEquals(name, "ol") && self->state >= IN_NAV_TOC) {
     self->olDepth--;
     if (self->olDepth == 0) {
       self->state = IN_NAV_TOC;
@@ -163,7 +163,7 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
     return;
   }
 
-  if (strcmp(name, "nav") == 0 && self->state >= IN_NAV_TOC) {
+  if (xmlLocalNameEquals(name, "nav") && self->state >= IN_NAV_TOC) {
     self->state = IN_BODY;
     LOG_DBG("NAV", "Finished parsing nav toc");
     return;
