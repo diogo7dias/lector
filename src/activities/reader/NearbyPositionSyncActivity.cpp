@@ -20,14 +20,6 @@ namespace {
 
 constexpr const char* LOG_TAG = "NBPS";
 
-std::string documentHashFor(const std::string& path) {
-  // The same identity KOSync uses, so a book matched by one is matched by the
-  // other, and a CrossInk device computing it the same way still pairs.
-  return KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME
-             ? KOReaderDocumentId::calculateFromFilename(path)
-             : KOReaderDocumentId::calculate(path);
-}
-
 }  // namespace
 
 NearbyPositionSyncActivity::NearbyPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
@@ -44,7 +36,9 @@ NearbyPositionSyncActivity::NearbyPositionSyncActivity(GfxRenderer& renderer, Ma
       localProgress(std::move(localProgress)) {}
 
 bool NearbyPositionSyncActivity::prepareLocalPosition() {
-  documentHash = documentHashFor(epubPath);
+  // The same identity KOSync uses, so a book matched by one is matched by the
+  // other, and a CrossInk device computing it the same way still pairs.
+  documentHash = KOReaderDocumentId::calculateFor(epubPath, KOREADER_STORE.getMatchMethod());
   if (documentHash.size() != DOCUMENT_HASH_BYTES || localProgress.xpath.empty()) {
     LOG_ERR(LOG_TAG, "No shareable position for %s", epubPath.c_str());
     return false;

@@ -54,11 +54,9 @@ bool NearbyPositionReceiveActivity::tryBook(const std::string& path) {
   if (!Storage.exists((cache + "/book.bin").c_str()) || !Storage.exists((cache + "/progress.bin").c_str()) ||
       !Storage.exists(path.c_str()))
     return false;
-  // Exactly documentHashFor's identity (NearbyPositionSyncActivity.cpp): honour
-  // the same KOReader match setting without changing the working sender.
-  const std::string hash = KOREADER_STORE.getMatchMethod() == DocumentMatchMethod::FILENAME
-                               ? KOReaderDocumentId::calculateFromFilename(path)
-                               : KOReaderDocumentId::calculate(path);
+  // The sender's identity (NearbyPositionSyncActivity.cpp), under the same
+  // KOReader match setting.
+  const std::string hash = KOReaderDocumentId::calculateFor(path, KOREADER_STORE.getMatchMethod());
   if (!matchesDocumentHash(documentHash, hash)) return false;
   matchedPath = path;
   {

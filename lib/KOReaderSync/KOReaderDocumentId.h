@@ -1,5 +1,8 @@
 #pragma once
+#include <cstdint>
 #include <string>
+
+enum class DocumentMatchMethod : uint8_t;  // KOReaderCredentialStore.h
 
 /**
  * Calculate KOReader document ID (partial MD5 hash).
@@ -32,6 +35,12 @@ class KOReaderDocumentId {
    * @return 32-character lowercase hex MD5 of the filename
    */
   static std::string calculateFromFilename(const std::string& filePath);
+
+  /**
+   * The hash the given match method names: calculateFromFilename() for FILENAME,
+   * calculate() otherwise. KOSync and Nearby Sync both identify a book this way.
+   */
+  static std::string calculateFor(const std::string& filePath, DocumentMatchMethod method);
 
  private:
   // Size of each chunk to read at each offset

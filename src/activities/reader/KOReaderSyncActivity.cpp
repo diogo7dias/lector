@@ -24,11 +24,6 @@
 #include "util/KOReaderSyncMessage.h"
 
 namespace {
-std::string calculateDocumentHashForMethod(const std::string& path, const DocumentMatchMethod method) {
-  return method == DocumentMatchMethod::FILENAME ? KOReaderDocumentId::calculateFromFilename(path)
-                                                 : KOReaderDocumentId::calculate(path);
-}
-
 DocumentMatchMethod alternateMatchMethod(const DocumentMatchMethod method) {
   return method == DocumentMatchMethod::FILENAME ? DocumentMatchMethod::BINARY : DocumentMatchMethod::FILENAME;
 }
@@ -130,7 +125,7 @@ void KOReaderSyncActivity::onWifiSelectionComplete(const bool success) {
 
 void KOReaderSyncActivity::performSync() {
   const DocumentMatchMethod primaryMethod = KOREADER_STORE.getMatchMethod();
-  documentHash = calculateDocumentHashForMethod(epubPath, primaryMethod);
+  documentHash = KOReaderDocumentId::calculateFor(epubPath, primaryMethod);
   if (documentHash.empty()) {
     {
       RenderLock lock(*this);
@@ -161,7 +156,7 @@ void KOReaderSyncActivity::performSync() {
   bool hasAlternateProgress = false;
   if (smartSyncEnabled()) {
     const DocumentMatchMethod altMethod = alternateMatchMethod(primaryMethod);
-    const std::string altHash = calculateDocumentHashForMethod(epubPath, altMethod);
+    const std::string altHash = KOReaderDocumentId::calculateFor(epubPath, altMethod);
     if (!altHash.empty() && altHash != documentHash) {
       KOReaderProgress altProgress;
       const auto altResult = KOReaderSyncClient::getProgress(altHash, altProgress);
@@ -494,7 +489,7 @@ void KOReaderSyncActivity::onConfirmButton() {
   if (state == NO_REMOTE_PROGRESS) {
     // Calculate hash if not done yet
     if (documentHash.empty()) {
-      documentHash = calculateDocumentHashForMethod(epubPath, KOREADER_STORE.getMatchMethod());
+      documentHash = KOReaderDocumentId::calculateFor(epubPath, KOREADER_STORE.getMatchMethod());
     }
     performUpload();
     return;
