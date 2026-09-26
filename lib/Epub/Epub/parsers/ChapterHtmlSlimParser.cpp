@@ -1391,7 +1391,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // heading goes on to open; the heading's own first block is flagged here because
     // startNewTextBlock ran before the watermark was set.
     self->headingUntilDepth_ = std::min(self->headingUntilDepth_, self->depth);
-    self->currentTextBlock->setHeading(true);
+    if (self->currentTextBlock) self->currentTextBlock->setHeading(true);  // null after OOM
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
@@ -1426,7 +1426,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(accumulated.withoutBottom());
       self->updateEffectiveInlineStyle();
 
-      if (strcmp(name, "li") == 0) {
+      if (strcmp(name, "li") == 0 && self->currentTextBlock) {  // null after OOM
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
         self->listItemBulletOnly = true;
       }

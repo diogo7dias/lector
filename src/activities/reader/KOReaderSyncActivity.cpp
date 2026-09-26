@@ -43,6 +43,10 @@ void KOReaderSyncActivity::ensureEpubLoaded() {
   if (!epub) {
     LOG_DBG("KOSync", "Loading epub for progress mapping (heap: %u)", (unsigned)ESP.getFreeHeap());
     epub = makeUniqueNoThrow<Epub>(epubPath, "/.crosspoint");
+    if (!epub) {
+      LOG_ERR("KOSync", "OOM: Epub");
+      return;
+    }
     epub->setupCacheDir();
     // Load metadata only (no CSS needed for progress mapping, don't rebuild if cache is missing).
     if (!epub->load(false, true)) {
