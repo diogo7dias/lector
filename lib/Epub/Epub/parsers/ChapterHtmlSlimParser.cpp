@@ -1797,8 +1797,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->nonVisibleTextDepth--;
   }
 
-  // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state
-  if (strcmp(name, "rt") == 0) {
+  // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state.
+  // A skipped <rt> (display:none, or inside a hidden subtree) never started collecting,
+  // so it takes the general path below, which also clears the skip it opened.
+  if (strcmp(name, "rt") == 0 && self->depth - 1 < self->skipUntilDepth) {
     self->collectingRubyText = false;
     if (self->inRuby && self->currentTextBlock) {
       const int currentWordCount = static_cast<int>(self->currentTextBlock->size());

@@ -110,7 +110,8 @@ namespace {
 // v61: wordSpacing enters the header; baseline gaps change pagination.
 // v62: remove the hyphenation header byte and automatic word splitting.
 // v63: a soft-flushed long paragraph no longer re-indents its continuation lines.
-constexpr uint8_t SECTION_FILE_VERSION = 63;
+// v64: a CSS-hidden <rt> clears its skip on close; the element after it no longer vanishes.
+constexpr uint8_t SECTION_FILE_VERSION = 64;
 // Written into the version field while a build is in progress; patched to
 // SECTION_FILE_VERSION only when the build is finalized. An abandoned /
 // crash-interrupted .bin therefore carries version 0, which loadSectionFile rejects
