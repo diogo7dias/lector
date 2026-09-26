@@ -34,7 +34,7 @@ class KOReaderSyncActivity final : public UiStatusActivity {
 
   void onEnter() override;
   void onExit() override;
-  bool preventAutoSleep() override { return state == CONNECTING || state == SYNCING || state == UPLOADING; }
+  bool preventAutoSleep() override { return state == SYNCING || state == UPLOADING; }
 
  protected:
   StatusView statusView() const override;
@@ -46,7 +46,6 @@ class KOReaderSyncActivity final : public UiStatusActivity {
  private:
   enum State {
     WIFI_SELECTION,
-    CONNECTING,
     SYNCING,
     SHOWING_RESULT,
     UPLOADING,

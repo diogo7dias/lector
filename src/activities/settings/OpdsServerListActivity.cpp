@@ -151,10 +151,6 @@ void OpdsServerListActivity::activateIndex(const int index) {
 
 void OpdsServerListActivity::buildScreen(UiScreen& screen) {
   const int itemCount = getItemCount();
-  if (itemCount == 0) {
-    screen.centeredText(tr(STR_NO_SERVERS));
-    return;
-  }
 
   const auto& servers = OPDS_STORE.getServers();
   const auto serverCount = static_cast<int>(servers.size());

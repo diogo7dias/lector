@@ -76,8 +76,6 @@ namespace {
 // pages per minute, first item is 1 to prevent division by zero if accessed
 constexpr size_t initialBookmarkCacheCapacity = 16;
 constexpr float bookmarkProgressEpsilon = 0.0001f;
-// paragraph_counts.bin: [uint8 version][uint16 spineCount][uint16 count]*spineCount.
-constexpr uint8_t PARAGRAPH_COUNTS_VERSION = 1;
 // Quote underlines. Positions only: 128 anchors is 1.5KB resident, and a book with
 // more saved quotes than that simply stops underlining the extras.
 constexpr size_t MAX_QUOTE_ANCHORS = 128;
@@ -1275,7 +1273,6 @@ void EpubReaderActivity::openFootnotes() {
 
 void EpubReaderActivity::openChapterSelection() {
   const int spineIdx = currentSpineIndex;
-  const std::string path = epub->getPath();
   // Release the section while the chapter list is up (mirrors the
   // READER_SETTINGS path): picking a chapter resets it anyway, and its
   // tens-of-KB footprint is the difference between the chapter list
@@ -1292,29 +1289,29 @@ void EpubReaderActivity::openChapterSelection() {
     }
     section.reset();
   }
-  startActivityForResult(
-      std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, path, spineIdx),
-      [this](const ActivityResult& result) {
-        RenderLock lock(*this);
-        if (!result.isCancelled) {
-          const auto& chapterResult = std::get<ChapterResult>(result.data);
-          if (chapterResult.spineIndex < 0 || chapterResult.spineIndex >= epub->getSpineItemsCount()) return;
-        }
-        recordJumpOrigin(!result.isCancelled);
-        if (!result.isCancelled) {
-          const auto& chapterResult = std::get<ChapterResult>(result.data);
-          clearDeferredReposition();
-          currentSpineIndex = chapterResult.spineIndex;
+  startActivityForResult(std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, spineIdx),
+                         [this](const ActivityResult& result) {
+                           RenderLock lock(*this);
+                           if (!result.isCancelled) {
+                             const auto& chapterResult = std::get<ChapterResult>(result.data);
+                             if (chapterResult.spineIndex < 0 || chapterResult.spineIndex >= epub->getSpineItemsCount())
+                               return;
+                           }
+                           recordJumpOrigin(!result.isCancelled);
+                           if (!result.isCancelled) {
+                             const auto& chapterResult = std::get<ChapterResult>(result.data);
+                             clearDeferredReposition();
+                             currentSpineIndex = chapterResult.spineIndex;
 
-          // If anchor is not empty, it will be used later to calculate the page number.
-          pendingAnchor = chapterResult.anchor;
+                             // If anchor is not empty, it will be used later to calculate the page number.
+                             pendingAnchor = chapterResult.anchor;
 
-          // Otherwise page 0 will be used.
-          nextPageNumber = 0;
+                             // Otherwise page 0 will be used.
+                             nextPageNumber = 0;
 
-          section.reset();
-        }
-      });
+                             section.reset();
+                           }
+                         });
 }
 
 void EpubReaderActivity::openPercentSelection() {
@@ -1719,8 +1716,6 @@ void EpubReaderActivity::launchNearbyPositionSync() {
   // released.
   CrossPointPosition localPos = getCurrentPosition();
   SavedProgressPosition localKoPos = ProgressMapper::toSavedProgress(*epub, localPos);
-  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
-  std::string localChapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
   const std::string savedEpubPath = epub->getPath();
 
   // goToReader() on the way back reads this file, so a failed write aborts the
@@ -1747,9 +1742,9 @@ void EpubReaderActivity::launchNearbyPositionSync() {
     epub.reset();
   }
 
-  activityManager.replaceActivity(std::make_unique<NearbyPositionSyncActivity>(
-      renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage, totalPages, std::move(localKoPos),
-      std::move(localChapterName), paragraphIndex));
+  activityManager.replaceActivity(
+      std::make_unique<NearbyPositionSyncActivity>(renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage,
+                                                   totalPages, std::move(localKoPos), paragraphIndex));
 }
 
 bool EpubReaderActivity::launchKOReaderSync() {

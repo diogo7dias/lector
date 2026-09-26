@@ -438,7 +438,6 @@ UiStatusActivity::StatusView KOReaderSyncActivity::statusView() const {
     case NO_CREDENTIALS:
       view.lines = {tr(STR_NO_CREDENTIALS_MSG), tr(STR_KOREADER_SETUP_HINT), nullptr, nullptr};
       break;
-    case CONNECTING:
     case SYNCING:
     case UPLOADING:
       view.lines = {statusMessage.c_str(), nullptr, nullptr, nullptr};
@@ -486,7 +485,7 @@ bool KOReaderSyncActivity::handleCustomInput() {
   }
   // Nothing to answer while the radio is working, and the picker owns its own
   // input.
-  return state == WIFI_SELECTION || state == CONNECTING || state == SYNCING || state == UPLOADING;
+  return state == WIFI_SELECTION || state == SYNCING || state == UPLOADING;
 }
 
 void KOReaderSyncActivity::onBackButton() { returnToReader(); }

@@ -30,26 +30,12 @@ TEST(QuoteText, WordAttachesLeftForClosingPunctuation) {
   EXPECT_FALSE(wordAttachesLeft(nullptr));
 }
 
-TEST(QuoteText, JoinSuppressesSpaceBeforePunctuation) {
-  EXPECT_EQ("Hello, world!", joinQuoteWords({"Hello", ",", "world", "!"}));
-}
-
-TEST(QuoteText, JoinPlainWordsGetSingleSpaces) { EXPECT_EQ("a b c", joinQuoteWords({"a", "b", "c"})); }
-
-TEST(QuoteText, JoinHardCapsLength) {
-  const std::vector<std::string> many(1000, "xxxx");
-  EXPECT_LE(joinQuoteWords(many, 100).size(), 100u);
-}
-
-TEST(QuoteText, AppendBuildsTheSameStringAsJoin) {
-  // A quote picked across page ends is built one word at a time; it must come out
-  // byte-identical to the same words joined in one go on a single page.
+TEST(QuoteText, AppendSuppressesSpaceBeforePunctuation) {
   const std::vector<std::string> words = {"Hello", ",", "world", "!", "Again"};
   std::string out;
   for (const auto& word : words) {
     EXPECT_TRUE(appendQuoteWord(out, word.c_str()));
   }
-  EXPECT_EQ(joinQuoteWords(words), out);
   EXPECT_EQ("Hello, world! Again", out);
 }
 
@@ -80,12 +66,12 @@ TEST(QuoteText, AppendRejectsNull) {
 }
 
 TEST(QuoteText, EntryFormatMatchesSidecarLayout) {
-  EXPECT_EQ("\f[Ch 1]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "Hello world"));
+  EXPECT_EQ("\f[Ch 1]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "", "Hello world"));
 }
 
 TEST(QuoteText, EveryEntryOpensWithAPageBreak) {
   // The sidecar read as a book must start each quote on its own page.
-  EXPECT_EQ(PAGE_BREAK, formatQuoteEntry("Ch 1", "Hello")[0]);
+  EXPECT_EQ(PAGE_BREAK, formatQuoteEntry("Ch 1", "", "Hello")[0]);
   EXPECT_EQ(PAGE_BREAK, formatQuoteEntry("Ch 1", "@q1:1,2,3", "Hello")[0]);
 }
 
@@ -152,10 +138,6 @@ TEST(QuoteText, SplitChapterAnchorLeavesPlainTitleAlone) {
 
 TEST(QuoteText, EntryWithAnchorKeepsRecordGrammar) {
   EXPECT_EQ("\f[Ch 1 @q1:2,5,7]\nHello world\n---\n\n", formatQuoteEntry("Ch 1", "@q1:2,5,7", "Hello world"));
-}
-
-TEST(QuoteText, EntryWithEmptyAnchorWritesNoToken) {
-  EXPECT_EQ(formatQuoteEntry("Ch 1", "Hello world"), formatQuoteEntry("Ch 1", "", "Hello world"));
 }
 
 TEST(QuoteText, AnchoredEntryRoundTripsThroughSplit) {

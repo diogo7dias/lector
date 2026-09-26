@@ -222,8 +222,8 @@ const char* SettingsActivity::cellValue(const int index) const {
 }
 
 void SettingsActivity::rebuildSettingsList() {
-  // Built per category so each keeps its own grouping map, then concatenated: the
-  // four categories are the top-level order of one flat list, not four screens.
+  // Built per category so each keeps its own grouping map; selectCategory copies the
+  // open category's rows into `settings`.
   displaySettings.clear();
   readerSettings.clear();
   controlsSettings.clear();
@@ -378,21 +378,6 @@ void SettingsActivity::rebuildSettingsList() {
           // applyGroups draws no heading for a group whose rows are all missing.
           {StrId::STR_GRP_ADVANCED, {StrId::STR_FAST_PAGE_TURNS, StrId::STR_PERF_TIMINGS}},
       });
-
-  settings.clear();
-  settings.reserve(displaySettings.size() + readerSettings.size() + controlsSettings.size() + systemSettings.size());
-  // Reader first, then Display, Controls, System: ordered by how often a row is actually
-  // reached for. Text size, fonts and the status bar are tuned while reading; the
-  // frontlight is next, which is why it leads Display; buttons and the system rows are
-  // set once and then left alone.
-  // Copied, never moved: selectCategory reads the four vectors again every time a
-  // category is opened or a change rebuilds the list. Moving out of them leaves each row
-  // with an empty valueGetter/stringGetter, and calling one of those aborts.
-  for (const auto* category : {&readerSettings, &displaySettings, &controlsSettings, &systemSettings}) {
-    settings.insert(settings.end(), category->begin(), category->end());
-  }
-
-  settingsCount = static_cast<int>(settings.size());
 }
 
 void SettingsActivity::onEnter() {
@@ -508,11 +493,6 @@ void SettingsActivity::toggleCurrentSetting() {
   if (selectedSetting < 0 || selectedSetting >= settingsCount) {
     return;
   }
-  // Confirm on a heading does nothing; it is a divider, not an option.
-  if (settings[selectedSetting].isHeader) {
-    return;
-  }
-
   const auto& setting = settings[selectedSetting];
 
   if (setting.nameId == StrId::STR_TIME_TO_SLEEP) {

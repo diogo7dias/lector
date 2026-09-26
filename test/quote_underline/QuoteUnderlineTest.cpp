@@ -46,7 +46,7 @@ TEST(QuoteUnderline, SingleWordQuote) {
 }
 
 TEST(QuoteUnderline, PunctuationTokensMatchJoinedQuote) {
-  // The page keeps punctuation as its own token; joinQuoteWords glued it on.
+  // The page keeps punctuation as its own token; appendQuoteWord glued it on.
   const std::vector<const char*> words = {"Hello", ",", "world", "!"};
   size_t first = 99, last = 99;
   EXPECT_TRUE(find(words, "Hello, world!", 0, first, last));

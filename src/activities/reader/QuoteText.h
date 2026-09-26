@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
-#include <vector>
 
 // Pure, Arduino-free helpers for the Grab Quote feature so they can be host
 // tested. The interactive selection and the SD read-modify-write live in
@@ -56,21 +55,6 @@ inline bool appendQuoteWord(std::string& out, const char* word, const size_t max
   if (needsSpace) out.push_back(' ');
   out.append(word);
   return true;
-}
-
-// Join words with single spaces, suppressing the space before attaching
-// punctuation. Hard-capped at maxLen bytes.
-inline std::string joinQuoteWords(const std::vector<std::string>& words, const size_t maxLen = MAX_QUOTE_LENGTH) {
-  std::string out;
-  for (size_t i = 0; i < words.size(); i++) {
-    if (i > 0 && !wordAttachesLeft(words[i].c_str())) out.push_back(' ');
-    out.append(words[i]);
-    if (out.size() >= maxLen) {
-      out.resize(maxLen);
-      break;
-    }
-  }
-  return out;
 }
 
 // Where a quote sits in the book, so the reader can underline it again on a
@@ -177,11 +161,6 @@ inline std::string formatQuoteEntry(const std::string& chapter, const std::strin
   entry.append(quote);
   entry.append("\n---\n\n");
   return entry;
-}
-
-// Anchorless overload, kept so callers that have no position to record stay put.
-inline std::string formatQuoteEntry(const std::string& chapter, const std::string& quote) {
-  return formatQuoteEntry(chapter, "", quote);
 }
 
 }  // namespace quote_text

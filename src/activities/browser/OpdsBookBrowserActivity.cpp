@@ -28,8 +28,6 @@
 namespace {
 constexpr int SEARCH_ICON_SIZE = 24;
 constexpr int SEARCH_ICON_MARGIN = 14;
-constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
-constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
 
 // The search glyph sits inside the header band, at its right edge.
 int searchIconX(const GfxRenderer& renderer) {
@@ -59,7 +57,6 @@ void OpdsBookBrowserActivity::onEnter() {
   currentPath = "";
   setListSelection(0);
   consumeConfirm = false;
-  consumeBack = false;
   cancelRequested = false;
   reconnectDetail.clear();
   reconnectAttempt.clear();
@@ -261,25 +258,15 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   reconnectDetail.clear();
   reconnectAttempt.clear();
 
-  int lastRenderedPercent = -1;
-  unsigned long lastProgressUpdateMs = 0;
-
-  auto progressCb = [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
+  auto progressCb = [this](const size_t downloaded, const size_t total) {
     mappedInput.update();
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       cancelRequested = true;
     }
     downloadProgress = downloaded;
     downloadTotal = total;
-    const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
-    const unsigned long now = millis();
-    if (percent >= 100 || lastRenderedPercent < 0 || percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
-        now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
-      lastRenderedPercent = percent;
-      lastProgressUpdateMs = now;
-      // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
-      // loan ends. The counters still move, and the screen catches up after.
-    }
+    // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
+    // loan ends. The counters still move, and the screen catches up after.
   };
 
   std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
@@ -517,10 +504,6 @@ bool OpdsBookBrowserActivity::handleCustomInput() {
   // A press that opened this screen must not also act on it.
   if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     consumeConfirm = false;
-    return true;
-  }
-  if (consumeBack && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    consumeBack = false;
     return true;
   }
 

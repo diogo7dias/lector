@@ -27,7 +27,6 @@ class NearbyPositionSyncActivity final : public UiStatusActivity {
   explicit NearbyPositionSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                       const std::string& epubPath, int currentSpineIndex, int currentPage,
                                       int totalPagesInSpine, SavedProgressPosition localProgress,
-                                      std::string localChapterName,
                                       std::optional<uint16_t> currentParagraphIndex = std::nullopt);
 
   void onEnter() override;
