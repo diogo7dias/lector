@@ -581,7 +581,7 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
   }
   // Not runnable in this reader, or runnable only when a card read says so (Hold
   // Wallpaper checks the file is still there). Fall through to the shared handler, which
-  // answers the device-wide actions and reports the rest as unavailable.
+  // answers the device-wide actions; anything else is a dead press.
   return false;
 }
 

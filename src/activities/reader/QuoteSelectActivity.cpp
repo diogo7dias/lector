@@ -229,7 +229,11 @@ void QuoteSelectActivity::saveSelectedQuote() {
   // anchor was taken on the start word's own page (see the Confirm handler): the word
   // index is only a tie-break for a passage repeated inside the same paragraph, and
   // the quote text itself is what identifies the words.
-  saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor));
+  if (!saveQuoteToFile(quote, quote_text::formatAnchorToken(startAnchor))) {
+    // Full sidecar or a failed write: say so before the reader repaints over it.
+    GUI.drawPopup(renderer, tr(STR_QUOTE_SAVE_FAILED));
+    delay(1200);
+  }
 }
 
 // Atomic-ish read-modify-write append of one "[chapter @anchor]\nquote\n---\n\n"

@@ -13,9 +13,9 @@
 // does nothing at all and says nothing about it.
 //
 // This resolves a binding into the subset a reader without the in-book menu CAN honour:
-// the ones that need nothing but global state. Everything else resolves to None, and the
-// caller reports it the way the EPUB reader reports a bound-but-impossible function — with
-// the "not available" pop-up, so the press is never silently dropped.
+// the ones that need nothing but global state. Everything else resolves to None and falls
+// through to ActivityManager's device-wide actions; a press neither can run does nothing.
+// (Only the EPUB quick menu draws a "not available" pop-up.)
 //
 // Text Settings is deliberately NOT in the subset. The TXT reader keeps its own font and
 // size (txtSdFontFamilyName / txtFontPointSize, edited from its Confirm pop-up), so the
