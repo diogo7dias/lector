@@ -205,6 +205,13 @@ void NearbyFileTransferActivity::onExit() {
   if (session.shouldDiscardPartialFile()) discardPartialFile();
   if (group.expectsMore()) discardPartialFamily();
   closeFiles();
+  // A credential bundle holds passwords in the clear; sent or not, it leaves the
+  // card with this screen. The receiver deletes its copy on import.
+  if (mode == Mode::Send) {
+    for (const auto& path : sourcePaths) {
+      if (credential_bundle::isBundleFilename(path)) Storage.remove(path.c_str());
+    }
+  }
   Activity::onExit();
 }
 

@@ -816,8 +816,8 @@ void SettingsActivity::shareCredentials() {
     file.close();
   }
 
-  // The Nearby screen owns the radio for its lifetime and removes the bundle when
-  // it is done with it, so nothing here waits around holding passwords on the card.
+  // The Nearby screen owns the radio for its lifetime and removes the bundle in its
+  // onExit, so nothing here waits around holding passwords on the card.
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path));
 }
