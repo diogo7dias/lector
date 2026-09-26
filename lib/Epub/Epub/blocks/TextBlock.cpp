@@ -8,7 +8,6 @@
 
 #include <cstring>
 
-#include "../../../../src/fontIds.h"
 
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const bool hasGuideDots,
                             const uint16_t textBytes) {

@@ -9,6 +9,8 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include <unordered_map>
+
 #include "Epub/SpineFileNameIndex.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"

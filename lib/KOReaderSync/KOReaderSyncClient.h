@@ -100,10 +100,6 @@ class KOReaderSyncClient {
    */
   static Error updateProgress(const KOReaderProgress& progress);
 
-  /**
-   * Get human-readable error message.
-   */
-  static const char* errorString(Error error);
 
   /** HTTP status code from the last request (for diagnostics). */
   static int lastHttpCode;

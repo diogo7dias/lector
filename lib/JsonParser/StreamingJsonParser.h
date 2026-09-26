@@ -44,7 +44,6 @@ class StreamingJsonParser {
     IN_STRING_VALUE,
     IN_NUMBER,
     IN_LITERAL,
-    SKIP_STRING,
   };
 
   enum class Container : uint8_t {
@@ -57,7 +56,6 @@ class StreamingJsonParser {
   void handleStringChar(char c);
   void handleNumber(char c);
   void handleLiteral(char c);
-  void handleSkipString(char c);
 
   void appendToken(char c);
   void emitToken();

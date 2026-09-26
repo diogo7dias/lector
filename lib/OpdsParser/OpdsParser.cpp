@@ -118,22 +118,6 @@ void OpdsParser::flush() {
 
 bool OpdsParser::error() const { return errorOccured; }
 
-void OpdsParser::clear() {
-  slots.clear();
-  arenaUsed = 0;
-  searchTemplate.clear();
-  nextPageUrl.clear();
-  prevPageUrl.clear();
-  currentEntry.type = OpdsEntryType::NAVIGATION;
-  currentEntry.title.clear();
-  currentEntry.author.clear();
-  currentEntry.href.clear();
-  currentText.clear();
-  inEntry = inTitle = inAuthor = inAuthorName = false;
-  collectCurrentEntry = false;
-  feedTruncated = false;
-}
-
 bool OpdsParser::storeCurrentEntry() {
   if (slots.size() >= MAX_ENTRIES || !arena) return false;
   const size_t need = currentEntry.title.size() + currentEntry.author.size() + currentEntry.href.size();

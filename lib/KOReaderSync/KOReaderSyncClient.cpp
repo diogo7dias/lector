@@ -289,26 +289,3 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
 }
-
-const char* KOReaderSyncClient::errorString(Error error) {
-  switch (error) {
-    case OK:
-      return "Success";
-    case NO_CREDENTIALS:
-      return "No credentials configured";
-    case NETWORK_ERROR:
-      return "Network error";
-    case AUTH_FAILED:
-      return "Authentication failed";
-    case SERVER_ERROR:
-      return "Server error (try again later)";
-    case JSON_ERROR:
-      return "JSON parse error";
-    case NOT_FOUND:
-      return "No progress found";
-    case LOW_MEMORY:
-      return "Not enough memory for sync — please retry";
-    default:
-      return "Unknown error";
-  }
-}

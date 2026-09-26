@@ -14,7 +14,6 @@
 #include <iterator>
 #include <new>
 
-#include "../../../../src/fontIds.h"
 #include "Epub.h"
 #include "Epub/Page.h"
 #include "Epub/VisibleTextUtils.h"

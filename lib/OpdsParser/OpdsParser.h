@@ -80,11 +80,6 @@ class OpdsParser final : public Print {
   /** Number of entries collected so far. */
   size_t entryCount() const { return slots.size(); }
 
-  /**
-   * Clear all parsed entries.
-   */
-  void clear();
-
  private:
   // Expat callbacks
   static void XMLCALL startElement(void* userData, const XML_Char* name, const XML_Char** atts);
