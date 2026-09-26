@@ -43,6 +43,8 @@ class XtcReaderActivity final : public Activity {
   // One page forward or back, end-of-book handling included. Shared by the side keys and
   // by a paging action bound to any other button.
   void pageTurn(bool forward);
+  // Leave the End-of-Book screen for the book's last page.
+  void returnToLastPage();
   // Opens chapter selection when the book has chapters (short-press Confirm); no-op otherwise
   void openChapterSelection();
   void renderStatusBarOverlay(StatusBarOverlayPosition position) const;

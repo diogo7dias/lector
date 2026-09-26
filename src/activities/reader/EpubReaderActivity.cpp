@@ -920,10 +920,7 @@ void EpubReaderActivity::loop() {
         onGoHome();
         return;
       case EndOfBookOptions::Action::LastPage:
-        currentSpineIndex = std::max(epub->getSpineItemsCount() - 1, 0);
-        nextPageNumber = 0;
-        pendingPageJump = std::numeric_limits<uint16_t>::max();
-        requestUpdate();
+        returnToLastPage();
         return;
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
@@ -1024,10 +1021,7 @@ void EpubReaderActivity::loop() {
     if (nextTriggered) {
       onGoHome();
     } else {
-      currentSpineIndex = epub->getSpineItemsCount() - 1;
-      nextPageNumber = 0;
-      pendingPageJump = std::numeric_limits<uint16_t>::max();
-      requestUpdate();
+      returnToLastPage();
     }
     return;
   }
@@ -1645,6 +1639,14 @@ void EpubReaderActivity::onBookmarkJumpResult(const ActivityResult& result) {
       nextPageNumber = targetPage;
     }
   }
+}
+
+void EpubReaderActivity::returnToLastPage() {
+  currentSpineIndex = std::max(epub->getSpineItemsCount() - 1, 0);
+  nextPageNumber = 0;
+  // The "last page" sentinel: render() clamps it to the chapter's real last page.
+  pendingPageJump = std::numeric_limits<uint16_t>::max();
+  requestUpdate();
 }
 
 void EpubReaderActivity::openBookmarks() {

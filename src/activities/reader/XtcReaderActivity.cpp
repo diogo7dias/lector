@@ -114,8 +114,7 @@ void XtcReaderActivity::loop() {
         onGoHome();
         return;
       case EndOfBookOptions::Action::LastPage:
-        currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
-        requestUpdate();
+        returnToLastPage();
         return;
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
@@ -143,6 +142,11 @@ void XtcReaderActivity::loop() {
   pageTurn(nextTriggered);
 }
 
+void XtcReaderActivity::returnToLastPage() {
+  currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
+  requestUpdate();
+}
+
 void XtcReaderActivity::pageTurn(const bool forward) {
   const bool prevTriggered = !forward;
   const bool nextTriggered = forward;
@@ -158,8 +162,7 @@ void XtcReaderActivity::pageTurn(const bool forward) {
     if (nextTriggered) {
       onGoHome();
     } else {
-      currentPage = xtc->getPageCount() - 1;
-      requestUpdate();
+      returnToLastPage();
     }
     return;
   }

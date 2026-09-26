@@ -418,6 +418,8 @@ class EpubReaderActivity final : public Activity {
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
   void pageTurn(bool isForwardTurn);
+  // Leave the End-of-Book screen for the book's last page.
+  void returnToLastPage();
   void loadCachedBookmarks();
   void addBookmark();
 
