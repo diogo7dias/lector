@@ -1,5 +1,6 @@
 #include "EpdFont.h"
 
+#include <BidiUtils.h>
 #include <Utf8.h>
 
 #include <algorithm>
@@ -23,7 +24,10 @@ void EpdFont::getTextBounds(const char* string, const int startX, const int star
   uint32_t cp;
   uint32_t prevCp = 0;
   while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&string)))) {
-    const bool isCombining = utf8IsCombiningMark(cp);
+    // RTL vowel marks (niqqud, harakat) are zero-advance overlays in drawText, exactly like
+    // Latin combining marks; measuring them as base glyphs made pointed Hebrew/Arabic
+    // measure wider than it draws.
+    const bool isCombining = utf8IsCombiningMark(cp) || BidiUtils::isTransparentMark(cp);
 
     if (!isCombining) {
       cp = applyLigatures(cp, string);
