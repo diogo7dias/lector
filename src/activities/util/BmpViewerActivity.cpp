@@ -85,7 +85,7 @@ void BmpViewerActivity::drawHints() {
   const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
   const char* favLabel = effectiveFavorite() ? tr(STR_UNFAV) : tr(STR_FAV);
   const char* pauseLabel =
-      filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
+      crosspoint::sleep::isPaused(filePath) ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
   // Blank rather than "Set sleep cover" when the file cannot become one: a .png is
   // only usable as a sleep image while the Transparent face is selected.
   const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
