@@ -119,7 +119,8 @@ class BookMetadataCache {
   void createSpineEntry(const std::string& href);
   bool endContentOpfPass();
   bool beginTocPass();
-  void createTocEntry(const std::string& title, const std::string& href, const std::string& anchor, uint8_t level);
+  // target is the TOC link resolved against the TOC document's folder, with any "#anchor" still attached.
+  void createTocEntry(const std::string& title, const std::string& target, uint8_t level);
   bool endTocPass();
   bool endWrite();
   bool cleanupTmpFiles() const;

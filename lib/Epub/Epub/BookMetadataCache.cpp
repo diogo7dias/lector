@@ -439,12 +439,16 @@ void BookMetadataCache::buildSpineFileNameIndex() {
   LOG_DBG("BMC", "Built file-name index for %d spine items", spineCount);
 }
 
-void BookMetadataCache::createTocEntry(const std::string& title, const std::string& href, const std::string& anchor,
-                                       const uint8_t level) {
+void BookMetadataCache::createTocEntry(const std::string& title, const std::string& target, const uint8_t level) {
   if (!buildMode || !tocFile || !spineFile) {
     LOG_DBG("BMC", "createTocEntry called but not in build mode");
     return;
   }
+
+  const size_t pos = target.find('#');
+  const std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(target.substr(0, pos)));
+  const std::string anchor =
+      pos == std::string::npos ? std::string() : FsHelpers::decodeUriEscapes(target.substr(pos + 1));
 
   int16_t spineIndex = -1;
 

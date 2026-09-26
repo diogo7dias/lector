@@ -1,6 +1,5 @@
 #include "TocNcxParser.h"
 
-#include <FsHelpers.h>
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
@@ -118,18 +117,8 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
     // This is the safest place to push the data, assuming <navLabel> always comes before <content>.
     // NCX spec says navLabel comes before content.
     if (!self->currentLabel.empty() && !self->currentSrc.empty()) {
-      const std::string rawTarget = self->baseContentPath + self->currentSrc;
-      const size_t pos = rawTarget.find('#');
-      const std::string rawPath = pos == std::string::npos ? rawTarget : rawTarget.substr(0, pos);
-      std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(rawPath));
-      std::string anchor;
-
-      if (pos != std::string::npos) {
-        anchor = FsHelpers::decodeUriEscapes(rawTarget.substr(pos + 1));
-      }
-
       if (self->cache) {
-        self->cache->createTocEntry(self->currentLabel, href, anchor, self->currentDepth);
+        self->cache->createTocEntry(self->currentLabel, self->baseContentPath + self->currentSrc, self->currentDepth);
       }
 
       // Clear them so we don't re-add them if there are weird XML structures

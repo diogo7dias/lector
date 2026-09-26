@@ -1,6 +1,5 @@
 #include "TocNavParser.h"
 
-#include <FsHelpers.h>
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
@@ -99,19 +98,9 @@ void XMLCALL TocNavParser::endElement(void* userData, const XML_Char* name) {
   if (xmlLocalNameEquals(name, "a") && self->state == IN_ANCHOR) {
     // Create TOC entry when closing anchor tag (we have all data now)
     if (!self->currentLabel.empty() && !self->currentHref.empty()) {
-      const std::string rawTarget = self->baseContentPath + self->currentHref;
-      const size_t pos = rawTarget.find('#');
-      const std::string rawPath = pos == std::string::npos ? rawTarget : rawTarget.substr(0, pos);
-      std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(rawPath));
-      std::string anchor;
-
-      if (pos != std::string::npos) {
-        anchor = FsHelpers::decodeUriEscapes(rawTarget.substr(pos + 1));
-      }
-
       if (self->cache) {
         // olDepth gives us the nesting level (1-based from the outer ol)
-        self->cache->createTocEntry(self->currentLabel, href, anchor, self->olDepth);
+        self->cache->createTocEntry(self->currentLabel, self->baseContentPath + self->currentHref, self->olDepth);
       }
 
       self->currentLabel.clear();
