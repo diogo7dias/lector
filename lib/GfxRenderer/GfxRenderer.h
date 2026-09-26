@@ -120,6 +120,8 @@ class GfxRenderer {
   void drawPixelDither(int x, int y) const;
   template <Color color>
   void fillArc(int maxRadius, int cx, int cy, int xDir, int yDir) const;
+  void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
+  void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
   // Byte-aligned, orientation-specialized rectangle fill. Rotates the rect's
   // two opposing corners into physical-framebuffer space once, then walks each
   // physical row with head-mask / middle memset / tail-mask byte writes — no
@@ -253,23 +255,19 @@ class GfxRenderer {
                        RenderMode mode, bool state) const;
   void drawLine(int x1, int y1, int x2, int y2, bool state = true) const;
   void drawLine(int x1, int y1, int x2, int y2, int lineWidth, bool state) const;
-  void drawArc(int maxRadius, int cx, int cy, int xDir, int yDir, int lineWidth, bool state) const;
   void drawRect(int x, int y, int width, int height, bool state = true) const;
   void drawRect(int x, int y, int width, int height, int lineWidth, bool state) const;
   void drawRoundedRect(int x, int y, int width, int height, int lineWidth, int cornerRadius, bool state) const;
   void drawRoundedRect(int x, int y, int width, int height, int lineWidth, int cornerRadius, bool roundTopLeft,
                        bool roundTopRight, bool roundBottomLeft, bool roundBottomRight, bool state) const;
-  void maskRoundedRectOutsideCorners(int x, int y, int width, int height, int radius, Color color = Color::White) const;
   void fillRect(int x, int y, int width, int height, bool state = true) const;
   void fillRectDither(int x, int y, int width, int height, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, Color color) const;
   void fillRoundedRect(int x, int y, int width, int height, int cornerRadius, bool roundTopLeft, bool roundTopRight,
                        bool roundBottomLeft, bool roundBottomRight, Color color) const;
-  void drawImage(const uint8_t bitmap[], int x, int y, int width, int height) const;
   void drawIcon(const uint8_t bitmap[], int x, int y, int size) const;
   void drawBitmap(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight, float cropX = 0,
                   float cropY = 0) const;
-  void drawBitmap1Bit(const Bitmap& bitmap, int x, int y, int maxWidth, int maxHeight) const;
   // Counter-invert content images in the logical framebuffer so output-level
   // dark mode leaves their original polarity unchanged.
   void preserveImagePolarity(int x, int y, int width, int height) const;
@@ -388,16 +386,4 @@ class GfxRenderer {
   uint16_t getDisplayWidth() const { return panelWidth; }
   uint16_t getDisplayHeight() const { return panelHeight; }
   uint16_t getDisplayWidthBytes() const { return panelWidthBytes; }
-
-  // Region cache: take a logical (orientation-aware) rect, hit the framebuffer
-  // bytes that the rect can have touched, and pump them in or out of a caller-
-  // supplied buffer. Used by HomeActivity to snapshot just the cover tile
-  // (~16 KB in Portrait) instead of cloning the entire 48 KB framebuffer.
-  //
-  // getRegionByteSize: required buffer length for the rect at current orientation.
-  // copyRegionToBuffer / copyBufferToRegion: false if `bufSize` is smaller than that.
-  size_t getRegionByteSize(int logicalX, int logicalY, int logicalW, int logicalH) const;
-  bool copyRegionToBuffer(int logicalX, int logicalY, int logicalW, int logicalH, uint8_t* buf, size_t bufSize) const;
-  bool copyBufferToRegion(int logicalX, int logicalY, int logicalW, int logicalH, const uint8_t* buf,
-                          size_t bufSize) const;
 };

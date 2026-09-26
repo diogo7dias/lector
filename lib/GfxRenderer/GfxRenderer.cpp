@@ -1177,41 +1177,6 @@ template void GfxRenderer::fillRectImpl<Color::White>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::LightGray>(int, int, int, int) const;
 template void GfxRenderer::fillRectImpl<Color::DarkGray>(int, int, int, int) const;
 
-void GfxRenderer::maskRoundedRectOutsideCorners(const int x, const int y, const int width, const int height,
-                                                const int radius, const Color color) const {
-  if (radius <= 0 || color == Color::Clear) {
-    return;
-  }
-
-  const int rr = radius - 1;
-  const int rr2 = rr * rr;
-  for (int dy = 0; dy < radius; dy++) {
-    for (int dx = 0; dx < radius; dx++) {
-      const int tx = rr - dx;
-      const int ty = rr - dy;
-      if (tx * tx + ty * ty > rr2) {
-        if (color == Color::White || color == Color::Black) {
-          bool state = color == Color::Black;
-          drawPixel(x + dx, y + dy, state);                           // top-left
-          drawPixel(x + width - 1 - dx, y + dy, state);               // top-right
-          drawPixel(x + dx, y + height - 1 - dy, state);              // bottom-left
-          drawPixel(x + width - 1 - dx, y + height - 1 - dy, state);  // bottom-right
-        } else if (color == Color::LightGray) {
-          drawPixelDither<Color::LightGray>(x + dx, y + dy);                           // top-left
-          drawPixelDither<Color::LightGray>(x + width - 1 - dx, y + dy);               // top-right
-          drawPixelDither<Color::LightGray>(x + dx, y + height - 1 - dy);              // bottom-left
-          drawPixelDither<Color::LightGray>(x + width - 1 - dx, y + height - 1 - dy);  // bottom-right
-        } else if (color == Color::DarkGray) {
-          drawPixelDither<Color::DarkGray>(x + dx, y + dy);                           // top-left
-          drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + dy);               // top-right
-          drawPixelDither<Color::DarkGray>(x + dx, y + height - 1 - dy);              // bottom-left
-          drawPixelDither<Color::DarkGray>(x + width - 1 - dx, y + height - 1 - dy);  // bottom-right
-        }
-      }
-    }
-  }
-}
-
 template <Color color>
 void GfxRenderer::fillArc(const int maxRadius, const int cx, const int cy, const int xDir, const int yDir) const {
   if (maxRadius <= 0) return;
@@ -1322,29 +1287,6 @@ void GfxRenderer::fillRoundedRect(const int x, const int y, const int width, con
   if (roundBottomLeft) {
     fillArcTemplated(maxRadius, x + maxRadius, y + height - maxRadius - 1, -1, 1, color);
   }
-}
-
-void GfxRenderer::drawImage(const uint8_t bitmap[], const int x, const int y, const int width, const int height) const {
-  int rotatedX = 0;
-  int rotatedY = 0;
-  rotateCoordinates(orientation, x, y, &rotatedX, &rotatedY, panelWidth, panelHeight);
-  // Rotate origin corner
-  switch (orientation) {
-    case Portrait:
-      rotatedY = rotatedY - height;
-      break;
-    case PortraitInverted:
-      rotatedX = rotatedX - width;
-      break;
-    case LandscapeClockwise:
-      rotatedY = rotatedY - height;
-      rotatedX = rotatedX - width;
-      break;
-    case LandscapeCounterClockwise:
-      break;
-  }
-  // TODO: Rotate bits
-  display.drawImage(bitmap, rotatedX, rotatedY, width, height);
 }
 
 void GfxRenderer::drawIcon(const uint8_t bitmap[], const int x, const int y, const int size) const {
@@ -1947,89 +1889,6 @@ void GfxRenderer::tapToLogical(float nx, float ny, int& outX, int& outY) const {
       outY = phyY;
       break;
   }
-}
-
-// Translate a logical rect through rotateCoordinates and take the bounding
-// box of its four corners on the physical panel. Output coords are inclusive
-// and clamped. Returns false if the rect ends up fully off-panel.
-static bool logicalRectToPhysicalBounds(GfxRenderer::Orientation orientation, int lx, int ly, int lw, int lh,
-                                        uint16_t panelWidth, uint16_t panelHeight, int* outX0, int* outY0, int* outX1,
-                                        int* outY1) {
-  if (lw <= 0 || lh <= 0) return false;
-  int minX = INT32_MAX;
-  int minY = INT32_MAX;
-  int maxX = INT32_MIN;
-  int maxY = INT32_MIN;
-  const int corners[4][2] = {{lx, ly}, {lx + lw - 1, ly}, {lx, ly + lh - 1}, {lx + lw - 1, ly + lh - 1}};
-  for (auto& c : corners) {
-    int phyX;
-    int phyY;
-    rotateCoordinates(orientation, c[0], c[1], &phyX, &phyY, panelWidth, panelHeight);
-    if (phyX < minX) minX = phyX;
-    if (phyY < minY) minY = phyY;
-    if (phyX > maxX) maxX = phyX;
-    if (phyY > maxY) maxY = phyY;
-  }
-  if (minX < 0) minX = 0;
-  if (minY < 0) minY = 0;
-  if (maxX >= panelWidth) maxX = panelWidth - 1;
-  if (maxY >= panelHeight) maxY = panelHeight - 1;
-  if (minX > maxX || minY > maxY) return false;
-  *outX0 = minX;
-  *outY0 = minY;
-  *outX1 = maxX;
-  *outY1 = maxY;
-  return true;
-}
-
-size_t GfxRenderer::getRegionByteSize(int lx, int ly, int lw, int lh) const {
-  int x0, y0, x1, y1;
-  if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
-    return 0;
-  }
-  // x bounds are in pixels; widen to byte boundaries on either side so per-row
-  // memcpy stays byte-aligned even when the logical rect doesn't.
-  const int byteX0 = x0 / 8;
-  const int byteX1 = x1 / 8;
-  const int bytesPerRow = byteX1 - byteX0 + 1;
-  const int rowCount = y1 - y0 + 1;
-  return static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
-}
-
-bool GfxRenderer::copyRegionToBuffer(int lx, int ly, int lw, int lh, uint8_t* buf, size_t bufSize) const {
-  int x0, y0, x1, y1;
-  if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
-    return false;
-  }
-  const int byteX0 = x0 / 8;
-  const int byteX1 = x1 / 8;
-  const int bytesPerRow = byteX1 - byteX0 + 1;
-  const int rowCount = y1 - y0 + 1;
-  const size_t needed = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
-  if (bufSize < needed || !frameBuffer || !buf) return false;
-  for (int row = 0; row < rowCount; row++) {
-    const uint8_t* src = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
-    memcpy(buf + row * bytesPerRow, src, bytesPerRow);
-  }
-  return true;
-}
-
-bool GfxRenderer::copyBufferToRegion(int lx, int ly, int lw, int lh, const uint8_t* buf, size_t bufSize) const {
-  int x0, y0, x1, y1;
-  if (!logicalRectToPhysicalBounds(orientation, lx, ly, lw, lh, panelWidth, panelHeight, &x0, &y0, &x1, &y1)) {
-    return false;
-  }
-  const int byteX0 = x0 / 8;
-  const int byteX1 = x1 / 8;
-  const int bytesPerRow = byteX1 - byteX0 + 1;
-  const int rowCount = y1 - y0 + 1;
-  const size_t needed = static_cast<size_t>(bytesPerRow) * static_cast<size_t>(rowCount);
-  if (bufSize < needed || !frameBuffer || !buf) return false;
-  for (int row = 0; row < rowCount; row++) {
-    uint8_t* dst = frameBuffer + (y0 + row) * panelWidthBytes + byteX0;
-    memcpy(dst, buf + row * bytesPerRow, bytesPerRow);
-  }
-  return true;
 }
 
 int GfxRenderer::getSpaceWidth(const int fontId, const EpdFontFamily::Style style) const {

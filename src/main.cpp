@@ -49,7 +49,6 @@
 #include "network/FirmwareSwitchAudit.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WakeFacePolicy.h"
-#include "sleep/WakeRoutePolicy.h"
 #include "sleep/WakeSequence.h"
 #include "util/BookProgressFile.h"
 #include "util/ButtonNavigator.h"
@@ -157,10 +156,6 @@ void bindUiFontsForLanguage(GfxRenderer& renderer) {
   renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
 }
 
-// measurement of power button press duration calibration value
-unsigned long t1 = 0;
-unsigned long t2 = 0;
-
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
 RTC_NOINIT_ATTR uint32_t silentRebootMagic;
 RTC_NOINIT_ATTR uint32_t silentRebootTarget;
@@ -238,10 +233,6 @@ void enterDeepSleep(bool fromTimeout = false) {
   unsigned long sleepTFrame = sleepT0;
   unsigned long sleepTWifi = sleepT0;
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
-
-  // Only the retired crest face ever named the wake's book on the sleep screen; no face
-  // sets this any more, and a stale one from an older build must not force a wake.
-  APP_STATE.pendingWakeBookPath.clear();
 
   // ponytail: no save here. persistAntiGhostBudget() below writes APP_STATE after the paint,
   // and a JSON rewrite per lock stage was two redundant SD writes on every lock.
@@ -427,8 +418,6 @@ void setup() {
   // two small arrays.
   WakeTiming::beginWake();
   BoardConfig::holdPowerRails();
-
-  t1 = millis();
 
 #ifdef ENABLE_SERIAL_LOG
   // Earliest possible Serial setup. The 250 ms stall before begin() lets the
@@ -661,9 +650,6 @@ void setup() {
   const BootResume resume = isSilentReboot ? BootResume::Silent : BootResume::Splash;
   bool allowFastInitialReaderRefresh = false;
 
-  const bool sleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
-  const std::string pendingWakeBookPath = sleepWake ? APP_STATE.pendingWakeBookPath : std::string();
-
   const bool paintedFaceWake = resume == BootResume::Splash && wakeupReason == HalGPIO::WakeupReason::PowerButton;
   // Started here because the clear below is armed before routing is known; the routing
   // fields are filled in once they are.
@@ -725,16 +711,11 @@ void setup() {
   // recoveryFirmwareMode, which is only known once the check above has run. Still ahead
   // of routing into the chosen book below.
   std::string bootBookPath;
-  if (!pendingWakeBookPath.empty()) {
-    bootBookPath = pendingWakeBookPath;
-  } else if (SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode &&
-             !rebootedFromPanic && resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
-             !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
+  if (SETTINGS.bootBookMode != CrossPointSettings::BOOT_BOOK_OFF && !recoveryFirmwareMode && !rebootedFromPanic &&
+      resume != BootResume::Silent && APP_STATE.readerActivityLoadCount == 0 &&
+      !mappedInputManager.isPressed(MappedInputManager::Button::Back)) {
     bootBookPath = pickBootBookPath();
   }
-
-  const bool oneShotWakeFlagsSet = !APP_STATE.pendingWakeBookPath.empty();
-  APP_STATE.pendingWakeBookPath.clear();
 
   switch (resume) {
     case BootResume::Silent:
@@ -783,20 +764,12 @@ void setup() {
     }
   }
 
-  // The whole wake decision, once, in one Module. What used to happen here was three
-  // passes over the same raw inputs: wake_route::resolve was called, immediately
-  // overridden by an inline recovery/panic/silent ternary, and then re-decided by a
-  // six-arm if/else chain that read isPressed(Back) and readerActivityLoadCount for the
-  // third and fourth time. The tested helper could be — and was — contradicted by the
-  // untested layers wrapped around it. wake_sequence::plan() folds all three together, so
-  // the overrides are arms of the same decision rather than a correction applied to it.
-  const std::string forcedBookPath = pendingWakeBookPath.empty() ? APP_STATE.openEpubPath : pendingWakeBookPath;
+  // The whole wake decision, once, in one Module: wake_sequence::plan() reads each raw
+  // input once, so no untested layer can contradict it.
   wakeInputs.recoveryFirmwareMode = recoveryFirmwareMode;
   wakeInputs.panic = rebootedFromPanic;
   wakeInputs.silentReboot = resume == BootResume::Silent;
   wakeInputs.silentTargetIsReader = snapshotTarget == SILENT_REBOOT_TARGET_READER;
-  wakeInputs.forceBookOnWake = !pendingWakeBookPath.empty();
-  wakeInputs.hasForcedBook = !forcedBookPath.empty();
   wakeInputs.openEpubPathEmpty = APP_STATE.openEpubPath.empty();
   wakeInputs.lastSleepFromReader = APP_STATE.lastSleepFromReader;
   wakeInputs.backHeld = mappedInputManager.isPressed(MappedInputManager::Button::Back);
@@ -808,8 +781,6 @@ void setup() {
   // Whether the reader's first page turn has to clean up after a drive-all first paint.
   const bool firstTurnCleans =
       wake_face::firstPageTurnCleans(wake_sequence::clearStrategy(wakeInputs), gpio.deviceIsX3());
-
-  if (oneShotWakeFlagsSet) APP_STATE.saveToFile();
 
   // Straight-line executor: every decision above it, every side effect below it. The
   // wait rule that used to live only in a comment — "Every route but the reader paints
@@ -824,8 +795,8 @@ void setup() {
   // is COMMITTED before goToReader, which is the whole point: a crash while opening then
   // lands on home next boot instead of trying again forever.
   //
-  // Takes the path BY VALUE, deliberately. Two arms pass APP_STATE.openEpubPath and then
-  // clear that very field before opening it; a reference would be dangling by the time
+  // Takes the path BY VALUE, deliberately. The resume arm passes APP_STATE.openEpubPath and
+  // then clears that very field before opening it; a reference would be dangling by the time
   // goToReader read it. The original code copied it into a local for the same reason.
   const auto enterReader = [&](const std::string path, const bool withWakeFlags) {
     if (wakePlan.clearOpenEpubPath) APP_STATE.openEpubPath = "";
@@ -858,12 +829,6 @@ void setup() {
       // through to the sleep-wake "resume reader" logic, which fires on stale
       // openEpubPath + lastSleepFromReader from a prior session.
       activityManager.goHome();
-      break;
-    case wake_sequence::Target::ForcedReader:
-      enterReader(forcedBookPath, /*withWakeFlags=*/true);
-      break;
-    case wake_sequence::Target::ForcedHome:
-      activityManager.goHome(HomeMenuItem::NONE);
       break;
     case wake_sequence::Target::BootBookReader:
       // "Open Book on Boot" jumps straight into a book instead of home: the last-read

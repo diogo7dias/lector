@@ -35,10 +35,6 @@ class CrossPointState : public PersistableStore<CrossPointState> {
   // sleep is a chip reset: a RAM-only flag would re-warn on every wake below the
   // threshold. Cleared again once the charge climbs back over LOW_BATTERY_CLEAR_PERCENT.
   bool lowBatteryWarned = false;
-  // The book the next wake will open, chosen at lock so the sleep screen can name it.
-  // "Open Book on Boot" would otherwise pick at wake time, naming one book on
-  // the sleep screen and opening another. Empty means "use openEpubPath".
-  std::string pendingWakeBookPath;
   // Wallpaper the last sleep screen actually rendered, or empty when the sleep screen
   // was not a wallpaper. Deep sleep is a chip reset, so the wake has no other way to
   // know what the panel is holding. The wake uses it to tell a wallpaper sleep from a

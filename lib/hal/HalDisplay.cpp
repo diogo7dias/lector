@@ -47,16 +47,6 @@ void HalDisplay::begin(bool seamless, const wake_classify::WakeupReason wakeupRe
 
 void HalDisplay::clearScreen(uint8_t color) const { einkDisplay.clearScreen(color); }
 
-void HalDisplay::drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                           bool fromProgmem) const {
-  einkDisplay.drawImage(imageData, x, y, w, h, fromProgmem);
-}
-
-void HalDisplay::drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                                      bool fromProgmem) const {
-  einkDisplay.drawImageTransparent(imageData, x, y, w, h, fromProgmem);
-}
-
 EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
   switch (mode) {
     case HalDisplay::FULL_REFRESH:
@@ -159,8 +149,8 @@ void HalDisplay::noteRefreshTiming(const RefreshMode requested, const RefreshMod
   // Read once, here, so every refresh path reports the split without having to remember
   // to. The counters were armed by beginRefreshAccounting() at the top of that path.
   // Every path that reports must have armed them on entry, or it reports the PREVIOUS
-  // refresh's split alongside its own total. All five do: displayBuffer,
-  // displayBufferAsync, refreshDisplay, displayGrayscaleBase, displayGrayBuffer.
+  // refresh's split alongside its own total. All four do: displayBuffer,
+  // displayBufferAsync, displayGrayscaleBase, displayGrayBuffer.
   const uint32_t wireUs = EInkDisplay::refreshTransferMicros();
   const uint32_t waveUs = EInkDisplay::refreshBusyMicros();
   PerfStats::noteRefresh(requested, actual, totalUs, wireUs, waveUs);
@@ -228,23 +218,7 @@ void HalDisplay::waitRefreshComplete() {
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
-void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
-  const RefreshMode requested = mode;
-  EInkDisplay::resetRefreshAccounting();
-  const uint32_t startUs = micros();
-  const uint16_t thinkMs = PerfStats::takeThinkMs(millis());
-  mode = applyRefreshPolicy(mode);
-  if (needsX3HalfResync(requested, mode)) {
-    einkDisplay.requestResync(1);
-  }
-
-  einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
-  noteRefreshTiming(requested, mode, micros() - startUs, 0, thinkMs, 0);
-}
-
 void HalDisplay::setInverted(bool inverted) { einkDisplay.setInverted(inverted); }
-
-bool HalDisplay::toggleInverted() { return einkDisplay.toggleInverted(); }
 
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
 
@@ -273,10 +247,6 @@ uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(
 uint8_t* HalDisplay::lendFrameBufferStorage(uint32_t* sizeOut) { return einkDisplay.lendBuildStorage(sizeOut); }
 
 void HalDisplay::returnFrameBufferStorage() { einkDisplay.returnBuildStorage(); }
-
-void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer) {
-  einkDisplay.copyGrayscaleBuffers(lsbBuffer, msbBuffer);
-}
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
   const RefreshMode requested = fallback;
