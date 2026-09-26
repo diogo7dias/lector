@@ -46,6 +46,18 @@ class ZipFile {
   uint32_t lastCentralDirPos = 0;
   bool lastCentralDirPosValid = false;
 
+  // One central-directory record. name holds the NUL-terminated path only when
+  // nameLen < sizeof(name); longer names are skipped.
+  struct CentralDirEntry {
+    FileStatSlim stat;
+    uint32_t crc32;
+    uint16_t nameLen;
+    char name[256];
+  };
+
+  // Reads the record at the cursor and leaves the cursor on the next one.
+  // Returns false at the end of the central directory.
+  bool readCentralDirEntry(CentralDirEntry& entry);
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
   long getDataOffset(const FileStatSlim& fileStat);
   bool loadZipDetails();
@@ -94,35 +106,11 @@ class ZipFile {
 
     file.seek(zipDetails.centralDirOffset);
 
-    uint32_t sig;
-    char itemName[256];
-
-    while (file.available()) {
-      file.read(&sig, 4);
-      if (sig != 0x02014b50) {
-        break;
+    CentralDirEntry entry;
+    while (readCentralDirEntry(entry)) {
+      if (entry.nameLen < sizeof(entry.name)) {
+        callback(std::string_view{entry.name, entry.nameLen}, entry.crc32, entry.stat.compressedSize);
       }
-
-      file.seekCur(12);
-      uint32_t crc32, compressedSize;
-      file.read(&crc32, 4);
-      file.read(&compressedSize, 4);
-      file.seekCur(4);
-      uint16_t nameLen, m, k;
-      file.read(&nameLen, 2);
-      file.read(&m, 2);
-      file.read(&k, 2);
-      file.seekCur(12);
-
-      if (nameLen < sizeof(itemName)) {
-        file.read(itemName, nameLen);
-        itemName[nameLen] = '\0';
-        callback(std::string_view{itemName, nameLen}, crc32, compressedSize);
-      } else {
-        file.seekCur(nameLen);
-      }
-
-      file.seekCur(m + k);
     }
 
     if (!wasOpen) {
