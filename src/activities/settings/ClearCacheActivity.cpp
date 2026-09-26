@@ -16,8 +16,8 @@ void ClearCacheActivity::onEnter() {
   UiStatusActivity::onEnter();
 
   state = WARNING;
-  const char* options[] = {tr(STR_CANCEL), tr(STR_CLEAR_BUTTON)};
-  confirmPopup.show(tr(STR_CLEAR_READING_CACHE), options, 2, 0, [this](int idx) {
+  const char* options[] = {tr(STR_CANCEL), orphansOnly ? tr(STR_CLEAN_BUTTON) : tr(STR_CLEAR_BUTTON)};
+  confirmPopup.show(orphansOnly ? tr(STR_CLEAN_STORAGE) : tr(STR_CLEAR_READING_CACHE), options, 2, 0, [this](int idx) {
     if (idx == 1) {
       beginClear();
     } else {
@@ -31,25 +31,32 @@ void ClearCacheActivity::onExit() { Activity::onExit(); }
 
 UiStatusActivity::StatusView ClearCacheActivity::statusView() const {
   StatusView view;
-  view.title = tr(STR_CLEAR_READING_CACHE);
+  view.title = orphansOnly ? tr(STR_CLEAN_STORAGE) : tr(STR_CLEAR_READING_CACHE);
   switch (state) {
     case WARNING:
-      view.lines = {tr(STR_CLEAR_CACHE_WARNING_1), tr(STR_CLEAR_CACHE_WARNING_2), tr(STR_CLEAR_CACHE_WARNING_3),
-                    tr(STR_CLEAR_CACHE_WARNING_4)};
+      if (orphansOnly) {
+        view.lines = {tr(STR_CLEAN_STORAGE_WARNING_1), tr(STR_CLEAN_STORAGE_WARNING_2), tr(STR_CLEAN_STORAGE_WARNING_3),
+                      nullptr};
+      } else {
+        view.lines = {tr(STR_CLEAR_CACHE_WARNING_1), tr(STR_CLEAR_CACHE_WARNING_2), tr(STR_CLEAR_CACHE_WARNING_3),
+                      tr(STR_CLEAR_CACHE_WARNING_4)};
+      }
       view.backHint = tr(STR_CANCEL);
-      view.confirmHint = tr(STR_CLEAR_BUTTON);
+      view.confirmHint = orphansOnly ? tr(STR_CLEAN_BUTTON) : tr(STR_CLEAR_BUTTON);
       break;
     case CLEARING:
-      view.lines = {tr(STR_CLEARING_CACHE), nullptr, nullptr, nullptr};
+      view.lines = {orphansOnly ? tr(STR_CLEANING_STORAGE) : tr(STR_CLEARING_CACHE), nullptr, nullptr, nullptr};
       // No way out while the card is being written; the hints say so by staying
       // empty rather than offering a button that does nothing.
       view.backHint = "";
       break;
     case SUCCESS:
-      view.lines = {tr(STR_CACHE_CLEARED), resultLine.c_str(), nullptr, nullptr};
+      view.lines = {orphansOnly ? tr(STR_STORAGE_CLEANED) : tr(STR_CACHE_CLEARED), resultLine.c_str(), nullptr,
+                    nullptr};
       break;
     case FAILED:
-      view.lines = {tr(STR_CLEAR_CACHE_FAILED), tr(STR_CHECK_SERIAL_OUTPUT), nullptr, nullptr};
+      view.lines = {orphansOnly ? tr(STR_CLEAN_STORAGE_FAILED) : tr(STR_CLEAR_CACHE_FAILED),
+                    tr(STR_CHECK_SERIAL_OUTPUT), nullptr, nullptr};
       break;
   }
   return view;
@@ -73,16 +80,43 @@ void ClearCacheActivity::onBackButton() {
 }
 
 void ClearCacheActivity::beginClear() {
-  LOG_DBG("CLEAR_CACHE", "User confirmed, starting cache clear");
+  LOG_DBG(orphansOnly ? "CLEAN_STORAGE" : "CLEAR_CACHE", "User confirmed, starting sweep");
   {
     RenderLock lock(*this);
     state = CLEARING;
   }
+  // The sweep blocks this task for as long as it runs, so the "clearing" frame has
+  // to reach the panel before it starts or the user stares at the warning screen.
   requestUpdateAndWait();
   clearCache();
 }
 
 void ClearCacheActivity::clearCache() {
+  int removedCount = 0;
+  int keptCount = 0;
+  int failedCount = 0;
+  // cleanOrphanBookCaches deletes nothing at all unless it could enumerate every
+  // book on the card first, because a book it failed to see is indistinguishable
+  // from an orphan and its cache holds that book's reading progress.
+  const bool swept = orphansOnly ? cleanOrphanBookCaches(removedCount, keptCount, failedCount)
+                                 : clearAllCaches(removedCount, failedCount);
+  if (!swept) {
+    if (orphansOnly) {
+      LOG_ERR("CLEAN_STORAGE", "sweep aborted, nothing removed");
+    }
+    state = FAILED;
+    requestUpdate();
+    return;
+  }
+
+  resultLine = std::to_string(removedCount) + " " + std::string(tr(STR_ITEMS_REMOVED));
+  if (orphansOnly) resultLine += ", " + std::to_string(keptCount) + " " + std::string(tr(STR_ITEMS_KEPT));
+  if (failedCount > 0) resultLine += ", " + std::to_string(failedCount) + " " + std::string(tr(STR_FAILED_LOWER));
+  state = SUCCESS;
+  requestUpdate();
+}
+
+bool ClearCacheActivity::clearAllCaches(int& clearedCount, int& failedCount) {
   LOG_DBG("CLEAR_CACHE", "Clearing cache...");
 
   // Open .crosspoint directory
@@ -90,13 +124,9 @@ void ClearCacheActivity::clearCache() {
   if (!root || !root.isDirectory()) {
     LOG_DBG("CLEAR_CACHE", "Failed to open cache directory");
     if (root) root.close();
-    state = FAILED;
-    requestUpdate();
-    return;
+    return false;
   }
 
-  clearedCount = 0;
-  failedCount = 0;
   char name[128];
 
   // Iterate through all entries in the directory
@@ -124,9 +154,5 @@ void ClearCacheActivity::clearCache() {
   root.close();
 
   LOG_DBG("CLEAR_CACHE", "Cache cleared: %d removed, %d failed", clearedCount, failedCount);
-
-  resultLine = std::to_string(clearedCount) + " " + std::string(tr(STR_ITEMS_REMOVED));
-  if (failedCount > 0) resultLine += ", " + std::to_string(failedCount) + " " + std::string(tr(STR_FAILED_LOWER));
-  state = SUCCESS;
-  requestUpdate();
+  return true;
 }

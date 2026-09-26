@@ -13,7 +13,6 @@
 
 #include "ButtonBindingsActivity.h"
 #include "ButtonRemapActivity.h"
-#include "CleanStorageActivity.h"
 #include "ClearCacheActivity.h"
 #include "CrossPointSettings.h"
 #include "Diagnostics.h"
@@ -686,7 +685,8 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       }
       case SettingAction::CleanStorage:
-        startActivityForResult(std::make_unique<CleanStorageActivity>(renderer, mappedInput), resultHandler);
+        startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput, /*orphansOnly=*/true),
+                               resultHandler);
         break;
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);
