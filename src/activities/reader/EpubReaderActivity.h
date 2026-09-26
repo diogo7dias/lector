@@ -34,9 +34,6 @@ class EpubReaderActivity final : public Activity {
   ReaderPrefs prefs_;
   int sessionPages = 0;  // Status bar only; reset with this reader activity.
   bool prefsCustom_ = false;
-  // Paragraph numbers (#10): per-spine visible-paragraph counts for whole-book
-  // numbering, captured as pages render and persisted to paragraph_counts.bin so
-  // the whole-book base survives reopen. Finalizes as the book is read through.
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
