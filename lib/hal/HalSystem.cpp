@@ -83,7 +83,28 @@ void IRAM_ATTR __wrap_panic_print_backtrace(const void* frame, int core) {
 
 namespace HalSystem {
 
+namespace {
+// Read once in begin(): checkPanic() zeroes the capture marker after a dump, so a live
+// read would change its answer partway through boot.
+bool rebootedFromPanic = false;
+
+bool detectPanicReboot() {
+  const auto resetReason = esp_reset_reason();
+  if (resetReason == ESP_RST_PANIC || resetReason == ESP_RST_CPU_LOCKUP) {
+    return true;
+  }
+
+  // A watchdog reset only counts as a crash when a panic handler actually ran
+  // and captured something. A bare timeout reset carries no reason, and
+  // reporting it opened the crash screen with an empty message.
+  const bool watchdogReset =
+      resetReason == ESP_RST_INT_WDT || resetReason == ESP_RST_TASK_WDT || resetReason == ESP_RST_WDT;
+  return watchdogReset && panicCaptureMarker == PANIC_CAPTURE_MAGIC;
+}
+}  // namespace
+
 void begin() {
+  rebootedFromPanic = detectPanicReboot();
   // This is mostly for the first boot, we need to initialize the panic info and logs to empty state
   // If we reboot from a panic state, we want to keep the panic info until we successfully dump it to the SD card, use
   // `clearPanic()` to clear it after dumping
@@ -161,18 +182,6 @@ std::string getPanicInfo(bool full) {
   }
 }
 
-bool isRebootFromPanic() {
-  const auto resetReason = esp_reset_reason();
-  if (resetReason == ESP_RST_PANIC || resetReason == ESP_RST_CPU_LOCKUP) {
-    return true;
-  }
-
-  // A watchdog reset only counts as a crash when a panic handler actually ran
-  // and captured something. A bare timeout reset carries no reason, and
-  // reporting it opened the crash screen with an empty message.
-  const bool watchdogReset =
-      resetReason == ESP_RST_INT_WDT || resetReason == ESP_RST_TASK_WDT || resetReason == ESP_RST_WDT;
-  return watchdogReset && panicCaptureMarker == PANIC_CAPTURE_MAGIC;
-}
+bool isRebootFromPanic() { return rebootedFromPanic; }
 
 }  // namespace HalSystem

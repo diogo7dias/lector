@@ -469,10 +469,6 @@ void setup() {
 
   HalSystem::begin();
   WakeTiming::mark(WakeTiming::Stage::SysReady);
-  // checkPanic() clears the watchdog capture marker after a successful SD dump,
-  // so isRebootFromPanic() stops answering true partway through setup(). Latch
-  // the boot classification here, before that happens, and use it everywhere
-  // below.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
