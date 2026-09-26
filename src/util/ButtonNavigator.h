@@ -64,6 +64,16 @@ class ButtonNavigator final {
   void onPreviousStep(const Callback& callback);
   void onStep(const Buttons& buttons, const Callback& callback);
 
+  // The list host's button wiring, shared by UiListActivity and UiStatusActivity. A
+  // press steps one row on release and wraps. A hold travels in ROWS, not pages:
+  // paging per repeat crossed a long list faster than the panel could show it, with
+  // no way to stop on a row. One row per repeat, coarsened by holdRepeatStep() once
+  // the hold is plainly not a nudge (the numeric settings' ramp), clamped rather than
+  // wrapped because a hold that wraps never ends. A swipe arrives through the same
+  // continuous callback and stays a page: a finger that moved one row is useless.
+  // `selected` is read when each callback fires, so it always sees the last move.
+  void onListNav(const int& selected, int count, int pageRows, const std::function<void(int)>& moveTo);
+
   void onNextContinuous(const Callback& callback);
   void onPreviousContinuous(const Callback& callback);
   void onContinuous(const Buttons& buttons, const Callback& callback);

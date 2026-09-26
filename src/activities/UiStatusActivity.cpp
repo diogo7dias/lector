@@ -14,7 +14,6 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
-#include "util/HoldRepeat.h"
 #include "util/QrUtils.h"
 
 namespace fui = freeink::ui;
@@ -574,24 +573,9 @@ bool UiStatusActivity::moveChoice(const int delta) {
 bool UiStatusActivity::navigateList() {
   if (listCount_ <= 0) return false;
   bool moved = false;
-  const auto step = [&](const int index) {
+  listButtons_.onListNav(listNav_.selected, listCount_, listNav_.pageRows(), [&](const int index) {
     setListSelection(index);
     moved = true;
-  };
-  listButtons_.onNextRelease([&] { step(ButtonNavigator::nextIndex(listNav_.selected, listCount_)); });
-  listButtons_.onPreviousRelease([&] { step(ButtonNavigator::previousIndex(listNav_.selected, listCount_)); });
-  // Rows per repeat, ramping via holdRepeatStep, and clamped at the ends: same
-  // hold behaviour as UiListActivity, for the same reason (see there). A swipe
-  // comes through here too and stays a page.
-  listButtons_.onNextContinuous([&] {
-    step(ButtonNavigator::swipeDrivenPass()
-             ? ButtonNavigator::nextPageIndex(listNav_.selected, listCount_, listNav_.pageRows())
-             : ButtonNavigator::heldIndex(listNav_.selected, listCount_, holdRepeatStep(listButtons_.repeats())));
-  });
-  listButtons_.onPreviousContinuous([&] {
-    step(ButtonNavigator::swipeDrivenPass()
-             ? ButtonNavigator::previousPageIndex(listNav_.selected, listCount_, listNav_.pageRows())
-             : ButtonNavigator::heldIndex(listNav_.selected, listCount_, -holdRepeatStep(listButtons_.repeats())));
   });
   return moved;
 }
