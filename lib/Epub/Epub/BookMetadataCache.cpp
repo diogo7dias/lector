@@ -523,16 +523,19 @@ bool BookMetadataCache::load() {
     return false;
   }
 
-  serialization::readPod(bookFile, lutOffset);
-  serialization::readPod(bookFile, spineCount);
-  serialization::readPod(bookFile, tocCount);
-
-  serialization::readString(bookFile, coreMetadata.title);
-  serialization::readString(bookFile, coreMetadata.author);
-  serialization::readString(bookFile, coreMetadata.language);
-  serialization::readString(bookFile, coreMetadata.coverItemHref);
-  serialization::readString(bookFile, coreMetadata.textReferenceHref);
-  serialization::readString(bookFile, coreMetadata.description);
+  // Every field is positional: one refused string misaligns all that follow, so any
+  // failure here rejects the cache and it is rebuilt.
+  if (!serialization::readPod(bookFile, lutOffset) || !serialization::readPod(bookFile, spineCount) ||
+      !serialization::readPod(bookFile, tocCount) || !serialization::readString(bookFile, coreMetadata.title) ||
+      !serialization::readString(bookFile, coreMetadata.author) ||
+      !serialization::readString(bookFile, coreMetadata.language) ||
+      !serialization::readString(bookFile, coreMetadata.coverItemHref) ||
+      !serialization::readString(bookFile, coreMetadata.textReferenceHref) ||
+      !serialization::readString(bookFile, coreMetadata.description)) {
+    LOG_ERR("BMC", "book.bin header unreadable, rebuilding");
+    bookFile.close();
+    return false;
+  }
 
   // Cache cumulative spine sizes in RAM. The progress bar (every render) and percent
   // jumps otherwise pay 2 seeks + a heap-allocating SpineEntry read per access. Spine

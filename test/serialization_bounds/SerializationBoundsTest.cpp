@@ -153,3 +153,15 @@ TEST(SerializationBounds, PlausibilityIsBoundedByBothTheCapAndTheBytesLeft) {
   EXPECT_TRUE(serialization::stringLengthIsPlausible(serialization::kMaxStringBytes, 1u << 20));
   EXPECT_FALSE(serialization::stringLengthIsPlausible(serialization::kMaxStringBytes + 1, 1u << 20));
 }
+
+// The writer caps too, or it produces a string its own reader refuses (and with it every
+// field after that one). The cut lands on a UTF-8 boundary.
+TEST(SerializationBounds, TheWriterCapsAnOverlongStringOnACharacterBoundary) {
+  EXPECT_EQ(serialization::writableStringLength("short"), 5u);
+  std::string longAscii(serialization::kMaxStringBytes + 10, 'a');
+  EXPECT_EQ(serialization::writableStringLength(longAscii), serialization::kMaxStringBytes);
+  // A two-byte character straddling the cap is dropped whole.
+  std::string straddle(serialization::kMaxStringBytes - 1, 'a');
+  straddle += "\xC3\xA9tail";
+  EXPECT_EQ(serialization::writableStringLength(straddle), serialization::kMaxStringBytes - 1);
+}
