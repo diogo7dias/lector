@@ -1,5 +1,6 @@
 #include "ZipFile.h"
 
+#include <Fnv1a.h>
 #include <HalStorage.h>
 #include <InflateStream.h>
 #include <Logging.h>
@@ -295,7 +296,7 @@ int ZipFile::fillUncompressedSizes(std::deque<SizeTarget>& targets, std::deque<u
     if (entry.nameLen >= sizeof(entry.name)) continue;
 
     const uint16_t nameLen = entry.nameLen;
-    uint64_t hash = fnvHash64(entry.name, nameLen);
+    uint64_t hash = fnv1a::hash64({entry.name, nameLen});
     SizeTarget key = {hash, nameLen, 0};
 
     auto it = std::lower_bound(targets.begin(), targets.end(), key, [](const SizeTarget& a, const SizeTarget& b) {

@@ -28,6 +28,7 @@ add_library(crosspoint_test_common INTERFACE)
 target_include_directories(crosspoint_test_common INTERFACE
   ${REPO_ROOT}
   ${REPO_ROOT}/lib
+  ${REPO_ROOT}/lib/Serialization
 )
 target_compile_options(crosspoint_test_common INTERFACE
   -Wall
@@ -65,6 +66,7 @@ add_subdirectory(firmware_flash_write)
 add_subdirectory(diag_log)
 add_subdirectory(paragraph_number_layout)
 add_subdirectory(string_utils)
+add_subdirectory(fnv1a)
 add_subdirectory(quote_text)
 add_subdirectory(quote_underline)
 add_subdirectory(keyboard_field)

@@ -5,6 +5,9 @@
 #define REPLACEMENT_GLYPH 0xFFFD
 
 uint32_t utf8NextCodepoint(const unsigned char** string);
+// Writes a Unicode codepoint as 1-4 UTF-8 bytes at `out` and returns the end. No bounds
+// check: the caller guarantees 4 bytes of room.
+char* utf8EncodeCodepoint(uint32_t cp, char* out);
 // Appends a Unicode codepoint to a std::string in UTF-8 encoding.
 void utf8AppendCodepoint(uint32_t cp, std::string& out);
 // Remove the last UTF-8 codepoint from a std::string and return the new size.

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <Fnv1a.h>
+
 #include <algorithm>
 #include <cstdint>
 #include <deque>
@@ -39,16 +41,8 @@ class SpineFileNameIndex {
     return slash == std::string_view::npos ? path : path.substr(slash + 1);
   }
 
-  // FNV-1a 64-bit. Same offset basis and prime as BookMetadataCache::fnvHash64, so the
-  // two indexes stay comparable if they are ever merged.
-  static uint64_t hashOf(const std::string_view text) {
-    uint64_t hash = 14695981039346656037ULL;
-    for (const char c : text) {
-      hash ^= static_cast<uint8_t>(c);
-      hash *= 1099511628211ULL;
-    }
-    return hash;
-  }
+  // Same FNV-1a 64 as the BookMetadataCache href index, so the two stay comparable.
+  static uint64_t hashOf(const std::string_view text) { return fnv1a::hash64(text); }
 
   void reserve(const size_t count) { entries_.resize(count); }
 

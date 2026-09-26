@@ -27,16 +27,6 @@ class ZipFile {
     uint16_t index;  // Caller's index (e.g. spine index)
   };
 
-  // FNV-1a 64-bit hash computed from char buffer (no std::string allocation)
-  static uint64_t fnvHash64(const char* s, size_t len) {
-    uint64_t hash = 14695981039346656037ull;
-    for (size_t i = 0; i < len; i++) {
-      hash ^= static_cast<uint8_t>(s[i]);
-      hash *= 1099511628211ull;
-    }
-    return hash;
-  }
-
  private:
   const std::string& filePath;
   HalFile file;

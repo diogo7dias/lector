@@ -191,8 +191,8 @@ TEST(TtfFontId, FamilySizeAndContentAllChangeTheId) {
 TEST(TtfFontId, ContentHashFollowsBytes) {
   const uint8_t a[] = {1, 2, 3};
   const uint8_t b[] = {1, 2, 4};
-  EXPECT_NE(fnv1a(FNV1A_SEED, a, sizeof(a)), fnv1a(FNV1A_SEED, b, sizeof(b)));
-  EXPECT_EQ(fnv1a(FNV1A_SEED, a, sizeof(a)), fnv1a(FNV1A_SEED, a, sizeof(a)));
+  EXPECT_NE(fnv1a::hash32(a, sizeof(a)), fnv1a::hash32(b, sizeof(b)));
+  EXPECT_EQ(fnv1a::hash32(a, sizeof(a)), fnv1a::hash32(a, sizeof(a)));
 }
 
 // --- sfnt metrics -------------------------------------------------------------------------

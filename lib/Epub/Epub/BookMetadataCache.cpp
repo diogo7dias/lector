@@ -1,6 +1,7 @@
 #include "BookMetadataCache.h"
 
 #include <BufferedFile.h>
+#include <Fnv1a.h>
 #include <Logging.h>
 #include <Serialization.h>
 #include <Utf8.h>
@@ -133,7 +134,7 @@ bool BookMetadataCache::beginTocPass() {
     for (int i = 0; i < spineCount; i++) {
       auto entry = readSpineEntry(spineFile);
       SpineHrefIndexEntry idx;
-      idx.hrefHash = fnvHash64(entry.href);
+      idx.hrefHash = fnv1a::hash64(entry.href);
       idx.hrefLen = static_cast<uint16_t>(entry.href.size());
       idx.spineIndex = static_cast<int16_t>(i);
       spineHrefIndex[i] = idx;
@@ -299,7 +300,7 @@ bool BookMetadataCache::buildBookBin(const std::string& epubPath, const BookMeta
       std::string path = FsHelpers::normalisePath(entry.href);
 
       ZipFile::SizeTarget t;
-      t.hash = ZipFile::fnvHash64(path.c_str(), path.size());
+      t.hash = fnv1a::hash64(path);
       t.len = static_cast<uint16_t>(path.size());
       t.index = static_cast<uint16_t>(i);
       targets[i] = t;
@@ -453,7 +454,7 @@ void BookMetadataCache::createTocEntry(const std::string& title, const std::stri
   int16_t spineIndex = -1;
 
   if (useSpineHrefIndex) {
-    uint64_t targetHash = fnvHash64(href);
+    uint64_t targetHash = fnv1a::hash64(href);
     uint16_t targetLen = static_cast<uint16_t>(href.size());
 
     auto it =

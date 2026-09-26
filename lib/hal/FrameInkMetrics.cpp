@@ -1,5 +1,7 @@
 #include "FrameInkMetrics.h"
 
+#include <Fnv1a.h>
+
 namespace {
 
 // Black pixels are ZERO bits: the framebuffer is cleared to 0xFF for white (see
@@ -31,9 +33,6 @@ constexpr uint8_t kInkInByte[256] = {
 constexpr uint32_t kCoverageWeight = 3;
 constexpr uint32_t kChurnWeight = 7;
 constexpr uint32_t kWeightTotal = kCoverageWeight + kChurnWeight;
-
-constexpr uint32_t kFnvOffsetBasis = 2166136261u;
-constexpr uint32_t kFnvPrime = 16777619u;
 
 }  // namespace
 
@@ -68,12 +67,12 @@ FrameInkMetrics::Result FrameInkMetrics::update(const uint8_t* const frameBuffer
     uint32_t end = start + bandBytes;
     if (end > frameBytes) end = frameBytes;  // last band on a height that is not a multiple of 8
 
-    uint32_t hash = kFnvOffsetBasis;
+    uint32_t hash = fnv1a::OFFSET_BASIS_32;
     uint32_t ink = 0;
     for (uint32_t i = start; i < end; i++) {
       const uint8_t byte = frameBuffer[i];
       ink += kInkInByte[byte];
-      hash = (hash ^ byte) * kFnvPrime;
+      hash = fnv1a::mix32(hash, byte);
     }
 
     const uint16_t inkCount = static_cast<uint16_t>(ink);
