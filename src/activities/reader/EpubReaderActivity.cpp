@@ -382,39 +382,55 @@ void EpubReaderActivity::openReaderMenu() {
   // "View Quotes" is only offered once Grab Quote has actually written a sidecar for
   // this book; an empty viewer would be a dead row.
   const bool hasQuotes = Storage.exists(quote_text::quotesFilePathFor(epub->getPath()).c_str());
-  startActivityForResult(
-      std::make_unique<EpubReaderMenuActivity>(
-          renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
-          bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-          prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
-          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, prefs_.sbOffBar, hasSleepWallpaper, wallpaperFavorited,
-          wallpaperPausable, hasQuotes, !returnHistory.empty()),
-      [this](const ActivityResult& result) {
-        // Always apply orientation / paragraph-number / paperback changes even if cancelled
-        const auto& menu = std::get<MenuResult>(result.data);
-        applyOrientation(menu.orientation);
-        applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
-        applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
-        // Last of the live toggles because it is the only one that repaginates.
-        applyStatusBar(menu.statusBar, menu.progressBar);
-        // A hold inside the menu comes back cancelled with the bound function attached:
-        // no row was chosen, so this replaces the row action rather than following it.
-        //
-        // Runs AFTER the toggles above, never before. Grab Quote hands the picker a raw
-        // Section* and the picker outlives this callback; starting it first and then
-        // letting applyStatusBar/applyOrientation drop the section would leave that
-        // pointer dangling. In this order the worst case is a bound function that
-        // declines because the section is already gone, which every one of them handles.
-        if (menu.holdFunction != CrossPointSettings::LP_MENU_DISABLED) {
-          // Through the manager, like any other binding: the reader takes its own actions
-          // and the rest (Home, Rotate, Sleep...) fall through to the global ones.
-          activityManager.runBoundAction(menu.holdFunction);
-          return;
-        }
-        if (!result.isCancelled) {
-          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-        }
-      });
+  EpubReaderMenuActivity::Context menuContext;
+  menuContext.title = epub->getTitle();
+  menuContext.author = epub->getAuthor();
+  menuContext.chapterName = chapterName;
+  menuContext.currentPage = currentPage;
+  menuContext.totalPages = totalPages;
+  menuContext.bookProgressPercent = bookProgressPercent;
+  menuContext.currentOrientation = SETTINGS.orientation;
+  menuContext.hasFootnotes = !currentPageFootnotes.empty();
+  menuContext.hasBookmarks = !cachedBookmarks.empty();
+  menuContext.hasReaderOverride = prefsCustom_;
+  menuContext.paragraphNumbering = prefs_.paragraphNumbering;
+  menuContext.paragraphNumberSize = prefs_.paragraphNumberSize;
+  menuContext.paperbackBody = prefs_.paperbackLookBody;
+  menuContext.paperbackStatus = prefs_.paperbackLookStatus;
+  menuContext.statusBar = prefs_.statusBarEnabled;
+  menuContext.progressBar = prefs_.sbOffBar;
+  menuContext.hasSleepWallpaper = hasSleepWallpaper;
+  menuContext.wallpaperFavorited = wallpaperFavorited;
+  menuContext.wallpaperPausable = wallpaperPausable;
+  menuContext.hasQuotes = hasQuotes;
+  menuContext.hasReturn = !returnHistory.empty();
+  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, menuContext),
+                         [this](const ActivityResult& result) {
+                           // Always apply orientation / paragraph-number / paperback changes even if cancelled
+                           const auto& menu = std::get<MenuResult>(result.data);
+                           applyOrientation(menu.orientation);
+                           applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
+                           applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
+                           // Last of the live toggles because it is the only one that repaginates.
+                           applyStatusBar(menu.statusBar, menu.progressBar);
+                           // A hold inside the menu comes back cancelled with the bound function attached:
+                           // no row was chosen, so this replaces the row action rather than following it.
+                           //
+                           // Runs AFTER the toggles above, never before. Grab Quote hands the picker a raw
+                           // Section* and the picker outlives this callback; starting it first and then
+                           // letting applyStatusBar/applyOrientation drop the section would leave that
+                           // pointer dangling. In this order the worst case is a bound function that
+                           // declines because the section is already gone, which every one of them handles.
+                           if (menu.holdFunction != CrossPointSettings::LP_MENU_DISABLED) {
+                             // Through the manager, like any other binding: the reader takes its own actions
+                             // and the rest (Home, Rotate, Sleep...) fall through to the global ones.
+                             activityManager.runBoundAction(menu.holdFunction);
+                             return;
+                           }
+                           if (!result.isCancelled) {
+                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                           }
+                         });
 }
 
 bool EpubReaderActivity::buildTickHeapGate() {

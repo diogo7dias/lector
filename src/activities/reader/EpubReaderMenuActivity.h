@@ -57,15 +57,33 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // this enum — see buildTabs().
   enum class Tab : uint8_t { Navigate, ThisBook, Look, Sleep, Device };
 
-  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
-                                  const std::string& author, const std::string& chapterName, const int currentPage,
-                                  const int totalPages, const int bookProgressPercent, const uint8_t currentOrientation,
-                                  const bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride = false,
-                                  uint8_t paragraphNumbering = 0, uint8_t paragraphNumberSize = 1,
-                                  uint8_t paperbackBody = 1, uint8_t paperbackStatus = 1, uint8_t statusBar = 1,
-                                  uint8_t progressBar = 0, bool hasSleepWallpaper = false,
-                                  bool wallpaperFavorited = false, bool wallpaperPausable = false,
-                                  bool hasQuotes = false, bool hasReturn = false);
+  // What the reader hands the menu, by name. The constructor used to take 23 positional
+  // arguments, eleven of them adjacent bools and uint8_ts where a swap compiled silently.
+  struct Context {
+    std::string title;
+    std::string author;
+    std::string chapterName;
+    int currentPage = 0;
+    int totalPages = 0;
+    int bookProgressPercent = 0;
+    uint8_t currentOrientation = 0;
+    bool hasFootnotes = false;
+    bool hasBookmarks = false;
+    bool hasReaderOverride = false;
+    uint8_t paragraphNumbering = 0;
+    uint8_t paragraphNumberSize = 1;
+    uint8_t paperbackBody = 1;
+    uint8_t paperbackStatus = 1;
+    uint8_t statusBar = 1;
+    uint8_t progressBar = 0;
+    bool hasSleepWallpaper = false;
+    bool wallpaperFavorited = false;
+    bool wallpaperPausable = false;
+    bool hasQuotes = false;
+    bool hasReturn = false;
+  };
+
+  explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const Context& context);
 
   void onEnter() override;
   void onExit() override;
@@ -110,10 +128,9 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   // Builds only the tabs that have something to show, so indices into the result are
   // NOT Tab values and the Sleep tab simply is not there when no wallpaper is in play.
-  static std::vector<TabPage> buildTabs(bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride,
-                                        uint8_t paragraphNumbering, uint8_t statusBar, bool hasSleepWallpaper,
-                                        bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes,
-                                        bool hasReturn);
+  static std::vector<TabPage> buildTabs(const Context& context);
+  // The result every close hands back: the live toggles plus the chosen action.
+  MenuResult resultFor(int action) const;
   // Adds or removes the Progress Bar row to match selectedStatusBar, in place, so the
   // row appears the moment the Status Bar row is switched off rather than on the next
   // menu open. Called under the render lock; the focused header and Status Bar
