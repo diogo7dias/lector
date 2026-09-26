@@ -54,7 +54,7 @@ class Epub {
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;
-  const std::string& getTitle() const;
+  std::string getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
   std::string getCoverBmpPath(bool cropped = false) const;

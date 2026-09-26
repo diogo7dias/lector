@@ -638,13 +638,17 @@ const std::string& Epub::getCachePath() const { return cachePath; }
 
 const std::string& Epub::getPath() const { return filepath; }
 
-const std::string& Epub::getTitle() const {
-  static std::string blank;
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return blank;
+// Falls back to the file name, as Txt and Xtc do: an EPUB without dc:title showed
+// blank in Recents and the status bar.
+std::string Epub::getTitle() const {
+  if (bookMetadataCache && bookMetadataCache->isLoaded() && !bookMetadataCache->coreMetadata.title.empty()) {
+    return bookMetadataCache->coreMetadata.title;
   }
-
-  return bookMetadataCache->coreMetadata.title;
+  const size_t slash = filepath.find_last_of('/');
+  std::string name = slash == std::string::npos ? filepath : filepath.substr(slash + 1);
+  const size_t dot = name.find_last_of('.');
+  if (dot != std::string::npos && dot > 0) name.resize(dot);
+  return name;
 }
 
 const std::string& Epub::getAuthor() const {
