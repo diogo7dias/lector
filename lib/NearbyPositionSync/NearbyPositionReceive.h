@@ -50,18 +50,28 @@ struct CachedPosition {
   std::optional<uint32_t> offset;
 };
 
-inline std::optional<CachedPosition> readCachedPosition(const uint8_t* bytes, size_t size) {
+// The progress.bin format alone: 4, 6 or 10 little-endian bytes (spine, page[, pages
+// [, visible-text offset]]). No judgement about the values; the reader and the sync
+// sender each apply their own.
+inline std::optional<CachedPosition> decodeCachedPosition(const uint8_t* bytes, size_t size) {
   if (!bytes || (size != 4 && size != 6 && size != 10)) return std::nullopt;
   const auto u16 = [bytes](size_t i) { return static_cast<uint16_t>(bytes[i] | (bytes[i + 1] << 8)); };
   CachedPosition p;
   p.spine = u16(0);
   p.page = u16(2);
-  if (p.page == UINT16_MAX) return std::nullopt;  // reader's navigation sentinel
   if (size >= 6) p.pages = u16(4);
-  if (p.pages != 0 && p.page >= p.pages) return std::nullopt;
   if (size == 10) {
     p.offset = uint32_t(bytes[6]) | (uint32_t(bytes[7]) << 8) | (uint32_t(bytes[8]) << 16) | (uint32_t(bytes[9]) << 24);
   }
+  return p;
+}
+
+// A position worth sending to a peer: decoded, and neither the reader's navigation
+// sentinel nor a page past the chapter's end.
+inline std::optional<CachedPosition> readCachedPosition(const uint8_t* bytes, size_t size) {
+  const auto p = decodeCachedPosition(bytes, size);
+  if (!p || p->page == UINT16_MAX) return std::nullopt;
+  if (p->pages != 0 && p->page >= p->pages) return std::nullopt;
   return p;
 }
 

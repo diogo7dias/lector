@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <NearbyPositionReceive.h>
 #include <esp_random.h>
 #include <esp_system.h>
 
@@ -174,10 +175,12 @@ void EpubReaderActivity::onEnter() {
   HalFile f;
   if (!sortesMode && Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
-    int dataSize = f.read(data, sizeof(data));
-    if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
-      currentSpineIndex = data[0] + (data[1] << 8);
-      nextPageNumber = data[2] + (data[3] << 8);
+    const int dataSize = f.read(data, sizeof(data));
+    // Decoded by the same tested function the position sync uses. The reader keeps a
+    // page past the chapter's end (the section clamps it) rather than losing the spine.
+    if (const auto saved = nearby_position::decodeCachedPosition(data, dataSize > 0 ? dataSize : 0)) {
+      currentSpineIndex = saved->spine;
+      nextPageNumber = saved->page;
       if (nextPageNumber == UINT16_MAX) {
         // UINT16_MAX is an in-memory navigation sentinel for "open previous
         // chapter on its last page". It should never be treated as persisted
@@ -186,14 +189,9 @@ void EpubReaderActivity::onEnter() {
         nextPageNumber = 0;
       }
       cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = saved->pages;
+      cachedVisibleTextOffset = saved->offset;
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
-    }
-    if (dataSize == 6) {
-      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-    } else if (dataSize == 10) {
-      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-      cachedVisibleTextOffset = static_cast<uint32_t>(data[6]) | (static_cast<uint32_t>(data[7]) << 8) |
-                                (static_cast<uint32_t>(data[8]) << 16) | (static_cast<uint32_t>(data[9]) << 24);
     }
   }
   // We may want a better condition to detect if we are opening for the first time.
