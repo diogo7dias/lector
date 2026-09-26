@@ -311,6 +311,10 @@ class EpubReaderActivity final : public Activity {
   // The caller MUST already hold the render lock; reloadForReaderPrefsChange() is the
   // entry point for callers that do not.
   void dropSectionForRelayout();
+  // Keep the reading position (content offset, page, chapter total) in the cached_*
+  // fields the rebuild restores from, before the section is dropped. Caller holds the
+  // render lock; no-op without a section.
+  void cacheSectionPosition();
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Reader-menu actions, one per row; onReaderMenuConfirm routes to them.
   // Navigation

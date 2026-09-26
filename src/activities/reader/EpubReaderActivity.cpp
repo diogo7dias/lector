@@ -1281,12 +1281,7 @@ void EpubReaderActivity::openChapterSelection() {
   // cached-position rebuild a settings edit uses.
   {
     RenderLock lock(*this);
-    if (section) {
-      rememberCurrentContentOffset();
-      cachedSpineIndex = currentSpineIndex;
-      cachedChapterTotalPageCount = section->pageCount;
-      nextPageNumber = section->currentPage;
-    }
+    cacheSectionPosition();
     section.reset();
   }
   startActivityForResult(std::make_unique<EpubReaderChapterSelectionActivity>(renderer, mappedInput, *epub, spineIdx),
@@ -1772,19 +1767,8 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     return;
   }
 
-  // Preserve current reading position so we can restore after reflow.
   {
     RenderLock lock(*this);
-    if (section) {
-      rememberCurrentContentOffset();
-      cachedSpineIndex = currentSpineIndex;
-      cachedChapterTotalPageCount = section->pageCount;
-      nextPageNumber = section->currentPage;
-      // Rotating re-flows the chapter for a different viewport, so the page number is
-      // as unreliable here as it is after a font change; anchor on the paragraph too.
-      captureOrdinalAnchor();
-    }
-
     // Persist the selection so the reader keeps the new orientation on next launch.
     SETTINGS.orientation = orientation;
     SETTINGS.saveToFile();
@@ -1792,16 +1776,11 @@ void EpubReaderActivity::applyOrientation(const uint8_t orientation) {
     // Update renderer orientation to match the new logical coordinate system.
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
 
-    // Reset section to force re-layout in the new orientation.
-    section.reset();
-    // Rotating moves every pixel on the panel, so the next paint takes the cleanup path
-    // for the same reason a font change does.
-    scheduleGhostCleanup();
-    // Same page number, entirely different geometry: drop the remembered quote
-    // underline segments so they are worked out again for the new viewport.
-    underlineMemoSpine = -1;
-    underlineMemoPage = -1;
-    underlineMemo.clear();
+    // Rotating re-flows the chapter for a different viewport: the same relayout a font
+    // change takes (position and paragraph anchor kept, section dropped, ghost cleanup,
+    // underline memo cleared). The capture reads only the section, never the renderer,
+    // so running it after the orientation switch is safe.
+    dropSectionForRelayout();
   }
 }
 
@@ -1884,10 +1863,7 @@ void EpubReaderActivity::dropSectionForRelayout() {
   if (section) {
     // The content offset is what makes the rebuild stop in the right place; the
     // paragraph below is what picks the landing page once it has.
-    rememberCurrentContentOffset();
-    cachedSpineIndex = currentSpineIndex;
-    cachedChapterTotalPageCount = section->pageCount;
-    nextPageNumber = section->currentPage;
+    cacheSectionPosition();
     // nextPageNumber is kept only as the fallback: the new layout may have a different
     // page count entirely, so the paragraph below is what actually restores the place.
     captureOrdinalAnchor();
@@ -3183,6 +3159,14 @@ bool EpubReaderActivity::flushQueuedProgress() {
   const uint32_t positionKey = progressSaveDebouncer.lastObservedPosition();
   return saveProgress(static_cast<int>(positionKey >> 16), static_cast<int>(positionKey & 0xFFFFU),
                       static_cast<int>(progressSaveDebouncer.lastObservedMetadata()));
+}
+
+void EpubReaderActivity::cacheSectionPosition() {
+  if (!section) return;
+  rememberCurrentContentOffset();
+  cachedSpineIndex = currentSpineIndex;
+  cachedChapterTotalPageCount = section->pageCount;
+  nextPageNumber = section->currentPage;
 }
 
 void EpubReaderActivity::rememberCurrentContentOffset() {
