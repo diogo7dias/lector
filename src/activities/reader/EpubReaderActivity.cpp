@@ -408,7 +408,9 @@ void EpubReaderActivity::openReaderMenu() {
         // pointer dangling. In this order the worst case is a bound function that
         // declines because the section is already gone, which every one of them handles.
         if (menu.holdFunction != CrossPointSettings::LP_MENU_DISABLED) {
-          runBoundMenuFunction(menu.holdFunction);
+          // Through the manager, like any other binding: the reader takes its own actions
+          // and the rest (Home, Rotate, Sleep...) fall through to the global ones.
+          activityManager.runBoundAction(menu.holdFunction);
           return;
         }
         if (!result.isCancelled) {
@@ -572,6 +574,7 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
     case CrossPointSettings::LP_MENU_BOOKMARK:
+    case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
     // Bound to a key that does not already page (the Home key, or a side key whose single
@@ -962,7 +965,7 @@ void EpubReaderActivity::loop() {
                                             ? ReaderUtils::GO_HOME_MS
                                             : ReaderUtils::BOOKMARK_HOLD_MS;
     if (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED &&
-        mappedInput.getHeldTime() >= holdThreshold && runBoundMenuFunction(SETTINGS.longPressMenuFunction)) {
+        mappedInput.getHeldTime() >= holdThreshold && activityManager.runBoundAction(SETTINGS.longPressMenuFunction)) {
       ignoreNextConfirmRelease = true;  // suppress the menu on the release that follows
       return;
     }
