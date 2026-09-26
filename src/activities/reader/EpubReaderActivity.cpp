@@ -45,6 +45,7 @@
 #include "QuoteUnderline.h"
 #include "QuotesViewerActivity.h"
 #include "ReaderFontSizes.h"
+#include "ReaderMargins.h"
 #include "ReaderPresetStore.h"
 #include "ReaderPresetsActivity.h"
 #include "ReaderUtils.h"
@@ -455,35 +456,6 @@ void EpubReaderActivity::showBuildPopup() {
   buildPopupPending = false;
 }
 
-void EpubReaderActivity::computeReaderMargins(int& top, int& right, int& bottom, int& left) const {
-  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
-  // screenMargin is the horizontal margin; the vertical ones are always the two stored
-  // fields, kept equal by the settings screen while Link Top/Bottom is on.
-  const uint8_t topMargin = prefs_.screenMarginTop;
-  const uint8_t bottomMargin = prefs_.screenMarginBottom;
-  top += topMargin;
-  bottom += bottomMargin;
-  if (prefs_.dynamicMargins) {
-    // Auto-widen the horizontal margins toward a target ~62 characters per line,
-    // using the reader font's average glyph width as the yardstick. Floored at
-    // 10px (mode 1) or 20px (mode 2) and capped at 55px so a narrow orientation
-    // keeps a usable viewport. Replaces the fixed horizontal margin; the changed
-    // viewport width re-paginates via the section cache like any margin change.
-    const int fontId = SETTINGS.getReaderFontId(prefs_);
-    const int sampleWidth = renderer.getTextWidth(fontId, "abcdefghijklmnopqrstuvwxyz");
-    const int avgCharWidth = (sampleWidth > 0) ? sampleWidth / 26 : 8;
-    const int targetTextWidth = 62 * avgCharWidth;
-    const int availableWidth = renderer.getScreenWidth() - left - right;
-    const int minDynamicMargin = (prefs_.dynamicMargins >= 2) ? 20 : 10;
-    const int dynamicMargin = std::max(minDynamicMargin, std::min(55, (availableWidth - targetTextWidth) / 2));
-    left += dynamicMargin;
-    right += dynamicMargin;
-  } else {
-    left += prefs_.screenMargin;
-    right += prefs_.screenMargin;
-  }
-}
-
 void EpubReaderActivity::openDictionaryWordSelect() {
   if (SETTINGS.dictionaryName[0] == '\0') {
     showDictionaryMessage = true;
@@ -497,7 +469,8 @@ void EpubReaderActivity::openDictionaryWordSelect() {
 
   // Word geometry must match render(): use the same per-book reader margins.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  ReaderUtils::readerMargins(renderer, prefs_, orientedMarginTop, orientedMarginRight, orientedMarginBottom,
+                             orientedMarginLeft);
 
   // The page was laid out in this book's font (per-book prefs), so the word boxes must be too.
   startActivityForResult(
@@ -511,7 +484,8 @@ void EpubReaderActivity::openQuoteGrab() {
 
   // Word geometry must match render(): use the same per-book reader margins.
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  ReaderUtils::readerMargins(renderer, prefs_, orientedMarginTop, orientedMarginRight, orientedMarginBottom,
+                             orientedMarginLeft);
 
   // Lay out the picker with this book's actual reader font (per-book prefs), so
   // the highlight boxes line up with the rendered glyphs.
@@ -2515,9 +2489,10 @@ void EpubReaderActivity::render(RenderLock&& lock) {
 
   // Apply screen viewable areas and additional padding
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
-  computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
+  ReaderUtils::readerMargins(renderer, prefs_, orientedMarginTop, orientedMarginRight, orientedMarginBottom,
+                             orientedMarginLeft);
 
-  // Status bar (v2 per-item): reserve top and/or bottom bands. computeReaderMargins
+  // Status bar (v2 per-item): reserve top and/or bottom bands. readerMargins
   // already folded the reading margins into orientedMarginTop/Bottom; the band is
   // ADDED on top of that (a real gap between the bar and the text), matching the
   // additive left/right margins. Changing the band shifts the viewport, which
