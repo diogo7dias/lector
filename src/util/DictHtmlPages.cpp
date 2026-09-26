@@ -283,18 +283,28 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     // Heap-allocated as Section does — the parser object is far too large for
     // a stack local. Null epub is safe: imageRendering=2 suppresses <img>
     // handling, the only path that dereferences it.
-    auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-        nullptr, tmpPath, renderer, SETTINGS.getReaderFontId(), SETTINGS.getReaderLineCompression(),
-        SETTINGS.extraParagraphSpacing, SETTINGS.paragraphSpacing, SETTINGS.wordSpacing, SETTINGS.paragraphAlignment,
-        viewportWidth, viewportHeight, SETTINGS.focusReadingEnabled,
-        // A definition is a short popup, not a page of the book: guide dots and the
-        // first-line indent are reading-surface furniture and only add noise here.
-        // Percent mode at 0 is how "no indent" is spelled: there is no NONE mode, and
-        // BOOK mode would honour whatever indent the definition's own markup carries.
-        /*guideDotsMode=*/GUIDE_DOTS_OFF, /*firstLineIndentMode=*/CrossPointSettings::FIRST_LINE_INDENT_PERCENT,
-        /*firstLineIndentPercent=*/0, &collectPage, &collect,
-        /*embeddedTextStyle=*/false, /*embeddedLayoutStyle=*/false, /*contentBase=*/"", /*imageBasePath=*/"",
-        /*imageRendering=*/2);
+    ReaderRenderSpec spec;
+    spec.fontId = SETTINGS.getReaderFontId();
+    spec.lineCompression = SETTINGS.getReaderLineCompression();
+    spec.extraParagraphSpacing = SETTINGS.extraParagraphSpacing;
+    spec.paragraphSpacing = SETTINGS.paragraphSpacing;
+    spec.wordSpacing = SETTINGS.wordSpacing;
+    spec.paragraphAlignment = SETTINGS.paragraphAlignment;
+    spec.viewportWidth = viewportWidth;
+    spec.viewportHeight = viewportHeight;
+    spec.focusReadingEnabled = SETTINGS.focusReadingEnabled;
+    // A definition is a short popup, not a page of the book: guide dots and the
+    // first-line indent are reading-surface furniture and only add noise here.
+    // Percent mode at 0 is how "no indent" is spelled: there is no NONE mode, and
+    // BOOK mode would honour whatever indent the definition's own markup carries.
+    spec.guideDotsMode = GUIDE_DOTS_OFF;
+    spec.firstLineIndentMode = CrossPointSettings::FIRST_LINE_INDENT_PERCENT;
+    spec.firstLineIndentPercent = 0;
+    spec.embeddedTextStyle = false;
+    spec.embeddedLayoutStyle = false;
+    spec.imageRendering = 2;
+    auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(nullptr, tmpPath, renderer, spec, &collectPage, &collect,
+                                                           /*contentBase=*/"", /*imageBasePath=*/"");
     if (!parser) {
       LOG_ERR("DHTML", "OOM: ChapterHtmlSlimParser");
     } else {

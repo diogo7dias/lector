@@ -514,11 +514,8 @@ bool Section::startBuild(const ReaderRenderSpec& spec, const PopupFn popupFn, vo
   BuildContext* ctxPtr = ctx.get();
   ctxPtr->owner = this;
   ctx->parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(
-      &epub, ctxPtr->parsePath, renderer, spec.fontId, spec.lineCompression, spec.extraParagraphSpacing,
-      spec.paragraphSpacing, spec.wordSpacing, spec.paragraphAlignment, spec.viewportWidth, spec.viewportHeight,
-      spec.focusReadingEnabled, spec.guideDotsMode, spec.firstLineIndentMode, spec.firstLineIndentPercent,
-      &Section::appendPageToLut, ctxPtr, spec.embeddedTextStyle, spec.embeddedLayoutStyle, ctxPtr->contentBase,
-      ctxPtr->imageBasePath, spec.imageRendering, std::move(tocAnchors), popupFn, popupCtx, ctxPtr->cssParser);
+      &epub, ctxPtr->parsePath, renderer, spec, &Section::appendPageToLut, ctxPtr, ctxPtr->contentBase,
+      ctxPtr->imageBasePath, std::move(tocAnchors), popupFn, popupCtx, ctxPtr->cssParser);
   if (!ctx->parser) {
     LOG_ERR("SCT", "OOM: ChapterHtmlSlimParser");
     noteBuildFailure(BuildFailure::OomParser);
