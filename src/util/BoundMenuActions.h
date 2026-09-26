@@ -49,10 +49,8 @@ enum LONG_PRESS_MENU_FUNCTION {
   // The saved-quotes viewer, next to Grab Quote that writes to it.
   LP_MENU_VIEW_QUOTES = 15,
   // Sends this book's own file to another reader over ESP-NOW. Bindable to a
-  // button, but deliberately absent from POPUP_ITEM_FUNCTIONS below: popupItems
-  // is a 16-bit mask keyed by these values, and bit 15 is already the last one
-  // there is. Listing it in the pop-up means widening that mask and migrating
-  // every stored value.
+  // button, but not listed in POPUP_ITEM_FUNCTIONS below. popupItems is a 32-bit
+  // mask keyed by these values, so listing it there needs no mask migration.
   LP_MENU_NEARBY_SEND_BOOK = 16,
   // Appended for the per-button bindings (Buttons settings screen). The first four
   // are what a button does rather than what a menu offers, so they are absent from

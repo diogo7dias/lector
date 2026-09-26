@@ -91,7 +91,6 @@ void logWakeTimingToPerfLog() {
   if (!PerfLog::isActive()) return;
   char timings[176];
   WakeTiming::formatDiagnostic(timings, sizeof(timings));
-  if (timings[0] == '\0') return;
   char line[192];
   snprintf(line, sizeof(line), "wake %s", timings);
   PerfLog::note(line);

@@ -16,8 +16,9 @@ namespace orientation_cycle {
 // Values are CrossPointSettings::READER_ORIENTATION. Spelled out here so this stays
 // host-testable without the storage layer.
 inline uint8_t next(const uint8_t orientation) {
-  // Landscape CW is the only value that leads anywhere but portrait: every orientation
-  // outside the cycle enters it at portrait rather than making the press dead.
+  // Portrait is the only value that leads anywhere but portrait (to Landscape CW): every
+  // other orientation, in the cycle or not, returns to portrait rather than making the
+  // press dead.
   return orientation == 0 ? 1 : 0;
 }
 

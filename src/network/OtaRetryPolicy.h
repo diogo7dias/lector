@@ -4,7 +4,7 @@
 #include <cstdint>
 
 // Decisions a firmware install makes when an attempt ends badly, kept free of
-// Arduino, TLS and esp_ota headers so they can be reasoned about (and tested)
+// Arduino, TLS and ESP-IDF partition headers so they can be reasoned about (and tested)
 // on their own. A 5 MB image over a marginal link drops often enough that one
 // attempt is not a fair test of whether the update can be had at all.
 namespace ota_retry {
@@ -18,7 +18,7 @@ constexpr int MAX_ATTEMPTS = 3;
 // Why an attempt ended. Only one of these is the link's fault.
 enum class Failure {
   DOWNLOAD,     // the transfer stopped early: dropped connection, TLS reset, timeout
-  FLASH_WRITE,  // esp_ota_write refused the bytes
+  FLASH_WRITE,  // the partition write (esp_partition_write) refused the bytes
   WRONG_CHIP,   // the image is built for another MCU
 };
 
@@ -34,7 +34,7 @@ inline bool shouldRetry(const Failure failure, const int attemptsMade) {
 // asked again the same instant.
 inline unsigned long backoffMs(const int attemptsMade) { return static_cast<unsigned long>(attemptsMade) * 1000UL; }
 
-// esp_ota_write appends, so bytes already written stay written and the next
+// StreamingInstall appends, so bytes already written stay written and the next
 // attempt asks the server for the rest. Nothing written means nothing to resume.
 inline size_t resumeOffset(const size_t bytesWritten) { return bytesWritten; }
 

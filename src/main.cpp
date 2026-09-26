@@ -608,11 +608,11 @@ void setup() {
   WakeTiming::loadPrevious();
   logWakeTimingToPerfLog();
   // Also on serial, so a kit log answers the unlock half without the card having to be
-  // read. Empty on the first boot after a flash, when there is no previous wake to report.
+  // read. On the first boot after a flash it says there is no previous wake yet.
   {
     char wakeDiag[176];
     WakeTiming::formatDiagnostic(wakeDiag, sizeof(wakeDiag));
-    if (wakeDiag[0] != '\0') LOG_INF("SLP", "Unlock %s", wakeDiag);
+    LOG_INF("SLP", "Unlock %s", wakeDiag);
   }
 
   // Brightness and warmth always come back; whether the light itself does is

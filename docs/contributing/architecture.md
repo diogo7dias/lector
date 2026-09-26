@@ -48,7 +48,8 @@ In each loop iteration, the firmware updates input, runs the active activity, ha
 ## Activity model
 
 Activities are screen-level controllers deriving from `src/activities/Activity.h`.
-Some flows use `src/activities/ActivityWithSubactivity.h` to host nested activities.
+`src/activities/ActivityManager.h` owns them as a stack: `replaceActivity()` (and the `goTo...()` wrappers) swap the whole stack, `pushActivity()` / `popActivity()` nest one screen over another.
+A screen that needs an answer back calls `startActivityForResult()`; the child calls `setResult()` and `finish()`, and the parent's handler receives an `ActivityResult` (`src/activities/ActivityResult.h`).
 
 - `onEnter()` and `onExit()` manage setup/teardown
 - `loop()` handles per-frame behavior

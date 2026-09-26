@@ -15,16 +15,9 @@
 
 struct SettingInfo;
 
-// Reader text settings: a live page preview over ONE scrolling list of every setting,
-// banded into sections (Type / Spacing / Margins / Reading aids). The tab bar this screen
-// used to carry is gone — the sections are drawList's own heading rows, which navigation
-// steps past, so Up/Down walks the whole tree without a mode switch.
-//
-// Numeric rows are edited IN PLACE (Confirm arms the row, Up/Down move the value) rather
-// than through a popup, because a popup would cover the very preview the number is being
-// judged against.
-// Auto-repeat timing for an armed numeric row. Deliberately faster than ButtonNavigator's
-// list defaults: these ranges run to 150, so a list-speed hold would never finish.
+// Reader text settings: a live page preview in the band above a grid of name-over-value
+// cells, one per setting (UiGridActivity). Toggles flip on Confirm, pickers open an
+// OptionPopup, and numeric cells open the shared slider dialog (IntervalSelectionActivity).
 
 class TextSettingsActivity final : public UiGridActivity {
  public:

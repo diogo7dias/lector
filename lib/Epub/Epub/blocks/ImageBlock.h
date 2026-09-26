@@ -43,7 +43,7 @@ class ImageBlock final : public Block {
 
  private:
   std::string imagePath;
-  std::string srcPath;  // book-internal source href; empty once known-extracted
+  std::string srcPath;  // book-internal source href; render() extracts from it when imagePath is missing
   int16_t width;
   int16_t height;
 

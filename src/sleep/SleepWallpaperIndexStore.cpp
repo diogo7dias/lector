@@ -552,8 +552,8 @@ void reconcileAtColdBoot(GfxRenderer& renderer) {
 
   if (plan == sleep_reconcile::Plan::IncrementalAppend) {
     // Pass 1: hash the known records (transient, freed before boot continues).
-    // Read sequentially in record chunks — one block read per 25 records, not
-    // a seek per record.
+    // Read sequentially in record chunks (one block read per kReadChunkRecords
+    // records), not a seek per record.
     sleep_reconcile::NameHashSet known;
     known.reserve(recordCount);
     {

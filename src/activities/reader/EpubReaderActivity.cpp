@@ -2011,8 +2011,8 @@ void EpubReaderActivity::applyStatusBarEdit() {
 
 void EpubReaderActivity::resetReaderPrefsToGlobal() {
   if (!sortesMode) Storage.remove(readerOverridePath().c_str());
-  // Not ReaderPrefs::fromGlobal(): inside the Reader Settings screen the live reader
-  // fields hold this book's values, not the global ones.
+  // SETTINGS only ever holds the global look (Text Settings edits a copy), so
+  // fromGlobal() is the true global snapshot.
   prefs_ = ReaderPrefs::fromGlobal();
   prefsCustom_ = false;
   // An SD family keeps exactly one size resident and the id resolver returns whichever that

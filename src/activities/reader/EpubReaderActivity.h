@@ -212,7 +212,7 @@ class EpubReaderActivity final : public Activity {
   // Reader text margins from the per-book prefs: oriented viewable insets plus the
   // user screen margins (uniform or independent top/bottom, and dynamic horizontal
   // auto-widen toward ~62 chars/line). `bottom` is the base reading margin only; the
-  // render path folds any status-bar band into the bottom separately (max-overlap).
+  // render path adds any status-bar band on top of these margins separately.
   void computeReaderMargins(int& top, int& right, int& bottom, int& left) const;
   void renderStatusBar() const;
   // Pages laid out per incremental-build pump: on the render path (catching up to the page
