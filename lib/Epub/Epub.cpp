@@ -693,76 +693,45 @@ bool Epub::generateCoverBmp(bool cropped) const {
     return false;
   }
 
-  if (FsHelpers::hasJpgExtension(coverImageHref)) {
-    LOG_DBG("EBP", "Generating BMP from JPG cover image (%s mode)", cropped ? "cropped" : "fit");
-    const auto coverJpgTempPath = getCachePath() + "/.cover.jpg";
+  const bool png = !FsHelpers::hasJpgExtension(coverImageHref);
+  if (png && !FsHelpers::hasPngExtension(coverImageHref)) {
+    LOG_ERR("EBP", "Cover image is not a supported format, skipping");
+    return false;
+  }
+  const char* const format = png ? "PNG" : "JPG";
 
-    HalFile coverJpg;
-    if (!Storage.openFileForWrite("EBP", coverJpgTempPath, coverJpg)) {
-      return false;
-    }
-    readItemContentsToStream(coverImageHref, coverJpg, 1024);
-    // Explicitly close() file before reopening for reading
-    coverJpg.close();
+  LOG_DBG("EBP", "Generating BMP from %s cover image (%s mode)", format, cropped ? "cropped" : "fit");
+  const auto coverTempPath = getCachePath() + (png ? "/.cover.png" : "/.cover.jpg");
 
-    if (!Storage.openFileForRead("EBP", coverJpgTempPath, coverJpg)) {
-      return false;
-    }
+  HalFile coverImage;
+  if (!Storage.openFileForWrite("EBP", coverTempPath, coverImage)) {
+    return false;
+  }
+  readItemContentsToStream(coverImageHref, coverImage, 1024);
+  // Explicitly close() file before reopening for reading
+  coverImage.close();
 
-    HalFile coverBmp;
-    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
-      return false;
-    }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp, cropped);
-    // Explicitly close() files before calling Storage.remove()
-    coverJpg.close();
-    coverBmp.close();
-    Storage.remove(coverJpgTempPath.c_str());
-
-    if (!success) {
-      LOG_ERR("EBP", "Failed to generate BMP from cover image");
-      Storage.remove(getCoverBmpPath(cropped).c_str());
-    }
-    LOG_DBG("EBP", "Generated BMP from JPG cover image, success: %s", success ? "yes" : "no");
-    return success;
+  if (!Storage.openFileForRead("EBP", coverTempPath, coverImage)) {
+    return false;
   }
 
-  if (FsHelpers::hasPngExtension(coverImageHref)) {
-    LOG_DBG("EBP", "Generating BMP from PNG cover image (%s mode)", cropped ? "cropped" : "fit");
-    const auto coverPngTempPath = getCachePath() + "/.cover.png";
-
-    HalFile coverPng;
-    if (!Storage.openFileForWrite("EBP", coverPngTempPath, coverPng)) {
-      return false;
-    }
-    readItemContentsToStream(coverImageHref, coverPng, 1024);
-    // Explicitly close() file before reopening for reading
-    coverPng.close();
-
-    if (!Storage.openFileForRead("EBP", coverPngTempPath, coverPng)) {
-      return false;
-    }
-
-    HalFile coverBmp;
-    if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
-      return false;
-    }
-    const bool success = PngToBmpConverter::pngFileToBmpStream(coverPng, coverBmp, cropped);
-    // Explicitly close() files before calling Storage.remove()
-    coverPng.close();
-    coverBmp.close();
-    Storage.remove(coverPngTempPath.c_str());
-
-    if (!success) {
-      LOG_ERR("EBP", "Failed to generate BMP from PNG cover image");
-      Storage.remove(getCoverBmpPath(cropped).c_str());
-    }
-    LOG_DBG("EBP", "Generated BMP from PNG cover image, success: %s", success ? "yes" : "no");
-    return success;
+  HalFile coverBmp;
+  if (!Storage.openFileForWrite("EBP", getCoverBmpPath(cropped), coverBmp)) {
+    return false;
   }
+  const bool success = png ? PngToBmpConverter::pngFileToBmpStream(coverImage, coverBmp, cropped)
+                           : JpegToBmpConverter::jpegFileToBmpStream(coverImage, coverBmp, cropped);
+  // Explicitly close() files before calling Storage.remove()
+  coverImage.close();
+  coverBmp.close();
+  Storage.remove(coverTempPath.c_str());
 
-  LOG_ERR("EBP", "Cover image is not a supported format, skipping");
-  return false;
+  if (!success) {
+    LOG_ERR("EBP", "Failed to generate BMP from %s cover image", format);
+    Storage.remove(getCoverBmpPath(cropped).c_str());
+  }
+  LOG_DBG("EBP", "Generated BMP from %s cover image, success: %s", format, success ? "yes" : "no");
+  return success;
 }
 
 std::string Epub::getThumbBmpPath() const { return cachePath + "/thumb_[HEIGHT].bmp"; }
