@@ -252,3 +252,16 @@ TEST(TransparentMark, LettersAndLatinMarksAreNot) {
   EXPECT_FALSE(BidiUtils::isTransparentMark(0x0661));  // Arabic-Indic digit
   EXPECT_FALSE(BidiUtils::isTransparentMark('a'));
 }
+
+/* ── Mirroring (L4) ──────────────────────────────────────────────────── */
+
+// L4 mirrors by each character's own resolved level. Mirroring after the L2
+// reorder used the level of whatever sat at that index before, doubling brackets.
+TEST(BidiMirroring, BracketsAroundHebrewInAnRtlParagraph) {
+  EXPECT_EQ(shapeVisual({'(', 0x05D0, ')', ' ', 'b'}), (CP{'b', ' ', '(', 0x05D0, ')'}));
+}
+
+TEST(BidiMirroring, BracketsAroundLatinInAnRtlParagraph) {
+  EXPECT_EQ(shapeVisual({0x05E9, 0x05DC, ' ', '(', 'W', 'o', 'r', 'l', 'd', ')'}),
+            (CP{'(', 'W', 'o', 'r', 'l', 'd', ')', ' ', 0x05DC, 0x05E9}));
+}
