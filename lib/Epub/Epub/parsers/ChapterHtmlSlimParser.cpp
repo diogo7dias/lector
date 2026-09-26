@@ -351,7 +351,7 @@ void ChapterHtmlSlimParser::flushPartWordBuffer() {
     fallbackTableRowToStacked();
   }
 
-  currentTextBlock->addWord(partWordBuffer, fontStyle, false, nextWordContinues, partWordVisibleOffset);
+  currentTextBlock->addWord(partWordBuffer, fontStyle, nextWordContinues, partWordVisibleOffset);
   if (insideTableCell && !tableRowStacked) {
     tableCellTextBytes += wordBytes;
     if (currentTextBlock->size() > MAX_GRID_TABLE_CELL_WORDS) {
@@ -410,9 +410,8 @@ void ChapterHtmlSlimParser::startNewTextBlock(const BlockStyle& blockStyle) {
   // If the pending anchor is a TOC chapter boundary, force a page break after the previous
   // block is flushed so the chapter starts on a fresh page.
   flushPendingAnchor();
-  currentTextBlock =
-      makeUniqueNoThrow<ParsedText>(extraParagraphSpacing, focusReadingEnabled, guideDotsMode, blockStyle,
-                                    firstLineIndentMode, firstLineIndentPercent, wordSpacing);
+  currentTextBlock = makeUniqueNoThrow<ParsedText>(focusReadingEnabled, guideDotsMode, blockStyle, firstLineIndentMode,
+                                                   firstLineIndentPercent, wordSpacing);
   if (!currentTextBlock) {
     LOG_ERR("EHP", "OOM: ParsedText");
     return;
@@ -897,9 +896,9 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       tableCellBlockStyle.isRtl = cssStyle.direction == CssTextDirection::Rtl;
     }
 
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(
-        self->extraParagraphSpacing, self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle,
-        self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock =
+        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, tableCellBlockStyle,
+                                      self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: table cell");
       self->skipUntilDepth = self->depth;
@@ -1267,9 +1266,6 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     }
     self->inRuby = true;
     self->rubyStartWordIndex = self->currentTextBlock ? static_cast<int>(self->currentTextBlock->size()) : 0;
-    if (self->currentTextBlock) {
-      self->currentTextBlock->ensureRubyCapacity();
-    }
     self->rubyTextBuffer.clear();
     self->depth += 1;
     return;
@@ -1426,7 +1422,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->updateEffectiveInlineStyle();
 
       if (strcmp(name, "li") == 0 && self->currentTextBlock) {  // null after OOM
-        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
+        self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, self->visibleTextOffset);
         self->listItemBulletOnly = true;
       }
     }
@@ -1586,9 +1582,9 @@ void XMLCALL ChapterHtmlSlimParser::characterData(void* userData, const XML_Char
   if (!self->currentTextBlock) {
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->focusReadingEnabled,
-                                                           self->guideDotsMode, flowStyle, self->firstLineIndentMode,
-                                                           self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock =
+        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
+                                      self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block for character data");
       return;
@@ -1942,9 +1938,9 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
 
     const BlockStyle flowStyle =
         self->blockStyleStack.empty() ? BlockStyle() : self->blockStyleStack.back().withoutBottom();
-    self->currentTextBlock = makeUniqueNoThrow<ParsedText>(self->extraParagraphSpacing, self->focusReadingEnabled,
-                                                           self->guideDotsMode, flowStyle, self->firstLineIndentMode,
-                                                           self->firstLineIndentPercent, self->wordSpacing);
+    self->currentTextBlock =
+        makeUniqueNoThrow<ParsedText>(self->focusReadingEnabled, self->guideDotsMode, flowStyle,
+                                      self->firstLineIndentMode, self->firstLineIndentPercent, self->wordSpacing);
     if (!self->currentTextBlock) {
       LOG_ERR("EHP", "OOM: text block after table");
     }

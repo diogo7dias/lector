@@ -8,10 +8,7 @@
 
 FontDecompressor::~FontDecompressor() { deinit(); }
 
-bool FontDecompressor::init() {
-  clearCache();
-  return true;
-}
+void FontDecompressor::init() { clearCache(); }
 
 void FontDecompressor::deinit() {
   freePageBuffer();

@@ -108,7 +108,6 @@ class EpubReaderActivity final : public Activity {
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
-  bool currentPageBookmarked = false;
   // Idle-time glyph prewarm: after a page settles, scan the neighbour the
   // reader is moving toward (scan mode draws nothing) and load its missing
   // glyphs from SD during idle, so the next turn's in-render prewarm is a cache
@@ -414,7 +413,6 @@ class EpubReaderActivity final : public Activity {
   void pageTurn(bool isForwardTurn);
   void loadCachedBookmarks();
   void addBookmark();
-  void updateBookmarkFlag();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

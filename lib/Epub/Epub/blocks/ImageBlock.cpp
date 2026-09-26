@@ -394,9 +394,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.y = y;
   config.maxWidth = width;
   config.maxHeight = height;
-  config.useGrayscale = true;
   config.useDithering = true;
-  config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
 

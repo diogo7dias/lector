@@ -149,7 +149,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
   static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
   static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
-  enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
     LEFT_ALIGN = 1,
@@ -432,10 +431,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
-  // Legacy coarse line-spacing enum (TIGHT/NORMAL/WIDE). Superseded by
-  // lineSpacingPercent below; retained so old saves still load and existing
-  // references stay valid. readerLineCompression now reads the percent.
-  uint8_t lineSpacing = NORMAL;
   // Reader line spacing as a percentage of the font's natural line height (100 =
   // natural). Restored granular control (old lector). The resolved line-compression
   // float is part of the cache key, so a change rebuilds the section cache.
@@ -670,10 +665,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char txtSdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
-  // Kept only so an existing settings file still parses and the perf log keeps its
-  // column. The sleep wallpaper is always drawn through the OEM 3-pass grayscale
-  // pipeline now; nothing reads this to choose anything. See SleepActivity.
-  uint8_t sleepImageQuality = 1;
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
   // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
   // either way). Chosen from code inspection, so the row exists to switch back without

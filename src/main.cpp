@@ -302,7 +302,7 @@ void enterDeepSleep(bool fromTimeout = false) {
   // chip, so anything still buffered here is lost.
   logFlush();
 
-  powerManager.startDeepSleep(gpio);
+  powerManager.startDeepSleep();
 }
 
 // Recovery firmware chord: a side button held together with the power button at
@@ -360,9 +360,7 @@ static void setupDisplay(const bool seamless, const HalGPIO::WakeupReason wakeup
 // wake can start its panel work between the two and let the card read overlap it.
 static void setupBuiltinFonts() {
   // Initialize font decompressor for compressed reader fonts
-  if (!fontDecompressor.init()) {
-    LOG_ERR("MAIN", "Font decompressor init failed");
-  }
+  fontDecompressor.init();
   fontCacheManager.setFontDecompressor(&fontDecompressor);
   renderer.setFontCacheManager(&fontCacheManager);
   renderer.insertFont(CHAREINK_14_FONT_ID, chareink14FontFamily);
@@ -636,7 +634,7 @@ void setup() {
         debug_trace::note("wake press not held, back to sleep");
         logFlush();
         Storage.prepareForDeepSleep();
-        powerManager.startDeepSleep(gpio);
+        powerManager.startDeepSleep();
       }
       wakePowerReleasePending = true;
       break;
@@ -645,7 +643,7 @@ void setup() {
       LOG_INF("SLP", "USB power cold boot, back to sleep");
       logFlush();
       Storage.prepareForDeepSleep();
-      powerManager.startDeepSleep(gpio);
+      powerManager.startDeepSleep();
       break;
     case HalGPIO::WakeupReason::AfterFlash:
       // After flashing, just proceed to boot

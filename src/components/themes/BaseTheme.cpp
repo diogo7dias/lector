@@ -25,7 +25,6 @@
 #include "components/TwoTapGate.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
-#include "components/icons/bookmark.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
@@ -34,22 +33,6 @@
 namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
-constexpr int bookmarkStatusIconWidth = 16;
-constexpr int bookmarkStatusIconHeight = 14;
-constexpr int bookmarkStatusIconGap = 4;
-constexpr int bookmarkStatusIconTopCrop = 2;
-
-void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
-  constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
-  for (int row = 0; row < bookmarkStatusIconHeight; ++row) {
-    for (int col = 0; col < bookmarkStatusIconWidth; ++col) {
-      const uint8_t byte = BookmarkStatusIcon[(row + bookmarkStatusIconTopCrop) * bytesPerRow + col / 8];
-      const uint8_t mask = 1U << (7 - (col % 8));
-      renderer.drawPixel(x + col, y + row, (byte & mask) != 0);
-    }
-  }
-}
-
 }  // namespace
 
 // Greedy word-wrap of input in the one UI font. Line 0 is wrapped to firstLineMaxWidth
@@ -380,13 +363,8 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans, const int spanCount,
-                              const bool armed) const {
-  // One highlight: the row filled, its text knocked out white. The spans a caller
-  // measures are no longer read — they were what the retired bracket style bracketed —
-  // but the parameters stay so every surface keeps calling one painter.
-  (void)spans;
-  (void)spanCount;
+bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
+  // One highlight: the row filled, its text knocked out white.
   if (armed) {
     // Two-tap confirmation: a row waiting for its confirming tap wears a 1px outline,
     // never the filled band, so "armed" can never be misread as "already opened". Same
@@ -764,19 +742,10 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
     const bool selected = row.index == selectedIndex;
     const int valueX = contentX + contentW - (row.valueW - valueGap);
     // One highlight over the whole measured height, so a row spanning several lines is
-    // marked as a single block. `inverted` is true only under the solid style, which is
-    // the only one that paints over the row's own text and its badge chip. The bracket
-    // style hugs the wrapped title block and the value separately.
+    // marked as a single block.
     bool inverted = false;
     if (selected) {
-      const int titleX = contentX + row.badgeW;
-      const Rect spans[2] = {
-          Rect(titleX, rowY + 3, contentX + contentW - titleX - (row.valueW > 0 ? row.valueW : 0),
-               static_cast<int>(row.lines.size()) * lineHeight),
-          Rect(valueX, rowY + 3, row.valueW - valueGap, lineHeight),
-      };
-      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), spans, row.valueW > 0 ? 2 : 1,
-                               row.index == two_tap::armedRow());
+      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), row.index == two_tap::armedRow());
     }
     if (row.valueW > 0) {
       renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !inverted);
@@ -824,9 +793,6 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const int textY =
         tileY + (menuMetrics.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
 
-    // Unselected tiles already carry an outline, so the highlight has to read against
-    // one. Brackets hug the tile's own label and the caret rule doubles the tile's
-    // bottom edge; both stay legible without the tile inverting.
     menuHitRows.add(itemIndexBase + i, rect.x + menuMetrics.contentSidePadding, tileY,
                     rect.width - menuMetrics.contentSidePadding * 2, menuMetrics.menuRowHeight);
 
@@ -834,8 +800,7 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                     menuMetrics.menuRowHeight);
     bool inverted = false;
     if (selected) {
-      const Rect labelSpan(textX, textY, textWidth, lineHeight);
-      inverted = drawSelection(renderer, tile, &labelSpan, 1, itemIndexBase + i == two_tap::armedRow());
+      inverted = drawSelection(renderer, tile, itemIndexBase + i == two_tap::armedRow());
       if (!inverted) renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
     } else {
       renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
@@ -1550,16 +1515,10 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
 
   for (const auto& entry : visibleEntries) {
     const bool selected = (selectorIndex == entry.bookIdx);
-    // Solid paints the whole row and forces white text; the other styles mark it and
-    // leave the text and the badge chip on their normal ground. Brackets hug the
-    // title block, which starts after the [NN%] chip when the row carries one.
+    // The selection paints the whole row and forces white text.
     bool inverted = false;
     if (selected) {
-      const int titleX = contentX + (entry.badgeW > 0 ? entry.badgeW + 6 : 0);
-      const Rect titleSpan(titleX, rowY + 3, rowX + rowW - titleX,
-                           static_cast<int>(entry.lines.size()) * rowLineHeight);
-      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), &titleSpan, 1,
-                               entry.bookIdx == two_tap::armedRow());
+      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), entry.bookIdx == two_tap::armedRow());
     }
 
     // [NN%] badge on line 0: an inverted chip that flips with row selection so it

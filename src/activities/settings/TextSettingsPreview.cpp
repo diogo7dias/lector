@@ -154,9 +154,8 @@ BlockStyle bodyStyle(const ReaderPrefs& look, int fontId, const GfxRenderer& ren
 // separates it from the paragraph above.
 void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId,
                      int textWidth, const char* text, const BlockStyle& style, bool heading, int gapBefore) {
-  ParsedText parsed(look.extraParagraphSpacing != 0, look.focusReadingEnabled != 0,
-                    resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden), style, look.firstLineIndentMode,
-                    look.firstLineIndentPercent, look.wordSpacing);
+  ParsedText parsed(look.focusReadingEnabled != 0, resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden),
+                    style, look.firstLineIndentMode, look.firstLineIndentPercent, look.wordSpacing);
   parsed.setHeading(heading);
   addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 

@@ -1,7 +1,7 @@
 #include "DisplayRefreshPolicy.h"
 
-DisplayRefreshPolicy::Mode DisplayRefreshPolicy::choose(const Mode requested, uint32_t /*nowMs*/,
-                                                        const uint16_t rawInkScore, const bool turboPass) {
+DisplayRefreshPolicy::Mode DisplayRefreshPolicy::choose(const Mode requested, const uint16_t rawInkScore,
+                                                        const bool turboPass) {
   Mode chosen = requested;
 
   // A Turbo pass buys its own cleans: it drives with a shorter waveform, so the same

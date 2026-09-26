@@ -42,12 +42,8 @@ struct ThemeMetrics {
   int batteryHeight;
 
   int topPadding;
-  int batteryBarHeight;
   int headerHeight;
   int verticalSpacing;
-
-  int previewPadding;
-  int previewHeightPercent;
 
   int contentSidePadding;
   int listRowHeight;
@@ -57,9 +53,6 @@ struct ThemeMetrics {
 
   int tabSpacing;
   int tabBarHeight;
-
-  int scrollBarWidth;
-  int scrollBarRightOffset;
 
   // FreeInkUI theme tokens. The SDK's UI toolkit takes its shape from these rather
   // than from hard-coded constants, so a screen hosted on FreeInkUI comes out looking
@@ -74,7 +67,6 @@ struct ThemeMetrics {
   int listScrollWidth;
   // 0 = scroll indicator on the right, 1 = on the left.
   int listScrollSide;
-  bool listTitleBold;
   int headerSidePadding;
   int headerUnderlineSize;
   // 0 = left aligned, 1 = centred.
@@ -84,9 +76,7 @@ struct ThemeMetrics {
   int capsuleRadius;
 
   int homeTopPadding;
-  int homeCoverHeight;
   int homeCoverTileHeight;
-  int homeRecentBooksCount;
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
@@ -117,8 +107,6 @@ struct ThemeMetrics {
   int optionPopupSelectionHPadding;
   int optionPopupSelectionVPadding;
   int optionPopupTitleGap;
-  bool optionPopupUseSmallFont;
-  bool optionPopupOptionFontBold;
   int optionPopupSelectionRadius;
   bool optionPopupSelectionLight;
   bool optionPopupDrawAllRows;
@@ -147,11 +135,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  // the panel edge. Every header y, content top and the per-page item
                                  // reserve are expressed against topPadding, so they all shift together.
                                  .topPadding = 14,
-                                 .batteryBarHeight = 20,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
-                                 .previewPadding = 12,
-                                 .previewHeightPercent = 30,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 50,
@@ -159,8 +144,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .menuSpacing = 8,
                                  .tabSpacing = 10,
                                  .tabBarHeight = 50,
-                                 .scrollBarWidth = 4,
-                                 .scrollBarRightOffset = 5,
                                  .listRowGap = 0,
                                  .listRowRadius = 0,
                                  .listInset = 0,
@@ -168,7 +151,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .listSelectionStyle = 0,
                                  .listScrollWidth = 4,
                                  .listScrollSide = 0,
-                                 .listTitleBold = false,
                                  .headerSidePadding = 20,
                                  .headerUnderlineSize = 0,
                                  .headerTitleAlign = 1,
@@ -176,9 +158,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sheetRadius = 0,
                                  .capsuleRadius = 0,
                                  .homeTopPadding = 40,
-                                 .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
-                                 .homeRecentBooksCount = 1,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
@@ -206,8 +186,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupSelectionHPadding = 8,
                                  .optionPopupSelectionVPadding = 4,
                                  .optionPopupTitleGap = 10,
-                                 .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = false,
                                  .optionPopupSelectionRadius = 0,
                                  .optionPopupSelectionLight = false,
                                  .optionPopupDrawAllRows = false,
@@ -250,16 +228,9 @@ class BaseTheme {
   // popup and tab goes through this rather than filling a rectangle itself, so one
   // setting reaches all of them. Section heading bands are NOT selections: they keep
   // their own solid fill in every style.
-  //
-  // `spans` are the text runs inside the row, in drawing order: a settings row hands
-  // over its label and its value. The bracket style hugs each span on its own rather
-  // than the whole row, which is what makes a value like ON read as picked. Surfaces
-  // with nothing to measure -- a book cover, a tab -- pass none and get the row
-  // bracketed instead. The solid and caret styles ignore spans entirely.
   // armed = this row is the one a first tap armed (components/TwoTapGate.h): it is
   // outlined rather than filled, and returns false so its text keeps its normal ground.
-  bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0,
-                     bool armed = false) const;
+  bool drawSelection(const GfxRenderer& renderer, Rect rect, bool armed = false) const;
 
   // Greedy word-wrap in the one UI face. Line 0 is wrapped to firstLineMaxWidth (room
   // for an inline badge or a right-hand label), later lines to restMaxWidth. A word

@@ -3015,8 +3015,6 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     return;
   }
 
-  updateBookmarkFlag();
-
   {
     // Unified page read: the in-progress build's in-RAM table if it has reached the page,
     // otherwise the on-disk file (finalized section, or a partial from a previous session).
@@ -3563,7 +3561,6 @@ void EpubReaderActivity::renderStatusBar() const {
       d.paragraphPagesLeft = static_cast<int>(*left);
     }
   }
-  d.bookmarked = currentPageBookmarked;
 
   // Paperback Look (status bar): thicken only the status-bar glyphs, then reset so
   // nothing drawn afterwards inherits the smear.
@@ -3643,12 +3640,10 @@ void EpubReaderActivity::loadCachedBookmarks() {
     cachedBookmarks.reserve(initialBookmarkCacheCapacity);
   }
   if (!epub) {
-    currentPageBookmarked = false;
     return;
   }
 
   BookmarkFile::load(epub->getPath(), cachedBookmarks);
-  updateBookmarkFlag();
 }
 
 void EpubReaderActivity::addBookmark() {
@@ -3676,7 +3671,6 @@ void EpubReaderActivity::addBookmark() {
                         cachedBookmarks.end());
   if (cachedBookmarks.size() != bookmarkCountBeforeToggle) {
     bookmarkRemoved = true;
-    currentPageBookmarked = false;
   } else {
     std::string pageText;
     if (currentPage >= 0 && currentPage < pageCount) {
@@ -3702,25 +3696,12 @@ void EpubReaderActivity::addBookmark() {
     }
     cachedBookmarks.insert(cachedBookmarks.begin(), entry);
     bookmarkRemoved = false;
-    currentPageBookmarked = true;
   }
 
   if (!BookmarkFile::save(epub->getPath(), cachedBookmarks)) {
     LOG_ERR("ERS", "Failed to save bookmarks");
   }
   requestUpdate();
-}
-
-void EpubReaderActivity::updateBookmarkFlag() {
-  if (!section || !epub || cachedBookmarks.empty()) {
-    currentPageBookmarked = false;
-    return;
-  }
-  const int pageCount = section->estimatedTotalPages();
-  const ProgressRange pageRange = getPageProgressRange(*epub, currentSpineIndex, section->currentPage, pageCount);
-  currentPageBookmarked = std::any_of(cachedBookmarks.begin(), cachedBookmarks.end(), [&](const BookmarkEntry& b) {
-    return bookmarkMatchesProgress(b, currentSpineIndex, section->currentPage, pageCount, pageRange);
-  });
 }
 
 ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {

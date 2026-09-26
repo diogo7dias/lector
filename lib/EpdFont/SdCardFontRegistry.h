@@ -9,8 +9,6 @@ struct SdCardFontFileInfo {
                       // where <root> is "/.fonts" (preferred, hidden) or "/fonts" (visible).
                       // e.g. "/.fonts/NotoSansCJK/NotoSansCJK_14.cpfont"
   uint8_t pointSize;  // parsed from filename: 14
-  uint8_t style;      // always 0 in v4 (all 4 styles bundled in one file);
-                      // kept for potential future formats
 };
 
 struct SdCardFontFamilyInfo {
@@ -29,10 +27,10 @@ struct SdCardFontFamilyInfo {
   static constexpr bool hasTtf() { return false; }
 #endif
 
-  const SdCardFontFileInfo* findFile(uint8_t size, uint8_t style = 0) const;
+  const SdCardFontFileInfo* findFile(uint8_t size) const;
   // Installed file closest to `pointSize` (ties → smaller). nullptr when the
-  // family ships nothing in `style`.
-  const SdCardFontFileInfo* findNearestSize(uint8_t pointSize, uint8_t style = 0) const;
+  // family ships no .cpfont file.
+  const SdCardFontFileInfo* findNearestSize(uint8_t pointSize) const;
   // Point sizes the reader can select for this family, ascending. A .cpfont
   // family ships fixed sizes; a TTF family offers every size in the TTF range.
   std::vector<uint8_t> availableSizes() const;
@@ -80,7 +78,7 @@ class SdCardFontRegistry {
  private:
   std::vector<SdCardFontFamilyInfo> families_;  // sorted alphabetically
 
-  static bool parseFilename(const char* filename, uint8_t& size, uint8_t& style);
+  static bool parseFilename(const char* filename, uint8_t& size);
   static void scanDirectory(const char* dirPath, SdCardFontFamilyInfo& family);
   // Scan one root (e.g. "/.fonts"), append families to `out`, dedup by name.
   static void scanRoot(const char* rootPath, std::vector<SdCardFontFamilyInfo>& out);
