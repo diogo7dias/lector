@@ -3579,7 +3579,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   if (sameFile) {
     targetSpineIndex = currentSpineIndex;
   } else {
-    targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr);
+    targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr, currentSpineIndex);
   }
 
   if (targetSpineIndex < 0) {
