@@ -20,33 +20,7 @@ ContainerParser::~ContainerParser() { destroyXmlParser(parser); }
 size_t ContainerParser::write(const uint8_t data) { return write(&data, 1); }
 
 size_t ContainerParser::write(const uint8_t* buffer, const size_t size) {
-  if (!parser) return 0;
-
-  const uint8_t* currentBufferPos = buffer;
-  auto remainingInBuffer = size;
-
-  while (remainingInBuffer > 0) {
-    void* const buf = XML_GetBuffer(parser, 1024);
-    if (!buf) {
-      LOG_DBG("CTR", "Couldn't allocate buffer");
-      destroyXmlParser(parser);
-      return 0;
-    }
-
-    const auto toRead = remainingInBuffer < 1024 ? remainingInBuffer : 1024;
-    memcpy(buf, currentBufferPos, toRead);
-
-    if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      LOG_ERR("CTR", "Parse error: %s", XML_ErrorString(XML_GetErrorCode(parser)));
-      destroyXmlParser(parser);
-      return 0;
-    }
-
-    currentBufferPos += toRead;
-    remainingInBuffer -= toRead;
-    remainingSize -= toRead;
-  }
-  return size;
+  return feedXmlParser(parser, buffer, size, remainingSize, "CTR");
 }
 
 void XMLCALL ContainerParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
