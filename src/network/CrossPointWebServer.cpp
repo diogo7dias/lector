@@ -476,6 +476,12 @@ const char* describeDownloadError(const HttpDownloader::DownloadError error) {
       return "The file could not be written to the SD card";
     case HttpDownloader::ABORTED:
       return "The download was stopped before it finished";
+    case HttpDownloader::NO_CONNECTION:
+      return "Could not connect to the server (check Wi-Fi and the address)";
+    case HttpDownloader::SERVER_ERROR:
+      return "The server refused the request or the file is not there";
+    case HttpDownloader::INCOMPLETE:
+      return "The connection dropped before the whole file arrived";
     default:
       return "The download failed";
   }
@@ -652,8 +658,7 @@ void CrossPointWebServer::runQueuedFetch() {
   } else {
     fetch.state = FetchStatus::State::Failed;
     fetch.error = describeDownloadError(result);
-    // Leave no half-written book in the file list.
-    Storage.remove(fetch.destPath.c_str());
+    // downloadToFile has already removed the partial (no resume here).
     LOG_ERR("WEB", "Fetch failed: %s (%s)", fetch.url.c_str(), fetch.error.c_str());
   }
 
