@@ -304,8 +304,8 @@ Press **Confirm** while reading. The menu opens in tabs; **Left** and **Right** 
 tab, and the tab strip runs across the top. Rows that do not apply to the open book are not
 shown at all.
 
-The menu opens on **Navigate**. **Settings > Reader > Book Menu Opens On** changes that to
-**Book**, **Look**, **Device** or **Sleep Screen** instead, and that choice always wins. The
+The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
+**Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The
 **Sleep Screen** tab appears alongside the others while the lock screen has a wallpaper to act
 on; on nights it has none, a menu set to open there opens on **Navigate**.
 
@@ -886,7 +886,7 @@ other numbers in Settings use the same band.
 
 - **Reading Orientation** — Portrait, Landscape CW, Portrait 180°, Landscape CCW.
 - **Paragraph Numbers** — Off or Per Chapter, with **Number Size** (Small or Double).
-- **Book Menu Opens On** — which tab the in-book menu starts on: Navigate, Book, Look or Device.
+- **Book Menu Opens On** — which tab the in-book menu starts on: Sleep Screen (default), Navigate, Book, Look or Device.
 
 **Look**
 

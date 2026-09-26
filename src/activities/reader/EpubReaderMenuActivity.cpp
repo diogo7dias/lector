@@ -79,7 +79,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     for (auto& member : members) items.push_back(member);
   };
 
-  // The menu opens on Look. Keep the common per-book controls first and use the tab
+  // Look comes first in the list. Keep the common per-book controls first and use the tab
   // label as the only heading: nested section headers spend a full screen row each.
   {
     auto& items = page(Tab::Look, StrId::STR_SEC_LOOK);
@@ -237,8 +237,27 @@ void EpubReaderMenuActivity::onEnter() {
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
-    int first = 0;
-    while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
+    // Open on the tab Settings > Book Menu Opens On names (indexed by BOOK_MENU_TAB).
+    // A tab that is not there tonight (Sleep, with no wallpaper to act on) falls back
+    // to Navigate, and failing that to the first heading.
+    static constexpr StrId TAB_LABELS[CrossPointSettings::BOOK_MENU_TAB_COUNT] = {
+        StrId::STR_SEC_NAVIGATE, StrId::STR_SEC_THIS_BOOK, StrId::STR_SEC_LOOK, StrId::STR_SEC_DEVICE,
+        StrId::STR_SEC_SLEEP_SCREEN};
+    const auto headerFor = [this](const StrId label) {
+      for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+        if (items[i].isHeader && items[i].labelId == label) return i;
+      }
+      return -1;
+    };
+    const uint8_t wanted = SETTINGS.bookMenuTab < CrossPointSettings::BOOK_MENU_TAB_COUNT
+                               ? SETTINGS.bookMenuTab
+                               : CrossPointSettings::BOOK_MENU_TAB_NAVIGATE;
+    int first = headerFor(TAB_LABELS[wanted]);
+    if (first < 0) first = headerFor(StrId::STR_SEC_NAVIGATE);
+    if (first < 0) {
+      first = 0;
+      while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
+    }
     nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
   }
   requestUpdate();
