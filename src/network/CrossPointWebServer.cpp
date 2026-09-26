@@ -38,9 +38,6 @@
 #include "util/TaskWatchdog.h"
 
 namespace {
-// Folders/files to hide from the web interface file browser
-// Note: Items starting with "." are automatically hidden
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -88,18 +85,6 @@ String normalizeWebPath(const String& inputPath) {
     result = result.substring(0, result.length() - 1);
   }
   return result;
-}
-
-bool isProtectedItemName(const String& name) {
-  if (name.startsWith(".")) {
-    return true;
-  }
-  for (const auto* item : HIDDEN_ITEMS) {
-    if (name.equals(item)) {
-      return true;
-    }
-  }
-  return false;
 }
 }  // namespace
 
@@ -522,7 +507,7 @@ void CrossPointWebServer::handlePostFetch() {
 
   const String directory = normalizeWebPath(server->hasArg("path") ? server->arg("path") : String("/"));
   const std::string filename = fetch_url::filenameFromUrl(url.c_str());
-  if (isProtectedItemName(String(filename.c_str()))) {
+  if (WebDAVHandler::isProtectedPath(directory) || WebDAVHandler::isProtectedPath(String(filename.c_str()))) {
     server->send(403, "text/plain", "Cannot write to a protected name");
     return;
   }
@@ -624,7 +609,7 @@ void CrossPointWebServer::applyServerFilename(const std::string& contentDisposit
 
   const std::string offered = fetch_url::filenameFromContentDisposition(contentDisposition);
   if (offered.empty() || offered == fetch.filename) return;
-  if (isProtectedItemName(String(offered.c_str()))) return;
+  if (WebDAVHandler::isProtectedPath(String(offered.c_str()))) return;
 
   const std::string directory = fetch.destPath.substr(0, fetch.destPath.find_last_of('/'));
   const std::string offeredPath = fetch_url::destinationPath(directory, offered);
@@ -764,18 +749,9 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     file.getName(name, sizeof(name));
     auto fileName = String(name);
 
-    // Skip hidden items (starting with ".")
-    bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
-
-    // Check against explicitly hidden items list
-    if (!shouldHide) {
-      for (const auto* item : HIDDEN_ITEMS) {
-        if (fileName.equals(item)) {
-          shouldHide = true;
-          break;
-        }
-      }
-    }
+    // Dot names show only when the reader opted in; system folders never do.
+    const bool shouldHide =
+        WebDAVHandler::isProtectedPath(fileName) && !(SETTINGS.showHiddenFiles && fileName.startsWith("."));
 
     if (!shouldHide) {
       FileInfo info;
@@ -812,6 +788,10 @@ void CrossPointWebServer::handleFileListData() const {
   String currentPath = "/";
   if (server->hasArg("path")) {
     currentPath = normalizeWebPath(server->arg("path"));
+  }
+  if (!SETTINGS.showHiddenFiles && WebDAVHandler::isProtectedPath(currentPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
   }
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -899,16 +879,10 @@ void CrossPointWebServer::handleDownload() const {
     return;
   }
 
-  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (itemName.startsWith(".")) {
-    server->send(403, "text/plain", "Cannot access system files");
+  // Every segment, not just the name: /.crosspoint holds the stored passwords.
+  if (WebDAVHandler::isProtectedPath(itemPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
     return;
-  }
-  for (const auto* item : HIDDEN_ITEMS) {
-    if (itemName.equals(item)) {
-      server->send(403, "text/plain", "Cannot access protected items");
-      return;
-    }
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -1031,6 +1005,10 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
       state.path = normalizeWebPath(server->arg("path"));
     } else {
       state.path = "/";
+    }
+    if (WebDAVHandler::isProtectedPath(state.path)) {
+      state.error = "Cannot write to a protected folder";
+      return;
     }
 
     LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
@@ -1175,7 +1153,7 @@ void CrossPointWebServer::handleCreateFolder() const {
     server->send(400, "text/plain", "Invalid folder name");
     return;
   }
-  if (isProtectedItemName(folderName)) {
+  if (WebDAVHandler::isProtectedPath(folderName)) {
     LOG_DBG("WEB", "Rejected protected folder name: %s", folderName.c_str());
     server->send(403, "text/plain", "Cannot create protected item");
     return;
@@ -1185,6 +1163,10 @@ void CrossPointWebServer::handleCreateFolder() const {
   String parentPath = "/";
   if (server->hasArg("path")) {
     parentPath = normalizeWebPath(server->arg("path"));
+  }
+  if (WebDAVHandler::isProtectedPath(parentPath)) {
+    server->send(403, "text/plain", "Cannot create protected item");
+    return;
   }
 
   // Build full folder path
@@ -1232,13 +1214,13 @@ void CrossPointWebServer::handleRename() const {
     server->send(400, "text/plain", "Invalid file name");
     return;
   }
-  if (isProtectedItemName(newName)) {
+  if (WebDAVHandler::isProtectedPath(newName)) {
     server->send(403, "text/plain", "Cannot rename to protected name");
     return;
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (isProtectedItemName(itemName)) {
+  if (WebDAVHandler::isProtectedPath(itemPath)) {
     server->send(403, "text/plain", "Cannot rename protected item");
     return;
   }
@@ -1316,7 +1298,7 @@ void CrossPointWebServer::handleMove() const {
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (isProtectedItemName(itemName)) {
+  if (WebDAVHandler::isProtectedPath(itemPath)) {
     server->send(403, "text/plain", "Cannot move protected item");
     return;
   }
@@ -1324,12 +1306,9 @@ void CrossPointWebServer::handleMove() const {
     server->send(409, "text/plain", "That file is being downloaded right now");
     return;
   }
-  if (destPath != "/") {
-    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
-    if (isProtectedItemName(destName)) {
-      server->send(403, "text/plain", "Cannot move into protected folder");
-      return;
-    }
+  if (WebDAVHandler::isProtectedPath(destPath)) {
+    server->send(403, "text/plain", "Cannot move into protected folder");
+    return;
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -1451,25 +1430,7 @@ void CrossPointWebServer::handleDelete() const {
       continue;
     }
 
-    // Security check: prevent deletion of protected items
-    const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-
-    // Hidden/system files are protected
-    if (itemName.startsWith(".")) {
-      failedItems += itemPath + " (hidden/system file); ";
-      allSuccess = false;
-      continue;
-    }
-
-    // Check against explicitly protected items
-    bool isProtected = false;
-    for (const auto* item : HIDDEN_ITEMS) {
-      if (itemName.equals(item)) {
-        isProtected = true;
-        break;
-      }
-    }
-    if (isProtected) {
+    if (WebDAVHandler::isProtectedPath(itemPath)) {
       failedItems += itemPath + " (protected file); ";
       allSuccess = false;
       continue;
@@ -2057,6 +2018,10 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           }
           wsUploadSize = sizeToken.toInt();
           wsUploadPath = normalizeWebPath(msg.substring(secondColon + 1));
+          if (WebDAVHandler::isProtectedPath(wsUploadPath)) {
+            wsServer->sendTXT(num, "ERROR:Cannot write to a protected folder");
+            return;
+          }
           wsUploadReceived = 0;
           wsLastProgressSent = 0;
           wsUploadResumeOffered = 0;

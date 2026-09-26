@@ -240,15 +240,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       String fileName(name);
 
       // Skip hidden/protected items
-      bool shouldHide = fileName.startsWith(".");
-      if (!shouldHide) {
-        for (const auto* item : HIDDEN_ITEMS) {
-          if (fileName.equals(item)) {
-            shouldHide = true;
-            break;
-          }
-        }
-      }
+      const bool shouldHide = isProtectedPath(fileName);
 
       if (!shouldHide) {
         String childPath = path;
@@ -791,7 +783,7 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
   }
 }
 
-bool WebDAVHandler::isProtectedPath(const String& path) const {
+bool WebDAVHandler::isProtectedPath(const String& path) {
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;
