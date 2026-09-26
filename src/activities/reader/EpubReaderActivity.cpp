@@ -2471,6 +2471,34 @@ void EpubReaderActivity::render(RenderLock&& lock) {
     GUI.drawPopup(renderer, msg);
     scheduleGhostCleanup();
   };
+  // A failed build: read the failure before the reset destroys it, drop the section, and
+  // show the error. A framebuffer loan still held is returned after the section is freed,
+  // so the 48 KB comes back into the room the section leaves, and before anything draws.
+  const auto failBuild = [&](const char* what, GfxRenderer::FrameBufferLoan* loan = nullptr) {
+    LOG_ERR("ERS", "%s", what);
+    const auto failure = section->lastFailure();
+    const auto failHeap = section->lastFailureFreeHeap();
+    const auto failAlloc = section->lastFailureMaxAlloc();
+    section.reset();
+    if (loan) loan->end();
+    buildPopupPending = false;
+    showBuildError(failure, failHeap, failAlloc);
+  };
+  // Lay out chunks until the page to show exists. False when render() must return now:
+  // the build failed (error shown) or yielded so loop() can take input.
+  const auto buildToCurrentPage = [&]() {
+    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
+      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
+        failBuild("Failed during incremental section build");
+        return false;
+      }
+      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
+                                    section->isBuildComplete())) {
+        return false;
+      }
+    }
+    return true;
+  };
 
   // edge case handling for sub-zero spine index
   if (currentSpineIndex < 0) {
@@ -2610,13 +2638,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
         releaseGrayscaleStripScratch();
         GfxRenderer::FrameBufferLoan loan(renderer);
         if (!section->createSectionFile(renderSpec, popupFn, this)) {
-          LOG_ERR("ERS", "Failed to persist page data to SD");
-          const auto failure = section->lastFailure();
-          const auto failHeap = section->lastFailureFreeHeap();
-          const auto failAlloc = section->lastFailureMaxAlloc();
-          section.reset();
-          loan.end();  // restore before anything draws
-          showBuildError(failure, failHeap, failAlloc);
+          failBuild("Failed to persist page data to SD", &loan);
           return;
         }
         loan.end();
@@ -2703,13 +2725,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           }
           if (!started) {
             loan.reset();  // restore before anything draws
-            LOG_ERR("ERS", "Failed to start section build");
-            const auto failure = section->lastFailure();
-            const auto failHeap = section->lastFailureFreeHeap();
-            const auto failAlloc = section->lastFailureMaxAlloc();
-            section.reset();
-            buildPopupPending = false;
-            showBuildError(failure, failHeap, failAlloc);
+            failBuild("Failed to start section build");
             return;
           }
           while (!section->isBuildComplete() &&
@@ -2729,13 +2745,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
             }
             if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
               loan.reset();  // restore before anything draws
-              LOG_ERR("ERS", "Failed during incremental section build");
-              const auto failure = section->lastFailure();
-              const auto failHeap = section->lastFailureFreeHeap();
-              const auto failAlloc = section->lastFailureMaxAlloc();
-              section.reset();
-              buildPopupPending = false;
-              showBuildError(failure, failHeap, failAlloc);
+              failBuild("Failed during incremental section build");
               return;
             }
           }
@@ -2879,51 +2889,16 @@ void EpubReaderActivity::render(RenderLock&& lock) {
   while (section->isPartial() && section->currentPage >= static_cast<int>(section->pageCount)) {
     // Start a build to extend a partial toward the requested page.
     if (!section->isBuilding() && !section->startBuild(renderSpec)) {
-      LOG_ERR("ERS", "Failed to start partial extension build");
-      const auto failure = section->lastFailure();
-      const auto failHeap = section->lastFailureFreeHeap();
-      const auto failAlloc = section->lastFailureMaxAlloc();
-      section.reset();
-      showBuildError(failure, failHeap, failAlloc);
+      failBuild("Failed to start partial extension build");
       return;
     }
     // Extend one chunk, then yield if the requested page still does not exist so
     // loop() can take input. Instant reopen is suspendBuild() on exit, same as
     // the background builder.
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        LOG_ERR("ERS", "Failed during incremental section build");
-        const auto failure = section->lastFailure();
-        const auto failHeap = section->lastFailureFreeHeap();
-        const auto failAlloc = section->lastFailureMaxAlloc();
-        section.reset();
-        showBuildError(failure, failHeap, failAlloc);
-        return;
-      }
-      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
-                                    section->isBuildComplete())) {
-        return;
-      }
-    }
+    if (!buildToCurrentPage()) return;
   }
   // For an in-progress incremental build, make sure the page we're about to show has been laid out.
-  if (section->isBuilding()) {
-    while (!section->isBuildComplete() && section->currentPage >= static_cast<int>(section->pageCount)) {
-      if (!section->buildSomeMore(BUILD_PAGES_PER_CHUNK)) {
-        LOG_ERR("ERS", "Failed during incremental section build");
-        const auto failure = section->lastFailure();
-        const auto failHeap = section->lastFailureFreeHeap();
-        const auto failAlloc = section->lastFailureMaxAlloc();
-        section.reset();
-        showBuildError(failure, failHeap, failAlloc);
-        return;
-      }
-      if (watermarkBuildShouldYield(section->currentPage, static_cast<int>(section->pageCount),
-                                    section->isBuildComplete())) {
-        return;
-      }
-    }
-  }
+  if (section->isBuilding() && !buildToCurrentPage()) return;
 
   // The requested page is now as built as it will get. If it still lands past the end,
   // clamp to the last real page: the UINT16_MAX "last page" sentinel from backward chapter
