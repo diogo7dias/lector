@@ -10,6 +10,7 @@
 #include <memory>
 
 #include "MappedInputManager.h"
+#include "QuoteSidecar.h"
 #include "QuoteText.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -98,15 +99,13 @@ void QuotesViewerActivity::loadQuotes() {
 }
 
 // Rewrites the sidecar from the in-RAM list using the same tmp/backup rotation the
-// writer uses: build a ".tmp", move the live file to ".bak", promote the tmp, then
-// drop the backup. A failed promote puts the backup back.
+// writer uses (quote_sidecar::promoteTmp).
 bool QuotesViewerActivity::saveQuotes() const {
   const std::string tmpPath = filePath + ".tmp";
-  const std::string bakPath = filePath + ".bak";
 
   if (quotes.empty()) {
     Storage.remove(filePath.c_str());
-    Storage.remove(bakPath.c_str());
+    Storage.remove((filePath + ".bak").c_str());
     LOG_INF("QV", "All quotes deleted, removed %s", filePath.c_str());
     return true;
   }
@@ -131,23 +130,7 @@ bool QuotesViewerActivity::saveQuotes() const {
     dst.close();
   }
 
-  const bool primaryExists = Storage.exists(filePath.c_str());
-  if (primaryExists) {
-    Storage.remove(bakPath.c_str());  // clear any stale backup
-    if (!Storage.rename(filePath.c_str(), bakPath.c_str())) {
-      LOG_ERR("QV", "Quotes backup rename failed");
-      Storage.remove(tmpPath.c_str());
-      return false;
-    }
-  }
-  if (!Storage.rename(tmpPath.c_str(), filePath.c_str())) {
-    LOG_ERR("QV", "Quotes promote rename failed");
-    if (Storage.exists(bakPath.c_str())) Storage.rename(bakPath.c_str(), filePath.c_str());
-    Storage.remove(tmpPath.c_str());
-    return false;
-  }
-  Storage.remove(bakPath.c_str());
-  return true;
+  return quote_sidecar::promoteTmp(filePath, "QV");
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────

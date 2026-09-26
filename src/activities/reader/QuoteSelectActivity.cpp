@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <climits>
 
+#include "QuoteSidecar.h"
 #include "QuoteText.h"
 #include "components/UITheme.h"
 
@@ -243,12 +244,10 @@ void QuoteSelectActivity::saveSelectedQuote() {
 bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::string& anchorToken) {
   const std::string path = quote_text::quotesFilePathFor(epub.getPath());
   const std::string tmpPath = path + ".tmp";
-  const std::string bakPath = path + ".bak";
   const std::string entry = quote_text::formatQuoteEntry(chapterTitle(), anchorToken, quote);
 
   size_t existingSize = 0;
-  const bool primaryExists = Storage.exists(path.c_str());
-  if (primaryExists) {
+  if (Storage.exists(path.c_str())) {
     HalFile probe;
     if (Storage.openFileForRead("QUOTE", path, probe)) {
       existingSize = probe.size();
@@ -295,21 +294,7 @@ bool QuoteSelectActivity::saveQuoteToFile(const std::string& quote, const std::s
   }
 
   // Promote temp -> primary. Keep a backup so a failed promote can be undone.
-  if (primaryExists) {
-    Storage.remove(bakPath.c_str());  // clear any stale backup
-    if (!Storage.rename(path.c_str(), bakPath.c_str())) {
-      LOG_ERR("QUOTE", "Quotes backup rename failed");
-      Storage.remove(tmpPath.c_str());
-      return false;
-    }
-  }
-  if (!Storage.rename(tmpPath.c_str(), path.c_str())) {
-    LOG_ERR("QUOTE", "Quotes promote rename failed");
-    if (Storage.exists(bakPath.c_str())) Storage.rename(bakPath.c_str(), path.c_str());
-    Storage.remove(tmpPath.c_str());
-    return false;
-  }
-  Storage.remove(bakPath.c_str());
+  if (!quote_sidecar::promoteTmp(path, "QUOTE")) return false;
   LOG_INF("QUOTE", "Saved quote (%u bytes) to %s", static_cast<unsigned>(entry.size()), path.c_str());
   return true;
 }
