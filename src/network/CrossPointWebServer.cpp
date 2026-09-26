@@ -464,6 +464,18 @@ void CrossPointWebServer::handleNotFound() const {
   server->send(404, "text/plain", message);
 }
 
+// A new file reached its final name, by any of the four ways in: multipart and
+// WebSocket upload, URL fetch (WebDAV has its own overwrite-aware copy). Every
+// one refuses to overwrite, so the file is always new. A stale cache for the path
+// would render the new book from the old book's data, and a wallpaper appends its
+// index record here so it jumps the rotation queue without a folder walk at the
+// next boot. Handlers run on the main task (handleClient is pumped from the
+// activity loop), so the persisted index patch is safe.
+static void onFileLanded(const char* path) {
+  clearBookCache(path);
+  crosspoint::sleep::windex::noteCreated(path);
+}
+
 // Books the reader has open, newest first. Read-only: the web pages show what
 // is in progress and link to the file, they never write reading state back.
 // Entries without a progress figure (added but never opened) are left out.
@@ -650,9 +662,7 @@ void CrossPointWebServer::runQueuedFetch() {
 
   if (result == HttpDownloader::OK) {
     applyServerFilename(contentDisposition);
-    // Same as every other write path here: a stale cache entry for this path
-    // would render the new book from the old book's data.
-    clearBookCache(fetch.destPath.c_str());
+    onFileLanded(fetch.destPath.c_str());
     fetch.state = FetchStatus::State::Done;
     LOG_DBG("WEB", "Fetch complete: %s (%u bytes)", fetch.destPath.c_str(), static_cast<unsigned>(fetch.received));
   } else {
@@ -1108,13 +1118,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
                 writePercent);
 
-        // Clear epub cache after uploading the file
-        clearBookCache(state.finalPath.c_str());
-        // A wallpaper landed over WiFi: append its index record right here so
-        // the new file jumps the rotation queue without the next boot paying a
-        // folder walk. Handlers run on the main task (handleClient is called
-        // from the activity loop), so the persisted patch is safe here.
-        crosspoint::sleep::windex::noteCreated(state.finalPath.c_str());
+        onFileLanded(state.finalPath.c_str());
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -2103,7 +2107,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", wsUploadFinalPath.c_str());
-            clearBookCache(wsUploadFinalPath.c_str());
+            onFileLanded(wsUploadFinalPath.c_str());
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2234,8 +2238,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         LOG_DBG("WS", "Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)", wsUploadFileName.c_str(), wsUploadSize,
                 elapsed, kbps);
 
-        // Clear epub cache after uploading the file
-        clearBookCache(wsUploadFinalPath.c_str());
+        onFileLanded(wsUploadFinalPath.c_str());
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
