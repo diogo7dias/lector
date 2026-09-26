@@ -454,7 +454,7 @@ bool ActivityManager::isReaderActivity() const {
          (currentActivity && currentActivity->isReaderActivity());
 }
 
-bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->name == "Home"; }
+bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->isHomeActivity(); }
 
 bool ActivityManager::handleForcedRefresh() { return currentActivity && currentActivity->handleForcedRefresh(); }
 
