@@ -136,22 +136,15 @@ UiStatusActivity::StatusView OtaUpdateActivity::statusView() const {
       view.confirmHint = tr(STR_RETRY);
       break;
     case FINISHED:
-      view.lines = {
-          tr(STR_UPDATE_COMPLETE),
-          "Flashed ok; if it boots back into Lector,",
-          "update Lector first to 0.29.5 then",
-          "reflash the other firmware.",
-      };
+      // The boots-back hint is for another firmware only: a Lector update that fails to
+      // boot just rolls back to the Lector that was running.
+      view.lines = {tr(STR_UPDATE_COMPLETE), allowAnyVersion ? tr(STR_FIRMWARE_BOOTS_BACK_HINT) : nullptr, nullptr,
+                    nullptr};
       view.backHint = "";
       break;
     case WIFI_SELECTION:
       if (firmware_flash::didPreviousSwitchRollBack()) {
-        view.lines = {
-            "Firmware rollback detected:",
-            "Previous flash booted back into Lector.",
-            "Update Lector to 0.29.5 first,",
-            "then reflash the other firmware.",
-        };
+        view.lines = {tr(STR_FIRMWARE_ROLLED_BACK), nullptr, nullptr, nullptr};
         view.backHint = "";
       } else {
         // The WiFi picker owns the screen.

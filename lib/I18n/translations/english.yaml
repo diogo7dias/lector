@@ -654,6 +654,8 @@ STR_INSTALL_ANYWAY: "Install anyway"
 STR_UPDATE_LOW_MEMORY: "Not enough memory for a secure connection"
 STR_RECOVERY_MODE: "Recovery Mode"
 STR_RECOVERY_MODE_HINT: "Place firmware.bin on SD card root and select it"
+STR_FIRMWARE_BOOTS_BACK_HINT: "If it boots back into Lector, flash the other firmware again"
+STR_FIRMWARE_ROLLED_BACK: "The last flash booted back into Lector. Flash the other firmware again."
 
 STR_SHOW_SLEEP_IMAGE_FILENAME: "Show Wallpaper Name"
 STR_SHOW_SLEEP_FAVORITE_BADGE: "Show Favorite Badge"
