@@ -8,7 +8,6 @@
 
 #include <cstring>
 
-
 size_t TextBlock::arenaSize(const uint16_t wordCount, const bool hasFocus, const bool hasGuideDots,
                             const uint16_t textBytes) {
   // Layout documented in TextBlock.h: 16-bit arrays first, then 8-bit arrays, then text.
@@ -178,8 +177,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
         }
         const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
         const int leaderWordX = xposArr[i] + x;
-        const auto baseDir =
-            static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(wordText(i), blockStyle.isRtl ? 1 : 0));
+        const auto baseDir = BidiUtils::detectParagraphLevel(
+            wordText(i), blockStyle.isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR);
         rubies[i] = {leaderWordX - (rubyWidth - groupActualWidth) / 2, rubyTexts[i], baseDir};
         i += groupWordCount - 1;
       }
@@ -226,8 +225,8 @@ void TextBlock::render(const GfxRenderer& renderer, const int fontId, const int 
     const char* word = wordText(i);
     const int wordX = xposArr[i] + x;
     const EpdFontFamily::Style currentStyle = wordStyle(i);
-    const auto baseDir =
-        static_cast<BidiUtils::BidiBaseDir>(BidiUtils::detectParagraphLevel(word, blockStyle.isRtl ? 1 : 0));
+    const auto baseDir = BidiUtils::detectParagraphLevel(
+        word, blockStyle.isRtl ? BidiUtils::BidiBaseDir::RTL : BidiUtils::BidiBaseDir::LTR);
     const uint8_t boundary = focusBoundary(i);
 
     // SUP/SUB shift the baseline passed to drawText; the glyph is also scaled 50% inside

@@ -44,26 +44,12 @@ bidi_char sharedBidiLine[BIDI_MAX_LINE];
 
 namespace BidiUtils {
 
-bool startsWithRtl(const char* utf8, int maxStrongChars) {
-  if (!utf8 || maxStrongChars <= 0) return false;
-
-  auto* p = reinterpret_cast<const unsigned char*>(utf8);
-  int checked = 0;
-  while (*p) {
-    const uint32_t cp = utf8NextCodepoint(&p);
-    if (!cp || cp == REPLACEMENT_GLYPH) break;
-
-    const uchar cls = bidi_class(cp);
-    if (cls == R || cls == AL) return true;
-    if (cls == L) return false;
-    checked++;
-    if (checked >= maxStrongChars) break;
-  }
-  return false;
+bool startsWithRtl(const char* utf8, const int maxStrongChars) {
+  return detectParagraphLevel(utf8, BidiBaseDir::LTR, maxStrongChars) == BidiBaseDir::RTL;
 }
 
-int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int maxStrongChars) {
-  if (!utf8 || maxStrongChars <= 0) return fallbackLevel & 1;
+BidiBaseDir detectParagraphLevel(const char* utf8, const BidiBaseDir fallback, const int maxStrongChars) {
+  if (!utf8 || maxStrongChars <= 0) return fallback;
 
   auto* p = reinterpret_cast<const unsigned char*>(utf8);
   int checked = 0;
@@ -72,13 +58,13 @@ int detectParagraphLevel(const char* utf8, const int fallbackLevel, const int ma
     if (!cp || cp == REPLACEMENT_GLYPH) break;
 
     const uchar cls = bidi_class(cp);
-    if (cls == R || cls == AL) return 1;
-    if (cls == L) return 0;
+    if (cls == R || cls == AL) return BidiBaseDir::RTL;
+    if (cls == L) return BidiBaseDir::LTR;
     checked++;
     if (checked >= maxStrongChars) break;
   }
 
-  return fallbackLevel & 1;
+  return fallback;
 }
 
 bool isTransparentMark(const uint32_t cp) {
@@ -91,7 +77,7 @@ bool isTransparentMark(const uint32_t cp) {
   return cp >= 0x0591 && bidi_class(cp) == NSM;
 }
 
-bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
+bool applyBidiVisual(const char* utf8, std::string& out, const BidiBaseDir baseDir) {
   if (!utf8 || !*utf8) return false;
   const std::lock_guard<std::mutex> lock(bidiMutex);
 
@@ -130,8 +116,8 @@ bool applyBidiVisual(const char* utf8, std::string& out, int paragraphLevel) {
   }
   if (!count) return false;
 
-  const bool autodir = (paragraphLevel < 0);
-  const int level = autodir ? 0 : (paragraphLevel & 1);
+  const bool autodir = baseDir == BidiBaseDir::AUTO;
+  const int level = baseDir == BidiBaseDir::RTL ? 1 : 0;
 
   // Order matters (mintty does the same): do_bidi() first to obtain visual
   // order, then do_shape() — contextual forms are resolved from *visual*

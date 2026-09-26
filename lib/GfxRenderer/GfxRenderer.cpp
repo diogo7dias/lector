@@ -56,7 +56,7 @@ void appendShapedRtlTokens(const char* text, std::string& shapedOut) {
     }
     if (!hasRtlBytes) continue;
     token.assign(start, p - start);
-    if (BidiUtils::applyBidiVisual(token.c_str(), visual, static_cast<int>(BidiUtils::BidiBaseDir::AUTO))) {
+    if (BidiUtils::applyBidiVisual(token.c_str(), visual)) {
       shapedOut += visual;
     }
   }
@@ -771,7 +771,7 @@ const char* resolveVisualText(const char* text, std::string& visualBuffer, const
     if (!hasRtlBytes) return text;
   }
 
-  if (BidiUtils::applyBidiVisual(text, visualBuffer, static_cast<int>(baseDir)) && !visualBuffer.empty()) {
+  if (BidiUtils::applyBidiVisual(text, visualBuffer, baseDir) && !visualBuffer.empty()) {
     return visualBuffer.c_str();
   }
   return text;

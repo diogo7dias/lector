@@ -1,15 +1,8 @@
 #pragma once
 
+#include <BidiUtils.h>
 #include <EpdFontFamily.h>
 #include <HalDisplay.h>
-
-namespace BidiUtils {
-// Paragraph base direction for the Unicode BiDi algorithm (UAX#9).
-// AUTO: scan text for first strong directional character (P2/P3 rules)
-// LTR:  force left-to-right paragraph embedding level
-// RTL:  force right-to-left paragraph embedding level
-enum class BidiBaseDir : signed char { AUTO = -1, LTR = 0, RTL = 1 };
-}  // namespace BidiUtils
 
 class FontCacheManager;
 class SdCardFont;
