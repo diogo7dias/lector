@@ -359,6 +359,12 @@ class EpubReaderActivity final : public Activity {
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();
+  // Handoff to a sync/transfer screen that reopens the book on the way out. The first
+  // saves the position that reopen lands on (false: error surfaced, abort the handoff);
+  // the second frees the Epub and Section for the radio. Neither holds the render lock
+  // on entry; the release takes it.
+  bool saveProgressForHandoff(const char* tag, int currentPage, int totalPages);
+  void releaseBookForHandoff();
   // Trades this book's position with another reader over ESP-NOW, no network involved.
   void launchNearbyPositionSync();
   // Sends this book's own file to another reader over ESP-NOW.

@@ -1672,6 +1672,27 @@ bool EpubReaderActivity::blockSortesAction() {
   return true;
 }
 
+bool EpubReaderActivity::saveProgressForHandoff(const char* tag, const int currentPage, const int totalPages) {
+  if (saveProgress(currentSpineIndex, currentPage, totalPages)) return true;
+  LOG_ERR(tag, "Aborting handoff because current progress could not be saved");
+  pendingSyncSaveError = true;
+  requestUpdate();
+  return false;
+}
+
+void EpubReaderActivity::releaseBookForHandoff() {
+  RenderLock lock(*this);
+  if (section) {
+    nextPageNumber = section->currentPage;
+  }
+  // The image extractor holds a raw pointer into this epub (see onEnter);
+  // clear it before the early release, mirroring onExit(), or a later image
+  // render would call through a dangling context.
+  ImageBlock::setExtractor(nullptr, nullptr);
+  section.reset();
+  epub.reset();
+}
+
 void EpubReaderActivity::launchNearbyBookSend() {
   if (blockSortesAction()) return;
   const int currentPage = section ? section->currentPage : nextPageNumber;
@@ -1680,26 +1701,10 @@ void EpubReaderActivity::launchNearbyBookSend() {
 
   // The transfer screen reopens this book on the way out, and goToReader() reads
   // this file to know where to land, so a failed write aborts the send.
-  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
-    LOG_ERR("NBFT", "Aborting nearby send because current progress could not be saved");
-    pendingSyncSaveError = true;
-    requestUpdate();
-    return;
-  }
+  if (!saveProgressForHandoff("NBFT", currentPage, totalPages)) return;
 
   // Release Epub and Section before the radio comes up, as the sync paths do.
-  {
-    RenderLock lock(*this);
-    if (section) {
-      nextPageNumber = section->currentPage;
-    }
-    // The image extractor holds a raw pointer into this epub (see onEnter);
-    // clear it before the early release, mirroring onExit(), or a later image
-    // render would call through a dangling context.
-    ImageBlock::setExtractor(nullptr, nullptr);
-    section.reset();
-    epub.reset();
-  }
+  releaseBookForHandoff();
 
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, savedEpubPath, savedEpubPath));
@@ -1720,27 +1725,11 @@ void EpubReaderActivity::launchNearbyPositionSync() {
 
   // goToReader() on the way back reads this file, so a failed write aborts the
   // sync rather than risking a return to the wrong page.
-  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
-    LOG_ERR("NBPS", "Aborting nearby sync because current progress could not be saved");
-    pendingSyncSaveError = true;
-    requestUpdate();
-    return;
-  }
+  if (!saveProgressForHandoff("NBPS", currentPage, totalPages)) return;
 
   // Release Epub and Section before the radio comes up: ESP-NOW needs less heap
   // than the TLS handshake KOSync makes room for, but it still needs room.
-  {
-    RenderLock lock(*this);
-    if (section) {
-      nextPageNumber = section->currentPage;
-    }
-    // The image extractor holds a raw pointer into this epub (see onEnter);
-    // clear it before the early release, mirroring onExit(), or a later image
-    // render would call through a dangling context.
-    ImageBlock::setExtractor(nullptr, nullptr);
-    section.reset();
-    epub.reset();
-  }
+  releaseBookForHandoff();
 
   activityManager.replaceActivity(
       std::make_unique<NearbyPositionSyncActivity>(renderer, mappedInput, savedEpubPath, currentSpineIndex, currentPage,
@@ -1763,27 +1752,13 @@ bool EpubReaderActivity::launchKOReaderSync() {
 
   // Persist current position so the reader resumes at the right page on return.
   // goToReader() depends on this file, so abort the sync if the write fails.
-  if (!saveProgress(currentSpineIndex, currentPage, totalPages)) {
-    LOG_ERR("KOSync", "Aborting sync because current progress could not be saved");
-    pendingSyncSaveError = true;
-    requestUpdate();
+  if (!saveProgressForHandoff("KOSync", currentPage, totalPages)) {
     return true;  // acted: surfaced a save error to the user
   }
 
   // Release Epub and Section to free ~65KB RAM for the TLS handshake.
   LOG_DBG("KOSync", "Releasing epub for sync (heap before: %u)", (unsigned)ESP.getFreeHeap());
-  {
-    RenderLock lock(*this);
-    if (section) {
-      nextPageNumber = section->currentPage;
-    }
-    // The image extractor holds a raw pointer into this epub (see onEnter);
-    // clear it before the early release, mirroring onExit(), or a later image
-    // render would call through a dangling context.
-    ImageBlock::setExtractor(nullptr, nullptr);
-    section.reset();
-    epub.reset();
-  }
+  releaseBookForHandoff();
   LOG_DBG("KOSync", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<KOReaderSyncActivity>(
