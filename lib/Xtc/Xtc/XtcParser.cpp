@@ -270,26 +270,12 @@ XtcError XtcParser::readChapters() {
     return XtcError::READ_ERROR;
   }
 
-  uint8_t hasChaptersFlag = 0;
-  if (!m_file.seek(0x0B)) {
-    return XtcError::READ_ERROR;
-  }
-  if (m_file.read(&hasChaptersFlag, sizeof(hasChaptersFlag)) != sizeof(hasChaptersFlag)) {
-    return XtcError::READ_ERROR;
-  }
-
-  if (hasChaptersFlag != 1) {
+  // Both come from the header open() already read and judged (legacy files have no
+  // chapterOffset field, which m_hasChapters accounts for).
+  if (!m_hasChapters) {
     return XtcError::OK;
   }
-
-  uint64_t chapterOffset = 0;
-  if (!m_file.seek(0x30)) {
-    return XtcError::READ_ERROR;
-  }
-  if (m_file.read(reinterpret_cast<uint8_t*>(&chapterOffset), sizeof(chapterOffset)) != sizeof(chapterOffset)) {
-    return XtcError::READ_ERROR;
-  }
-
+  const uint64_t chapterOffset = m_header.chapterOffset;
   if (chapterOffset == 0) {
     return XtcError::OK;
   }
