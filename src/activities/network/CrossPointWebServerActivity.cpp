@@ -280,6 +280,9 @@ void CrossPointWebServerActivity::startWebServer() {
   webServer = makeUniqueNoThrow<CrossPointWebServer>();
   if (!webServer) {
     LOG_ERR("WEBACT", "OOM: CrossPointWebServer");
+    // Same way out as a server that fails to begin(): staying would leave a hidden
+    // screen that swallows Back.
+    onGoHome();
     return;
   }
   // A URL fetch holds this loop for the length of the transfer, so the server
