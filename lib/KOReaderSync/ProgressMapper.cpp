@@ -239,7 +239,8 @@ class ParagraphStreamer final : public Print {
   bool relaxFirstStepDepth = false;
 
   // Tag name accumulation
-  enum TagParseState { TAG_IDLE, TAG_IN_NAME, TAG_ATTRS } tagState = TAG_IDLE;
+  // TAG_MARKUP: <!-- -->, <!DOCTYPE>, <?xml?>: skipped to '>', never an element.
+  enum TagParseState { TAG_IDLE, TAG_IN_NAME, TAG_ATTRS, TAG_MARKUP } tagState = TAG_IDLE;
   bool tagIsClose = false;
   char tagName[12] = {};
   int tagNameLen = 0;
@@ -593,7 +594,11 @@ class ParagraphStreamer final : public Print {
         if (c == '/') {
           tagIsClose = true;
           tagState = TAG_IN_NAME;
-        } else if (c != '!' && c != '?') {
+        } else if (c == '!' || c == '?') {
+          // Left idle, the "--" of a comment became an element that never closed,
+          // pushing every later sibling one level too deep.
+          tagState = TAG_MARKUP;
+        } else {
           tagIsClose = false;
           tagName[0] = static_cast<char>(c);
           tagNameLen = 1;
@@ -616,6 +621,8 @@ class ParagraphStreamer final : public Print {
         } else if (tagNameLen + 1 < static_cast<int>(sizeof(tagName))) {
           tagName[tagNameLen++] = static_cast<char>(c);
         }
+        break;
+      case TAG_MARKUP:
         break;
       case TAG_ATTRS:
         // Track quoted attribute values so '/' inside them is not mistaken for self-closing.

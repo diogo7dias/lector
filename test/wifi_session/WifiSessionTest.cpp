@@ -287,6 +287,37 @@ TEST(WifiSessionJoin, ForgetsAnAbandonedPasswordEntry) {
   EXPECT_FALSE(session.offersToSaveCredential());
 }
 
+// A typed password that failed must not ride along to the next join: answering
+// "remember" after joining a saved network would overwrite its stored password
+// with the (empty) typed one.
+TEST(WifiSessionJoin, AFailedTypedPasswordIsNotOfferedAfterJoiningASavedNetwork) {
+  WifiSession session;
+  wifi_session::Startup startup;
+  startup.allowAutoConnect = false;
+  startup.savedSsids = {"home"};
+  session.begin(startup, 1000);
+  drain(session, 1000);
+  const std::vector<Network> found = {seen("home", -50), seen("cafe", -40)};
+  session.onScanResults(found.data(), found.size(), 2000);
+  drain(session, 2000);
+  ASSERT_STREQ(session.networks()[1].ssid, "cafe");
+
+  session.selectNetwork(1, 3000);
+  drain(session, 3000);
+  session.onPasswordEntered(4000);
+  drain(session, 4000);
+  session.onJoinFailed(5000);
+  session.dismissFailure(6000);
+
+  session.selectNetwork(0, 7000);
+  const std::vector<wifi_session::Action> join = drain(session, 7000);
+  ASSERT_EQ(join.size(), 1u);
+  EXPECT_TRUE(join[0].useSavedPassword);
+  session.onJoinSucceeded(8000);
+
+  EXPECT_FALSE(session.offersToSaveCredential());
+}
+
 TEST(WifiSessionJoin, DoesNotOfferToRememberAPasswordItAlreadyHad) {
   WifiSession session;
   wifi_session::Startup startup;

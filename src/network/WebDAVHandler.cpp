@@ -20,13 +20,16 @@ const char* FIXED_DATE = "Thu, 01 Jan 2024 00:00:00 GMT";
 // ── RequestHandler interface ─────────────────────────────────────────────────
 
 bool WebDAVHandler::canHandle(WebServer& server, HTTPMethod method, const String& uri) {
-  (void)server;
   (void)uri;
   switch (method) {
-    case HTTP_OPTIONS:
-    case HTTP_PROPFIND:
+    // A GET for a path that is not on the card falls through to onNotFound, which
+    // in AP mode answers OS captive-portal probes (/generate_204, ...) with the
+    // redirect that opens the browser. Claiming every GET sent them a 404.
     case HTTP_GET:
     case HTTP_HEAD:
+      return Storage.exists(getRequestPath(server).c_str());
+    case HTTP_OPTIONS:
+    case HTTP_PROPFIND:
     case HTTP_PUT:
     case HTTP_DELETE:
     case HTTP_MKCOL:
@@ -240,15 +243,7 @@ void WebDAVHandler::handlePropfind(WebServer& s) {
       String fileName(name);
 
       // Skip hidden/protected items
-      bool shouldHide = fileName.startsWith(".");
-      if (!shouldHide) {
-        for (const auto* item : HIDDEN_ITEMS) {
-          if (fileName.equals(item)) {
-            shouldHide = true;
-            break;
-          }
-        }
-      }
+      const bool shouldHide = isProtectedPath(fileName);
 
       if (!shouldHide) {
         String childPath = path;
@@ -791,7 +786,7 @@ void WebDAVHandler::urlEncodePath(const String& path, String& out) const {
   }
 }
 
-bool WebDAVHandler::isProtectedPath(const String& path) const {
+bool WebDAVHandler::isProtectedPath(const String& path) {
   // Check every segment of the path, not just the last one.
   // This prevents access to e.g. /.hidden/somefile or /System Volume Information/foo
   int start = 0;

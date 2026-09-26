@@ -41,8 +41,8 @@ bool CrossPointState::fromJson(JsonVariantConst doc) {
   readOrderCounter = doc["readOrderCounter"] | static_cast<uint32_t>(0);
   readingBadgesSeeded = doc["readingBadgesSeeded"] | false;
   lowBatteryWarned = doc["lowBatteryWarned"] | false;
-  pendingWakeBookPath = doc["pendingWakeBookPath"] | std::string("");
-  lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | std::string("");
+  pendingWakeBookPath = doc["pendingWakeBookPath"] | "";
+  lastSleepWallpaperPath = doc["lastSleepWallpaperPath"] | "";
   // Missing keys fall back to "no index yet" defaults, so a pre-index
   // state.json (or one from the removed recency-buffer era) forces a clean
   // first build instead of misreading stale fields.

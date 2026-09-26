@@ -85,7 +85,7 @@ void BmpViewerActivity::drawHints() {
   const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
   const char* favLabel = effectiveFavorite() ? tr(STR_UNFAV) : tr(STR_FAV);
   const char* pauseLabel =
-      filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
+      crosspoint::sleep::isPaused(filePath) ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
   // Blank rather than "Set sleep cover" when the file cannot become one: a .png is
   // only usable as a sleep image while the Transparent face is selected.
   const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
@@ -353,6 +353,14 @@ void BmpViewerActivity::doToggleFavorite() {
 }
 
 void BmpViewerActivity::doTogglePause() {
+  // A queued favourite rename and the move are both name-based operations on this one
+  // file: drain the queue first and adopt the post-drain name, as PxcViewerActivity does.
+  // Otherwise the rename lands after the move and misses the file.
+  const std::string queuedName = effectivePath();
+  DeferredFavorite::waitForIdle(15000);
+  DeferredFavorite::reconcile();
+  if (Storage.exists(queuedName.c_str())) filePath = queuedName;
+
   // Pick the neighbour before the move, while this file still anchors the lookup.
   const int nextIndex = (currentImageIndex > 0) ? currentImageIndex - 1 : currentImageIndex + 1;
   const bool hasNeighbour =

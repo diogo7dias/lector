@@ -205,6 +205,16 @@ static bool decodeScanline(PngDecodeContext& ctx) {
   return true;
 }
 
+// Same weights and white backdrop as PngToFramebufferConverter and Bitmap, so a
+// cover and the same image inside a book come out the same grey. A transparent
+// cover was drawn on black before.
+static inline uint8_t rgbToGray(const uint8_t r, const uint8_t g, const uint8_t b) {
+  return static_cast<uint8_t>((r * 77 + g * 150 + b * 29) >> 8);
+}
+static inline uint8_t overWhite(const uint8_t gray, const uint8_t alpha) {
+  return static_cast<uint8_t>((gray * alpha + 255u * (255u - alpha)) / 255u);
+}
+
 // Batch-convert an entire scanline to grayscale.
 // Branches once on colorType/bitDepth, then runs a tight loop for the whole row.
 static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow) {
@@ -232,11 +242,11 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
         // Fast path: most common EPUB cover format
         for (uint32_t x = 0; x < w; x++) {
           const uint8_t* p = src + x * 3;
-          grayRow[x] = (p[0] * 25 + p[1] * 50 + p[2] * 25) / 100;
+          grayRow[x] = rgbToGray(p[0], p[1], p[2]);
         }
       } else {
         for (uint32_t x = 0; x < w; x++) {
-          grayRow[x] = (src[x * 6] * 25 + src[x * 6 + 2] * 50 + src[x * 6 + 4] * 25) / 100;
+          grayRow[x] = rgbToGray(src[x * 6], src[x * 6 + 2], src[x * 6 + 4]);
         }
       }
       break;
@@ -250,16 +260,16 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
         int shift = (ppb - 1 - (x % ppb)) * ctx.bitDepth;
         uint8_t idx = (src[x / ppb] >> shift) & mask;
         if (idx >= palSize) idx = 0;
-        grayRow[x] = (pal[idx * 3] * 25 + pal[idx * 3 + 1] * 50 + pal[idx * 3 + 2] * 25) / 100;
+        grayRow[x] = rgbToGray(pal[idx * 3], pal[idx * 3 + 1], pal[idx * 3 + 2]);
       }
       break;
     }
 
     case PNG_COLOR_GRAYSCALE_ALPHA:
       if (ctx.bitDepth == 8) {
-        for (uint32_t x = 0; x < w; x++) grayRow[x] = src[x * 2];
+        for (uint32_t x = 0; x < w; x++) grayRow[x] = overWhite(src[x * 2], src[x * 2 + 1]);
       } else {
-        for (uint32_t x = 0; x < w; x++) grayRow[x] = src[x * 4];
+        for (uint32_t x = 0; x < w; x++) grayRow[x] = overWhite(src[x * 4], src[x * 4 + 2]);
       }
       break;
 
@@ -267,11 +277,11 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
       if (ctx.bitDepth == 8) {
         for (uint32_t x = 0; x < w; x++) {
           const uint8_t* p = src + x * 4;
-          grayRow[x] = (p[0] * 25 + p[1] * 50 + p[2] * 25) / 100;
+          grayRow[x] = overWhite(rgbToGray(p[0], p[1], p[2]), p[3]);
         }
       } else {
         for (uint32_t x = 0; x < w; x++) {
-          grayRow[x] = (src[x * 8] * 25 + src[x * 8 + 2] * 50 + src[x * 8 + 4] * 25) / 100;
+          grayRow[x] = overWhite(rgbToGray(src[x * 8], src[x * 8 + 2], src[x * 8 + 4]), src[x * 8 + 6]);
         }
       }
       break;
@@ -424,6 +434,17 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       // Skip any remaining palette data
       if (chunkLen > palBytes) pngFile.seekCur(chunkLen - palBytes);
       pngFile.seekCur(4);  // CRC
+    } else if (memcmp(chunkType, "tRNS", 4) == 0 && ctx.colorType == PNG_COLOR_PALETTE) {
+      // Fold palette alpha into the palette itself (tRNS follows PLTE), so the
+      // scanline loop stays alpha-free and no 256-byte alpha table is needed.
+      // ponytail: colour-key tRNS for grey/RGB images is still ignored.
+      const uint32_t entries = chunkLen < static_cast<uint32_t>(ctx.paletteSize) ? chunkLen : ctx.paletteSize;
+      for (uint32_t i = 0; i < entries; i++) {
+        uint8_t alpha;
+        if (pngFile.read(&alpha, 1) != 1) break;
+        for (int c = 0; c < 3; c++) ctx.palette[i * 3 + c] = overWhite(ctx.palette[i * 3 + c], alpha);
+      }
+      pngFile.seekCur(chunkLen - entries + 4);  // rest + CRC
     } else if (memcmp(chunkType, "IDAT", 4) == 0) {
       ctx.chunkBytesRemaining = chunkLen;
       foundIdat = true;

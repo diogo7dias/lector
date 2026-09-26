@@ -941,20 +941,29 @@ bool CssParser::saveToCache() const {
   memcpy(header + 2, &entryCount_, sizeof(entryCount_));
   memcpy(header + 4, &styleCount_, sizeof(styleCount_));
   memcpy(header + 6, &poolSize_, sizeof(poolSize_));
-  file.write(header, sizeof(header));
+  bool ok = file.write(header, sizeof(header)) == sizeof(header);
 
-  if (entryCount_ > 0) {
-    file.write(entries_.get(), entryCount_ * sizeof(SelectorEntry));
+  if (ok && entryCount_ > 0) {
+    const size_t bytes = entryCount_ * sizeof(SelectorEntry);
+    ok = file.write(entries_.get(), bytes) == bytes;
   }
 
-  for (uint16_t i = 0; i < styleCount_; ++i) {
+  for (uint16_t i = 0; ok && i < styleCount_; ++i) {
     uint8_t wire[STYLE_WIRE_BYTES];
     encodeStyleWire(stylePool_[i], wire);
-    file.write(wire, STYLE_WIRE_BYTES);
+    ok = file.write(wire, STYLE_WIRE_BYTES) == STYLE_WIRE_BYTES;
   }
 
-  if (poolSize_ > 0) {
-    file.write(selectorPool_.get(), poolSize_);
+  if (ok && poolSize_ > 0) {
+    ok = file.write(selectorPool_.get(), poolSize_) == poolSize_;
+  }
+
+  if (!ok) {
+    // A full card: leave no truncated cache behind to be tried at the next open.
+    LOG_ERR("CSS", "Short write saving the CSS cache");
+    file.close();
+    Storage.remove((cachePath + rulesCache).c_str());
+    return false;
   }
 
   LOG_DBG("CSS", "Saved %u rules to cache%s", entryCount_, partial_ ? " (partial)" : "");

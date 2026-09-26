@@ -2,6 +2,7 @@
 
 #include <HalStorage.h>
 
+#include "CrossPointState.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "util/FavoriteImage.h"
 
@@ -10,8 +11,9 @@ namespace sleep {
 
 namespace {
 
-constexpr const char* kSleepPrefix = "/sleep/";
 constexpr const char* kPausePrefix = "/sleep pause/";
+
+bool isUnderRotationDir(const std::string& p) { return p.rfind("/sleep/", 0) == 0 || p.rfind("/.sleep/", 0) == 0; }
 
 std::string baseName(const std::string& p) {
   const auto slash = p.find_last_of('/');
@@ -20,20 +22,19 @@ std::string baseName(const std::string& p) {
 
 }  // namespace
 
-bool isUnderSleepDirs(const std::string& path) {
-  // Check the pause folder first: its prefix also starts with "/sleep".
-  return path.rfind(kPausePrefix, 0) == 0 || path.rfind(kSleepPrefix, 0) == 0;
-}
+bool isPaused(const std::string& path) { return path.rfind(kPausePrefix, 0) == 0; }
+
+bool isUnderSleepDirs(const std::string& path) { return isPaused(path) || isUnderRotationDir(path); }
 
 SleepPauseToggleResult toggleSleepPause(const std::string& path) {
   SleepPauseToggleResult r;
   r.newPath = path;
 
   std::string destDir;
-  if (path.rfind(kPausePrefix, 0) == 0) {
-    destDir = kSleepDir;
+  if (isPaused(path)) {
+    destDir = windex::dirPathForId(APP_STATE.sleepIndexDirId);
     r.toPause = false;
-  } else if (path.rfind(kSleepPrefix, 0) == 0) {
+  } else if (isUnderRotationDir(path)) {
     destDir = kSleepPauseDir;
     r.toPause = true;
   } else {

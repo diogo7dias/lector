@@ -1,6 +1,7 @@
 #include "OpdsClient.h"
 
 #include <Arduino.h>
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <OpdsStream.h>
@@ -152,19 +153,35 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
     return false;
   };
 
+  // Bytes land under ".part" and take the book's name only once complete, so a
+  // failed download never shows up as a half-book in the library and an older
+  // book of the same name stays intact until the new one has fully arrived.
+  // Retries within this call resume the partial; giving up deletes it, so no
+  // later download can append onto a different edition's bytes.
+  const std::string partPath = filename + FsHelpers::PARTIAL_SUFFIX;
+  auto giveUp = [&partPath](const HttpDownloader::DownloadError error) {
+    Storage.remove(partPath.c_str());
+    return error;
+  };
+
   for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
-    if (isCancelled()) return HttpDownloader::ABORTED;
+    if (isCancelled()) return giveUp(HttpDownloader::ABORTED);
 
     std::string serverFilename;
     HttpDownloader::DownloadError result;
 
     if (beforeAttempt) beforeAttempt();
     result = HttpDownloader::downloadToFile(
-        downloadUrl, filename, progress, cancelFlag, server.username, server.password,
+        downloadUrl, partPath, progress, cancelFlag, server.username, server.password,
         /*allowResume=*/true, server.keepFilename ? &serverFilename : nullptr, timeoutMs);
     if (afterAttempt) afterAttempt();
 
     if (result == HttpDownloader::OK) {
+      if (Storage.exists(filename.c_str())) Storage.remove(filename.c_str());
+      if (!Storage.rename(partPath.c_str(), filename.c_str())) {
+        LOG_ERR("OPDSCLI", "rename of finished download failed: %s", partPath.c_str());
+        return giveUp(HttpDownloader::FILE_ERROR);
+      }
       const std::string sanitized = StringUtils::sanitizeFilename(serverFilename);
       if (server.keepFilename && !sanitized.empty()) {
         std::string finalPath;
@@ -187,14 +204,16 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
     }
 
     if (result == HttpDownloader::ABORTED || isCancelled()) {
-      return HttpDownloader::ABORTED;
+      return giveUp(HttpDownloader::ABORTED);
     }
 
-    // Only retry on network/server failures; file errors on SD are not retried
-    if (result != HttpDownloader::HTTP_ERROR || attempt >= maxAttempts) {
+    // Retry only a transfer that dropped. A status the server answered with, a bad
+    // URL or an SD error will fail the same way again.
+    const bool dropped = result == HttpDownloader::NO_CONNECTION || result == HttpDownloader::INCOMPLETE;
+    if (!dropped || attempt >= maxAttempts) {
       LOG_ERR("OPDSCLI", "Download failed permanently (attempt %d/%d, error %d)", attempt, maxAttempts,
               static_cast<int>(result));
-      return result;
+      return giveUp(result);
     }
 
     const unsigned long delayMs = opds_retry::backoffMs(attempt);
@@ -212,7 +231,7 @@ HttpDownloader::DownloadError OpdsClient::downloadBook(
 
     const unsigned long start = millis();
     while (millis() - start < delayMs) {
-      if (isCancelled()) return HttpDownloader::ABORTED;
+      if (isCancelled()) return giveUp(HttpDownloader::ABORTED);
       delay(20);
     }
   }

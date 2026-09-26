@@ -46,7 +46,6 @@ void indexBuildYield(void*) { vTaskDelay(1); }
 
 void DictionaryWordSelectActivity::onEnter() {
   Activity::onEnter();
-  fontId = SETTINGS.getReaderFontId();
   lineHeight = renderer.getLineHeight(fontId);
   // No null check: a failed allocation just disables the differential
   // fast path (drawHighlightWithSnapshot skips the read), keeping the

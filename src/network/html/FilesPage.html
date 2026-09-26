@@ -3543,8 +3543,10 @@ async function fetchVersion() {
           ? formatFileSize(data.sdFree) + ' free on card'
           : '';
       }
-      if (data.device === 'X3' || data.device === 'X4') {
-        DETECTED_DEVICE = data.device;
+      // The X4 Pro has the X4's 480x800 panel, so it converts to the same profile.
+      const detected = data.device === 'X4 Pro' ? 'X4' : data.device;
+      if (detected === 'X3' || detected === 'X4') {
+        DETECTED_DEVICE = detected;
         applyDeviceTarget();
       }
     }

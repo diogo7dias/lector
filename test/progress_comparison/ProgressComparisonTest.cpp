@@ -68,6 +68,16 @@ TEST(ProgressComparison, InvalidPercentageWithoutMappedEvidenceIsUnknown) {
             ProgressComparison::Unknown);
 }
 
+// A server record outside 0..1 cannot be a position. Treated as a real one, 1.5 read as
+// "remote ahead" and smart sync jumped to the end of the book.
+TEST(ProgressComparison, OutOfRangePercentageWithoutMappedEvidenceIsUnknown) {
+  const CrossPointPosition estimated{};
+  EXPECT_EQ(compareProgress(estimated, 0.5f, estimated, 1.5f), ProgressComparison::Unknown);
+  EXPECT_EQ(compareProgress(estimated, 0.5f, estimated, -0.1f), ProgressComparison::Unknown);
+  EXPECT_EQ(compareProgress(estimated, 1.2f, estimated, 0.5f), ProgressComparison::Unknown);
+  EXPECT_EQ(compareProgress(estimated, 0.0f, estimated, 1.0f), ProgressComparison::RemoteAhead);
+}
+
 TEST(ProgressComparison, RichPageOnlyPositionsUseTrustedPages) {
   EXPECT_EQ(compareProgress(mappedPage(5, 9), 0.8f, mappedPage(5, 12), 0.2f), ProgressComparison::RemoteAhead);
   EXPECT_EQ(compareProgress(mappedPage(5, 9), 0.8f, mappedPage(5, 9), 0.2f), ProgressComparison::Synchronized);

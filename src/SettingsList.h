@@ -830,8 +830,11 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
   return baseList;
 }
 
+// withAbsentHardware keeps the rows this board cannot use. Saving and loading pass it:
+// the values still persist, so a card moved between devices keeps them. Screens do not.
 inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* registry = nullptr,
-                                                const std::vector<DictionaryEntry>* dictionaries = nullptr) {
+                                                const std::vector<DictionaryEntry>* dictionaries = nullptr,
+                                                const bool withAbsentHardware = false) {
   std::vector<SettingInfo> v = settingsBaseList();
   // The status-bar clock reads the RTC, which only the X3 carries. HalClock does have
   // a system-clock fallback for boards without one, but deep sleep here is a full chip
@@ -846,7 +849,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   // controls that move nothing. Filtered in this per-call copy rather than in
   // the static baseList because the static is built on first use, which is not
   // guaranteed to be after HalFrontlight::begin().
-  if (!Frontlight.present()) {
+  if (!withAbsentHardware && !Frontlight.present()) {
     static constexpr StrId FRONTLIGHT_ROWS[] = {StrId::STR_FRONTLIGHT, StrId::STR_FRONTLIGHT_BRIGHTNESS,
                                                 StrId::STR_FRONTLIGHT_WARMTH, StrId::STR_FRONTLIGHT_RESTORE_ON_WAKE};
     v.erase(std::remove_if(v.begin(), v.end(),
@@ -855,13 +858,13 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                                     std::end(FRONTLIGHT_ROWS);
                            }),
             v.end());
-  } else if (!Frontlight.hasColorTemperature()) {
+  } else if (!withAbsentHardware && !Frontlight.hasColorTemperature()) {
     // Single-colour light: brightness applies, warmth does not.
     v.erase(std::remove_if(v.begin(), v.end(),
                            [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONTLIGHT_WARMTH; }),
             v.end());
   }
-  if (!halClock.isAvailable()) {
+  if (!withAbsentHardware && !halClock.isAvailable()) {
     v.erase(std::remove_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_CLOCK; }),
             v.end());
   }

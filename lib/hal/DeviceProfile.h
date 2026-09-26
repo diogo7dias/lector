@@ -32,6 +32,10 @@ struct DeviceProfile {
   bool hasTouch = false;
 };
 
+// The board's name as the web API and the perf log report it. HalGPIO's DeviceType has
+// only X4 and X3, so an X4 Pro used to call itself an X4.
+inline const char* deviceName(const DeviceProfile& dev) { return dev.isX3 ? "X3" : dev.isX4Pro ? "X4 Pro" : "X4"; }
+
 // Reads the hardware detect (HalGPIO + BoardConfig) once. Valid only after gpio.begin(),
 // which is what runs the detect and selects the active board.
 DeviceProfile deviceProfileFromHardware();

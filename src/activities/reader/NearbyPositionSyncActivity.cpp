@@ -94,6 +94,10 @@ void NearbyPositionSyncActivity::ensureEpubLoaded() {
   if (epub) return;
 
   epub = makeUniqueNoThrow<Epub>(epubPath, "/.crosspoint");
+  if (!epub) {
+    LOG_ERR("NBPS", "OOM: Epub");
+    return;
+  }
   epub->setupCacheDir();
   // Metadata only: mapping a position needs the spine and TOC, not the CSS, and
   // this must not rebuild a missing cache while the radio holds the heap.

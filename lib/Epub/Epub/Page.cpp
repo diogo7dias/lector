@@ -83,6 +83,10 @@ std::unique_ptr<PageImage> PageImage::deserialize(HalFile& file) {
   serialization::readPod(file, yPos);
 
   auto ib = ImageBlock::deserialize(file);
+  if (!ib) {
+    LOG_ERR("PAGE", "OOM: ImageBlock");
+    return nullptr;
+  }
   auto image = makeUniqueNoThrow<PageImage>(std::move(ib), xPos, yPos);
   if (!image) LOG_ERR("PAGE", "OOM: PageImage");
   return image;

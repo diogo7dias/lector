@@ -159,9 +159,6 @@ class ParagraphTextCounter final : public Print {
     if (nonVisibleDepth > 0 || VisibleTextUtils::isNonVisibleElement(name)) {
       nonVisibleDepth++;
     }
-    if (name == "p") {
-      paragraphDepth++;
-    }
     depth++;
   }
 
@@ -182,13 +179,11 @@ class ParagraphTextCounter final : public Print {
     if (nonVisibleDepth > 0) {
       nonVisibleDepth--;
     }
-    if (name == "p" && paragraphDepth > 0) {
-      paragraphDepth--;
-    }
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || nonVisibleDepth > 0 || paragraphDepth <= 0 || len <= 0) {
+    // Same scale as XPathProgressResolver: every visible body character.
+    if (!insideBody || nonVisibleDepth > 0 || len <= 0) {
       return;
     }
 
@@ -202,7 +197,6 @@ class ParagraphTextCounter final : public Print {
   bool stopped = false;
   int depth = 0;
   int bodyDepth = -1;
-  int paragraphDepth = 0;
   uint16_t nonVisibleDepth = 0;
   size_t visibleChars = 0;
 };
@@ -287,12 +281,10 @@ class XPathParagraphResolver final : public Print {
     path.push_back({name, siblingIndex});
     parentStates.emplace_back();
 
-    // Count both <p> and <li> as paragraph-like positions, matching how the section
-    // layout tracks them (xpathParagraphIndex and xpathListItemIndex). This ensures
-    // KOReader progress in list items maps to the correct XPath.
+    // <p> only: the section's xpathParagraphIndex counts paragraphs, and list items
+    // have their own counter (xpathListItemIndex), as does the ParagraphStreamer that
+    // resolves the index on the way back in.
     if (name == "p") {
-      paragraphCount++;
-    } else if (name == "li") {
       paragraphCount++;
     }
     if (paragraphCount == targetParagraph) {
@@ -512,12 +504,19 @@ class XPathProgressResolver final : public Print {
   }
 
   void onCharacterData(const XML_Char* data, const int len) {
-    if (!insideBody || nonVisibleDepth > 0 || (paragraphDepth <= 0 && liDepth <= 0) || len <= 0 || stopped) {
+    if (!insideBody || nonVisibleDepth > 0 || len <= 0 || stopped) {
       return;
     }
 
     const size_t codepointCount = countUtf8Codepoints(data, len);
     if (codepointCount == 0) {
+      return;
+    }
+    // Every visible body character counts, the way Section::visibleTextOffset counts
+    // them, but only paragraph and list-item text becomes an XPath: a target that falls
+    // in a heading resolves to the start of the next paragraph.
+    if (paragraphDepth <= 0 && liDepth <= 0) {
+      visibleChars += codepointCount;
       return;
     }
 
@@ -536,7 +535,7 @@ class XPathProgressResolver final : public Print {
     const bool targetInCurrentChunk = boundaryMode == BoundaryMode::Inclusive ? targetVisibleChar <= nextVisibleChars
                                                                               : targetVisibleChar < nextVisibleChars;
     if (targetInCurrentChunk) {
-      const size_t delta = targetVisibleChar - visibleChars;
+      const size_t delta = targetVisibleChar > visibleChars ? targetVisibleChar - visibleChars : 0;
       const int texNode = textNodeIndexStack.empty() ? 0 : textNodeIndexStack.back();
       const size_t charOff = visibleChars - textNodeStartChars + delta;
       xpath = buildParagraphXPath(spineIndex, path, texNode, charOff);

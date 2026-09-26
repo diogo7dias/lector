@@ -107,6 +107,8 @@ class FontDownloadActivity : public UiStatusActivity {
   int downloadingFamilyIndex_ = 0;
   /** Drawn on the DOWNLOADING screen, which runs while families_ is empty. */
   std::string downloadingFamilyName_;
+  /** What Retry on the ERROR screen fetches again. Empty means the manifest itself failed. */
+  std::vector<std::string> retryFamilies_;
   /**
    * The four lines the ERROR screen shows: a headline naming which half of the
    * trip failed, the reason in the reader's language, and two untranslated code

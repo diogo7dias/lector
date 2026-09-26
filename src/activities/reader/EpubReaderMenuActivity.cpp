@@ -15,29 +15,37 @@
 
 namespace fui = freeink::ui;
 
-EpubReaderMenuActivity::EpubReaderMenuActivity(
-    GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title, const std::string& author,
-    const std::string& chapterName, const int currentPage, const int totalPages, const int bookProgressPercent,
-    const uint8_t currentOrientation, const bool hasFootnotes, const bool hasBookmarks, const bool hasReaderOverride,
-    const uint8_t paragraphNumbering, const uint8_t paragraphNumberSize, const uint8_t paperbackBody,
-    const uint8_t paperbackStatus, const uint8_t statusBar, const uint8_t progressBar, const bool hasSleepWallpaper,
-    const bool wallpaperFavorited, const bool wallpaperPausable, const bool hasQuotes, const bool hasReturn)
+EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
+                                               const Context& context)
     : UiListActivity("EpubReaderMenu", renderer, mappedInput),
-      items(flatten(buildTabs(hasFootnotes, hasBookmarks, hasReaderOverride, paragraphNumbering, statusBar,
-                              hasSleepWallpaper, wallpaperFavorited, wallpaperPausable, hasQuotes, hasReturn))),
-      title(title),
-      author(author),
-      chapterName(chapterName),
-      pendingOrientation(currentOrientation),
-      selectedParagraphNumbering(paragraphNumbering),
-      selectedParagraphNumberSize(paragraphNumberSize),
-      selectedPaperbackBody(paperbackBody),
-      selectedPaperbackStatus(paperbackStatus),
-      selectedStatusBar(statusBar),
-      selectedProgressBar(progressBar),
-      currentPage(currentPage),
-      totalPages(totalPages),
-      bookProgressPercent(bookProgressPercent) {}
+      items(flatten(buildTabs(context))),
+      title(context.title),
+      author(context.author),
+      chapterName(context.chapterName),
+      pendingOrientation(context.currentOrientation),
+      selectedParagraphNumbering(context.paragraphNumbering),
+      selectedParagraphNumberSize(context.paragraphNumberSize),
+      selectedPaperbackBody(context.paperbackBody),
+      selectedPaperbackStatus(context.paperbackStatus),
+      selectedStatusBar(context.statusBar),
+      selectedProgressBar(context.progressBar),
+      currentPage(context.currentPage),
+      totalPages(context.totalPages),
+      bookProgressPercent(context.bookProgressPercent) {}
+
+MenuResult EpubReaderMenuActivity::resultFor(const int action) const {
+  MenuResult r;
+  r.action = action;
+  r.orientation = pendingOrientation;
+  r.paragraphNumbering = selectedParagraphNumbering;
+  r.paragraphNumberSize = selectedParagraphNumberSize;
+  r.paperbackBody = selectedPaperbackBody;
+  r.paperbackStatus = selectedPaperbackStatus;
+  r.statusBar = selectedStatusBar;
+  r.progressBar = selectedProgressBar;
+  r.holdFunction = firedHoldFunction;
+  return r;
+}
 
 // Section label first, then that section's rows. A section that built no rows
 // contributes nothing at all, heading included.
@@ -54,9 +62,17 @@ std::vector<EpubReaderMenuActivity::MenuItem> EpubReaderMenuActivity::flatten(co
   return flat;
 }
 
-std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
-    bool hasFootnotes, bool hasBookmarks, bool hasReaderOverride, uint8_t paragraphNumbering, uint8_t statusBar,
-    bool hasSleepWallpaper, bool wallpaperFavorited, bool wallpaperPausable, bool hasQuotes, bool hasReturn) {
+std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(const Context& context) {
+  const bool hasFootnotes = context.hasFootnotes;
+  const bool hasBookmarks = context.hasBookmarks;
+  const bool hasReaderOverride = context.hasReaderOverride;
+  const uint8_t paragraphNumbering = context.paragraphNumbering;
+  const uint8_t statusBar = context.statusBar;
+  const bool hasSleepWallpaper = context.hasSleepWallpaper;
+  const bool wallpaperFavorited = context.wallpaperFavorited;
+  const bool wallpaperPausable = context.wallpaperPausable;
+  const bool hasQuotes = context.hasQuotes;
+  const bool hasReturn = context.hasReturn;
   // Reserve every tab this menu can ever have, so no push_back below can reallocate.
   // That matters: page() hands back a reference INTO the vector, and a reallocation
   // would dangle it. Raise this with any new tab. (Each reference also dies at the end
@@ -79,7 +95,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(
     for (auto& member : members) items.push_back(member);
   };
 
-  // The menu opens on Look. Keep the common per-book controls first and use the tab
+  // Look comes first in the list. Keep the common per-book controls first and use the tab
   // label as the only heading: nested section headers spend a full screen row each.
   {
     auto& items = page(Tab::Look, StrId::STR_SEC_LOOK);
@@ -237,8 +253,27 @@ void EpubReaderMenuActivity::onEnter() {
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
-    int first = 0;
-    while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
+    // Open on the tab Settings > Book Menu Opens On names (indexed by BOOK_MENU_TAB).
+    // A tab that is not there tonight (Sleep, with no wallpaper to act on) falls back
+    // to Navigate, and failing that to the first heading.
+    static constexpr StrId TAB_LABELS[CrossPointSettings::BOOK_MENU_TAB_COUNT] = {
+        StrId::STR_SEC_NAVIGATE, StrId::STR_SEC_THIS_BOOK, StrId::STR_SEC_LOOK, StrId::STR_SEC_DEVICE,
+        StrId::STR_SEC_SLEEP_SCREEN};
+    const auto headerFor = [this](const StrId label) {
+      for (int i = 0; i < static_cast<int>(items.size()); ++i) {
+        if (items[i].isHeader && items[i].labelId == label) return i;
+      }
+      return -1;
+    };
+    const uint8_t wanted = SETTINGS.bookMenuTab < CrossPointSettings::BOOK_MENU_TAB_COUNT
+                               ? SETTINGS.bookMenuTab
+                               : CrossPointSettings::BOOK_MENU_TAB_NAVIGATE;
+    int first = headerFor(TAB_LABELS[wanted]);
+    if (first < 0) first = headerFor(StrId::STR_SEC_NAVIGATE);
+    if (first < 0) {
+      first = 0;
+      while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
+    }
     nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
   }
   requestUpdate();
@@ -252,15 +287,7 @@ void EpubReaderMenuActivity::onExit() {
 void EpubReaderMenuActivity::closeCancelled() {
   ActivityResult result;
   result.isCancelled = true;
-  result.data = MenuResult{-1,
-                           pendingOrientation,
-                           selectedParagraphNumbering,
-                           selectedParagraphNumberSize,
-                           selectedPaperbackBody,
-                           selectedPaperbackStatus,
-                           selectedStatusBar,
-                           selectedProgressBar,
-                           firedHoldFunction};
+  result.data = resultFor(-1);
   setResult(std::move(result));
   finish();
 }
@@ -421,9 +448,7 @@ void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   // through pays one. The row label is right the next time the menu opens because the
   // reader moves APP_STATE to the new name before it returns.
 
-  setResult(MenuResult{static_cast<int>(selectedAction), pendingOrientation, selectedParagraphNumbering,
-                       selectedParagraphNumberSize, selectedPaperbackBody, selectedPaperbackStatus, selectedStatusBar,
-                       selectedProgressBar, firedHoldFunction});
+  setResult(resultFor(static_cast<int>(selectedAction)));
   finish();
 }
 

@@ -46,6 +46,7 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
 
   // Sustained WiFi-loss tracking; abandon only after WIFI_ABANDON_MS.
   int consecutiveDisconnects = 0;
+  unsigned long lastWifiCheck = 0;  // per instance: a function static carried over to the next session
   unsigned long firstDisconnectAt = 0;
   static constexpr unsigned long WIFI_ABANDON_MS = 5UL * 60UL * 1000UL;
 

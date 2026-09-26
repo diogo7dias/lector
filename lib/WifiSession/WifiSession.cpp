@@ -209,6 +209,9 @@ void WifiSession::onJoinFailed(const uint32_t nowMs) {
   clockMs_ = nowMs;
   diaglog::note("  t=%u join failed (radio)", nowMs);
   joiningSsid_.clear();
+  // A typed password that did not join has nothing worth remembering, and left set
+  // it would offer to save itself over whichever network joins next.
+  typedPasswordPending_ = false;
   if (state_ != State::AUTO_CONNECTING) {
     setState(State::FAILED);
     return;

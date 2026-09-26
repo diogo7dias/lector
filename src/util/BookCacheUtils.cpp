@@ -114,7 +114,8 @@ void clearBookCache(const std::string& path) {
     Epub(path, CACHE_DIR).clearCache();
   } else if (FsHelpers::hasXtcExtension(path)) {
     Xtc(path, CACHE_DIR).clearCache();
-  } else if (FsHelpers::hasTxtExtension(path)) {
+  } else if (FsHelpers::hasTxtExtension(path) || FsHelpers::hasMarkdownExtension(path)) {
+    // .md is opened by the txt reader and caches under txt_ (see bookCacheKeyForPath).
     Txt(path, CACHE_DIR).clearCache();
   } else {
     return;

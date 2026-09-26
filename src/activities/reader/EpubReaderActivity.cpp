@@ -9,6 +9,7 @@
 #include <I18n.h>
 #include <Logging.h>
 #include <Memory.h>
+#include <NearbyPositionReceive.h>
 #include <esp_random.h>
 #include <esp_system.h>
 
@@ -174,10 +175,12 @@ void EpubReaderActivity::onEnter() {
   HalFile f;
   if (!sortesMode && Storage.openFileForRead("ERS", epub->getCachePath() + "/progress.bin", f)) {
     uint8_t data[10];
-    int dataSize = f.read(data, sizeof(data));
-    if (dataSize == 4 || dataSize == 6 || dataSize == 10) {
-      currentSpineIndex = data[0] + (data[1] << 8);
-      nextPageNumber = data[2] + (data[3] << 8);
+    const int dataSize = f.read(data, sizeof(data));
+    // Decoded by the same tested function the position sync uses. The reader keeps a
+    // page past the chapter's end (the section clamps it) rather than losing the spine.
+    if (const auto saved = nearby_position::decodeCachedPosition(data, dataSize > 0 ? dataSize : 0)) {
+      currentSpineIndex = saved->spine;
+      nextPageNumber = saved->page;
       if (nextPageNumber == UINT16_MAX) {
         // UINT16_MAX is an in-memory navigation sentinel for "open previous
         // chapter on its last page". It should never be treated as persisted
@@ -186,14 +189,9 @@ void EpubReaderActivity::onEnter() {
         nextPageNumber = 0;
       }
       cachedSpineIndex = currentSpineIndex;
+      cachedChapterTotalPageCount = saved->pages;
+      cachedVisibleTextOffset = saved->offset;
       LOG_DBG("ERS", "Loaded cache: %d, %d", currentSpineIndex, nextPageNumber);
-    }
-    if (dataSize == 6) {
-      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-    } else if (dataSize == 10) {
-      cachedChapterTotalPageCount = data[4] + (data[5] << 8);
-      cachedVisibleTextOffset = static_cast<uint32_t>(data[6]) | (static_cast<uint32_t>(data[7]) << 8) |
-                                (static_cast<uint32_t>(data[8]) << 16) | (static_cast<uint32_t>(data[9]) << 24);
     }
   }
   // We may want a better condition to detect if we are opening for the first time.
@@ -384,37 +382,55 @@ void EpubReaderActivity::openReaderMenu() {
   // "View Quotes" is only offered once Grab Quote has actually written a sidecar for
   // this book; an empty viewer would be a dead row.
   const bool hasQuotes = Storage.exists(quote_text::quotesFilePathFor(epub->getPath()).c_str());
-  startActivityForResult(
-      std::make_unique<EpubReaderMenuActivity>(
-          renderer, mappedInput, epub->getTitle(), epub->getAuthor(), chapterName, currentPage, totalPages,
-          bookProgressPercent, SETTINGS.orientation, !currentPageFootnotes.empty(), !cachedBookmarks.empty(),
-          prefsCustom_, prefs_.paragraphNumbering, prefs_.paragraphNumberSize, prefs_.paperbackLookBody,
-          prefs_.paperbackLookStatus, prefs_.statusBarEnabled, prefs_.sbOffBar, hasSleepWallpaper, wallpaperFavorited,
-          wallpaperPausable, hasQuotes, !returnHistory.empty()),
-      [this](const ActivityResult& result) {
-        // Always apply orientation / paragraph-number / paperback changes even if cancelled
-        const auto& menu = std::get<MenuResult>(result.data);
-        applyOrientation(menu.orientation);
-        applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
-        applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
-        // Last of the live toggles because it is the only one that repaginates.
-        applyStatusBar(menu.statusBar, menu.progressBar);
-        // A hold inside the menu comes back cancelled with the bound function attached:
-        // no row was chosen, so this replaces the row action rather than following it.
-        //
-        // Runs AFTER the toggles above, never before. Grab Quote hands the picker a raw
-        // Section* and the picker outlives this callback; starting it first and then
-        // letting applyStatusBar/applyOrientation drop the section would leave that
-        // pointer dangling. In this order the worst case is a bound function that
-        // declines because the section is already gone, which every one of them handles.
-        if (menu.holdFunction != CrossPointSettings::LP_MENU_DISABLED) {
-          runBoundMenuFunction(menu.holdFunction);
-          return;
-        }
-        if (!result.isCancelled) {
-          onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
-        }
-      });
+  EpubReaderMenuActivity::Context menuContext;
+  menuContext.title = epub->getTitle();
+  menuContext.author = epub->getAuthor();
+  menuContext.chapterName = chapterName;
+  menuContext.currentPage = currentPage;
+  menuContext.totalPages = totalPages;
+  menuContext.bookProgressPercent = bookProgressPercent;
+  menuContext.currentOrientation = SETTINGS.orientation;
+  menuContext.hasFootnotes = !currentPageFootnotes.empty();
+  menuContext.hasBookmarks = !cachedBookmarks.empty();
+  menuContext.hasReaderOverride = prefsCustom_;
+  menuContext.paragraphNumbering = prefs_.paragraphNumbering;
+  menuContext.paragraphNumberSize = prefs_.paragraphNumberSize;
+  menuContext.paperbackBody = prefs_.paperbackLookBody;
+  menuContext.paperbackStatus = prefs_.paperbackLookStatus;
+  menuContext.statusBar = prefs_.statusBarEnabled;
+  menuContext.progressBar = prefs_.sbOffBar;
+  menuContext.hasSleepWallpaper = hasSleepWallpaper;
+  menuContext.wallpaperFavorited = wallpaperFavorited;
+  menuContext.wallpaperPausable = wallpaperPausable;
+  menuContext.hasQuotes = hasQuotes;
+  menuContext.hasReturn = !returnHistory.empty();
+  startActivityForResult(std::make_unique<EpubReaderMenuActivity>(renderer, mappedInput, menuContext),
+                         [this](const ActivityResult& result) {
+                           // Always apply orientation / paragraph-number / paperback changes even if cancelled
+                           const auto& menu = std::get<MenuResult>(result.data);
+                           applyOrientation(menu.orientation);
+                           applyParagraphNumbering(menu.paragraphNumbering, menu.paragraphNumberSize);
+                           applyPaperbackLook(menu.paperbackBody, menu.paperbackStatus);
+                           // Last of the live toggles because it is the only one that repaginates.
+                           applyStatusBar(menu.statusBar, menu.progressBar);
+                           // A hold inside the menu comes back cancelled with the bound function attached:
+                           // no row was chosen, so this replaces the row action rather than following it.
+                           //
+                           // Runs AFTER the toggles above, never before. Grab Quote hands the picker a raw
+                           // Section* and the picker outlives this callback; starting it first and then
+                           // letting applyStatusBar/applyOrientation drop the section would leave that
+                           // pointer dangling. In this order the worst case is a bound function that
+                           // declines because the section is already gone, which every one of them handles.
+                           if (menu.holdFunction != CrossPointSettings::LP_MENU_DISABLED) {
+                             // Through the manager, like any other binding: the reader takes its own actions
+                             // and the rest (Home, Rotate, Sleep...) fall through to the global ones.
+                             activityManager.runBoundAction(menu.holdFunction);
+                             return;
+                           }
+                           if (!result.isCancelled) {
+                             onReaderMenuConfirm(static_cast<EpubReaderMenuActivity::MenuAction>(menu.action));
+                           }
+                         });
 }
 
 bool EpubReaderActivity::buildTickHeapGate() {
@@ -485,9 +501,11 @@ void EpubReaderActivity::openDictionaryWordSelect() {
   int orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft;
   computeReaderMargins(orientedMarginTop, orientedMarginRight, orientedMarginBottom, orientedMarginLeft);
 
-  startActivityForResult(std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page),
-                                                                        orientedMarginLeft, orientedMarginTop),
-                         [this](const ActivityResult&) { requestUpdate(); });
+  // The page was laid out in this book's font (per-book prefs), so the word boxes must be too.
+  startActivityForResult(
+      std::make_unique<DictionaryWordSelectActivity>(renderer, mappedInput, std::move(page), orientedMarginLeft,
+                                                     orientedMarginTop, SETTINGS.getReaderFontId(prefs_)),
+      [this](const ActivityResult&) { requestUpdate(); });
 }
 
 void EpubReaderActivity::openQuoteGrab() {
@@ -572,6 +590,7 @@ bool EpubReaderActivity::boundMenuFunctionAvailable(const uint8_t function) cons
       // the lock screen actually showed, and it must still be on the card.
       return !APP_STATE.lastSleepWallpaperPath.empty() && Storage.exists(APP_STATE.lastSleepWallpaperPath.c_str());
     case CrossPointSettings::LP_MENU_BOOKMARK:
+    case CrossPointSettings::LP_MENU_NEARBY_SEND_BOOK:
     case CrossPointSettings::LP_MENU_READER_SETTINGS:
     case CrossPointSettings::LP_MENU_TOGGLE_STATUS_BAR:
     // Bound to a key that does not already page (the Home key, or a side key whose single
@@ -962,7 +981,7 @@ void EpubReaderActivity::loop() {
                                             ? ReaderUtils::GO_HOME_MS
                                             : ReaderUtils::BOOKMARK_HOLD_MS;
     if (SETTINGS.longPressMenuFunction != CrossPointSettings::LP_MENU_DISABLED &&
-        mappedInput.getHeldTime() >= holdThreshold && runBoundMenuFunction(SETTINGS.longPressMenuFunction)) {
+        mappedInput.getHeldTime() >= holdThreshold && activityManager.runBoundAction(SETTINGS.longPressMenuFunction)) {
       ignoreNextConfirmRelease = true;  // suppress the menu on the release that follows
       return;
     }
@@ -2108,28 +2127,25 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
   }
 
   // Numbering restarts at 1 in every chapter, so the number typed is always a paragraph
-  // of the chapter being read. There is no book-wide range to search.
-  const int targetSpine = currentSpineIndex;
-  uint16_t localOrdinal = static_cast<uint16_t>(target);
-  if (localOrdinal < 1) localOrdinal = 1;
+  // of the chapter being read. There is no book-wide range to search. Clamped, not cast:
+  // a six-digit entry used to wrap past 65535 to an early paragraph.
+  const uint16_t localOrdinal = static_cast<uint16_t>(std::min(target, static_cast<int>(UINT16_MAX)));
 
-  if (targetSpine == currentSpineIndex && section) {
-    // Same chapter, section already loaded — scan and move within it.
-    const int page = findPageForOrdinal(*section, localOrdinal);
+  {
+    // The same preamble as every other jump: Return can undo it, and a deferred
+    // reposition from a background build cannot snap the page back afterwards.
     RenderLock lock(*this);
-    returnHistory.finishReturn(false);
-    pendingOffsetJump.reset();
-    section->currentPage = page;
-    nextPageNumber = page;
-  } else {
-    // Different chapter — switch spine and defer the page scan until it loads.
-    RenderLock lock(*this);
-    returnHistory.finishReturn(false);
-    pendingOffsetJump.reset();
-    currentSpineIndex = targetSpine;
-    nextPageNumber = 0;
-    pendingParagraphScan_ = localOrdinal;
-    section.reset();
+    recordJumpOrigin();
+    clearDeferredReposition();
+    if (section) {
+      const int page = findPageForOrdinal(*section, localOrdinal);
+      section->currentPage = page;
+      nextPageNumber = page;
+    } else {
+      // Section not loaded yet: defer the page scan until it is.
+      nextPageNumber = 0;
+      pendingParagraphScan_ = localOrdinal;
+    }
   }
   requestUpdate();
 }
@@ -2139,14 +2155,15 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
 // book is not open. Writing our own override marks this book custom, so a later Reset
 // still returns it to the global settings.
 void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
-  ReaderPrefs stolen;
-  HalFile f;
-  if (!Storage.openFileForRead("ERS", sourceCachePath + "/reader_override.bin", f) || !readReaderPrefs(f, stolen)) {
+  // Through the loader, so an old sidecar is settled (migrated defaults filled in) the
+  // way it would be when that book opens.
+  const BookReaderPrefs stolen = loadBookReaderPrefs(sourceCachePath, ReaderPrefs::fromGlobal());
+  if (!stolen.custom) {
     LOG_ERR("ERS", "Steal Look: source reader_override.bin missing or unreadable");
     requestUpdate();
     return;
   }
-  applyReaderPrefsFrom(stolen);
+  applyReaderPrefsFrom(stolen.prefs);
 }
 
 // Adopt a whole set of reader settings from somewhere else — another book (Steal Look)
@@ -3579,7 +3596,7 @@ void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool s
   if (sameFile) {
     targetSpineIndex = currentSpineIndex;
   } else {
-    targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr);
+    targetSpineIndex = epub->resolveHrefToSpineIndex(hrefStr, currentSpineIndex);
   }
 
   if (targetSpineIndex < 0) {

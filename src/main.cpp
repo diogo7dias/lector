@@ -469,10 +469,6 @@ void setup() {
 
   HalSystem::begin();
   WakeTiming::mark(WakeTiming::Stage::SysReady);
-  // checkPanic() clears the watchdog capture marker after a successful SD dump,
-  // so isRebootFromPanic() stops answering true partway through setup(). Latch
-  // the boot classification here, before that happens, and use it everywhere
-  // below.
   const bool rebootedFromPanic = HalSystem::isRebootFromPanic();
 
   // Read-and-clear so a panic later in setup() doesn't loop into silent reboot.
@@ -603,7 +599,10 @@ void setup() {
   // copied file carries both the wake cost and the refresh costs that follow it.
   const uint32_t logsStartedMs = millis();
   debug_trace::begin();
-  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
+  {
+    const DeviceProfile dev = deviceProfileFromHardware();
+    startPerfLogSink(dev.isX3 ? "x3" : dev.isX4Pro ? "x4pro" : "x4");
+  }
   WakeTiming::noteCost(WakeTiming::Cost::Logs, millis() - logsStartedMs);
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
@@ -1182,6 +1181,24 @@ void loop() {
     };
 
     const uint32_t now = millis();
+    // One key's pass through the router: its RAW edges (the overrides below are what
+    // rewrite the mapped ones, and feeding the router its own output would latch it),
+    // then the hold timer, then the bound action unless the ruling is to replay the
+    // gesture the key already does.
+    const auto routeKey = [&](const uint8_t key, const bool pressed, const bool released) {
+      button_router::Fired fired;
+      if (pressed) {
+        fired = bindingRouter.onPress(key, now);
+      } else if (released) {
+        fired = bindingRouter.onRelease(key, now);
+      }
+      if (!fired.valid) fired = bindingRouter.tick(key, now);
+      if (fired.valid)
+        debug_trace::note("key %u fired action %u replay=%d", key, fired.function, fired.replayRawEdge ? 1 : 0);
+      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      return fired;
+    };
+
     // Left is the upper side key, Right the lower one, matching the hint labels.
     constexpr uint8_t SIDE_HARDWARE[] = {HalGPIO::BTN_UP, HalGPIO::BTN_DOWN};
     // A replayed side-key gesture is two passes long; button_replay::SideKey owns
@@ -1194,18 +1211,7 @@ void loop() {
         continue;
       }
       const uint8_t hardware = SIDE_HARDWARE[key];
-      // The RAW edges, deliberately: the override below is what rewrites the mapped ones,
-      // and feeding the router its own output would latch it.
-      button_router::Fired fired;
-      if (gpio.wasPressed(hardware)) {
-        fired = bindingRouter.onPress(key, now);
-      } else if (gpio.wasReleased(hardware)) {
-        fired = bindingRouter.onRelease(key, now);
-      }
-      if (!fired.valid) fired = bindingRouter.tick(key, now);
-      if (fired.valid)
-        debug_trace::note("side key %u fired action %u replay=%d", key, fired.function, fired.replayRawEdge ? 1 : 0);
-      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      const button_router::Fired fired = routeKey(key, gpio.wasPressed(hardware), gpio.wasReleased(hardware));
       // Edges stay hidden for as long as this key is intercepted, and are replayed only on
       // the pass the router rules the gesture the paging the key already did.
       const button_replay::Injection injection =
@@ -1219,15 +1225,9 @@ void loop() {
     // A hold left on Sleep is not intercepted at all: the sleep-hold check further up keeps
     // it, threshold included.
     if (bindingRouter.intercepts(CrossPointSettings::BOUND_BTN_POWER)) {
-      constexpr int POWER_KEY = CrossPointSettings::BOUND_BTN_POWER;
-      button_router::Fired fired;
-      if (gpio.wasPressed(HalGPIO::BTN_POWER)) {
-        fired = bindingRouter.onPress(POWER_KEY, now);
-      } else if (gpio.wasReleased(HalGPIO::BTN_POWER)) {
-        fired = bindingRouter.onRelease(POWER_KEY, now);
-      }
-      if (!fired.valid) fired = bindingRouter.tick(POWER_KEY, now);
-      if (fired.valid && !fired.replayRawEdge) runBoundFunction(fired.function);
+      const button_router::Fired fired =
+          routeKey(CrossPointSettings::BOUND_BTN_POWER, gpio.wasPressed(HalGPIO::BTN_POWER),
+                   gpio.wasReleased(HalGPIO::BTN_POWER));
       mappedInputManager.setPowerReleaseOverride(/*suppress=*/true,
                                                  /*inject=*/fired.valid && fired.replayRawEdge);
     }
@@ -1235,7 +1235,7 @@ void loop() {
     // The Home key reports taps and long presses, never raw edges, so its press and release
     // are manufactured from the tap it already completed. A long press is the hold outright;
     // the detector is reset after one so a tap reported alongside it cannot fire as well.
-    constexpr uint8_t HOME_KEY = 2;
+    constexpr uint8_t HOME_KEY = CrossPointSettings::BOUND_BTN_HOME;
     if (gpio.hasHomeKey() && bindingRouter.intercepts(HOME_KEY)) {
       button_router::Fired fired;
       if (gpio.wasHomeKeyLongPressed()) {

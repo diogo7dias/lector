@@ -624,9 +624,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Layout: text alignment, first-line indent, margins, padding, book-set image sizes.
   // Paragraph Alignment "Book's Style" and First Line Indent "Book" both need this on.
   uint8_t embeddedLayoutStyle = 1;
-  // Which tab the in-book menu opens on (see BOOK_MENU_TAB). Navigate by default,
-  // which is where chapters, bookmarks and the percent jump live.
-  uint8_t bookMenuTab = BOOK_MENU_TAB_NAVIGATE;
+  // Which tab the in-book menu opens on (see BOOK_MENU_TAB). Sleep Screen by default;
+  // on a night with no wallpaper to act on that tab is absent and the menu opens on Navigate.
+  uint8_t bookMenuTab = BOOK_MENU_TAB_SLEEP;
   // Focus Reading - emphasizes the first part of words with bold
   uint8_t focusReadingEnabled = 0;
   // Guide Dots — draw a middle dot (U+00B7) between words as a reading aid. Restored

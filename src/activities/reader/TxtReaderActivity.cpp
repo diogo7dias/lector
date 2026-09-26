@@ -581,7 +581,7 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
   }
   // Not runnable in this reader, or runnable only when a card read says so (Hold
   // Wallpaper checks the file is still there). Fall through to the shared handler, which
-  // answers the device-wide actions and reports the rest as unavailable.
+  // answers the device-wide actions; anything else is a dead press.
   return false;
 }
 
@@ -798,8 +798,16 @@ bool TxtReaderActivity::loadPageIndexCache() {
     return false;
   }
 
+  // A truncated index (card pulled mid-save) must not size reserve() or leave
+  // zeroed offsets: bound the count by the bytes actually left, check each read.
   uint32_t numPages;
-  serialization::readPod(f, numPages);
+  const size_t here = f.position();
+  const size_t total = f.size();
+  if (!serialization::readPod(f, numPages) || numPages == 0 || total < here + sizeof(numPages) ||
+      numPages > (total - here - sizeof(numPages)) / sizeof(uint32_t)) {
+    LOG_DBG("TRS", "Cache page count unusable, rebuilding");
+    return false;
+  }
 
   // Read page offsets
   pageOffsets.clear();
@@ -807,7 +815,11 @@ bool TxtReaderActivity::loadPageIndexCache() {
 
   for (uint32_t i = 0; i < numPages; i++) {
     uint32_t offset;
-    serialization::readPod(f, offset);
+    if (!serialization::readPod(f, offset)) {
+      LOG_DBG("TRS", "Cache truncated, rebuilding");
+      pageOffsets.clear();
+      return false;
+    }
     pageOffsets.push_back(offset);
   }
 

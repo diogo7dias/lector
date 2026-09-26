@@ -74,6 +74,9 @@ void SdFirmwareUpdateActivity::onPickerResult(const ActivityResult& result) {
 }
 
 bool SdFirmwareUpdateActivity::validateFirmware() {
+  // A retry must not show the previous failure's detail under a different error.
+  detailMessage.clear();
+  hintMessage.clear();
   HalFile file;
   if (!Storage.openFileForRead("FW", firmwarePath.c_str(), file) || !file) {
     errorMessage = tr(STR_FIRMWARE_FILE_OPEN_FAILED);
@@ -107,8 +110,6 @@ bool SdFirmwareUpdateActivity::validateFirmware() {
   const auto vr = firmware_flash::validateImageFile(firmwarePath.c_str(), partitionLimit);
   if (vr != firmware_flash::Result::OK) {
     LOG_ERR("FW", "image validation failed: %s", firmware_flash::resultName(vr));
-    detailMessage.clear();
-    hintMessage.clear();
     if (vr == firmware_flash::Result::TOO_LARGE) {
       errorMessage = tr(STR_FIRMWARE_TOO_LARGE);
       detailMessage = "File exceeds partition limit";
@@ -300,12 +301,8 @@ UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
       view.backHint = "";
       break;
     case State::SUCCESS:
-      view.lines = {
-          tr(STR_UPDATE_COMPLETE),
-          "Flashed ok; if it boots back into Lector,",
-          "update Lector first to 0.29.5 then",
-          "reflash the other firmware.",
-      };
+      // Any image can come off the card, so the boots-back hint always applies.
+      view.lines = {tr(STR_UPDATE_COMPLETE), tr(STR_FIRMWARE_BOOTS_BACK_HINT), nullptr, nullptr};
       view.backHint = "";
       break;
     case State::FAILED:
@@ -332,12 +329,7 @@ UiStatusActivity::StatusView SdFirmwareUpdateActivity::statusView() const {
         view.lines = {tr(STR_RECOVERY_MODE_HINT), nullptr, nullptr, nullptr};
         view.backHint = "";
       } else if (firmware_flash::didPreviousSwitchRollBack()) {
-        view.lines = {
-            "Firmware rollback detected:",
-            "Previous flash booted back into Lector.",
-            "Update Lector to 0.29.5 first,",
-            "then reflash the other firmware.",
-        };
+        view.lines = {tr(STR_FIRMWARE_ROLLED_BACK), nullptr, nullptr, nullptr};
         view.backHint = "";
       } else {
         view.hidden = true;

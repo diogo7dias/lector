@@ -54,7 +54,7 @@ class Epub {
   void setupCacheDir() const;
   const std::string& getCachePath() const;
   const std::string& getPath() const;
-  const std::string& getTitle() const;
+  std::string getTitle() const;
   const std::string& getAuthor() const;
   const std::string& getLanguage() const;
   std::string getCoverBmpPath(bool cropped = false) const;
@@ -81,5 +81,6 @@ class Epub {
   size_t getBookSize() const;
   float calculateProgress(int currentSpineIndex, float currentSpineRead) const;
   CssParser* getCssParser() const { return cssParser.get(); }
-  int resolveHrefToSpineIndex(const std::string& href) const;
+  // fromSpineIndex: the chapter the link sits in, whose folder a relative href is resolved against.
+  int resolveHrefToSpineIndex(const std::string& href, int fromSpineIndex = -1) const;
 };

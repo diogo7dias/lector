@@ -9,6 +9,7 @@
 #include <Utf8.h>
 #include <ZipFile.h>
 
+#include "Epub/SpineFileNameIndex.h"
 #include "Epub/parsers/ContainerParser.h"
 #include "Epub/parsers/ContentOpfParser.h"
 #include "Epub/parsers/TocNavParser.h"
@@ -637,13 +638,17 @@ const std::string& Epub::getCachePath() const { return cachePath; }
 
 const std::string& Epub::getPath() const { return filepath; }
 
-const std::string& Epub::getTitle() const {
-  static std::string blank;
-  if (!bookMetadataCache || !bookMetadataCache->isLoaded()) {
-    return blank;
+// Falls back to the file name, as Txt and Xtc do: an EPUB without dc:title showed
+// blank in Recents and the status bar.
+std::string Epub::getTitle() const {
+  if (bookMetadataCache && bookMetadataCache->isLoaded() && !bookMetadataCache->coreMetadata.title.empty()) {
+    return bookMetadataCache->coreMetadata.title;
   }
-
-  return bookMetadataCache->coreMetadata.title;
+  const size_t slash = filepath.find_last_of('/');
+  std::string name = slash == std::string::npos ? filepath : filepath.substr(slash + 1);
+  const size_t dot = name.find_last_of('.');
+  if (dot != std::string::npos && dot > 0) name.resize(dot);
+  return name;
 }
 
 const std::string& Epub::getAuthor() const {
@@ -1027,29 +1032,39 @@ float Epub::calculateProgress(const int currentSpineIndex, const float currentSp
   return totalProgress / static_cast<float>(bookSize);
 }
 
-int Epub::resolveHrefToSpineIndex(const std::string& href) const {
+int Epub::resolveHrefToSpineIndex(const std::string& href, const int fromSpineIndex) const {
   if (!bookMetadataCache || !bookMetadataCache->isLoaded()) return -1;
 
   // Split before decoding so escaped '#' characters in filenames stay part of the path.
   const size_t hashPos = href.find('#');
   const std::string rawTarget = hashPos != std::string::npos ? href.substr(0, hashPos) : href;
-  const std::string target = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(rawTarget));
+  const std::string decoded = FsHelpers::decodeUriEscapes(rawTarget);
+  const std::string target = FsHelpers::normalisePath(decoded);
 
   // Same-file reference (anchor-only)
   if (target.empty()) return -1;
 
-  // Extract just the filename for comparison
-  size_t targetSlash = target.find_last_of('/');
-  std::string targetFilename = (targetSlash != std::string::npos) ? target.substr(targetSlash + 1) : target;
+  // A link in a chapter is relative to that chapter's folder, which is how the spine
+  // names it too ("../Notes/n.xhtml" from "OEBPS/Text/c.xhtml" is "OEBPS/Notes/n.xhtml").
+  std::string relative;
+  if (fromSpineIndex >= 0 && fromSpineIndex < getSpineItemsCount()) {
+    const std::string& from = getSpineItem(fromSpineIndex).href;
+    const size_t slash = from.find_last_of('/');
+    if (slash != std::string::npos) relative = FsHelpers::normalisePath(from.substr(0, slash + 1) + decoded);
+  }
 
+  const std::string_view targetFilename = SpineFileNameIndex::fileNameOf(target);
+  int nameMatch = -1;
+  int nameMatches = 0;
   for (int i = 0; i < getSpineItemsCount(); i++) {
     const auto& spineHref = getSpineItem(i).href;
-    // Try exact match first
-    if (spineHref == target) return i;
-    // Then filename-only match
-    size_t spineSlash = spineHref.find_last_of('/');
-    std::string spineFilename = (spineSlash != std::string::npos) ? spineHref.substr(spineSlash + 1) : spineHref;
-    if (spineFilename == targetFilename) return i;
+    if (spineHref == target || (!relative.empty() && spineHref == relative)) return i;
+    if (SpineFileNameIndex::fileNameOf(spineHref) == targetFilename) {
+      nameMatch = i;
+      nameMatches++;
+    }
   }
-  return -1;
+  // The file name decides only when exactly one spine item carries it: two folders
+  // holding the same name make any guess a wrong chapter.
+  return nameMatches == 1 ? nameMatch : -1;
 }

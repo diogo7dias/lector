@@ -219,6 +219,20 @@ void SleepActivity::renderSleepScreen() const {
   }
   SleepTiming::mark("popup");
 
+  // Before anything is drawn, and before any sleep face is chosen (Cover mode included): a scrub is about the
+  // panel's charge history, not about which picture is going on top of it.
+  //
+  // This is the lock screen's only defence against a ghost. No face's own paint clears the
+  // panel: every board writes the picture against a baseline that leaves the pixels which
+  // are NOT changing sitting on whatever charge the reader left them with. On the X3 the
+  // grayscale base's requestResync() was mistaken for a clear; it is a sync, and it flashes
+  // only the pure-white part of the frame. See SleepPreClear.h for the waveform cells.
+  //
+  // The cost is a clean pass at lock, which the user does not wait for: it runs after the
+  // device has already been put down. One submission on the X3, four elsewhere.
+  const uint32_t preClearMs = sleepPreClear(renderer, display.profile());
+  LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
+
   // Custom: wallpaper, then cover, then the Lector fallback. Cover: cover, then the
   // fallback. Retired values are migrated to Custom when settings load, so nothing else
   // can arrive here; the default keeps a stale value from a blank panel.
@@ -240,19 +254,6 @@ void SleepActivity::renderCustomSleepScreen() const {
 #else
   const PxcRenderOptions* const pxcOptions = nullptr;
 #endif
-  // Before anything is drawn, and before any sleep face is chosen: a scrub is about the
-  // panel's charge history, not about which picture is going on top of it.
-  //
-  // This is the lock screen's only defence against a ghost. No face's own paint clears the
-  // panel: every board writes the picture against a baseline that leaves the pixels which
-  // are NOT changing sitting on whatever charge the reader left them with. On the X3 the
-  // grayscale base's requestResync() was mistaken for a clear; it is a sync, and it flashes
-  // only the pure-white part of the frame. See SleepPreClear.h for the waveform cells.
-  //
-  // The cost is a clean pass at lock, which the user does not wait for: it runs after the
-  // device has already been put down. One submission on the X3, four elsewhere.
-  const uint32_t preClearMs = sleepPreClear(renderer, display.profile());
-  LOG_INF("SLP", "pre-clear %ums", static_cast<unsigned>(preClearMs));
   // Look for sleep.bmp on the root of the sd card to determine if we should
   // render a custom sleep screen instead of the default.
   // This takes priority over the /sleep folder.

@@ -13,8 +13,8 @@ void writePod(std::ostream& os, const T& value) {
 }
 
 template <typename T>
-void writePod(HalFile& file, const T& value) {
-  file.write(reinterpret_cast<const uint8_t*>(&value), sizeof(T));
+bool writePod(HalFile& file, const T& value) {
+  return file.write(reinterpret_cast<const uint8_t*>(&value), sizeof(T)) == sizeof(T);
 }
 
 // Returns false when the card could not supply a whole T. The value is zeroed on failure
@@ -30,15 +30,14 @@ bool readPod(HalFile& file, T& value) {
 }
 
 inline void writeString(std::ostream& os, const std::string& s) {
-  const uint32_t len = s.size();
+  const uint32_t len = writableStringLength(s);
   writePod(os, len);
   os.write(s.data(), len);
 }
 
-inline void writeString(HalFile& file, const std::string& s) {
-  const uint32_t len = s.size();
-  writePod(file, len);
-  file.write(reinterpret_cast<const uint8_t*>(s.data()), len);
+inline bool writeString(HalFile& file, const std::string& s) {
+  const uint32_t len = writableStringLength(s);
+  return writePod(file, len) && file.write(reinterpret_cast<const uint8_t*>(s.data()), len) == len;
 }
 
 // Mirrors readString(std::istream&) in SerializationLimits.h, which is where the host

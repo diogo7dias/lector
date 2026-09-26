@@ -69,7 +69,7 @@ void PxcViewerActivity::drawHints() const {
   // anything else the slot stays blank rather than offering a hidden no-op.
   const char* pauseLabel = "";
   if (crosspoint::sleep::isUnderSleepDirs(filePath)) {
-    pauseLabel = filePath.rfind("/sleep pause/", 0) == 0 ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
+    pauseLabel = crosspoint::sleep::isPaused(filePath) ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
   }
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

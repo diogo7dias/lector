@@ -549,6 +549,9 @@ void FileBrowserActivity::confirmDelete(const std::string& fullPath) {
         requestUpdate(true);
       } else {
         LOG_ERR("FileBrowser", "Failed to delete: %s", fullPath.c_str());
+        GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
+        delay(1200);
+        requestUpdate(true);
       }
     } else {
       LOG_DBG("FileBrowser", "Delete cancelled by user");
@@ -893,7 +896,8 @@ void FileBrowserActivity::render(RenderLock&&) {
   }
 
   // Help text
-  const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
+  // Only the Books browser goes Home from the root; both pickers cancel back to the caller.
+  const char* backLabel = (basepath == "/" && mode == Mode::Books) ? tr(STR_HOME) : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
   const int selectedRow = static_cast<int>(selectorIndex);

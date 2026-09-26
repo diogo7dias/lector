@@ -570,7 +570,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   const int16_t lineHeight =
-      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression));
+      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression)));
   const size_t columnCount = tableRowCells.size();
   const uint16_t cellWidth = static_cast<uint16_t>(viewportWidth / columnCount);
 
@@ -1391,7 +1391,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
     // heading goes on to open; the heading's own first block is flagged here because
     // startNewTextBlock ran before the watermark was set.
     self->headingUntilDepth_ = std::min(self->headingUntilDepth_, self->depth);
-    self->currentTextBlock->setHeading(true);
+    if (self->currentTextBlock) self->currentTextBlock->setHeading(true);  // null after OOM
     self->boldUntilDepth = std::min(self->boldUntilDepth, self->depth);
     self->updateEffectiveInlineStyle();
   } else if (matches(name, BLOCK_TAGS, std::size(BLOCK_TAGS))) {
@@ -1426,7 +1426,7 @@ void XMLCALL ChapterHtmlSlimParser::startElement(void* userData, const XML_Char*
       self->startNewTextBlock(accumulated.withoutBottom());
       self->updateEffectiveInlineStyle();
 
-      if (strcmp(name, "li") == 0) {
+      if (strcmp(name, "li") == 0 && self->currentTextBlock) {  // null after OOM
         self->currentTextBlock->addWord("\xe2\x80\xa2", EpdFontFamily::REGULAR, false, false, self->visibleTextOffset);
         self->listItemBulletOnly = true;
       }
@@ -1797,8 +1797,10 @@ void XMLCALL ChapterHtmlSlimParser::endElement(void* userData, const XML_Char* n
     self->nonVisibleTextDepth--;
   }
 
-  // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state
-  if (strcmp(name, "rt") == 0) {
+  // Ruby text: </rt> distributes ruby to base words, </ruby> resets ruby state.
+  // A skipped <rt> (display:none, or inside a hidden subtree) never started collecting,
+  // so it takes the general path below, which also clears the skip it opened.
+  if (strcmp(name, "rt") == 0 && self->depth - 1 < self->skipUntilDepth) {
     self->collectingRubyText = false;
     if (self->inRuby && self->currentTextBlock) {
       const int currentWordCount = static_cast<int>(self->currentTextBlock->size());

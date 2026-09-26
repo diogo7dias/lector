@@ -207,9 +207,12 @@ const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
     if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
+    // Settings only: the group headings applyGroups inserts are rows too.
+    const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
+    const auto settingCount =
+        std::count_if(rows.begin(), rows.end(), [](const SettingInfo& row) { return !row.isHeader; });
     char count[24];
-    snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT),
-             static_cast<unsigned>(const_cast<SettingsActivity*>(this)->categoryRows(index).size()));
+    snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT), static_cast<unsigned>(settingCount));
     cellValueScratch = count;
     return cellValueScratch.c_str();
   }
@@ -816,8 +819,8 @@ void SettingsActivity::shareCredentials() {
     file.close();
   }
 
-  // The Nearby screen owns the radio for its lifetime and removes the bundle when
-  // it is done with it, so nothing here waits around holding passwords on the card.
+  // The Nearby screen owns the radio for its lifetime and removes the bundle in its
+  // onExit, so nothing here waits around holding passwords on the card.
   activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
       renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, path));
 }

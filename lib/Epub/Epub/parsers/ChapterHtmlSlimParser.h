@@ -15,6 +15,7 @@
 #include "Epub/FootnoteEntry.h"
 #include "Epub/PageCallbacks.h"
 #include "Epub/ParsedText.h"
+#include "Epub/ReaderRenderSpec.h"
 #include "Epub/blocks/ImageBlock.h"
 #include "Epub/blocks/TextBlock.h"
 #include "Epub/css/CssParser.h"
@@ -229,39 +230,38 @@ class ChapterHtmlSlimParser {
   static void XMLCALL endElement(void* userData, const XML_Char* name);
 
  public:
-  explicit ChapterHtmlSlimParser(
-      Epub* epub, const std::string& filepath, GfxRenderer& renderer, const int fontId, const float lineCompression,
-      const bool extraParagraphSpacing, const uint8_t paragraphSpacing, const uint8_t wordSpacing,
-      const uint8_t paragraphAlignment, const uint16_t viewportWidth, const uint16_t viewportHeight,
-      const bool focusReadingEnabled, const uint8_t guideDotsMode, const uint8_t firstLineIndentMode,
-      const uint8_t firstLineIndentPercent, const PageCompleteFn completePageFn, void* const completePageCtx,
-      const bool embeddedTextStyle, const bool embeddedLayoutStyle, const std::string& contentBase,
-      const std::string& imageBasePath, const uint8_t imageRendering = 0, std::vector<uint64_t> tocAnchors = {},
-      const PopupFn popupFn = nullptr, void* const popupCtx = nullptr, const CssParser* cssParser = nullptr)
+  // Takes the render settings as the spec they already live in: listing them one by one
+  // put two adjacent uint8_t (paragraphSpacing, wordSpacing) where a swap compiled.
+  explicit ChapterHtmlSlimParser(Epub* epub, const std::string& filepath, GfxRenderer& renderer,
+                                 const ReaderRenderSpec& spec, const PageCompleteFn completePageFn,
+                                 void* const completePageCtx, const std::string& contentBase,
+                                 const std::string& imageBasePath, std::vector<uint64_t> tocAnchors = {},
+                                 const PopupFn popupFn = nullptr, void* const popupCtx = nullptr,
+                                 const CssParser* cssParser = nullptr)
 
       : epub(epub),
         filepath(filepath),
         renderer(renderer),
-        fontId(fontId),
-        lineCompression(lineCompression),
-        extraParagraphSpacing(extraParagraphSpacing),
-        wordSpacing(wordSpacing),
-        paragraphSpacing(paragraphSpacing),
-        paragraphAlignment(paragraphAlignment),
-        viewportWidth(viewportWidth),
-        viewportHeight(viewportHeight),
-        focusReadingEnabled(focusReadingEnabled),
-        guideDotsMode(guideDotsMode),
-        firstLineIndentMode(firstLineIndentMode),
-        firstLineIndentPercent(firstLineIndentPercent),
+        fontId(spec.fontId),
+        lineCompression(spec.lineCompression),
+        extraParagraphSpacing(spec.extraParagraphSpacing),
+        wordSpacing(spec.wordSpacing),
+        paragraphSpacing(spec.paragraphSpacing),
+        paragraphAlignment(spec.paragraphAlignment),
+        viewportWidth(spec.viewportWidth),
+        viewportHeight(spec.viewportHeight),
+        focusReadingEnabled(spec.focusReadingEnabled),
+        guideDotsMode(spec.guideDotsMode),
+        firstLineIndentMode(spec.firstLineIndentMode),
+        firstLineIndentPercent(spec.firstLineIndentPercent),
         completePageFn(completePageFn),
         completePageCtx(completePageCtx),
         popupFn(popupFn),
         popupCtx(popupCtx),
         cssParser(cssParser),
-        embeddedTextStyle(embeddedTextStyle),
-        embeddedLayoutStyle(embeddedLayoutStyle),
-        imageRendering(imageRendering),
+        embeddedTextStyle(spec.embeddedTextStyle),
+        embeddedLayoutStyle(spec.embeddedLayoutStyle),
+        imageRendering(spec.imageRendering),
         contentBase(contentBase),
         imageBasePath(imageBasePath),
         tocAnchors(std::move(tocAnchors)) {}

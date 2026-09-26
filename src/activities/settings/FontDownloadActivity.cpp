@@ -249,6 +249,7 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   }
   requestUpdateAndWait();
 
+  retryFamilies_.clear();
   if (!fetchAndParseManifest()) {
     // Back pressed while waiting for the link is an answer, not a failure to
     // report: leave the screen rather than accuse the server of anything.
@@ -523,6 +524,7 @@ void FontDownloadActivity::runBatch(const std::function<bool(const ManifestFamil
     return;
   }
   state_ = ERROR;
+  retryFamilies_ = failed;
   std::string names = failed.front();
   for (size_t i = 1; i < failed.size(); i++) names += ", " + failed[i];
   setError(StrId::STR_FONT_INSTALL_FAILED, std::string(tr(STR_FONT_ERR_INSTALL)) + ": " + names, "");
@@ -984,6 +986,7 @@ void FontDownloadActivity::downloadSingleFamily(const std::string& familyName) {
   }
   if (cancelRequested_) return;
   RenderLock lock(*this);
+  retryFamilies_ = {familyName};
   state_ = ERROR;
 }
 
@@ -1224,16 +1227,24 @@ void FontDownloadActivity::onConfirmButton() {
   }
   if (state_ != ERROR) return;
 
-  // Retry the family that failed, when it is still one the manifest offers.
-  const auto retry = std::find_if(families_.begin(), families_.end(),
-                                  [this](const ManifestFamily& f) { return downloadingFamilyName_ == f.name; });
-  if (retry == families_.end()) {
-    onBackButton();
+  // A failed manifest leaves nothing to retry but the manifest itself.
+  if (retryFamilies_.empty()) {
+    onWifiSelectionComplete(true);
     return;
   }
+  // Every family that failed, not just the last one attempted, which in a batch may
+  // well have succeeded.
+  const std::vector<std::string> retry = std::move(retryFamilies_);
+  retryFamilies_.clear();
   currentFileIndex_ = 0;
-  currentFileTotal_ = retry->fileCount;
-  downloadSingleFamily(downloadingFamilyName_);
+  currentFileTotal_ = 0;
+  for (const auto& family : families_) {
+    if (std::find(retry.begin(), retry.end(), family.name) != retry.end()) currentFileTotal_ += family.fileCount;
+  }
+  cancelRequested_ = false;
+  runBatch([&retry](const ManifestFamily& family) {
+    return std::find(retry.begin(), retry.end(), family.name) != retry.end();
+  });
   requestUpdateAndWait();
 }
 

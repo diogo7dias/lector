@@ -42,6 +42,16 @@ constexpr bool stringLengthIsPlausible(const uint32_t len, const uint64_t bytesR
   return len <= kMaxStringBytes && len <= bytesRemaining;
 }
 
+// Longest prefix readString will accept back: capped at kMaxStringBytes and cut on a UTF-8
+// boundary. Writing more produced a cache whose reader refused the string and, with it,
+// every field after it.
+inline uint32_t writableStringLength(const std::string& s) {
+  if (s.size() <= kMaxStringBytes) return static_cast<uint32_t>(s.size());
+  uint32_t len = kMaxStringBytes;
+  while (len > 0 && (static_cast<uint8_t>(s[len]) & 0xC0) == 0x80) len--;
+  return len;
+}
+
 // Returns false when the stream could not supply a whole T. The value is zeroed on
 // failure rather than left holding whatever the caller's stack had, which is what made a
 // short read produce a wild length instead of an obvious one.

@@ -3,6 +3,7 @@
 #include <FsHelpers.h>
 #include <JpegToBmpConverter.h>
 #include <Logging.h>
+#include <PngToBmpConverter.h>
 
 Txt::Txt(std::string path, std::string cacheBasePath)
     : filepath(std::move(path)), cacheBasePath(std::move(cacheBasePath)) {
@@ -129,31 +130,30 @@ bool Txt::generateCoverBmp() const {
     }
     LOG_DBG("TXT", "Copied BMP cover to cache");
     return true;
-  } else if (FsHelpers::hasJpgExtension(coverImagePath)) {
-    // Convert JPG/JPEG to BMP (same approach as Epub)
-    LOG_DBG("TXT", "Generating BMP from JPG cover image");
-    HalFile coverJpg, coverBmp;
-    if (!Storage.openFileForRead("TXT", coverImagePath, coverJpg)) {
-      return false;
-    }
-    if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
-      return false;
-    }
-    const bool success = JpegToBmpConverter::jpegFileToBmpStream(coverJpg, coverBmp);
-
-    if (!success) {
-      LOG_ERR("TXT", "Failed to generate BMP from JPG cover image");
-      coverBmp.close();  // the handle must be released before the path is removed
-      Storage.remove(getCoverBmpPath().c_str());
-    } else {
-      LOG_DBG("TXT", "Generated BMP from JPG cover image");
-    }
-    return success;
   }
 
-  // PNG files are not supported (would need a PNG decoder)
-  LOG_ERR("TXT", "Cover image format not supported (only BMP/JPG/JPEG)");
-  return false;
+  // JPG/JPEG or PNG: convert to BMP with the same converters Epub uses.
+  const bool isJpg = FsHelpers::hasJpgExtension(coverImagePath);
+  if (!isJpg && !FsHelpers::hasPngExtension(coverImagePath)) {
+    LOG_ERR("TXT", "Cover image format not supported (only BMP/JPG/JPEG/PNG)");
+    return false;
+  }
+  LOG_DBG("TXT", "Generating BMP from %s cover image", isJpg ? "JPG" : "PNG");
+  HalFile coverSrc, coverBmp;
+  if (!Storage.openFileForRead("TXT", coverImagePath, coverSrc)) {
+    return false;
+  }
+  if (!Storage.openFileForWrite("TXT", getCoverBmpPath(), coverBmp)) {
+    return false;
+  }
+  const bool success = isJpg ? JpegToBmpConverter::jpegFileToBmpStream(coverSrc, coverBmp)
+                             : PngToBmpConverter::pngFileToBmpStream(coverSrc, coverBmp);
+  if (!success) {
+    LOG_ERR("TXT", "Failed to generate BMP from cover image");
+    coverBmp.close();  // the handle must be released before the path is removed
+    Storage.remove(getCoverBmpPath().c_str());
+  }
+  return success;
 }
 
 bool Txt::clearCache() const {

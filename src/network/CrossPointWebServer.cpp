@@ -1,6 +1,7 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
+#include <DeviceProfile.h>
 #include <FsHelpers.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -38,9 +39,6 @@
 #include "util/TaskWatchdog.h"
 
 namespace {
-// Folders/files to hide from the web interface file browser
-// Note: Items starting with "." are automatically hidden
-constexpr const char* HIDDEN_ITEMS[] = {"System Volume Information", "XTCache"};
 constexpr uint16_t UDP_PORTS[] = {54982, 48123, 39001, 44044, 59678};
 constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
@@ -88,18 +86,6 @@ String normalizeWebPath(const String& inputPath) {
     result = result.substring(0, result.length() - 1);
   }
   return result;
-}
-
-bool isProtectedItemName(const String& name) {
-  if (name.startsWith(".")) {
-    return true;
-  }
-  for (const auto* item : HIDDEN_ITEMS) {
-    if (name.equals(item)) {
-      return true;
-    }
-  }
-  return false;
 }
 }  // namespace
 
@@ -479,6 +465,18 @@ void CrossPointWebServer::handleNotFound() const {
   server->send(404, "text/plain", message);
 }
 
+// A new file reached its final name, by any of the four ways in: multipart and
+// WebSocket upload, URL fetch (WebDAV has its own overwrite-aware copy). Every
+// one refuses to overwrite, so the file is always new. A stale cache for the path
+// would render the new book from the old book's data, and a wallpaper appends its
+// index record here so it jumps the rotation queue without a folder walk at the
+// next boot. Handlers run on the main task (handleClient is pumped from the
+// activity loop), so the persisted index patch is safe.
+static void onFileLanded(const char* path) {
+  clearBookCache(path);
+  crosspoint::sleep::windex::noteCreated(path);
+}
+
 // Books the reader has open, newest first. Read-only: the web pages show what
 // is in progress and link to the file, they never write reading state back.
 // Entries without a progress figure (added but never opened) are left out.
@@ -491,6 +489,12 @@ const char* describeDownloadError(const HttpDownloader::DownloadError error) {
       return "The file could not be written to the SD card";
     case HttpDownloader::ABORTED:
       return "The download was stopped before it finished";
+    case HttpDownloader::NO_CONNECTION:
+      return "Could not connect to the server (check Wi-Fi and the address)";
+    case HttpDownloader::SERVER_ERROR:
+      return "The server refused the request or the file is not there";
+    case HttpDownloader::INCOMPLETE:
+      return "The connection dropped before the whole file arrived";
     default:
       return "The download failed";
   }
@@ -522,7 +526,7 @@ void CrossPointWebServer::handlePostFetch() {
 
   const String directory = normalizeWebPath(server->hasArg("path") ? server->arg("path") : String("/"));
   const std::string filename = fetch_url::filenameFromUrl(url.c_str());
-  if (isProtectedItemName(String(filename.c_str()))) {
+  if (WebDAVHandler::isProtectedPath(directory) || WebDAVHandler::isProtectedPath(String(filename.c_str()))) {
     server->send(403, "text/plain", "Cannot write to a protected name");
     return;
   }
@@ -624,7 +628,7 @@ void CrossPointWebServer::applyServerFilename(const std::string& contentDisposit
 
   const std::string offered = fetch_url::filenameFromContentDisposition(contentDisposition);
   if (offered.empty() || offered == fetch.filename) return;
-  if (isProtectedItemName(String(offered.c_str()))) return;
+  if (WebDAVHandler::isProtectedPath(String(offered.c_str()))) return;
 
   const std::string directory = fetch.destPath.substr(0, fetch.destPath.find_last_of('/'));
   const std::string offeredPath = fetch_url::destinationPath(directory, offered);
@@ -659,16 +663,13 @@ void CrossPointWebServer::runQueuedFetch() {
 
   if (result == HttpDownloader::OK) {
     applyServerFilename(contentDisposition);
-    // Same as every other write path here: a stale cache entry for this path
-    // would render the new book from the old book's data.
-    clearBookCache(fetch.destPath.c_str());
+    onFileLanded(fetch.destPath.c_str());
     fetch.state = FetchStatus::State::Done;
     LOG_DBG("WEB", "Fetch complete: %s (%u bytes)", fetch.destPath.c_str(), static_cast<unsigned>(fetch.received));
   } else {
     fetch.state = FetchStatus::State::Failed;
     fetch.error = describeDownloadError(result);
-    // Leave no half-written book in the file list.
-    Storage.remove(fetch.destPath.c_str());
+    // downloadToFile has already removed the partial (no resume here).
     LOG_ERR("WEB", "Fetch failed: %s (%s)", fetch.url.c_str(), fetch.error.c_str());
   }
 
@@ -707,7 +708,7 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
-  doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
+  doc["device"] = deviceName(deviceProfileFromHardware());
   doc["battery"] = powerManager.getBatteryPercentage();
 
   // Card figures for the home page and the file manager header, so remaining
@@ -764,18 +765,9 @@ void CrossPointWebServer::scanFiles(const char* path, const std::function<void(F
     file.getName(name, sizeof(name));
     auto fileName = String(name);
 
-    // Skip hidden items (starting with ".")
-    bool shouldHide = !SETTINGS.showHiddenFiles && fileName.startsWith(".");
-
-    // Check against explicitly hidden items list
-    if (!shouldHide) {
-      for (const auto* item : HIDDEN_ITEMS) {
-        if (fileName.equals(item)) {
-          shouldHide = true;
-          break;
-        }
-      }
-    }
+    // Dot names show only when the reader opted in; system folders never do.
+    const bool shouldHide =
+        WebDAVHandler::isProtectedPath(fileName) && !(SETTINGS.showHiddenFiles && fileName.startsWith("."));
 
     if (!shouldHide) {
       FileInfo info;
@@ -812,6 +804,10 @@ void CrossPointWebServer::handleFileListData() const {
   String currentPath = "/";
   if (server->hasArg("path")) {
     currentPath = normalizeWebPath(server->arg("path"));
+  }
+  if (!SETTINGS.showHiddenFiles && WebDAVHandler::isProtectedPath(currentPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
+    return;
   }
 
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
@@ -899,16 +895,10 @@ void CrossPointWebServer::handleDownload() const {
     return;
   }
 
-  const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (itemName.startsWith(".")) {
-    server->send(403, "text/plain", "Cannot access system files");
+  // Every segment, not just the name: /.crosspoint holds the stored passwords.
+  if (WebDAVHandler::isProtectedPath(itemPath)) {
+    server->send(403, "text/plain", "Cannot access protected items");
     return;
-  }
-  for (const auto* item : HIDDEN_ITEMS) {
-    if (itemName.equals(item)) {
-      server->send(403, "text/plain", "Cannot access protected items");
-      return;
-    }
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -1032,6 +1022,10 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
     } else {
       state.path = "/";
     }
+    if (WebDAVHandler::isProtectedPath(state.path)) {
+      state.error = "Cannot write to a protected folder";
+      return;
+    }
 
     LOG_DBG("WEB", "[UPLOAD] START: %s to path: %s", state.fileName.c_str(), state.path.c_str());
     LOG_DBG("WEB", "[UPLOAD] Free heap: %d bytes", ESP.getFreeHeap());
@@ -1125,13 +1119,7 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         LOG_DBG("WEB", "[UPLOAD] Diagnostics: %d writes, total write time: %lu ms (%.1f%%)", writeCount, totalWriteTime,
                 writePercent);
 
-        // Clear epub cache after uploading the file
-        clearBookCache(state.finalPath.c_str());
-        // A wallpaper landed over WiFi: append its index record right here so
-        // the new file jumps the rotation queue without the next boot paying a
-        // folder walk. Handlers run on the main task (handleClient is called
-        // from the activity loop), so the persisted patch is safe here.
-        crosspoint::sleep::windex::noteCreated(state.finalPath.c_str());
+        onFileLanded(state.finalPath.c_str());
       }
     }
   } else if (upload.status == UPLOAD_FILE_ABORTED) {
@@ -1175,7 +1163,7 @@ void CrossPointWebServer::handleCreateFolder() const {
     server->send(400, "text/plain", "Invalid folder name");
     return;
   }
-  if (isProtectedItemName(folderName)) {
+  if (WebDAVHandler::isProtectedPath(folderName)) {
     LOG_DBG("WEB", "Rejected protected folder name: %s", folderName.c_str());
     server->send(403, "text/plain", "Cannot create protected item");
     return;
@@ -1185,6 +1173,10 @@ void CrossPointWebServer::handleCreateFolder() const {
   String parentPath = "/";
   if (server->hasArg("path")) {
     parentPath = normalizeWebPath(server->arg("path"));
+  }
+  if (WebDAVHandler::isProtectedPath(parentPath)) {
+    server->send(403, "text/plain", "Cannot create protected item");
+    return;
   }
 
   // Build full folder path
@@ -1232,13 +1224,13 @@ void CrossPointWebServer::handleRename() const {
     server->send(400, "text/plain", "Invalid file name");
     return;
   }
-  if (isProtectedItemName(newName)) {
+  if (WebDAVHandler::isProtectedPath(newName)) {
     server->send(403, "text/plain", "Cannot rename to protected name");
     return;
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (isProtectedItemName(itemName)) {
+  if (WebDAVHandler::isProtectedPath(itemPath)) {
     server->send(403, "text/plain", "Cannot rename protected item");
     return;
   }
@@ -1316,7 +1308,7 @@ void CrossPointWebServer::handleMove() const {
   }
 
   const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-  if (isProtectedItemName(itemName)) {
+  if (WebDAVHandler::isProtectedPath(itemPath)) {
     server->send(403, "text/plain", "Cannot move protected item");
     return;
   }
@@ -1324,12 +1316,9 @@ void CrossPointWebServer::handleMove() const {
     server->send(409, "text/plain", "That file is being downloaded right now");
     return;
   }
-  if (destPath != "/") {
-    const String destName = destPath.substring(destPath.lastIndexOf('/') + 1);
-    if (isProtectedItemName(destName)) {
-      server->send(403, "text/plain", "Cannot move into protected folder");
-      return;
-    }
+  if (WebDAVHandler::isProtectedPath(destPath)) {
+    server->send(403, "text/plain", "Cannot move into protected folder");
+    return;
   }
 
   if (!Storage.exists(itemPath.c_str())) {
@@ -1451,25 +1440,7 @@ void CrossPointWebServer::handleDelete() const {
       continue;
     }
 
-    // Security check: prevent deletion of protected items
-    const String itemName = itemPath.substring(itemPath.lastIndexOf('/') + 1);
-
-    // Hidden/system files are protected
-    if (itemName.startsWith(".")) {
-      failedItems += itemPath + " (hidden/system file); ";
-      allSuccess = false;
-      continue;
-    }
-
-    // Check against explicitly protected items
-    bool isProtected = false;
-    for (const auto* item : HIDDEN_ITEMS) {
-      if (itemName.equals(item)) {
-        isProtected = true;
-        break;
-      }
-    }
-    if (isProtected) {
+    if (WebDAVHandler::isProtectedPath(itemPath)) {
       failedItems += itemPath + " (protected file); ";
       allSuccess = false;
       continue;
@@ -2057,6 +2028,10 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
           }
           wsUploadSize = sizeToken.toInt();
           wsUploadPath = normalizeWebPath(msg.substring(secondColon + 1));
+          if (WebDAVHandler::isProtectedPath(wsUploadPath)) {
+            wsServer->sendTXT(num, "ERROR:Cannot write to a protected folder");
+            return;
+          }
           wsUploadReceived = 0;
           wsLastProgressSent = 0;
           wsUploadResumeOffered = 0;
@@ -2133,7 +2108,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", wsUploadFinalPath.c_str());
-            clearBookCache(wsUploadFinalPath.c_str());
+            onFileLanded(wsUploadFinalPath.c_str());
             wsServer->sendTXT(num, "DONE");
             wsLastProgressSent = 0;
             break;
@@ -2264,8 +2239,7 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         LOG_DBG("WS", "Upload complete: %s (%d bytes in %lu ms, %.1f KB/s)", wsUploadFileName.c_str(), wsUploadSize,
                 elapsed, kbps);
 
-        // Clear epub cache after uploading the file
-        clearBookCache(wsUploadFinalPath.c_str());
+        onFileLanded(wsUploadFinalPath.c_str());
 
         wsServer->sendTXT(num, "DONE");
         wsLastProgressSent = 0;
@@ -2328,6 +2302,19 @@ void CrossPointWebServer::handleFontList() const {
 
 void CrossPointWebServer::handleFontUploadData() {
   HTTPUpload& upload = server->upload();
+  // A short write (card full, card pulled) invalidates the upload, so the partial
+  // font is removed at the end instead of being reported as installed.
+  auto flushFontUploadBuffer = [](FontUploadState& state) {
+    if (state.bufferPos == 0) return true;
+    const size_t written = state.file.write(state.buffer.data(), state.bufferPos);
+    if (written != state.bufferPos) {
+      LOG_ERR("WEB", "Font upload write failed: expected %zu, wrote %zu", state.bufferPos, written);
+      state.valid = false;
+    }
+    state.bytesWritten += written;
+    state.bufferPos = 0;
+    return state.valid;
+  };
 
   switch (upload.status) {
     case UPLOAD_FILE_START: {
@@ -2384,9 +2371,10 @@ void CrossPointWebServer::handleFontUploadData() {
       if (!fontUpload.valid) break;
       resetTaskWatchdogIfSubscribed();
 
-      // Validate magic bytes on first chunk only
-      if (!fontUpload.magicChecked && upload.currentSize >= 8) {
-        if (memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
+      // Validate magic bytes on the first chunk. A first chunk shorter than the
+      // magic is rejected too: skipping the check let any short body through.
+      if (!fontUpload.magicChecked) {
+        if (upload.currentSize < 8 || memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
           LOG_ERR("WEB", "Invalid .cpfont magic bytes");
           fontUpload.valid = false;
           break;
@@ -2406,9 +2394,7 @@ void CrossPointWebServer::handleFontUploadData() {
         remaining -= chunk;
 
         if (fontUpload.bufferPos >= FontUploadState::BUFFER_SIZE) {
-          fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
-          fontUpload.bytesWritten += fontUpload.bufferPos;
-          fontUpload.bufferPos = 0;
+          if (!flushFontUploadBuffer(fontUpload)) break;
           resetTaskWatchdogIfSubscribed();
         }
       }
@@ -2416,12 +2402,9 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_END: {
-      // Flush remaining buffer
-      if (fontUpload.valid && fontUpload.bufferPos > 0) {
-        fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
-        fontUpload.bytesWritten += fontUpload.bufferPos;
-        fontUpload.bufferPos = 0;
-      }
+      // An empty body never reached the magic check.
+      if (!fontUpload.magicChecked) fontUpload.valid = false;
+      if (fontUpload.valid) flushFontUploadBuffer(fontUpload);
       if (fontUpload.file.isOpen()) {
         fontUpload.file.close();
       }

@@ -280,6 +280,9 @@ void CrossPointWebServerActivity::startWebServer() {
   webServer = makeUniqueNoThrow<CrossPointWebServer>();
   if (!webServer) {
     LOG_ERR("WEBACT", "OOM: CrossPointWebServer");
+    // Same way out as a server that fails to begin(): staying would leave a hidden
+    // screen that swallows Back.
+    onGoHome();
     return;
   }
   // A URL fetch holds this loop for the length of the transfer, so the server
@@ -331,7 +334,6 @@ bool CrossPointWebServerActivity::handleCustomInput() {
 
     // STA mode: Monitor WiFi connection health
     if (!isApMode && webServer && webServer->isRunning()) {
-      static unsigned long lastWifiCheck = 0;
       if (millis() - lastWifiCheck > 2000) {  // Check every 2 seconds
         lastWifiCheck = millis();
         const wl_status_t wifiStatus = WiFi.status();
