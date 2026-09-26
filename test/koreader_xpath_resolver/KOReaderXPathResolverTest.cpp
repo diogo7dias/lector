@@ -140,3 +140,25 @@ TEST(KOReaderXPathResolver, KeepsParagraphOnlyResolutionUnchanged) {
   EXPECT_EQ(ChapterXPathResolver::findXPathForParagraph(epub, 0, 2),
             "/body/DocFragment[1]/body/div[1]/section[1]/p[2]");
 }
+
+// The section counts every visible body character, headings included, so the offset
+// it hands over is on that scale. A resolver counting only paragraph text put the
+// XPath one heading's length too late.
+TEST(KOReaderXPathResolver, CountsHeadingTextTheWayTheSectionDoes) {
+  auto epub = epubWith(R"(<html><body><h1>Title</h1><p>Alpha bravo</p></body></html>)");
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 11),
+            "/body/DocFragment[1]/body/p[1]/text()[1].6");
+}
+
+// A page that starts inside a heading syncs to the paragraph that follows it.
+TEST(KOReaderXPathResolver, AnOffsetInsideAHeadingResolvesToTheNextParagraph) {
+  auto epub = epubWith(R"(<html><body><h1>Title</h1><p>Alpha bravo</p></body></html>)");
+  EXPECT_EQ(ChapterXPathResolver::findXPathForVisibleTextOffset(epub, 0, 2),
+            "/body/DocFragment[1]/body/p[1]/text()[1].0");
+}
+
+// The section's paragraph index counts <p> only (list items have their own counter).
+TEST(KOReaderXPathResolver, ParagraphIndexCountsParagraphsOnly) {
+  auto epub = epubWith(R"(<html><body><ul><li>one</li></ul><p>first</p><p>second</p></body></html>)");
+  EXPECT_EQ(ChapterXPathResolver::findXPathForParagraph(epub, 0, 2), "/body/DocFragment[1]/body/p[2]");
+}
