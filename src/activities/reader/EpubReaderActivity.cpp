@@ -2113,28 +2113,25 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
   }
 
   // Numbering restarts at 1 in every chapter, so the number typed is always a paragraph
-  // of the chapter being read. There is no book-wide range to search.
-  const int targetSpine = currentSpineIndex;
-  uint16_t localOrdinal = static_cast<uint16_t>(target);
-  if (localOrdinal < 1) localOrdinal = 1;
+  // of the chapter being read. There is no book-wide range to search. Clamped, not cast:
+  // a six-digit entry used to wrap past 65535 to an early paragraph.
+  const uint16_t localOrdinal = static_cast<uint16_t>(std::min(target, static_cast<int>(UINT16_MAX)));
 
-  if (targetSpine == currentSpineIndex && section) {
-    // Same chapter, section already loaded — scan and move within it.
-    const int page = findPageForOrdinal(*section, localOrdinal);
+  {
+    // The same preamble as every other jump: Return can undo it, and a deferred
+    // reposition from a background build cannot snap the page back afterwards.
     RenderLock lock(*this);
-    returnHistory.finishReturn(false);
-    pendingOffsetJump.reset();
-    section->currentPage = page;
-    nextPageNumber = page;
-  } else {
-    // Different chapter — switch spine and defer the page scan until it loads.
-    RenderLock lock(*this);
-    returnHistory.finishReturn(false);
-    pendingOffsetJump.reset();
-    currentSpineIndex = targetSpine;
-    nextPageNumber = 0;
-    pendingParagraphScan_ = localOrdinal;
-    section.reset();
+    recordJumpOrigin();
+    clearDeferredReposition();
+    if (section) {
+      const int page = findPageForOrdinal(*section, localOrdinal);
+      section->currentPage = page;
+      nextPageNumber = page;
+    } else {
+      // Section not loaded yet: defer the page scan until it is.
+      nextPageNumber = 0;
+      pendingParagraphScan_ = localOrdinal;
+    }
   }
   requestUpdate();
 }
@@ -2144,14 +2141,15 @@ void EpubReaderActivity::jumpToParagraph(const int target) {
 // book is not open. Writing our own override marks this book custom, so a later Reset
 // still returns it to the global settings.
 void EpubReaderActivity::applyStolenLook(const std::string& sourceCachePath) {
-  ReaderPrefs stolen;
-  HalFile f;
-  if (!Storage.openFileForRead("ERS", sourceCachePath + "/reader_override.bin", f) || !readReaderPrefs(f, stolen)) {
+  // Through the loader, so an old sidecar is settled (migrated defaults filled in) the
+  // way it would be when that book opens.
+  const BookReaderPrefs stolen = loadBookReaderPrefs(sourceCachePath, ReaderPrefs::fromGlobal());
+  if (!stolen.custom) {
     LOG_ERR("ERS", "Steal Look: source reader_override.bin missing or unreadable");
     requestUpdate();
     return;
   }
-  applyReaderPrefsFrom(stolen);
+  applyReaderPrefsFrom(stolen.prefs);
 }
 
 // Adopt a whole set of reader settings from somewhere else — another book (Steal Look)

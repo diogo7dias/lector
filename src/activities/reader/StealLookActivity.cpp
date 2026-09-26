@@ -5,6 +5,7 @@
 #include <I18n.h>
 
 #include "MappedInputManager.h"
+#include "ReaderPrefs.h"
 #include "RecentBooksStore.h"
 #include "activities/ActivityResult.h"
 #include "components/UITheme.h"
@@ -22,7 +23,7 @@ void StealLookActivity::loadCandidates() {
     if (cacheDir.empty()) continue;
     // Only a book with its own override has a look worth stealing; the rest are just
     // showing the global settings, which this book already follows or has left.
-    if (!Storage.exists((cacheDir + "/reader_override.bin").c_str())) continue;
+    if (!Storage.exists(readerSidecarPath(cacheDir).c_str())) continue;
     candidates.push_back({book.title.empty() ? book.path : book.title, book.path, cacheDir});
   }
 }
