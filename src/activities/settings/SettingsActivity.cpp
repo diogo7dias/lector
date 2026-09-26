@@ -207,9 +207,12 @@ const char* SettingsActivity::cellValue(const int index) const {
   if (mode == Mode::Hub) {
     if (index == 4) return nullptr;
     if (index < 0 || index >= kCategoryCount) return nullptr;
+    // Settings only: the group headings applyGroups inserts are rows too.
+    const auto& rows = const_cast<SettingsActivity*>(this)->categoryRows(index);
+    const auto settingCount =
+        std::count_if(rows.begin(), rows.end(), [](const SettingInfo& row) { return !row.isHeader; });
     char count[24];
-    snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT),
-             static_cast<unsigned>(const_cast<SettingsActivity*>(this)->categoryRows(index).size()));
+    snprintf(count, sizeof(count), tr(STR_SETTINGS_COUNT_FORMAT), static_cast<unsigned>(settingCount));
     cellValueScratch = count;
     return cellValueScratch.c_str();
   }
