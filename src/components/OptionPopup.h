@@ -16,43 +16,26 @@ class OptionPopup {
  public:
   void show(StrId titleId, const StrId* optionIds, int optionCount, int currentIndex,
             std::function<void(int)> onSelect) {
-    title = I18N.get(titleId);
     ownedStrings.resize(optionCount);
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = I18N.get(optionIds[i]);
     }
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    layoutValid = false;
-    closing = false;
-    active = true;
+    open(I18N.get(titleId), currentIndex, std::move(onSelect));
   }
 
   void show(const char* titleStr, const char* const* options, int optionCount, int currentIndex,
             std::function<void(int)> onSelect) {
-    title = titleStr;
     ownedStrings.resize(optionCount);
     for (int i = 0; i < optionCount; i++) {
       ownedStrings[i] = options[i];
     }
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    layoutValid = false;
-    closing = false;
-    active = true;
+    open(titleStr, currentIndex, std::move(onSelect));
   }
 
   void show(StrId titleId, const std::vector<std::string>& options, int currentIndex,
             std::function<void(int)> onSelect) {
-    title = I18N.get(titleId);
     ownedStrings = options;
-    disabled.clear();
-    leftAligned = false;
-    selectedIndex = currentIndex;
-    onSelectCallback = std::move(onSelect);
-    layoutValid = false;
-    closing = false;
-    active = true;
+    open(I18N.get(titleId), currentIndex, std::move(onSelect));
   }
 
   // Variant for lists whose rows are not all usable right now (the reader's Quick Menu).
@@ -157,6 +140,19 @@ class OptionPopup {
   bool isActive() const { return active; }
 
  private:
+  // Every show() ends here, so no overload can leave the previous list's disabled rows
+  // or alignment behind.
+  void open(const char* titleStr, const int currentIndex, std::function<void(int)> onSelect) {
+    title = titleStr;
+    disabled.clear();
+    leftAligned = false;
+    selectedIndex = currentIndex;
+    onSelectCallback = std::move(onSelect);
+    layoutValid = false;
+    closing = false;
+    active = true;
+  }
+
   void closeOnPress(const std::function<void()>& requestUpdate) {
     active = false;
     closing = true;

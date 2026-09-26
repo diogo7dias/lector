@@ -241,12 +241,6 @@ void HomeActivity::render(RenderLock&&) {
     menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
-  if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
-    // Insert Continue Reading at the top if enabled in theme
-    menuItems.insert(menuItems.begin(), tr(STR_CONTINUE_READING));
-    menuIcons.insert(menuIcons.begin(), Book);
-  }
-
   // drawButtonMenu lays its rows out from the top of this rect and ignores the height,
   // so any row the home screen does not draw leaves its gap at the BOTTOM — which is
   // what dropping Recent Books produced: a hole between Settings and the button hints.
@@ -278,11 +272,10 @@ void HomeActivity::render(RenderLock&&) {
       Rect{0, menuTop, pageWidth,
            pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
                          metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      menuCount, metrics.homeContinueReadingInMenu ? selectorIndex : selectorIndex - recentBooks.size(),
-      [&menuItems](int index) { return std::string(menuItems[index]); },
+      menuCount, selectorIndex - recentBooks.size(), [&menuItems](int index) { return std::string(menuItems[index]); },
       [&menuIcons](int index) { return menuIcons[index]; },
       // The books above own indices 0..N-1 of the same selection space the menu continues.
-      metrics.homeContinueReadingInMenu ? 0 : static_cast<int>(recentBooks.size()));
+      static_cast<int>(recentBooks.size()));
 
   // Back's hint must match what it actually does. An empty label draws no
   // button box at all, which is what HOME_BACK_NONE wants.
