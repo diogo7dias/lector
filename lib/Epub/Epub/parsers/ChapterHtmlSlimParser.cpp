@@ -570,7 +570,7 @@ void ChapterHtmlSlimParser::finishTableRow() {
   }
 
   const int16_t lineHeight =
-      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId) * lineCompression));
+      std::max<int16_t>(1, static_cast<int16_t>(renderer.getLineHeight(fontId, lineCompression)));
   const size_t columnCount = tableRowCells.size();
   const uint16_t cellWidth = static_cast<uint16_t>(viewportWidth / columnCount);
 
