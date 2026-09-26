@@ -164,3 +164,30 @@ TEST(GrowthBounds, WithinAndOverLimit) {
   EXPECT_FALSE(memory::canGrowWithinLimit(900, 101, 1000));
   EXPECT_FALSE(memory::canGrowWithinLimit(1001, 0, 1000));
 }
+
+// Both sidecar readers (the viewer and the reader's underline index) walk records
+// through nextQuoteRecord, so its idea of the grammar is the file's.
+TEST(QuoteText, NextQuoteRecordWalksWrittenEntries) {
+  const std::string buf =
+      formatQuoteEntry("Ch 1", "@q1:1,2,3", "first") + formatQuoteEntry("Ch 2", "", "second") + "\n\nbare tail";
+  size_t pos = 0;
+  QuoteRecord rec;
+  std::vector<std::string> headers, texts;
+  while (nextQuoteRecord(buf, pos, rec)) {
+    headers.push_back(rec.hasHeader ? buf.substr(rec.headerStart, rec.headerLen) : "<none>");
+    texts.push_back(buf.substr(rec.textStart, rec.textEnd - rec.textStart));
+  }
+  EXPECT_EQ((std::vector<std::string>{"Ch 1 @q1:1,2,3", "Ch 2", "<none>"}), headers);
+  EXPECT_EQ((std::vector<std::string>{"first", "second", "bare tail"}), texts);
+  EXPECT_EQ(buf.size(), pos);
+}
+
+TEST(QuoteText, NextQuoteRecordUnclosedBracketIsText) {
+  const std::string buf = "[no close\nquote\n---\n";
+  size_t pos = 0;
+  QuoteRecord rec;
+  ASSERT_TRUE(nextQuoteRecord(buf, pos, rec));
+  EXPECT_FALSE(rec.hasHeader);
+  EXPECT_EQ("[no close\nquote", buf.substr(rec.textStart, rec.textEnd - rec.textStart));
+  EXPECT_FALSE(nextQuoteRecord(buf, pos, rec));
+}

@@ -78,39 +78,22 @@ void QuotesViewerActivity::loadQuotes() {
   // Format written by QuoteSelectActivity / quote_text::formatQuoteEntry:
   //   [Chapter Title]\nquote text\n---\n\n
   size_t pos = 0;
-  while (pos < buf.size()) {
+  quote_text::QuoteRecord record;
+  while (quote_text::nextQuoteRecord(buf, pos, record)) {
     busy::tick();
-    // isRecordGap covers the page-break byte each entry now starts with, so the
-    // header bracket is still what the scan lands on.
-    while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
-    if (pos >= buf.size()) break;
-
     QuoteEntry entry;
-    if (buf[pos] == '[') {
-      const auto close = buf.find(']', pos);
-      if (close != std::string::npos) {
-        // The header field carries the chapter title and, for quotes saved with
-        // a position, the anchor token. Split them so the title displays clean
-        // and the anchor survives a rewrite of this file.
-        quote_text::splitChapterAnchor(buf.substr(pos + 1, close - pos - 1), entry.chapter, entry.anchor);
-        pos = close + 1;
-        while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
-      }
+    if (record.hasHeader) {
+      // The header field carries the chapter title and, for quotes saved with
+      // a position, the anchor token. Split them so the title displays clean
+      // and the anchor survives a rewrite of this file.
+      quote_text::splitChapterAnchor(buf.substr(record.headerStart, record.headerLen), entry.chapter, entry.anchor);
     }
-
-    const auto sep = buf.find("\n---", pos);
-    if (sep == std::string::npos) {
-      entry.text = buf.substr(pos);
-    } else {
-      entry.text = buf.substr(pos, sep - pos);
-      pos = sep + 4;
-    }
+    entry.text = buf.substr(record.textStart, record.textEnd - record.textStart);
     while (!entry.text.empty() &&
            (entry.text.back() == '\n' || entry.text.back() == '\r' || entry.text.back() == ' ')) {
       entry.text.pop_back();
     }
     if (!entry.text.empty()) quotes.push_back(std::move(entry));
-    if (sep == std::string::npos) break;
   }
 }
 

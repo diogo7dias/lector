@@ -142,6 +142,42 @@ inline constexpr char PAGE_BREAK = '\f';
 // Every parser of this file must skip these before looking for a header bracket.
 inline bool isRecordGap(const char c) { return c == '\n' || c == '\r' || c == ' ' || c == PAGE_BREAK; }
 
+// One record of the sidecar, located in place so no parser copies what it skips:
+// the bracketed header field (chapter title plus any anchor token), if the record has
+// one, and the quote text up to, not including, its "\n---" separator.
+struct QuoteRecord {
+  bool hasHeader = false;
+  size_t headerStart = 0;
+  size_t headerLen = 0;
+  size_t textStart = 0;
+  size_t textEnd = 0;
+};
+
+// The one reader of the record grammar below. Parses the record at `pos` and moves
+// `pos` past it; false when only record gaps are left. A '[' with no closing ']' is
+// not a header, so that record's text starts at the bracket.
+inline bool nextQuoteRecord(const std::string& buf, size_t& pos, QuoteRecord& out) {
+  while (pos < buf.size() && isRecordGap(buf[pos])) ++pos;
+  if (pos >= buf.size()) return false;
+
+  out = QuoteRecord{};
+  if (buf[pos] == '[') {
+    const auto close = buf.find(']', pos);
+    if (close != std::string::npos) {
+      out.hasHeader = true;
+      out.headerStart = pos + 1;
+      out.headerLen = close - pos - 1;
+      pos = close + 1;
+      while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
+    }
+  }
+  out.textStart = pos;
+  const auto sep = buf.find("\n---", pos);
+  out.textEnd = (sep == std::string::npos) ? buf.size() : sep;
+  pos = (sep == std::string::npos) ? buf.size() : sep + 4;
+  return true;
+}
+
 // One sidecar entry: "\f[chapter @q1:...]\nquote\n---\n\n". The anchor lives inside
 // the brackets on purpose: the record grammar (bracketed header line, body, "---")
 // is unchanged, so a reader that knows nothing about anchors still parses every

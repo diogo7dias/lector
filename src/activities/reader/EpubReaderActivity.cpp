@@ -2230,34 +2230,24 @@ void EpubReaderActivity::loadQuoteAnchors() {
   // Records with no anchor are skipped here — they stay bare in the text.
   quoteAnchors.reserve(MAX_QUOTE_ANCHORS);
   size_t pos = 0;
-  while (pos < buf.size() && quoteAnchors.size() < MAX_QUOTE_ANCHORS) {
-    while (pos < buf.size() && quote_text::isRecordGap(buf[pos])) ++pos;
-    if (pos >= buf.size()) break;
-
+  quote_text::QuoteRecord record;
+  while (quoteAnchors.size() < MAX_QUOTE_ANCHORS && quote_text::nextQuoteRecord(buf, pos, record)) {
     quote_text::QuoteAnchor anchor;
-    if (buf[pos] == '[') {
-      const auto close = buf.find(']', pos);
-      if (close == std::string::npos) break;
+    if (record.hasHeader) {
       std::string chapter, token;
-      quote_text::splitChapterAnchor(buf.substr(pos + 1, close - pos - 1), chapter, token);
+      quote_text::splitChapterAnchor(buf.substr(record.headerStart, record.headerLen), chapter, token);
       if (!token.empty()) quote_text::parseAnchorToken(token, anchor);
-      pos = close + 1;
-      while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
     }
-
-    const auto sep = buf.find("\n---", pos);
-    const size_t textEnd = (sep == std::string::npos) ? buf.size() : sep;
-    if (anchor.valid && textEnd > pos && (textEnd - pos) <= quote_underline::MAX_MATCH_BYTES) {
+    const size_t textLength = record.textEnd - record.textStart;
+    if (anchor.valid && textLength > 0 && textLength <= quote_underline::MAX_MATCH_BYTES) {
       QuoteAnchorRef ref;
-      ref.textOffset = static_cast<uint32_t>(pos);
-      ref.textLength = static_cast<uint16_t>(textEnd - pos);
+      ref.textOffset = static_cast<uint32_t>(record.textStart);
+      ref.textLength = static_cast<uint16_t>(textLength);
       ref.spine = anchor.spine;
       ref.paragraph = anchor.paragraph;
       ref.wordHint = anchor.wordHint;
       quoteAnchors.push_back(ref);
     }
-    if (sep == std::string::npos) break;
-    pos = sep + 4;
   }
   LOG_DBG("ERS", "Quote anchors: %u", static_cast<unsigned>(quoteAnchors.size()));
 }
