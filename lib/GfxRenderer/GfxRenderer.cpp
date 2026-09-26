@@ -183,6 +183,11 @@ void GfxRenderer::FrameBufferLoan::end() {
 
 bool GfxRenderer::isFontCacheScanning() const { return fontCacheManager_ && fontCacheManager_->isScanning(); }
 
+uint8_t* GfxRenderer::getWriteTarget() const {
+  if (isFontCacheScanning()) return nullptr;
+  return _stripActive ? _stripBuf : frameBuffer;
+}
+
 void GfxRenderer::insertFont(const int fontId, EpdFontFamily font) {
   auto result = fontMap.insert({fontId, font});
   if (!result.second) {
@@ -567,6 +572,10 @@ void GfxRenderer::drawPixel(const int x, const int y, const bool state) const {
     }
     return;
   }
+
+  // The prewarm scan draws nothing: drawPixel is reached from drawIcon, the rotated
+  // text path and other callers that carry no scan guard of their own.
+  if (isFontCacheScanning()) return;
 
   // Tiled grayscale: redirect writes to the strip scratch and clip to the
   // current band. Single predictable branch on the hot per-pixel path.
@@ -1548,7 +1557,8 @@ void GfxRenderer::drawBitmap1Bit(const Bitmap& bitmap, const int x, const int y,
 }
 
 void GfxRenderer::preserveImagePolarity(const int x, const int y, const int width, const int height) const {
-  if (renderMode != BW || !display.isInverted() || _stripActive || !frameBuffer || width <= 0 || height <= 0) {
+  if (renderMode != BW || !display.isInverted() || _stripActive || !frameBuffer || width <= 0 || height <= 0 ||
+      isFontCacheScanning()) {
     return;
   }
 

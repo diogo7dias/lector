@@ -240,7 +240,9 @@ class GfxRenderer {
   // scratch plus its physical-row origin and extent; otherwise the full
   // framebuffer ([0, panelHeight)). Writers subtract the origin and clip to the
   // extent, so they honor tiled-grayscale banding without per-pixel method calls.
-  uint8_t* getWriteTarget() const { return _stripActive ? _stripBuf : frameBuffer; }
+  // Null during the font-prewarm scan pass, so no writer can paint over the visible page
+  // while the scan only collects glyphs.
+  uint8_t* getWriteTarget() const;
   int getWriteOriginY() const { return _stripActive ? _stripY0 : 0; }
   int getWriteRows() const { return _stripActive ? _stripRows : panelHeight; }
 
