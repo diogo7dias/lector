@@ -1816,7 +1816,7 @@ std::string GfxRenderer::truncatedText(const int fontId, const char* text, const
   while (low < high) {
     const size_t mid = low + (high - low + 1) / 2;
     setCandidate(mid);
-    if (getTextWidth(fontId, candidate.c_str(), style) < maxWidth) {
+    if (getTextWidth(fontId, candidate.c_str(), style) <= maxWidth) {
       low = mid;
     } else {
       high = mid - 1;

@@ -2184,7 +2184,7 @@ ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming
       LOG_ERR("ERS", "Reader prefs name a missing SD font '%s' — falling back to the built-in family",
               next.sdFontFamilyName);
       std::memset(next.sdFontFamilyName, 0, sizeof(next.sdFontFamilyName));
-      next.fontFamily = 0;  // CrossPointSettings::CHAREINK
+      next.fontFamily = CrossPointSettings::CHAREINK;
     }
   }
 

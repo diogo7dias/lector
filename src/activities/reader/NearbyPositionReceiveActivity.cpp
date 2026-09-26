@@ -239,7 +239,7 @@ bool NearbyPositionReceiveActivity::handleCustomInput() {
       if (packet.type != PacketType::HELLO && packet.type != PacketType::POSITION && packet.type != PacketType::APPLY)
         continue;
       const std::string_view hash(packet.position.documentHash.data(), DOCUMENT_HASH_BYTES);
-      if (!matchesDocumentHash(hash, hash)) continue;
+      if (!isDocumentHash(hash)) continue;
       peerMac = received.sourceMac;
       documentHash.assign(hash);
       peerPosition = packet.position;

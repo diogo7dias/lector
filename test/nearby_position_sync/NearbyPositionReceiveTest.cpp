@@ -33,6 +33,13 @@ TEST(NearbyPositionReceive, MatchesOnlyTheFullDocumentHash) {
   EXPECT_FALSE(matchesDocumentHash(std::string(32, 'x'), std::string(32, 'x')));
 }
 
+TEST(NearbyPositionReceive, DocumentHashFormat) {
+  EXPECT_TRUE(isDocumentHash(HASH));
+  EXPECT_FALSE(isDocumentHash(HASH.substr(0, 31)));
+  EXPECT_FALSE(isDocumentHash(std::string(32, 'A')));
+  EXPECT_FALSE(isDocumentHash({}));
+}
+
 TEST(NearbyPositionReceive, NoCandidatesNeverSelectsABook) {
   const std::array<std::string_view, 0> candidates{};
   bool matched = false;
