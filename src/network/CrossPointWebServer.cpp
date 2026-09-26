@@ -2293,6 +2293,19 @@ void CrossPointWebServer::handleFontList() const {
 
 void CrossPointWebServer::handleFontUploadData() {
   HTTPUpload& upload = server->upload();
+  // A short write (card full, card pulled) invalidates the upload, so the partial
+  // font is removed at the end instead of being reported as installed.
+  auto flushFontUploadBuffer = [](FontUploadState& state) {
+    if (state.bufferPos == 0) return true;
+    const size_t written = state.file.write(state.buffer.data(), state.bufferPos);
+    if (written != state.bufferPos) {
+      LOG_ERR("WEB", "Font upload write failed: expected %zu, wrote %zu", state.bufferPos, written);
+      state.valid = false;
+    }
+    state.bytesWritten += written;
+    state.bufferPos = 0;
+    return state.valid;
+  };
 
   switch (upload.status) {
     case UPLOAD_FILE_START: {
@@ -2349,9 +2362,10 @@ void CrossPointWebServer::handleFontUploadData() {
       if (!fontUpload.valid) break;
       resetTaskWatchdogIfSubscribed();
 
-      // Validate magic bytes on first chunk only
-      if (!fontUpload.magicChecked && upload.currentSize >= 8) {
-        if (memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
+      // Validate magic bytes on the first chunk. A first chunk shorter than the
+      // magic is rejected too: skipping the check let any short body through.
+      if (!fontUpload.magicChecked) {
+        if (upload.currentSize < 8 || memcmp(upload.buf, "CPFONT\0\0", 8) != 0) {
           LOG_ERR("WEB", "Invalid .cpfont magic bytes");
           fontUpload.valid = false;
           break;
@@ -2371,9 +2385,7 @@ void CrossPointWebServer::handleFontUploadData() {
         remaining -= chunk;
 
         if (fontUpload.bufferPos >= FontUploadState::BUFFER_SIZE) {
-          fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
-          fontUpload.bytesWritten += fontUpload.bufferPos;
-          fontUpload.bufferPos = 0;
+          if (!flushFontUploadBuffer(fontUpload)) break;
           resetTaskWatchdogIfSubscribed();
         }
       }
@@ -2381,12 +2393,9 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_END: {
-      // Flush remaining buffer
-      if (fontUpload.valid && fontUpload.bufferPos > 0) {
-        fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
-        fontUpload.bytesWritten += fontUpload.bufferPos;
-        fontUpload.bufferPos = 0;
-      }
+      // An empty body never reached the magic check.
+      if (!fontUpload.magicChecked) fontUpload.valid = false;
+      if (fontUpload.valid) flushFontUploadBuffer(fontUpload);
       if (fontUpload.file.isOpen()) {
         fontUpload.file.close();
       }
