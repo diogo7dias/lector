@@ -189,9 +189,7 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
       y += height + gap;
     }
     // Chevrons in the spacing above and below the rows, as every list draws them.
-    const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
-    const int reach = std::min(spacing, list_scrollbar::kHeight + list_scrollbar::kGap);
-    scrollArrowBand_ = Rect{0, pane.y - reach, pane.width, pane.height + reach * 2};
+    scrollArrowBand_ = list_scrollbar::outsideBand(pane, UITheme::getInstance().getMetrics().verticalSpacing);
     scrollArrows_ = list_scrollbar::forWindow(count, win.first, win.count);
     return;
   }
@@ -201,9 +199,7 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
     if (rect.width == 0) continue;  // scrolled out
     buildCell(screen, i, rect);
   }
-  const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
-  const int reach = std::min(spacing, list_scrollbar::kHeight + list_scrollbar::kGap);
-  scrollArrowBand_ = Rect{0, pane.y - reach, pane.width, pane.height + reach * 2};
+  scrollArrowBand_ = list_scrollbar::outsideBand(pane, UITheme::getInstance().getMetrics().verticalSpacing);
   scrollArrows_ = list_scrollbar::forWindow(layout.totalRows, layout.scrollRow, layout.visibleRows);
 }
 

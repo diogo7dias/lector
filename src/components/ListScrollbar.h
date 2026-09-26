@@ -41,4 +41,13 @@ inline Arrows forVisibleRange(const int itemCount, const int firstVisible, const
   return Arrows{firstVisible > 0, lastVisible < itemCount - 1};
 }
 
+// The band the chevrons sit in: the rows grown into the vertical spacing above and
+// below them, never further than a chevron and its gap need. Any {x, y, width, height}
+// rect type.
+template <typename R>
+R outsideBand(const R& rows, const int spacing) {
+  const int reach = spacing < kHeight + kGap ? spacing : kHeight + kGap;
+  return R{rows.x, rows.y - reach, rows.width, rows.height + reach * 2};
+}
+
 }  // namespace list_scrollbar

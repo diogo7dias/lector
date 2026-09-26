@@ -190,11 +190,8 @@ void UiListActivity::drawScrollArrows() {
   const auto& n = activeNav();
   const list_scrollbar::Arrows arrows = list_scrollbar::forWindow(listCount(), n.top, n.pageRows());
   if (!arrows.up && !arrows.down) return;
-  const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
-  const int reach = list_scrollbar::kHeight + list_scrollbar::kGap;
-  const Rect band{listBand.x, listBand.y - std::min(spacing, reach), listBand.width,
-                  listBand.height + std::min(spacing, reach) * 2};
-  GUI.drawScrollArrows(renderer, band, arrows);
+  GUI.drawScrollArrows(
+      renderer, list_scrollbar::outsideBand(listBand, UITheme::getInstance().getMetrics().verticalSpacing), arrows);
 }
 
 ListChrome UiListActivity::chrome() const {

@@ -670,9 +670,7 @@ void UiStatusActivity::render(RenderLock&&) {
   if (listCount_ > 0) {
     // Same chevrons as every UiListActivity, in the spacing outside the rows.
     const list_scrollbar::Arrows arrows = list_scrollbar::forWindow(listCount_, listNav_.top, listNav_.pageRows());
-    const int reach = std::min<int>(metricsSpacing(), list_scrollbar::kHeight + list_scrollbar::kGap);
-    GUI.drawScrollArrows(renderer,
-                         Rect{listBand_.x, listBand_.y - reach, listBand_.width, listBand_.height + reach * 2}, arrows);
+    GUI.drawScrollArrows(renderer, list_scrollbar::outsideBand(listBand_, metricsSpacing()), arrows);
   }
 
   const auto labels =

@@ -67,4 +67,20 @@ TEST(ListScrollbar, VisibleRangeFormAgrees) {
   EXPECT_FALSE(none.down);
 }
 
+// The band grows into the spacing, capped at what a chevron and its gap need.
+TEST(ListScrollbar, OutsideBandReachesIntoSpacing) {
+  struct R {
+    int x, y, width, height;
+  };
+  const R rows{0, 100, 480, 300};
+  const R tight = list_scrollbar::outsideBand(rows, 3);
+  EXPECT_EQ(tight.y, 97);
+  EXPECT_EQ(tight.height, 306);
+  const R wide = list_scrollbar::outsideBand(rows, 40);
+  const int reach = list_scrollbar::kHeight + list_scrollbar::kGap;
+  EXPECT_EQ(wide.y, 100 - reach);
+  EXPECT_EQ(wide.height, 300 + reach * 2);
+  EXPECT_EQ(wide.width, 480);
+}
+
 }  // namespace
