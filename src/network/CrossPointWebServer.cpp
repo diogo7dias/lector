@@ -1,6 +1,7 @@
 #include "CrossPointWebServer.h"
 
 #include <ArduinoJson.h>
+#include <DeviceProfile.h>
 #include <FsHelpers.h>
 #include <HalGPIO.h>
 #include <HalPowerManager.h>
@@ -707,7 +708,7 @@ void CrossPointWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
-  doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
+  doc["device"] = deviceName(deviceProfileFromHardware());
   doc["battery"] = powerManager.getBatteryPercentage();
 
   // Card figures for the home page and the file manager header, so remaining

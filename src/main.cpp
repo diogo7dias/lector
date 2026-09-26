@@ -599,7 +599,10 @@ void setup() {
   // copied file carries both the wake cost and the refresh costs that follow it.
   const uint32_t logsStartedMs = millis();
   debug_trace::begin();
-  startPerfLogSink(gpio.deviceIsX3() ? "x3" : "x4");
+  {
+    const DeviceProfile dev = deviceProfileFromHardware();
+    startPerfLogSink(dev.isX3 ? "x3" : dev.isX4Pro ? "x4pro" : "x4");
+  }
   WakeTiming::noteCost(WakeTiming::Cost::Logs, millis() - logsStartedMs);
   WakeTiming::setEnabled(SETTINGS.showTimings != 0);
   WakeTiming::loadPrevious();
