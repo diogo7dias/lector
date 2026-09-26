@@ -353,6 +353,14 @@ void BmpViewerActivity::doToggleFavorite() {
 }
 
 void BmpViewerActivity::doTogglePause() {
+  // A queued favourite rename and the move are both name-based operations on this one
+  // file: drain the queue first and adopt the post-drain name, as PxcViewerActivity does.
+  // Otherwise the rename lands after the move and misses the file.
+  const std::string queuedName = effectivePath();
+  DeferredFavorite::waitForIdle(15000);
+  DeferredFavorite::reconcile();
+  if (Storage.exists(queuedName.c_str())) filePath = queuedName;
+
   // Pick the neighbour before the move, while this file still anchors the lookup.
   const int nextIndex = (currentImageIndex > 0) ? currentImageIndex - 1 : currentImageIndex + 1;
   const bool hasNeighbour =
