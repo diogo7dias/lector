@@ -58,9 +58,7 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
       simple_reader_shortcut::Action::WallpaperHold) {
     return false;
   }
-  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
-  SETTINGS.saveToFile();
-  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+  ReaderUtils::toggleWallpaperHold(renderer, pagesUntilFullRefresh);
   requestUpdate();
   return true;
 }

@@ -2,11 +2,13 @@
 
 #include <CrossPointSettings.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
 #include "activities/reader/ReaderTouchZones.h"
+#include "components/UITheme.h"
 
 namespace ReaderUtils {
 
@@ -174,6 +176,16 @@ bool renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
 
   renderer.restoreBwBuffer();
   return true;
+}
+
+// Wallpaper Hold, the same in every reader: flip the rotation pause, say which way it
+// went, and put the next paint on the ghost-cleanup path so the popup does not ghost
+// under the page. The caller requests the redraw.
+inline void toggleWallpaperHold(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
+  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
+  SETTINGS.saveToFile();
+  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+  pagesUntilFullRefresh = 0;
 }
 
 struct BackNavCallback {

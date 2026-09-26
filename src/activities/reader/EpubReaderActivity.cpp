@@ -1411,10 +1411,7 @@ void EpubReaderActivity::toggleWallpaperFavorite() {
 }
 
 void EpubReaderActivity::toggleWallpaperHold() {
-  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
-  SETTINGS.saveToFile();
-  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
-  scheduleGhostCleanup();
+  ReaderUtils::toggleWallpaperHold(renderer, pagesUntilFullRefresh);
   requestUpdate();
 }
 
