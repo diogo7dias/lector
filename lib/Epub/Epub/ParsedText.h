@@ -56,7 +56,6 @@ class ParsedText {
   std::vector<VisibleOffsetRebase> visibleOffsetRebases;
   std::deque<std::string> rubyTexts;
   BlockStyle blockStyle;
-  bool extraParagraphSpacing;
   bool focusReadingEnabled;
   // Guide Dots (LTR paragraphs only): GUIDE_DOTS_OFF, GUIDE_DOTS_VISIBLE (widened gap
   // with a middle dot in it) or GUIDE_DOTS_HIDDEN (the same widened gap, no dot drawn).
@@ -108,12 +107,10 @@ class ParsedText {
   std::vector<uint16_t> calculateWordWidths(const GfxRenderer& renderer, int fontId);
 
  public:
-  explicit ParsedText(const bool extraParagraphSpacing, const bool focusReadingEnabled = false,
-                      const uint8_t guideDotsMode = GUIDE_DOTS_OFF, const BlockStyle& blockStyle = BlockStyle(),
-                      const uint8_t firstLineIndentMode = 0, const uint8_t firstLineIndentPercent = 0,
-                      const uint8_t wordSpacing = 100)
+  explicit ParsedText(const bool focusReadingEnabled = false, const uint8_t guideDotsMode = GUIDE_DOTS_OFF,
+                      const BlockStyle& blockStyle = BlockStyle(), const uint8_t firstLineIndentMode = 0,
+                      const uint8_t firstLineIndentPercent = 0, const uint8_t wordSpacing = 100)
       : blockStyle(blockStyle),
-        extraParagraphSpacing(extraParagraphSpacing),
         focusReadingEnabled(focusReadingEnabled),
         guideDotsMode(guideDotsMode),
         wordSpacing(std::clamp<uint8_t>(wordSpacing, 75, 150)),
@@ -124,7 +121,7 @@ class ParsedText {
         isHeading(false) {}
   ~ParsedText() = default;
 
-  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool underline = false, bool attachToPrevious = false,
+  void addWord(std::string word, EpdFontFamily::Style fontStyle, bool attachToPrevious = false,
                uint32_t visibleTextOffset = 0);
   void setRubyForWordAt(size_t index, const std::string& ruby);
   void setRubyGroupAt(size_t startIndex, size_t count, const std::string& ruby);
@@ -132,7 +129,6 @@ class ParsedText {
     return index < wordStyles.size() ? wordStyles[index] : EpdFontFamily::REGULAR;
   }
   std::string getRubyTextAt(size_t index) const { return index < rubyTexts.size() ? rubyTexts[index] : std::string(); }
-  void ensureRubyCapacity();
   void setBlockStyle(const BlockStyle& blockStyle) { this->blockStyle = blockStyle; }
   BlockStyle& getBlockStyle() { return blockStyle; }
   size_t size() const { return words.size(); }

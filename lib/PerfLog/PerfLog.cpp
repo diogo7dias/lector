@@ -43,19 +43,6 @@ CommitSink commitSink = nullptr;
 // a gap in the sequence numbers is never silently unexplained.
 uint32_t droppedRecords = 0;
 
-const char* modeName(const uint8_t mode) {
-  switch (mode) {
-    case 0:
-      return "FULL";
-    case 1:
-      return "HALF";
-    case 2:
-      return "FAST";
-    default:
-      return "?";
-  }
-}
-
 }  // namespace
 
 void begin(const LineSink sink, const CommitSink commit) {
@@ -133,8 +120,8 @@ void flush() {
     char think[8] = {0};
     if (r.thinkMs != PerfStats::kNoThink) snprintf(think, sizeof(think), "%u", static_cast<unsigned>(r.thinkMs));
     snprintf(line, sizeof(line), "%u,%lu,%s,%s,%s,%lu,%lu,%lu,%lu,%s,%u,%u,%u,%u,%u\n", static_cast<unsigned>(r.seq),
-             static_cast<unsigned long>(r.ms), r.screen, modeName(r.requested), modeName(r.actual),
-             static_cast<unsigned long>(r.totalUs), static_cast<unsigned long>(r.wireUs),
+             static_cast<unsigned long>(r.ms), r.screen, PerfStats::modeName(r.requested),
+             PerfStats::modeName(r.actual), static_cast<unsigned long>(r.totalUs), static_cast<unsigned long>(r.wireUs),
              static_cast<unsigned long>(r.waveUs), static_cast<unsigned long>(r.asyncStartUs), think,
              static_cast<unsigned>(r.inkScore), static_cast<unsigned>(r.inkDebt),
              static_cast<unsigned>(r.turbo ? 1 : 0), static_cast<unsigned>(r.diag), static_cast<unsigned>(r.settleMs));

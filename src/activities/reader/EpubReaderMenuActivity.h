@@ -170,7 +170,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   uint8_t selectedPaperbackBody = 1;
   uint8_t selectedPaperbackStatus = 1;
   uint8_t selectedStatusBar = 1;
-  // Global Progress Bar value, cycled in the menu; returned via MenuResult like the rest.
+  // This book's Progress Bar value, cycled in the menu; returned via MenuResult like the rest.
   uint8_t selectedProgressBar = 0;
   // Set when Confirm was held long enough to fire the bound Menu Hold function.
   // Reported to the reader, which owns the page the function needs. LP_MENU_DISABLED

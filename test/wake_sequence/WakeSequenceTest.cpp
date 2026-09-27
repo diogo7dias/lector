@@ -1,11 +1,5 @@
 // The wake decision, as one asserted table.
 //
-// This decision used to be made three times over the same raw inputs: wake_route::resolve
-// was called, immediately overridden by an inline recovery/panic/silent ternary, and then
-// re-decided by a six-arm if/else chain that re-read isPressed(Back) and
-// readerActivityLoadCount. Only the middle helper had tests, so the two untested layers
-// wrapped around it could contradict it and nothing would notice.
-//
 // Every expectation here states TODAY'S shipped routing.
 #include <gtest/gtest.h>
 
@@ -37,19 +31,15 @@ TEST(WakeSequence, RecoveryFirmwareOutranksEverything) {
   in.recoveryFirmwareMode = true;
   in.panic = true;
   in.silentReboot = true;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = true;
   EXPECT_EQ(plan(in).target, Target::RecoveryFirmware);
 }
 
 // The way back onto a device whose USB flashing the vendor locked. It must stay reachable
-// even when the reader crashed last boot and a book is being forced.
-TEST(WakeSequence, RecoveryFirmwareSurvivesACrashLoopAndAForcedBook) {
+// even when the reader crashed last boot.
+TEST(WakeSequence, RecoveryFirmwareSurvivesACrashLoop) {
   WakeInputs in;
   in.recoveryFirmwareMode = true;
   in.readerCrashed = true;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = true;
   EXPECT_EQ(plan(in).target, Target::RecoveryFirmware);
 }
 
@@ -57,8 +47,6 @@ TEST(WakeSequence, PanicOutranksEverythingButRecovery) {
   WakeInputs in = resumeWake();
   in.panic = true;
   in.silentReboot = true;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = true;
   EXPECT_EQ(plan(in).target, Target::CrashReport);
 }
 
@@ -90,42 +78,6 @@ TEST(WakeSequence, ASilentRebootNeverFallsThroughToTheSleepWakeResume) {
   in.silentReboot = true;
   in.silentTargetIsReader = false;
   EXPECT_EQ(plan(in).target, Target::SilentHome);
-}
-
-TEST(WakeSequence, ASilentRebootIgnoresAForcedBook) {
-  WakeInputs in;
-  in.silentReboot = true;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = true;
-  EXPECT_EQ(plan(in).target, Target::SilentHome);
-}
-
-// ---------------------------------------------------------------------------
-// The forced-book promise and its safety valves.
-// ---------------------------------------------------------------------------
-
-TEST(WakeSequence, TheSleepFacesForcedBookOpensIt) {
-  WakeInputs in;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = true;
-  EXPECT_EQ(plan(in).target, Target::ForcedReader);
-}
-
-TEST(WakeSequence, AForcedBookThatIsMissingLandsOnHome) {
-  WakeInputs in;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = false;
-  EXPECT_EQ(plan(in).target, Target::ForcedHome);
-}
-
-// The crash-loop valve outranks the promise: a book that crashes the reader must not be
-// retried forever just because the sleep face named it.
-TEST(WakeSequence, AForcedBookIsAbandonedAfterAReaderCrash) {
-  WakeInputs in;
-  in.forceBookOnWake = true;
-  in.hasForcedBook = true;
-  in.readerCrashed = true;
-  EXPECT_EQ(plan(in).target, Target::ForcedHome);
 }
 
 // ---------------------------------------------------------------------------
@@ -202,12 +154,6 @@ TEST(WakeSequence, EveryNonReaderRouteWaitsForAnInFlightBlank) {
   panic.panic = true;
   EXPECT_TRUE(plan(panic).waitBeforeRoutePaint);
 
-  WakeInputs forcedHome;
-  forcedHome.forceBookOnWake = true;
-  forcedHome.hasForcedBook = false;
-  EXPECT_EQ(plan(forcedHome).target, Target::ForcedHome);
-  EXPECT_TRUE(plan(forcedHome).waitBeforeRoutePaint);
-
   WakeInputs home = resumeWake();
   home.backHeld = true;
   EXPECT_EQ(plan(home).target, Target::Home);
@@ -215,12 +161,6 @@ TEST(WakeSequence, EveryNonReaderRouteWaitsForAnInFlightBlank) {
 }
 
 TEST(WakeSequence, NoReaderRouteWaitsBeforeDispatch) {
-  WakeInputs forced;
-  forced.forceBookOnWake = true;
-  forced.hasForcedBook = true;
-  EXPECT_EQ(plan(forced).target, Target::ForcedReader);
-  EXPECT_FALSE(plan(forced).waitBeforeRoutePaint);
-
   EXPECT_FALSE(plan(resumeWake()).waitBeforeRoutePaint);
 
   WakeInputs bootBook;
@@ -252,11 +192,6 @@ TEST(WakeSequence, NeitherSilentArmWaitsBecauseASilentRebootNeverBlanks) {
 // ---------------------------------------------------------------------------
 
 TEST(WakeSequence, EveryReaderArmBumpsTheCrashLoopCounter) {
-  WakeInputs forced;
-  forced.forceBookOnWake = true;
-  forced.hasForcedBook = true;
-  EXPECT_TRUE(plan(forced).bumpReaderLoadCount);
-
   EXPECT_TRUE(plan(resumeWake()).bumpReaderLoadCount);
 
   WakeInputs bootBook;
@@ -278,13 +213,9 @@ TEST(WakeSequence, TheSilentReaderArmTouchesNeitherTheCounterNorTheOpenPath) {
   EXPECT_FALSE(out.readerTakesWakeFlags);
 }
 
-// Only the two arms that resume a painted-face wake carry the wake flags; the boot-book
+// Only the arm that resumes a painted-face wake carries the wake flags; the boot-book
 // arm opens a book the user did not fall asleep in, so it paints normally.
 TEST(WakeSequence, OnlyTheWakeResumingArmsCarryTheWakeFlags) {
-  WakeInputs forced;
-  forced.forceBookOnWake = true;
-  forced.hasForcedBook = true;
-  EXPECT_TRUE(plan(forced).readerTakesWakeFlags);
   EXPECT_TRUE(plan(resumeWake()).readerTakesWakeFlags);
 
   WakeInputs bootBook;
@@ -297,10 +228,6 @@ TEST(WakeSequence, OnlyTheWakeResumingArmsCarryTheWakeFlags) {
 // must copy it. Pinned here because the two facts only make sense together.
 TEST(WakeSequence, TheArmsThatClearTheOpenPathAreTheOnesThatOpenIt) {
   EXPECT_TRUE(plan(resumeWake()).clearOpenEpubPath);
-  WakeInputs forced;
-  forced.forceBookOnWake = true;
-  forced.hasForcedBook = true;
-  EXPECT_TRUE(plan(forced).clearOpenEpubPath);
 }
 
 // No non-reader arm may carry a reader side effect.

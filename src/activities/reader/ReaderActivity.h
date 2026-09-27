@@ -10,7 +10,6 @@ class Txt;
 
 class ReaderActivity final : public Activity {
   std::string initialBookPath;
-  std::string currentBookPath;  // Track current book path for navigation
   bool allowFastInitialRefresh;
   bool firstTurnCleans;
   const bool sortesMode;

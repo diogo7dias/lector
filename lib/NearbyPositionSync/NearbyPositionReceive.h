@@ -10,12 +10,17 @@
 
 namespace nearby_position {
 
-inline bool matchesDocumentHash(std::string_view offered, std::string_view candidate) {
-  if (offered.size() != DOCUMENT_HASH_BYTES || candidate.size() != DOCUMENT_HASH_BYTES) return false;
-  for (char c : offered) {
+// Well-formed document hash: DOCUMENT_HASH_BYTES lowercase hex digits.
+inline bool isDocumentHash(std::string_view hash) {
+  if (hash.size() != DOCUMENT_HASH_BYTES) return false;
+  for (char c : hash) {
     if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
   }
-  return offered == candidate;
+  return true;
+}
+
+inline bool matchesDocumentHash(std::string_view offered, std::string_view candidate) {
+  return isDocumentHash(offered) && offered == candidate;
 }
 
 // Validate before feeding the older XPath mapper, whose numeric parser uses int.

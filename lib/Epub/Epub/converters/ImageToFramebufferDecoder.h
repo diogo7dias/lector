@@ -15,9 +15,7 @@ struct ImageDimensions {
 struct RenderConfig {
   int x, y;
   int maxWidth, maxHeight;
-  bool useGrayscale = true;
   bool useDithering = true;
-  bool performanceMode = false;
   bool useExactDimensions = false;  // If true, use maxWidth/maxHeight as exact output size (no recalculation)
   float sourceCropX = 0.0f;         // Fraction cropped equally from the left and right edges
   float sourceCropY = 0.0f;         // Fraction cropped equally from the top and bottom edges
@@ -44,6 +42,11 @@ class ImageToFramebufferDecoder {
   // Validate decoder/header dimensions before narrowing them into the layout
   // representation. Shared by header probing and decoder fallbacks.
   static bool validateAndStoreDimensions(int64_t width, int64_t height, ImageDimensions& out, const char* format);
+
+  // Decoder file callbacks shared by the JPEG and PNG converters: open a heap
+  // HalFile the decoder owns, which the close callback closes and deletes.
+  static void* openDecoderFile(const char* tag, const char* filename, int32_t* size);
+  static void closeDecoderFile(void* handle);
 
  protected:
   // Size validation helpers. The cap bounds decode TIME, not memory: both decoders

@@ -99,7 +99,7 @@ bool TtfSdFont::load(const SdCardFontFamilyInfo& family, const uint8_t pointSize
     return false;
   }
   pointSize_ = ttfscan::clampTtfPointSize(pointSize);
-  contentHash_ = ttfscan::FNV1A_SEED;
+  contentHash_ = fnv1a::OFFSET_BASIS_32;
   for (uint8_t style = 0; style < MAX_STYLES; ++style) {
     faces_[style].reset();
     const std::string& path = family.ttfFaces[style];
@@ -186,7 +186,7 @@ bool TtfSdFont::loadFace(const uint8_t style, const char* path, const uint8_t po
   d.glyphMissCtx = &ctx_[style];
   d.coverageHandler = &TtfSdFont::onCoverageQuery;
 
-  contentHash_ = ttfscan::fnv1a(contentHash_, face->fileBytes.get(), len);
+  contentHash_ = fnv1a::hash32(face->fileBytes.get(), len, contentHash_);
   LOG_DBG(TAG, "Loaded %s: %u bytes, em %u px, height %u px, line %u px, %u ligatures", path,
           static_cast<unsigned>(len), emPx, face->sizePx, d.advanceY, static_cast<unsigned>(ligCount));
   faces_[style] = std::move(face);

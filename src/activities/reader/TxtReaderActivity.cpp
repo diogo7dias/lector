@@ -52,7 +52,7 @@ void TxtReaderActivity::onEnter() {
   auto fileName = filePath.substr(filePath.rfind('/') + 1);
   APP_STATE.openEpubPath = filePath;
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(filePath, fileName, "", "");
+  RECENT_BOOKS.addBook(filePath, fileName, "");
 
   // Trigger first update
   requestUpdate();
@@ -571,9 +571,7 @@ bool TxtReaderActivity::runBoundAction(const uint8_t function) {
       relayoutForFontChange();
       return true;
     case simple_reader_shortcut::Action::WallpaperHold:
-      SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
-      SETTINGS.saveToFile();
-      GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+      ReaderUtils::toggleWallpaperHold(renderer, pagesUntilFullRefresh);
       requestUpdate();
       return true;
     case simple_reader_shortcut::Action::None:

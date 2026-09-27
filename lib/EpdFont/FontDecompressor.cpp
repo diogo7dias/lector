@@ -8,10 +8,7 @@
 
 FontDecompressor::~FontDecompressor() { deinit(); }
 
-bool FontDecompressor::init() {
-  clearCache();
-  return true;
-}
+void FontDecompressor::init() { clearCache(); }
 
 void FontDecompressor::deinit() {
   freePageBuffer();
@@ -223,29 +220,8 @@ const uint8_t* FontDecompressor::getBitmap(const EpdFontData* fontData, const Ep
 // --- Prewarm: pre-decompress glyph bitmaps for a page of text ---
 
 int32_t FontDecompressor::findGlyphIndex(const EpdFontData* fontData, uint32_t codepoint) {
-  const EpdUnicodeInterval* intervals = fontData->intervals;
-  const int count = fontData->intervalCount;
-
-  if (count == 0) return -1;
-
-  // Binary search
-  int left = 0;
-  int right = count - 1;
-
-  while (left <= right) {
-    const int mid = left + (right - left) / 2;
-    const EpdUnicodeInterval* interval = &intervals[mid];
-
-    if (codepoint < interval->first) {
-      right = mid - 1;
-    } else if (codepoint > interval->last) {
-      left = mid + 1;
-    } else {
-      return static_cast<int32_t>(interval->offset + (codepoint - interval->first));
-    }
-  }
-
-  return -1;
+  const auto* interval = findInterval(fontData->intervals, fontData->intervalCount, codepoint);
+  return interval ? static_cast<int32_t>(interval->offset + (codepoint - interval->first)) : -1;
 }
 
 int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8Text) {
@@ -292,39 +268,9 @@ int FontDecompressor::prewarmCache(const EpdFontData* fontData, const char* utf8
 
   // Add ligature output glyphs: if both input codepoints of a ligature pair are
   // in the needed set, the output glyph will be queried during rendering.
-  if (fontData->ligaturePairs && fontData->ligaturePairCount > 0) {
-    for (uint32_t li = 0; li < fontData->ligaturePairCount && glyphCount < MAX_PAGE_GLYPHS; li++) {
-      uint32_t leftCp = fontData->ligaturePairs[li].pair >> 16;
-      uint32_t rightCp = fontData->ligaturePairs[li].pair & 0xFFFF;
-
-      int32_t leftIdx = findGlyphIndex(fontData, leftCp);
-      int32_t rightIdx = findGlyphIndex(fontData, rightCp);
-      if (leftIdx < 0 || rightIdx < 0) continue;
-
-      // Check if both inputs are in neededGlyphs
-      bool hasLeft = false, hasRight = false;
-      for (uint16_t i = 0; i < glyphCount; i++) {
-        if (neededGlyphs[i] == static_cast<uint32_t>(leftIdx)) hasLeft = true;
-        if (neededGlyphs[i] == static_cast<uint32_t>(rightIdx)) hasRight = true;
-        if (hasLeft && hasRight) break;
-      }
-      if (!hasLeft || !hasRight) continue;
-
-      int32_t outIdx = findGlyphIndex(fontData, fontData->ligaturePairs[li].ligatureCp);
-      if (outIdx < 0) continue;
-
-      // Deduplicate
-      bool found = false;
-      for (uint16_t i = 0; i < glyphCount; i++) {
-        if (neededGlyphs[i] == static_cast<uint32_t>(outIdx)) {
-          found = true;
-          break;
-        }
-      }
-      if (!found) {
-        neededGlyphs[glyphCount++] = static_cast<uint32_t>(outIdx);
-      }
-    }
+  if (fontData->ligaturePairs) {
+    addLigatureOutputs(fontData->ligaturePairs, fontData->ligaturePairCount, neededGlyphs, glyphCount, MAX_PAGE_GLYPHS,
+                       [fontData](const uint32_t cp) { return findGlyphIndex(fontData, cp); });
   }
 
   if (glyphCount == 0) return 0;

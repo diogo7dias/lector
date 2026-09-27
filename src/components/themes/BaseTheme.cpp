@@ -25,7 +25,6 @@
 #include "components/TwoTapGate.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
-#include "components/icons/bookmark.h"
 #include "components/icons/skull12.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
@@ -34,22 +33,6 @@
 namespace {
 constexpr int homeMenuMargin = 20;
 constexpr int homeMarginTop = 30;
-constexpr int bookmarkStatusIconWidth = 16;
-constexpr int bookmarkStatusIconHeight = 14;
-constexpr int bookmarkStatusIconGap = 4;
-constexpr int bookmarkStatusIconTopCrop = 2;
-
-void drawBookmarkStatusIcon(const GfxRenderer& renderer, const int x, const int y) {
-  constexpr int bytesPerRow = bookmarkStatusIconWidth / 8;
-  for (int row = 0; row < bookmarkStatusIconHeight; ++row) {
-    for (int col = 0; col < bookmarkStatusIconWidth; ++col) {
-      const uint8_t byte = BookmarkStatusIcon[(row + bookmarkStatusIconTopCrop) * bytesPerRow + col / 8];
-      const uint8_t mask = 1U << (7 - (col % 8));
-      renderer.drawPixel(x + col, y + row, (byte & mask) != 0);
-    }
-  }
-}
-
 }  // namespace
 
 // Greedy word-wrap of input in the one UI font. Line 0 is wrapped to firstLineMaxWidth
@@ -380,13 +363,8 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
   }
 }
 
-bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const Rect* spans, const int spanCount,
-                              const bool armed) const {
-  // One highlight: the row filled, its text knocked out white. The spans a caller
-  // measures are no longer read — they were what the retired bracket style bracketed —
-  // but the parameters stay so every surface keeps calling one painter.
-  (void)spans;
-  (void)spanCount;
+bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
+  // One highlight: the row filled, its text knocked out white.
   if (armed) {
     // Two-tap confirmation: a row waiting for its confirming tap wears a 1px outline,
     // never the filled band, so "armed" can never be misread as "already opened". Same
@@ -657,8 +635,10 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
   return false;
 }
 
-// Defined below, next to the home list it was written for.
+// Defined below, next to the home list they were written for.
 void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx);
+void drawBadgeChip(const GfxRenderer& renderer, int x, int rowY, int lineHeight, int chipW, int textDx,
+                   const char* text, bool inverted);
 
 ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rect rect, const int itemCount,
                                           const int selectedIndex, const int scrollOffset,
@@ -764,33 +744,18 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
     const bool selected = row.index == selectedIndex;
     const int valueX = contentX + contentW - (row.valueW - valueGap);
     // One highlight over the whole measured height, so a row spanning several lines is
-    // marked as a single block. `inverted` is true only under the solid style, which is
-    // the only one that paints over the row's own text and its badge chip. The bracket
-    // style hugs the wrapped title block and the value separately.
+    // marked as a single block.
     bool inverted = false;
     if (selected) {
-      const int titleX = contentX + row.badgeW;
-      const Rect spans[2] = {
-          Rect(titleX, rowY + 3, contentX + contentW - titleX - (row.valueW > 0 ? row.valueW : 0),
-               static_cast<int>(row.lines.size()) * lineHeight),
-          Rect(valueX, rowY + 3, row.valueW - valueGap, lineHeight),
-      };
-      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), spans, row.valueW > 0 ? 2 : 1,
-                               row.index == two_tap::armedRow());
+      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), row.index == two_tap::armedRow());
     }
     if (row.valueW > 0) {
       renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !inverted);
     }
     int textX = contentX;
     if (row.badgeW > 0) {
-      // The chip flips with the row so it stays legible on both grounds: black chip with
-      // white text on an unselected row, white chip with black text on the inverted one.
-      const int chipW = row.badgeW - badgeGap;
-      const int chipH = lineHeight + 2;
-      const int chipY = rowY + 3 + (lineHeight - chipH) / 2;
-      renderer.fillRect(contentX, chipY, chipW, chipH, !inverted);
-      renderer.drawText(UI_10_FONT_ID, contentX + row.badgeTextDx, chipY + (chipH - lineHeight) / 2, row.badge.c_str(),
-                        inverted);
+      drawBadgeChip(renderer, contentX, rowY, lineHeight, row.badgeW - badgeGap, row.badgeTextDx, row.badge.c_str(),
+                    inverted);
       textX = contentX + row.badgeW;
     }
     int baselineY = rowY + 3;
@@ -824,9 +789,6 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     const int textY =
         tileY + (menuMetrics.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
 
-    // Unselected tiles already carry an outline, so the highlight has to read against
-    // one. Brackets hug the tile's own label and the caret rule doubles the tile's
-    // bottom edge; both stay legible without the tile inverting.
     menuHitRows.add(itemIndexBase + i, rect.x + menuMetrics.contentSidePadding, tileY,
                     rect.width - menuMetrics.contentSidePadding * 2, menuMetrics.menuRowHeight);
 
@@ -834,8 +796,7 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
                     menuMetrics.menuRowHeight);
     bool inverted = false;
     if (selected) {
-      const Rect labelSpan(textX, textY, textWidth, lineHeight);
-      inverted = drawSelection(renderer, tile, &labelSpan, 1, itemIndexBase + i == two_tap::armedRow());
+      inverted = drawSelection(renderer, tile, itemIndexBase + i == two_tap::armedRow());
       if (!inverted) renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
     } else {
       renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
@@ -1414,6 +1375,17 @@ void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW,
   *chipW = *textDx + inkW + kGap;
 }
 
+// The chip on a row's first line. It flips with the row so it stays legible on both
+// grounds: black chip with white text on an unselected row, white chip with black text
+// on the inverted one.
+void drawBadgeChip(const GfxRenderer& renderer, const int x, const int rowY, const int lineHeight, const int chipW,
+                   const int textDx, const char* text, const bool inverted) {
+  const int chipH = lineHeight + 2;
+  const int chipY = rowY + 3 + (lineHeight - chipH) / 2;
+  renderer.fillRect(x, chipY, chipW, chipH, !inverted);
+  renderer.drawText(UI_10_FONT_ID, x + textDx, chipY + (chipH - lineHeight) / 2, text, inverted);
+}
+
 // full title + " by INITIALS" wraps across as many lines as it needs; a [NN%] badge
 // with a black background sits inline on line 0 (it flips to a white chip on the
 // selected/inverted row so it stays legible). "N more above/below" indicators show
@@ -1423,10 +1395,6 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
                                              int scrollOffset) const {
   constexpr int maxRowsCap = 30;
   const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
-  // Cap the measure loop at the store's own capacity rather than a smaller number:
-  // the home list now grows into whatever the bottom-anchored menu leaves free, so a
-  // lower cap would hide books that fit. Height still decides how many actually draw.
-  constexpr int maxVisibleBooks = RecentBooksStore::MAX_RECENT_BOOKS;
   const int clampedOffset = std::max(0, std::min(scrollOffset, std::max(0, count - 1)));
   constexpr int rowGap = 4;
   const int rowLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
@@ -1484,41 +1452,15 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     return {idx, std::move(lines), h, badgeW, badgeTextDx, std::move(badgeText)};
   };
 
-  auto buildVisibleEntries = [&](int startIdx) {
-    std::vector<BookEntry> entries;
-    int accumulated = 0;
-    for (int i = startIdx; i < count && static_cast<int>(entries.size()) < maxVisibleBooks; i++) {
-      auto entry = measureBook(i);
-      const int needed = accumulated + (entries.empty() ? 0 : rowGap) + entry.height;
-      if (needed > contentHeight) break;
-      accumulated = needed;
-      entries.push_back(std::move(entry));
-    }
-    return entries;
-  };
-
-  std::vector<BookEntry> visibleEntries = buildVisibleEntries(clampedOffset);
-
-  // If the selected book is below the visible range, walk back from it so it lands at
-  // the bottom with as many above as fit.
-  if (selectorIndex >= 0 && selectorIndex < count && !visibleEntries.empty()) {
-    const int lastVisibleIdx = visibleEntries.back().bookIdx;
-    if (selectorIndex > lastVisibleIdx) {
-      int totalH = measureBook(selectorIndex).height;
-      int newOffset = selectorIndex;
-      for (int i = selectorIndex - 1; i >= 0; i--) {
-        const int h = measureBook(i).height;
-        if (totalH + rowGap + h > contentHeight) break;
-        totalH += rowGap + h;
-        newOffset = i;
-      }
-      visibleEntries = buildVisibleEntries(newOffset);
-    }
-  }
-
-  if (visibleEntries.empty() && clampedOffset < count) {
-    visibleEntries.push_back(measureBook(clampedOffset));
-  }
+  // Same window as every wrapped list: forward from the offset, walked back from a
+  // selection below it so the selected book lands at the bottom. A selection off the
+  // list (the menu below has focus) leaves the window where the offset puts it.
+  const int selectedBook = selectorIndex < count ? selectorIndex : -1;
+  const wrapped_list::Window win = wrapped_list::window(count, selectedBook, clampedOffset, contentHeight, rowGap,
+                                                        [&](const int i) { return measureBook(i).height; });
+  std::vector<BookEntry> visibleEntries;
+  visibleEntries.reserve(static_cast<size_t>(win.count));
+  for (int i = win.first; i < win.first + win.count; i++) visibleEntries.push_back(measureBook(i));
 
   const int firstVisible = visibleEntries.front().bookIdx;
   const int lastVisible = visibleEntries.back().bookIdx;
@@ -1550,16 +1492,10 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
 
   for (const auto& entry : visibleEntries) {
     const bool selected = (selectorIndex == entry.bookIdx);
-    // Solid paints the whole row and forces white text; the other styles mark it and
-    // leave the text and the badge chip on their normal ground. Brackets hug the
-    // title block, which starts after the [NN%] chip when the row carries one.
+    // The selection paints the whole row and forces white text.
     bool inverted = false;
     if (selected) {
-      const int titleX = contentX + (entry.badgeW > 0 ? entry.badgeW + 6 : 0);
-      const Rect titleSpan(titleX, rowY + 3, rowX + rowW - titleX,
-                           static_cast<int>(entry.lines.size()) * rowLineHeight);
-      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), &titleSpan, 1,
-                               entry.bookIdx == two_tap::armedRow());
+      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), entry.bookIdx == two_tap::armedRow());
     }
 
     // [NN%] badge on line 0: an inverted chip that flips with row selection so it
@@ -1567,11 +1503,8 @@ ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
     // selected/inverted row).
     int firstLineX = contentX;
     if (entry.badgeW > 0) {
-      const int badgeH = rowLineHeight + 2;
-      const int badgeY = rowY + 3 + (rowLineHeight - badgeH) / 2;
-      renderer.fillRect(contentX, badgeY, entry.badgeW, badgeH, !inverted);
-      renderer.drawText(UI_10_FONT_ID, contentX + entry.badgeTextDx, badgeY + (badgeH - rowLineHeight) / 2,
-                        entry.badgeText.c_str(), inverted);
+      drawBadgeChip(renderer, contentX, rowY, rowLineHeight, entry.badgeW, entry.badgeTextDx, entry.badgeText.c_str(),
+                    inverted);
       firstLineX = contentX + entry.badgeW + 6;
     }
 

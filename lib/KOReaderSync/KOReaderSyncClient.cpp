@@ -2,8 +2,8 @@
 
 #include <ArduinoJson.h>
 #include <Logging.h>
+#include <ObfuscationUtils.h>
 #include <SecureHttpClient.h>
-#include <base64.h>
 
 #include <string>
 
@@ -52,9 +52,7 @@ void applyAuthHeaders(freeink::SecureHttpClient& http) {
   http.addHeader("Accept", "application/vnd.koreader.v1+json");
   http.addHeader("x-auth-user", KOREADER_STORE.getUsername());
   http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password());
-  const std::string credentials = KOREADER_STORE.getUsername() + ":" + KOREADER_STORE.getPassword();
-  const String encoded = base64::encode(credentials.c_str());
-  http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
+  http.addHeader("Authorization", basicAuthHeader(KOREADER_STORE.getUsername(), KOREADER_STORE.getPassword()));
 }
 
 // True when free heap is too low to risk a TLS handshake.
@@ -288,27 +286,4 @@ KOReaderSyncClient::Error KOReaderSyncClient::updateProgress(const KOReaderProgr
   if (httpCode >= 200 && httpCode < 300) return OK;
   if (httpCode == 401) return AUTH_FAILED;
   return SERVER_ERROR;
-}
-
-const char* KOReaderSyncClient::errorString(Error error) {
-  switch (error) {
-    case OK:
-      return "Success";
-    case NO_CREDENTIALS:
-      return "No credentials configured";
-    case NETWORK_ERROR:
-      return "Network error";
-    case AUTH_FAILED:
-      return "Authentication failed";
-    case SERVER_ERROR:
-      return "Server error (try again later)";
-    case JSON_ERROR:
-      return "JSON parse error";
-    case NOT_FOUND:
-      return "No progress found";
-    case LOW_MEMORY:
-      return "Not enough memory for sync — please retry";
-    default:
-      return "Unknown error";
-  }
 }

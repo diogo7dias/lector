@@ -10,10 +10,9 @@
 class EpubReaderChapterSelectionActivity final : public UiListActivity {
  public:
   explicit EpubReaderChapterSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Epub& epub,
-                                              const std::string& epubPath, const int currentSpineIndex)
+                                              const int currentSpineIndex)
       : UiListActivity("EpubReaderChapterSelection", renderer, mappedInput),
         epub(epub),
-        epubPath(epubPath),
         currentSpineIndex(currentSpineIndex) {}
 
   void onEnter() override;
@@ -28,7 +27,6 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
 
  private:
   Epub& epub;
-  std::string epubPath;
   int currentSpineIndex = 0;
 
   // Visible-row cache. TOC entries are SD-backed (BookMetadataCache LUT reads) and the

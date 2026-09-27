@@ -46,16 +46,16 @@ class DisplayRefreshPolicy {
   // keeps earning cleans gradually earns them sooner, and eventually earns a FULL.
   static constexpr uint16_t CLEAN_DISCHARGE_DIVISOR = 5;
 
-  // nowMs is accepted for call-site stability but no longer consulted: idle time
-  // on an e-reader is the user reading the page, so it must never trigger a
-  // clean. Ghosting cleanup is driven by MAX_CONSECUTIVE_FAST instead.
+  // Time is deliberately not an input: idle time on an e-reader is the user reading the
+  // page, so it must never trigger a clean. Ghosting cleanup is driven by
+  // MAX_CONSECUTIVE_FAST instead.
   //
   // inkScore is this frame's cost from FrameInkMetrics. It defaults to 0, which is the
   // "no metrics available" case and reproduces the counter-only behaviour exactly.
   // turboPass says this pass is running the cheap partial path, which charges
   // TURBO_DEBT_MULTIPLIER times the ink. Defaulted so every existing caller and test
   // keeps its exact behaviour.
-  Mode choose(Mode requested, uint32_t nowMs, uint16_t inkScore = 0, bool turboPass = false);
+  Mode choose(Mode requested, uint16_t inkScore = 0, bool turboPass = false);
   void reset();
 
   // Ink debt outstanding, carried across a lock alongside fastSinceFull(). Same reason:

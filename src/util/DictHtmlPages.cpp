@@ -281,7 +281,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
   {
     const std::string tmpPath = TMP_HTML_PATH;  // the parser stores a reference
     // Heap-allocated as Section does — the parser object is far too large for
-    // a stack local. Null epub is safe: imageRendering=2 suppresses <img>
+    // a stack local. Null epub is safe: IMAGES_SUPPRESS skips <img>
     // handling, the only path that dereferences it.
     ReaderRenderSpec spec;
     spec.fontId = SETTINGS.getReaderFontId();
@@ -302,7 +302,7 @@ bool buildDictionaryHtmlPages(GfxRenderer& renderer, const std::string& definiti
     spec.firstLineIndentPercent = 0;
     spec.embeddedTextStyle = false;
     spec.embeddedLayoutStyle = false;
-    spec.imageRendering = 2;
+    spec.imageRendering = CrossPointSettings::IMAGES_SUPPRESS;
     auto parser = makeUniqueNoThrow<ChapterHtmlSlimParser>(nullptr, tmpPath, renderer, spec, &collectPage, &collect,
                                                            /*contentBase=*/"", /*imageBasePath=*/"");
     if (!parser) {

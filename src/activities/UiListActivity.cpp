@@ -9,7 +9,6 @@
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "fontIds.h"
-#include "util/HoldRepeat.h"
 
 namespace fui = freeink::ui;
 
@@ -128,31 +127,8 @@ void UiListActivity::loop() {
 }
 
 void UiListActivity::navigateButtons() {
-  const int count = listCount();
   auto& n = activeNav();
-  buttonNavigator.onNextRelease([this, count, &n] { moveSelectionTo(ButtonNavigator::nextIndex(n.selected, count)); });
-  buttonNavigator.onPreviousRelease(
-      [this, count, &n] { moveSelectionTo(ButtonNavigator::previousIndex(n.selected, count)); });
-  // A hold travels in ROWS, not pages. Paging per repeat moved ~14 rows twice a
-  // second, so a held key crossed a long list far faster than the panel could
-  // show it and there was no way to stop on a row. One row per repeat at the
-  // list interval is aimable, and holdRepeatStep() coarsens it to five once the
-  // hold has plainly stopped being a nudge — the same ramp the numeric settings
-  // use, so there is one hold feel in the firmware rather than two.
-  // Clamped rather than wrapped: a hold that wraps past the end never ends.
-  //
-  // A swipe arrives through this same callback and stays a page: it is a travel
-  // gesture, and a finger that moved one row would be useless.
-  buttonNavigator.onNextContinuous([this, count, &n] {
-    moveSelectionTo(ButtonNavigator::swipeDrivenPass()
-                        ? ButtonNavigator::nextPageIndex(n.selected, count, n.pageRows())
-                        : ButtonNavigator::heldIndex(n.selected, count, holdRepeatStep(buttonNavigator.repeats())));
-  });
-  buttonNavigator.onPreviousContinuous([this, count, &n] {
-    moveSelectionTo(ButtonNavigator::swipeDrivenPass()
-                        ? ButtonNavigator::previousPageIndex(n.selected, count, n.pageRows())
-                        : ButtonNavigator::heldIndex(n.selected, count, -holdRepeatStep(buttonNavigator.repeats())));
-  });
+  buttonNavigator.onListNav(n.selected, listCount(), n.pageRows(), [this](const int index) { moveSelectionTo(index); });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
@@ -190,11 +166,8 @@ void UiListActivity::drawScrollArrows() {
   const auto& n = activeNav();
   const list_scrollbar::Arrows arrows = list_scrollbar::forWindow(listCount(), n.top, n.pageRows());
   if (!arrows.up && !arrows.down) return;
-  const int spacing = UITheme::getInstance().getMetrics().verticalSpacing;
-  const int reach = list_scrollbar::kHeight + list_scrollbar::kGap;
-  const Rect band{listBand.x, listBand.y - std::min(spacing, reach), listBand.width,
-                  listBand.height + std::min(spacing, reach) * 2};
-  GUI.drawScrollArrows(renderer, band, arrows);
+  GUI.drawScrollArrows(
+      renderer, list_scrollbar::outsideBand(listBand, UITheme::getInstance().getMetrics().verticalSpacing), arrows);
 }
 
 ListChrome UiListActivity::chrome() const {

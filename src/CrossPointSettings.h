@@ -149,7 +149,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // slot; fromJson() folds that range up (see LEGACY_FONT_SIZE_MAX).
   static constexpr uint8_t LEGACY_FONT_SIZE_MAX = 3;
   static constexpr uint8_t DEFAULT_FONT_POINT_SIZE = 14;
-  enum LINE_COMPRESSION { TIGHT = 0, NORMAL = 1, WIDE = 2, LINE_COMPRESSION_COUNT };
   enum PARAGRAPH_ALIGNMENT {
     JUSTIFIED = 0,
     LEFT_ALIGN = 1,
@@ -432,10 +431,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
-  // Legacy coarse line-spacing enum (TIGHT/NORMAL/WIDE). Superseded by
-  // lineSpacingPercent below; retained so old saves still load and existing
-  // references stay valid. readerLineCompression now reads the percent.
-  uint8_t lineSpacing = NORMAL;
   // Reader line spacing as a percentage of the font's natural line height (100 =
   // natural). Restored granular control (old lector). The resolved line-compression
   // float is part of the cache key, so a change rebuilds the section cache.
@@ -564,7 +559,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // The binding field for one button and gesture, in or out of a book. Returns a
   // pointer so both the settings rows and the router read the same storage.
   uint8_t* buttonBinding(const bool inBook, const uint8_t button, const uint8_t gesture) {
-    static uint8_t CrossPointSettings::* const table[2][BOUND_BTN_COUNT][BOUND_GESTURE_COUNT] = {
+    const BindingField field = bindingField(inBook, button, gesture);
+    return field ? &(this->*field) : nullptr;
+  }
+  using BindingField = uint8_t CrossPointSettings::*;
+  // nullptr for a button or gesture out of range.
+  static BindingField bindingField(const bool inBook, const uint8_t button, const uint8_t gesture) {
+    static const BindingField table[2][BOUND_BTN_COUNT][BOUND_GESTURE_COUNT] = {
         {{&CrossPointSettings::btnUiLeftSingle, &CrossPointSettings::btnUiLeftDouble,
           &CrossPointSettings::btnUiLeftHold},
          {&CrossPointSettings::btnUiRightSingle, &CrossPointSettings::btnUiRightDouble,
@@ -582,7 +583,23 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
          {&CrossPointSettings::btnBookPowerSingle, &CrossPointSettings::btnBookPowerDouble,
           &CrossPointSettings::btnBookPowerHold}}};
     if (button >= BOUND_BTN_COUNT || gesture >= BOUND_GESTURE_COUNT) return nullptr;
-    return &(this->*table[inBook ? 1 : 0][button][gesture]);
+    return table[inBook ? 1 : 0][button][gesture];
+  }
+  // Every per-button binding field, both contexts, all buttons and gestures.
+  template <typename Visit>
+  static void forEachBindingField(Visit&& visit) {
+    for (const bool inBook : {false, true}) {
+      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
+        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
+          visit(bindingField(inBook, button, gesture));
+        }
+      }
+    }
+  }
+  bool anyButtonBindingIs(const uint8_t function) const {
+    bool found = false;
+    forEachBindingField([&](const BindingField field) { found = found || this->*field == function; });
+    return found;
   }
   // Which actions the Menu Pop-up lists, as a bitmask indexed by LONG_PRESS_MENU_FUNCTION
   // value (bit 2 = Toggle Bookmark, and so on). A mask rather than a list so the row order
@@ -670,10 +687,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   char txtSdFontFamilyName[32] = "";
   // Dictionary folder name under /dictionaries (empty = no dictionary)
   char dictionaryName[32] = "";
-  // Kept only so an existing settings file still parses and the perf log keeps its
-  // column. The sleep wallpaper is always drawn through the OEM 3-pass grayscale
-  // pipeline now; nothing reads this to choose anything. See SleepActivity.
-  uint8_t sleepImageQuality = 1;
   // Fast Unlock (1 = on). Shortens the recovery-chord settle window the wake waits out
   // before routing, 500 ms to 100 ms on the X3/X4 button ladder (the X4 Pro is 20 ms
   // either way). Chosen from code inspection, so the row exists to switch back without
@@ -774,15 +787,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     if (longPressMenuFunction == LP_MENU_POPUP || menuHoldFunction == LP_MENU_POPUP) {
       return true;
     }
-    for (const bool inBook : {false, true}) {
-      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
-        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
-          const uint8_t* binding = const_cast<CrossPointSettings*>(this)->buttonBinding(inBook, button, gesture);
-          if (binding != nullptr && *binding == LP_MENU_POPUP) return true;
-        }
-      }
-    }
-    return false;
+    return anyButtonBindingIs(LP_MENU_POPUP);
   }
   // Whether a single power press sleeps the device. Every consumer must ask this rather
   // than reading a binding itself, so the answer is decided in one place: the wake-hold
@@ -793,17 +798,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // True when Sleep is bound to any gesture, on any button, in either context. False here
   // means the device has no manual route to sleep at all, and getSleepTimeoutMs() caps the
   // auto-sleep timeout in response; see util/SleepTimeoutGuard.h.
-  bool anySleepBinding() const {
-    for (const bool inBook : {false, true}) {
-      for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
-        for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
-          const uint8_t* binding = const_cast<CrossPointSettings*>(this)->buttonBinding(inBook, button, gesture);
-          if (binding != nullptr && *binding == LP_MENU_SLEEP) return true;
-        }
-      }
-    }
-    return false;
-  }
+  bool anySleepBinding() const { return anyButtonBindingIs(LP_MENU_SLEEP); }
   // Pop-up membership. The mask layout has exactly one owner: these three.
   bool isPopupItem(const uint8_t function) const { return (popupItems >> function) & 1u; }
   uint8_t popupItemCount() const {

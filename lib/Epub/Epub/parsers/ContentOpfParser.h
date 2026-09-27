@@ -43,16 +43,6 @@ class ContentOpfParser final : public Print {
   std::deque<ItemIndexEntry> itemIndex;
   bool useItemIndex = false;
 
-  // FNV-1a hash function
-  static uint32_t fnvHash(const std::string& s) {
-    uint32_t hash = 2166136261u;
-    for (char c : s) {
-      hash ^= static_cast<uint8_t>(c);
-      hash *= 16777619u;
-    }
-    return hash;
-  }
-
   static void startElement(void* userData, const XML_Char* name, const XML_Char** atts);
   static void characterData(void* userData, const XML_Char* s, int len);
   static void endElement(void* userData, const XML_Char* name);

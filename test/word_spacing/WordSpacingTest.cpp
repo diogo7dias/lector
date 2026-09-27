@@ -30,7 +30,7 @@ void layout(const std::string& text, int percent, int width, CssTextAlign align 
   style.textAlignDefined = true;
   style.directionDefined = true;
   style.isRtl = rtl;
-  ParsedText parsed(false, false, dots, style, 1, 0, percent);
+  ParsedText parsed(false, dots, style, 1, 0, percent);
   std::istringstream input(text);
   std::string word;
   int i = 0;
@@ -40,11 +40,11 @@ void layout(const std::string& text, int percent, int width, CssTextAlign align 
     size_t start = 0;
     size_t nbsp;
     while ((nbsp = word.find("\xC2\xA0", start)) != std::string::npos) {
-      parsed.addWord(word.substr(start, nbsp - start), fontStyle, false, start != 0);
-      parsed.addWord(" ", fontStyle, false, true);
+      parsed.addWord(word.substr(start, nbsp - start), fontStyle, start != 0);
+      parsed.addWord(" ", fontStyle, true);
       start = nbsp + 2;
     }
-    parsed.addWord(word.substr(start), fontStyle, false, start != 0);
+    parsed.addWord(word.substr(start), fontStyle, start != 0);
   }
   parsed.layoutAndExtractLines(renderer, FONT, width, [](void*, std::shared_ptr<TextBlock>, uint32_t) {}, nullptr);
 }
@@ -239,7 +239,7 @@ TEST(WordSpacing, SoftFlushedParagraphIndentsOnlyItsFirstLine) {
   style.alignment = CssTextAlign::Left;
   style.textAlignDefined = true;
   style.directionDefined = true;
-  ParsedText parsed(false, false, GUIDE_DOTS_OFF, style, 1, 0, 100);
+  ParsedText parsed(false, GUIDE_DOTS_OFF, style, 1, 0, 100);
   const auto sink = [](void*, std::shared_ptr<TextBlock>, uint32_t) {};
   for (int pass = 0; pass < 3; ++pass) {
     std::istringstream input(PROSE);

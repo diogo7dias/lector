@@ -42,12 +42,8 @@ struct ThemeMetrics {
   int batteryHeight;
 
   int topPadding;
-  int batteryBarHeight;
   int headerHeight;
   int verticalSpacing;
-
-  int previewPadding;
-  int previewHeightPercent;
 
   int contentSidePadding;
   int listRowHeight;
@@ -58,13 +54,10 @@ struct ThemeMetrics {
   int tabSpacing;
   int tabBarHeight;
 
-  int scrollBarWidth;
-  int scrollBarRightOffset;
-
   // FreeInkUI theme tokens. The SDK's UI toolkit takes its shape from these rather
   // than from hard-coded constants, so a screen hosted on FreeInkUI comes out looking
   // like the rest of this firmware. Values below match what BaseTheme already draws by
-  // hand; a theme that overrides the hand-drawn look overrides these alongside it.
+  // hand; change the hand-drawn look and these alongside it.
   int listRowGap;
   int listRowRadius;
   int listInset;
@@ -74,7 +67,6 @@ struct ThemeMetrics {
   int listScrollWidth;
   // 0 = scroll indicator on the right, 1 = on the left.
   int listScrollSide;
-  bool listTitleBold;
   int headerSidePadding;
   int headerUnderlineSize;
   // 0 = left aligned, 1 = centred.
@@ -84,9 +76,7 @@ struct ThemeMetrics {
   int capsuleRadius;
 
   int homeTopPadding;
-  int homeCoverHeight;
   int homeCoverTileHeight;
-  int homeRecentBooksCount;
   int homeMenuTopOffset;
 
   int buttonHintsHeight;
@@ -117,8 +107,6 @@ struct ThemeMetrics {
   int optionPopupSelectionHPadding;
   int optionPopupSelectionVPadding;
   int optionPopupTitleGap;
-  bool optionPopupUseSmallFont;
-  bool optionPopupOptionFontBold;
   int optionPopupSelectionRadius;
   bool optionPopupSelectionLight;
   bool optionPopupDrawAllRows;
@@ -136,8 +124,7 @@ struct ThemeMetrics {
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
 
-// Default theme implementation (Classic Theme)
-// Additional themes can inherit from this and override methods as needed
+// The one theme. Nothing is virtual: UITheme holds a BaseTheme and calls it directly.
 
 namespace BaseMetrics {
 constexpr ThemeMetrics values = {.batteryWidth = 15,
@@ -148,11 +135,8 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  // the panel edge. Every header y, content top and the per-page item
                                  // reserve are expressed against topPadding, so they all shift together.
                                  .topPadding = 14,
-                                 .batteryBarHeight = 20,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
-                                 .previewPadding = 12,
-                                 .previewHeightPercent = 30,
                                  .contentSidePadding = 20,
                                  .listRowHeight = 30,
                                  .listWithSubtitleRowHeight = 50,
@@ -160,8 +144,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .menuSpacing = 8,
                                  .tabSpacing = 10,
                                  .tabBarHeight = 50,
-                                 .scrollBarWidth = 4,
-                                 .scrollBarRightOffset = 5,
                                  .listRowGap = 0,
                                  .listRowRadius = 0,
                                  .listInset = 0,
@@ -169,7 +151,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .listSelectionStyle = 0,
                                  .listScrollWidth = 4,
                                  .listScrollSide = 0,
-                                 .listTitleBold = false,
                                  .headerSidePadding = 20,
                                  .headerUnderlineSize = 0,
                                  .headerTitleAlign = 1,
@@ -177,9 +158,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .sheetRadius = 0,
                                  .capsuleRadius = 0,
                                  .homeTopPadding = 40,
-                                 .homeCoverHeight = 400,
                                  .homeCoverTileHeight = 400,
-                                 .homeRecentBooksCount = 1,
                                  .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
@@ -207,8 +186,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .optionPopupSelectionHPadding = 8,
                                  .optionPopupSelectionVPadding = 4,
                                  .optionPopupTitleGap = 10,
-                                 .optionPopupUseSmallFont = true,
-                                 .optionPopupOptionFontBold = false,
                                  .optionPopupSelectionRadius = 0,
                                  .optionPopupSelectionLight = false,
                                  .optionPopupDrawAllRows = false,
@@ -241,8 +218,8 @@ class BaseTheme {
   hint_band::Band hintBand(const GfxRenderer& renderer) const;
   void drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                        const char* btn4) const;
-  // Shared by every theme's drawButtonHints(): centres a hint label in its box,
-  // wrapping to two lines rather than overflowing when it's too wide to fit.
+  // Used by drawButtonHints(): centres a hint label in its box, wrapping to two
+  // lines rather than overflowing when it's too wide to fit.
   static void drawHintLabel(GfxRenderer& renderer, int fontId, const char* label, int x, int boxWidth, int boxTop,
                             int boxHeight, int singleLineYOffset);
   void drawSideButtonHints(const GfxRenderer& renderer, const char* topBtn, const char* bottomBtn) const;
@@ -251,16 +228,9 @@ class BaseTheme {
   // popup and tab goes through this rather than filling a rectangle itself, so one
   // setting reaches all of them. Section heading bands are NOT selections: they keep
   // their own solid fill in every style.
-  //
-  // `spans` are the text runs inside the row, in drawing order: a settings row hands
-  // over its label and its value. The bracket style hugs each span on its own rather
-  // than the whole row, which is what makes a value like ON read as picked. Surfaces
-  // with nothing to measure -- a book cover, a tab -- pass none and get the row
-  // bracketed instead. The solid and caret styles ignore spans entirely.
   // armed = this row is the one a first tap armed (components/TwoTapGate.h): it is
   // outlined rather than filled, and returns false so its text keeps its normal ground.
-  bool drawSelection(const GfxRenderer& renderer, Rect rect, const Rect* spans = nullptr, int spanCount = 0,
-                     bool armed = false) const;
+  bool drawSelection(const GfxRenderer& renderer, Rect rect, bool armed = false) const;
 
   // Greedy word-wrap in the one UI face. Line 0 is wrapped to firstLineMaxWidth (room
   // for an inline badge or a right-hand label), later lines to restMaxWidth. A word
@@ -272,7 +242,7 @@ class BaseTheme {
   // both against the band's right edge. See ListScrollbar.h for the predicate.
   void drawScrollArrows(const GfxRenderer& renderer, Rect band, list_scrollbar::Arrows arrows) const;
   // Geometry of the filled title band: flush with the top of the drawable area, ending
-  // one pixel under the title. Exposed so a theme overriding drawHeader keeps the shape.
+  // one pixel under the title. Exposed so other header drawing keeps the same shape.
   static int headerBandTop(Rect rect);
   static int headerBandHeight(const GfxRenderer& renderer, Rect rect, int titleLines = 1);
   // The title wraps rather than being cut. These say how many lines it takes in a band
@@ -354,7 +324,7 @@ class BaseTheme {
                      int contentStartX = 0, int contentWidth = 0) const;
   bool showsFileIcons() const { return false; }
 
-  // Shared constants and helpers for battery drawing (used by all themes)
+  // Shared constants and helpers for battery drawing
   static constexpr int batteryPercentSpacing = 4;
   // Gap between the battery icon and the right edge of the header.
   static constexpr int batteryRightPadding = 12;
@@ -377,6 +347,6 @@ class BaseTheme {
   // not, the bar scrolls so the selected tab is the one guaranteed to be readable.
   // drawTabBar and tabIndexFromPoint both go through this, and apply the same
   // right-edge cut-off, so what is on screen and what answers to a touch cannot
-  // disagree. A theme that overrides either of those owns keeping that true.
+  // disagree. A change to either of those owns keeping that true.
   size_t firstVisibleTab(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs) const;
 };

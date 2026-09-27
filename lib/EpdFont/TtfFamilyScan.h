@@ -9,6 +9,8 @@
 // up to four faces (regular / bold / italic / bold-italic) inferred from the
 // file names.
 
+#include <Fnv1a.h>
+
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -50,26 +52,10 @@ constexpr uint32_t TTF_MAX_FACE_BYTES = 2u * 1024u * 1024u;
 // is the section-cache key, so a different face file, family, or size never
 // serves another one's pre-rendered pages. Never 0 (the "not found" sentinel).
 inline int fontIdForFamilySize(const uint32_t contentHash, const char* familyName, const uint8_t pointSize) {
-  constexpr uint32_t FNV_PRIME = 16777619u;
-  uint32_t hash = contentHash;
-  while (*familyName) {
-    hash ^= static_cast<uint8_t>(*familyName++);
-    hash *= FNV_PRIME;
-  }
-  hash ^= pointSize;
-  hash *= FNV_PRIME;
+  const uint32_t hash = fnv1a::mix32(fnv1a::hash32(familyName, contentHash), pointSize);
   const int id = static_cast<int>(hash);
   return id != 0 ? id : 1;
 }
-
-inline uint32_t fnv1a(uint32_t hash, const uint8_t* data, const size_t len) {
-  for (size_t i = 0; i < len; ++i) {
-    hash ^= data[i];
-    hash *= 16777619u;
-  }
-  return hash;
-}
-constexpr uint32_t FNV1A_SEED = 2166136261u;
 
 // --- file-name rules ---------------------------------------------------------
 

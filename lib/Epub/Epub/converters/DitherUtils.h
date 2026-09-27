@@ -25,3 +25,11 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   if (adjusted < 192) return 2;
   return 3;
 }
+
+// Bayer-dithered or plain 4-level value for one pixel, as the framebuffer
+// converters draw it.
+inline uint8_t quantize4Level(const uint8_t gray, const int x, const int y, const bool useDithering) {
+  if (useDithering) return applyBayerDither4Level(gray, x, y);
+  const uint8_t level = gray / 85;
+  return level > 3 ? 3 : level;
+}

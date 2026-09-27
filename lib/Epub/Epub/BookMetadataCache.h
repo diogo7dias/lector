@@ -91,16 +91,6 @@ class BookMetadataCache {
 
   static constexpr uint16_t LARGE_SPINE_THRESHOLD = 400;
 
-  // FNV-1a 64-bit hash function
-  static uint64_t fnvHash64(const std::string& s) {
-    uint64_t hash = 14695981039346656037ull;
-    for (char c : s) {
-      hash ^= static_cast<uint8_t>(c);
-      hash *= 1099511628211ull;
-    }
-    return hash;
-  }
-
   uint32_t writeSpineEntry(HalFile& file, const SpineEntry& entry) const;
   uint32_t writeTocEntry(HalFile& file, const TocEntry& entry) const;
   SpineEntry readSpineEntry(HalFile& file) const;
@@ -119,7 +109,8 @@ class BookMetadataCache {
   void createSpineEntry(const std::string& href);
   bool endContentOpfPass();
   bool beginTocPass();
-  void createTocEntry(const std::string& title, const std::string& href, const std::string& anchor, uint8_t level);
+  // target is the TOC link resolved against the TOC document's folder, with any "#anchor" still attached.
+  void createTocEntry(const std::string& title, const std::string& target, uint8_t level);
   bool endTocPass();
   bool endWrite();
   bool cleanupTmpFiles() const;

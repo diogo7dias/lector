@@ -52,7 +52,6 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   std::string currentPath;
   std::string searchTemplate;
   bool consumeConfirm = false;
-  bool consumeBack = false;  // Added missing member
   /** The line the download screen names the book on. */
   std::string downloadTitle;
   // Spend one FULL refresh on the frame that replaces the download screen. That
@@ -74,6 +73,8 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
   void fetchFeed(const std::string& path);
+  void showReconnect(const opds::ReconnectInfo& info);
+  bool pollBackForCancel();
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();

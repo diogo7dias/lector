@@ -4,6 +4,8 @@
 #include <Logging.h>
 #include <MD5Builder.h>
 
+#include "KOReaderCredentialStore.h"
+
 namespace {
 // Extract filename from path (everything after last '/')
 std::string getFilename(const std::string& path) {
@@ -14,6 +16,10 @@ std::string getFilename(const std::string& path) {
   return path.substr(pos + 1);
 }
 }  // namespace
+
+std::string KOReaderDocumentId::calculateFor(const std::string& filePath, const DocumentMatchMethod method) {
+  return method == DocumentMatchMethod::FILENAME ? calculateFromFilename(filePath) : calculate(filePath);
+}
 
 std::string KOReaderDocumentId::calculateFromFilename(const std::string& filePath) {
   const std::string filename = getFilename(filePath);

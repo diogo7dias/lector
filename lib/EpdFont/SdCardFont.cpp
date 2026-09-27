@@ -1,5 +1,6 @@
 #include "SdCardFont.h"
 
+#include <Fnv1a.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Utf8.h>
@@ -17,18 +18,6 @@ static_assert(sizeof(EpdKernClassEntry) == 3, "EpdKernClassEntry must be 3 bytes
 static_assert(sizeof(EpdLigaturePair) == 8, "EpdLigaturePair must be 8 bytes to match .cpfont file layout");
 
 namespace {
-
-// FNV-1a hash for content-based font ID generation
-constexpr uint32_t FNV_OFFSET = 2166136261u;
-constexpr uint32_t FNV_PRIME = 16777619u;
-
-uint32_t fnv1a(const uint8_t* data, size_t len, uint32_t hash = FNV_OFFSET) {
-  for (size_t i = 0; i < len; i++) {
-    hash ^= data[i];
-    hash *= FNV_PRIME;
-  }
-  return hash;
-}
 
 // .cpfont magic bytes
 constexpr char CPFONT_MAGIC[8] = {'C', 'P', 'F', 'O', 'N', 'T', '\0', '\0'};
@@ -320,17 +309,6 @@ bool SdCardFont::loadStyleKernLigatureData(PerStyle& s) {
 
 // --- Per-page mini kern matrix ---
 
-// Local copy of EpdFont.cpp's lookupKernClass (that one is file-static there).
-// Returns the 1-based class ID for `cp`, or 0 if the codepoint has no kerning class.
-static uint8_t miniLookupKernClass(const EpdKernClassEntry* entries, uint16_t count, uint32_t cp) {
-  if (!entries || count == 0 || cp > 0xFFFF) return 0;
-  const auto target = static_cast<uint16_t>(cp);
-  const auto* end = entries + count;
-  const auto it =
-      std::lower_bound(entries, end, target, [](const EpdKernClassEntry& e, uint16_t v) { return e.codepoint < v; });
-  return (it != end && it->codepoint == target) ? it->classId : 0;
-}
-
 // Build a small per-page kern matrix containing ONLY the (leftClass, rightClass)
 // pairs reachable from codepoints in the current text. Class IDs are renumbered
 // to a dense 1..N range so the resulting matrix is usedLeft × usedRight (typical
@@ -365,9 +343,9 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   bool usedLeft[256] = {};
   bool usedRight[256] = {};
   for (uint32_t i = 0; i < cpCount; i++) {
-    uint8_t lc = miniLookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, codepoints[i]);
+    uint8_t lc = lookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, codepoints[i]);
     if (lc) usedLeft[lc] = true;
-    uint8_t rc = miniLookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, codepoints[i]);
+    uint8_t rc = lookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, codepoints[i]);
     if (rc) usedRight[rc] = true;
   }
 
@@ -400,8 +378,8 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   uint16_t miniLeftCount = 0;
   uint16_t miniRightCount = 0;
   for (uint32_t i = 0; i < cpCount; i++) {
-    if (miniLookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, codepoints[i]) != 0) miniLeftCount++;
-    if (miniLookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, codepoints[i]) != 0) miniRightCount++;
+    if (lookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, codepoints[i]) != 0) miniLeftCount++;
+    if (lookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, codepoints[i]) != 0) miniRightCount++;
   }
 
   // Step 4: size the three mini buffers (reused across pages when they fit; the
@@ -424,13 +402,13 @@ bool SdCardFont::buildMiniKernMatrix(PerStyle& s, const uint32_t* codepoints, ui
   for (uint32_t i = 0; i < cpCount; i++) {
     uint32_t cp = codepoints[i];
     if (cp > 0xFFFF) continue;  // kern class entries are uint16_t
-    uint8_t lc = miniLookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, cp);
+    uint8_t lc = lookupKernClass(s.kernLeftClasses, s.header.kernLeftEntryCount, cp);
     if (lc) {
       s.miniKernLeftClasses[lIdx].codepoint = static_cast<uint16_t>(cp);
       s.miniKernLeftClasses[lIdx].classId = leftRenumber[lc];
       lIdx++;
     }
-    uint8_t rc = miniLookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, cp);
+    uint8_t rc = lookupKernClass(s.kernRightClasses, s.header.kernRightEntryCount, cp);
     if (rc) {
       s.miniKernRightClasses[rIdx].codepoint = static_cast<uint16_t>(cp);
       s.miniKernRightClasses[rIdx].classId = rightRenumber[rc];
@@ -554,7 +532,7 @@ bool SdCardFont::load(const char* path) {
   }
 
   // Begin content hash: accumulate global header
-  uint32_t hash = fnv1a(headerBuf, HEADER_SIZE);
+  uint32_t hash = fnv1a::hash32(headerBuf, HEADER_SIZE);
 
   bool is2Bit = (readU16(headerBuf + 10) & 1) != 0;
 
@@ -574,7 +552,7 @@ bool SdCardFont::load(const char* path) {
     }
 
     // Accumulate TOC entry into content hash
-    hash = fnv1a(tocBuf, STYLE_TOC_ENTRY_SIZE, hash);
+    hash = fnv1a::hash32(tocBuf, STYLE_TOC_ENTRY_SIZE, hash);
 
     uint8_t styleId = tocBuf[0];
     if (styleId >= MAX_STYLES) {
@@ -738,22 +716,12 @@ bool SdCardFont::load(const char* path) {
 // --- Codepoint lookup ---
 
 int32_t SdCardFont::findGlobalGlyphIndex(const PerStyle& s, uint32_t codepoint) const {
-  int left = 0;
-  int right = static_cast<int>(s.header.intervalCount) - 1;
-  while (left <= right) {
-    int mid = left + (right - left) / 2;
-    const uint32_t first = s.intervalsAreBmp16 ? s.bmpIntervals[mid].first : s.fullIntervals[mid].first;
-    const uint32_t last = s.intervalsAreBmp16 ? s.bmpIntervals[mid].last : s.fullIntervals[mid].last;
-    if (codepoint < first) {
-      right = mid - 1;
-    } else if (codepoint > last) {
-      left = mid + 1;
-    } else {
-      const uint32_t offset = s.intervalsAreBmp16 ? s.bmpIntervals[mid].offset : s.fullIntervals[mid].offset;
-      return static_cast<int32_t>(offset + (codepoint - first));
-    }
-  }
-  return -1;
+  // Both layouts are validated sorted and non-overlapping when the file loads.
+  const auto at = [codepoint](const auto* interval) {
+    return interval ? static_cast<int32_t>(interval->offset + (codepoint - interval->first)) : -1;
+  };
+  return s.intervalsAreBmp16 ? at(findInterval(s.bmpIntervals, s.header.intervalCount, codepoint))
+                             : at(findInterval(s.fullIntervals, s.header.intervalCount, codepoint));
 }
 
 // --- Prewarm ---
@@ -868,31 +836,9 @@ int SdCardFont::prewarm(TextGetter getter, const void* ctx, uint32_t textCount, 
       auto& s = styles_[si];
 
       loadStyleKernLigatureData(s);
-      if (s.ligaturePairs && s.header.ligaturePairCount > 0) {
-        for (uint8_t li = 0; li < s.header.ligaturePairCount && cpCount < MAX_PAGE_GLYPHS; li++) {
-          uint32_t leftCp = s.ligaturePairs[li].pair >> 16;
-          uint32_t rightCp = s.ligaturePairs[li].pair & 0xFFFF;
-          uint32_t outCp = s.ligaturePairs[li].ligatureCp;
-
-          bool hasLeft = false, hasRight = false;
-          for (uint32_t i = 0; i < cpCount; i++) {
-            if (codepoints[i] == leftCp) hasLeft = true;
-            if (codepoints[i] == rightCp) hasRight = true;
-            if (hasLeft && hasRight) break;
-          }
-          if (!hasLeft || !hasRight) continue;
-
-          bool hasOut = false;
-          for (uint32_t i = 0; i < cpCount; i++) {
-            if (codepoints[i] == outCp) {
-              hasOut = true;
-              break;
-            }
-          }
-          if (!hasOut) {
-            codepoints[cpCount++] = outCp;
-          }
-        }
+      if (s.ligaturePairs) {
+        addLigatureOutputs(s.ligaturePairs, s.header.ligaturePairCount, codepoints.get(), cpCount, MAX_PAGE_GLYPHS,
+                           [](const uint32_t cp) { return static_cast<int32_t>(cp); });
       }
     }
   }

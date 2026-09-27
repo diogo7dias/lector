@@ -43,7 +43,7 @@ std::vector<uint32_t> decode(const std::string& utf8) {
 std::vector<uint32_t> shapeVisual(const std::vector<uint32_t>& logical) {
   const std::string in = encode(logical);
   std::string out;
-  if (!BidiUtils::applyBidiVisual(in.c_str(), out, /*paragraphLevel=*/-1)) {
+  if (!BidiUtils::applyBidiVisual(in.c_str(), out, BidiUtils::BidiBaseDir::AUTO)) {
     return decode(in);  // pipeline declined: unchanged text
   }
   return decode(out);

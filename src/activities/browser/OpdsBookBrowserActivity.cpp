@@ -28,8 +28,6 @@
 namespace {
 constexpr int SEARCH_ICON_SIZE = 24;
 constexpr int SEARCH_ICON_MARGIN = 14;
-constexpr int DOWNLOAD_PROGRESS_STEP_PERCENT = 5;
-constexpr unsigned long DOWNLOAD_PROGRESS_MIN_UPDATE_MS = 5000;
 
 // The search glyph sits inside the header band, at its right edge.
 int searchIconX(const GfxRenderer& renderer) {
@@ -59,7 +57,6 @@ void OpdsBookBrowserActivity::onEnter() {
   currentPath = "";
   setListSelection(0);
   consumeConfirm = false;
-  consumeBack = false;
   cancelRequested = false;
   reconnectDetail.clear();
   reconnectAttempt.clear();
@@ -81,6 +78,45 @@ void OpdsBookBrowserActivity::onExit() {
     delay(30);
     silentRestart();
   }
+}
+
+// What the error screen says for a failed fetch; nullptr when the feed arrived (empty
+// counts). ABORTED is not an error screen and is handled before this is asked.
+static const char* feedErrorMessage(const opds::ClientStatus status) {
+  switch (status) {
+    case opds::ClientStatus::OK:
+    case opds::ClientStatus::EMPTY:
+      return nullptr;
+    case opds::ClientStatus::BAD_CREDENTIALS:
+      return tr(STR_OPDS_BAD_CREDENTIALS);
+    case opds::ClientStatus::FEED_TOO_LARGE:
+      return tr(STR_OPDS_FEED_TOO_LARGE);
+    case opds::ClientStatus::HEAP_LOW:
+      return tr(STR_UPDATE_LOW_MEMORY);
+    case opds::ClientStatus::PARSE_FAILED:
+      return tr(STR_PARSE_FEED_FAILED);
+    default:
+      return tr(STR_FETCH_FEED_FAILED);
+  }
+}
+
+// Shared by the feed fetch and the book download: the retry screen, and Back as cancel.
+void OpdsBookBrowserActivity::showReconnect(const opds::ReconnectInfo& info) {
+  state = BrowserState::RECONNECTING;
+  char attemptBuf[64];
+  snprintf(attemptBuf, sizeof(attemptBuf), "%s (%d/%d)...", tr(STR_CONNECTING), info.attempt, info.maxAttempts);
+  reconnectDetail = info.reason ? info.reason : tr(STR_CONNECTING);
+  reconnectAttempt = attemptBuf;
+  requestUpdate();
+}
+
+bool OpdsBookBrowserActivity::pollBackForCancel() {
+  mappedInput.update();
+  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
+    cancelRequested = true;
+    return true;
+  }
+  return cancelRequested;
 }
 
 void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
@@ -118,23 +154,8 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     pendingFullRefresh = true;
   };
 
-  auto onReconnect = [this](const opds::ReconnectInfo& info) {
-    state = BrowserState::RECONNECTING;
-    char attemptBuf[64];
-    snprintf(attemptBuf, sizeof(attemptBuf), "%s (%d/%d)...", tr(STR_CONNECTING), info.attempt, info.maxAttempts);
-    reconnectDetail = info.reason ? info.reason : tr(STR_CONNECTING);
-    reconnectAttempt = attemptBuf;
-    requestUpdate();
-  };
-
-  auto pollCancel = [this]() -> bool {
-    mappedInput.update();
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      cancelRequested = true;
-      return true;
-    }
-    return cancelRequested;
-  };
+  const auto onReconnect = [this](const opds::ReconnectInfo& info) { showReconnect(info); };
+  const auto pollCancel = [this] { return pollBackForCancel(); };
 
   const auto status =
       client.fetchFeed(server, path, result, onReconnect, &cancelRequested, opds_retry::DEFAULT_TIMEOUT_MS,
@@ -154,37 +175,9 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
     return;
   }
 
-  if (status == opds::ClientStatus::BAD_CREDENTIALS) {
+  if (const char* error = feedErrorMessage(status)) {
     state = BrowserState::ERROR;
-    errorMessage = tr(STR_OPDS_BAD_CREDENTIALS);
-    requestUpdate();
-    return;
-  }
-
-  if (status == opds::ClientStatus::FEED_TOO_LARGE) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_OPDS_FEED_TOO_LARGE);
-    requestUpdate();
-    return;
-  }
-
-  if (status == opds::ClientStatus::HEAP_LOW) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_UPDATE_LOW_MEMORY);
-    requestUpdate();
-    return;
-  }
-
-  if (status == opds::ClientStatus::PARSE_FAILED) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_PARSE_FEED_FAILED);
-    requestUpdate();
-    return;
-  }
-
-  if (status != opds::ClientStatus::OK && status != opds::ClientStatus::EMPTY) {
-    state = BrowserState::ERROR;
-    errorMessage = tr(STR_FETCH_FEED_FAILED);
+    errorMessage = error;
     requestUpdate();
     return;
   }
@@ -261,25 +254,15 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
   reconnectDetail.clear();
   reconnectAttempt.clear();
 
-  int lastRenderedPercent = -1;
-  unsigned long lastProgressUpdateMs = 0;
-
-  auto progressCb = [this, &lastRenderedPercent, &lastProgressUpdateMs](const size_t downloaded, const size_t total) {
+  auto progressCb = [this](const size_t downloaded, const size_t total) {
     mappedInput.update();
     if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
       cancelRequested = true;
     }
     downloadProgress = downloaded;
     downloadTotal = total;
-    const int percent = total > 0 ? static_cast<int>(static_cast<uint64_t>(downloaded) * 100 / total) : 0;
-    const unsigned long now = millis();
-    if (percent >= 100 || lastRenderedPercent < 0 || percent >= lastRenderedPercent + DOWNLOAD_PROGRESS_STEP_PERCENT ||
-        now - lastProgressUpdateMs >= DOWNLOAD_PROGRESS_MIN_UPDATE_MS) {
-      lastRenderedPercent = percent;
-      lastProgressUpdateMs = now;
-      // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
-      // loan ends. The counters still move, and the screen catches up after.
-    }
+    // Deliberately no repaint: the framebuffer belongs to wolfSSL until the
+    // loan ends. The counters still move, and the screen catches up after.
   };
 
   std::unique_ptr<GfxRenderer::FrameBufferLoan> loan;
@@ -298,23 +281,8 @@ void OpdsBookBrowserActivity::downloadBook(const OpdsEntry& book) {
     pendingFullRefresh = true;
   };
 
-  auto onReconnect = [this](const opds::ReconnectInfo& info) {
-    state = BrowserState::RECONNECTING;
-    char attemptBuf[64];
-    snprintf(attemptBuf, sizeof(attemptBuf), "%s (%d/%d)...", tr(STR_CONNECTING), info.attempt, info.maxAttempts);
-    reconnectDetail = info.reason ? info.reason : tr(STR_CONNECTING);
-    reconnectAttempt = attemptBuf;
-    requestUpdate();
-  };
-
-  auto pollCancel = [this]() -> bool {
-    mappedInput.update();
-    if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-      cancelRequested = true;
-      return true;
-    }
-    return cancelRequested;
-  };
+  const auto onReconnect = [this](const opds::ReconnectInfo& info) { showReconnect(info); };
+  const auto pollCancel = [this] { return pollBackForCancel(); };
 
   std::string finalPath;
   const std::string feedUrl = UrlUtils::buildUrl(server.url, currentPath);
@@ -517,10 +485,6 @@ bool OpdsBookBrowserActivity::handleCustomInput() {
   // A press that opened this screen must not also act on it.
   if (consumeConfirm && mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     consumeConfirm = false;
-    return true;
-  }
-  if (consumeBack && mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    consumeBack = false;
     return true;
   }
 

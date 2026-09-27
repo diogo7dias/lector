@@ -123,4 +123,31 @@ TEST(ReaderPresetMigration, TheLayoutSwitchFollowsTheOldSingleChoice) {
   }
 }
 
+// CrossPointSettings resaves only when the margin rule changed something; the return
+// value is its only signal.
+TEST(ReaderPresetMigration, MarginLinkReportsWhetherItMigrated) {
+  uint8_t h = 20, top = 12, bottom = 18, dynamic = 0, mode = 0;
+  LegacyKeys current;
+  current.hasMarginLinkMode = true;
+  current.hasVerticalMarginsLinked = true;
+  EXPECT_FALSE(reader_preset_migration::migrateMarginLink(current, h, top, bottom, dynamic, mode));
+  EXPECT_EQ(0, mode);
+
+  LegacyKeys none;
+  EXPECT_FALSE(reader_preset_migration::migrateMarginLink(none, h, top, bottom, dynamic, mode));
+
+  LegacyKeys vertical;
+  vertical.hasVerticalMarginsLinked = true;
+  vertical.verticalMarginsLinked = 0;
+  EXPECT_TRUE(reader_preset_migration::migrateMarginLink(vertical, h, top, bottom, dynamic, mode));
+  EXPECT_EQ(margin_link::toStored(Mode::Separate), mode);
+
+  LegacyKeys uniform;
+  uniform.hasUniformMargins = true;
+  EXPECT_TRUE(reader_preset_migration::migrateMarginLink(uniform, h, top, bottom, dynamic, mode));
+  EXPECT_EQ(margin_link::toStored(Mode::AllSides), mode);
+  EXPECT_EQ(20, top);
+  EXPECT_EQ(20, bottom);
+}
+
 }  // namespace

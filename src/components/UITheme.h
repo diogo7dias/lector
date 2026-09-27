@@ -23,7 +23,6 @@ class UITheme {
                          bool hasSideButtonHints = false);
   static void drawCenteredText(const GfxRenderer& renderer, Rect screen, int fontId, int y, const char* text,
                                bool black = true, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
-  static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   // v2 status bar: pixels to reserve at the top / bottom edge for the text band(s)
   // plus any progress bars on that edge. hasChapters filters chapter-only items,

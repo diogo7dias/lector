@@ -42,7 +42,7 @@ TEST(ListSwipe, OpdsReleaseAndContinuousDispatchOnlyOneOwner) {
   int pages = 0;
   int selected = 9;
   const auto dispatch = [&] {
-    // UiStatusActivity::navigateList(), used by OPDS: release then continuous.
+    // ButtonNavigator::onListNav(), used by OPDS: release then continuous.
     nav.onNextRelease([&] {
       ++rows;
       selected = ButtonNavigator::nextIndex(selected, 30);

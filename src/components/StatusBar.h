@@ -32,7 +32,6 @@ struct StatusBarData {
   // a new paragraph begins on the next page. -1 = the chapter cannot answer (no
   // paragraph table), which hides the item rather than showing a wrong 0.
   int paragraphPagesLeft = -1;
-  bool bookmarked = false;
 };
 
 // Progress bar thickness in pixels for the slim/medium/fat setting (0/1/2). Kept

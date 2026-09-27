@@ -149,7 +149,6 @@ void KeyboardEntryActivity::onEnter() {
   touchRouter.reset();
   touchRouter.holdMs = TOUCH_LONG_PRESS_MS;
   touchRouter.overrideHoldMs = TOUCH_DEL_LONG_PRESS_MS;
-  interactionsReady = false;
   requestUpdate();
 }
 
@@ -626,10 +625,7 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, title.c_str());
 
   // The field draws through the same target the keyboard does, so its type and
-  // its ink come from the theme rather than from a font id named here. The
-  // frame's constructor clears the interaction table, so the routing gate has
-  // to close before it is built, not later when the keys are drawn.
-  interactionsReady = false;
+  // its ink come from the theme rather than from a font id named here.
   // The loop task routes against the last published table while this one is
   // rebuilt here, so the rebuild goes into the other generation.
   interactions.beginPublishCycle();
@@ -911,7 +907,6 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, hintsTop - (kbRect.y + kbRect.height)));
   fui::keyboard(frame, kbRect, props);
   interactions.publish();
-  interactionsReady = true;
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), tr(STR_SELECT), tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

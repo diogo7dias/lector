@@ -4,24 +4,18 @@
 
 #include <cstddef>
 
-// Return value for readAtMost().
-enum class InflateStatus {
-  Ok,     // Output buffer full; more compressed data remains.
-  Done,   // Stream ended cleanly (TINF_DONE). produced may be < maxLen.
-  Error,  // Decompression failed.
-};
-
 // Streaming deflate decompressor wrapping uzlib.
 //
-// NOTE: retained ONLY for FontDecompressor's tiny one-shot flash-resident group
+// Used by FontDecompressor for its tiny one-shot flash-resident group
 // decompressions, where uzlib's ~1KB state beats tinfl's ~11KB on the
-// OOM-sensitive render path. All throughput paths (zip entries, PNG IDAT) use
-// InflateStream (lib/miniz), which decodes several times faster.
+// OOM-sensitive render path, and by DictZip for streaming dictionary chunks.
+// The throughput paths (zip entries, PNG IDAT) use InflateStream (lib/miniz),
+// which decodes several times faster.
 //
 // Two modes:
 //   init(false)  — one-shot: input is a contiguous buffer, call read() once.
 //   init(true)   — streaming: allocates a 32KB ring buffer for back-references
-//                  across multiple read() / readAtMost() calls.
+//                  across multiple read() calls.
 //
 // Streaming callback pattern:
 //   The uzlib read callback receives a `struct uzlib_uncomp*` with no separate
@@ -54,7 +48,7 @@ class InflateReader {
   static constexpr size_t RING_BYTES = 32768;
 
   // Initialise decompressor. streaming=true allocates a 32KB ring buffer needed
-  // when read() or readAtMost() will be called multiple times.
+  // when read() will be called multiple times.
   // Returns false only in streaming mode if the ring buffer allocation fails.
   bool init(bool streaming = false);
 
@@ -85,17 +79,6 @@ class InflateReader {
   // Decompress exactly len bytes into dest.
   // Returns false if the stream ends before producing len bytes, or on error.
   bool read(uint8_t* dest, size_t len);
-
-  // Decompress up to maxLen bytes into dest.
-  // Sets *produced to the number of bytes written.
-  // Returns Done when the stream ends cleanly, Ok when there is more to read,
-  // and Error on failure.
-  InflateStatus readAtMost(uint8_t* dest, size_t maxLen, size_t* produced);
-
-  // Returns a pointer to the underlying TINF_DATA.
-  // Useful for advanced streaming setups where the callback needs access to the
-  // uzlib struct directly (e.g. updating source/source_limit).
-  uzlib_uncomp* raw() { return &decomp; }
 
  private:
   uzlib_uncomp decomp = {};

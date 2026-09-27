@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cstdint>
 
+#include "RowSlider.h"
+
 // Where the light panel's rows, steppers and buttons land. The panel is a band pulled
 // down from the top edge holding the frontlight's controls and whatever actions make
 // sense where you are. Pure geometry, so the draw code stays a draw loop and the layout
@@ -212,13 +214,11 @@ inline Hit hitTest(const Layout& layout, const int x, const int y) {
   return Hit{};
 }
 
-// Maps a touch x onto the bar's range. Past either end clamps rather than doing nothing,
-// so a drag that runs off the side still parks the value at 0 or at the maximum.
+// Maps a touch x onto the bar's range: the settings rows' drag-bar rule, unstepped. Past
+// either end clamps rather than doing nothing, so a drag that runs off the side still
+// parks the value at 0 or at the maximum.
 inline int valueForX(const Bar& bar, const int x, const int minValue, const int maxValue) {
-  if (bar.width <= 0) return minValue;
-  const int offset = std::clamp(x - bar.x, 0, bar.width);
-  const int range = maxValue - minValue;
-  return minValue + static_cast<int>((static_cast<long long>(offset) * range + bar.width / 2) / bar.width);
+  return row_slider::valueForX(row_slider::Bar{bar.x, bar.y, bar.width, bar.height}, x, minValue, maxValue, 1);
 }
 
 }  // namespace light_panel

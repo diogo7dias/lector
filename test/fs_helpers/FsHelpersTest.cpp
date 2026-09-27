@@ -53,3 +53,13 @@ TEST(FsHelpers, PartialNamesRoundTripBackToTheRealOne) {
   EXPECT_FALSE(FsHelpers::hasPartialExtension(std::string_view("/books/Dune.epub")));
   EXPECT_FALSE(FsHelpers::hasPartialExtension(std::string_view("/books/part")));
 }
+
+TEST(FsHelpers, NextSessionIndexFindsFirstGapAndClampsWhenFull) {
+  const auto upTo = [](const int taken) { return [taken](const int index) { return index <= taken; }; };
+  EXPECT_EQ(FsHelpers::nextSessionIndex(1, 50, upTo(0)), 1);    // empty card
+  EXPECT_EQ(FsHelpers::nextSessionIndex(1, 50, upTo(17)), 18);  // 1..17 exist
+  EXPECT_EQ(FsHelpers::nextSessionIndex(1, 50, upTo(50)), 50);  // full: reuse the last
+  EXPECT_EQ(FsHelpers::nextSessionIndex(0, 199, upTo(-1)), 0);
+  EXPECT_EQ(FsHelpers::nextSessionIndex(0, 199, upTo(198)), 199);
+  EXPECT_EQ(FsHelpers::nextSessionIndex(0, 199, upTo(199)), 199);
+}

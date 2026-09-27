@@ -371,8 +371,8 @@ int ParsedText::guideDotNaturalGap(const GfxRenderer& renderer, const int fontId
          spaceAdvance(renderer, fontId, GUIDE_DOT_CODEPOINT, firstCodepoint(rightWord), EpdFontFamily::REGULAR);
 }
 
-void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
-                         const bool attachToPrevious, const uint32_t visibleTextOffset) {
+void ParsedText::addWord(std::string word, const EpdFontFamily::Style baseStyle, const bool attachToPrevious,
+                         const uint32_t visibleTextOffset) {
   if (word.empty()) return;
 
   // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
@@ -383,10 +383,6 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   // result is cached in the section file) and is a cheap no-op for mark-free text.
   word = utf8ComposeNfc(word);
 
-  EpdFontFamily::Style baseStyle = fontStyle;
-  if (underline) {
-    baseStyle = static_cast<EpdFontFamily::Style>(baseStyle | EpdFontFamily::UNDERLINE);
-  }
   const bool wordStartsRtl = !hasRtlWord && mayContainRtlBytes(word.c_str()) &&
                              BidiUtils::startsWithRtl(word.c_str(), RTL_PER_WORD_PROBE_DEPTH);
 
@@ -632,11 +628,6 @@ void ParsedText::setRubyGroupAt(size_t startIndex, size_t count, const std::stri
     wordContinues[idx] = true;       // Prevent page breaker from splitting the Group Ruby!
     wordNoSpaceBefore[idx] = false;  // Ensure allowsBreak returns false!
   }
-}
-
-void ParsedText::ensureRubyCapacity() {
-  // No-op: rubyTexts is a std::deque (chunked growth, no capacity to pre-reserve
-  // and no large contiguous reallocation to avoid). Kept for call-site stability.
 }
 
 // A paragraph always starts with a visible indent, whatever the spacing toggle says:

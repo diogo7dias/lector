@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "CrossPointSettings.h"
+#include "activities/reader/ReaderMargins.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -103,23 +104,6 @@ int drawStatusBarEdge(const GfxRenderer& renderer, const StatusBarBlock& sb, boo
   return lineH;
 }
 
-// Horizontal reading margin, resolved exactly like EpubReaderActivity::computeReaderMargins
-// does for the page: Dynamic Margins replaces the fixed margin with a width aimed at ~62
-// characters per line. Measured against the FULL screen, which is also the pane's width,
-// so the margin drawn here is the margin the page will get.
-int resolveHorizontalMargin(const ReaderPrefs& look, const GfxRenderer& renderer, int fontId) {
-  if (!look.dynamicMargins) return look.screenMargin;
-
-  int viewableTop, viewableRight, viewableBottom, viewableLeft;
-  renderer.getOrientedViewableTRBL(&viewableTop, &viewableRight, &viewableBottom, &viewableLeft);
-  const int sampleWidth = renderer.getTextWidth(fontId, "abcdefghijklmnopqrstuvwxyz");
-  const int avgCharWidth = (sampleWidth > 0) ? sampleWidth / 26 : 8;
-  const int targetTextWidth = 62 * avgCharWidth;
-  const int availableWidth = renderer.getScreenWidth() - viewableLeft - viewableRight;
-  const int minDynamicMargin = (look.dynamicMargins >= 2) ? 20 : 10;
-  return std::max(minDynamicMargin, std::min(55, (availableWidth - targetTextWidth) / 2));
-}
-
 // Feeds one space-separated word at a time; addWord handles NFC/CJK/RTL/focus splitting.
 void addWords(ParsedText& parsed, const char* text, EpdFontFamily::Style style) {
   std::string word;
@@ -154,9 +138,8 @@ BlockStyle bodyStyle(const ReaderPrefs& look, int fontId, const GfxRenderer& ren
 // separates it from the paragraph above.
 void appendParagraph(const ReaderPrefs& look, PreviewLayout& layout, const GfxRenderer& renderer, int fontId,
                      int textWidth, const char* text, const BlockStyle& style, bool heading, int gapBefore) {
-  ParsedText parsed(look.extraParagraphSpacing != 0, look.focusReadingEnabled != 0,
-                    resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden), style, look.firstLineIndentMode,
-                    look.firstLineIndentPercent, look.wordSpacing);
+  ParsedText parsed(look.focusReadingEnabled != 0, resolveGuideDotsMode(look.guideDotsEnabled, look.guideDotsHidden),
+                    style, look.firstLineIndentMode, look.firstLineIndentPercent, look.wordSpacing);
   parsed.setHeading(heading);
   addWords(parsed, text, heading ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR);
 
@@ -213,14 +196,17 @@ void renderPreview(const GfxRenderer& renderer, PreviewLayout& layout, const Rea
   const int lineH = renderer.getTextHeight(fontId);
   if (lineH <= 0) return;
 
-  const int marginH = resolveHorizontalMargin(look, renderer, fontId);
-  const int textLeft = paneLeft + marginH;
-  const int textWidth = paneWidth - 2 * marginH;
+  // The page's own horizontal margins, viewable insets included, so the sample's lines
+  // break where the page's will. The vertical ones are not used: the preview has its own band.
+  int marginTop, marginRight, marginBottom, marginLeft;
+  ReaderUtils::readerMargins(renderer, look, marginTop, marginRight, marginBottom, marginLeft);
+  const int textLeft = paneLeft + marginLeft;
+  const int textWidth = paneWidth - marginLeft - marginRight;
   if (textWidth <= 0) return;
 
   PreviewKey key{.spec = makeRenderSpec(look, fontId, static_cast<uint16_t>(textWidth), 0),
                  .fontPointSize = look.fontPointSize,
-                 .screenMargin = marginH};
+                 .screenMargin = marginLeft};
   // The sample has no CSS-driven bold or italic, so Embedded Text Style leaves it untouched;
   // only the layout switch (a first-line indent and a centred heading) changes it.
   key.spec.embeddedTextStyle = false;

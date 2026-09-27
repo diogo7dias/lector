@@ -39,7 +39,7 @@ void XtcReaderActivity::onEnter() {
   // Save current XTC as last opened book and add to recent books
   APP_STATE.openEpubPath = xtc->getPath();
   APP_STATE.saveToFile();
-  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor(), xtc->getThumbBmpPath());
+  RECENT_BOOKS.addBook(xtc->getPath(), xtc->getTitle(), xtc->getAuthor());
 
   // Trigger first update
   requestUpdate();
@@ -58,9 +58,7 @@ bool XtcReaderActivity::runBoundAction(const uint8_t function) {
       simple_reader_shortcut::Action::WallpaperHold) {
     return false;
   }
-  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
-  SETTINGS.saveToFile();
-  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+  ReaderUtils::toggleWallpaperHold(renderer, pagesUntilFullRefresh);
   requestUpdate();
   return true;
 }
@@ -116,8 +114,7 @@ void XtcReaderActivity::loop() {
         onGoHome();
         return;
       case EndOfBookOptions::Action::LastPage:
-        currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
-        requestUpdate();
+        returnToLastPage();
         return;
       case EndOfBookOptions::Action::Redraw:
         requestUpdate();
@@ -145,6 +142,11 @@ void XtcReaderActivity::loop() {
   pageTurn(nextTriggered);
 }
 
+void XtcReaderActivity::returnToLastPage() {
+  currentPage = xtc->getPageCount() > 0 ? xtc->getPageCount() - 1 : 0;
+  requestUpdate();
+}
+
 void XtcReaderActivity::pageTurn(const bool forward) {
   const bool prevTriggered = !forward;
   const bool nextTriggered = forward;
@@ -160,8 +162,7 @@ void XtcReaderActivity::pageTurn(const bool forward) {
     if (nextTriggered) {
       onGoHome();
     } else {
-      currentPage = xtc->getPageCount() - 1;
-      requestUpdate();
+      returnToLastPage();
     }
     return;
   }

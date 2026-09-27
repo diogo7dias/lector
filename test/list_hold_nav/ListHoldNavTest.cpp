@@ -166,20 +166,21 @@ TEST(ListHoldNav, TheRepeatRatesMatchTheHeader) {
 
 TEST(ListHoldNav, TheListScreensHoldByRowsNotPages) {
   // The regression this whole file exists for: a hold wired to nextPageIndex
-  // moves a screenful per repeat.
+  // moves a screenful per repeat. Both list screens share ButtonNavigator's
+  // onListNav wiring, so that is where the hold must step by rows.
   for (const char* path : {LIST_ACTIVITY_SOURCE, STATUS_ACTIVITY_SOURCE}) {
-    const std::string source = readSource(path);
-    EXPECT_TRUE(contains(source, "heldIndex")) << path << " does not step its hold by rows";
-    EXPECT_FALSE(contains(source, "onNextContinuous(\n      [&] { step(ButtonNavigator::nextPageIndex"))
-        << path << " still pages on hold";
+    EXPECT_TRUE(contains(readSource(path), ".onListNav(")) << path << " no longer uses the shared list wiring";
   }
+  const std::string wiring = readSource(BUTTON_NAVIGATOR_SOURCE);
+  EXPECT_TRUE(contains(wiring, "heldIndex")) << "onListNav does not step its hold by rows";
+  EXPECT_FALSE(contains(wiring, "onNextContinuous([&] { moveTo(nextPageIndex")) << "onListNav still pages on hold";
 }
 
 TEST(ListHoldNav, ASwipeStillTravelsAPage) {
   // A body swipe is delivered through the same continuous callback as a hold.
   // Without the split it would inherit the hold's one-row step, and dragging a
   // finger down a long list would move a single row per swipe.
-  for (const char* path : {LIST_ACTIVITY_SOURCE, STATUS_ACTIVITY_SOURCE, BROWSER_ACTIVITY_SOURCE}) {
+  for (const char* path : {BUTTON_NAVIGATOR_SOURCE, BROWSER_ACTIVITY_SOURCE}) {
     const std::string source = readSource(path);
     EXPECT_TRUE(contains(source, "swipeDrivenPass()"))
         << path << " gives a swipe the hold's row step instead of a page";

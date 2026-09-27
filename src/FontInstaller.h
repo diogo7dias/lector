@@ -12,9 +12,7 @@ class FontInstaller {
   enum class Error {
     OK,
     INVALID_FAMILY_NAME,
-    INVALID_FILE,
     SD_WRITE_ERROR,
-    MAX_FAMILIES_REACHED,
   };
 
   explicit FontInstaller(SdCardFontRegistry& registry);
@@ -54,6 +52,5 @@ class FontInstaller {
  private:
   SdCardFontRegistry& registry_;
 
-  static constexpr const char* CPFONT_MAGIC = "CPFONT\0";
   static constexpr size_t CPFONT_MAGIC_LEN = 8;
 };

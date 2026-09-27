@@ -12,6 +12,8 @@
 //
 // Host-testable: no SD, no display, no ESP headers.
 
+#include <Fnv1a.h>
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -33,30 +35,16 @@ inline constexpr uint32_t kDeadSlotFloor = 64;
 // is weak because macOS Finder and Windows Explorer preserve source mtimes on
 // copy, so a same-name replacement could otherwise go unseen.
 inline uint32_t entryHash(const std::string_view name, const uint32_t mtime, const uint32_t size) {
-  uint32_t h = 2166136261u;  // FNV-1a 32
-  for (const char ch : name) {
-    h ^= static_cast<uint8_t>(ch);
-    h *= 16777619u;
-  }
-  h ^= mtime;
-  h *= 16777619u;
-  h ^= size;
-  h *= 16777619u;
-  return h;
+  // FNV-1a 32 over the name, then each whole 32-bit field xored in at once (not per byte).
+  const uint32_t h = (fnv1a::hash32(name) ^ mtime) * fnv1a::PRIME_32;
+  return (h ^ size) * fnv1a::PRIME_32;
 }
 
 // 64-bit name-only hash for the membership set. 64 bits because a 32-bit space
 // gives ~1% odds of some colliding pair across a 10k-file folder's lifetime,
 // and a collided new file would silently never index; at 64 bits the risk is
 // gone for 8 bytes per record of transient RAM (~80 KB at the cap).
-inline uint64_t nameHash(const std::string_view name) {
-  uint64_t h = 14695981039346656037ull;  // FNV-1a 64
-  for (const char ch : name) {
-    h ^= static_cast<uint8_t>(ch);
-    h *= 1099511628211ull;
-  }
-  return h;
-}
+inline uint64_t nameHash(const std::string_view name) { return fnv1a::hash64(name); }
 
 // Sorted-vector set of nameHash values. Build with add(), then finalize() once,
 // then query with contains(). ~8 bytes per record, freed when it goes out of

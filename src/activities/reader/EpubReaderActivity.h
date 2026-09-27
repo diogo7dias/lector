@@ -34,9 +34,6 @@ class EpubReaderActivity final : public Activity {
   ReaderPrefs prefs_;
   int sessionPages = 0;  // Status bar only; reset with this reader activity.
   bool prefsCustom_ = false;
-  // Paragraph numbers (#10): per-spine visible-paragraph counts for whole-book
-  // numbering, captured as pages render and persisted to paragraph_counts.bin so
-  // the whole-book base survives reopen. Finalizes as the book is read through.
   int currentSpineIndex = 0;
   int nextPageNumber = 0;
   std::optional<uint16_t> pendingPageJump;
@@ -108,7 +105,6 @@ class EpubReaderActivity final : public Activity {
   bool showDictionaryMessage = false;
   unsigned long dictionaryMessageTime = 0UL;
   bool ignoreNextConfirmRelease = false;
-  bool currentPageBookmarked = false;
   // Idle-time glyph prewarm: after a page settles, scan the neighbour the
   // reader is moving toward (scan mode draws nothing) and load its missing
   // glyphs from SD during idle, so the next turn's in-render prewarm is a cache
@@ -209,11 +205,6 @@ class EpubReaderActivity final : public Activity {
 
   void renderContents(std::unique_ptr<Page> page, int orientedMarginTop, int orientedMarginRight,
                       int orientedMarginBottom, int orientedMarginLeft);
-  // Reader text margins from the per-book prefs: oriented viewable insets plus the
-  // user screen margins (uniform or independent top/bottom, and dynamic horizontal
-  // auto-widen toward ~62 chars/line). `bottom` is the base reading margin only; the
-  // render path folds any status-bar band into the bottom separately (max-overlap).
-  void computeReaderMargins(int& top, int& right, int& bottom, int& left) const;
   void renderStatusBar() const;
   // Pages laid out per incremental-build pump: on the render path (catching up to the page
   // being shown) and per loop() tick (background build of a large chapter). Kept small so a
@@ -315,6 +306,10 @@ class EpubReaderActivity final : public Activity {
   // The caller MUST already hold the render lock; reloadForReaderPrefsChange() is the
   // entry point for callers that do not.
   void dropSectionForRelayout();
+  // Keep the reading position (content offset, page, chapter total) in the cached_*
+  // fields the rebuild restores from, before the section is dropped. Caller holds the
+  // render lock; no-op without a section.
+  void cacheSectionPosition();
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
   // Reader-menu actions, one per row; onReaderMenuConfirm routes to them.
   // Navigation
@@ -363,6 +358,12 @@ class EpubReaderActivity final : public Activity {
   // Returns true if sync acted (launched, or surfaced a save error); false if it was a no-op
   // because no KOReader credentials are stored.
   bool launchKOReaderSync();
+  // Handoff to a sync/transfer screen that reopens the book on the way out. The first
+  // saves the position that reopen lands on (false: error surfaced, abort the handoff);
+  // the second frees the Epub and Section for the radio. Neither holds the render lock
+  // on entry; the release takes it.
+  bool saveProgressForHandoff(const char* tag, int currentPage, int totalPages);
+  void releaseBookForHandoff();
   // Trades this book's position with another reader over ESP-NOW, no network involved.
   void launchNearbyPositionSync();
   // Sends this book's own file to another reader over ESP-NOW.
@@ -412,9 +413,10 @@ class EpubReaderActivity final : public Activity {
   void loadQuoteAnchors();
   void drawQuoteUnderlines(const Page& page, int marginLeft, int marginTop, int fontId);
   void pageTurn(bool isForwardTurn);
+  // Leave the End-of-Book screen for the book's last page.
+  void returnToLastPage();
   void loadCachedBookmarks();
   void addBookmark();
-  void updateBookmarkFlag();
 
   // Footnote navigation
   void navigateToHref(const std::string& href, bool savePosition = false);

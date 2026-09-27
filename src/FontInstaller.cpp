@@ -119,7 +119,6 @@ FontInstaller::Error FontInstaller::deleteFamily(const char* familyName) {
 
   // A family may exist in either root (or, edge case, both). Remove from both.
   const char* roots[] = {SdCardFontRegistry::FONTS_DIR_HIDDEN, SdCardFontRegistry::FONTS_DIR_VISIBLE};
-  bool removedAny = false;
   bool sawAny = false;
   for (const char* root : roots) {
     char dirPath[160];
@@ -130,14 +129,12 @@ FontInstaller::Error FontInstaller::deleteFamily(const char* familyName) {
       LOG_ERR("FONT", "Failed to remove family dir: %s", dirPath);
       return Error::SD_WRITE_ERROR;
     }
-    removedAny = true;
   }
 
   if (!sawAny) {
     LOG_DBG("FONT", "Family not found in any fonts root: %s", familyName);
     return Error::OK;  // Already gone
   }
-  (void)removedAny;
 
   // If this was the active font, clear the setting
   if (strcmp(SETTINGS.sdFontFamilyName, familyName) == 0) {

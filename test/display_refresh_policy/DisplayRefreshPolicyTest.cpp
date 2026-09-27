@@ -4,42 +4,31 @@
 
 using Mode = DisplayRefreshPolicy::Mode;
 
-TEST(DisplayRefreshPolicy, DoesNotPromoteFastAfterLongIdle) {
-  DisplayRefreshPolicy policy;
-
-  // On an e-reader "idle" is the user reading the current page, which routinely
-  // exceeds a minute. Idle time must NOT trigger a clean, or nearly every real
-  // page turn is promoted from a fast async refresh to a slow blocking one.
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Fast);
-  EXPECT_EQ(policy.choose(Mode::Fast, 5UL * 60000), Mode::Fast);
-  EXPECT_EQ(policy.choose(Mode::Fast, 20UL * 60000), Mode::Fast);
-}
-
 TEST(DisplayRefreshPolicy, BoundsConsecutiveFastRefreshes) {
   DisplayRefreshPolicy policy;
 
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
-    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i), Mode::Fast);
+    EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
   }
-  EXPECT_EQ(policy.choose(Mode::Fast, 2000), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Clean);
 }
 
 TEST(DisplayRefreshPolicy, ExplicitCleanRefreshResetsFastBudget) {
   DisplayRefreshPolicy policy;
 
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
-    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i), Mode::Fast);
+    EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
   }
-  EXPECT_EQ(policy.choose(Mode::Clean, 2000), Mode::Clean);
-  EXPECT_EQ(policy.choose(Mode::Fast, 2001), Mode::Fast);
+  EXPECT_EQ(policy.choose(Mode::Clean), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
 }
 
 TEST(DisplayRefreshPolicy, FullRefreshPassesThroughAndResetsFastBudget) {
   DisplayRefreshPolicy policy;
 
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Fast);
-  EXPECT_EQ(policy.choose(Mode::Full, 1001), Mode::Full);
-  EXPECT_EQ(policy.choose(Mode::Fast, 1002), Mode::Fast);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
+  EXPECT_EQ(policy.choose(Mode::Full), Mode::Full);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
 }
 
 // ── Surviving a lock ────────────────────────────────────────────────────────
@@ -51,7 +40,7 @@ TEST(DisplayRefreshPolicy, FullRefreshPassesThroughAndResetsFastBudget) {
 
 TEST(DisplayRefreshPolicy, SeedRestoresTheFastBudgetAcrossALock) {
   DisplayRefreshPolicy before;
-  for (uint8_t i = 0; i < 20; ++i) before.choose(Mode::Fast, 1000 + i);
+  for (uint8_t i = 0; i < 20; ++i) before.choose(Mode::Fast);
   // 19, not 20: the 13th request was promoted to Clean by MAX_CONSECUTIVE_FAST, and a
   // promoted pass is not a FAST pass, so it spends no discharge budget.
   EXPECT_EQ(before.fastSinceFull(), 19);
@@ -67,8 +56,8 @@ TEST(DisplayRefreshPolicy, ASeededBudgetStillReachesTheFullRefresh) {
   policy.seedFastSinceFull(DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL - 1);
 
   // One short session after the lock is enough, because the budget carried over.
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Fast);
-  EXPECT_EQ(policy.choose(Mode::Fast, 1001), Mode::Full);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Full);
   EXPECT_EQ(policy.fastSinceFull(), 0);
 }
 
@@ -79,9 +68,9 @@ TEST(DisplayRefreshPolicy, ASeedDoesNotCarryTheConsecutiveFastRun) {
   DisplayRefreshPolicy policy;
   policy.seedFastSinceFull(DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL - 20);
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
-    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i), Mode::Fast);
+    EXPECT_EQ(policy.choose(Mode::Fast), Mode::Fast);
   }
-  EXPECT_EQ(policy.choose(Mode::Fast, 2000), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Clean);
 }
 
 TEST(DisplayRefreshPolicy, SeedingCannotExceedTheFullRefreshBudget) {
@@ -106,20 +95,20 @@ TEST(DisplayRefreshPolicy, AnExternalPassSpendsTheFastBudget) {
 TEST(DisplayRefreshPolicy, ExternalPassesAloneCanEarnAFullRefresh) {
   DisplayRefreshPolicy policy;
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL; ++i) policy.noteExternalFastPass();
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Full);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Full);
 }
 
 TEST(DisplayRefreshPolicy, ExternalPassesCountTowardTheCleanCapToo) {
   DisplayRefreshPolicy policy;
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) policy.noteExternalFastPass();
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Clean);
 }
 
 TEST(DisplayRefreshPolicy, ExternalPassesSaturateInsteadOfWrapping) {
   DisplayRefreshPolicy policy;
   for (int i = 0; i < 400; ++i) policy.noteExternalFastPass();
   EXPECT_EQ(policy.fastSinceFull(), DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL);
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000), Mode::Full);
+  EXPECT_EQ(policy.choose(Mode::Fast), Mode::Full);
 }
 
 // ── Ink debt ────────────────────────────────────────────────────────────────
@@ -134,9 +123,9 @@ TEST(DisplayRefreshPolicy, ExternalPassesSaturateInsteadOfWrapping) {
 TEST(DisplayRefreshPolicy, AZeroScoreLeavesTheCountersInSoleCharge) {
   DisplayRefreshPolicy policy;
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
-    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i, 0), Mode::Fast);
+    EXPECT_EQ(policy.choose(Mode::Fast, 0), Mode::Fast);
   }
-  EXPECT_EQ(policy.choose(Mode::Fast, 2000, 0), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast, 0), Mode::Clean);
   EXPECT_EQ(policy.inkDebt(), 0);
 }
 
@@ -147,9 +136,9 @@ TEST(DisplayRefreshPolicy, OrdinaryReadingKeepsItsExistingCadence) {
   DisplayRefreshPolicy policy;
   constexpr uint16_t kTextPage = 300;
   for (uint8_t i = 0; i < DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST; ++i) {
-    EXPECT_EQ(policy.choose(Mode::Fast, 1000 + i, kTextPage), Mode::Fast) << "page " << static_cast<int>(i);
+    EXPECT_EQ(policy.choose(Mode::Fast, kTextPage), Mode::Fast) << "page " << static_cast<int>(i);
   }
-  EXPECT_EQ(policy.choose(Mode::Fast, 2000, kTextPage), Mode::Clean);
+  EXPECT_EQ(policy.choose(Mode::Fast, kTextPage), Mode::Clean);
 }
 
 // Heavy content is the case the counters miss: a full-screen inversion leaves as much
@@ -158,7 +147,7 @@ TEST(DisplayRefreshPolicy, HeavyContentEarnsACleanWithinAFewPasses) {
   DisplayRefreshPolicy policy;
   constexpr uint16_t kInversion = 1000;
   int passes = 0;
-  while (policy.choose(Mode::Fast, 1000 + passes, kInversion) == Mode::Fast) {
+  while (policy.choose(Mode::Fast, kInversion) == Mode::Fast) {
     passes++;
     ASSERT_LT(passes, DisplayRefreshPolicy::MAX_CONSECUTIVE_FAST) << "the debt never fired";
   }
@@ -168,7 +157,7 @@ TEST(DisplayRefreshPolicy, HeavyContentEarnsACleanWithinAFewPasses) {
 TEST(DisplayRefreshPolicy, ACleanLeavesSomeDebtBehind) {
   DisplayRefreshPolicy policy;
   constexpr uint16_t kInversion = 1000;
-  while (policy.choose(Mode::Fast, 1000, kInversion) == Mode::Fast) {
+  while (policy.choose(Mode::Fast, kInversion) == Mode::Fast) {
   }
   // Scrubbed, not discharged: what is left is why a screen that keeps demanding cleans
   // eventually earns a real FULL.
@@ -177,9 +166,9 @@ TEST(DisplayRefreshPolicy, ACleanLeavesSomeDebtBehind) {
 
 TEST(DisplayRefreshPolicy, AFullDischargesTheDebtEntirely) {
   DisplayRefreshPolicy policy;
-  policy.choose(Mode::Fast, 1000, 900);
+  policy.choose(Mode::Fast, 900);
   ASSERT_GT(policy.inkDebt(), 0);
-  EXPECT_EQ(policy.choose(Mode::Full, 1001, 0), Mode::Full);
+  EXPECT_EQ(policy.choose(Mode::Full, 0), Mode::Full);
   EXPECT_EQ(policy.inkDebt(), 0);
 }
 
@@ -187,7 +176,7 @@ TEST(DisplayRefreshPolicy, RelentlesslyHeavyContentEventuallyEarnsAFull) {
   DisplayRefreshPolicy policy;
   bool sawFull = false;
   for (int i = 0; i < 200 && !sawFull; ++i) {
-    sawFull = policy.choose(Mode::Fast, 1000 + i, 1000) == Mode::Full;
+    sawFull = policy.choose(Mode::Fast, 1000) == Mode::Full;
   }
   EXPECT_TRUE(sawFull);
 }
@@ -197,15 +186,15 @@ TEST(DisplayRefreshPolicy, RelentlesslyHeavyContentEventuallyEarnsAFull) {
 TEST(DisplayRefreshPolicy, TheDebtCannotDelayTheCountersEscalation) {
   DisplayRefreshPolicy policy;
   policy.seedFastSinceFull(DisplayRefreshPolicy::MAX_FAST_BEFORE_FULL - 1);
-  EXPECT_EQ(policy.choose(Mode::Fast, 1000, 1), Mode::Fast);
+  EXPECT_EQ(policy.choose(Mode::Fast, 1), Mode::Fast);
   // Scored as nearly free, and promoted anyway: the ceiling is the ceiling.
-  EXPECT_EQ(policy.choose(Mode::Fast, 1001, 1), Mode::Full);
+  EXPECT_EQ(policy.choose(Mode::Fast, 1), Mode::Full);
 }
 
 TEST(DisplayRefreshPolicy, DebtSurvivesALock) {
   DisplayRefreshPolicy before;
-  before.choose(Mode::Fast, 1000, 900);
-  before.choose(Mode::Fast, 1001, 900);
+  before.choose(Mode::Fast, 900);
+  before.choose(Mode::Fast, 900);
   ASSERT_EQ(before.inkDebt(), 1800);
 
   DisplayRefreshPolicy after;
@@ -262,10 +251,10 @@ TEST(DisplayRefreshPolicy, RefusedPassesDoNotAdvanceTheReloadCadence) {
 
 TEST(DisplayRefreshPolicy, ATurboPassChargesMoreDebtThanTheSamePassWouldOtherwise) {
   DisplayRefreshPolicy standard;
-  standard.choose(Mode::Fast, 1000, 300, /*turboPass=*/false);
+  standard.choose(Mode::Fast, 300, /*turboPass=*/false);
 
   DisplayRefreshPolicy turbo;
-  turbo.choose(Mode::Fast, 1000, 300, /*turboPass=*/true);
+  turbo.choose(Mode::Fast, 300, /*turboPass=*/true);
 
   EXPECT_EQ(turbo.inkDebt(), standard.inkDebt() * DisplayRefreshPolicy::TURBO_DEBT_MULTIPLIER);
 }
@@ -275,7 +264,7 @@ TEST(DisplayRefreshPolicy, TurboReachesACleanSoonerThanStandardDoes) {
   auto passesUntilClean = [](const bool turbo) {
     DisplayRefreshPolicy policy;
     for (int i = 0; i < 100; ++i) {
-      if (policy.choose(Mode::Fast, 1000 + i, 300, turbo) != Mode::Fast) return i;
+      if (policy.choose(Mode::Fast, 300, turbo) != Mode::Fast) return i;
     }
     return 100;
   };
@@ -287,7 +276,7 @@ TEST(DisplayRefreshPolicy, TurboReachesACleanSoonerThanStandardDoes) {
 // the thresholds were set against.
 TEST(DisplayRefreshPolicy, AMultipliedScoreStillCannotExceedOneWholeFrame) {
   DisplayRefreshPolicy policy;
-  policy.choose(Mode::Fast, 1000, 1000, /*turboPass=*/true);
+  policy.choose(Mode::Fast, 1000, /*turboPass=*/true);
   EXPECT_EQ(policy.inkDebt(), 1000);
 }
 

@@ -38,7 +38,7 @@ bool readReaderPrefs(HalFile& in, ReaderPrefs& p, bool* migrated, uint8_t* fromV
   uint8_t ver = 0;
   if (in.read(&ver, 1) != 1) return false;
   if (fromVersion) *fromVersion = ver;
-  // v5 through v9 are read and upgraded rather than discarded, which would silently drop
+  // v5 through v13 are read and upgraded rather than discarded, which would silently drop
   // every per-book override the first time this build runs. Each older layout is a strict
   // prefix of the current struct, so a record is read at its own shorter length and every
   // field appended since keeps its constructed default.

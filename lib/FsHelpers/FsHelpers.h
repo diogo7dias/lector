@@ -113,4 +113,21 @@ inline bool isSafePathComponent(const String& name) {
  */
 void sanitizePathComponentForFat32(const char* input, char* output, size_t maxLen);
 
+// Numbered per-session files are created contiguously from `first`, so a binary search over
+// `exists(index)` finds the next free number in log(n) card probes. Returns `last` when every
+// slot is taken: the caller then reuses (truncates) the final file.
+template <typename Exists>
+int nextSessionIndex(const int first, const int last, Exists exists) {
+  int low = first;
+  int high = last + 1;
+  while (low < high) {
+    const int mid = low + (high - low) / 2;
+    if (exists(mid))
+      low = mid + 1;
+    else
+      high = mid;
+  }
+  return low <= last ? low : last;
+}
+
 }  // namespace FsHelpers

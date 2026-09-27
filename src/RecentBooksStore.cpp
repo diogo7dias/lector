@@ -16,7 +16,6 @@ void RecentBooksStore::toJson(JsonDocument& doc) const {
     obj["path"] = book.path;
     obj["title"] = book.title;
     obj["author"] = book.author;
-    obj["coverBmpPath"] = book.coverBmpPath;
     obj["progressPercent"] = book.progressPercent;
   }
 }
@@ -33,7 +32,6 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     book.path = obj["path"] | "";
     book.title = obj["title"] | "";
     book.author = obj["author"] | "";
-    book.coverBmpPath = obj["coverBmpPath"] | "";
     book.progressPercent = obj["progressPercent"] | -1;
     recentBooks.push_back(book);
   }
@@ -42,8 +40,7 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
   return true;
 }
 
-void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author,
-                               const std::string& coverBmpPath) {
+void RecentBooksStore::addBook(const std::string& path, const std::string& title, const std::string& author) {
   // Drop stale entries first so a new add can't evict a valid book in their stead.
   pruneMissing();
 
@@ -57,7 +54,7 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   }
 
   // Add to front
-  recentBooks.insert(recentBooks.begin(), {path, title, author, coverBmpPath, keepProgress});
+  recentBooks.insert(recentBooks.begin(), {path, title, author, keepProgress});
 
   // Trim to max size
   if (recentBooks.size() > MAX_RECENT_BOOKS) {
@@ -65,19 +62,6 @@ void RecentBooksStore::addBook(const std::string& path, const std::string& title
   }
 
   saveToFile();
-}
-
-void RecentBooksStore::updateBook(const std::string& path, const std::string& title, const std::string& author,
-                                  const std::string& coverBmpPath) {
-  auto it =
-      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
-  if (it != recentBooks.end()) {
-    RecentBook& book = *it;
-    book.title = title;
-    book.author = author;
-    book.coverBmpPath = coverBmpPath;
-    saveToFile();
-  }
 }
 
 void RecentBooksStore::setProgress(const std::string& path, int percent) {
@@ -103,17 +87,13 @@ bool RecentBooksStore::removeByPath(const std::string& path) {
   return true;
 }
 
-void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath,
-                                  const std::string& oldCachePath, const std::string& newCachePath) {
+void RecentBooksStore::updatePath(const std::string& oldPath, const std::string& newPath) {
   auto it = std::find_if(recentBooks.begin(), recentBooks.end(),
                          [&](const RecentBook& book) { return book.path == oldPath; });
   if (it == recentBooks.end()) {
     return;
   }
   it->path = newPath;
-  if (!oldCachePath.empty() && !it->coverBmpPath.empty() && it->coverBmpPath.rfind(oldCachePath, 0) == 0) {
-    it->coverBmpPath = newCachePath + it->coverBmpPath.substr(oldCachePath.size());
-  }
   saveToFile();
 }
 

@@ -2,11 +2,13 @@
 
 #include <CrossPointSettings.h>
 #include <GfxRenderer.h>
+#include <I18n.h>
 #include <Logging.h>
 
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
 #include "activities/reader/ReaderTouchZones.h"
+#include "components/UITheme.h"
 
 namespace ReaderUtils {
 
@@ -151,11 +153,12 @@ inline void displayWithRefreshCycle(const GfxRenderer& renderer, int& pagesUntil
 // the grayscale buffer. Only the content callback is re-rendered — status bars
 // and other overlays should be drawn before calling this.
 // Kept as a template to avoid std::function overhead; instantiated once per reader type.
+// False when the BW frame could not be stored: nothing was drawn, the BW page stands.
 template <typename RenderFn>
-void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
+bool renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
   if (!renderer.storeBwBuffer()) {
     LOG_ERR("READER", "Failed to store BW buffer for anti-aliasing");
-    return;
+    return false;
   }
 
   renderer.clearScreen(0x00);
@@ -172,6 +175,17 @@ void renderAntiAliased(GfxRenderer& renderer, RenderFn&& renderFn) {
   renderer.setRenderMode(GfxRenderer::BW);
 
   renderer.restoreBwBuffer();
+  return true;
+}
+
+// Wallpaper Hold, the same in every reader: flip the rotation pause, say which way it
+// went, and put the next paint on the ghost-cleanup path so the popup does not ghost
+// under the page. The caller requests the redraw.
+inline void toggleWallpaperHold(const GfxRenderer& renderer, int& pagesUntilFullRefresh) {
+  SETTINGS.wallpaperRotationPaused = SETTINGS.wallpaperRotationPaused ? 0 : 1;
+  SETTINGS.saveToFile();
+  GUI.drawPopup(renderer, SETTINGS.wallpaperRotationPaused ? tr(STR_ROTATION_PAUSED) : tr(STR_ROTATION_RESUMED));
+  pagesUntilFullRefresh = 0;
 }
 
 struct BackNavCallback {

@@ -4,7 +4,6 @@
 #include <deque>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 
 class ZipFile {
  public:
@@ -28,26 +27,27 @@ class ZipFile {
     uint16_t index;  // Caller's index (e.g. spine index)
   };
 
-  // FNV-1a 64-bit hash computed from char buffer (no std::string allocation)
-  static uint64_t fnvHash64(const char* s, size_t len) {
-    uint64_t hash = 14695981039346656037ull;
-    for (size_t i = 0; i < len; i++) {
-      hash ^= static_cast<uint8_t>(s[i]);
-      hash *= 1099511628211ull;
-    }
-    return hash;
-  }
-
  private:
   const std::string& filePath;
   HalFile file;
   ZipDetails zipDetails = {0, 0, false};
-  std::unordered_map<std::string, FileStatSlim> fileStatSlimCache;
 
   // Cursor for sequential central-dir scanning optimization
   uint32_t lastCentralDirPos = 0;
   bool lastCentralDirPosValid = false;
 
+  // One central-directory record. name holds the NUL-terminated path only when
+  // nameLen < sizeof(name); longer names are skipped.
+  struct CentralDirEntry {
+    FileStatSlim stat;
+    uint32_t crc32;
+    uint16_t nameLen;
+    char name[256];
+  };
+
+  // Reads the record at the cursor and leaves the cursor on the next one.
+  // Returns false at the end of the central directory.
+  bool readCentralDirEntry(CentralDirEntry& entry);
   bool loadFileStatSlim(const char* filename, FileStatSlim* fileStat);
   long getDataOffset(const FileStatSlim& fileStat);
   bool loadZipDetails();
@@ -60,7 +60,6 @@ class ZipFile {
   bool isOpen() const { return !!file; }
   bool open();
   bool close();
-  bool loadAllFileStatSlims();
   bool getInflatedFileSize(const char* filename, size_t* size);
   // Batch lookup: scan ZIP central dir once and fill sizes for matching targets.
   // targets must be sorted by (hash, len). sizes[target.index] receives uncompressedSize.
@@ -76,19 +75,11 @@ class ZipFile {
 
   template <typename F>
   bool enumerateFilePaths(F&& callback) {
-    if (!fileStatSlimCache.empty()) {
-      for (const auto& entry : fileStatSlimCache) {
-        callback(std::string_view{entry.first});
-      }
-      return true;
-    }
-
     return enumerateFileEntries([&callback](std::string_view path, uint32_t, uint32_t) { callback(path); });
   }
 
   // Callback receives (path, crc32, compressedSize) for each central-directory
-  // entry. Always scans the central directory: the slim-stat cache does not
-  // hold CRCs.
+  // entry.
   template <typename F>
   bool enumerateFileEntries(F&& callback) {
     const bool wasOpen = isOpen();
@@ -105,35 +96,11 @@ class ZipFile {
 
     file.seek(zipDetails.centralDirOffset);
 
-    uint32_t sig;
-    char itemName[256];
-
-    while (file.available()) {
-      file.read(&sig, 4);
-      if (sig != 0x02014b50) {
-        break;
+    CentralDirEntry entry;
+    while (readCentralDirEntry(entry)) {
+      if (entry.nameLen < sizeof(entry.name)) {
+        callback(std::string_view{entry.name, entry.nameLen}, entry.crc32, entry.stat.compressedSize);
       }
-
-      file.seekCur(12);
-      uint32_t crc32, compressedSize;
-      file.read(&crc32, 4);
-      file.read(&compressedSize, 4);
-      file.seekCur(4);
-      uint16_t nameLen, m, k;
-      file.read(&nameLen, 2);
-      file.read(&m, 2);
-      file.read(&k, 2);
-      file.seekCur(12);
-
-      if (nameLen < sizeof(itemName)) {
-        file.read(itemName, nameLen);
-        itemName[nameLen] = '\0';
-        callback(std::string_view{itemName, nameLen}, crc32, compressedSize);
-      } else {
-        file.seekCur(nameLen);
-      }
-
-      file.seekCur(m + k);
     }
 
     if (!wasOpen) {

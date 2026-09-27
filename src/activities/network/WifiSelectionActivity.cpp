@@ -860,12 +860,7 @@ void WifiSelectionActivity::onBackButton() {
 }
 
 void WifiSelectionActivity::onConfirmButton() {
-  if (state == WifiSelectionState::SCANNING || state == WifiSelectionState::AUTO_CONNECTING) {
-    // The reader took over; stop trying saved networks behind their back.
-    session.showNetworkList(millis());
-    pumpSession();
-    return;
-  }
+  // Scanning and auto-connect Confirm is taken in handleCustomInput.
   if (state == WifiSelectionState::CONNECTION_FAILED) {
     session.dismissFailure(millis());
     pumpSession();

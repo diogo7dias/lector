@@ -15,6 +15,7 @@
 #include "FirmwareSwitchAudit.h"
 #include "FlashWriteVerify.h"
 #include "OtaBootSwitch.h"
+#include "OtaRetryPolicy.h"
 
 namespace firmware_flash {
 
@@ -211,7 +212,7 @@ Result validateImageStream(ByteSource& file, size_t partitionSize) {
   std::memcpy(&imageChip, header + 12, sizeof(imageChip));
   g_lastImageChip = imageChip;
   const uint16_t deviceChip = runningPartitionChipId();
-  if (deviceChip != 0xFFFF && imageChip != deviceChip) {
+  if (ota_retry::isWrongChip(imageChip, deviceChip)) {
     LOG_ERR("FLASH", "validate: wrong chip: image=0x%04X (%s) device=0x%04X (%s)", imageChip, chipName(imageChip),
             deviceChip, chipName(deviceChip));
     return Result::BAD_CHIP;

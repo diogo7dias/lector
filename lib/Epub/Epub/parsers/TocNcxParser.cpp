@@ -1,6 +1,5 @@
 #include "TocNcxParser.h"
 
-#include <FsHelpers.h>
 #include <Logging.h>
 #include <XmlParserUtils.h>
 
@@ -24,34 +23,7 @@ TocNcxParser::~TocNcxParser() { destroyXmlParser(parser); }
 size_t TocNcxParser::write(const uint8_t data) { return write(&data, 1); }
 
 size_t TocNcxParser::write(const uint8_t* buffer, const size_t size) {
-  if (!parser) return 0;
-
-  const uint8_t* currentBufferPos = buffer;
-  auto remainingInBuffer = size;
-
-  while (remainingInBuffer > 0) {
-    void* const buf = XML_GetBuffer(parser, 1024);
-    if (!buf) {
-      LOG_DBG("TOC", "Couldn't allocate memory for buffer");
-      destroyXmlParser(parser);
-      return 0;
-    }
-
-    const auto toRead = remainingInBuffer < 1024 ? remainingInBuffer : 1024;
-    memcpy(buf, currentBufferPos, toRead);
-
-    if (XML_ParseBuffer(parser, static_cast<int>(toRead), remainingSize == toRead) == XML_STATUS_ERROR) {
-      LOG_DBG("TOC", "Parse error at line %lu: %s", XML_GetCurrentLineNumber(parser),
-              XML_ErrorString(XML_GetErrorCode(parser)));
-      destroyXmlParser(parser);
-      return 0;
-    }
-
-    currentBufferPos += toRead;
-    remainingInBuffer -= toRead;
-    remainingSize -= toRead;
-  }
-  return size;
+  return feedXmlParser(parser, buffer, size, remainingSize, "TOC");
 }
 
 void XMLCALL TocNcxParser::startElement(void* userData, const XML_Char* name, const XML_Char** atts) {
@@ -145,18 +117,8 @@ void XMLCALL TocNcxParser::endElement(void* userData, const XML_Char* name) {
     // This is the safest place to push the data, assuming <navLabel> always comes before <content>.
     // NCX spec says navLabel comes before content.
     if (!self->currentLabel.empty() && !self->currentSrc.empty()) {
-      const std::string rawTarget = self->baseContentPath + self->currentSrc;
-      const size_t pos = rawTarget.find('#');
-      const std::string rawPath = pos == std::string::npos ? rawTarget : rawTarget.substr(0, pos);
-      std::string href = FsHelpers::normalisePath(FsHelpers::decodeUriEscapes(rawPath));
-      std::string anchor;
-
-      if (pos != std::string::npos) {
-        anchor = FsHelpers::decodeUriEscapes(rawTarget.substr(pos + 1));
-      }
-
       if (self->cache) {
-        self->cache->createTocEntry(self->currentLabel, href, anchor, self->currentDepth);
+        self->cache->createTocEntry(self->currentLabel, self->baseContentPath + self->currentSrc, self->currentDepth);
       }
 
       // Clear them so we don't re-add them if there are weird XML structures

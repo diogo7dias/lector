@@ -33,9 +33,6 @@ void StreamingJsonParser::feed(const char* data, size_t len) {
       case State::IN_LITERAL:
         handleLiteral(c);
         break;
-      case State::SKIP_STRING:
-        handleSkipString(c);
-        break;
     }
   }
 }
@@ -205,21 +202,6 @@ void StreamingJsonParser::handleLiteral(char c) {
     }
   } else {
     error = true;
-  }
-}
-
-void StreamingJsonParser::handleSkipString(char c) {
-  if (escaped) {
-    escaped = false;
-    return;
-  }
-  if (c == '\\') {
-    escaped = true;
-    return;
-  }
-  if (c == '"') {
-    state = State::SCANNING;
-    expectingValue = false;
   }
 }
 

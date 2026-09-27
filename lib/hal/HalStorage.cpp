@@ -177,7 +177,7 @@ bool HalStorage::removeDir(const char* path) { HAL_STORAGE_WRAPPED_CALL(removeDi
 
 // HalFile implementation
 // Allow doing file operations while ensuring thread safety via HalStorage's mutex.
-// Please keep the list below in sync with the HalFile.h header
+// Please keep the list below in sync with the HalFile class in HalStorage.h
 
 #define HAL_FILE_WRAPPED_CALL(method, ...) \
   HalStorage::StorageLock lock;            \

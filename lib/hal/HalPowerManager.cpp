@@ -357,7 +357,7 @@ size_t HalPowerManager::formatPowerReport(char* const out, const size_t outLen) 
   return static_cast<size_t>(written) < outLen ? static_cast<size_t>(written) : outLen - 1;
 }
 
-void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+void HalPowerManager::startDeepSleep() const {
   // Hold the performance lock for the whole of this function. It is not about
   // speed: a CPU_FREQ_MAX lock keeps esp_pm out of PM_MODE_LIGHT_SLEEP, and the
   // wake-source disarm below is only safe if nothing re-arms one behind it.

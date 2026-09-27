@@ -12,7 +12,7 @@ class FontDecompressor {
   FontDecompressor() = default;
   ~FontDecompressor();
 
-  bool init();
+  void init();
   void deinit();
 
   // Returns pointer to decompressed bitmap data for the given glyph.

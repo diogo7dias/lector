@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Logging.h>
 
+#include <new>
+
 bool ImageToFramebufferDecoder::validateAndStoreDimensions(const int64_t width, const int64_t height,
                                                            ImageDimensions& out, const char* format) {
   if (width <= 0 || height <= 0) {
@@ -28,6 +30,28 @@ bool ImageToFramebufferDecoder::validateAndStoreDimensions(const int64_t width, 
   out.width = static_cast<int16_t>(width);
   out.height = static_cast<int16_t>(height);
   return true;
+}
+
+void* ImageToFramebufferDecoder::openDecoderFile(const char* tag, const char* filename, int32_t* size) {
+  HalFile* f = new (std::nothrow) HalFile();  // raw: the decoder's close callback deletes it
+  if (!f) {
+    LOG_ERR(tag, "OOM: HalFile");
+    return nullptr;
+  }
+  if (!Storage.openFileForRead(tag, std::string(filename), *f)) {
+    delete f;
+    return nullptr;
+  }
+  *size = f->size();
+  return f;
+}
+
+void ImageToFramebufferDecoder::closeDecoderFile(void* handle) {
+  HalFile* f = reinterpret_cast<HalFile*>(handle);
+  if (f) {
+    f->close();
+    delete f;
+  }
 }
 
 void ImageToFramebufferDecoder::yieldDuringDecode(uint32_t& lastYieldMs) {

@@ -1,7 +1,7 @@
 #include "ScreenshotUtil.h"
 
 #include <Arduino.h>
-#include <BitmapHelpers.h>
+#include <BmpWriter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalStorage.h>
@@ -10,7 +10,6 @@
 #include <cstring>
 #include <string>
 
-#include "Bitmap.h"  // Required for BmpHeader struct definition
 #include "activities/Activity.h"
 
 void ScreenshotUtil::buildFilename(const ScreenshotInfo& info, char* buf, size_t bufSize) {
@@ -127,14 +126,8 @@ bool ScreenshotUtil::saveFramebufferAsBmp(const char* filename, const uint8_t* f
     return false;
   }
 
-  BmpHeader header;
-
-  createBmpHeader(&header, phyWidth, phyHeight, BmpRowOrder::BottomUp);
-
-  bool write_error = false;
-  if (file.write(reinterpret_cast<uint8_t*>(&header), sizeof(header)) != sizeof(header)) {
-    write_error = true;
-  }
+  // 1-bit header is 62 bytes: 14 file + 40 info + 2 palette entries.
+  bool write_error = bmp_writer::writeHeader(file, phyWidth, phyHeight, 1, false) != 62;
 
   if (write_error) {
     // Explicitly close() file before calling Storage.remove()

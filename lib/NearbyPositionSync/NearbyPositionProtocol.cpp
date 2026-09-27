@@ -1,10 +1,13 @@
 #include "NearbyPositionProtocol.h"
 
+#include <LeCursor.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 
 namespace nearby_position {
+using namespace le;
 namespace {
 
 constexpr uint8_t MAGIC[4] = {'C', 'I', 'B', 'P'};
@@ -13,35 +16,6 @@ constexpr uint8_t FLAG_LI = 1 << 1;
 
 // Everything in a serialized position except the two length-prefixed strings.
 constexpr size_t POSITION_FIXED_BYTES = DOCUMENT_HASH_BYTES + 4 + 2 + 2 + 2 + 1 + 2 + 2 + 1 + 1;
-
-void writeU16(uint8_t*& cursor, const uint16_t value) {
-  *cursor++ = static_cast<uint8_t>(value & 0xFF);
-  *cursor++ = static_cast<uint8_t>((value >> 8) & 0xFF);
-}
-
-void writeU32(uint8_t*& cursor, const uint32_t value) {
-  *cursor++ = static_cast<uint8_t>(value & 0xFF);
-  *cursor++ = static_cast<uint8_t>((value >> 8) & 0xFF);
-  *cursor++ = static_cast<uint8_t>((value >> 16) & 0xFF);
-  *cursor++ = static_cast<uint8_t>((value >> 24) & 0xFF);
-}
-
-bool readU16(const uint8_t*& cursor, size_t& remaining, uint16_t& value) {
-  if (remaining < 2) return false;
-  value = static_cast<uint16_t>(cursor[0]) | static_cast<uint16_t>(static_cast<uint16_t>(cursor[1]) << 8);
-  cursor += 2;
-  remaining -= 2;
-  return true;
-}
-
-bool readU32(const uint8_t*& cursor, size_t& remaining, uint32_t& value) {
-  if (remaining < 4) return false;
-  value = static_cast<uint32_t>(cursor[0]) | (static_cast<uint32_t>(cursor[1]) << 8) |
-          (static_cast<uint32_t>(cursor[2]) << 16) | (static_cast<uint32_t>(cursor[3]) << 24);
-  cursor += 4;
-  remaining -= 4;
-  return true;
-}
 
 /** Length of a NUL-terminated field, never reading past its fixed capacity. */
 size_t boundedLength(const char* text, const size_t maxBytes) {

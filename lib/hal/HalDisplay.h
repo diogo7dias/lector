@@ -38,10 +38,6 @@ class HalDisplay {
 
   // Frame buffer operations
   void clearScreen(uint8_t color = 0xFF) const;
-  void drawImage(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                 bool fromProgmem = false) const;
-  void drawImageTransparent(const uint8_t* imageData, uint16_t x, uint16_t y, uint16_t w, uint16_t h,
-                            bool fromProgmem = false) const;
 
   void displayBuffer(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
   // Non-blocking refresh (shadow-free): starts the panel waveform and returns
@@ -55,12 +51,10 @@ class HalDisplay {
   // True when displayBufferAsync() genuinely overlaps (panel driver defers);
   // false where it falls back to a blocking refresh.
   bool supportsAsyncRefresh() const;
-  void refreshDisplay(RefreshMode mode = RefreshMode::FAST_REFRESH, bool turnOffScreen = false);
 
   // Output polarity. The framebuffer remains in normal polarity; inversion is
   // applied by the display driver while sending it to the panel.
   void setInverted(bool inverted);
-  bool toggleInverted();
   bool isInverted() const;
 
   // Power management
@@ -116,7 +110,6 @@ class HalDisplay {
   // ("AA-pre-BW(mid)"). Other panels display normally with `fallback` mode.
   void displayGrayscaleBase(RefreshMode fallback = HALF_REFRESH, bool turnOffScreen = false);
 
-  void copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* msbBuffer);
   void copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer);
   void copyGrayscaleMsbBuffers(const uint8_t* msbBuffer);
   void cleanupGrayscaleBuffers(const uint8_t* bwBuffer);
@@ -156,7 +149,7 @@ class HalDisplay {
   // class performs is routed through it, so no run of FAST passes can grow long
   // enough to trap charge in the panel.
   // `inkScore` is what FrameInkMetrics made of the frame about to be pushed, or 0 on a
-  // path that has no framebuffer to measure (a bare refreshDisplay, a grayscale plane).
+  // path that has no framebuffer to measure (a grayscale plane).
   RefreshMode applyRefreshPolicy(RefreshMode requested, uint16_t inkScore = 0, bool allowTurbo = true);
   // Scores the framebuffer that is about to go to the panel. Returns 0 when the timings
   // are of no use to the policy (a mode the policy will not promote anyway), so the pass

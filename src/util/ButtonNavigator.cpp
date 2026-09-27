@@ -2,6 +2,7 @@
 
 #include <algorithm>
 
+#include "HoldRepeat.h"
 #include "ListIndex.h"
 
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
@@ -14,6 +15,20 @@ void ButtonNavigator::onNext(const Callback& callback) {
 void ButtonNavigator::onPrevious(const Callback& callback) {
   onPreviousPress(callback);
   onPreviousContinuous(callback);
+}
+
+void ButtonNavigator::onListNav(const int& selected, const int count, const int pageRows,
+                                const std::function<void(int)>& moveTo) {
+  onNextRelease([&] { moveTo(nextIndex(selected, count)); });
+  onPreviousRelease([&] { moveTo(previousIndex(selected, count)); });
+  onNextContinuous([&] {
+    moveTo(swipeDrivenPass() ? nextPageIndex(selected, count, pageRows)
+                             : heldIndex(selected, count, holdRepeatStep(repeats())));
+  });
+  onPreviousContinuous([&] {
+    moveTo(swipeDrivenPass() ? previousPageIndex(selected, count, pageRows)
+                             : heldIndex(selected, count, -holdRepeatStep(repeats())));
+  });
 }
 
 void ButtonNavigator::onPressAndContinuous(const Buttons& buttons, const Callback& callback) {

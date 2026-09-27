@@ -69,7 +69,6 @@ class Bitmap {
 
   explicit Bitmap(HalFile& file, bool dithering = false, BitmapToneMapping toneMapping = BitmapToneMapping::None)
       : file(file), dithering(dithering), toneMapping(toneMapping) {}
-  ~Bitmap();
   BmpReaderError parseHeaders();
   BmpReaderError readNextRow(uint8_t* data, uint8_t* rowBuffer) const;
   BmpReaderError rewindToData() const;
@@ -104,9 +103,5 @@ class Bitmap {
   uint8_t adaptiveWhitePoint = 255;
 
   // Dithering state (mutable for const methods)
-  mutable int16_t* errorCurRow = nullptr;
-  mutable int16_t* errorNextRow = nullptr;
-  mutable int prevRowY = -1;  // Track row progression for error propagation
-
   mutable std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
 };

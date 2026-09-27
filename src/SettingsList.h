@@ -496,102 +496,33 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     // the Buttons screen is what actually lists them (withButtons keeps them out of the
     // flat Controls list). Key names match the field names so a settings file reads as
     // context + button + gesture.
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftSingle, boundFunctionLabels(),
-                                  "btnBookLeftSingle", StrId::STR_CAT_CONTROLS)
+    // Same [context][button][gesture] layout as CrossPointSettings::bindingField, walked
+    // book first, one row per push_back (see the stack note above).
+    {
+      static constexpr const char* kBindingKeys[2][CrossPointSettings::BOUND_BTN_COUNT]
+                                               [CrossPointSettings::BOUND_GESTURE_COUNT] = {
+                                                   {{"btnUiLeftSingle", "btnUiLeftDouble", "btnUiLeftHold"},
+                                                    {"btnUiRightSingle", "btnUiRightDouble", "btnUiRightHold"},
+                                                    {"btnUiHomeSingle", "btnUiHomeDouble", "btnUiHomeHold"},
+                                                    {"btnUiPowerSingle", "btnUiPowerDouble", "btnUiPowerHold"}},
+                                                   {{"btnBookLeftSingle", "btnBookLeftDouble", "btnBookLeftHold"},
+                                                    {"btnBookRightSingle", "btnBookRightDouble", "btnBookRightHold"},
+                                                    {"btnBookHomeSingle", "btnBookHomeDouble", "btnBookHomeHold"},
+                                                    {"btnBookPowerSingle", "btnBookPowerDouble", "btnBookPowerHold"}}};
+      static constexpr StrId kButtonLabels[CrossPointSettings::BOUND_BTN_COUNT] = {
+          StrId::STR_BTN_LEFT, StrId::STR_BTN_RIGHT, StrId::STR_BTN_HOME, StrId::STR_BTN_POWER};
+      for (const bool inBook : {true, false}) {
+        for (uint8_t button = 0; button < CrossPointSettings::BOUND_BTN_COUNT; ++button) {
+          for (uint8_t gesture = 0; gesture < CrossPointSettings::BOUND_GESTURE_COUNT; ++gesture) {
+            v.push_back(
+                SettingInfo::Enum(kButtonLabels[button], CrossPointSettings::bindingField(inBook, button, gesture),
+                                  boundFunctionLabels(), kBindingKeys[inBook][button][gesture], StrId::STR_CAT_CONTROLS)
                     .withHiddenEnumValues(retiredBoundFunctions())
                     .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftDouble, boundFunctionLabels(),
-                                  "btnBookLeftDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnBookLeftHold, boundFunctionLabels(),
-                                  "btnBookLeftHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightSingle, boundFunctionLabels(),
-                                  "btnBookRightSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightDouble, boundFunctionLabels(),
-                                  "btnBookRightDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnBookRightHold, boundFunctionLabels(),
-                                  "btnBookRightHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeSingle, boundFunctionLabels(),
-                                  "btnBookHomeSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeDouble, boundFunctionLabels(),
-                                  "btnBookHomeDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnBookHomeHold, boundFunctionLabels(),
-                                  "btnBookHomeHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerSingle, boundFunctionLabels(),
-                                  "btnBookPowerSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerDouble, boundFunctionLabels(),
-                                  "btnBookPowerDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnBookPowerHold, boundFunctionLabels(),
-                                  "btnBookPowerHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftSingle, boundFunctionLabels(),
-                                  "btnUiLeftSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftDouble, boundFunctionLabels(),
-                                  "btnUiLeftDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_LEFT, &CrossPointSettings::btnUiLeftHold, boundFunctionLabels(),
-                                  "btnUiLeftHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightSingle, boundFunctionLabels(),
-                                  "btnUiRightSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightDouble, boundFunctionLabels(),
-                                  "btnUiRightDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_RIGHT, &CrossPointSettings::btnUiRightHold, boundFunctionLabels(),
-                                  "btnUiRightHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeSingle, boundFunctionLabels(),
-                                  "btnUiHomeSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeDouble, boundFunctionLabels(),
-                                  "btnUiHomeDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_HOME, &CrossPointSettings::btnUiHomeHold, boundFunctionLabels(),
-                                  "btnUiHomeHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerSingle, boundFunctionLabels(),
-                                  "btnUiPowerSingle", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerDouble, boundFunctionLabels(),
-                                  "btnUiPowerDouble", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
-    v.push_back(SettingInfo::Enum(StrId::STR_BTN_POWER, &CrossPointSettings::btnUiPowerHold, boundFunctionLabels(),
-                                  "btnUiPowerHold", StrId::STR_CAT_CONTROLS)
-                    .withHiddenEnumValues(retiredBoundFunctions())
-                    .withButtons());
+          }
+        }
+      }
+    }
 
     // --- System ---
     v.push_back(SettingInfo::Value(
@@ -641,13 +572,13 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                   {StrId::STR_FMT_AUTHOR_TITLE, StrId::STR_FMT_TITLE_AUTHOR, StrId::STR_FMT_TITLE},
                                   "opdsFilenameFormat"));
 
-    // Measurement, off by default and free while it is off. On, the device times every
-    // refresh, draws the previous one's cost in a corner of the screen, and writes a CSV
-    // to /perf on the card for reading on a computer. It exists because the device has no
-    // serial console in a reader's hands, so the only honest way to judge a speed change
-    // is to have the device report its own numbers. See docs/perf-measurement.md.
-    // Instrumented builds keep it on and out of sight; releases never show it. See the
-    // field's declaration in CrossPointSettings.h.
+// Measurement, off by default and free while it is off. On, the device times every
+// refresh, draws the previous one's cost in a corner of the screen, and writes a CSV
+// to /perf on the card for reading on a computer. It exists because the device has no
+// serial console in a reader's hands, so the only honest way to judge a speed change
+// is to have the device report its own numbers. See docs/perf-measurement.md.
+// Instrumented builds keep it on and out of sight; releases never show it. See the
+// field's declaration in CrossPointSettings.h.
 #ifndef LECTOR_FORCE_PERF_TIMINGS
     v.push_back(SettingInfo::Toggle(StrId::STR_PERF_TIMINGS, &CrossPointSettings::showTimings, "showTimings",
                                     StrId::STR_CAT_SYSTEM));
@@ -715,26 +646,21 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     // --- Per-item status bar model (v2). Position enums share the same 7-value
     // list {Off, TL, TC, TR, BL, BC, BR}; the device UI (StatusBarSettingsActivity)
     // renders these as the [XX] position popup. ---
+    // Every position enum shares the same 7-value list; built once, copied per entry.
+    const std::vector<StrId> anchorPositions = {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC,
+                                                StrId::STR_ANCHOR_TR, StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC,
+                                                StrId::STR_ANCHOR_BR};
     v.push_back(SettingInfo::Toggle(StrId::STR_STATUS_BAR, &CrossPointSettings::sbEnabled, "sbEnabled",
                                     StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_BATTERY, &CrossPointSettings::sbBatteryPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbBatteryPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_BATTERY, &CrossPointSettings::sbBatteryPos, anchorPositions,
+                                  "sbBatteryPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::sbClockPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbClockPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_CLOCK, &CrossPointSettings::sbClockPos, anchorPositions, "sbClockPos",
+                                  StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_TITLE, &CrossPointSettings::sbTitlePos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbTitlePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_TITLE, &CrossPointSettings::sbTitlePos, anchorPositions, "sbTitlePos",
+                                  StrId::STR_CUSTOMISE_STATUS_BAR));
 
     v.push_back(SettingInfo::Enum(StrId::STR_TITLE_SOURCE, &CrossPointSettings::sbTitleSource,
                                   {StrId::STR_BOOK, StrId::STR_CHAPTER}, "sbTitleSource",
@@ -743,45 +669,27 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
     v.push_back(SettingInfo::Toggle(StrId::STR_TRUNCATE_TITLE, &CrossPointSettings::sbTitleTruncate, "sbTitleTruncate",
                                     StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_PAGE_IN_CHAPTER, &CrossPointSettings::sbPagePos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbPagePos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_PAGE_IN_CHAPTER, &CrossPointSettings::sbPagePos, anchorPositions,
+                                  "sbPagePos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
     v.push_back(SettingInfo::Enum(StrId::STR_PAGE_FORMAT, &CrossPointSettings::sbPageFormat,
                                   {StrId::STR_PAGE_FRACTION, StrId::STR_PAGE_LEFT}, "sbPageFormat",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_BOOK_PERCENT, &CrossPointSettings::sbBookPctPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbBookPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_BOOK_PERCENT, &CrossPointSettings::sbBookPctPos, anchorPositions,
+                                  "sbBookPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_CHAPTER_PERCENT, &CrossPointSettings::sbChapterPctPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbChapterPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_PERCENT, &CrossPointSettings::sbChapterPctPos, anchorPositions,
+                                  "sbChapterPctPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_CHAPTER_NUMBER, &CrossPointSettings::sbChapterNumPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbChapterNumPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_CHAPTER_NUMBER, &CrossPointSettings::sbChapterNumPos, anchorPositions,
+                                  "sbChapterNumPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_SESSION_PAGES, &CrossPointSettings::sbSessionPagesPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbSessionPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_SESSION_PAGES, &CrossPointSettings::sbSessionPagesPos, anchorPositions,
+                                  "sbSessionPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    v.push_back(
-        SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos,
-                          {StrId::STR_STATE_OFF, StrId::STR_ANCHOR_TL, StrId::STR_ANCHOR_TC, StrId::STR_ANCHOR_TR,
-                           StrId::STR_ANCHOR_BL, StrId::STR_ANCHOR_BC, StrId::STR_ANCHOR_BR},
-                          "sbParaPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
+    v.push_back(SettingInfo::Enum(StrId::STR_PARA_PAGES, &CrossPointSettings::sbParaPagesPos, anchorPositions,
+                                  "sbParaPagesPos", StrId::STR_CUSTOMISE_STATUS_BAR));
 
     v.push_back(SettingInfo::Enum(StrId::STR_BOOK_BAR, &CrossPointSettings::sbBookBar,
                                   {StrId::STR_STATE_OFF, StrId::STR_TOP, StrId::STR_BOTTOM}, "sbBookBar",

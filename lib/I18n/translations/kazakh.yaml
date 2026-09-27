@@ -385,7 +385,6 @@ STR_BACK_SHORT_TO_FILE_BROWSER: "Қысқа басқанда файл шолғы
 STR_SET_SLEEP_COVER: "Мұқаба орнату"
 STR_ADD_SERVER: "Сервер қосу"
 STR_SERVER_NAME: "Сервер атауы"
-STR_NO_SERVERS: "OPDS серверлері бапталмаған"
 STR_DELETE_SERVER: "Серверді жою"
 STR_OPDS_SERVERS: "OPDS серверлері"
 STR_OPDS_SD_ROOT: "SD картаның түбірлік қалтасы"

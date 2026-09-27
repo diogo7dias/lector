@@ -2,6 +2,7 @@
 // https://github.com/vroland/epdiy/blob/c61e9e923ce2418150d54f88cea5d196cdc40c54/src/epd_internals.h
 
 #pragma once
+#include <algorithm>
 #include <cstdint>
 
 /// Font metrics use "fixed-point 4" (4 fractional bits, i.e. 1/16-pixel
@@ -214,3 +215,51 @@ typedef struct {
   /// nullptr for fonts whose interval table is already complete (built-ins).
   bool (*coverageHandler)(void* ctx, uint32_t codepoint);
 } EpdFontData;
+
+/// The interval holding `cp`, or nullptr. `intervals` must be sorted by `first` and
+/// non-overlapping, with `last` inclusive; `Interval` is any struct with first/last.
+template <typename Interval>
+inline const Interval* findInterval(const Interval* intervals, const uint32_t count, const uint32_t cp) {
+  const Interval* end = intervals + count;
+  // upper_bound: the first interval starting past cp, so the one before it is the only
+  // candidate that could contain cp.
+  const Interval* it =
+      std::upper_bound(intervals, end, cp, [](const uint32_t value, const Interval& iv) { return value < iv.first; });
+  if (it == intervals || cp > (it - 1)->last) return nullptr;
+  return it - 1;
+}
+
+/// The 1-based kerning class of `cp`, or 0 when it has none.
+inline uint8_t lookupKernClass(const EpdKernClassEntry* entries, const uint16_t count, const uint32_t cp) {
+  if (!entries || count == 0 || cp > 0xFFFF) return 0;
+  const auto target = static_cast<uint16_t>(cp);
+  const auto* end = entries + count;
+  const auto* it = std::lower_bound(entries, end, target, [](const EpdKernClassEntry& entry, const uint16_t value) {
+    return entry.codepoint < value;
+  });
+  return (it != end && it->codepoint == target) ? it->classId : 0;
+}
+
+/// Prewarm step: for every ligature whose two inputs are both in `set`, adds its output
+/// (deduplicated) while `count < cap`, since rendering will ask for that glyph. `key` maps a
+/// codepoint to the set's key type (the codepoint itself, or a glyph index) and returns a
+/// negative value when the font has no such glyph.
+template <typename Count, typename Key>
+void addLigatureOutputs(const EpdLigaturePair* pairs, const uint32_t pairCount, uint32_t* set, Count& count,
+                        const uint32_t cap, Key key) {
+  const auto contains = [&](const uint32_t value) {
+    for (Count i = 0; i < count; i++) {
+      if (set[i] == value) return true;
+    }
+    return false;
+  };
+  for (uint32_t li = 0; li < pairCount && count < cap; li++) {
+    const int32_t left = key(pairs[li].pair >> 16);
+    const int32_t right = key(pairs[li].pair & 0xFFFF);
+    if (left < 0 || right < 0) continue;
+    if (!contains(static_cast<uint32_t>(left)) || !contains(static_cast<uint32_t>(right))) continue;
+    const int32_t out = key(pairs[li].ligatureCp);
+    if (out < 0 || contains(static_cast<uint32_t>(out))) continue;
+    set[count++] = static_cast<uint32_t>(out);
+  }
+}

@@ -7,12 +7,6 @@
 
 namespace {
 
-void safeCopy(char* dst, size_t dstSize, const char* src, size_t srcLen) {
-  const size_t n = srcLen < dstSize - 1 ? srcLen : dstSize - 1;
-  memcpy(dst, src, n);
-  dst[n] = '\0';
-}
-
 uint32_t parseUnsigned(const char* value, size_t len) {
   char buf[24];
   safeCopy(buf, sizeof(buf), value, len);

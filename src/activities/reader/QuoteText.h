@@ -3,7 +3,6 @@
 #include <cstddef>
 #include <cstring>
 #include <string>
-#include <vector>
 
 // Pure, Arduino-free helpers for the Grab Quote feature so they can be host
 // tested. The interactive selection and the SD read-modify-write live in
@@ -56,21 +55,6 @@ inline bool appendQuoteWord(std::string& out, const char* word, const size_t max
   if (needsSpace) out.push_back(' ');
   out.append(word);
   return true;
-}
-
-// Join words with single spaces, suppressing the space before attaching
-// punctuation. Hard-capped at maxLen bytes.
-inline std::string joinQuoteWords(const std::vector<std::string>& words, const size_t maxLen = MAX_QUOTE_LENGTH) {
-  std::string out;
-  for (size_t i = 0; i < words.size(); i++) {
-    if (i > 0 && !wordAttachesLeft(words[i].c_str())) out.push_back(' ');
-    out.append(words[i]);
-    if (out.size() >= maxLen) {
-      out.resize(maxLen);
-      break;
-    }
-  }
-  return out;
 }
 
 // Where a quote sits in the book, so the reader can underline it again on a
@@ -158,6 +142,42 @@ inline constexpr char PAGE_BREAK = '\f';
 // Every parser of this file must skip these before looking for a header bracket.
 inline bool isRecordGap(const char c) { return c == '\n' || c == '\r' || c == ' ' || c == PAGE_BREAK; }
 
+// One record of the sidecar, located in place so no parser copies what it skips:
+// the bracketed header field (chapter title plus any anchor token), if the record has
+// one, and the quote text up to, not including, its "\n---" separator.
+struct QuoteRecord {
+  bool hasHeader = false;
+  size_t headerStart = 0;
+  size_t headerLen = 0;
+  size_t textStart = 0;
+  size_t textEnd = 0;
+};
+
+// The one reader of the record grammar below. Parses the record at `pos` and moves
+// `pos` past it; false when only record gaps are left. A '[' with no closing ']' is
+// not a header, so that record's text starts at the bracket.
+inline bool nextQuoteRecord(const std::string& buf, size_t& pos, QuoteRecord& out) {
+  while (pos < buf.size() && isRecordGap(buf[pos])) ++pos;
+  if (pos >= buf.size()) return false;
+
+  out = QuoteRecord{};
+  if (buf[pos] == '[') {
+    const auto close = buf.find(']', pos);
+    if (close != std::string::npos) {
+      out.hasHeader = true;
+      out.headerStart = pos + 1;
+      out.headerLen = close - pos - 1;
+      pos = close + 1;
+      while (pos < buf.size() && (buf[pos] == '\n' || buf[pos] == '\r')) ++pos;
+    }
+  }
+  out.textStart = pos;
+  const auto sep = buf.find("\n---", pos);
+  out.textEnd = (sep == std::string::npos) ? buf.size() : sep;
+  pos = (sep == std::string::npos) ? buf.size() : sep + 4;
+  return true;
+}
+
 // One sidecar entry: "\f[chapter @q1:...]\nquote\n---\n\n". The anchor lives inside
 // the brackets on purpose: the record grammar (bracketed header line, body, "---")
 // is unchanged, so a reader that knows nothing about anchors still parses every
@@ -177,11 +197,6 @@ inline std::string formatQuoteEntry(const std::string& chapter, const std::strin
   entry.append(quote);
   entry.append("\n---\n\n");
   return entry;
-}
-
-// Anchorless overload, kept so callers that have no position to record stay put.
-inline std::string formatQuoteEntry(const std::string& chapter, const std::string& quote) {
-  return formatQuoteEntry(chapter, "", quote);
 }
 
 }  // namespace quote_text

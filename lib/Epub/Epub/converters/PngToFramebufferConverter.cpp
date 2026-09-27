@@ -50,25 +50,7 @@ struct PngContext {
 // File I/O callbacks use pFile->fHandle to access the HalFile*,
 // avoiding the need for global file state.
 void* pngOpenWithHandle(const char* filename, int32_t* size) {
-  HalFile* f = new (std::nothrow) HalFile();  // raw: the decoder's close callback deletes it
-  if (!f) {
-    LOG_ERR("PNG", "OOM: HalFile");
-    return nullptr;
-  }
-  if (!Storage.openFileForRead("PNG", std::string(filename), *f)) {
-    delete f;
-    return nullptr;
-  }
-  *size = f->size();
-  return f;
-}
-
-void pngCloseWithHandle(void* handle) {
-  HalFile* f = reinterpret_cast<HalFile*>(handle);
-  if (f) {
-    f->close();
-    delete f;
-  }
+  return ImageToFramebufferDecoder::openDecoderFile("PNG", filename, size);
 }
 
 int32_t pngReadWithHandle(PNGFILE* pFile, uint8_t* pBuf, int32_t len) {
@@ -291,13 +273,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
         if (alpha >= 8 && alpha > alphaThreshold4x4(outX, outY)) {
           uint8_t gray = ctx->grayLineBuffer[srcX];
 
-          uint8_t ditheredGray;
-          if (useDithering) {
-            ditheredGray = applyBayerDither4Level(gray, outX, outY);
-          } else {
-            ditheredGray = gray / 85;
-            if (ditheredGray > 3) ditheredGray = 3;
-          }
+          const uint8_t ditheredGray = quantize4Level(gray, outX, outY, useDithering);
           pw.writePixel(outX, ditheredGray, ctx->alphaLineBuffer != nullptr);
           if (caching) cw.writePixel(outX, ditheredGray);
         }
@@ -330,8 +306,8 @@ bool PngToFramebufferConverter::getDimensionsStatic(const std::string& imagePath
     return false;
   }
 
-  int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
-                     nullptr);
+  int rc = png->open(imagePath.c_str(), pngOpenWithHandle, ImageToFramebufferDecoder::closeDecoderFile,
+                     pngReadWithHandle, pngSeekWithHandle, nullptr);
   const ScopedCleanup cleanup{[&png]() { png->close(); }};
 
   if (rc != 0) {
@@ -366,8 +342,8 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.screenWidth = renderer.getScreenWidth();
   ctx.screenHeight = renderer.getScreenHeight();
 
-  int rc = png->open(imagePath.c_str(), pngOpenWithHandle, pngCloseWithHandle, pngReadWithHandle, pngSeekWithHandle,
-                     pngDrawCallback);
+  int rc = png->open(imagePath.c_str(), pngOpenWithHandle, ImageToFramebufferDecoder::closeDecoderFile,
+                     pngReadWithHandle, pngSeekWithHandle, pngDrawCallback);
   const ScopedCleanup cleanup{[&png]() { png->close(); }};
   if (rc != PNG_SUCCESS) {
     LOG_ERR("PNG", "Failed to open PNG: %d", rc);

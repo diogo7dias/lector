@@ -31,9 +31,9 @@ struct MenuResult {
   // reader on close. Unlike the Paperback flags this one repaginates: the bar's
   // reserved bands change the viewport.
   uint8_t statusBar = 1;
-  // The global Progress Bar value (CrossPointSettings::STATUS_BAR_OFF_BAR), cycled in the
-  // menu on the row that only exists while this book's status bar is off. Global, not
-  // per-book, exactly like Book Bar / Chapter Bar / Bar Thickness. Repaginates too.
+  // This book's Progress Bar value (a CrossPointSettings::STATUS_BAR_OFF_BAR value), cycled
+  // in the menu on the row that only exists while this book's status bar is off. Per-book,
+  // like the status bar switch, and applied with it on close. Repaginates too.
   uint8_t progressBar = 0;
   // The bound Menu Hold function (a CrossPointSettings::LONG_PRESS_MENU_FUNCTION
   // value) when the menu was closed by holding Confirm, else LP_MENU_DISABLED. The

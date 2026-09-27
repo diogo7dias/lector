@@ -5,9 +5,8 @@
 #include "KOReaderSyncClient.h"
 
 /**
- * Reader-facing text for a sync outcome. KOReaderSyncClient::errorString stays
- * English for the log; anything shown on the screen goes through here, because
- * no library under lib/ can reach the translation tables.
+ * Reader-facing text for a sync outcome. It lives here because no library
+ * under lib/ can reach the translation tables.
  */
 inline const char* koSyncErrorText(const KOReaderSyncClient::Error error) {
   switch (error) {

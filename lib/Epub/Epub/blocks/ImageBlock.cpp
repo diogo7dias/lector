@@ -1,5 +1,6 @@
 #include "ImageBlock.h"
 
+#include <Fnv1a.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <Logging.h>
@@ -66,17 +67,8 @@ constexpr size_t MAX_SESSION_IMAGE_FAILURES = 16;
 uint64_t failedImageHashes[MAX_SESSION_IMAGE_FAILURES];
 size_t failedImageCount = 0;
 
-uint64_t imagePathHash(const std::string& path) {
-  uint64_t hash = 14695981039346656037ull;
-  for (const char c : path) {
-    hash ^= static_cast<uint8_t>(c);
-    hash *= 1099511628211ull;
-  }
-  return hash;
-}
-
 bool imageFailedThisSession(const std::string& path) {
-  const uint64_t hash = imagePathHash(path);
+  const uint64_t hash = fnv1a::hash64(path);
   for (size_t i = 0; i < failedImageCount; i++) {
     if (failedImageHashes[i] == hash) return true;
   }
@@ -85,7 +77,7 @@ bool imageFailedThisSession(const std::string& path) {
 
 void rememberImageFailure(const std::string& path) {
   if (failedImageCount == MAX_SESSION_IMAGE_FAILURES || imageFailedThisSession(path)) return;
-  failedImageHashes[failedImageCount++] = imagePathHash(path);
+  failedImageHashes[failedImageCount++] = fnv1a::hash64(path);
 }
 
 // --- Per-page-render RAM slot for the pixel cache ----------------------------
@@ -189,7 +181,7 @@ bool renderFromCache(GfxRenderer& renderer, const std::string& cachePath, int x,
                      int expectedHeight) {
   // A later pass of the same page render: the payload is already in RAM, skip
   // the file entirely.
-  const uint64_t cacheHash = imagePathHash(cachePath);
+  const uint64_t cacheHash = fnv1a::hash64(cachePath);
   if (pxcSlotHash == cacheHash && pxcSlotWidth != 0) {
     renderRowsFromPxcSlot(renderer, x, y);
     return true;
@@ -394,9 +386,7 @@ void ImageBlock::render(GfxRenderer& renderer, const int x, const int y) {
   config.y = y;
   config.maxWidth = width;
   config.maxHeight = height;
-  config.useGrayscale = true;
   config.useDithering = true;
-  config.performanceMode = false;
   config.useExactDimensions = true;  // Use pre-calculated dimensions to avoid rounding mismatches
   config.cachePath = cachePath;      // Enable caching during decode
 

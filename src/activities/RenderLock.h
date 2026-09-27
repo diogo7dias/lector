@@ -8,7 +8,7 @@ class RenderLock {
 
  public:
   explicit RenderLock();
-  explicit RenderLock(Activity&);  // unused for now, but keep for compatibility
+  explicit RenderLock(Activity&);  // same lock as the default constructor; the Activity is not used
   RenderLock(const RenderLock&) = delete;
   RenderLock& operator=(const RenderLock&) = delete;
   ~RenderLock();

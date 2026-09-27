@@ -1,6 +1,7 @@
 #include "DebugTrace.h"
 
 #include <Arduino.h>
+#include <FsHelpers.h>
 #include <HalStorage.h>
 #include <PerfLog.h>
 
@@ -32,17 +33,10 @@ void begin() {
   if (!SETTINGS.showTimings) return;
   if (!Storage.ready()) return;
   char path[24];
-  int low = 1;
-  int high = kMaxSessions + 1;
-  while (low < high) {
-    const int mid = low + (high - low) / 2;
-    snprintf(path, sizeof(path), "/trace-%d.log", mid);
-    if (Storage.exists(path))
-      low = mid + 1;
-    else
-      high = mid;
-  }
-  const int session = low <= kMaxSessions ? low : kMaxSessions;
+  const int session = FsHelpers::nextSessionIndex(1, kMaxSessions, [&path](const int index) {
+    snprintf(path, sizeof(path), "/trace-%d.log", index);
+    return Storage.exists(path);
+  });
   snprintf(path, sizeof(path), "/trace-%d.log", session);
   if (Storage.openFileForWrite("TRACE", path, traceFile)) note("trace opened");
 }

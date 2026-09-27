@@ -20,11 +20,6 @@ constexpr int ADAPTIVE_TONE_BLEND_NUM = 3;
 constexpr int ADAPTIVE_TONE_BLEND_DEN = 4;
 // ============================================================================
 
-Bitmap::~Bitmap() {
-  delete[] errorCurRow;
-  delete[] errorNextRow;
-}
-
 uint16_t Bitmap::readLE16(HalFile& f) {
   const int c0 = f.read();
   const int c1 = f.read();
@@ -334,8 +329,6 @@ bool Bitmap::analyzeAdaptiveToneMapping() {
 BmpReaderError Bitmap::readNextRow(uint8_t* data, uint8_t* rowBuffer) const {
   // Note: rowBuffer should be pre-allocated by the caller to size 'rowBytes'
   if (file.read(rowBuffer, rowBytes) != rowBytes) return BmpReaderError::ShortReadRow;
-
-  prevRowY += 1;
 
   uint8_t* outPtr = data;
   uint8_t currentOutByte = 0;

@@ -11,14 +11,14 @@
 
 // --- SdCardFontFamilyInfo helpers ---
 
-const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size, uint8_t style) const {
+const SdCardFontFileInfo* SdCardFontFamilyInfo::findFile(uint8_t size) const {
   for (const auto& f : files) {
-    if (f.pointSize == size && f.style == style) return &f;
+    if (f.pointSize == size) return &f;
   }
   return nullptr;
 }
 
-const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t pointSize, const uint8_t style) const {
+const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t pointSize) const {
   // The reader stores an actual point size, so an exact match is the norm and
   // falls out of the delta search below (delta 0). The search only matters when
   // the size was carried over from a family that ships different sizes; the
@@ -26,7 +26,6 @@ const SdCardFontFileInfo* SdCardFontFamilyInfo::findNearestSize(const uint8_t po
   const SdCardFontFileInfo* best = nullptr;
   uint8_t bestDelta = 255;
   for (const auto& f : files) {
-    if (f.style != style) continue;
     const uint8_t delta = f.pointSize > pointSize ? f.pointSize - pointSize : pointSize - f.pointSize;
     // Ties resolve to the smaller size, matching snapToNearestPointSize().
     if (!best || delta < bestDelta || (delta == bestDelta && f.pointSize < best->pointSize)) {
@@ -70,7 +69,7 @@ uint8_t SdCardFontFamilyInfo::resolvePointSize(const uint8_t pointSize) const {
 
 // --- SdCardFontRegistry ---
 
-bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint8_t& style) {
+bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size) {
   // V4 naming: <name>_<size>.cpfont (e.g. Bookerly-SD_14.cpfont)
   // Use an ends-with check rather than strstr() so that in-progress downloads
   // like "Foo_14.cpfont.tmp" or backups like "Foo_14.cpfont~" aren't accepted.
@@ -97,12 +96,7 @@ bool SdCardFontRegistry::parseFilename(const char* filename, uint8_t& size, uint
   if (endPtr == sizeStr || *endPtr != '\0' || sizeVal < 1 || sizeVal > 255) return false;
   size = static_cast<uint8_t>(sizeVal);
   // V4 .cpfont files bundle every style (regular/bold/italic/bold-italic) into
-  // one file, so style is always 0 at the registry level. The per-style
-  // bitstream is selected later by SdCardFont::getEpdFont(style). The `style`
-  // field in SdCardFontFileInfo is reserved for future formats that split
-  // styles across files; scanDirectory() defends against accidental
-  // (pointSize, style) collisions in that scenario.
-  style = 0;
+  // one file; the per-style bitstream is selected later by SdCardFont::getEpdFont(style).
   return true;
 }
 
@@ -133,16 +127,14 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
 #ifdef CROSSPOINT_TTF_READER
     if (ttf.offer(nameBuffer)) continue;
 #endif
-    uint8_t size, style;
-    if (!parseFilename(nameBuffer, size, style)) continue;
+    uint8_t size;
+    if (!parseFilename(nameBuffer, size)) continue;
 
-    // Reject duplicate (pointSize, style) entries in the same family. With
-    // v4's bundle-everything design parseFilename always returns style=0, so
-    // two files at the same size in the same family would silently shadow
-    // each other in findFile(). Skip the duplicate and warn.
+    // Reject duplicate sizes in the same family: two files at the same size would
+    // silently shadow each other in findFile(). Skip the duplicate and warn.
     bool duplicate = false;
     for (const auto& existing : family.files) {
-      if (existing.pointSize == size && existing.style == style) {
+      if (existing.pointSize == size) {
         duplicate = true;
         break;
       }
@@ -155,7 +147,6 @@ void SdCardFontRegistry::scanDirectory(const char* dirPath, SdCardFontFamilyInfo
     SdCardFontFileInfo info;
     info.path = std::string(dirPath) + "/" + nameBuffer;
     info.pointSize = size;
-    info.style = style;
     family.files.push_back(std::move(info));
   }
 #ifdef CROSSPOINT_TTF_READER
