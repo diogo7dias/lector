@@ -14,11 +14,11 @@
 
 #include "I18nKeys.h"
 #include "ReaderFontSizes.h"
+#include "ReaderPresetMigration.h"
 #include "SettingsList.h"
 #include "fontIds.h"
 #include "sleep/WakeFacePolicy.h"
 #include "util/BoundActionScope.h"
-#include "util/MarginLink.h"
 #include "util/SleepTimeoutGuard.h"
 
 namespace {
@@ -295,28 +295,12 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
     needsResave = true;
   }
 
-  // Margins model, two changes deep. "verticalMarginsLinked" was an on/off switch over
-  // the two vertical sides; it is now one of three link modes, so a file holding only the
-  // old key keeps how its sides were edited. Older still is "uniformMargins", which meant
-  // "every side uses screenMargin" — that is exactly All Sides today, and such a file has
-  // no vertical values of its own, so both sides take the horizontal margin, which is what
-  // the reader was already drawing. Written once; the resave drops the old keys.
-  if (!doc["marginLinkMode"].is<uint8_t>()) {
-    if (doc["verticalMarginsLinked"].is<uint8_t>()) {
-      marginLinkMode = margin_link::toStored(
-          doc["verticalMarginsLinked"].as<uint8_t>() != 0 ? margin_link::Mode::TopBottom : margin_link::Mode::Separate);
-      needsResave = true;
-    } else if (doc["uniformMargins"].is<uint8_t>()) {
-      const margin_link::State migrated =
-          margin_link::migrateFromUniform(doc["uniformMargins"].as<uint8_t>() != 0,
-                                          {screenMargin, screenMarginTop, screenMarginBottom}, dynamicMargins);
-      screenMargin = migrated.margins.horizontal;
-      screenMarginTop = migrated.margins.top;
-      screenMarginBottom = migrated.margins.bottom;
-      dynamicMargins = migrated.dynamicMargins;
-      marginLinkMode = margin_link::toStored(migrated.mode);
-      needsResave = true;
-    }
+  // Margins model, two changes deep: "uniformMargins" became the "verticalMarginsLinked"
+  // switch, which became the three link modes. Same rule as a saved preset's; written
+  // once, and the resave drops the old keys.
+  if (reader_preset_migration::migrateMarginLink(reader_preset_migration::readLegacyKeys(doc), screenMargin,
+                                                 screenMarginTop, screenMarginBottom, dynamicMargins, marginLinkMode)) {
+    needsResave = true;
   }
 
   // Embedded Style split into Embedded Text Style and Embedded Layout Style. The old key
