@@ -73,6 +73,8 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   void launchWifiSelection();
   void onWifiSelectionComplete(bool connected);
   void fetchFeed(const std::string& path);
+  void showReconnect(const opds::ReconnectInfo& info);
+  bool pollBackForCancel();
   void releaseEntries();
   void navigateToEntry(const OpdsEntry& entry);
   void navigateBack();
