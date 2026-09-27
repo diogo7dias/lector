@@ -214,7 +214,7 @@ void EpubReaderActivity::onEnter() {
   } else {
     APP_STATE.openEpubPath = epub->getPath();
     APP_STATE.saveToFile();
-    RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+    RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
   }
 
   loadCachedBookmarks();
@@ -850,7 +850,7 @@ void EpubReaderActivity::loop() {
       recentsEntryRemoved = RECENT_BOOKS.removeByPath(epub->getPath());
     } else if (!atEndOfBook && recentsEntryRemoved) {
       // Re-add (goes to front of the list via addBook — accepted ordering side effect).
-      RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor(), epub->getThumbBmpPath());
+      RECENT_BOOKS.addBook(epub->getPath(), epub->getTitle(), epub->getAuthor());
       recentsEntryRemoved = false;
     }
   }

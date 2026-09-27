@@ -9,7 +9,6 @@ struct RecentBook {
   std::string path;
   std::string title;
   std::string author;
-  std::string coverBmpPath;
   int progressPercent = -1;  // last-read progress 0-100; -1 = unknown (never read) -> no badge
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
@@ -33,11 +32,7 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   bool fromJson(JsonVariantConst doc);
 
   // Add a book to the recent list (moves to front if already exists)
-  void addBook(const std::string& path, const std::string& title, const std::string& author,
-               const std::string& coverBmpPath);
-
-  void updateBook(const std::string& path, const std::string& title, const std::string& author,
-                  const std::string& coverBmpPath);
+  void addBook(const std::string& path, const std::string& title, const std::string& author);
 
   // Update a book's last-read progress percent (0-100). No-op if the book is not in
   // the list or the value is unchanged (skips the SD write). Called on reader exit.
@@ -48,11 +43,9 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
   // Persistence is best-effort: a failed save is logged, not reflected in the return.
   bool removeByPath(const std::string& path);
 
-  // Repoint an entry's path (and coverBmpPath, if it lived under the old cache dir) after the
-  // backing file and cache dir were moved on disk. No-op if no entry matches oldPath.
+  // Repoint an entry's path after the backing file and cache dir were moved on disk. No-op if no entry matches oldPath.
   // Persists on success. Keeps the entry's list position (does not reorder).
-  void updatePath(const std::string& oldPath, const std::string& newPath, const std::string& oldCachePath,
-                  const std::string& newCachePath);
+  void updatePath(const std::string& oldPath, const std::string& newPath);
 
   // True if the book's backing file is no longer present on the SD card.
   static bool isMissing(const RecentBook& book);

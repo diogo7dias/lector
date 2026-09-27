@@ -293,8 +293,8 @@ static void convertScanlineToGray(const PngDecodeContext& ctx, uint8_t* grayRow)
 }
 
 bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpOut, int targetWidth, int targetHeight,
-                                                   bool oneBit, bool crop) {
-  LOG_DBG("PNG", "Converting PNG to %s BMP (target: %dx%d)", oneBit ? "1-bit" : "2-bit", targetWidth, targetHeight);
+                                                   bool crop) {
+  LOG_DBG("PNG", "Converting PNG to 2-bit BMP (target: %dx%d)", targetWidth, targetHeight);
 
   // Verify PNG signature
   uint8_t sig[8];
@@ -494,14 +494,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
   }
 
   // Write BMP header
-  int bytesPerRow;
-  if (oneBit) {
-    bmp_writer::writeHeader1bit(bmpOut, outWidth, outHeight);
-    bytesPerRow = (outWidth + 31) / 32 * 4;
-  } else {
-    bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
-    bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
-  }
+  bmp_writer::writeHeader2bit(bmpOut, outWidth, outHeight);
+  const int bytesPerRow = (outWidth * 2 + 31) / 32 * 4;
 
   // Allocate BMP row buffer
   auto* rowBuffer = static_cast<uint8_t*>(malloc(bytesPerRow));
@@ -512,28 +506,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
     return false;
   }
 
-  // Create ditherers (same as JpegToBmpConverter)
-  std::unique_ptr<AtkinsonDitherer> atkinsonDitherer;
-  std::unique_ptr<Atkinson1BitDitherer> atkinson1BitDitherer;
-
-  if (oneBit) {
-    atkinson1BitDitherer = makeUniqueNoThrow<Atkinson1BitDitherer>(outWidth);
-    if (!atkinson1BitDitherer) {
-      LOG_ERR("PNG", "OOM: Atkinson1BitDitherer (%u bytes)", static_cast<unsigned>(sizeof(Atkinson1BitDitherer)));
-      free(rowBuffer);
-      free(ctx.currentRow);
-      free(ctx.previousRow);
-      return false;
-    }
-  } else {
-    atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
-    if (!atkinsonDitherer) {
-      LOG_ERR("PNG", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
-      free(rowBuffer);
-      free(ctx.currentRow);
-      free(ctx.previousRow);
-      return false;
-    }
+  auto atkinsonDitherer = makeUniqueNoThrow<AtkinsonDitherer>(outWidth);
+  if (!atkinsonDitherer) {
+    LOG_ERR("PNG", "OOM: AtkinsonDitherer (%u bytes)", static_cast<unsigned>(sizeof(AtkinsonDitherer)));
+    free(rowBuffer);
+    free(ctx.currentRow);
+    free(ctx.previousRow);
+    return false;
   }
 
   // Scaling accumulators
@@ -592,8 +571,8 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
     if (!needsScaling) {
       // Direct output (no scaling)
-      packBmpRow(rowBuffer, bytesPerRow, outWidth, static_cast<int>(y), oneBit, atkinson1BitDitherer.get(),
-                 atkinsonDitherer.get(), [grayRow](const int x) { return grayRow[x]; });
+      packBmpRow(rowBuffer, bytesPerRow, outWidth, atkinsonDitherer.get(),
+                 [grayRow](const int x) { return grayRow[x]; });
       bmpOut.write(rowBuffer, bytesPerRow);
       yieldDuringDecode(rowsSinceYield);
     } else {
@@ -606,10 +585,9 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       // Output all rows whose boundaries we've crossed (handles both up and downscaling)
       // For upscaling, one source row may produce multiple output rows
       while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
-        packBmpRow(rowBuffer, bytesPerRow, outWidth, currentOutY, oneBit, atkinson1BitDitherer.get(),
-                   atkinsonDitherer.get(), [&rowAccum, &rowCount](const int x) {
-                     return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
-                   });
+        packBmpRow(rowBuffer, bytesPerRow, outWidth, atkinsonDitherer.get(), [&rowAccum, &rowCount](const int x) {
+          return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
+        });
         bmpOut.write(rowBuffer, bytesPerRow);
         currentOutY++;
         yieldDuringDecode(rowsSinceYield);
@@ -650,10 +628,5 @@ bool PngToBmpConverter::pngFileToBmpStream(HalFile& pngFile, Print& bmpOut, bool
   // Use runtime display dimensions (swapped for portrait cover sizing)
   const int targetWidth = display.getDisplayHeight();
   const int targetHeight = display.getDisplayWidth();
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, false, crop);
-}
-
-bool PngToBmpConverter::pngFileTo1BitBmpStreamWithSize(HalFile& pngFile, Print& bmpOut, int targetMaxWidth,
-                                                       int targetMaxHeight) {
-  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetMaxWidth, targetMaxHeight, true, true);
+  return pngFileToBmpStreamInternal(pngFile, bmpOut, targetWidth, targetHeight, crop);
 }
