@@ -80,9 +80,6 @@ class Xtc {
    */
   size_t loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) const;
 
-  // Progress calculation
-  uint8_t calculateProgress(uint32_t currentPage) const;
-
   // Check if file is loaded
   bool isLoaded() const { return loaded; }
 

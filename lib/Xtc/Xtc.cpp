@@ -298,13 +298,6 @@ size_t Xtc::loadPage(uint32_t pageIndex, uint8_t* buffer, size_t bufferSize) con
   return const_cast<xtc::XtcParser*>(parser.get())->loadPage(pageIndex, buffer, bufferSize);
 }
 
-uint8_t Xtc::calculateProgress(uint32_t currentPage) const {
-  if (!loaded || !parser || parser->getPageCount() == 0) {
-    return 0;
-  }
-  return static_cast<uint8_t>((currentPage + 1) * 100 / parser->getPageCount());
-}
-
 xtc::XtcError Xtc::getLastError() const {
   if (!parser) {
     return xtc::XtcError::FILE_NOT_FOUND;

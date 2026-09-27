@@ -23,6 +23,7 @@
 #include "util/BookCacheUtils.h"
 #include "util/BookFilingNames.h"
 #include "util/BookProgressFile.h"
+#include "util/ReadingPercent.h"
 
 namespace {
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
@@ -72,8 +73,7 @@ void TxtReaderActivity::onExit() {
   // [NN%] badge for TXT books (EPUB writes this on exit too; comics/XTC intentionally do not).
   // setProgress skips the SD write when unchanged, so this is cheap on every exit.
   if (txt && totalPages > 0 && !pendingDeleteBook) {
-    int pct = static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f);
-    if (pct > 100) pct = 100;
+    const int pct = reading_percent::pagePercent(currentPage, totalPages);
     RECENT_BOOKS.setProgress(txt->getPath(), pct);
     // Same number again, beside the book's cache, for the file browser's row badge and its
     // last-read order. The enclosing condition already excludes a book being deleted.
@@ -681,7 +681,7 @@ void TxtReaderActivity::renderStatusBar() const {
   d.hasChapters = false;
   d.chapterPage = static_cast<int>(currentPage) + 1;
   d.chapterPages = static_cast<int>(totalPages);
-  d.bookPercent = totalPages > 0 ? static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
+  d.bookPercent = reading_percent::pagePercent(currentPage, totalPages);
   d.bookTitle = txt->getTitle();
   // Paperback Look (status bar): thicken only status-bar glyphs, then reset.
   renderer.setPaperbackLook(SETTINGS.paperbackLookStatus);
@@ -862,7 +862,6 @@ ScreenshotInfo TxtReaderActivity::getScreenshotInfo() const {
   }
   info.currentPage = currentPage + 1;
   info.totalPages = totalPages;
-  info.progressPercent = totalPages > 0 ? static_cast<int>((currentPage + 1) * 100.0f / totalPages + 0.5f) : 0;
-  if (info.progressPercent > 100) info.progressPercent = 100;
+  info.progressPercent = reading_percent::pagePercent(currentPage, totalPages);
   return info;
 }

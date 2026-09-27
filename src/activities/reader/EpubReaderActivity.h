@@ -316,6 +316,8 @@ class EpubReaderActivity final : public Activity {
   void openChapterSelection();
   void openFootnotes();
   void openPercentSelection();
+  // Whole-book reading percent (util/ReadingPercent.h) for every place that shows one.
+  int bookPercent() const;
   void openParagraphEntry();
   void openBookmarks();
   // A bookmark picked in the list: jump to it by content offset, else by saved page.

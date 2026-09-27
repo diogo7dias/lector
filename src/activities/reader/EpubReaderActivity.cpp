@@ -69,6 +69,7 @@
 #include "util/BoundMenuLabels.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
+#include "util/ReadingPercent.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SortesSelection.h"
 
@@ -268,11 +269,7 @@ void EpubReaderActivity::onExit() {
   // Update this book's home-list progress badge from the current position. One write
   // per reading session (setProgress skips if unchanged), so no page-turn cost.
   if (epub) {
-    const int curPage = section ? section->currentPage : nextPageNumber;
-    const int pageCnt = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
-    const float chapterProgress = pageCnt > 0 ? static_cast<float>(curPage) / static_cast<float>(pageCnt) : 0.0f;
-    const int pct =
-        clampPercent(static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f));
+    const int pct = bookPercent();
     RECENT_BOOKS.setProgress(epub->getPath(), pct);
     // The same number, kept beside the book's own cache so the file browser can badge a
     // book the recents list no longer holds, and stamped with this session's read order so
@@ -351,13 +348,7 @@ void EpubReaderActivity::onExit() {
 void EpubReaderActivity::openReaderMenu() {
   const int currentPage = section ? section->currentPage + 1 : 0;
   const int totalPages = section ? section->estimatedTotalPages() : 0;
-  float bookProgress = 0.0f;
-  if (epub->getBookSize() > 0 && section && section->estimatedTotalPages() > 0) {
-    const float chapterProgress =
-        static_cast<float>(section->currentPage) / static_cast<float>(section->estimatedTotalPages());
-    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
-  }
-  const int bookProgressPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+  const int bookProgressPercent = bookPercent();
   // Resolve the current chapter name for the menu header, falling back to "Unnamed"
   // when the book has no TOC entry for this spine index.
   std::string chapterName = tr(STR_UNNAMED);
@@ -1277,13 +1268,18 @@ void EpubReaderActivity::openChapterSelection() {
                          });
 }
 
+int EpubReaderActivity::bookPercent() const {
+  if (!epub) return 0;
+  // The whole-book page count is unknown, so the chapter's page share is weighted by its
+  // bytes. estimatedTotalPages(), not the live pageCount: mid-build that is a watermark.
+  const int page = section ? section->currentPage : nextPageNumber;
+  const int total = section ? section->estimatedTotalPages() : cachedChapterTotalPageCount;
+  return reading_percent::toPercent(
+      epub->calculateProgress(currentSpineIndex, reading_percent::pageFraction(page, total)));
+}
+
 void EpubReaderActivity::openPercentSelection() {
-  float bookProgress = 0.0f;
-  if (epub && epub->getBookSize() > 0 && section && section->pageCount > 0) {
-    const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(section->pageCount);
-    bookProgress = epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f;
-  }
-  const int initialPercent = clampPercent(static_cast<int>(bookProgress + 0.5f));
+  const int initialPercent = bookPercent();
   startActivityForResult(std::make_unique<EpubReaderPercentSelectionActivity>(renderer, mappedInput, initialPercent),
                          [this](const ActivityResult& result) {
                            if (!result.isCancelled) {
@@ -3395,9 +3391,8 @@ void EpubReaderActivity::renderStatusBar() const {
   // estimatedTotalPages() keeps "page X / Y" sane while a giant spine is still
   // building (its live pageCount would read off the small build watermark).
   d.chapterPages = static_cast<int>(section->estimatedTotalPages());
-  const float chapterProg = (d.chapterPages > 0) ? static_cast<float>(d.chapterPage) / d.chapterPages : 0.0f;
-  d.chapterPercent = static_cast<int>(chapterProg * 100 + 0.5f);
-  d.bookPercent = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProg) * 100 + 0.5f);
+  d.chapterPercent = reading_percent::pagePercent(section->currentPage, d.chapterPages);
+  d.bookPercent = bookPercent();
   d.bookTitle = epub->getTitle();
   d.chapterTotal = epub->getTocItemsCount();
 
@@ -3569,13 +3564,7 @@ ScreenshotInfo EpubReaderActivity::getScreenshotInfo() const {
   if (section) {
     info.currentPage = section->currentPage + 1;
     info.totalPages = section->estimatedTotalPages();
-    if (epub && epub->getBookSize() > 0 && info.totalPages > 0) {
-      const float chapterProgress = static_cast<float>(section->currentPage) / static_cast<float>(info.totalPages);
-      int pct = static_cast<int>(epub->calculateProgress(currentSpineIndex, chapterProgress) * 100.0f + 0.5f);
-      if (pct < 0) pct = 0;
-      if (pct > 100) pct = 100;
-      info.progressPercent = pct;
-    }
+    info.progressPercent = bookPercent();
   }
   return info;
 }

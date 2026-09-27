@@ -181,7 +181,7 @@ Renaming and moving files is done from the web interface rather than on the devi
 
 Each row shows its file type on the right, and a book you have opened before also shows how
 far in you are on the left, in front of the title: a percentage while you are reading it, or
-**Read** once it is finished, in the same style the home screen uses. The
+**Read** once you reach its last page, in the same style the home screen uses. The
 badge stays even after the book leaves the Recents list or is filed into `/read`. Books you
 have never opened show no badge, and comics (XTC) never carry one.
 
