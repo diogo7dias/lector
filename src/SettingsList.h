@@ -720,7 +720,7 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                   {StrId::STR_HIDE, StrId::STR_BOTTOM, StrId::STR_TOP}, "xtcStatusBarMode",
                                   StrId::STR_CUSTOMISE_STATUS_BAR));
 
-    // Clock entries (web settings only; device UI uses ClockOffsetActivity for the offset).
+    // Clock entries (web settings only).
     // Range 0..104 = quarter-hour steps from UTC-12:00 to UTC+14:00, biased by 48.
     v.push_back(SettingInfo::Value(StrId::STR_CLOCK_UTC_OFFSET, &CrossPointSettings::clockUtcOffsetQ, {0, 104, 1},
                                    "clockUtcOffsetQ", StrId::STR_CUSTOMISE_STATUS_BAR));

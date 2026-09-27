@@ -16,7 +16,6 @@ target_compile_definitions(TwoTapGateTest PRIVATE
   MAPPED_INPUT_SOURCE="${REPO_ROOT}/src/MappedInputManager.cpp"
   ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/Activity.cpp"
   STATUS_ACTIVITY_SOURCE="${REPO_ROOT}/src/activities/UiStatusActivity.cpp"
-  CLOCK_OFFSET_SOURCE="${REPO_ROOT}/src/activities/settings/ClockOffsetActivity.cpp"
   THEME_TOKENS_HEADER="${REPO_ROOT}/src/components/UIThemeTokens.h"
   BASE_THEME_SOURCE="${REPO_ROOT}/src/components/themes/BaseTheme.cpp"
   KEYBOARD_SOURCE="${REPO_ROOT}/src/activities/util/KeyboardEntryActivity.cpp"
