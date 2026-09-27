@@ -3,16 +3,6 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace {
-
-void safeCopy(char* dst, size_t dstSize, const char* src, size_t srcLen) {
-  size_t n = srcLen < dstSize - 1 ? srcLen : dstSize - 1;
-  memcpy(dst, src, n);
-  dst[n] = '\0';
-}
-
-}  // namespace
-
 ReleaseJsonParser::ReleaseJsonParser()
     : parser(JsonCallbacks{this, sOnKey, sOnString, sOnNumber, sOnBool, sOnNull, sOnObjectStart, sOnObjectEnd,
                            sOnArrayStart, sOnArrayEnd}),

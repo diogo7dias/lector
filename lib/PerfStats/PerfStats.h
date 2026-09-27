@@ -23,6 +23,9 @@ namespace PerfStats {
 // Mode indices match HalDisplay::RefreshMode (FULL, HALF, FAST).
 constexpr uint8_t kModeCount = 3;
 
+// "FULL", "HALF", "FAST", or "?" for anything else.
+const char* modeName(uint8_t mode);
+
 // The button press landed. Called once per accepted input event, before the activity
 // gets to react to it. A second call before any refresh replaces the first: what matters
 // is the press the paint answers, and in a burst that is the last one.

@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <Logging.h>
 #include <Memory.h>
-#include <base64.h>
+#include <ObfuscationUtils.h>
 
 #include <functional>
 #include <string>
@@ -105,9 +105,7 @@ HttpDownloader::DownloadError runGetWolf(const std::string& startUrl, const std:
     // answers 400 "Duplicate 'User-Agent' header found").
     http.setUserAgent("CrossPoint-ESP32-" CROSSPOINT_VERSION);
     if (!username.empty() && !password.empty()) {
-      const std::string credentials = username + ":" + password;
-      const String encoded = base64::encode(credentials.c_str());
-      http.addHeader("Authorization", std::string("Basic ") + encoded.c_str());
+      http.addHeader("Authorization", basicAuthHeader(username, password));
     }
 
     if (sink.rangeStart > 0) {
@@ -229,9 +227,7 @@ HttpDownloader::DownloadError runGet(const std::string& url, const std::string& 
   }
   if (!username.empty() && !password.empty()) {
     // Preemptive Basic auth, like the prior addHeader; don't wait for a 401.
-    const std::string credentials = username + ":" + password;
-    const String header = "Basic " + base64::encode(credentials.c_str());
-    esp_http_client_set_header(client, "Authorization", header.c_str());
+    esp_http_client_set_header(client, "Authorization", basicAuthHeader(username, password).c_str());
   }
 
   // open()/read() does not auto-follow redirects (only perform() does), so step

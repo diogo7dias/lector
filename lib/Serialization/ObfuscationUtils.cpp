@@ -9,6 +9,11 @@
 #include <cstring>
 #include <limits>
 
+std::string basicAuthHeader(const std::string& username, const std::string& password) {
+  const std::string credentials = username + ":" + password;
+  return std::string("Basic ") + base64::encode(credentials.c_str()).c_str();
+}
+
 namespace obfuscation {
 
 namespace {

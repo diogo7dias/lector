@@ -1,36 +1,13 @@
 #include "NearbyFilePayloads.h"
 
+#include <LeCursor.h>
+
 #include <algorithm>
 #include <cstring>
 
 namespace nearby_file {
+using namespace le;
 namespace {
-
-void writeU64(uint8_t*& cursor, const uint64_t value) {
-  for (int shift = 0; shift < 64; shift += 8) *cursor++ = static_cast<uint8_t>((value >> shift) & 0xFF);
-}
-
-void writeU32(uint8_t*& cursor, const uint32_t value) {
-  for (int shift = 0; shift < 32; shift += 8) *cursor++ = static_cast<uint8_t>((value >> shift) & 0xFF);
-}
-
-bool readU64(const uint8_t*& cursor, size_t& remaining, uint64_t& value) {
-  if (remaining < 8) return false;
-  value = 0;
-  for (int index = 0; index < 8; index++) value |= static_cast<uint64_t>(cursor[index]) << (index * 8);
-  cursor += 8;
-  remaining -= 8;
-  return true;
-}
-
-bool readU32(const uint8_t*& cursor, size_t& remaining, uint32_t& value) {
-  if (remaining < 4) return false;
-  value = 0;
-  for (int index = 0; index < 4; index++) value |= static_cast<uint32_t>(cursor[index]) << (index * 8);
-  cursor += 4;
-  remaining -= 4;
-  return true;
-}
 
 /** Writes a byte-length-prefixed string, truncated to `maxBytes`. */
 bool writeString(uint8_t*& cursor, const uint8_t* end, const std::string& text, const size_t maxBytes) {

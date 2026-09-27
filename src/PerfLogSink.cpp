@@ -1,5 +1,6 @@
 #include "PerfLogSink.h"
 
+#include <FsHelpers.h>
 #include <HalDisplay.h>
 #include <HalPowerManager.h>
 #include <HalStorage.h>
@@ -48,17 +49,10 @@ void startPerfLogSink(const char* device) {
   if (!Storage.ensureDirectoryExists(kDir)) return;
 
   char filePath[32] = {0};
-  int low = 0;
-  int high = kMaxSessions;
-  while (low < high) {
-    const int mid = low + (high - low) / 2;
-    snprintf(filePath, sizeof(filePath), "%s/%s-%03d.csv", kDir, device, mid);
-    if (Storage.exists(filePath))
-      low = mid + 1;
-    else
-      high = mid;
-  }
-  const int session = low < kMaxSessions ? low : kMaxSessions - 1;
+  const int session = FsHelpers::nextSessionIndex(0, kMaxSessions - 1, [&](const int index) {
+    snprintf(filePath, sizeof(filePath), "%s/%s-%03d.csv", kDir, device, index);
+    return Storage.exists(filePath);
+  });
   snprintf(filePath, sizeof(filePath), "%s/%s-%03d.csv", kDir, device, session);
 
   if (!Storage.openFileForWrite("PERF", filePath, logFile)) return;

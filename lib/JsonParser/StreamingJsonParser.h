@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 
 // Why this exists next to ArduinoJson, which the firmware already links.
 //
@@ -12,6 +13,13 @@
 // name, URL and size peaks at 11,644 bytes of heap, plus the 12,822-byte payload it must
 // be handed = 24,466 bytes, and that grows with the release notes and the asset count.
 // This parser is 1,784 bytes of fixed state and never holds the payload at all.
+// Copies a callback's (not NUL-terminated) token into a fixed field, truncating to fit.
+inline void safeCopy(char* dst, const size_t dstSize, const char* src, const size_t srcLen) {
+  const size_t n = srcLen < dstSize - 1 ? srcLen : dstSize - 1;
+  memcpy(dst, src, n);
+  dst[n] = '\0';
+}
+
 struct JsonCallbacks {
   void* ctx;
   void (*onKey)(void* ctx, const char* key, size_t len);

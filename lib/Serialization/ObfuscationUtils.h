@@ -14,6 +14,9 @@
  * obfuscated data to the specific device (cannot be decoded on another chip or PC).
  *
  */
+// "Basic <base64(user:password)>", the value of an HTTP Authorization header.
+std::string basicAuthHeader(const std::string& username, const std::string& password);
+
 namespace obfuscation {
 
 // XOR obfuscate/deobfuscate in-place using hardware MAC key (symmetric operation)

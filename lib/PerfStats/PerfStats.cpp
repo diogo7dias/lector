@@ -37,6 +37,8 @@ uint32_t promoted = 0;
 uint32_t renderPasses = 0;
 uint32_t updateRequests = 0;
 
+}  // namespace
+
 const char* modeName(const uint8_t mode) {
   switch (mode) {
     case 0:
@@ -49,8 +51,6 @@ const char* modeName(const uint8_t mode) {
       return "?";
   }
 }
-
-}  // namespace
 
 void noteInput(const uint32_t ms) {
   inputAtMs = ms;
