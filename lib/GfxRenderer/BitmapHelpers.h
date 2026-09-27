@@ -3,8 +3,6 @@
 #include <cstdint>
 #include <cstring>
 
-struct BmpHeader;
-
 // Helper functions
 uint8_t quantizeSimple(int gray);
 uint8_t quantize1bit(int gray, int x, int y);
@@ -34,11 +32,6 @@ inline QuantizedGray4 quantizeGray4(int gray, const Gray4QuantizationMode mode) 
   if (gray < 140) return {2, 80};
   return {3, 210};
 }
-
-enum class BmpRowOrder { BottomUp, TopDown };
-
-// Populates a 1-bit BMP header in the provided memory.
-void createBmpHeader(BmpHeader* bmpHeader, int width, int height, BmpRowOrder rowOrder);
 
 // 1-bit Atkinson dithering - better quality than noise dithering for thumbnails
 // Error distribution pattern (same as 2-bit but quantizes to 2 levels):
@@ -186,3 +179,70 @@ class AtkinsonDitherer {
   int16_t* errorRow1;
   int16_t* errorRow2;
 };
+
+// Output size for a src image scaled to fit inside target (crop = false) or to
+// cover it (crop = true), aspect kept, each side at least 1 pixel. Shared by
+// the JPEG and PNG cover converters.
+inline void scaleToFit(const int srcWidth, const int srcHeight, const int targetWidth, const int targetHeight,
+                       const bool crop, int& outWidth, int& outHeight) {
+  const float scaleToFitWidth = static_cast<float>(targetWidth) / static_cast<float>(srcWidth);
+  const float scaleToFitHeight = static_cast<float>(targetHeight) / static_cast<float>(srcHeight);
+  float scale;
+  if (crop) {
+    scale = (scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+  } else {
+    scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
+  }
+
+  outWidth = static_cast<int>(static_cast<float>(srcWidth) * scale);
+  outHeight = static_cast<int>(static_cast<float>(srcHeight) * scale);
+  if (outWidth < 1) outWidth = 1;
+  if (outHeight < 1) outHeight = 1;
+}
+
+// Area averaging on the X axis: adds one source row into the per-output-column
+// sums and counts. CountT is the caller's counter width.
+template <typename CountT>
+void accumulateAreaRow(const uint8_t* srcRow, const int srcWidth, const int outWidth, const uint32_t scaleX_fp,
+                       uint32_t* rowAccum, CountT* rowCount) {
+  for (int outX = 0; outX < outWidth; outX++) {
+    const int srcXStart = (static_cast<uint32_t>(outX) * scaleX_fp) >> 16;
+    const int srcXEnd = (static_cast<uint32_t>(outX + 1) * scaleX_fp) >> 16;
+    int sum = 0;
+    int count = 0;
+    for (int srcX = srcXStart; srcX < srcXEnd && srcX < srcWidth; srcX++) {
+      sum += srcRow[srcX];
+      count++;
+    }
+    if (count == 0 && srcXStart < srcWidth) {
+      sum = srcRow[srcXStart];
+      count = 1;
+    }
+    rowAccum[outX] += sum;
+    rowCount[outX] += count;
+  }
+}
+
+// Dithers (or, without a ditherer, quantizes) one row of gray values into a
+// packed 1-bit or 2-bit BMP row. grayAt(x) yields the gray for column x.
+template <typename GrayAt>
+void packBmpRow(uint8_t* bmpRow, const int bytesPerRow, const int width, const int y, const bool oneBit,
+                Atkinson1BitDitherer* ditherer1Bit, AtkinsonDitherer* ditherer2Bit, GrayAt grayAt) {
+  memset(bmpRow, 0, bytesPerRow);
+
+  if (oneBit) {
+    for (int x = 0; x < width; x++) {
+      const uint8_t gray = grayAt(x);
+      const uint8_t bit = ditherer1Bit ? ditherer1Bit->processPixel(gray, x) : quantize1bit(gray, x, y);
+      bmpRow[x / 8] |= (bit << (7 - (x % 8)));
+    }
+    if (ditherer1Bit) ditherer1Bit->nextRow();
+  } else {
+    for (int x = 0; x < width; x++) {
+      const uint8_t gray = grayAt(x);
+      const uint8_t twoBit = ditherer2Bit ? ditherer2Bit->processPixel(gray, x) : quantizeSimple(gray);
+      bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
+    }
+    if (ditherer2Bit) ditherer2Bit->nextRow();
+  }
+}

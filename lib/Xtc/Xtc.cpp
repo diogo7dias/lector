@@ -7,7 +7,6 @@
 
 #include "Xtc.h"
 
-#include <Bitmap.h>
 #include <BmpWriter.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -239,9 +238,7 @@ bool Xtc::generateCoverBmp() const {
     free(rowBuffer);
   } else {
     // Write 1-bit BMP header (top-down row order)
-    BmpHeader bmpHeader;
-    createBmpHeader(&bmpHeader, pageInfo.width, pageInfo.height, BmpRowOrder::TopDown);
-    coverBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+    bmp_writer::writeHeader1bit(coverBmp, pageInfo.width, pageInfo.height);
 
     const uint32_t rowSize = ((pageInfo.width + 31) / 32) * 4;
     // 1-bit source: write directly with proper padding
@@ -364,9 +361,7 @@ bool Xtc::generateThumbBmp(int height) const {
   }
 
   // Write 1-bit BMP header (top-down row order)
-  BmpHeader bmpHeader;
-  createBmpHeader(&bmpHeader, thumbWidth, thumbHeight, BmpRowOrder::TopDown);
-  thumbBmp.write(reinterpret_cast<const uint8_t*>(&bmpHeader), sizeof(bmpHeader));
+  bmp_writer::writeHeader1bit(thumbBmp, thumbWidth, thumbHeight);
 
   const uint32_t rowSize = (thumbWidth + 31) / 32 * 4;
 

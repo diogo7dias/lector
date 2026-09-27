@@ -123,25 +123,8 @@ static void yieldDuringDecodeBlock(BmpConvertCtx* ctx) {
 
 // Write a fully-assembled output row (grayscale bytes, length outWidth) to BMP
 static void writeOutputRow(BmpConvertCtx* ctx, const uint8_t* srcRow, int outY) {
-  memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
-
-  if (ctx->oneBit) {
-    for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(srcRow[x], x)
-                                                    : quantize1bit(srcRow[x], x, outY);
-      ctx->bmpRow[x / 8] |= (bit << (7 - (x % 8)));
-    }
-    if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
-  } else {
-    for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = srcRow[x];
-      uint8_t twoBit;
-      twoBit = ctx->atkinsonDitherer ? ctx->atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
-      ctx->bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
-    }
-    if (ctx->atkinsonDitherer) ctx->atkinsonDitherer->nextRow();
-  }
-
+  packBmpRow(ctx->bmpRow.get(), ctx->bytesPerRow, ctx->outWidth, outY, ctx->oneBit, ctx->atkinson1BitDitherer.get(),
+             ctx->atkinsonDitherer.get(), [srcRow](const int x) { return srcRow[x]; });
   ctx->bmpOut->write(ctx->bmpRow.get(), ctx->bytesPerRow);
   yieldDuringDecode(ctx);
 }
@@ -230,26 +213,12 @@ static void finishSmoothUpscale(BmpConvertCtx* ctx) {
 
 // Flush one scaled output row from Y-axis accumulators and advance currentOutY
 static void flushScaledRow(BmpConvertCtx* ctx) {
-  memset(ctx->bmpRow.get(), 0, ctx->bytesPerRow);
-
-  if (ctx->oneBit) {
-    for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
-      const uint8_t bit = ctx->atkinson1BitDitherer ? ctx->atkinson1BitDitherer->processPixel(gray, x)
-                                                    : quantize1bit(gray, x, ctx->currentOutY);
-      ctx->bmpRow[x / 8] |= (bit << (7 - (x % 8)));
-    }
-    if (ctx->atkinson1BitDitherer) ctx->atkinson1BitDitherer->nextRow();
-  } else {
-    for (int x = 0; x < ctx->outWidth; x++) {
-      const uint8_t gray = (ctx->rowCount[x] > 0) ? (ctx->rowAccum[x] / ctx->rowCount[x]) : 0;
-      uint8_t twoBit;
-      twoBit = ctx->atkinsonDitherer ? ctx->atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
-      ctx->bmpRow[(x * 2) / 8] |= (twoBit << (6 - ((x * 2) % 8)));
-    }
-    if (ctx->atkinsonDitherer) ctx->atkinsonDitherer->nextRow();
-  }
-
+  const uint32_t* rowAccum = ctx->rowAccum.get();
+  const uint32_t* rowCount = ctx->rowCount.get();
+  packBmpRow(ctx->bmpRow.get(), ctx->bytesPerRow, ctx->outWidth, ctx->currentOutY, ctx->oneBit,
+             ctx->atkinson1BitDitherer.get(), ctx->atkinsonDitherer.get(), [rowAccum, rowCount](const int x) {
+               return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
+             });
   ctx->bmpOut->write(ctx->bmpRow.get(), ctx->bytesPerRow);
   ctx->currentOutY++;
   yieldDuringDecode(ctx);
@@ -302,22 +271,7 @@ int bmpDrawCallback(JPEGDRAW* pDraw) {
       writeOutputRow(ctx, srcRow, y);
     } else {
       // Fixed-point area averaging on X axis
-      for (int outX = 0; outX < ctx->outWidth; outX++) {
-        const int srcXStart = (static_cast<uint32_t>(outX) * ctx->scaleX_fp) >> 16;
-        const int srcXEnd = (static_cast<uint32_t>(outX + 1) * ctx->scaleX_fp) >> 16;
-        int sum = 0;
-        int count = 0;
-        for (int srcX = srcXStart; srcX < srcXEnd && srcX < ctx->srcWidth; srcX++) {
-          sum += srcRow[srcX];
-          count++;
-        }
-        if (count == 0 && srcXStart < ctx->srcWidth) {
-          sum = srcRow[srcXStart];
-          count = 1;
-        }
-        ctx->rowAccum[outX] += sum;
-        ctx->rowCount[outX] += count;
-      }
+      accumulateAreaRow(srcRow, ctx->srcWidth, ctx->outWidth, ctx->scaleX_fp, ctx->rowAccum.get(), ctx->rowCount.get());
 
       // Flush output row(s) whose Y boundary we've crossed
       const uint32_t srcY_fp = static_cast<uint32_t>(y + 1) << 16;
@@ -401,20 +355,7 @@ bool JpegToBmpConverter::jpegFileToBmpStreamInternal(HalFile& jpegFile, Print& b
   bool needsScaling = false;
 
   if (targetWidth > 0 && targetHeight > 0 && (srcWidth != targetWidth || srcHeight != targetHeight)) {
-    const float scaleToFitWidth = static_cast<float>(targetWidth) / srcWidth;
-    const float scaleToFitHeight = static_cast<float>(targetHeight) / srcHeight;
-    float scale = 1.0f;
-    if (crop) {
-      scale = (scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
-    } else {
-      scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
-    }
-
-    outWidth = static_cast<int>(srcWidth * scale);
-    outHeight = static_cast<int>(srcHeight * scale);
-    if (outWidth < 1) outWidth = 1;
-    if (outHeight < 1) outHeight = 1;
-
+    scaleToFit(srcWidth, srcHeight, targetWidth, targetHeight, crop, outWidth, outHeight);
     LOG_DBG("JPG", "Scaling source %dx%d (decode grid %dx%d) -> %dx%d (target %dx%d)", srcWidth, srcHeight,
             scaleSrcWidth, scaleSrcHeight, outWidth, outHeight, targetWidth, targetHeight);
   }

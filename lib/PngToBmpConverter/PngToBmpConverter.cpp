@@ -483,19 +483,7 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
   if (targetWidth > 0 && targetHeight > 0 &&
       (static_cast<int>(width) != targetWidth || static_cast<int>(height) != targetHeight)) {
-    const float scaleToFitWidth = static_cast<float>(targetWidth) / width;
-    const float scaleToFitHeight = static_cast<float>(targetHeight) / height;
-    float scale = 1.0;
-    if (crop) {
-      scale = (scaleToFitWidth > scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
-    } else {
-      scale = (scaleToFitWidth < scaleToFitHeight) ? scaleToFitWidth : scaleToFitHeight;
-    }
-
-    outWidth = static_cast<int>(width * scale);
-    outHeight = static_cast<int>(height * scale);
-    if (outWidth < 1) outWidth = 1;
-    if (outHeight < 1) outHeight = 1;
+    scaleToFit(static_cast<int>(width), static_cast<int>(height), targetWidth, targetHeight, crop, outWidth, outHeight);
 
     scaleX_fp = (width << 16) / outWidth;
     scaleY_fp = (height << 16) / outHeight;
@@ -604,50 +592,13 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
 
     if (!needsScaling) {
       // Direct output (no scaling)
-      memset(rowBuffer, 0, bytesPerRow);
-
-      if (oneBit) {
-        for (int x = 0; x < outWidth; x++) {
-          const uint8_t bit =
-              atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(grayRow[x], x) : quantize1bit(grayRow[x], x, y);
-          const int byteIndex = x / 8;
-          const int bitOffset = 7 - (x % 8);
-          rowBuffer[byteIndex] |= (bit << bitOffset);
-        }
-        if (atkinson1BitDitherer) atkinson1BitDitherer->nextRow();
-      } else {
-        for (int x = 0; x < outWidth; x++) {
-          const uint8_t gray = grayRow[x];
-          const uint8_t twoBit = atkinsonDitherer ? atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
-          const int byteIndex = (x * 2) / 8;
-          const int bitOffset = 6 - ((x * 2) % 8);
-          rowBuffer[byteIndex] |= (twoBit << bitOffset);
-        }
-        if (atkinsonDitherer) atkinsonDitherer->nextRow();
-      }
+      packBmpRow(rowBuffer, bytesPerRow, outWidth, static_cast<int>(y), oneBit, atkinson1BitDitherer.get(),
+                 atkinsonDitherer.get(), [grayRow](const int x) { return grayRow[x]; });
       bmpOut.write(rowBuffer, bytesPerRow);
       yieldDuringDecode(rowsSinceYield);
     } else {
       // Area-averaging scaling (same as JpegToBmpConverter)
-      for (int outX = 0; outX < outWidth; outX++) {
-        const int srcXStart = (static_cast<uint32_t>(outX) * scaleX_fp) >> 16;
-        const int srcXEnd = (static_cast<uint32_t>(outX + 1) * scaleX_fp) >> 16;
-
-        int sum = 0;
-        int count = 0;
-        for (int srcX = srcXStart; srcX < srcXEnd && srcX < static_cast<int>(width); srcX++) {
-          sum += grayRow[srcX];
-          count++;
-        }
-
-        if (count == 0 && srcXStart < static_cast<int>(width)) {
-          sum = grayRow[srcXStart];
-          count = 1;
-        }
-
-        rowAccum[outX] += sum;
-        rowCount[outX] += count;
-      }
+      accumulateAreaRow(grayRow, static_cast<int>(width), outWidth, scaleX_fp, rowAccum.get(), rowCount.get());
 
       // Check if we've crossed into the next output row(s)
       const uint32_t srcY_fp = static_cast<uint32_t>(y + 1) << 16;
@@ -655,29 +606,10 @@ bool PngToBmpConverter::pngFileToBmpStreamInternal(HalFile& pngFile, Print& bmpO
       // Output all rows whose boundaries we've crossed (handles both up and downscaling)
       // For upscaling, one source row may produce multiple output rows
       while (srcY_fp >= nextOutY_srcStart && currentOutY < outHeight) {
-        memset(rowBuffer, 0, bytesPerRow);
-
-        if (oneBit) {
-          for (int x = 0; x < outWidth; x++) {
-            const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
-            const uint8_t bit =
-                atkinson1BitDitherer ? atkinson1BitDitherer->processPixel(gray, x) : quantize1bit(gray, x, currentOutY);
-            const int byteIndex = x / 8;
-            const int bitOffset = 7 - (x % 8);
-            rowBuffer[byteIndex] |= (bit << bitOffset);
-          }
-          if (atkinson1BitDitherer) atkinson1BitDitherer->nextRow();
-        } else {
-          for (int x = 0; x < outWidth; x++) {
-            const uint8_t gray = (rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0;
-            const uint8_t twoBit = atkinsonDitherer ? atkinsonDitherer->processPixel(gray, x) : quantizeSimple(gray);
-            const int byteIndex = (x * 2) / 8;
-            const int bitOffset = 6 - ((x * 2) % 8);
-            rowBuffer[byteIndex] |= (twoBit << bitOffset);
-          }
-          if (atkinsonDitherer) atkinsonDitherer->nextRow();
-        }
-
+        packBmpRow(rowBuffer, bytesPerRow, outWidth, currentOutY, oneBit, atkinson1BitDitherer.get(),
+                   atkinsonDitherer.get(), [&rowAccum, &rowCount](const int x) {
+                     return static_cast<uint8_t>((rowCount[x] > 0) ? (rowAccum[x] / rowCount[x]) : 0);
+                   });
         bmpOut.write(rowBuffer, bytesPerRow);
         currentOutY++;
         yieldDuringDecode(rowsSinceYield);

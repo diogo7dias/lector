@@ -43,6 +43,11 @@ class ImageToFramebufferDecoder {
   // representation. Shared by header probing and decoder fallbacks.
   static bool validateAndStoreDimensions(int64_t width, int64_t height, ImageDimensions& out, const char* format);
 
+  // Decoder file callbacks shared by the JPEG and PNG converters: open a heap
+  // HalFile the decoder owns, which the close callback closes and deletes.
+  static void* openDecoderFile(const char* tag, const char* filename, int32_t* size);
+  static void closeDecoderFile(void* handle);
+
  protected:
   // Size validation helpers. The cap bounds decode TIME, not memory: both decoders
   // stream (JPEG in MCU bands at 1/2..1/8 coarse scale, PNG scanline-by-scanline
