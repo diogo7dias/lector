@@ -78,7 +78,9 @@ class OtaUpdateActivity : public UiStatusActivity {
  public:
   explicit OtaUpdateActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                              const bool installOtherFirmware = false)
-      : UiStatusActivity("OtaUpdate", renderer, mappedInput), allowAnyVersion(installOtherFirmware), updater() {}
+      : UiStatusActivity(activity_name::kOtaUpdate, renderer, mappedInput),
+        allowAnyVersion(installOtherFirmware),
+        updater() {}
   void onEnter() override;
   void onExit() override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }

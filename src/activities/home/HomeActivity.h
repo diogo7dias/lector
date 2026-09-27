@@ -64,7 +64,7 @@ class HomeActivity final : public Activity {
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
-      : Activity("Home", renderer, mappedInput),
+      : Activity(activity_name::kHome, renderer, mappedInput),
         initialMenuItem(initialMenuItemValue),
         cleanInitialRefresh(cleanInitialRefresh) {}
   void onEnter() override;

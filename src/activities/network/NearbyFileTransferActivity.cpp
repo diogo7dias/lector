@@ -43,7 +43,7 @@ constexpr const char* DESTINATION_FOLDER = bookfiling::ROOT_FOLDER;
 NearbyFileTransferActivity::NearbyFileTransferActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                        const Mode mode, std::string sourcePath,
                                                        std::string returnToReaderPath)
-    : UiStatusActivity("NearbyFileTransfer", renderer, mappedInput),
+    : UiStatusActivity(activity_name::kNearbyFileTransfer, renderer, mappedInput),
       mode(mode),
       returnToReaderPath(std::move(returnToReaderPath)) {
   if (!sourcePath.empty()) sourcePaths.push_back(std::move(sourcePath));

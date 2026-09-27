@@ -14,7 +14,9 @@ class FontPickerActivity final : public UiListActivity {
  public:
   FontPickerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::vector<std::string> names,
                      int currentIndex)
-      : UiListActivity("FontPicker", renderer, mappedInput), names(std::move(names)), currentIndex(currentIndex) {}
+      : UiListActivity(activity_name::kFontPicker, renderer, mappedInput),
+        names(std::move(names)),
+        currentIndex(currentIndex) {}
 
   void onEnter() override;
   void onExit() override;

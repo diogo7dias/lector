@@ -27,7 +27,7 @@ class OpdsBookBrowserActivity final : public UiStatusActivity {
   };
 
   explicit OpdsBookBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, OpdsServer server)
-      : UiStatusActivity("OpdsBookBrowser", renderer, mappedInput), server(std::move(server)) {}
+      : UiStatusActivity(activity_name::kOpdsBookBrowser, renderer, mappedInput), server(std::move(server)) {}
 
   void onEnter() override;
   void onExit() override;

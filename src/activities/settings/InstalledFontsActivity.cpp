@@ -28,7 +28,7 @@ constexpr const char* LOG_TAG = "FONTS";
 }  // namespace
 
 InstalledFontsActivity::InstalledFontsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiListActivity("InstalledFonts", renderer, mappedInput), fontInstaller(sdFontSystem.registry()) {}
+    : UiListActivity(activity_name::kInstalledFonts, renderer, mappedInput), fontInstaller(sdFontSystem.registry()) {}
 
 void InstalledFontsActivity::onEnter() {
   loadFamilies();

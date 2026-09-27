@@ -27,7 +27,7 @@ NearbyPositionSyncActivity::NearbyPositionSyncActivity(GfxRenderer& renderer, Ma
                                                        const int currentPage, const int totalPagesInSpine,
                                                        SavedProgressPosition localProgress,
                                                        std::optional<uint16_t> currentParagraphIndex)
-    : UiStatusActivity("NearbyPositionSync", renderer, mappedInput),
+    : UiStatusActivity(activity_name::kNearbyPositionSync, renderer, mappedInput),
       epubPath(epubPath),
       currentSpineIndex(currentSpineIndex),
       currentPage(currentPage),

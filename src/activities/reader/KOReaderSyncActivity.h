@@ -24,7 +24,7 @@ class KOReaderSyncActivity final : public UiStatusActivity {
   explicit KOReaderSyncActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& epubPath,
                                 CrossPointPosition localPosition, SavedProgressPosition localKoPos,
                                 std::string localChapterName)
-      : UiStatusActivity("KOReaderSync", renderer, mappedInput),
+      : UiStatusActivity(activity_name::kKOReaderSync, renderer, mappedInput),
         epubPath(epubPath),
         localChapterName(std::move(localChapterName)),
         localPosition(localPosition),

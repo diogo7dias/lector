@@ -211,7 +211,7 @@ bool gateAllowsTls(const char* step, const bool framebufferLent,
 }  // namespace
 
 FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiStatusActivity("FontDownload", renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
+    : UiStatusActivity(activity_name::kFontDownload, renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
 
 // --- Lifecycle ---
 

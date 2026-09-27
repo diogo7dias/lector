@@ -425,7 +425,7 @@ class EpubReaderActivity final : public Activity {
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
                               int initialRefreshCountdown, bool sortesMode = false)
-      : Activity("EpubReader", renderer, mappedInput),
+      : Activity(activity_name::kEpubReader, renderer, mappedInput),
         epub(std::move(epub)),
         sortesMode(sortesMode),
         pendingSortesPage(sortesMode),

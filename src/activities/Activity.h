@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ActivityManager.h"  // for using the ActivityManager singleton
+#include "ActivityNames.h"
 #include "ActivityResult.h"
 #include "GfxRenderer.h"
 #include "MappedInputManager.h"

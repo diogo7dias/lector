@@ -243,7 +243,7 @@ class SettingsActivity final : public UiGridActivity {
 
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiGridActivity("Settings", renderer, mappedInput) {}
+      : UiGridActivity(activity_name::kSettings, renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
 

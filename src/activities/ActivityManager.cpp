@@ -343,7 +343,7 @@ void ActivityManager::loop() {
 }
 
 const std::string& ActivityManager::pendingTransitionName() const {
-  static const std::string kHome = "Home";
+  static const std::string kHome = activity_name::kHome;
   if (pendingActivity) return pendingActivity->name;
   if (!stackActivities.empty()) return stackActivities.back()->name;
   return kHome;
@@ -413,13 +413,13 @@ void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::
 void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {
   if (initialMenuItem == HomeMenuItem::NONE && currentActivity) {
     const auto& activityName = currentActivity->name;
-    if (activityName == "FileBrowser") {
+    if (activityName == activity_name::kFileBrowser) {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
-    } else if (activityName == "OpdsBookBrowser") {
+    } else if (activityName == activity_name::kOpdsBookBrowser) {
       initialMenuItem = HomeMenuItem::OPDS_BROWSER;
-    } else if (activityName == "CrossPointWebServer") {
+    } else if (activityName == activity_name::kCrossPointWebServer) {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
-    } else if (activityName == "Settings") {
+    } else if (activityName == activity_name::kSettings) {
       initialMenuItem = HomeMenuItem::SETTINGS_MENU;
     }
   }

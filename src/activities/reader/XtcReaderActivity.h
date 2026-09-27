@@ -56,7 +56,7 @@ class XtcReaderActivity final : public Activity {
  public:
   explicit XtcReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Xtc> xtc,
                              int initialRefreshCountdown)
-      : Activity("XtcReader", renderer, mappedInput),
+      : Activity(activity_name::kXtcReader, renderer, mappedInput),
         xtc(std::move(xtc)),
         pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;
