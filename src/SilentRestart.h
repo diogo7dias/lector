@@ -6,3 +6,7 @@
 
 void silentRestart();          // home screen
 void silentRestartToReader();  // currently-open EPUB (APP_STATE.openEpubPath)
+
+// A WiFi activity's way out: when the radio is on, drop the station (radio kept
+// up), let the disconnect settle, then silentRestart(). No-op with WiFi off.
+void teardownWifiAndRestart();

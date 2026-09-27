@@ -230,11 +230,7 @@ void FontDownloadActivity::onExit() {
   // file names without holding all of them in RAM. Nothing needs it now.
   Storage.remove(MANIFEST_TMP);
 
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  teardownWifiAndRestart();
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
