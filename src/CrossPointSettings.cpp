@@ -379,13 +379,7 @@ bool CrossPointSettings::migrateFromJson(JsonVariantConst doc) {
   };
   retireStatsBinding(longPressMenuFunction);
   retireStatsBinding(menuHoldFunction);
-  for (const bool inBook : {false, true}) {
-    for (uint8_t button = 0; button < BOUND_BTN_COUNT; ++button) {
-      for (uint8_t gesture = 0; gesture < BOUND_GESTURE_COUNT; ++gesture) {
-        retireStatsBinding(*buttonBinding(inBook, button, gesture));
-      }
-    }
-  }
+  forEachBindingField([&](const BindingField field) { retireStatsBinding(this->*field); });
 
   // Reader font size — an actual point size since 1.5. Files written by 1.4 and
   // earlier hold the old SMALL/MEDIUM/LARGE/EXTRA_LARGE slot in 0..3; no font is
