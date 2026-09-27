@@ -125,6 +125,14 @@ void XtcReaderActivity::loop() {
     }
   }
 
+  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap or swipe
+  // turns the page, and the menu gesture opens what Confirm opens here.
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
+    openChapterSelection();
+    return;
+  }
+
   // Enter chapter selection activity
   if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     openChapterSelection();
@@ -137,6 +145,8 @@ void XtcReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     return;
   }

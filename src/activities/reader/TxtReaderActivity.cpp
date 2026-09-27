@@ -124,7 +124,11 @@ void TxtReaderActivity::loop() {
   // child screen that closed on press, instead of reading it as "leave the book".
   backLatch_.observe(mappedInput.wasPressed(MappedInputManager::Button::Back));
 
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap or swipe
+  // turns the page, and the menu gesture opens what Confirm opens here.
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu) ||
+      mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
     openSettingsPopup();
     return;
   }
@@ -136,6 +140,8 @@ void TxtReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     return;
   }
