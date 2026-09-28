@@ -232,32 +232,21 @@ bool renderPxcSleepScreen(GfxRenderer& renderer, const std::string& path, const 
   }
 #endif
 
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_LSB);
-  if (!decode()) {
-    renderer.setRenderMode(GfxRenderer::BW);
-    return false;
-  }
-  // Re-drawn per plane for the same reason the wallpaper is: a plane pass only
-  // carries the pixels written during that pass.
-  if (overlay != nullptr) overlay(renderer);
-  renderer.copyGrayscaleLsbBuffers();
-  stage("copyLSB");
-  SleepTiming::mark("lsb");
-
-  renderer.clearScreen(0x00);
-  renderer.setRenderMode(GfxRenderer::GRAYSCALE_MSB);
-  if (!decode()) {
-    renderer.setRenderMode(GfxRenderer::BW);
-    return false;
-  }
-  if (overlay != nullptr) overlay(renderer);
-  renderer.copyGrayscaleMsbBuffers();
-  stage("copyMSB");
-  SleepTiming::mark("msb");
-
-  renderer.displayGrayBuffer(/*fullTone=*/true);
-  renderer.setRenderMode(GfxRenderer::BW);
+  const bool planesOk = sleep_face::paintGrayscalePlanes(
+      renderer,
+      [&] {
+        if (!decode()) return false;
+        // Re-drawn per plane for the same reason the wallpaper is: a plane pass only
+        // carries the pixels written during that pass.
+        if (overlay != nullptr) overlay(renderer);
+        return true;
+      },
+      [&](const GfxRenderer::RenderMode mode) {
+        const bool lsb = mode == GfxRenderer::GRAYSCALE_LSB;
+        stage(lsb ? "copyLSB" : "copyMSB");
+        SleepTiming::mark(lsb ? "lsb" : "msb");
+      });
+  if (!planesOk) return false;
   stage("grayBuffer done");
   return true;
 }

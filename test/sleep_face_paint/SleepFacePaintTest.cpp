@@ -11,6 +11,8 @@
 // "Lector"). The wallpaper path is the priority path.
 #include <gtest/gtest.h>
 
+#include <string>
+
 #include "activities/boot_sleep/SleepFacePaint.h"
 
 namespace {
@@ -174,4 +176,44 @@ TEST(SleepFacePaint, EverySleepBaseIsACleanWaveformSoThePolicyNeverEscalatesIt) 
       }
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// The shared grayscale plane sequence. Both wallpaper renderers (.bmp and .pxc) run
+// through paintGrayscalePlanes, so this pins the exact order the panel sees.
+
+namespace {
+
+struct FakeRenderer {
+  enum RenderMode { BW, GRAYSCALE_LSB, GRAYSCALE_MSB };
+  std::string log;
+  void clearScreen(uint8_t) { log += "clear "; }
+  void setRenderMode(RenderMode m) { log += m == BW ? "BW " : m == GRAYSCALE_LSB ? "LSB " : "MSB "; }
+  void copyGrayscaleLsbBuffers() { log += "copyLSB "; }
+  void copyGrayscaleMsbBuffers() { log += "copyMSB "; }
+  void displayGrayBuffer(bool fullTone) { log += fullTone ? "gray(full) " : "gray "; }
+};
+
+}  // namespace
+
+TEST(PaintGrayscalePlanes, RunsBothPlanesThenCommitsFullTone) {
+  FakeRenderer r;
+  const bool ok = sleep_face::paintGrayscalePlanes(
+      r,
+      [&] {
+        r.log += "draw ";
+        return true;
+      },
+      [&](FakeRenderer::RenderMode m) { r.log += m == FakeRenderer::GRAYSCALE_LSB ? "doneLSB " : "doneMSB "; });
+  EXPECT_TRUE(ok);
+  EXPECT_EQ(r.log, "clear LSB draw copyLSB doneLSB clear MSB draw copyMSB doneMSB gray(full) BW ");
+}
+
+TEST(PaintGrayscalePlanes, AFailedDrawStopsBeforeAnyCommitAndRestoresBw) {
+  FakeRenderer r;
+  int calls = 0;
+  const bool ok = sleep_face::paintGrayscalePlanes(
+      r, [&] { return ++calls < 2; }, [&](FakeRenderer::RenderMode) { r.log += "done "; });
+  EXPECT_FALSE(ok);
+  EXPECT_EQ(r.log, "clear LSB copyLSB done clear MSB BW ");
 }
