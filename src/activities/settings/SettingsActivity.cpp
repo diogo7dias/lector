@@ -474,7 +474,7 @@ void SettingsActivity::onBackButton() {
 ListChrome SettingsActivity::chrome() const {
   ListChrome chrome;
   chrome.title = mode == Mode::Hub ? tr(STR_SETTINGS_TITLE) : I18N.get(categoryName(selectedCategory));
-  if (mode == Mode::Hub) chrome.headerRight = CROSSPOINT_VERSION;
+  if (mode == Mode::Hub) chrome.footerRight = CROSSPOINT_VERSION;
 
   const int index = selected();
   const bool onSleepTimeout = mode == Mode::Category && index >= 0 && index < settingsCount &&

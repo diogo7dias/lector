@@ -35,7 +35,8 @@ list_chrome::Metrics metricsFor(const GfxRenderer& renderer, const ListChrome& c
   metrics.screenHeight = renderer.getScreenHeight();
   metrics.topPadding = themeMetrics.topPadding;
   // The band grows a line for every line the title wraps to.
-  metrics.headerHeight = present(chrome.title) ? BaseTheme::headerHeightFor(renderer, metrics.screenWidth, chrome.title)
+  metrics.headerHeight = present(chrome.title) ? BaseTheme::headerHeightFor(renderer, metrics.screenWidth, chrome.title,
+                                                                            chrome.headerRight)
                                                : themeMetrics.headerHeight;
   metrics.subHeaderHeight = themeMetrics.tabBarHeight;
   metrics.lineHeight = renderer.getLineHeight(uiScaleSpec().smallFontId);
@@ -64,7 +65,7 @@ list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome
 void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome) {
   const list_chrome::Bands bands = listChromeBands(renderer, chrome);
   if (chrome.title != nullptr) {
-    GUI.drawHeader(renderer, toRect(bands.header), chrome.title[0] != '\0' ? chrome.title : nullptr,
+    GUI.drawHeader(renderer, toRect(bands.header), chrome.title[0] != '\0' ? chrome.title : nullptr, chrome.footerRight,
                    chrome.headerRight);
   }
   if (present(chrome.subHeader)) {

@@ -397,32 +397,44 @@ int BaseTheme::headerBandHeight(const GfxRenderer& renderer, const Rect rect, co
   return height > 0 ? height : 0;
 }
 
-// The title's own width budget inside a band `width` wide: clear of the battery
-// cluster on both sides, so a centred line never runs under it.
-static int headerTitleWidth(const GfxRenderer& renderer, const int width) {
-  const int padding = BaseTheme::batteryClusterWidth(renderer);
+// Between the label right of the title and the battery cluster, same as the home clock.
+static constexpr int headerRightGap = 12;
+
+// What the band keeps clear on its right: the battery cluster, and the label right of
+// the title when there is one.
+static int headerRightReserve(const GfxRenderer& renderer, const char* right) {
+  const int cluster = BaseTheme::batteryClusterWidth(renderer);
+  if (right == nullptr || right[0] == '\0') return cluster;
+  return cluster + headerRightGap + renderer.getTextWidth(UI_10_FONT_ID, right);
+}
+
+// The title's own width budget inside a band `width` wide: clear of the right reserve
+// on both sides, so a centred line never runs under the cluster or the label.
+static int headerTitleWidth(const GfxRenderer& renderer, const int width, const char* right) {
+  const int padding = headerRightReserve(renderer, right);
   return std::max(1, width - padding * 2 - BaseMetrics::values.contentSidePadding * 2);
 }
 
-std::vector<std::string> BaseTheme::headerTitleWrapped(const GfxRenderer& renderer, const int width,
-                                                       const char* title) {
+std::vector<std::string> BaseTheme::headerTitleWrapped(const GfxRenderer& renderer, const int width, const char* title,
+                                                       const char* right) {
   const std::string decorated = header_title::decorate(title);
   if (decorated.empty()) return {};
-  const int maxWidth = headerTitleWidth(renderer, width);
+  const int maxWidth = headerTitleWidth(renderer, width, right);
   return wrapUiText(renderer, decorated, maxWidth, maxWidth);
 }
 
-int BaseTheme::headerTitleLines(const GfxRenderer& renderer, const int width, const char* title) {
-  const auto lines = headerTitleWrapped(renderer, width, title);
+int BaseTheme::headerTitleLines(const GfxRenderer& renderer, const int width, const char* title, const char* right) {
+  const auto lines = headerTitleWrapped(renderer, width, title, right);
   return lines.empty() ? 1 : static_cast<int>(lines.size());
 }
 
-int BaseTheme::headerHeightFor(const GfxRenderer& renderer, const int width, const char* title) {
+int BaseTheme::headerHeightFor(const GfxRenderer& renderer, const int width, const char* title, const char* right) {
   const int base = UITheme::getInstance().getMetrics().headerHeight;
-  return base + (headerTitleLines(renderer, width, title) - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+  return base + (headerTitleLines(renderer, width, title, right) - 1) * renderer.getLineHeight(UI_10_FONT_ID);
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const char* right) const {
   // A titled header is one solid black row, battery cluster included: the brackets alone
   // read as just another line of text next to the rows under them. Filling the whole row
   // also clears the last battery reading, which is why no separate knock-out box is left
@@ -431,7 +443,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // The title wraps rather than being cut: the band grows a line per extra line, and
   // the caller's rect (ListChrome, or headerHeightFor) has already reserved the room.
   const std::vector<std::string> titleLines =
-      inverted ? headerTitleWrapped(renderer, rect.width, title) : std::vector<std::string>{};
+      inverted ? headerTitleWrapped(renderer, rect.width, title, right) : std::vector<std::string>{};
   if (inverted) {
     // The band runs from the panel edge to one pixel under the title, not over the
     // rect the caller reserved: the top padding above it read as a white stripe along
@@ -466,6 +478,12 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), false, EpdFontFamily::REGULAR);
       y += renderer.getLineHeight(UI_10_FONT_ID);
     }
+  }
+
+  // On the title's first line, against the cluster. The title was wrapped clear of it.
+  if (right != nullptr && right[0] != '\0') {
+    const int rightX = rect.x + rect.width - headerRightReserve(renderer, right);
+    renderer.drawText(UI_10_FONT_ID, rightX, rect.y + headerTitleOffset, right, /*black=*/!inverted);
   }
 
   if (subtitle) {

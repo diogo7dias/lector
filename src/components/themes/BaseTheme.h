@@ -247,12 +247,17 @@ class BaseTheme {
   static int headerBandHeight(const GfxRenderer& renderer, Rect rect, int titleLines = 1);
   // The title wraps rather than being cut. These say how many lines it takes in a band
   // `width` wide, and how tall the header rect must therefore be, so a caller reserving
-  // the band and the painter filling it agree by construction.
-  static std::vector<std::string> headerTitleWrapped(const GfxRenderer& renderer, int width, const char* title);
-  static int headerTitleLines(const GfxRenderer& renderer, int width, const char* title);
-  static int headerHeightFor(const GfxRenderer& renderer, int width, const char* title);
+  // the band and the painter filling it agree by construction. `right` is the label drawn
+  // right of the title (a counter); the title narrows to stay clear of it.
+  static std::vector<std::string> headerTitleWrapped(const GfxRenderer& renderer, int width, const char* title,
+                                                     const char* right = nullptr);
+  static int headerTitleLines(const GfxRenderer& renderer, int width, const char* title, const char* right = nullptr);
+  static int headerHeightFor(const GfxRenderer& renderer, int width, const char* title, const char* right = nullptr);
 
-  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr) const;
+  // `subtitle` sits at the bottom right above the button hints (the Settings version);
+  // `right` sits in the band, right of the title and left of the battery cluster.
+  void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
+                  const char* right = nullptr) const;
   void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label, const char* rightLabel = nullptr) const;
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, bool selected) const;
   bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
