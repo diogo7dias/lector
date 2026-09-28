@@ -63,3 +63,14 @@ TEST(FsHelpers, NextSessionIndexFindsFirstGapAndClampsWhenFull) {
   EXPECT_EQ(FsHelpers::nextSessionIndex(0, 199, upTo(198)), 199);
   EXPECT_EQ(FsHelpers::nextSessionIndex(0, 199, upTo(199)), 199);
 }
+
+// Both HTTP front doors (file API and WebDAV) resolve request paths through this,
+// so ".." never climbs above the card root and every path has one spelling.
+TEST(FsHelpers, NormaliseWebPathIsAbsoluteWithoutTrailingSlash) {
+  EXPECT_EQ(FsHelpers::normaliseWebPath(""), "/");
+  EXPECT_EQ(FsHelpers::normaliseWebPath("/"), "/");
+  EXPECT_EQ(FsHelpers::normaliseWebPath("books/"), "/books");
+  EXPECT_EQ(FsHelpers::normaliseWebPath("//books//a.epub/"), "/books/a.epub");
+  EXPECT_EQ(FsHelpers::normaliseWebPath("/../../.crosspoint"), "/.crosspoint");
+  EXPECT_EQ(FsHelpers::normaliseWebPath("/books/../x"), "/x");
+}

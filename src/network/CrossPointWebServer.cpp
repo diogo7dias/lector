@@ -70,23 +70,7 @@ String wsLastCompleteName;
 size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
 
-String normalizeWebPath(const String& inputPath) {
-  if (inputPath.isEmpty() || inputPath == "/") {
-    return "/";
-  }
-  std::string normalized = FsHelpers::normalisePath(inputPath.c_str());
-  String result = normalized.c_str();
-  if (result.isEmpty()) {
-    return "/";
-  }
-  if (!result.startsWith("/")) {
-    result = "/" + result;
-  }
-  if (result.length() > 1 && result.endsWith("/")) {
-    result = result.substring(0, result.length() - 1);
-  }
-  return result;
-}
+String normalizeWebPath(const String& inputPath) { return FsHelpers::normaliseWebPath(inputPath.c_str()).c_str(); }
 }  // namespace
 
 // File listing page template - now using generated headers:

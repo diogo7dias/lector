@@ -11,6 +11,9 @@ std::string decodeUriEscapes(const std::string& path);
 
 std::string normalisePath(const std::string& path);
 
+// normalisePath for a request path: always absolute, no trailing slash, "/" for the root.
+std::string normaliseWebPath(const std::string& path);
+
 // Numeric-aware, case-insensitive comparison ("2" < "10"). Returns true when str1 orders
 // before str2. Same ordering sortFileList applies within the file/directory groups.
 bool naturalLess(const std::string& str1, const std::string& str2);
