@@ -85,15 +85,15 @@ struct Seg {
 // height check (UITheme's sbBandHasText) both expand this list, so a new item that is
 // drawn always reserves its band. A new item also needs its field in
 // READER_STATUS_BAR_FIELDS, a settings row, and its text in drawStatusBarV2.
-#define STATUS_BAR_ITEMS(X)                 \
-  X(Battery, batteryPos, false)             \
-  X(Clock, clockPos, false)                 \
-  X(Title, titlePos, false)                 \
-  X(Page, pagePos, false)                   \
-  X(BookPct, bookPctPos, false)             \
-  X(ChapterPct, chapterPctPos, true)        \
-  X(ChapterNum, chapterNumPos, true)        \
-  X(SessionPages, sessionPagesPos, false)   \
+#define STATUS_BAR_ITEMS(X)               \
+  X(Battery, batteryPos, false)           \
+  X(Clock, clockPos, false)               \
+  X(Title, titlePos, false)               \
+  X(Page, pagePos, false)                 \
+  X(BookPct, bookPctPos, false)           \
+  X(ChapterPct, chapterPctPos, true)      \
+  X(ChapterNum, chapterNumPos, true)      \
+  X(SessionPages, sessionPagesPos, false) \
   X(ParaPages, paraPagesPos, false)
 
 #define SB_ITEM_ENUM(id, field, chapterOnly) id,
