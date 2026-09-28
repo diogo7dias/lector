@@ -5,6 +5,7 @@ add_executable(StatusBarReflowTest
 
 target_include_directories(StatusBarReflowTest PRIVATE
   ${REPO_ROOT}/src/components
+  ${REPO_ROOT}/src/activities/reader
 )
 
 target_link_libraries(StatusBarReflowTest PRIVATE

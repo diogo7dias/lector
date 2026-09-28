@@ -79,8 +79,38 @@ struct Seg {
   bool isBattery = false;
 };
 
+// The anchored items of the bar, declared once, in the order the renderer places them.
+// X(id, blockField, chapterOnly): blockField is the StatusBarBlock anchor member;
+// chapterOnly items hide on a chapterless book. The renderer's push loop and the band
+// height check (UITheme's sbBandHasText) both expand this list, so a new item that is
+// drawn always reserves its band. A new item also needs its field in
+// READER_STATUS_BAR_FIELDS, a settings row, and its text in drawStatusBarV2.
+#define STATUS_BAR_ITEMS(X)                 \
+  X(Battery, batteryPos, false)             \
+  X(Clock, clockPos, false)                 \
+  X(Title, titlePos, false)                 \
+  X(Page, pagePos, false)                   \
+  X(BookPct, bookPctPos, false)             \
+  X(ChapterPct, chapterPctPos, true)        \
+  X(ChapterNum, chapterNumPos, true)        \
+  X(SessionPages, sessionPagesPos, false)   \
+  X(ParaPages, paraPagesPos, false)
+
+#define SB_ITEM_ENUM(id, field, chapterOnly) id,
+enum Item : uint8_t { STATUS_BAR_ITEMS(SB_ITEM_ENUM) kItemCount };
+#undef SB_ITEM_ENUM
+
 constexpr int kAnchorCount = 6;
-constexpr int kMaxPerAnchor = 7;
+// Every item can target the same anchor, so an anchor holds them all and none is dropped.
+constexpr int kMaxPerAnchor = kItemCount;
+
+// Left and right x of the text band: the oriented screen width less the viewable margins
+// and the theme's bar margin. The title wrap that reserves height (UITheme) and the draw
+// (BaseTheme) both take the band from here, so they cannot disagree on its width.
+inline void bandEdges(int screenW, int marginL, int marginR, int hMargin, int* left, int* right) {
+  *left = hMargin + marginL + 1;
+  *right = screenW - hMargin - marginR;
+}
 
 // Six anchors, each holding up to kMaxPerAnchor co-located segments in
 // enable-order. `counts[a]` is how many of `buckets[a]` are live.

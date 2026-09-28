@@ -1,5 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <cstring>
+
+#include "ReaderLookFields.h"
 #include "StatusBar.h"
 
 using statusbar::BarLayout;
@@ -210,4 +213,27 @@ TEST(StatusBarReflow, ACoTenantIsNeverEvictedWhileTruncationIsOn) {
   put(l, TC, 30);
   reflowTitle(l, TC, /*titleSegIndex=*/0, /*truncate=*/true, kBand, kSep, /*destReserved=*/true);
   EXPECT_EQ(l.counts[TC], 2);
+}
+
+TEST(StatusBarItems, EveryAnchorFieldIsAnItem) {
+  // Every "...Pos" field of the status bar block is an anchored item. One missing from
+  // STATUS_BAR_ITEMS would be neither drawn nor given band height.
+#define SB_ITEM_NAME(id, field, chapterOnly) #field,
+  const char* items[] = {STATUS_BAR_ITEMS(SB_ITEM_NAME)};
+#undef SB_ITEM_NAME
+  int anchorFields = 0;
+  auto check = [&](const char* field) {
+    const size_t n = std::strlen(field);
+    if (n < 3 || std::strcmp(field + n - 3, "Pos") != 0) return;
+    anchorFields++;
+    bool found = false;
+    for (const char* item : items) found = found || std::strcmp(item, field) == 0;
+    EXPECT_TRUE(found) << field << " is missing from STATUS_BAR_ITEMS";
+  };
+#define SB_CHECK_FIELD(prefsName, settingsName, blockName) check(#blockName);
+  READER_STATUS_BAR_FIELDS(SB_CHECK_FIELD)
+#undef SB_CHECK_FIELD
+  EXPECT_EQ(anchorFields, statusbar::kItemCount);
+  // Every item can sit on one anchor without being dropped.
+  EXPECT_GE(kMaxPerAnchor, statusbar::kItemCount);
 }

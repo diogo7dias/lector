@@ -104,22 +104,16 @@ bool sbItemOn(uint8_t anchor, bool chapterOnly, bool hasChapters) {
 // a band that was already reserved for its native residents.
 bool sbBandHasText(const StatusBarBlock& sb, bool top, bool hasChapters) {
   const bool clockAvailable = halClock.isAvailable();
+#define SB_BAND_ITEM(id, field, chapterOnly) {sb.field, chapterOnly},
   const struct {
     uint8_t anchor;
     bool chapterOnly;
-    bool applicable;
-  } items[] = {
-      {sb.batteryPos, false, true},   {sb.clockPos, false, clockAvailable},
-      {sb.titlePos, false, true},  // title falls back to book title on chapterless books
-      {sb.pagePos, false, true},   // page falls back to book pages on chapterless books
-      {sb.bookPctPos, false, true},   {sb.chapterPctPos, true, true},
-      {sb.chapterNumPos, true, true}, {sb.sessionPagesPos, false, true},
-      {sb.paraPagesPos, false, true},
-  };
-  for (const auto& it : items) {
-    if (!it.applicable) continue;
-    if (!sbItemOn(it.anchor, it.chapterOnly, hasChapters)) continue;
-    if (top ? sbAnchorTop(it.anchor) : sbAnchorBottom(it.anchor)) return true;
+  } items[] = {STATUS_BAR_ITEMS(SB_BAND_ITEM)};
+#undef SB_BAND_ITEM
+  for (int i = 0; i < statusbar::kItemCount; i++) {
+    if (i == statusbar::Clock && !clockAvailable) continue;
+    if (!sbItemOn(items[i].anchor, items[i].chapterOnly, hasChapters)) continue;
+    if (top ? sbAnchorTop(items[i].anchor) : sbAnchorBottom(items[i].anchor)) return true;
   }
   return false;
 }
@@ -157,8 +151,8 @@ int UITheme::getStatusBarV2BandWidth(const GfxRenderer& renderer) {
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
   int mt, mr, mb, ml;
   renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
-  const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
-  const int rightEdge = renderer.getScreenWidth() - metrics.statusBarHorizontalMargin - mr;
+  int leftEdge, rightEdge;
+  statusbar::bandEdges(renderer.getScreenWidth(), ml, mr, metrics.statusBarHorizontalMargin, &leftEdge, &rightEdge);
   return rightEdge - leftEdge;
 }
 
