@@ -71,6 +71,20 @@ size_t wsLastCompleteSize = 0;
 unsigned long wsLastCompleteAt = 0;
 
 String normalizeWebPath(const String& inputPath) { return FsHelpers::normaliseWebPath(inputPath.c_str()).c_str(); }
+
+// Parses the request's JSON body into doc; on failure answers 400 and returns false.
+bool parseJsonBody(WebServer& server, JsonDocument& doc) {
+  if (!server.hasArg("plain")) {
+    server.send(400, "text/plain", "Missing JSON body");
+    return false;
+  }
+  const DeserializationError err = deserializeJson(doc, server.arg("plain"));
+  if (err) {
+    server.send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
+    return false;
+  }
+  return true;
+}
 }  // namespace
 
 // File listing page template - now using generated headers:
@@ -1598,18 +1612,8 @@ void CrossPointWebServer::handleGetSettings() const {
 }
 
 void CrossPointWebServer::handlePostSettings() {
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing JSON body");
-    return;
-  }
-
-  const String body = server->arg("plain");
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
-    return;
-  }
+  if (!parseJsonBody(*server, doc)) return;
 
   const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
@@ -1712,18 +1716,8 @@ void CrossPointWebServer::handleGetOpdsServers() const {
 }
 
 void CrossPointWebServer::handlePostOpdsServer() {
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing JSON body");
-    return;
-  }
-
-  const String body = server->arg("plain");
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
-    return;
-  }
+  if (!parseJsonBody(*server, doc)) return;
 
   OpdsServer opdsServer;
   opdsServer.name = doc["name"] | std::string("");
@@ -1763,18 +1757,8 @@ void CrossPointWebServer::handlePostOpdsServer() {
 
 // Uses POST (not HTTP DELETE) because ESP32 WebServer doesn't support DELETE with body.
 void CrossPointWebServer::handleDeleteOpdsServer() {
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing JSON body");
-    return;
-  }
-
-  const String body = server->arg("plain");
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
-    return;
-  }
+  if (!parseJsonBody(*server, doc)) return;
 
   if (!doc["index"].is<int>()) {
     server->send(400, "text/plain", "Missing index");
@@ -1829,18 +1813,8 @@ void CrossPointWebServer::handleGetWifiNetworks() const {
 }
 
 void CrossPointWebServer::handlePostWifiNetwork() {
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing JSON body");
-    return;
-  }
-
-  const String body = server->arg("plain");
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
-    return;
-  }
+  if (!parseJsonBody(*server, doc)) return;
 
   std::string ssid = doc["ssid"] | std::string("");
   if (ssid.empty()) {
@@ -1896,18 +1870,8 @@ void CrossPointWebServer::handlePostWifiNetwork() {
 
 // Uses POST (not HTTP DELETE) because ESP32 WebServer doesn't support DELETE with body.
 void CrossPointWebServer::handleDeleteWifiNetwork() {
-  if (!server->hasArg("plain")) {
-    server->send(400, "text/plain", "Missing JSON body");
-    return;
-  }
-
-  const String body = server->arg("plain");
   JsonDocument doc;
-  const DeserializationError err = deserializeJson(doc, body);
-  if (err) {
-    server->send(400, "text/plain", String("Invalid JSON: ") + err.c_str());
-    return;
-  }
+  if (!parseJsonBody(*server, doc)) return;
 
   if (!doc["index"].is<int>()) {
     server->send(400, "text/plain", "Missing index");
