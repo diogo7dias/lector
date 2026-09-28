@@ -1691,6 +1691,7 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   char output[512];
   constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
+  bool seenFirst = false;
 
   for (size_t i = 0; i < servers.size(); i++) {
     doc.clear();
@@ -1704,7 +1705,8 @@ void CrossPointWebServer::handleGetOpdsServers() const {
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
 
-    if (i > 0) server->sendContent(",");
+    if (seenFirst) server->sendContent(",");
+    seenFirst = true;
     server->sendContent(output);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
@@ -1789,6 +1791,7 @@ void CrossPointWebServer::handleGetWifiNetworks() const {
   char output[320];
   constexpr size_t outputSize = sizeof(output);
   JsonDocument doc;
+  bool seenFirst = false;
 
   for (size_t i = 0; i < credentials.size(); i++) {
     doc.clear();
@@ -1801,7 +1804,8 @@ void CrossPointWebServer::handleGetWifiNetworks() const {
     const size_t written = serializeJson(doc, output, outputSize);
     if (written >= outputSize) continue;
 
-    if (i > 0) server->sendContent(",");
+    if (seenFirst) server->sendContent(",");
+    seenFirst = true;
     server->sendContent(output);
     yield();                          // Yield to allow WiFi and other tasks to process during a slow send
     resetTaskWatchdogIfSubscribed();  // Reset watchdog: each sendContent() is a blocking network write
