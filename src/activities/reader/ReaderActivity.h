@@ -34,7 +34,7 @@ class ReaderActivity final : public Activity {
  public:
   explicit ReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialBookPath,
                           bool allowFastInitialRefresh, bool firstTurnCleans = false, bool sortesMode = false)
-      : Activity("Reader", renderer, mappedInput),
+      : Activity(activity_name::kReader, renderer, mappedInput),
         initialBookPath(std::move(initialBookPath)),
         allowFastInitialRefresh(allowFastInitialRefresh),
         firstTurnCleans(firstTurnCleans),

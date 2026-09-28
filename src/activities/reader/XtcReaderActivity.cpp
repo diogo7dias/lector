@@ -23,6 +23,7 @@
 #include "XtcReaderChapterSelectionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "util/ReadingPercent.h"
 
 void XtcReaderActivity::onEnter() {
   Activity::onEnter();
@@ -124,6 +125,14 @@ void XtcReaderActivity::loop() {
     }
   }
 
+  // Touch on the open page, read once per loop, as in EpubReaderActivity: a tap or swipe
+  // turns the page, and the menu gesture opens what Confirm opens here.
+  const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
+  if (ReaderUtils::isTouchMenuGesture(renderer, mappedInput, touch.menu)) {
+    openChapterSelection();
+    return;
+  }
+
   // Enter chapter selection activity
   if (confirmLatch_.release(mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
     openChapterSelection();
@@ -136,6 +145,8 @@ void XtcReaderActivity::loop() {
   }
 
   auto [prevTriggered, nextTriggered] = ReaderUtils::detectPageTurn(mappedInput);
+  prevTriggered = prevTriggered || touch.prev;
+  nextTriggered = nextTriggered || touch.next;
   if (!prevTriggered && !nextTriggered) {
     return;
   }
@@ -271,9 +282,7 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   }
 
   // Self-contained bar: title on the left, "page/total  pct%" on the right.
-  const int pageCount = static_cast<int>(xtc->getPageCount());
-  const int displayPage = static_cast<int>(currentPage) + 1;
-  const int pct = pageCount > 0 ? static_cast<int>((static_cast<float>(displayPage) * 100.0f) / pageCount + 0.5f) : 0;
+  const int pct = reading_percent::pagePercent(static_cast<int>(currentPage), static_cast<int>(xtc->getPageCount()));
   const auto info = getStatusBarInfo();
 
   const int fontId = UI_10_FONT_ID;
@@ -519,7 +528,7 @@ ScreenshotInfo XtcReaderActivity::getScreenshotInfo() const {
     info.totalPages = pageCount;
     // Clamp to last valid page to avoid sentinel value (currentPage == pageCount)
     uint32_t clampedPage = (pageCount > 0 && currentPage >= pageCount) ? pageCount - 1 : currentPage;
-    info.progressPercent = pageCount > 0 ? xtc->calculateProgress(clampedPage) : 0;
+    info.progressPercent = reading_percent::pagePercent(static_cast<int>(clampedPage), static_cast<int>(pageCount));
     info.currentPage = static_cast<int>(clampedPage) + 1;
   } else {
     info.currentPage = currentPage + 1;

@@ -14,7 +14,7 @@
 class OpdsServerListActivity final : public UiListActivity {
  public:
   explicit OpdsServerListActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool pickerMode = false)
-      : UiListActivity("OpdsServerList", renderer, mappedInput), pickerMode(pickerMode) {}
+      : UiListActivity(activity_name::kOpdsServerList, renderer, mappedInput), pickerMode(pickerMode) {}
 
   void onEnter() override;
   void onExit() override;

@@ -67,7 +67,7 @@ class CrossPointWebServerActivity final : public UiStatusActivity {
 
  public:
   explicit CrossPointWebServerActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiStatusActivity("CrossPointWebServer", renderer, mappedInput) {}
+      : UiStatusActivity(activity_name::kCrossPointWebServer, renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }

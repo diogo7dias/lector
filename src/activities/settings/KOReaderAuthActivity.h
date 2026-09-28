@@ -15,7 +15,7 @@ class KOReaderAuthActivity final : public UiStatusActivity {
   enum class Mode { AUTHENTICATE, SIGN_UP };
 
   explicit KOReaderAuthActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Mode mode = Mode::AUTHENTICATE)
-      : UiStatusActivity("KOReaderAuth", renderer, mappedInput), mode(mode) {}
+      : UiStatusActivity(activity_name::kKOReaderAuth, renderer, mappedInput), mode(mode) {}
 
   void onEnter() override;
   void onExit() override;

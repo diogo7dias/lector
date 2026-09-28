@@ -211,7 +211,7 @@ bool gateAllowsTls(const char* step, const bool framebufferLent,
 }  // namespace
 
 FontDownloadActivity::FontDownloadActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-    : UiStatusActivity("FontDownload", renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
+    : UiStatusActivity(activity_name::kFontDownload, renderer, mappedInput), fontInstaller_(sdFontSystem.registry()) {}
 
 // --- Lifecycle ---
 
@@ -230,11 +230,7 @@ void FontDownloadActivity::onExit() {
   // file names without holding all of them in RAM. Nothing needs it now.
   Storage.remove(MANIFEST_TMP);
 
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  teardownWifiAndRestart();
 }
 
 void FontDownloadActivity::onWifiSelectionComplete(const bool success) {

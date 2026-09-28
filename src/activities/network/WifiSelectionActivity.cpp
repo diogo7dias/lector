@@ -640,7 +640,7 @@ void WifiSelectionActivity::refreshRows() {
 
 void WifiSelectionActivity::refreshHeaderCount() {
   // STR_NETWORKS_FOUND is ~37 bytes once the Arabic translation is substituted,
-  // so 32 truncated it. See ClockSyncActivity for the same class of bug.
+  // so 32 truncated it.
   char countStr[64];
   snprintf(countStr, sizeof(countStr), tr(STR_NETWORKS_FOUND), realNetworkCount);
   networkCountLine = countStr;

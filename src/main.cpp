@@ -216,6 +216,13 @@ void silentRestartToReader() {
   ESP.restart();
 }
 
+void teardownWifiAndRestart() {
+  if (WiFi.getMode() == WIFI_MODE_NULL) return;  // WiFi never came up: nothing to defrag
+  WiFi.disconnect(false);
+  delay(30);
+  silentRestart();
+}
+
 // Defined below setup()'s helpers.
 static std::string pickRandomRecentBookPath();
 static std::string pickBootBookPath();

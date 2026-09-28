@@ -38,7 +38,7 @@ class CalibreConnectActivity final : public UiStatusActivity {
 
  public:
   explicit CalibreConnectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
-      : UiStatusActivity("CalibreConnect", renderer, mappedInput) {}
+      : UiStatusActivity(activity_name::kCalibreConnect, renderer, mappedInput) {}
   void onEnter() override;
   void onExit() override;
   bool skipLoopDelay() override { return webServer && webServer->isRunning(); }

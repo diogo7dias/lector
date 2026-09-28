@@ -72,7 +72,7 @@ class TxtReaderActivity final : public Activity {
  public:
   explicit TxtReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Txt> txt,
                              int initialRefreshCountdown)
-      : Activity("TxtReader", renderer, mappedInput),
+      : Activity(activity_name::kTxtReader, renderer, mappedInput),
         txt(std::move(txt)),
         pagesUntilFullRefresh(initialRefreshCountdown) {}
   void onEnter() override;

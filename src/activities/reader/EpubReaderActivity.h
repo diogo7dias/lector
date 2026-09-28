@@ -316,6 +316,8 @@ class EpubReaderActivity final : public Activity {
   void openChapterSelection();
   void openFootnotes();
   void openPercentSelection();
+  // Whole-book reading percent (util/ReadingPercent.h) for every place that shows one.
+  int bookPercent() const;
   void openParagraphEntry();
   void openBookmarks();
   // A bookmark picked in the list: jump to it by content offset, else by saved page.
@@ -425,7 +427,7 @@ class EpubReaderActivity final : public Activity {
  public:
   explicit EpubReaderActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::unique_ptr<Epub> epub,
                               int initialRefreshCountdown, bool sortesMode = false)
-      : Activity("EpubReader", renderer, mappedInput),
+      : Activity(activity_name::kEpubReader, renderer, mappedInput),
         epub(std::move(epub)),
         sortesMode(sortesMode),
         pendingSortesPage(sortesMode),

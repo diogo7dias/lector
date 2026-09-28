@@ -73,11 +73,7 @@ void OpdsBookBrowserActivity::onExit() {
   entries.clear();
   navigationHistory.clear();
 
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
-    silentRestart();
-  }
+  teardownWifiAndRestart();
 }
 
 // What the error screen says for a failed fetch; nullptr when the feed arrived (empty

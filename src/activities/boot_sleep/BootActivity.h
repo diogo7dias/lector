@@ -9,7 +9,7 @@ class BootActivity final : public Activity {
   // A .pxc path redraws the wallpaper without banners. An empty or unreadable path
   // falls back to the centred name on a white screen.
   explicit BootActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string wallpaperPath = {})
-      : Activity("Boot", renderer, mappedInput), wallpaperPath_(std::move(wallpaperPath)) {}
+      : Activity(activity_name::kBoot, renderer, mappedInput), wallpaperPath_(std::move(wallpaperPath)) {}
   void onEnter() override;
 
  private:

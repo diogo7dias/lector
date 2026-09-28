@@ -175,10 +175,6 @@ TEST(TwoTapGate, EveryExemptionIsDeclaredAtItsCallSite) {
   EXPECT_TRUE(contains(status, "exemptFromTwoTap(ACTION_SLIDER);"));
   EXPECT_TRUE(contains(status, "EXEMPT from two-tap confirmation"))
       << "the slider exemption no longer says why it is exempt";
-
-  const std::string clock = readSource(CLOCK_OFFSET_SOURCE);
-  EXPECT_TRUE(contains(clock, "exemptFromTwoTap(ACTION_FIELD);"));
-  EXPECT_TRUE(contains(clock, "EXEMPT from two-tap confirmation"));
 }
 
 // The three surfaces that route their own contacts instead of going through UiAppHost

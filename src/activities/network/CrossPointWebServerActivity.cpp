@@ -6,7 +6,6 @@
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
 #include <I18n.h>
-#include <Memory.h>
 #include <WiFi.h>
 
 #include <cstddef>
@@ -15,11 +14,11 @@
 #include "NearbyFileTransferActivity.h"
 #include "NetworkModeSelectionActivity.h"
 #include "SilentRestart.h"
+#include "WebServerSession.h"
 #include "WifiSelectionActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/TaskWatchdog.h"
 
 namespace {
 // AP Mode configuration
@@ -39,15 +38,6 @@ void stopDnsServer() {
   dnsServer->stop();
   delete dnsServer;
   dnsServer = nullptr;
-}
-
-void restartMdns(const char* hostname, const char* tag) {
-  MDNS.end();
-  if (MDNS.begin(hostname)) {
-    LOG_DBG(tag, "mDNS started: http://%s.local/", hostname);
-  } else {
-    LOG_DBG(tag, "WARNING: mDNS failed to start");
-  }
 }
 
 // 0..4 bars from RSSI (dBm), with 3 dBm hysteresis on currentBars to suppress flicker.
@@ -268,31 +258,13 @@ void CrossPointWebServerActivity::startAccessPoint() {
 void CrossPointWebServerActivity::startWebServer() {
   LOG_DBG("WEBACT", "Starting web server...");
 
-  // Repeat the release right before the allocation: the WiFi selection screen
-  // rendered since onEnter(), and a CJK SSID repopulates the SD-font caches.
-  if (auto* fcm = renderer.getFontCacheManager()) {
-    LOG_DBG("WEBACT", "Free heap before SD font cache release: %d bytes", ESP.getFreeHeap());
-    fcm->releaseSdFontCaches();
-    LOG_DBG("WEBACT", "Free heap before server alloc: %d bytes", ESP.getFreeHeap());
-  }
-
-  // Create the web server instance
-  webServer = makeUniqueNoThrow<CrossPointWebServer>();
+  webServer = startServer(renderer, mappedInput, "WEBACT");
   if (!webServer) {
-    LOG_ERR("WEBACT", "OOM: CrossPointWebServer");
     // Same way out as a server that fails to begin(): staying would leave a hidden
     // screen that swallows Back.
     onGoHome();
     return;
   }
-  // A URL fetch holds this loop for the length of the transfer, so the server
-  // polls Back through here instead: without it the button is dead until the
-  // download ends.
-  webServer->setFetchCancelPoll([this] {
-    mappedInput.update();
-    return mappedInput.wasPressed(MappedInputManager::Button::Back);
-  });
-  webServer->begin();
 
   if (webServer->isRunning()) {
     state = WebServerActivityState::SERVER_RUNNING;
@@ -377,40 +349,11 @@ bool CrossPointWebServerActivity::handleCustomInput() {
     }
 
     // Handle web server requests - maximize throughput with watchdog safety
-    if (webServer && webServer->isRunning()) {
-      const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;
-
-      // Log if there's a significant gap between handleClient calls (>100ms)
-      if (lastHandleClientTime > 0 && timeSinceLastHandleClient > 100) {
-        LOG_DBG("WEBACT", "WARNING: %lu ms gap since last handleClient", timeSinceLastHandleClient);
-      }
-
-      // Reset watchdog BEFORE processing - HTTP header parsing can be slow
-      resetTaskWatchdogIfSubscribed();
-
-      // Process HTTP requests in tight loop for maximum throughput
-      // More iterations = more data processed per main loop cycle
-      constexpr int MAX_ITERATIONS = 500;
-      for (int i = 0; i < MAX_ITERATIONS && webServer->isRunning(); i++) {
-        webServer->handleClient();
-        // Reset watchdog every 32 iterations
-        if ((i & 0x1F) == 0x1F) {
-          resetTaskWatchdogIfSubscribed();
-        }
-        // Yield and check for exit button every 64 iterations
-        if ((i & 0x3F) == 0x3F) {
-          yield();
-          // Force trigger an update of which buttons are being pressed so be have accurate state
-          // for back button checking
-          mappedInput.update();
-          // Check for exit button inside loop for responsiveness
-          if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-            onGoHome();
-            return true;
-          }
-        }
-      }
-      lastHandleClientTime = millis();
+    // Tight loop for throughput: more iterations = more data per main loop cycle.
+    if (webServer && webServer->isRunning() &&
+        pumpServer(*webServer, mappedInput, lastHandleClientTime, "WEBACT", 500, 32, 64)) {
+      onGoHome();
+      return true;
     }
 
     // Handle exit on Back button (also check outside loop)

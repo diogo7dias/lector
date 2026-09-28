@@ -131,7 +131,7 @@ class WifiSelectionActivity final : public UiStatusActivity {
 
  public:
   explicit WifiSelectionActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool autoConnect = false)
-      : UiStatusActivity("WifiSelection", renderer, mappedInput), allowAutoConnect(autoConnect) {}
+      : UiStatusActivity(activity_name::kWifiSelection, renderer, mappedInput), allowAutoConnect(autoConnect) {}
   void onEnter() override;
   void onExit() override;
 
