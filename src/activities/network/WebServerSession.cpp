@@ -18,7 +18,8 @@ void restartMdns(const char* hostname, const char* tag) {
   }
 }
 
-std::unique_ptr<CrossPointWebServer> startServer(GfxRenderer& renderer, MappedInputManager& input, const char* tag) {
+std::unique_ptr<CrossPointWebServer> startServer(const GfxRenderer& renderer, MappedInputManager& input,
+                                                 const char* tag) {
   // Heap-critical allocation: SD-font caches retained for the CJK UI fallback are
   // rebuildable. Release them right before the allocation: the WiFi selection
   // screen may have repopulated them rendering a CJK SSID.

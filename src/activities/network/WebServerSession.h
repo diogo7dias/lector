@@ -15,7 +15,8 @@ void restartMdns(const char* hostname, const char* tag);
 // Releases the SD-font caches, allocates the server and begins it, with Back
 // polled during a URL fetch (the fetch holds the loop for the whole transfer).
 // nullptr on OOM; otherwise check isRunning().
-std::unique_ptr<CrossPointWebServer> startServer(GfxRenderer& renderer, MappedInputManager& input, const char* tag);
+std::unique_ptr<CrossPointWebServer> startServer(const GfxRenderer& renderer, MappedInputManager& input,
+                                                 const char* tag);
 
 // Up to `budget` handleClient() calls, feeding the watchdog every `watchdogEvery`
 // and yielding to poll Back every `inputEvery` (both powers of two). True when

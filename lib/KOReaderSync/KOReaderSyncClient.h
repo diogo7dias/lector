@@ -100,7 +100,6 @@ class KOReaderSyncClient {
    */
   static Error updateProgress(const KOReaderProgress& progress);
 
-
   /** HTTP status code from the last request (for diagnostics). */
   static int lastHttpCode;
 };
