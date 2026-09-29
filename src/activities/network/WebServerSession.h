@@ -13,7 +13,7 @@ class MappedInputManager;
 void restartMdns(const char* hostname, const char* tag);
 
 // Releases the SD-font caches, allocates the server and begins it, with Back
-// polled during a URL fetch (the fetch holds the loop for the whole transfer).
+// polled during a URL fetch or HTTP upload (each holds the loop for the whole transfer).
 // nullptr on OOM; otherwise check isRunning().
 std::unique_ptr<CrossPointWebServer> startServer(const GfxRenderer& renderer, MappedInputManager& input,
                                                  const char* tag);

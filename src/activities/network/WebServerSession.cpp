@@ -3,6 +3,7 @@
 #include <ESPmDNS.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
+#include <HalGPIO.h>
 #include <Logging.h>
 #include <Memory.h>
 
@@ -34,12 +35,17 @@ std::unique_ptr<CrossPointWebServer> startServer(const GfxRenderer& renderer, Ma
     LOG_ERR(tag, "OOM: CrossPointWebServer");
     return server;
   }
-  // A URL fetch holds the loop for the length of the transfer, so the server
-  // polls Back through here instead: without it the button is dead until the
-  // download ends.
-  server->setFetchCancelPoll([&input] {
+  // A URL fetch or an HTTP upload holds the loop for the length of the transfer,
+  // so the server polls Back through here instead: without it the button is dead
+  // until the transfer ends. Upload chunks can come ~0.5 s apart on a slow link, so
+  // a button found down gets a second sample past the SDK's 5 ms debounce.
+  server->setCancelPoll([&input] {
     input.update();
-    return input.wasPressed(MappedInputManager::Button::Back);
+    if (gpio.rawInputActive()) {
+      delay(6);
+      input.update();
+    }
+    return input.isPressed(MappedInputManager::Button::Back) || input.wasPressed(MappedInputManager::Button::Back);
   });
   server->begin();
   return server;
@@ -59,6 +65,10 @@ bool pumpServer(CrossPointWebServer& server, MappedInputManager& input, unsigned
   bool backPressed = false;
   for (int i = 0; i < budget && server.isRunning(); i++) {
     server.handleClient();
+    if (server.takeUploadCancel()) {
+      backPressed = true;
+      break;
+    }
     if ((i & watchdogMask) == watchdogMask) {
       resetTaskWatchdogIfSubscribed();
     }

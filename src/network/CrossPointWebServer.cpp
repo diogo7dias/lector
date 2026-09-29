@@ -614,6 +614,13 @@ void CrossPointWebServer::handleFetchStatus() const {
 // the download; with it, status polling and the file list keep answering.
 // A fetch started here is refused by handlePostFetch (fetchRunning is set), so
 // this cannot recurse into another download.
+bool CrossPointWebServer::dropUploadIfCancelled() const {
+  if (!cancelPoll || !cancelPoll()) return false;
+  uploadCancelled = true;
+  server->client().stop();
+  return true;
+}
+
 void CrossPointWebServer::pumpDuringFetch() {
   constexpr unsigned long PUMP_INTERVAL_MS = 150;
   const unsigned long now = millis();
@@ -1090,6 +1097,15 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
 
     LOG_DBG("WEB", "[UPLOAD] File created successfully: %s", state.partialPath.c_str());
   } else if (upload.status == UPLOAD_FILE_WRITE) {
+    if (dropUploadIfCancelled()) {
+      state.bufferPos = 0;
+      if (state.file) {
+        state.file.close();
+        Storage.remove(state.partialPath.c_str());
+      }
+      state.error = "Upload cancelled on the device";
+      return;
+    }
     if (state.file && state.error.isEmpty()) {
       // Buffer incoming data and flush when buffer is full
       // This reduces SD card write operations and improves throughput
@@ -2394,6 +2410,8 @@ void CrossPointWebServer::handleFontUploadData() {
     }
 
     case UPLOAD_FILE_WRITE: {
+      // Invalid, END or ABORTED removes the partial.
+      if (dropUploadIfCancelled()) fontUpload.valid = false;
       if (!fontUpload.valid) break;
       resetTaskWatchdogIfSubscribed();
 

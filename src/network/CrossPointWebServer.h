@@ -8,6 +8,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
 // Structure to hold file information
@@ -87,7 +88,9 @@ class CrossPointWebServer {
   bool conflictsWithActiveFetch(const String& path) const;
 
   // Installs the cancel poll described on `cancelPoll`.
-  void setFetchCancelPoll(std::function<bool()> poll) { cancelPoll = std::move(poll); }
+  void setCancelPoll(std::function<bool()> poll) { cancelPoll = std::move(poll); }
+  // True once after the cancel poll dropped an HTTP upload, so the screen leaves too.
+  bool takeUploadCancel() { return std::exchange(uploadCancelled, false); }
 
   // A single "fetch this URL onto the card" job. The POST handler only queues
   // one; the transfer itself runs from handleClient(), outside any request, so
@@ -156,10 +159,13 @@ class CrossPointWebServer {
   bool fetchCancelRequested = false;
   unsigned long lastFetchPumpAt = 0;
   unsigned long lastRequestAt = 0;
-  // Polled between chunks of a running fetch. The activity sets it so the Back
-  // button still cancels while the transfer holds the loop; without it the only
-  // way out of a slow download is the reset pin.
+  // Polled between chunks of a running fetch and on each chunk of an HTTP upload
+  // (upstream #3732). The activity sets it so the Back button still cancels while
+  // the transfer holds the loop; without it the only way out is the reset pin.
   std::function<bool()> cancelPoll;
+  mutable bool uploadCancelled = false;
+  // Drops the client when the poll says cancel: WebServer then aborts the upload.
+  bool dropUploadIfCancelled() const;
   void runQueuedFetch();
   void applyServerFilename(const std::string& contentDisposition);
   void pumpDuringFetch();
