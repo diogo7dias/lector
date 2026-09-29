@@ -115,11 +115,11 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   // The header (and its sub-header) are painted outside the app, same as every
   // list screen, so the body starts under whichever of them was drawn.
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int16_t bodyTop =
-      static_cast<int16_t>(metrics.topPadding +
-                           (view.title ? BaseTheme::headerHeightFor(renderer, renderer.getScreenWidth(), view.title)
-                                       : metrics.headerHeight) +
-                           metrics.verticalSpacing);
+  int16_t bodyTop = static_cast<int16_t>(
+      metrics.topPadding +
+      (view.title ? BaseTheme::headerHeightFor(renderer, renderer.getScreenWidth(), view.title, view.headerRight)
+                  : metrics.headerHeight) +
+      metrics.verticalSpacing);
   if (view.subtitleLeft) bodyTop = static_cast<int16_t>(bodyTop + metrics.tabBarHeight);
   screen.setContentMargin(fui::Insets{bodyTop, static_cast<int16_t>(metrics.contentSidePadding),
                                       static_cast<int16_t>(metrics.buttonHintsHeight),
@@ -634,8 +634,8 @@ void UiStatusActivity::render(RenderLock&&) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int pageWidth = renderer.getScreenWidth();
     const Rect headerRect{0, metrics.topPadding, pageWidth,
-                          BaseTheme::headerHeightFor(renderer, pageWidth, view.title)};
-    GUI.drawHeader(renderer, headerRect, view.title, view.headerRight ? view.headerRight : "");
+                          BaseTheme::headerHeightFor(renderer, pageWidth, view.title, view.headerRight)};
+    GUI.drawHeader(renderer, headerRect, view.title, nullptr, view.headerRight);
     drawHeaderExtras(headerRect);
     if (view.subtitleLeft) {
       const int bandTop = headerRect.y + headerRect.height;

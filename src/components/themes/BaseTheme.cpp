@@ -397,32 +397,44 @@ int BaseTheme::headerBandHeight(const GfxRenderer& renderer, const Rect rect, co
   return height > 0 ? height : 0;
 }
 
-// The title's own width budget inside a band `width` wide: clear of the battery
-// cluster on both sides, so a centred line never runs under it.
-static int headerTitleWidth(const GfxRenderer& renderer, const int width) {
-  const int padding = BaseTheme::batteryClusterWidth(renderer);
+// Between the label right of the title and the battery cluster, same as the home clock.
+static constexpr int headerRightGap = 12;
+
+// What the band keeps clear on its right: the battery cluster, and the label right of
+// the title when there is one.
+static int headerRightReserve(const GfxRenderer& renderer, const char* right) {
+  const int cluster = BaseTheme::batteryClusterWidth(renderer);
+  if (right == nullptr || right[0] == '\0') return cluster;
+  return cluster + headerRightGap + renderer.getTextWidth(UI_10_FONT_ID, right);
+}
+
+// The title's own width budget inside a band `width` wide: clear of the right reserve
+// on both sides, so a centred line never runs under the cluster or the label.
+static int headerTitleWidth(const GfxRenderer& renderer, const int width, const char* right) {
+  const int padding = headerRightReserve(renderer, right);
   return std::max(1, width - padding * 2 - BaseMetrics::values.contentSidePadding * 2);
 }
 
-std::vector<std::string> BaseTheme::headerTitleWrapped(const GfxRenderer& renderer, const int width,
-                                                       const char* title) {
+std::vector<std::string> BaseTheme::headerTitleWrapped(const GfxRenderer& renderer, const int width, const char* title,
+                                                       const char* right) {
   const std::string decorated = header_title::decorate(title);
   if (decorated.empty()) return {};
-  const int maxWidth = headerTitleWidth(renderer, width);
+  const int maxWidth = headerTitleWidth(renderer, width, right);
   return wrapUiText(renderer, decorated, maxWidth, maxWidth);
 }
 
-int BaseTheme::headerTitleLines(const GfxRenderer& renderer, const int width, const char* title) {
-  const auto lines = headerTitleWrapped(renderer, width, title);
+int BaseTheme::headerTitleLines(const GfxRenderer& renderer, const int width, const char* title, const char* right) {
+  const auto lines = headerTitleWrapped(renderer, width, title, right);
   return lines.empty() ? 1 : static_cast<int>(lines.size());
 }
 
-int BaseTheme::headerHeightFor(const GfxRenderer& renderer, const int width, const char* title) {
+int BaseTheme::headerHeightFor(const GfxRenderer& renderer, const int width, const char* title, const char* right) {
   const int base = UITheme::getInstance().getMetrics().headerHeight;
-  return base + (headerTitleLines(renderer, width, title) - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+  return base + (headerTitleLines(renderer, width, title, right) - 1) * renderer.getLineHeight(UI_10_FONT_ID);
 }
 
-void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle) const {
+void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle,
+                           const char* right) const {
   // A titled header is one solid black row, battery cluster included: the brackets alone
   // read as just another line of text next to the rows under them. Filling the whole row
   // also clears the last battery reading, which is why no separate knock-out box is left
@@ -431,7 +443,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // The title wraps rather than being cut: the band grows a line per extra line, and
   // the caller's rect (ListChrome, or headerHeightFor) has already reserved the room.
   const std::vector<std::string> titleLines =
-      inverted ? headerTitleWrapped(renderer, rect.width, title) : std::vector<std::string>{};
+      inverted ? headerTitleWrapped(renderer, rect.width, title, right) : std::vector<std::string>{};
   if (inverted) {
     // The band runs from the panel edge to one pixel under the title, not over the
     // rect the caller reserved: the top padding above it read as a white stripe along
@@ -466,6 +478,12 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       renderer.drawCenteredText(UI_10_FONT_ID, y, line.c_str(), false, EpdFontFamily::REGULAR);
       y += renderer.getLineHeight(UI_10_FONT_ID);
     }
+  }
+
+  // On the title's first line, against the cluster. The title was wrapped clear of it.
+  if (right != nullptr && right[0] != '\0') {
+    const int rightX = rect.x + rect.width - headerRightReserve(renderer, right);
+    renderer.drawText(UI_10_FONT_ID, rightX, rect.y + headerTitleOffset, right, /*black=*/!inverted);
   }
 
   if (subtitle) {
@@ -894,8 +912,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const int screenW = renderer.getScreenWidth();
   const int screenH = renderer.getScreenHeight();
 
-  const int leftEdge = metrics.statusBarHorizontalMargin + ml + 1;
-  const int rightEdge = screenW - metrics.statusBarHorizontalMargin - mr;
+  int leftEdge, rightEdge;
+  statusbar::bandEdges(screenW, ml, mr, metrics.statusBarHorizontalMargin, &leftEdge, &rightEdge);
   const int bandWidth = rightEdge - leftEdge;
   const int lineH = renderer.getLineHeight(f);
 
@@ -1000,12 +1018,12 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // Which segment of that anchor the title is. Battery and clock are placed before it, so
   // it is only 0 when neither of them shares the title's anchor.
   int titleSegIdx = -1;
-  auto push = [&](uint8_t anchor, bool chapterOnly, const char* text, int width, bool isBattery) {
-    if (anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
-    if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
-    const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
-    if (idx < 0 || idx >= statusbar::kAnchorCount || L.counts[idx] >= statusbar::kMaxPerAnchor) return;
-    L.buckets[idx][L.counts[idx]++] = Seg{text, width, isBattery};
+  // Each item's text and width, filled below; a null text is an item with nothing to show.
+  const char* text[statusbar::kItemCount] = {};
+  int width[statusbar::kItemCount] = {};
+  auto set = [&](statusbar::Item item, const char* t) {
+    text[item] = t;
+    width[item] = renderer.getTextWidth(f, t);
   };
 
   char batBuf[8] = "";
@@ -1023,13 +1041,14 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       snprintf(batBuf, sizeof(batBuf), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
       w += batteryPercentSpacing + renderer.getTextWidth(f, batBuf);
     }
-    push(sb.batteryPos, false, batBuf, w, true);
+    text[statusbar::Battery] = batBuf;
+    width[statusbar::Battery] = w;
   }
   // Clock (X3 RTC only). Only read the RTC when the clock is actually placed, so a
   // clock-off config doesn't do an I2C transaction every frame.
   if (sb.clockPos != CrossPointSettings::SB_ANCHOR_OFF && halClock.isAvailable() &&
       halClock.formatTime(clkBuf, sizeof(clkBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1)) {
-    push(sb.clockPos, false, clkBuf, renderer.getTextWidth(f, clkBuf), false);
+    set(statusbar::Clock, clkBuf);
   }
   // Title (points at the caller's string; truncated at draw time if it overflows).
   // Chapter source falls back to the book title on a chapterless book (TXT, flat
@@ -1038,14 +1057,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   {
     const bool chapterSrc = sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER;
     const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
-    if (title[0] != '\0') {
-      push(sb.titlePos, false, title, renderer.getTextWidth(f, title), false);
-      const int idx = static_cast<int>(sb.titlePos) - 1;
-      if (sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && idx >= 0 && idx < statusbar::kAnchorCount) {
-        titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
-        titleSegIdx = L.counts[idx] - 1;
-      }
-    }
+    if (title[0] != '\0') set(statusbar::Title, title);
   }
   // Page in chapter ("3/40" or "8 left")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
@@ -1056,21 +1068,21 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
   // Page item is NOT chapter-only: on a chapterless book (TXT, flat XTC) the
   // reader fills chapterPage/chapterPages with BOOK page/total so it still shows.
-  push(sb.pagePos, false, pageBuf, renderer.getTextWidth(f, pageBuf), false);
+  set(statusbar::Page, pageBuf);
   // Book % ("B:20%"), Chapter % ("C:60%"), Chapter number ("Ch 2/12")
   snprintf(bookPctBuf, sizeof(bookPctBuf), "B:%d%%", data.bookPercent);
-  push(sb.bookPctPos, false, bookPctBuf, renderer.getTextWidth(f, bookPctBuf), false);
+  set(statusbar::BookPct, bookPctBuf);
   snprintf(chapPctBuf, sizeof(chapPctBuf), "C:%d%%", data.chapterPercent);
-  push(sb.chapterPctPos, true, chapPctBuf, renderer.getTextWidth(f, chapPctBuf), false);
+  set(statusbar::ChapterPct, chapPctBuf);
   snprintf(chapNumBuf, sizeof(chapNumBuf), "Ch %d/%d", data.chapterNum, data.chapterTotal);
-  push(sb.chapterNumPos, true, chapNumBuf, renderer.getTextWidth(f, chapNumBuf), false);
+  set(statusbar::ChapterNum, chapNumBuf);
   // Pages turned this sitting ("+12"). The plus carries "since you sat down" on its
   // own, so no letter has to be decoded — unlike B:/C:, which only work because a
   // percent sign follows and the letter merely picks which percent.
   // Hidden when the reader reports no session, so it never sits at 0 pretending to count.
   if (data.sessionPages >= 0) {
     snprintf(sessionBuf, sizeof(sessionBuf), "+%d", data.sessionPages);
-    push(sb.sessionPagesPos, false, sessionBuf, renderer.getTextWidth(f, sessionBuf), false);
+    set(statusbar::SessionPages, sessionBuf);
   }
 
   // Pages left in the paragraph this page starts in (">P.2"). Almost always 0: a
@@ -1079,8 +1091,25 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   char paraBuf[12];
   if (data.paragraphPagesLeft >= 0) {
     snprintf(paraBuf, sizeof(paraBuf), ">P.%d", data.paragraphPagesLeft);
-    push(sb.paraPagesPos, false, paraBuf, renderer.getTextWidth(f, paraBuf), false);
+    set(statusbar::ParaPages, paraBuf);
   }
+
+  // Place the items in table order (STATUS_BAR_ITEMS), the same list the band heights
+  // are reserved from.
+  auto push = [&](statusbar::Item item, uint8_t anchor, bool chapterOnly) {
+    if (!text[item] || anchor == CrossPointSettings::SB_ANCHOR_OFF) return;
+    if (chapterOnly && !data.hasChapters) return;  // chapter items hide on chapterless books
+    const int idx = static_cast<int>(anchor) - 1;  // TL(1)..BR(6) -> 0..5
+    if (idx < 0 || idx >= statusbar::kAnchorCount) return;
+    L.buckets[idx][L.counts[idx]++] = Seg{text[item], width[item], item == statusbar::Battery};
+    if (item == statusbar::Title) {
+      titleAnchorIdx = idx;  // reflow pivots on where the greedy title landed
+      titleSegIdx = L.counts[idx] - 1;
+    }
+  };
+#define SB_PUSH(id, field, chapterOnly) push(statusbar::id, sb.field, chapterOnly);
+  STATUS_BAR_ITEMS(SB_PUSH)
+#undef SB_PUSH
 
   // --- Reflow: a greedy (truncate-OFF) title bumps overlapping same-band
   // neighbours into the opposite band. Pure + allocation-free (see StatusBar.cpp).

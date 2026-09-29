@@ -11,18 +11,12 @@
 
 #include "CrossPointSettings.h"
 #include "activities/util/ConfirmationActivity.h"
+#include "activities/util/SleepImageTriage.h"
 #include "components/UITheme.h"
-#include "fontIds.h"
 #include "sleep/SleepPauseToggle.h"
-#include "sleep/SleepWallpaperIndexStore.h"
-#include "util/DeferredFavorite.h"
 #include "util/FavoriteImage.h"
 
-namespace {
-// The one line an error state gets, in the theme's own help face: these screens
-// are an image and nothing else, so the message is all the chrome they have.
-int lineHeightForHelp(const GfxRenderer& renderer) { return renderer.getLineHeight(UI_10_FONT_ID); }
-}  // namespace
+using SleepImageTriage::lineHeightForHelp;
 
 namespace {
 constexpr char CUSTOM_SLEEP_ROOT_BMP[] = "/sleep.bmp";
@@ -83,7 +77,7 @@ void BmpViewerActivity::drawHints() {
   // viewer, so the two image viewers do not want different fingers. Siblings move
   // to Up/Down there; outside those folders nothing has changed.
   const bool triage = crosspoint::sleep::isUnderSleepDirs(filePath);
-  const char* favLabel = effectiveFavorite() ? tr(STR_UNFAV) : tr(STR_FAV);
+  const char* favLabel = SleepImageTriage::effectiveFavorite(filePath) ? tr(STR_UNFAV) : tr(STR_FAV);
   const char* pauseLabel =
       crosspoint::sleep::isPaused(filePath) ? tr(STR_SLEEP_MOVE_TO_SLEEP) : tr(STR_SLEEP_MOVE_TO_PAUSE);
   // Blank rather than "Set sleep cover" when the file cannot become one: a .png is
@@ -318,48 +312,19 @@ void BmpViewerActivity::loop() {
   }
 }
 
-std::string BmpViewerActivity::effectivePath() const {
-  const std::string queued = DeferredFavorite::pendingTargetFor(filePath);
-  return queued.empty() ? filePath : queued;
-}
-
-bool BmpViewerActivity::effectiveFavorite() const { return FavoriteImage::isFavoritePath(effectivePath()); }
-
 void BmpViewerActivity::doToggleFavorite() {
-  // Queued, not renamed here. On a FAT card a rename is a linear scan of the directory,
-  // and a wallpaper folder holds thousands of files, so doing it on the press pinned the
-  // viewer for seconds. The queue drains when the browser is left or the device is locked.
-  // See PxcViewerActivity for the same flow, and DeferredFavorite.h for why.
-  //
   // The browser is handed the CURRENT path: the card still holds the old name until the
   // queue drains, so that is the row to reopen on. The browser reads the queued name for
   // display, so the row still shows as favorited.
-  const bool makeFavorite = !effectiveFavorite();
-  const std::string target = FavoriteImage::favoritePathFor(effectivePath(), makeFavorite);
-  if (!target.empty() && target != effectivePath()) {
-    if (DeferredFavorite::request(effectivePath(), target)) {
-      FavoriteImage::replacePathReferences(effectivePath(), target);
-    } else if (FavoriteImage::setFavorite(effectivePath(), makeFavorite, nullptr) !=
-               FavoriteImage::SetFavoriteResult::Success) {
-      // Queue jammed and the foreground attempt failed too. Report it rather than
-      // closing as though the press had worked.
-      GUI.drawPopup(renderer, tr(STR_FAVORITE_FAILED));
-      delay(1000);
-      onEnter();
-      return;
-    }
+  if (!SleepImageTriage::toggleFavorite(renderer, filePath)) {
+    onEnter();
+    return;
   }
   activityManager.goToFileBrowser(filePath);
 }
 
 void BmpViewerActivity::doTogglePause() {
-  // A queued favourite rename and the move are both name-based operations on this one
-  // file: drain the queue first and adopt the post-drain name, as PxcViewerActivity does.
-  // Otherwise the rename lands after the move and misses the file.
-  const std::string queuedName = effectivePath();
-  DeferredFavorite::waitForIdle(15000);
-  DeferredFavorite::reconcile();
-  if (Storage.exists(queuedName.c_str())) filePath = queuedName;
+  filePath = SleepImageTriage::drainFavorites(filePath);
 
   // Pick the neighbour before the move, while this file still anchors the lookup.
   const int nextIndex = (currentImageIndex > 0) ? currentImageIndex - 1 : currentImageIndex + 1;
@@ -367,9 +332,7 @@ void BmpViewerActivity::doTogglePause() {
       siblingImages.size() > 1 && nextIndex >= 0 && nextIndex < static_cast<int>(siblingImages.size());
   std::string nextName = hasNeighbour ? std::string(siblingImages[nextIndex]) : std::string();
 
-  if (!crosspoint::sleep::toggleSleepPause(filePath).ok) {
-    GUI.drawPopup(renderer, tr(STR_MOVE_FAILED));
-    delay(1000);
+  if (!SleepImageTriage::togglePause(renderer, filePath)) {
     onEnter();
     return;
   }
@@ -388,39 +351,14 @@ void BmpViewerActivity::doTogglePause() {
 }
 
 void BmpViewerActivity::promptDelete() {
-  const std::string doomed = filePath;
   startActivityForResult(
       std::make_unique<ConfirmationActivity>(renderer, mappedInput, tr(STR_DELETE) + std::string("? "),
-                                             FavoriteImage::displayNameForPath(doomed)),
-      [this, doomed](const ActivityResult& res) {
-        if (res.isCancelled) {
+                                             FavoriteImage::displayNameForPath(filePath)),
+      [this](const ActivityResult& res) {
+        if (res.isCancelled || !SleepImageTriage::deleteImage(renderer, filePath)) {
           onEnter();
           return;
         }
-        // A queued favorite rename would move this file out from under the delete, so
-        // let it land first. Card work is expected here anyway, and the user has already
-        // confirmed.
-        //
-        // Draining is what performs the rename, so the name captured before it is exactly
-        // the one that stops existing. Adopt the post-drain name, or the confirmed delete
-        // fails against a file that is no longer there.
-        const std::string queued = DeferredFavorite::pendingTargetFor(doomed);
-        DeferredFavorite::waitForIdle(15000);
-        DeferredFavorite::reconcile();
-        const std::string live = (!queued.empty() && Storage.exists(queued.c_str())) ? queued : doomed;
-        // Measured while the file still exists: an on-device delete then costs
-        // the index one dead slot instead of a folder walk at the next unlock.
-        const auto pendingDelete = crosspoint::sleep::windex::planDeletion(live);
-        if (!Storage.remove(live.c_str())) {
-          GUI.drawPopup(renderer, tr(STR_DELETE_FAILED));
-          delay(1000);
-          onEnter();
-          return;
-        }
-        crosspoint::sleep::windex::commitDeletion(pendingDelete);
-        // The wake path re-renders the last wallpaper; a dead path
-        // there sends the next wake to the boot logo for no reason.
-        FavoriteImage::removePathReferences(live);
-        activityManager.goToFileBrowser(FsHelpers::extractFolderPath(live));
+        activityManager.goToFileBrowser(FsHelpers::extractFolderPath(filePath));
       });
 }

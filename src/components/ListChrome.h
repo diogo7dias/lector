@@ -17,8 +17,10 @@ struct ListChrome {
   // screen; an empty string draws the band with its battery cluster but no
   // text. A long title wraps and the band grows with it.
   const char* title = nullptr;
-  // Right of the title, for a count the screen keeps ("3 / 8").
+  // Right of the title, in the band, for a count the screen keeps ("3 / 8").
   const char* headerRight = nullptr;
+  // Bottom right, above the button hints (the firmware version on Settings).
+  const char* footerRight = nullptr;
   // A band under the title for a line about the screen rather than about any
   // row (what the middle button does here).
   const char* subHeader = nullptr;

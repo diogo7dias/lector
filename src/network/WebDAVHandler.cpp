@@ -710,22 +710,7 @@ void WebDAVHandler::handleUnlock(WebServer& s) {
 // ── Utility functions ────────────────────────────────────────────────────────
 
 String WebDAVHandler::getRequestPath(WebServer& s) const {
-  String uri = s.uri();
-  String decoded = WebServer::urlDecode(uri);
-
-  // Normalize using FsHelpers
-  std::string normalized = FsHelpers::normalisePath(decoded.c_str());
-  String result = normalized.c_str();
-
-  if (result.isEmpty()) return "/";
-  if (!result.startsWith("/")) result = "/" + result;
-
-  // Remove trailing slash unless root
-  if (result.length() > 1 && result.endsWith("/")) {
-    result = result.substring(0, result.length() - 1);
-  }
-
-  return result;
+  return FsHelpers::normaliseWebPath(WebServer::urlDecode(s.uri()).c_str()).c_str();
 }
 
 String WebDAVHandler::getDestinationPath(WebServer& s) const {
@@ -744,19 +729,7 @@ String WebDAVHandler::getDestinationPath(WebServer& s) const {
     }
   }
 
-  String decoded = WebServer::urlDecode(dest);
-  std::string normalized = FsHelpers::normalisePath(decoded.c_str());
-  String result = normalized.c_str();
-
-  if (result.isEmpty()) return "/";
-  if (!result.startsWith("/")) result = "/" + result;
-
-  // Remove trailing slash unless root
-  if (result.length() > 1 && result.endsWith("/")) {
-    result = result.substring(0, result.length() - 1);
-  }
-
-  return result;
+  return FsHelpers::normaliseWebPath(WebServer::urlDecode(dest).c_str()).c_str();
 }
 
 void WebDAVHandler::urlEncodePath(const String& path, String& out) const {

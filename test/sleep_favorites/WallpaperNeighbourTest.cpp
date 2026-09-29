@@ -84,3 +84,17 @@ TEST(NeighbourWallpaper, UnknownFolderYieldsNothing) {
   ListFs fs = threeUnsorted();
   EXPECT_EQ("", neighbourWallpaper(fs, "/sleep pause", "a.bmp", true));
 }
+
+TEST(NeighbourWallpaper, FollowsTheFileBrowserNaturalOrder) {
+  // Same order as the file browser and the BMP viewer (FsHelpers::fileListLessC):
+  // numbers compare by value, letters ignore case. Names that order calls equal
+  // still get a strict order, so neither is skipped.
+  ListFs fs;
+  fs.names = {"img10.pxc", "img2.pxc", "B.pxc", "a.pxc", "A.pxc"};
+  EXPECT_EQ("a.pxc", neighbourWallpaper(fs, kDir, "A.pxc", true));
+  EXPECT_EQ("B.pxc", neighbourWallpaper(fs, kDir, "a.pxc", true));
+  EXPECT_EQ("img2.pxc", neighbourWallpaper(fs, kDir, "B.pxc", true));
+  EXPECT_EQ("img10.pxc", neighbourWallpaper(fs, kDir, "img2.pxc", true));
+  EXPECT_EQ("img2.pxc", neighbourWallpaper(fs, kDir, "img10.pxc", false));
+  EXPECT_EQ("A.pxc", neighbourWallpaper(fs, kDir, "a.pxc", false));
+}

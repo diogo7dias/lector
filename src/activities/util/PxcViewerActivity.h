@@ -35,13 +35,6 @@ class PxcViewerActivity final : public Activity {
   // overlay hook, so the hints composite into the same refresh as the wallpaper
   // instead of costing a second one.
   void drawHints() const;
-  // The path this file WILL have once the favorite queue drains, or filePath itself when
-  // nothing is queued for it. Everything the user is shown reads through here: the press
-  // that favorites a wallpaper only queues the rename, so the card still holds the old
-  // name for a while, and a hint strip reading the card alone would say "Favorite" again
-  // on a file the user has just favorited.
-  std::string effectivePath() const;
-  bool effectiveFavorite() const;
 
   std::string filePath;
   // Set to false once the file has been deleted, so onExit does not try to keep

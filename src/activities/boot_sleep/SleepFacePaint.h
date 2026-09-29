@@ -100,4 +100,37 @@ inline constexpr uint8_t totalSubmissions(const Face face, const bool sourceHasG
   return static_cast<uint8_t>(POPUP_SUBMISSIONS + planFor(face, sourceHasGrayscale, dev).submissions);
 }
 
+// The two grayscale planes of the OEM 3-pass pipeline and their commit, shared by the
+// .bmp and .pxc faces so the two cannot drift. Runs after the caller's BW base.
+//
+// drawPlane() paints the whole picture (overlay included) into the current plane and
+// returns false on a read error; the planes stop there and the render mode goes back to
+// BW with nothing committed. planeDone(mode) runs after each plane's copy, for timing
+// marks. Returns true once the planes are committed. Renderer is GfxRenderer in firmware,
+// a recording fake in test/sleep_face_paint.
+template <typename Renderer, typename DrawPlane, typename PlaneDone>
+bool paintGrayscalePlanes(Renderer& renderer, DrawPlane&& drawPlane, PlaneDone&& planeDone) {
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(Renderer::GRAYSCALE_LSB);
+  if (!drawPlane()) {
+    renderer.setRenderMode(Renderer::BW);
+    return false;
+  }
+  renderer.copyGrayscaleLsbBuffers();
+  planeDone(Renderer::GRAYSCALE_LSB);
+
+  renderer.clearScreen(0x00);
+  renderer.setRenderMode(Renderer::GRAYSCALE_MSB);
+  if (!drawPlane()) {
+    renderer.setRenderMode(Renderer::BW);
+    return false;
+  }
+  renderer.copyGrayscaleMsbBuffers();
+  planeDone(Renderer::GRAYSCALE_MSB);
+
+  renderer.displayGrayBuffer(/*fullTone=*/true);
+  renderer.setRenderMode(Renderer::BW);
+  return true;
+}
+
 }  // namespace sleep_face

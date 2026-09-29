@@ -80,6 +80,8 @@ std::string normalisePath(const std::string& path) {
   return result;
 }
 
+std::string normaliseWebPath(const std::string& path) { return "/" + normalisePath(path); }
+
 bool naturalLess(const std::string& str1, const std::string& str2) { return naturalLessC(str1.c_str(), str2.c_str()); }
 
 bool naturalLessC(const char* s1, const char* s2) {
