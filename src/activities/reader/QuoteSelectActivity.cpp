@@ -12,6 +12,7 @@
 
 #include "QuoteSidecar.h"
 #include "QuoteText.h"
+#include "WordEmphasis.h"
 #include "components/UITheme.h"
 
 QuoteSelectActivity::QuoteSelectActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, Section* section,
@@ -367,8 +368,8 @@ void QuoteSelectActivity::loop() {
   }
 }
 
-// Continuous black bar over the selected range [min(start,cursor)..max], one bar
-// per screen row (words sharing a y), with the covered words redrawn white.
+// The selected range [min(start,cursor)..max] in bold over one continuous underline per
+// screen row (words sharing a y).
 void QuoteSelectActivity::drawRangeHighlight() const {
   const int a = firstSelectedOnPage();
   const int b = cursor;
@@ -377,20 +378,18 @@ void QuoteSelectActivity::drawRangeHighlight() const {
   int i = a;
   while (i <= b) {
     const int16_t y = words[i].y;
-    int minX = words[i].x;
-    int maxX = words[i].x + words[i].width;
     int j = i;
-    while (j + 1 <= b && words[j + 1].y == y) {
-      j++;
-      minX = std::min<int>(minX, words[j].x);
-      maxX = std::max<int>(maxX, words[j].x + words[j].width);
-    }
-    // One pixel of ink around the words, no more: the highlight marks the passage, it
-    // does not band the line.
-    renderer.fillRect(minX - 1, y - 1, (maxX - minX) + 2, lineHeight + 2, true);
+    while (j + 1 <= b && words[j + 1].y == y) j++;
+    int minX = words[i].x;
+    int maxX = minX;
     for (int k = i; k <= j; k++) {
-      renderer.drawText(fontId, words[k].x, words[k].y, words[k].text, false, words[k].style);
+      const int w = word_emphasis::width(renderer, fontId, words[k].text, words[k].style, words[k].width);
+      word_emphasis::clear(renderer, words[k].x, y, w, lineHeight);
+      minX = std::min<int>(minX, words[k].x);
+      maxX = std::max<int>(maxX, words[k].x + w);
     }
+    for (int k = i; k <= j; k++) word_emphasis::word(renderer, fontId, words[k].x, y, words[k].text, words[k].style);
+    word_emphasis::underline(renderer, fontId, minX, maxX, y);
     i = j + 1;
   }
 }
@@ -420,8 +419,10 @@ void QuoteSelectActivity::render(RenderLock&&) {
   if (!words.empty()) {
     if (phase == Phase::SelectStart) {
       const WordBox& w = words[cursor];
-      renderer.fillRect(w.x - 1, w.y - 1, w.width + 2, lineHeight + 2, true);
-      renderer.drawText(fontId, w.x, w.y, w.text, false, w.style);
+      const int width = word_emphasis::width(renderer, fontId, w.text, w.style, w.width);
+      word_emphasis::clear(renderer, w.x, w.y, width, lineHeight);
+      word_emphasis::word(renderer, fontId, w.x, w.y, w.text, w.style);
+      word_emphasis::underline(renderer, fontId, w.x, w.x + width, w.y);
     } else {
       drawRangeHighlight();
     }
