@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lector in-book menu looks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;0,7..72,700;1,7..72,400&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0d0c; --line: #2b2926; --fg: #e6e1d5; --dim: #8d877b;
+    --cyan: #5fd4e0; --amber: #e3a948; --green: #7fc87a;
+    --paper: #f3f1ea; --ink: #111;
+    --s: .64;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace;
+    padding: 28px 16px 64px;
+  }
+  header { max-width: 1180px; margin: 0 auto 28px; border-bottom: 1px solid var(--line); padding-bottom: 18px; }
+  .kicker { font-size: 10px; letter-spacing: .3em; text-transform: uppercase; color: var(--cyan); }
+  h1 { font-size: 22px; font-weight: 600; margin: 6px 0 10px; letter-spacing: -.01em; }
+  h1 .cursor { display: inline-block; width: .55em; height: 1em; background: var(--cyan); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  header p { margin: 4px 0; color: var(--dim); max-width: 820px; }
+  header p b { color: var(--fg); font-weight: 600; }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 12px; font-size: 11px; color: var(--dim); }
+  .legend span::before { content: "■ "; }
+  .legend .s::before { color: var(--cyan); } .legend .r::before { color: var(--amber); } .legend .c::before { color: var(--green); }
+
+  .grid {
+    max-width: 1180px; margin: 0 auto;
+    display: grid; gap: 34px 26px;
+    grid-template-columns: repeat(auto-fill, minmax(calc(480px * var(--s) + 12px), 1fr));
+  }
+  .opt { opacity: 0; transform: translateY(18px); animation: rise .7s cubic-bezier(.2,.8,.2,1) forwards; }
+  .opt:nth-child(1){animation-delay:.05s}.opt:nth-child(2){animation-delay:.12s}.opt:nth-child(3){animation-delay:.19s}
+  .opt:nth-child(4){animation-delay:.26s}.opt:nth-child(5){animation-delay:.33s}.opt:nth-child(6){animation-delay:.40s}
+  .opt:nth-child(7){animation-delay:.47s}.opt:nth-child(8){animation-delay:.54s}.opt:nth-child(9){animation-delay:.61s}
+
+  .dev {
+    width: calc(480px * var(--s) + 12px); height: calc(800px * var(--s) + 12px);
+    padding: 6px; margin: 0 auto 14px;
+    background: #1c1b19; border: 1px solid var(--line); border-radius: 10px;
+    position: relative; cursor: pointer;
+  }
+  .dev::after { /* refresh sweep */
+    content: ""; position: absolute; inset: 6px; pointer-events: none;
+    background: linear-gradient(180deg, transparent 0 46%, rgba(95,212,224,.55) 50%, transparent 54% 100%);
+    background-size: 100% 220%; background-position: 0 120%; opacity: 0;
+  }
+  .dev.flash::after { animation: sweep .8s ease-in-out; }
+  .dev.flash .scr { animation: eink .8s steps(1); }
+  .num {
+    position: absolute; top: -12px; left: -10px; z-index: 3;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: var(--bg); border: 1px solid var(--cyan); color: var(--cyan);
+    display: grid; place-items: center; font-weight: 600; font-size: 15px;
+  }
+  .opt.base .num { border-color: var(--amber); color: var(--amber); }
+  .cap h2 { font-size: 14px; margin: 0 0 2px; font-weight: 600; }
+  .cap h2 small { color: var(--dim); font-weight: 400; }
+  .cap p { margin: 0 0 8px; color: var(--dim); }
+  .cap ul { margin: 0; padding: 0; list-style: none; font-size: 12px; }
+  .cap li { padding: 3px 0 3px 14px; position: relative; border-top: 1px solid var(--line); }
+  .cap li::before { content: "›"; position: absolute; left: 2px; color: var(--cyan); }
+  .cap li.warn::before { content: "!"; color: var(--amber); }
+  .tag { display: inline-block; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; padding: 0 5px; border: 1px solid; border-radius: 3px; margin-right: 4px; vertical-align: 1px; }
+  .tag.s { color: var(--cyan); } .tag.r { color: var(--amber); } .tag.c { color: var(--green); }
+
+  footer { max-width: 1180px; margin: 40px auto 0; border-top: 1px solid var(--line); padding-top: 16px; color: var(--dim); }
+  footer b { color: var(--fg); }
+
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes eink { 0% { filter: invert(1); } 25% { filter: brightness(0); } 50% { filter: brightness(4); } 75% { filter: invert(1); } 100% { filter: none; } }
+  @keyframes sweep { 0% { opacity: 1; background-position: 0 120%; } 100% { opacity: 1; background-position: 0 -20%; } }
+
+  /* ===== device screen, drawn at native 480 x 800 then scaled ===== */
+  .scr {
+    width: 480px; height: 800px; transform: scale(var(--s)); transform-origin: 0 0;
+    background: var(--paper); color: var(--ink); overflow: hidden; position: relative;
+    font: 20px/1.25 "DejaVu Sans", Verdana, sans-serif;
+    display: flex; flex-direction: column;
+  }
+  .serif { font-family: Literata, Georgia, serif; }
+  .inv { background: var(--ink); color: var(--paper); }
+  .row { display: flex; justify-content: space-between; align-items: center; padding: 11px 22px; }
+  .row .v { font-size: 18px; }
+  .row.sel { background: var(--ink); color: var(--paper); }
+  .band { background: var(--ink); color: var(--paper); text-align: center; font-weight: 700; font-size: 18px; padding: 9px 0; letter-spacing: .04em; margin-top: 2px; }
+  .hints { margin-top: auto; display: flex; gap: 8px; padding: 8px 12px 10px; }
+  .hints span { flex: 1; border: 2px solid var(--ink); border-radius: 6px; text-align: center; font-size: 15px; padding: 5px 0; }
+  .chev::after { content: "›"; font-size: 26px; line-height: 0; margin-left: 8px; }
+
+  /* 0 current */
+  .bookblock { padding: 18px 22px 14px; font-size: 19px; line-height: 1.35; }
+  .bookblock b { font-size: 23px; display: block; }
+
+  /* 1 tabs */
+  .mini { display: flex; justify-content: space-between; padding: 12px 20px 8px; font-size: 17px; }
+  .mini b { font-weight: 700; }
+  .track { height: 4px; margin: 0 20px 12px; background: #cfcbc0; }
+  .track i { display: block; height: 100%; width: 23%; background: var(--ink); }
+  .tabs { display: flex; border-top: 2px solid var(--ink); border-bottom: 2px solid var(--ink); margin-bottom: 6px; }
+  .tabs span { flex: 1; text-align: center; font-size: 16px; padding: 10px 0; border-left: 2px solid var(--ink); }
+  .tabs span:first-child { border-left: 0; }
+  .tabs span.on { background: var(--ink); color: var(--paper); font-weight: 700; }
+
+  /* 2 tiles */
+  .sec { display: flex; align-items: center; gap: 10px; padding: 6px 22px 12px; font-size: 14px; letter-spacing: .2em; font-weight: 700; }
+  .sec::after { content: ""; flex: 1; height: 2px; background: var(--ink); }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 22px 16px; }
+  .tile { border: 2px solid var(--ink); border-radius: 12px; height: 124px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; font-size: 14px; text-align: center; line-height: 1.15; }
+  .tile svg { width: 40px; height: 40px; }
+  .tile b { font-size: 13px; letter-spacing: .08em; }
+  .tile.on { background: var(--ink); color: var(--paper); }
+  .tile.sel { outline: 4px solid var(--ink); outline-offset: 4px; }
+  .tile.off { border-style: dashed; }
+  .links .row { border-top: 2px solid var(--ink); padding: 13px 22px; }
+  .links .row:last-child { border-bottom: 2px solid var(--ink); }
+  .dots { display: flex; justify-content: center; gap: 16px; font-size: 15px; padding: 14px 0 0; }
+  .dots .on { font-weight: 700; text-decoration: underline; text-underline-offset: 5px; text-decoration-thickness: 3px; }
+
+  /* 3 sheet */
+  .page { padding: 16px 34px 0; font-size: 20px; line-height: 1.5; text-align: justify; hyphens: auto; font-weight: 500; }
+  .page .sb { font-family: "DejaVu Sans", Verdana, sans-serif; font-size: 14px; display: flex; justify-content: space-between; margin-bottom: 12px; font-weight: 400; }
+  .page p { margin: 0; text-indent: 1.4em; }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; height: 468px; background: var(--paper); border-top: 2px solid var(--ink); border-radius: 24px 24px 0 0; box-shadow: 0 -2px 0 var(--ink); display: flex; flex-direction: column; }
+  .grab { width: 64px; height: 6px; border-radius: 3px; background: var(--ink); margin: 12px auto 10px; }
+  .stabs { display: flex; justify-content: space-around; font-size: 13px; letter-spacing: .14em; padding: 0 12px 10px; border-bottom: 2px solid var(--ink); }
+  .stabs .on { font-weight: 700; box-shadow: 0 5px 0 -1px var(--ink); padding-bottom: 4px; }
+  .scroll { position: absolute; right: 6px; top: 96px; width: 4px; height: 300px; background: #cfcbc0; }
+  .scroll i { display: block; width: 100%; height: 40%; background: var(--ink); }
+
+  /* 4 type panel */
+  .th { display: flex; justify-content: space-between; align-items: baseline; padding: 18px 22px 10px; }
+  .th b { font-size: 26px; }
+  .th small { font-size: 14px; }
+  .preview { margin: 0 22px; border: 2px solid var(--ink); border-radius: 10px; padding: 16px 20px; font-size: 19px; line-height: 1.4; text-align: justify; hyphens: auto; height: 212px; overflow: hidden; }
+  .preview p { margin: 0; text-indent: 1.3em; }
+  .pcap { text-align: center; font-size: 13px; padding: 8px 0 8px; letter-spacing: .06em; }
+  .step { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px; font-size: 19px; }
+  .step .ctl { display: flex; align-items: center; gap: 10px; font-size: 17px; }
+  .step .ctl em { font-style: normal; min-width: 104px; text-align: center; border: 2px solid currentColor; border-radius: 6px; padding: 2px 6px; }
+  .step.sel { background: var(--ink); color: var(--paper); }
+  .chips { display: flex; gap: 10px; padding: 12px 22px 0; }
+  .chips span { flex: 1; text-align: center; border: 2px solid var(--ink); border-radius: 20px; padding: 6px 0; font-size: 15px; }
+
+  /* 5 editorial */
+  .title { text-align: center; padding: 34px 30px 18px; }
+  .title .t { font-size: 25px; letter-spacing: .22em; font-weight: 600; }
+  .title .a { font-style: italic; font-size: 19px; margin-top: 4px; }
+  .title hr { width: 64px; border: 0; border-top: 2px solid var(--ink); margin: 14px auto; }
+  .title .c { font-size: 15px; letter-spacing: .14em; font-variant: small-caps; }
+  .title .p { font-style: italic; font-size: 15px; margin-top: 4px; }
+  .ed h3 { font-weight: 600; font-size: 26px; margin: 8px 36px 6px; padding-bottom: 6px; border-bottom: 1px solid var(--ink); display: flex; gap: 14px; align-items: baseline; }
+  .ed h3 small { font-size: 16px; letter-spacing: .1em; }
+  .lead { display: flex; align-items: baseline; padding: 6px 36px; font-size: 20px; position: relative; }
+  .lead .d { flex: 1; border-bottom: 2px dotted var(--ink); margin: 0 8px; transform: translateY(-5px); }
+  .lead.sel { font-weight: 700; }
+  .lead.sel::before { content: ""; position: absolute; left: 14px; top: 13px; border: 8px solid transparent; border-left: 11px solid var(--ink); }
+  .ed .toc { padding: 10px 36px 0; font-size: 20px; line-height: 1.75; }
+  .ed .toc span { display: inline-block; width: 44px; font-size: 15px; letter-spacing: .08em; }
+
+  /* 6 rail */
+  .topstrip { display: flex; justify-content: space-between; padding: 12px 18px; border-bottom: 2px solid var(--ink); font-size: 17px; }
+  .body6 { display: flex; flex: 1; }
+  .rail { width: 94px; border-right: 2px solid var(--ink); display: flex; flex-direction: column; }
+  .rail div { height: 104px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; font-size: 13px; border-bottom: 2px solid var(--ink); }
+  .rail div svg { width: 36px; height: 36px; }
+  .rail div.on { background: var(--ink); color: var(--paper); }
+  .pane { flex: 1; font-size: 19px; }
+  .pane h4 { margin: 0; padding: 16px 18px 10px; font-size: 24px; }
+  .pane .row { padding: 11px 18px; }
+  .pane .row .v { font-size: 17px; }
+
+  /* 7 segmented */
+  .seg { display: inline-flex; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; font-size: 15px; }
+  .seg span { padding: 4px 10px; border-left: 2px solid var(--ink); }
+  .seg span:first-child { border-left: 0; }
+  .seg span.on { background: var(--ink); color: var(--paper); font-weight: 700; }
+  .srow { display: flex; justify-content: space-between; align-items: center; padding: 10px 22px 10px 26px; font-size: 19px; position: relative; min-height: 52px; }
+  .srow.sel { font-weight: 700; }
+  .srow.sel::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 10px; background: var(--ink); }
+  .orient { display: flex; gap: 8px; align-items: center; }
+  .orient i { display: block; border: 2px solid var(--ink); border-radius: 3px; }
+  .orient i.p { width: 16px; height: 24px; } .orient i.l { width: 24px; height: 16px; }
+  .orient i.on { background: var(--ink); }
+
+  /* 8 dashboard */
+  .scrub { margin: 4px 22px 16px; position: relative; height: 34px; }
+  .scrub .bar { position: absolute; top: 12px; left: 0; right: 0; height: 6px; border: 2px solid var(--ink); border-radius: 4px; }
+  .scrub .fill { position: absolute; top: 12px; left: 0; width: 23%; height: 6px; background: var(--ink); border-radius: 4px 0 0 4px; }
+  .scrub .tick { position: absolute; top: 6px; width: 2px; height: 18px; background: var(--ink); }
+  .scrub .knob { position: absolute; top: 3px; left: calc(23% - 12px); width: 24px; height: 24px; border-radius: 50%; background: var(--paper); border: 4px solid var(--ink); }
+  .scrub small { position: absolute; top: 30px; font-size: 12px; }
+  .quick { display: flex; justify-content: space-between; padding: 8px 26px 18px; }
+  .quick div { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 14px; width: 88px; }
+  .quick .c { width: 76px; height: 76px; border-radius: 50%; border: 2px solid var(--ink); display: grid; place-items: center; }
+  .quick .c svg { width: 34px; height: 34px; }
+  .quick .on .c { background: var(--ink); color: var(--paper); }
+  .drow { display: flex; justify-content: space-between; align-items: center; padding: 11px 22px; border-top: 2px solid var(--ink); }
+  .drow b { font-size: 20px; display: block; }
+  .drow small { font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">lector · workshop · in-book menu</div>
+  <h1>New looks for the in-book menu<span class="cursor"></span></h1>
+  <p>Every panel shows the same moment: <b>Middlemarch, p.12/31, Look tab open</b>, drawn at the real 480×800 and scaled down. Tap a panel to fire a fake e-ink refresh.</p>
+  <p><b>0</b> is today. <b>1 to 8</b> are alternatives. They combine: pick a <b>structure</b>, a <b>row style</b> and a <b>Look contents</b> idea separately if you like.</p>
+  <div class="legend"><span class="s">structure: 1 3 6 8</span><span class="r">row style: 5 7</span><span class="c">Look contents: 2 4</span></div>
+</header>
+
+<main class="grid">
+
+<!-- 0 CURRENT -->
+<section class="opt base">
+  <div class="dev"><div class="num">0</div><div class="scr">
+    <div class="bookblock"><b>Middlemarch</b>by George Eliot<br>Book II, Chapter 19<br>Pages: 12/31&nbsp;&nbsp;|&nbsp;&nbsp;Book: 23%</div>
+    <div class="band">Look</div>
+    <div class="row">Reader Settings</div>
+    <div class="row sel">Status Bar <span class="v">On</span></div>
+    <div class="row">Customise Status Bar</div>
+    <div class="row">Steal Look</div>
+    <div class="row">Reading Themes</div>
+    <div class="row">Paperback Look <span class="v">On</span></div>
+    <div class="row">Paperback Status Bar <span class="v">Off</span></div>
+    <div class="row">Paragraph Numbers <span class="v">Off</span></div>
+    <div class="row">Reading Orientation <span class="v">Portrait</span></div>
+    <div class="band">Navigate</div>
+  </div></div>
+  <div class="cap">
+    <h2>Today <small>accordion list</small></h2>
+    <p>Book block, then black bands that expand in place. Values sit bare on the right.</p>
+    <ul><li>Look alone is 9 rows, so the other tabs fall below the fold.</li><li>Values give no hint of the other choices before you press.</li></ul>
+  </div>
+</section>
+
+<!-- 1 TABS -->
+<section class="opt">
+  <div class="dev"><div class="num">1</div><div class="scr">
+    <div class="mini"><b>Middlemarch</b><span>II.19 · 23%</span></div>
+    <div class="track"><i></i></div>
+    <div class="tabs"><span class="on">Look</span><span>Navigate</span><span>Book</span><span>Sleep</span><span>Device</span></div>
+    <div class="row chev">Reader Settings</div>
+    <div class="row sel">Status Bar <span class="v">On</span></div>
+    <div class="row chev">Customise Status Bar</div>
+    <div class="row chev">Steal Look</div>
+    <div class="row chev">Reading Themes</div>
+    <div class="row">Paperback Look <span class="v">On</span></div>
+    <div class="row">Paperback Status Bar <span class="v">Off</span></div>
+    <div class="row">Paragraph Numbers <span class="v">Off</span></div>
+    <div class="row">Reading Orientation <span class="v">Portrait</span></div>
+    <div class="hints"><span>Back</span><span>Select</span><span>◀ Tab ▶</span><span>▲ ▼</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Tab strip <small><span class="tag s">structure</span></small></h2>
+    <p>Real tabs across the top. The book block shrinks to one line and a progress hairline.</p>
+    <ul><li>Every tab is one press away. Back leaves at once, no collapse step.</li><li>› marks rows that open a screen, so toggles and screens look different.</li><li class="warn">Left/Right are Next/Previous today. This screen would need to claim them.</li></ul>
+  </div>
+</section>
+
+<!-- 2 TILES -->
+<section class="opt">
+  <div class="dev"><div class="num">2</div><div class="scr">
+    <div class="mini" style="padding-top:16px"><b>Middlemarch</b><span>p.12/31 · 23%</span></div>
+    <div class="track"><i></i></div>
+    <div class="sec">LOOK</div>
+    <div class="tiles">
+      <div class="tile on sel"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><rect x="5" y="5" width="30" height="30" rx="3"/><path d="M5 12h30" stroke-width="5"/></svg>Status Bar<b>ON</b></div>
+      <div class="tile on"><svg viewBox="0 0 40 40"><text x="20" y="31" text-anchor="middle" font-family="Georgia" font-weight="900" font-size="30" fill="currentColor">A</text></svg>Paperback<b>ON</b></div>
+      <div class="tile"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><rect x="4" y="22" width="32" height="12" rx="2"/><text x="20" y="18" text-anchor="middle" font-family="Georgia" font-weight="900" font-size="16" fill="currentColor" stroke="none">A</text></svg>Paperback Bar<b>OFF</b></div>
+      <div class="tile"><svg viewBox="0 0 40 40"><text x="20" y="32" text-anchor="middle" font-family="Georgia" font-size="32" fill="currentColor">¶</text></svg>¶ Numbers<b>OFF</b></div>
+      <div class="tile"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><rect x="11" y="4" width="18" height="32" rx="3"/><path d="M32 12a14 14 0 0 1 0 16" /></svg>Orientation<b>PORTRAIT</b></div>
+      <div class="tile off"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="3"><rect x="4" y="16" width="32" height="8" rx="2"/><path d="M4 20h12" stroke-width="8"/></svg>Progress Bar<b>BAR IS ON</b></div>
+    </div>
+    <div class="links">
+      <div class="row chev" style="justify-content:space-between">Reader Settings</div>
+      <div class="row chev" style="justify-content:space-between">Customise Status Bar</div>
+      <div class="row chev" style="justify-content:space-between">Reading Themes</div>
+      <div class="row chev" style="justify-content:space-between">Steal Look</div>
+    </div>
+    <div class="dots"><span class="on">Look</span><span>Navigate</span><span>Book</span><span>Sleep</span><span>Device</span></div>
+    <div class="hints"><span>Back</span><span>Toggle</span><span>◀</span><span>▶</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Toggle tiles <small><span class="tag c">Look contents</span></small></h2>
+    <p>Six on/off settings become tiles: black means on. Screens move to a short list underneath.</p>
+    <ul><li>Look fits on one screen with room to spare.</li><li>A dashed tile is unavailable, and says why.</li><li>Next/Previous walk the tiles in reading order, so the button map does not change.</li></ul>
+  </div>
+</section>
+
+<!-- 3 SHEET -->
+<section class="opt">
+  <div class="dev"><div class="num">3</div><div class="scr">
+    <div class="page serif">
+      <div class="sb"><span>Middlemarch</span><span>12 / 31</span></div>
+      <p>When they were at the Vatican, Dorothea let her husband pass on to the museum of inscriptions. She herself had gone through the long gallery of statues, and now stood by the reclining Ariadne, then called the Cleopatra, in the marble voluptuousness of her beauty.</p>
+      <p>A young man stood near, looking at her.</p>
+    </div>
+    <div class="sheet">
+      <div class="grab"></div>
+      <div class="stabs"><span class="on">LOOK</span><span>NAV</span><span>BOOK</span><span>SLEEP</span><span>DEVICE</span></div>
+      <div class="row sel" style="margin-top:6px">Paperback Look <span class="v">On</span></div>
+      <div class="row">Paragraph Numbers <span class="v">Off</span></div>
+      <div class="row">Status Bar <span class="v">On</span></div>
+      <div class="row">Reading Orientation <span class="v">Portrait</span></div>
+      <div class="row chev">Reader Settings</div>
+      <div class="row chev">Reading Themes</div>
+      <div class="scroll"><i></i></div>
+    </div>
+  </div></div>
+  <div class="cap">
+    <h2>Bottom sheet <small><span class="tag s">structure</span></small></h2>
+    <p>The menu covers only the lower half, so the page stays in view above it.</p>
+    <ul><li>Paperback and status bar changes show on the page straight away.</li><li>Only the sheet redraws, so opening it can be a partial refresh.</li><li class="warn">Paragraph numbers change the layout, so they still apply on close.</li></ul>
+  </div>
+</section>
+
+<!-- 4 TYPE PANEL -->
+<section class="opt">
+  <div class="dev"><div class="num">4</div><div class="scr">
+    <div class="th"><b>Aa&nbsp; Type</b><small>applies on close</small></div>
+    <div class="preview serif"><p>When they were at the Vatican, Dorothea let her husband pass on to the museum of inscriptions. She herself had gone through the long gallery of statues, and now stood by the reclining Ariadne, then called the Cleopatra.</p></div>
+    <div class="pcap">LITERATA 18 · 130% · JUSTIFY · MARGIN M</div>
+    <div class="step">Font <span class="ctl">◀ <em>Literata</em> ▶</span></div>
+    <div class="step sel">Size <span class="ctl">◀ <em>18</em> ▶</span></div>
+    <div class="step">Line Spacing <span class="ctl">◀ <em>130%</em> ▶</span></div>
+    <div class="step">Margins <span class="ctl">◀ <em>Medium</em> ▶</span></div>
+    <div class="step">Alignment <span class="ctl">◀ <em>Justify</em> ▶</span></div>
+    <div class="step">Paperback <span class="ctl">◀ <em>On</em> ▶</span></div>
+    <div class="chips"><span>All settings ›</span><span>Themes ›</span><span>Steal ›</span></div>
+    <div class="hints"><span>Back</span><span>Done</span><span>◀ − + ▶</span><span>▲ ▼</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Type panel <small><span class="tag c">Look contents</span></small></h2>
+    <p>The five Reader Settings you change most move into the menu, as steppers over a live sample.</p>
+    <ul><li>Font size is one press away instead of three screens deep.</li><li>The sample redraws alone. The page re-lays out once, on close.</li><li class="warn">Needs Left/Right for − and +, the same caveat as 1.</li></ul>
+  </div>
+</section>
+
+<!-- 5 EDITORIAL -->
+<section class="opt">
+  <div class="dev"><div class="num">5</div><div class="scr serif ed">
+    <div class="title">
+      <div class="t">MIDDLEMARCH</div>
+      <div class="a">George Eliot</div>
+      <hr>
+      <div class="c">book ii · chapter 19</div>
+      <div class="p">page 12 of 31 · 23% of the book</div>
+    </div>
+    <h3><small>I</small>Look</h3>
+    <div class="lead">Reader Settings<span class="d"></span>›</div>
+    <div class="lead sel">Status Bar<span class="d"></span>on</div>
+    <div class="lead">Customise Status Bar<span class="d"></span>›</div>
+    <div class="lead">Steal Look<span class="d"></span>›</div>
+    <div class="lead">Reading Themes<span class="d"></span>›</div>
+    <div class="lead">Paperback Look<span class="d"></span>on</div>
+    <div class="lead">Paperback Status Bar<span class="d"></span>off</div>
+    <div class="lead">Paragraph Numbers<span class="d"></span>off</div>
+    <div class="lead">Orientation<span class="d"></span>portrait</div>
+    <div class="toc"><span>II</span>Navigate<br><span>III</span>Book<br><span>IV</span>Sleep</div>
+  </div></div>
+  <div class="cap">
+    <h2>Contents page <small><span class="tag r">row style</span></small></h2>
+    <p>No black bands. It reads like a book's contents page: roman numerals, dot leaders, and a ▸ for the cursor.</p>
+    <ul><li>Almost no solid black, so less ghosting and cheaper partial refreshes.</li><li>Feels like part of the book rather than a settings app.</li><li class="warn">The cursor is quieter than an inverted row. It needs an eye test on the X3.</li></ul>
+  </div>
+</section>
+
+<!-- 6 RAIL -->
+<section class="opt">
+  <div class="dev"><div class="num">6</div><div class="scr">
+    <div class="topstrip"><b>Middlemarch</b><span>p.12/31 · 23%</span></div>
+    <div class="body6">
+      <div class="rail">
+        <div class="on"><svg viewBox="0 0 36 36"><text x="18" y="27" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="24" fill="currentColor">Aa</text></svg>Look</div>
+        <div><svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="3"><circle cx="18" cy="18" r="14"/><path d="M18 8l5 10-5 10-5-10z" fill="currentColor"/></svg>Navigate</div>
+        <div><svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="3"><path d="M6 7h10a3 3 0 0 1 2 1 3 3 0 0 1 2-1h10v22H20a3 3 0 0 0-2 1 3 3 0 0 0-2-1H6z"/><path d="M18 8v22"/></svg>Book</div>
+        <div><svg viewBox="0 0 36 36" fill="currentColor"><path d="M24 5a13 13 0 1 0 7 21A11 11 0 0 1 24 5z"/></svg>Sleep</div>
+        <div><svg viewBox="0 0 36 36" fill="none" stroke="currentColor" stroke-width="3"><rect x="9" y="9" width="18" height="18" rx="2"/><path d="M14 4v5M22 4v5M14 27v5M22 27v5M4 14h5M4 22h5M27 14h5M27 22h5"/></svg>Device</div>
+      </div>
+      <div class="pane">
+        <h4>Look</h4>
+        <div class="row chev">Reader Settings</div>
+        <div class="row sel">Status Bar <span class="v">On</span></div>
+        <div class="row chev">Customise Bar</div>
+        <div class="row chev">Steal Look</div>
+        <div class="row chev">Themes</div>
+        <div class="row">Paperback <span class="v">On</span></div>
+        <div class="row">Paperback Bar <span class="v">Off</span></div>
+        <div class="row">¶ Numbers <span class="v">Off</span></div>
+        <div class="row">Orientation <span class="v">Portrait</span></div>
+      </div>
+    </div>
+    <div class="hints" style="border-top:2px solid var(--ink)"><span>Back</span><span>Select</span><span>◀ Rail</span><span>▲ ▼</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Side rail <small><span class="tag s">structure</span></small></h2>
+    <p>All five sections stay visible down a left rail with icons. The rows fill the right-hand side.</p>
+    <ul><li>You always see where you are and what else is there.</li><li>Icons become muscle memory after a week.</li><li class="warn">Rows are 94px narrower, so labels need shortening ("Customise Bar").</li></ul>
+  </div>
+</section>
+
+<!-- 7 SEGMENTED -->
+<section class="opt">
+  <div class="dev"><div class="num">7</div><div class="scr">
+    <div class="bookblock" style="padding-bottom:10px"><b>Middlemarch</b>Book II, Chapter 19 · 23%</div>
+    <div class="band">Look</div>
+    <div class="srow">Status Bar <span class="seg"><span>On</span><span class="on">Off</span></span></div>
+    <div class="srow sel">Progress Bar <span class="seg"><span>Off</span><span class="on">Slim</span><span>Med</span><span>Fat</span></span></div>
+    <div class="srow">Paperback Look <span class="seg"><span class="on">On</span><span>Off</span></span></div>
+    <div class="srow">Paperback Bar <span class="seg"><span>On</span><span class="on">Off</span></span></div>
+    <div class="srow">¶ Numbers <span class="seg"><span class="on">Off</span><span>Chapter</span></span></div>
+    <div class="srow">Orientation <span class="orient"><i class="p on"></i><i class="l"></i><i class="p"></i><i class="l"></i></span></div>
+    <div class="srow chev" style="justify-content:space-between">Reader Settings<span></span></div>
+    <div class="srow chev" style="justify-content:space-between">Customise Status Bar<span></span></div>
+    <div class="srow chev" style="justify-content:space-between">Reading Themes<span></span></div>
+    <div class="srow chev" style="justify-content:space-between">Steal Look<span></span></div>
+    <div class="hints"><span>Back</span><span>Next value</span><span>▲</span><span>▼</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Segmented values <small><span class="tag r">row style</span></small></h2>
+    <p>Each setting shows all of its choices, with the current one filled. The cursor is a bar on the left.</p>
+    <ul><li>You see Slim/Med/Fat before cycling through them blind.</li><li>Orientation shows four little pages, so the pop-up goes away.</li><li>Confirm still cycles, so the button map is unchanged.</li></ul>
+  </div>
+</section>
+
+<!-- 8 DASHBOARD -->
+<section class="opt">
+  <div class="dev"><div class="num">8</div><div class="scr">
+    <div class="bookblock" style="padding-bottom:6px"><b>Middlemarch</b>Book II, Chapter 19</div>
+    <div class="scrub">
+      <div class="bar"></div><div class="fill"></div>
+      <div class="tick" style="left:9%"></div><div class="tick" style="left:31%"></div><div class="tick" style="left:52%"></div><div class="tick" style="left:74%"></div>
+      <div class="knob"></div>
+      <small style="left:0">p.12/31 in chapter</small><small style="right:0">23%</small>
+    </div>
+    <div class="quick">
+      <div class="on"><span class="c"><svg viewBox="0 0 34 34" fill="currentColor"><path d="M8 3h18v28l-9-7-9 7z"/></svg></span>Bookmark</div>
+      <div><span class="c"><svg viewBox="0 0 34 34" fill="none" stroke="currentColor" stroke-width="3"><circle cx="14" cy="14" r="9"/><path d="M21 21l9 9"/></svg></span>Look Up</div>
+      <div><span class="c"><svg viewBox="0 0 34 34"><text x="17" y="30" text-anchor="middle" font-family="Georgia" font-weight="700" font-size="34" fill="currentColor">“</text></svg></span>Quote</div>
+      <div><span class="c"><svg viewBox="0 0 34 34"><text x="17" y="24" text-anchor="middle" font-family="Verdana" font-weight="700" font-size="17" fill="currentColor">%</text></svg></span>Go to</div>
+    </div>
+    <div class="drow"><span><b>Look</b><small>Literata 18 · bar on · paperback</small></span><span class="chev"></span></div>
+    <div class="drow"><span><b>Navigate</b><small>chapters · bookmarks · footnotes</small></span><span class="chev"></span></div>
+    <div class="drow"><span><b>Book</b><small>lookup history · quotes · remove</small></span><span class="chev"></span></div>
+    <div class="drow"><span><b>Sleep</b><small>favourite · pause · hold</small></span><span class="chev"></span></div>
+    <div class="drow" style="border-bottom:2px solid var(--ink)"><span><b>Device</b><small>nearby · QR · sync · cache</small></span><span class="chev"></span></div>
+    <div class="hints"><span>Back</span><span>Open</span><span>◀</span><span>▶</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Dashboard <small><span class="tag s">structure</span></small></h2>
+    <p>The four things you do most become buttons at the top. Each section is one row with a summary line.</p>
+    <ul><li>Bookmark, look up and quote take one press from the menu.</li><li>The chapter scrubber shows where you are in the chapter.</li><li class="warn">Look moves one level down, so a toggle costs one press more than today.</li></ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  Reply by number, e.g. <b>"6 with 7's rows"</b> or <b>"5, drop the numerals"</b>. The Look rows are the real list from <b>EpubReaderMenuActivity::buildTabs</b>. The quick actions in 8 are a guess, so name your own four.
+</footer>
+
+<script>
+  document.querySelectorAll('.dev').forEach(d => d.addEventListener('click', () => {
+    d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash');
+  }));
+</script>
+</body>
+</html>
