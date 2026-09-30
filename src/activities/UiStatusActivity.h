@@ -3,6 +3,7 @@
 #include <HalDisplay.h>
 
 #include <array>
+#include <string>
 
 #include "activities/Activity.h"
 #include "components/ListChrome.h"
@@ -269,6 +270,8 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect) const;
   // The contents look's title page and hints for a view, in ListChrome terms.
   ListChrome contentsChrome(const StatusView& view) const;
+  // What contentsChrome's italic line points into.
+  mutable std::string subtitleLine_;
 
   void buildActions(UiScreen& screen, const StatusView& view);
 

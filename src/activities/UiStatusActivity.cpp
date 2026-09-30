@@ -683,7 +683,15 @@ void UiStatusActivity::loop() {
 ListChrome UiStatusActivity::contentsChrome(const StatusView& view) const {
   ListChrome chrome;
   chrome.title = view.title;
-  chrome.subHeader = view.subtitleLeft;
+  // The sub-header's two halves as one italic line: the network and the address a
+  // screen is reachable on (Calibre's IP), which is the part the reader needs.
+  subtitleLine_.clear();
+  for (const char* part : {view.subtitleLeft, view.subtitleRight}) {
+    if (part == nullptr || part[0] == '\0') continue;
+    if (!subtitleLine_.empty()) subtitleLine_ += " \xC2\xB7 ";
+    subtitleLine_ += part;
+  }
+  chrome.subHeader = subtitleLine_.empty() ? nullptr : subtitleLine_.c_str();
   chrome.headerRight = view.headerRight;
   chrome.backHint = view.backHint ? view.backHint : tr(STR_BACK);
   chrome.confirmHint = view.confirmHint ? view.confirmHint : "";
