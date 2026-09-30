@@ -19,6 +19,8 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   // so both have to outlive it.
   std::vector<freeink::ui::ListItem> rows;
   std::vector<std::string> subtitles;
+  // The title page's italic line; chrome() borrows it.
+  std::string bookTitle;
   void refreshRows(bool portrait);
 
   /** Asks before deleting; the answer runs deleteBookmark(). */
@@ -44,5 +46,6 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   bool handleButtons() override;
   void onBackButton() override;
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
   bool drawOverlay() override;
 };

@@ -18,6 +18,7 @@ constexpr int ENTER_DELETE_MODE_MS = 700;
 }  // namespace
 
 void EpubReaderBookmarksActivity::onEnter() {
+  bookTitle = epub.getTitle();
   UiListActivity::onEnter();
 
   if (!BookmarkFile::load(epubPath, bookmarks)) {
@@ -170,6 +171,7 @@ void EpubReaderBookmarksActivity::onBackButton() {
 ListChrome EpubReaderBookmarksActivity::chrome() const {
   ListChrome chrome;
   chrome.title = tr(STR_BOOKMARKS);
+  chrome.subHeader = bookTitle.c_str();
   if (bookmarks.empty()) {
     // Nothing to open and nothing to delete, so neither is offered.
     chrome.confirmHint = "";
