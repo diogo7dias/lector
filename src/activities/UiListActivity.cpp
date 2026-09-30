@@ -6,7 +6,7 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
-#include "UiFont.h"
+#include "components/ContentsLook.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "fontIds.h"
@@ -23,14 +23,7 @@ void UiListActivity::onEnter() {
   // fonts, so a screen-specific body font has to be bound first.
   const int fontId = listFontId();
   if (fontId != 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
-  if (contentsLook()) {
-    // Heading, numeral and italic-line faces; rows use the UI font. Arabic and Hebrew
-    // draw everything in theirs, which Literata cannot stand in for.
-    const bool ubuntu = uiLanguageNeedsUbuntu();
-    uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, ubuntu ? UI_10_FONT_ID : LITERATA_UI_26_FONT_ID);
-    uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, ubuntu ? UI_10_FONT_ID : LITERATA_UI_16_FONT_ID);
-    uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_3, ubuntu ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID);
-  }
+  if (contentsLook()) contents_look::bindFonts(uiTarget);
   activeNav().reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
@@ -163,15 +156,10 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
   int16_t rowGap = screen.theme().listRowGap;
   if (contentsLook()) {
     // Fixed geometry on every board: the painter ignores the theme's row tokens.
-    rowHeight = hasSubtitle ? fui::contents::SUB_ROW_H : fui::contents::ROW_H;
+    rowHeight = contents_look::rowHeight(hasSubtitle);
     rowGap = 0;
     props.rowHeight = rowHeight;
-    props.contentsLook = true;
-    props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
-    props.valueText.font = fui::GfxRendererTarget::FONT_BODY;
-    props.headerText.font = fui::GfxRendererTarget::FONT_EXTRA_1;
-    props.headingNumeralText.font = fui::GfxRendererTarget::FONT_EXTRA_2;
-    props.subtitleText.font = fui::GfxRendererTarget::FONT_EXTRA_3;
+    contents_look::applyListProps(props);
   }
   // Remembered for the chevrons render() draws once the list has reported what it
   // actually laid out.

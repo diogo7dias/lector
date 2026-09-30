@@ -5,6 +5,7 @@
 #include <array>
 
 #include "activities/Activity.h"
+#include "components/ListChrome.h"
 #include "components/UiAppHost.h"
 #include "components/themes/BaseTheme.h"  // Rect, for the QR squares the body layout places
 #include "util/ButtonNavigator.h"
@@ -169,6 +170,10 @@ class UiStatusActivity : public Activity, protected UiAppHost {
 
   UiStatusActivity(const char* name, GfxRenderer& renderer, MappedInputManager& mappedInput);
 
+  // The contents look (a Literata title page, italic secondary lines, flat rows, a
+  // hairline progress rule). Screens opt in one at a time while the firmware moves over.
+  virtual bool contentsLook() const { return false; }
+
   // Re-read every render; a subclass returns whatever its state machine is in
   // the middle of.
   virtual StatusView statusView() const = 0;
@@ -261,7 +266,9 @@ class UiStatusActivity : public Activity, protected UiAppHost {
   // Link strength at the right of the sub-header band, or a cross when the link
   // is down.
   void drawSignal(const StatusView& view, int bandRight, int bandBottom) const;
-  static void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect);
+  void drawProgress(UiScreen& screen, const StatusView& view, const freeink::ui::Rect& rect) const;
+  // The contents look's title page and hints for a view, in ListChrome terms.
+  ListChrome contentsChrome(const StatusView& view) const;
 
   void buildActions(UiScreen& screen, const StatusView& view);
 

@@ -6,7 +6,9 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "UiFont.h"
 #include "components/ComparisonLayout.h"
+#include "components/ContentsLook.h"
 #include "components/PlainSliderBand.h"
 #include "components/SignalMeter.h"
 #include "components/SliderField.h"
@@ -14,6 +16,7 @@
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
+#include "fontIds.h"
 #include "util/QrUtils.h"
 
 namespace fui = freeink::ui;
@@ -27,6 +30,13 @@ UiStatusActivity::UiStatusActivity(const char* name, GfxRenderer& renderer, Mapp
 
 void UiStatusActivity::onEnter() {
   Activity::onEnter();
+  if (contentsLook()) {
+    // Before resetUi(): the theme tokens are measured from these faces. The small face
+    // becomes the italic every secondary line is set in.
+    contents_look::bindFonts(uiTarget);
+    uiTarget.setFont(fui::GfxRendererTarget::FONT_SMALL,
+                     uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID);
+  }
   resetUi();
   app.on(ACTION_ACCEPT, &UiStatusActivity::acceptTrampoline, this);
   app.on(ACTION_CANCEL, &UiStatusActivity::cancelTrampoline, this);
@@ -115,15 +125,23 @@ void UiStatusActivity::buildScreen(UiScreen& screen) {
   // The header (and its sub-header) are painted outside the app, same as every
   // list screen, so the body starts under whichever of them was drawn.
   const auto& metrics = UITheme::getInstance().getMetrics();
-  int16_t bodyTop = static_cast<int16_t>(
-      metrics.topPadding +
-      (view.title ? BaseTheme::headerHeightFor(renderer, renderer.getScreenWidth(), view.title, view.headerRight)
-                  : metrics.headerHeight) +
-      metrics.verticalSpacing);
-  if (view.subtitleLeft) bodyTop = static_cast<int16_t>(bodyTop + metrics.tabBarHeight);
-  screen.setContentMargin(fui::Insets{bodyTop, static_cast<int16_t>(metrics.contentSidePadding),
-                                      static_cast<int16_t>(metrics.buttonHintsHeight),
-                                      static_cast<int16_t>(metrics.contentSidePadding)});
+  if (contentsLook()) {
+    // The title page and the foot come from the same bands the chrome paints.
+    const list_chrome::Bands bands = listChromeBands(renderer, contentsChrome(view));
+    constexpr auto side = static_cast<int16_t>(fui::contents::SIDE);
+    screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop), side,
+                                        static_cast<int16_t>(renderer.getScreenHeight() - bands.contentBottom), side});
+  } else {
+    int16_t bodyTop = static_cast<int16_t>(
+        metrics.topPadding +
+        (view.title ? BaseTheme::headerHeightFor(renderer, renderer.getScreenWidth(), view.title, view.headerRight)
+                    : metrics.headerHeight) +
+        metrics.verticalSpacing);
+    if (view.subtitleLeft) bodyTop = static_cast<int16_t>(bodyTop + metrics.tabBarHeight);
+    screen.setContentMargin(fui::Insets{bodyTop, static_cast<int16_t>(metrics.contentSidePadding),
+                                        static_cast<int16_t>(metrics.buttonHintsHeight),
+                                        static_cast<int16_t>(metrics.contentSidePadding)});
+  }
 
   // Taken from the bottom first, so neither shape lays text into the band the
   // buttons stand in.
@@ -387,8 +405,8 @@ void UiStatusActivity::buildChoiceBand(UiScreen& screen, const StatusView& view)
   if (count == 0) return;
 
   const auto& theme = screen.theme();
-  const int16_t gap = theme.listRowGap > 0 ? theme.listRowGap : 4;
-  const int16_t rowHeight = theme.rowHeight;
+  const int16_t gap = contentsLook() ? 0 : (theme.listRowGap > 0 ? theme.listRowGap : 4);
+  const int16_t rowHeight = contentsLook() ? contents_look::rowHeight(false) : theme.rowHeight;
 
   // Rows are copied into a buffer that outlives the build: FreeInkUI keeps the
   // interaction table pointing at what was drawn.
@@ -420,6 +438,10 @@ void UiStatusActivity::buildChoiceBand(UiScreen& screen, const StatusView& view)
   props.action = ACTION_CHOICE;
   props.rowHeight = rowHeight;
   props.rowGap = gap;
+  if (contentsLook()) {
+    contents_look::applyListProps(props);
+    props.contentsSide = 0;  // the body is already inset
+  }
   // list() takes the band itself; the spacer after it is the air between the
   // answers and whatever the screen draws above them.
   screen.list(props, band, fui::LayoutAnchor::Bottom);
@@ -458,9 +480,17 @@ void UiStatusActivity::buildList(UiScreen& screen, const StatusView& view) {
   applyKeysOnlyValueStyle(props, theme);
   applyWrappingRowStyle(props, theme);
   applyInvertedSectionHeaderStyle(props, theme);
+  int16_t rowGap = theme.listRowGap;
+  if (contentsLook()) {
+    rowHeight = contents_look::rowHeight(view.listHasSubtitle);
+    rowGap = 0;
+    props.rowHeight = rowHeight;
+    contents_look::applyListProps(props);
+    props.contentsSide = 0;  // the body is already inset
+  }
   const fui::Rect body = screen.body();
   listBand_ = Rect{body.x, body.y, body.width, body.height};
-  listNav_.syncToProps(body, rowHeight, theme.listRowGap, listCount_, props);
+  listNav_.syncToProps(body, rowHeight, rowGap, listCount_, props);
   screen.list(props);
 }
 
@@ -551,7 +581,20 @@ void UiStatusActivity::drawSignal(const StatusView& view, const int bandRight, c
   }
 }
 
-void UiStatusActivity::drawProgress(UiScreen& screen, const StatusView& view, const fui::Rect& rect) {
+void UiStatusActivity::drawProgress(UiScreen& screen, const StatusView& view, const fui::Rect& rect) const {
+  if (contentsLook()) {
+    // A hairline across the body with the done part as a 4px bar on it.
+    const int max = view.progressMax > 0 ? view.progressMax : 100;
+    const int value = std::clamp(view.progressValue, 0, max);
+    const auto mid = static_cast<int16_t>(rect.y + rect.height / 2);
+    auto& target = screen.frame().target();
+    target.fill(fui::Rect{rect.x, mid, rect.width, 1}, fui::Paint::solid(fui::Color::Black));
+    const auto done = static_cast<int16_t>(rect.width * value / max);
+    if (done > 0) {
+      target.fill(fui::Rect{rect.x, static_cast<int16_t>(mid - 1), done, 4}, fui::Paint::solid(fui::Color::Black));
+    }
+    return;
+  }
   fui::ProgressBarProps bar;
   bar.value = view.progressValue;
   bar.max = view.progressMax > 0 ? view.progressMax : 100;
@@ -623,6 +666,26 @@ void UiStatusActivity::loop() {
   navigateList();
 }
 
+ListChrome UiStatusActivity::contentsChrome(const StatusView& view) const {
+  ListChrome chrome;
+  chrome.title = view.title;
+  chrome.subHeader = view.subtitleLeft;
+  chrome.headerRight = view.headerRight;
+  chrome.backHint = view.backHint ? view.backHint : tr(STR_BACK);
+  chrome.confirmHint = view.confirmHint ? view.confirmHint : "";
+  chrome.thirdHint = view.thirdHint ? view.thirdHint : "";
+  chrome.fourthHint = view.fourthHint ? view.fourthHint : "";
+  // The hints stay while a key does something the screen does not show: Confirm, or
+  // the other two, with no on-screen button saying so. Back alone needs no band.
+  const bool hasButtons = (view.cancelLabel != nullptr && view.cancelLabel[0] != '\0') ||
+                          (view.acceptLabel != nullptr && view.acceptLabel[0] != '\0');
+  const auto used = [](const char* hint) { return hint[0] != '\0'; };
+  chrome.contentsKeepsHints =
+      !hasButtons && (used(chrome.confirmHint) || used(chrome.thirdHint) || used(chrome.fourthHint));
+  toContentsLook(chrome, mappedInput.hasTouch());
+  return chrome;
+}
+
 static int metricsSpacing() { return UITheme::getInstance().getMetrics().verticalSpacing; }
 
 void UiStatusActivity::render(RenderLock&&) {
@@ -630,7 +693,10 @@ void UiStatusActivity::render(RenderLock&&) {
   if (view.hidden) return;
 
   renderer.clearScreen();
-  if (view.title) {
+  const ListChrome chrome = contentsLook() ? contentsChrome(view) : ListChrome{};
+  if (contentsLook()) {
+    drawListChromeTop(renderer, chrome);
+  } else if (view.title) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int pageWidth = renderer.getScreenWidth();
     const Rect headerRect{0, metrics.topPadding, pageWidth,
@@ -657,10 +723,14 @@ void UiStatusActivity::render(RenderLock&&) {
     GUI.drawScrollArrows(renderer, list_scrollbar::outsideBand(listBand_, metricsSpacing()), arrows);
   }
 
-  const auto labels =
-      mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK), view.confirmHint ? view.confirmHint : "",
-                            view.thirdHint ? view.thirdHint : "", view.fourthHint ? view.fourthHint : "");
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  if (contentsLook()) {
+    drawListChromeBottom(renderer, mappedInput, chrome);
+  } else {
+    const auto labels =
+        mappedInput.mapLabels(view.backHint ? view.backHint : tr(STR_BACK), view.confirmHint ? view.confirmHint : "",
+                              view.thirdHint ? view.thirdHint : "", view.fourthHint ? view.fourthHint : "");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  }
 
   if (drawOverlay()) return;
   renderer.displayBuffer(view.refresh);
