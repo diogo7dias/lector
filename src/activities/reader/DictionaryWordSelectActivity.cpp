@@ -13,6 +13,7 @@
 #include "CrossPointSettings.h"
 #include "DictHistoryStore.h"
 #include "DictionaryDefinitionActivity.h"
+#include "WordEmphasis.h"
 #include "components/UITheme.h"
 #include "util/DictionaryFailure.h"
 
@@ -275,9 +276,10 @@ void DictionaryWordSelectActivity::loop() {
 // next cursor move must do a full repaint.
 bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   const WordBox& word = words[selected];
+  const int emphasisW = word_emphasis::width(renderer, fontId, word.text, word.style, word.width);
   int hx = word.x - 2;
   int hy = word.y - 2;
-  int hw = word.width + 4;
+  int hw = emphasisW + 4;
   int hh = lineHeight + 4;
   // Clamp to the panel so save, draw and restore all use the same box.
   if (hx < 0) {
@@ -299,8 +301,9 @@ bool DictionaryWordSelectActivity::drawHighlightWithSnapshot() {
   snapshotH = static_cast<int16_t>(hh);
   snapshotIdx = saved ? selected : -1;
 
-  renderer.fillRect(hx, hy, hw, hh, true);
-  renderer.drawText(fontId, word.x, word.y, word.text, false, word.style);
+  word_emphasis::clear(renderer, word.x, word.y, emphasisW, lineHeight);
+  word_emphasis::word(renderer, fontId, word.x, word.y, word.text, word.style);
+  word_emphasis::underline(renderer, fontId, word.x, word.x + emphasisW, word.y);
   return saved;
 }
 
@@ -331,9 +334,10 @@ void DictionaryWordSelectActivity::render(RenderLock&&) {
   if (popup == Popup::None && snapshotIdx >= 0 && !words.empty() && selected != snapshotIdx) {
     renderer.writeFramebufferRegion(snapshotX, snapshotY, snapshotW, snapshotH, snapshot.get());
     // The full path's PrewarmScope cleared the glyph cache on exit; batch-load
-    // just the highlighted word's glyphs before drawing them white-on-black.
+    // just the highlighted word's glyphs, in the bold they are drawn in.
     renderer.getFontCacheManager()->prewarmCache(
-        fontId, words[selected].text, static_cast<uint8_t>(1u << (static_cast<uint8_t>(words[selected].style) & 0x03)));
+        fontId, words[selected].text,
+        static_cast<uint8_t>(1u << (static_cast<uint8_t>(word_emphasis::bold(words[selected].style)) & 0x03)));
     if (drawHighlightWithSnapshot()) {
       drawHints();
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
