@@ -664,22 +664,20 @@ void EpubReaderActivity::openQuickMenu() {
   for (const uint8_t function : functions) {
     if (!SETTINGS.isPopupItem(function)) continue;
     const bool available = boundMenuFunctionAvailable(function);
-    // Fixed-width status column, and the pop-up is left-aligned, so ticking or losing a
-    // footnote never shifts a label sideways.
     // One row, two names: a wallpaper already starred offers Unfavorite. Same swap the
     // reader menu's own Sleep Screen row makes, so the two never disagree.
     const StrId label = function == CrossPointSettings::LP_MENU_WALLPAPER_FAVORITE &&
                                 FavoriteImage::isFavoritePath(APP_STATE.lastSleepWallpaperPath)
                             ? StrId::STR_UNFAVORITE_WALLPAPER
                             : boundMenuActionLabel(function);
-    labels.push_back(std::string(available ? "    " : "[X] ") + I18N.get(label));
+    labels.push_back(I18N.get(label));
     disabledRows.push_back(!available);
     quickMenuFunctions.push_back(function);
   }
 
   if (quickMenuFunctions.empty()) return;
 
-  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, 0, true, [this](const int index) {
+  quickMenu.showWithDisabled(StrId::STR_QUICK_MENU, labels, disabledRows, 0, [this](const int index) {
     if (index < 0 || index >= static_cast<int>(quickMenuFunctions.size())) return;
     const uint8_t function = quickMenuFunctions[index];
     // The pop-up has already closed itself by the time this runs, so the action draws

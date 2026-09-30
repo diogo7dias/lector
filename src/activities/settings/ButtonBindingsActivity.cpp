@@ -137,7 +137,7 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
     // actions in the same order, so the one that is missing reads as unavailable here
     // rather than as absent from the firmware.
     const bool unavailable = !inBook && !bound_action::allowedOutsideBook(function);
-    options.push_back(std::string(unavailable ? "[X] " : "    ") + I18N.get(boundMenuActionLabel(function)));
+    options.push_back(I18N.get(boundMenuActionLabel(function)));
     disabledRows.push_back(unavailable);
     if (function == *binding) currentIndex = static_cast<int>(pickerFunctions.size());
     pickerFunctions.push_back(function);
@@ -145,7 +145,7 @@ void ButtonBindingsActivity::openActionPicker(const size_t row) {
   if (pickerFunctions.empty()) return;
 
   pickerRow = row;
-  actionPopup.showWithDisabled(gestureLabel(bindingRows[row].gesture), options, disabledRows, currentIndex, true,
+  actionPopup.showWithDisabled(gestureLabel(bindingRows[row].gesture), options, disabledRows, currentIndex,
                                [this](const int choice) {
                                  if (choice < 0 || choice >= static_cast<int>(pickerFunctions.size())) return;
                                  uint8_t* target = bindingFor(pickerRow);
