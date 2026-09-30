@@ -6,6 +6,7 @@
 #include <algorithm>
 
 #include "MappedInputManager.h"
+#include "UiFont.h"
 #include "components/UITheme.h"
 #include "components/UIThemeTokens.h"
 #include "fontIds.h"
@@ -22,6 +23,14 @@ void UiListActivity::onEnter() {
   // fonts, so a screen-specific body font has to be bound first.
   const int fontId = listFontId();
   if (fontId != 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
+  if (contentsLook()) {
+    // Heading, numeral and italic-line faces; rows use the UI font. Arabic and Hebrew
+    // draw everything in theirs, which Literata cannot stand in for.
+    const bool ubuntu = uiLanguageNeedsUbuntu();
+    uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, ubuntu ? UI_10_FONT_ID : LITERATA_UI_26_FONT_ID);
+    uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, ubuntu ? UI_10_FONT_ID : LITERATA_UI_16_FONT_ID);
+    uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_3, ubuntu ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID);
+  }
   activeNav().reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
@@ -35,7 +44,7 @@ void UiListActivity::screenTrampoline(UiScreen& screen, void* user) {
   // The body is reserved from the same bands the chrome paints, so a screen
   // cannot draw a header the list then runs under. A screen wanting a different
   // band still calls setContentMargin itself; this only sets the default.
-  const ListChrome listChrome = self->chrome();
+  const ListChrome listChrome = self->shownChrome();
   const list_chrome::Bands bands = listChromeBands(self->renderer, listChrome);
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop),
                                       static_cast<int16_t>(listChrome.sideInset),
@@ -151,11 +160,24 @@ void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, c
   }
   applyWrappingRowStyle(props, screen.theme());
   applyInvertedSectionHeaderStyle(props, screen.theme());
+  int16_t rowGap = screen.theme().listRowGap;
+  if (contentsLook()) {
+    // Fixed geometry on every board: the painter ignores the theme's row tokens.
+    rowHeight = hasSubtitle ? fui::contents::SUB_ROW_H : fui::contents::ROW_H;
+    rowGap = 0;
+    props.rowHeight = rowHeight;
+    props.contentsLook = true;
+    props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
+    props.valueText.font = fui::GfxRendererTarget::FONT_BODY;
+    props.headerText.font = fui::GfxRendererTarget::FONT_EXTRA_1;
+    props.headingNumeralText.font = fui::GfxRendererTarget::FONT_EXTRA_2;
+    props.subtitleText.font = fui::GfxRendererTarget::FONT_EXTRA_3;
+  }
   // Remembered for the chevrons render() draws once the list has reported what it
   // actually laid out.
   const fui::Rect body = screen.body();
   listBand = Rect{body.x, body.y, body.width, body.height};
-  activeNav().syncToProps(body, rowHeight, screen.theme().listRowGap, listCount(), props);
+  activeNav().syncToProps(body, rowHeight, rowGap, listCount(), props);
 }
 
 void UiListActivity::drawScrollArrows() {
@@ -170,15 +192,21 @@ void UiListActivity::drawScrollArrows() {
       renderer, list_scrollbar::outsideBand(listBand, UITheme::getInstance().getMetrics().verticalSpacing), arrows);
 }
 
+ListChrome UiListActivity::shownChrome() const {
+  ListChrome shown = chrome();
+  if (contentsLook()) toContentsLook(shown, mappedInput.hasTouch());
+  return shown;
+}
+
 ListChrome UiListActivity::chrome() const {
   ListChrome chrome;
   chrome.title = headerTitle();
   return chrome;
 }
 
-void UiListActivity::drawChrome() { drawListChromeTop(renderer, chrome()); }
+void UiListActivity::drawChrome() { drawListChromeTop(renderer, shownChrome()); }
 
-void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, chrome()); }
+void UiListActivity::drawFooter() { drawListChromeBottom(renderer, mappedInput, shownChrome()); }
 
 void UiListActivity::render(RenderLock&&) {
   renderer.clearScreen();

@@ -42,6 +42,8 @@ struct ListChrome {
   } titlePage;
   // False drops the button-hint band, and the body runs to the panel's foot.
   bool hints = true;
+  // Set by toContentsLook(): footnotes are set in italic, centred, over an 18px foot.
+  bool contents = false;
   // A centred note under everything above, wrapped like the header lines.
   const char* note = nullptr;
   // Lines above the button hints, for something true of the whole list rather
@@ -59,6 +61,12 @@ struct ListChrome {
   // prose in its rows asks for the theme's content padding.
   int sideInset = 0;
 };
+
+// The contents look for a screen that describes its chrome the classic way: the title
+// and one line about the screen (sub-header, counter or note, the first there is) become
+// a title page, and the hint band goes unless the board is touch, where it is the only
+// Back. A chrome that already set its own titlePage keeps it.
+void toContentsLook(ListChrome& chrome, bool keepHints);
 
 // The bands, measured from the live renderer and theme.
 list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome& chrome);

@@ -44,6 +44,9 @@ namespace freeink::ui {
 class GfxRendererTarget : public DrawTarget {
  public:
   static constexpr FontId FONT_BODY = 1;
+  static constexpr FontId FONT_EXTRA_1 = 3;
+  static constexpr FontId FONT_EXTRA_2 = 4;
+  static constexpr FontId FONT_EXTRA_3 = 5;
   struct Fill {
     Rect rect;
     Paint paint;
@@ -166,6 +169,12 @@ inline list_chrome::Bands listChromeBands(const GfxRenderer&, const ListChrome&)
   return bands;
 }
 inline void drawListChromeTop(const GfxRenderer&, const ListChrome&) {}
+inline void toContentsLook(ListChrome& chrome, bool keepHints) { chrome.hints = chrome.hints && keepHints; }
+inline bool uiLanguageNeedsUbuntu() { return false; }
+constexpr int UI_10_FONT_ID = 1;
+constexpr int LITERATA_UI_26_FONT_ID = 2;
+constexpr int LITERATA_UI_16_FONT_ID = 3;
+constexpr int LITERATA_UI_19_IT_FONT_ID = 4;
 inline void drawListChromeBottom(GfxRenderer&, const MappedInputManager&, const ListChrome&) {}
 
 // clang-format off: declarations must precede the production definitions.
