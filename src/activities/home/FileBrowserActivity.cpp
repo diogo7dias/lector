@@ -19,10 +19,8 @@
 #include "activities/util/ConfirmationActivity.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/BusyBanner.h"
-#include "components/RowHitTest.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
-#include "util/BookBadgeLabel.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookFiling.h"
 #include "util/BookFilingNames.h"
@@ -31,8 +29,9 @@
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
 #include "util/FavoriteImageNames.h"
-#include "util/HoldRepeat.h"
 #include "util/TaskWatchdog.h"
+
+namespace fui = freeink::ui;
 
 namespace {
 constexpr unsigned long GO_HOME_MS = 1000;
@@ -61,8 +60,6 @@ std::string getFileName(std::string filename);
 std::string getFileExtension(const std::string& filename);
 
 void FileBrowserActivity::loadFiles() {
-  // Callers hold RenderLock: old hit rows must stop answering before the listing changes.
-  row_hit::lastRows().begin();
   // Drop the old search mapping even when opening the new folder fails.
   searchQuery.clear();
   filtered.clear();
@@ -76,11 +73,6 @@ void FileBrowserActivity::loadFiles() {
   files.clear();
   readingPercents.clear();
   sortKeys.clear();
-  // A new listing invalidates the scroll window. render() re-derives it from the selection,
-  // so starting at the top is safe even when the caller then selects a row further down.
-  scrollOffset = 0;
-  firstVisibleIdx = 0;
-  lastVisibleIdx = 0;
 
   auto root = Storage.open(basepath.c_str());
   if (!root || !root.isDirectory()) {
@@ -266,17 +258,16 @@ std::string FileBrowserActivity::rowValue(const int row) const {
   const int index = fileIndexAt(row);
   if (index < 0) return {};
 
-  // File type only. The reading badge used to ride along here, right-aligned at the far
-  // end of the row; it now leads the row as a chip, which is where the eye scanning a
-  // library looks for it and how the home screen has always shown it.
+  // File type only; the reading progress is the row's italic line (rowBadge).
   return getFileExtension(std::string(files[static_cast<size_t>(index)]));
 }
 
 std::string FileBrowserActivity::rowBadge(const int row) const {
   if (rowKindAt(row) != RowKind::Entry) return {};
-  const int index = fileIndexAt(row);
-  if (index < 0) return {};
-  return book_badge::chipLabel(readingPercentAt(index), tr(STR_READ_BADGE));
+  const int percent = readingPercentAt(fileIndexAt(row));
+  if (percent < 0) return {};
+  if (percent >= 100) return tr(STR_READ_BADGE);
+  return std::to_string(percent) + "%";
 }
 
 void FileBrowserActivity::applySearch(const std::string& query) {
@@ -284,12 +275,10 @@ void FileBrowserActivity::applySearch(const std::string& query) {
     // The render task walks `filtered` to map rows onto files; swapping it mid-draw
     // would index the wrong entries.
     RenderLock lock(*this);
-    row_hit::lastRows().begin();
     searchQuery = query;
     filtered = searchActive() ? librarysearch::rankMatches(files, searchQuery) : std::vector<int>{};
     // Land on the first result, which is the whole point of having searched.
-    selectorIndex = static_cast<size_t>(std::min(headerRowCount(), std::max(0, totalRowCount() - 1)));
-    scrollOffset = 0;
+    moveSelectionTo(std::min(headerRowCount(), std::max(0, totalRowCount() - 1)));
   }
   requestUpdate(true);
 }
@@ -401,7 +390,7 @@ void FileBrowserActivity::applyBrowserOrder() {
 }
 
 void FileBrowserActivity::onEnter() {
-  Activity::onEnter();
+  UiListActivity::onEnter();
   RenderLock lock(*this);
 
   fileNameBuffer = makeUniqueNoThrow<char[]>(NAME_BUFFER_SIZE);
@@ -410,7 +399,6 @@ void FileBrowserActivity::onEnter() {
     return;
   }
 
-  selectorIndex = 0;
   pendingFullRefresh = true;
 
   auto root = Storage.open(basepath.c_str());
@@ -424,16 +412,14 @@ void FileBrowserActivity::onEnter() {
 
     const auto pos = oldPath.find_last_of('/');
     const std::string fileName = oldPath.substr(pos + 1);
-    selectorIndex = findEntryRow(fileName);
+    moveSelectionTo(findEntryRow(fileName));
   } else {
     loadFiles();
   }
-
-  requestUpdate();
 }
 
 void FileBrowserActivity::onExit() {
-  Activity::onExit();
+  UiListActivity::onExit();
   // Deliberately NO DeferredFavorite::flush() here. This runs when the browser opens an
   // image viewer too, which would rename the file the viewer is about to show and put the
   // card work back on exactly the press this defers it off. The queue drains when a book
@@ -537,13 +523,8 @@ void FileBrowserActivity::confirmDelete(const std::string& fullPath) {
           // rebuilds those strings, so the swap has to happen under the render lock.
           RenderLock lock(*this);
           loadFiles();
-          const int rows = totalRowCount();
-          if (rows == 0) {
-            selectorIndex = 0;
-          } else if (selectorIndex >= static_cast<size_t>(rows)) {
-            // Move selection to the new "last" item
-            selectorIndex = static_cast<size_t>(rows - 1);
-          }
+          // The row that took the deleted one's place, or the new last row.
+          moveSelectionTo(std::max(0, std::min(nav.selected, totalRowCount() - 1)));
         }
 
         requestUpdate(true);
@@ -565,98 +546,78 @@ void FileBrowserActivity::confirmDelete(const std::string& fullPath) {
       handler);
 }
 
-void FileBrowserActivity::loop() {
-  // While the file-action pop-up is up it owns every button, so nothing below
-  // can move the selection or open a file underneath it.
-  if (fileActionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+void FileBrowserActivity::activateRow(const int row, const bool holdAction) {
+  if (rowKindAt(row) == RowKind::Search) {
+    openSearchEntry();
+    return;
+  }
+  if (rowKindAt(row) == RowKind::ClearSearch) {
+    clearSearch();
+    return;
+  }
 
-  // Rows have variable heights now, so a fixed items-per-page is meaningless.
-  // The swipe jump steps by however many rows the last draw actually fit.
-  const int pageItems = std::max(1, lastVisibleIdx - firstVisibleIdx + 1);
+  const int fileIndex = fileIndexAt(row);
+  if (fileIndex < 0) return;
+  const std::string entry(files[static_cast<size_t>(fileIndex)]);
+  const bool isDirectory = (!entry.empty() && entry.back() == '/');
+  std::string cleanBasePath = basepath;
+  if (cleanBasePath.back() != '/') cleanBasePath += "/";
 
-  auto activateSelected = [this](const bool holdAction) {
-    const int row = static_cast<int>(selectorIndex);
-    if (rowKindAt(row) == RowKind::Search) {
-      openSearchEntry();
-      return;
-    }
-    if (rowKindAt(row) == RowKind::ClearSearch) {
-      clearSearch();
-      return;
-    }
+  // Firmware picker: select file -> return path; navigate into directories normally.
+  if (mode == Mode::PickFirmware && !isDirectory) {
+    ActivityResult res{FilePathResult{cleanBasePath + entry}};
+    res.isCancelled = false;
+    setResult(std::move(res));
+    finish();
+    return;
+  }
 
-    const int fileIndex = fileIndexAt(row);
-    if (fileIndex < 0) return;
-    const std::string entry(files[static_cast<size_t>(fileIndex)]);
-    bool isDirectory = (!entry.empty() && entry.back() == '/');
-
-    // Firmware picker: select file -> return path; navigate into directories normally.
-    if (mode == Mode::PickFirmware && !isDirectory) {
-      std::string cleanBasePath = basepath;
-      if (cleanBasePath.back() != '/') cleanBasePath += "/";
-      ActivityResult res{FilePathResult{cleanBasePath + entry}};
-      res.isCancelled = false;
-      setResult(std::move(res));
-      finish();
-      return;
-    }
-
-    if (mode == Mode::Books && holdAction) {
-      // --- LONG PRESS ACTION: SEND OR DELETE ---
-      std::string cleanBasePath = basepath;
-      if (cleanBasePath.back() != '/') cleanBasePath += "/";
-      const std::string fullPath = cleanBasePath + entry;
-
-      // A folder cannot be sent, so its hold still goes straight to the delete
-      // confirmation rather than opening a pop-up with one usable row.
-      if (!isDirectory) {
-        // A folder is not sent anywhere and is not moved from here, so its hold goes
-        // straight to the delete confirmation rather than opening a pop-up.
-        const bool sendable = nearby_file::isAcceptedFilename(entry);
-        StrId actions[3];
-        int count = 0;
-        if (sendable) actions[count++] = StrId::STR_NEARBY_SEND_FILE;
-        actions[count++] = StrId::STR_MOVE_TO_FOLDER;
-        actions[count++] = StrId::STR_DELETE;
-        fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, sendable](const int choice) {
-          const int adjusted = sendable ? choice : choice + 1;
-          if (adjusted == 0) {
-            activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
-                renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
-          } else if (adjusted == 1) {
-            promptMoveToFolder(fullPath);
-          } else {
-            confirmDelete(fullPath);
-          }
-        });
-        requestUpdate();
-        return;
-      }
-
+  if (mode == Mode::Books && holdAction) {
+    const std::string fullPath = cleanBasePath + entry;
+    // A folder is not sent anywhere and is not moved from here, so its hold goes
+    // straight to the delete confirmation rather than opening a pop-up.
+    if (isDirectory) {
       confirmDelete(fullPath);
       return;
     }
-
-    {
-      // --- SHORT PRESS ACTION: OPEN/NAVIGATE ---
-      if (basepath.back() != '/') basepath += "/";
-
-      if (isDirectory) {
-        {
-          // Same race as the delete path: swap the listing under the render lock.
-          RenderLock lock(*this);
-          basepath += entry.substr(0, entry.length() - 1);
-          loadFiles();
-          selectorIndex = 0;
-        }
-        requestUpdate();
+    const bool sendable = nearby_file::isAcceptedFilename(entry);
+    StrId actions[3];
+    int count = 0;
+    if (sendable) actions[count++] = StrId::STR_NEARBY_SEND_FILE;
+    actions[count++] = StrId::STR_MOVE_TO_FOLDER;
+    actions[count++] = StrId::STR_DELETE;
+    fileActionPopup.show(StrId::STR_FILE_ACTIONS, actions, count, 0, [this, fullPath, sendable](const int choice) {
+      const int adjusted = sendable ? choice : choice + 1;
+      if (adjusted == 0) {
+        activityManager.replaceActivity(std::make_unique<NearbyFileTransferActivity>(
+            renderer, mappedInput, NearbyFileTransferActivity::Mode::Send, fullPath));
+      } else if (adjusted == 1) {
+        promptMoveToFolder(fullPath);
       } else {
-        onSelectBook(basepath + entry);
+        confirmDelete(fullPath);
       }
-    }
+    });
+    requestUpdate();
     return;
-  };
+  }
 
+  if (!isDirectory) {
+    onSelectBook(cleanBasePath + entry);
+    return;
+  }
+  {
+    // Same race as the delete path: swap the listing under the render lock.
+    RenderLock lock(*this);
+    basepath = cleanBasePath + entry.substr(0, entry.length() - 1);
+    loadFiles();
+  }
+  moveSelectionTo(0);
+}
+
+bool FileBrowserActivity::handleCustomInput() {
+  // While the file-action pop-up is up it owns every button, so nothing below
+  // can move the selection or open a file underneath it.
+  if (fileActionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return true;
   // The folder picker answers with the folder it is standing in, on the button whose
   // label says so.
   if (mode == Mode::PickFolder && mappedInput.wasPressed(MappedInputManager::Button::Left)) {
@@ -664,40 +625,25 @@ void FileBrowserActivity::loop() {
     res.isCancelled = false;
     setResult(std::move(res));
     finish();
-    return;
+    return true;
   }
+  return false;
+}
 
-  // A tapped row selects, and a second tap on that same row opens it
-  // (components/TwoTapGate.h): the wrapped list records the rect of each row it paints,
-  // so a two-line title answers over both of its lines.
-  if (mappedInput.hasTouch()) {
-    // The render task rebuilds the table under this same lock.
-    RenderLock lock(*this);
-    int tappedRow = 0;
-    const auto rowTap = mappedInput.wasRowTapped(tappedRow);
-    if (rowTap != MappedInputManager::RowTap::None && tappedRow >= 0 && tappedRow < totalRowCount()) {
-      selectorIndex = static_cast<size_t>(tappedRow);
-      lock.unlock();  // Activation can reload the listing and acquire its own lock.
-      if (rowTap == MappedInputManager::RowTap::Activate) activateSelected(/*holdAction=*/false);
-      requestUpdate();
-      return;
-    }
-  }
-
+bool FileBrowserActivity::handleButtons() {
   // Confirm carries two actions, so it cannot fire on the press: the firmware has to
-  // wait to learn which one was meant. The hold half no longer waits for the release
-  // though — it fires the moment the threshold passes, and the delete it opens asks
-  // for confirmation anyway.
+  // wait to learn which one was meant. The hold half fires the moment the threshold
+  // passes, and the delete it opens asks for confirmation anyway.
   switch (confirmHold.update(mappedInput.wasPressed(MappedInputManager::Button::Confirm),
                              mappedInput.isPressed(MappedInputManager::Button::Confirm),
                              mappedInput.wasReleased(MappedInputManager::Button::Confirm), mappedInput.getHeldTime(),
                              GO_HOME_MS)) {
     case hold_button::Fired::Hold:
-      activateSelected(/*holdAction=*/true);
-      return;
+      if (nav.selected < totalRowCount()) activateRow(nav.selected, /*holdAction=*/true);
+      return true;
     case hold_button::Fired::Short:
-      activateSelected(/*holdAction=*/false);
-      return;
+      if (nav.selected < totalRowCount()) activateRow(nav.selected, /*holdAction=*/false);
+      return true;
     case hold_button::Fired::None:
       break;
   }
@@ -717,91 +663,33 @@ void FileBrowserActivity::loop() {
       RenderLock lock(*this);
       basepath = "/";
       loadFiles();
-      selectorIndex = 0;
     }
-    requestUpdate();
-    return;
+    moveSelectionTo(0);
+    return true;
   }
-  if (backFired == hold_button::Fired::Short) {
+  if (backFired != hold_button::Fired::Short) return false;
+
+  if (basepath != "/") {
+    const std::string oldPath = basepath;
+    int row = 0;
     {
-      if (basepath != "/") {
-        const std::string oldPath = basepath;
-
-        {
-          RenderLock lock(*this);
-          basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
-          if (basepath.empty()) basepath = "/";
-          loadFiles();
-
-          const auto pos = oldPath.find_last_of('/');
-          const std::string dirName = oldPath.substr(pos + 1) + "/";
-          selectorIndex = findEntryRow(dirName);
-        }
-
-        requestUpdate();
-      } else if (mode == Mode::PickFirmware || mode == Mode::PickFolder) {
-        // A picker at root: cancel back to the caller instead of going home.
-        ActivityResult res;
-        res.isCancelled = true;
-        setResult(std::move(res));
-        finish();
-      } else {
-        onGoHome();
-      }
+      RenderLock lock(*this);
+      basepath.replace(basepath.find_last_of('/'), std::string::npos, "");
+      if (basepath.empty()) basepath = "/";
+      loadFiles();
+      row = static_cast<int>(findEntryRow(oldPath.substr(oldPath.find_last_of('/') + 1) + "/"));
     }
+    moveSelectionTo(row);
+  } else if (mode == Mode::PickFirmware || mode == Mode::PickFolder) {
+    // A picker at root: cancel back to the caller instead of going home.
+    ActivityResult res;
+    res.isCancelled = true;
+    setResult(std::move(res));
+    finish();
+  } else {
+    onGoHome();
   }
-
-  const int listSize = totalRowCount();
-
-  // Keep the selection inside the drawn window. Moving past the bottom nudges the offset by
-  // one and lets the draw settle the rest; jumping above the top snaps the offset to the
-  // selection (which also covers the wrap from the first row to the last).
-  auto followSelection = [this, listSize] {
-    const int index = static_cast<int>(selectorIndex);
-    if (index > lastVisibleIdx) {
-      // By however far the selection ran past the window, not by one: a held key
-      // now moves several rows per repeat, and a one-row nudge would leave the
-      // cursor off the bottom of the screen for the rest of the hold.
-      scrollOffset = std::min(scrollOffset + (index - lastVisibleIdx), listSize - 1);
-    }
-    if (index < firstVisibleIdx) {
-      scrollOffset = index;
-    }
-    scrollOffset = std::clamp(scrollOffset, 0, std::max(0, listSize - 1));
-  };
-
-  buttonNavigator.onNextStep([this, listSize, followSelection] {
-    selectorIndex = ButtonNavigator::nextIndex(static_cast<int>(selectorIndex), listSize);
-    followSelection();
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousStep([this, listSize, followSelection] {
-    selectorIndex = ButtonNavigator::previousIndex(static_cast<int>(selectorIndex), listSize);
-    followSelection();
-    requestUpdate();
-  });
-
-  // Rows per repeat with the shared ramp, clamped at the ends — the library is
-  // the longest list on the device and a page-per-repeat hold was unaimable. A
-  // swipe arrives through the same callback and stays a page.
-  buttonNavigator.onNextContinuous([this, listSize, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::swipeDrivenPass()
-                        ? ButtonNavigator::nextPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
-                        : ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
-                                                     holdRepeatStep(buttonNavigator.repeats()));
-    followSelection();
-    requestUpdate();
-  });
-
-  buttonNavigator.onPreviousContinuous([this, listSize, pageItems, followSelection] {
-    selectorIndex = ButtonNavigator::swipeDrivenPass()
-                        ? ButtonNavigator::previousPageIndex(static_cast<int>(selectorIndex), listSize, pageItems)
-                        : ButtonNavigator::heldIndex(static_cast<int>(selectorIndex), listSize,
-                                                     -holdRepeatStep(buttonNavigator.repeats()));
-    followSelection();
-    requestUpdate();
-  });
+  return true;
 }
 
 std::string getFileName(std::string filename) {
@@ -812,9 +700,6 @@ std::string getFileName(std::string filename) {
   filename = utf8ComposeNfc(filename);
   if (filename.back() == '/') {
     filename.pop_back();
-    if (!UITheme::getInstance().getTheme().showsFileIcons()) {
-      return "[" + filename + "]";
-    }
     return filename;
   }
   const auto pos = filename.rfind('.');
@@ -831,103 +716,96 @@ std::string getFileExtension(const std::string& filename) {
     return "";
   }
   const auto pos = filename.rfind('.');
-  return filename.substr(pos);
+  return pos == std::string::npos ? std::string() : filename.substr(pos + 1);
 }
 
-void FileBrowserActivity::render(RenderLock&&) {
-  if (fileActionPopup.processRender(renderer, mappedInput)) return;
-
-  renderer.clearScreen();
-
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
-  const auto& metrics = UITheme::getInstance().getMetrics();
-
-  std::string folderName =
-      (mode == Mode::PickFirmware) ? std::string(tr(STR_SELECT_FIRMWARE_FILE))
-      : (mode == Mode::PickFolder)
-          ? std::string(tr(STR_MOVE_TO_FOLDER))
-          : ((basepath == "/") ? std::string(tr(STR_SD_CARD)) : basepath.substr(basepath.rfind('/') + 1));
-  // A folder too big to list in full must say so. Showing a silently short listing
-  // would read as missing files.
-  if (files.truncated()) {
-    folderName += " (";
-    folderName += tr(STR_PARTIAL_LISTING);
-    folderName += ")";
-  }
-  // A long folder name wraps and the band grows with it, so the rows start under it.
-  const int headerHeight = BaseTheme::headerHeightFor(renderer, pageWidth, folderName.c_str());
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, headerHeight}, folderName.c_str());
-
-  // The path wraps over the lines it needs; the band is reserved from the same wrap.
-  const int pathLineHeight =
-      renderer.getLineHeight(UI_10_FONT_ID) * BaseTheme::pathBarLines(renderer, pageWidth, basepath.c_str());
-  const int pathReserved = pathLineHeight + metrics.verticalSpacing;
-  const int contentTop = metrics.topPadding + headerHeight + metrics.verticalSpacing;
-  const int contentHeight =
-      pageHeight - contentTop - metrics.buttonHintsHeight - metrics.verticalSpacing - pathReserved;
+void FileBrowserActivity::buildScreen(UiScreen& screen) {
   if (totalRowCount() == 0) {
-    const char* emptyMsg = (mode == Mode::PickFirmware) ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND);
-    GUI.drawHelpText(renderer, Rect{0, contentTop + 20, pageWidth, contentHeight}, emptyMsg);
-  } else {
-    // Wrapping list: a long book title spills onto extra lines instead of being cut off
-    // with an ellipsis. Rows therefore vary in height, so the visible range comes back from
-    // the draw and feeds the scroll offset.
-    const ListVisibility vis = GUI.drawWrappedList(
-        renderer, Rect{0, contentTop, pageWidth, contentHeight}, totalRowCount(), static_cast<int>(selectorIndex),
-        scrollOffset, [this](int row) { return rowTitle(row); }, [this](int row) { return rowValue(row); },
-        [this](int row) { return rowBadge(row); });
-    firstVisibleIdx = vis.firstVisible;
-    lastVisibleIdx = vis.lastVisible;
-    scrollOffset = vis.firstVisible;
-    // A search that matched nothing still shows its two rows, so say so rather than
-    // leaving the user staring at an empty list wondering if the search ran.
-    if (searchActive() && filtered.empty()) {
-      GUI.drawHelpText(renderer, Rect{0, contentTop + contentHeight / 2, pageWidth, contentHeight},
-                       tr(STR_NO_FILES_FOUND));
+    screen.centeredText(mode == Mode::PickFirmware ? tr(STR_NO_BIN_FILES) : tr(STR_NO_FILES_FOUND));
+    return;
+  }
+  static const char* const MORE = "\xE2\x80\xBA";
+  const int count = totalRowCount();
+  rows.assign(count, fui::ListItem{});
+  // Three strings per row (title, progress, file type) the items point into.
+  rowText.assign(static_cast<size_t>(count) * 3, std::string());
+  for (int row = 0; row < count; ++row) {
+    auto& item = rows[row];
+    std::string* text = &rowText[static_cast<size_t>(row) * 3];
+    item.actionValue = static_cast<int16_t>(row);
+    text[0] = rowTitle(row);
+    item.label = text[0].c_str();
+    const int index = fileIndexAt(row);
+    const std::string_view name = index >= 0 ? files[static_cast<size_t>(index)] : std::string_view();
+    if (index < 0 || (!name.empty() && name.back() == '/')) {
+      item.value = MORE;  // the search rows and folders open something
+      continue;
     }
+    // Progress under the title, in the italic line; the file type as the value.
+    text[1] = rowBadge(row);
+    if (!text[1].empty()) item.subtitle = text[1].c_str();
+    text[2] = rowValue(row);
+    item.value = text[2].c_str();
   }
 
-  // Where in the card the listing is coming from, along the foot of the screen.
-  {
-    const int pathY = pageHeight - metrics.buttonHintsHeight - metrics.verticalSpacing - pathLineHeight;
-    const int separatorY = pathY - metrics.verticalSpacing / 2;
-    GUI.drawPathBar(renderer, Rect{0, separatorY, pageWidth, pathReserved}, basepath.c_str());
-  }
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(count);
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;
+  syncListViewport(screen, props);
+  // A long name wraps rather than being cut, so the whole title stays readable.
+  props.labelText.maxLines = 3;
+  screen.list(props);
+}
 
-  // Help text
+void FileBrowserActivity::activateIndex(const int index) { activateRow(index, /*holdAction=*/false); }
+
+ListChrome FileBrowserActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = mode == Mode::PickFirmware ? tr(STR_SELECT_FIRMWARE_FILE)
+                 : mode == Mode::PickFolder ? tr(STR_MOVE_TO_FOLDER)
+                 : basepath == "/"          ? tr(STR_SD_CARD)
+                                            : basepath.c_str() + basepath.rfind('/') + 1;
+  // A folder too big to list in full must say so; a silently short listing would read
+  // as missing files. A search that matched nothing says that instead of an empty list.
+  if (files.truncated()) {
+    chrome.note = tr(STR_PARTIAL_LISTING);
+  } else if (searchActive() && filtered.empty()) {
+    chrome.note = tr(STR_NO_FILES_FOUND);
+  }
+  // Where in the card the listing comes from, at the foot. The root needs no path.
+  if (basepath != "/") chrome.footnotes[0] = basepath.c_str();
+
   // Only the Books browser goes Home from the root; both pickers cancel back to the caller.
-  const char* backLabel = (basepath == "/" && mode == Mode::Books) ? tr(STR_HOME) : tr(STR_BACK);
-  // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
-  // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const int selectedRow = static_cast<int>(selectorIndex);
-  const int selectedFile = fileIndexAt(selectedRow);
+  chrome.backHint = (basepath == "/" && mode == Mode::Books) ? tr(STR_HOME) : tr(STR_BACK);
+  const bool listEmpty = totalRowCount() == 0;
+  const int selectedFile = fileIndexAt(nav.selected);
+  // In PickFirmware mode, Confirm on a .bin returns the path to the caller; folders still open.
   const bool selectingFirmwareFile = mode == Mode::PickFirmware && selectedFile >= 0 &&
                                      !files[static_cast<size_t>(selectedFile)].empty() &&
                                      files[static_cast<size_t>(selectedFile)].back() != '/';
-  const bool listEmpty = totalRowCount() == 0;
-  const char* confirmLabel =
-      listEmpty ? ""
-                : (rowKindAt(selectedRow) != RowKind::Entry ? tr(STR_SELECT)
-                                                            : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN)));
-  const auto labels = mode == Mode::PickFolder
-                          ? mappedInput.mapLabels(backLabel, listEmpty ? "" : tr(STR_OPEN), tr(STR_MOVE_HERE),
-                                                  listEmpty ? "" : tr(STR_DIR_DOWN))
-                          : mappedInput.mapLabels(backLabel, confirmLabel, listEmpty ? "" : tr(STR_DIR_UP),
-                                                  listEmpty ? "" : tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  // The browser is commonly reached straight from screens that paint only in FAST
-  // (the OPDS download fires 20+ full-screen FAST paints of its own), so the panel
-  // arrives here already carrying ghosts. Spend one FULL on the first frame after
-  // entry or resume; every later frame stays FAST.
-  if (pendingFullRefresh) {
-    pendingFullRefresh = false;
-    renderer.displayBuffer(HalDisplay::FULL_REFRESH);
-  } else {
-    renderer.displayBuffer();
+  chrome.confirmHint = listEmpty                                                              ? ""
+                       : (rowKindAt(nav.selected) != RowKind::Entry || selectingFirmwareFile) ? tr(STR_SELECT)
+                                                                                              : tr(STR_OPEN);
+  if (mode == Mode::PickFolder) {
+    // Move Here lives on a key the rows cannot show, so its hint stays on every board.
+    chrome.thirdHint = tr(STR_MOVE_HERE);
+    chrome.contentsKeepsHints = true;
   }
+  return chrome;
 }
+
+// The browser is commonly reached straight from screens that paint only in FAST (the OPDS
+// download fires 20+ full-screen FAST paints of its own), so the panel arrives here already
+// carrying ghosts. One FULL on the first frame after entry or resume; later frames stay FAST.
+HalDisplay::RefreshMode FileBrowserActivity::refreshMode() {
+  if (!pendingFullRefresh) return HalDisplay::FAST_REFRESH;
+  pendingFullRefresh = false;
+  return HalDisplay::FULL_REFRESH;
+}
+
+bool FileBrowserActivity::drawOverlay() { return fileActionPopup.processRender(renderer, mappedInput); }
 
 void FileBrowserActivity::promptMoveToFolder(const std::string& fullPath) {
   startActivityForResult(std::make_unique<FileBrowserActivity>(renderer, mappedInput, "/", Mode::PickFolder),
@@ -968,7 +846,7 @@ void FileBrowserActivity::onMoveDestinationResult(const std::string& fullPath, c
     const std::string target = bookfiling::buildFolderDestination(fullPath, folderArg.c_str());
     bookfiling::moveBookToFolder(fullPath, target);
     loadFiles();
-    if (selectorIndex >= static_cast<size_t>(totalRowCount())) selectorIndex = 0;
+    if (nav.selected >= totalRowCount()) moveSelectionTo(0);
   }
   requestUpdate();
 }
