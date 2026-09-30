@@ -1,19 +1,14 @@
 #include "HomeActivity.h"
 
-#include <Bitmap.h>
-#include <Epub.h>
-#include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalClock.h>
 #include <HalDisplay.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
-#include <Utf8.h>
-#include <Xtc.h>
 #include <esp_random.h>
 
 #include <algorithm>
-#include <cstring>
 #include <vector>
 
 #include "CrossPointSettings.h"
@@ -23,10 +18,12 @@
 #include "activities/network/NearbyFileTransferActivity.h"
 #include "components/BusyBanner.h"
 #include "components/UITheme.h"
-#include "components/icons/skull12.h"
 #include "fontIds.h"
 #include "util/BusyTick.h"
 #include "util/DeferredFavorite.h"
+#include "util/StringUtils.h"
+
+namespace fui = freeink::ui;
 
 int HomeActivity::menuRowCount() const {
   int count = 3;  // File Browser, File transfer, Settings
@@ -35,8 +32,6 @@ int HomeActivity::menuRowCount() const {
   }
   return count;
 }
-
-int HomeActivity::getMenuItemCount() const { return static_cast<int>(recentBooks.size()) + menuRowCount(); }
 
 void HomeActivity::loadRecentBooks(int maxBooks) {
   recentBooks.clear();
@@ -77,7 +72,6 @@ void HomeActivity::loadRecentBooks(int maxBooks) {
 }
 
 void HomeActivity::onEnter() {
-  Activity::onEnter();
   // Reaching home means the user has finished triaging wallpapers, so this is one of the
   // moments queued favorite renames run. A no-op when the queue is empty, which is almost
   // always. See DeferredFavorite.h for why they are not done on the press.
@@ -99,214 +93,165 @@ void HomeActivity::onEnter() {
     sortesResult = sortes::findBook(sortesBook, esp_random);
   }
 
-  // Load every recent (in-progress) book, up to the store cap; drawList pages them
-  // (with up/down arrows) when there are more than fit the list area at once.
+  // Every recent (in-progress) book, up to the store cap; the list windows them.
   loadRecentBooks(RecentBooksStore::MAX_RECENT_BOOKS);
-  scrollOffset = 0;
-  firstVisibleBookIdx = 0;
-  lastVisibleBookIdx = 0;
+  authors.clear();
+  percents.clear();
+  authors.reserve(recentBooks.size());
+  percents.reserve(recentBooks.size());
+  for (const RecentBook& book : recentBooks) {
+    authors.push_back(SETTINGS.authorDisplay == CrossPointSettings::AUTHOR_FULL_NAME
+                          ? book.author
+                          : StringUtils::authorInitials(book.author));
+    char pct[8] = "";
+    if (book.progressPercent >= 0) snprintf(pct, sizeof(pct), "%d%%", book.progressPercent);
+    percents.emplace_back(pct);
+  }
 
-  const auto base = static_cast<int>(recentBooks.size());
-  selectorIndex = initialMenuItem == HomeMenuItem::NONE ? 0 : base + menuItemToIndex(initialMenuItem, hasOpdsServers);
-
-  // Trigger first update
-  requestUpdate();
+  UiListActivity::onEnter();
+  const int first = bookCount() > 0 ? firstBookRow() : firstMenuRow();
+  moveSelectionTo(initialMenuItem == HomeMenuItem::NONE
+                      ? first
+                      : firstMenuRow() + menuItemToIndex(initialMenuItem, hasOpdsServers));
 }
 
-void HomeActivity::onExit() { Activity::onExit(); }
-
-void HomeActivity::loop() {
-  const int menuCount = getMenuItemCount();
-
-  auto activateSelection = [this] {
-    if (selectorIndex < static_cast<int>(recentBooks.size())) {
-      onSelectBook(recentBooks[selectorIndex].path);
-      return;
-    }
-    const int menuIndex = selectorIndex - static_cast<int>(recentBooks.size());
-    switch (indexToMenuItem(menuIndex, hasOpdsServers)) {
+void HomeActivity::buildScreen(UiScreen& screen) {
+  static const char* const MORE = "\xE2\x80\xBA";
+  rows.assign(listCount(), fui::ListItem{});
+  if (bookCount() > 0) {
+    rows[0].label = tr(STR_CONTINUE_READING);
+    rows[0].isHeader = true;
+  }
+  for (int i = 0; i < bookCount(); ++i) {
+    auto& row = rows[firstBookRow() + i];
+    row.label = recentBooks[i].title.c_str();
+    row.subtitle = authors[i].empty() ? nullptr : authors[i].c_str();
+    row.value = percents[i].empty() ? nullptr : percents[i].c_str();
+  }
+  rows[libraryHeadingRow()].label = tr(STR_GRP_LIBRARY);
+  rows[libraryHeadingRow()].isHeader = true;
+  for (int i = 0; i < menuRowCount(); ++i) {
+    auto& row = rows[firstMenuRow() + i];
+    switch (indexToMenuItem(i, hasOpdsServers)) {
       case HomeMenuItem::FILE_BROWSER:
-        onFileBrowserOpen();
+        row.label = tr(STR_BROWSE_FILES);
         break;
       case HomeMenuItem::OPDS_BROWSER:
-        onOpdsBrowserOpen();
+        row.label = tr(STR_OPDS_BROWSER);
         break;
       case HomeMenuItem::FILE_TRANSFER:
-        onFileTransferOpen();
-        break;
-      case HomeMenuItem::SETTINGS_MENU:
-        onSettingsOpen();
+        row.label = tr(STR_NEARBY_SYNC);
         break;
       default:
+        row.label = tr(STR_SETTINGS_TITLE);
         break;
     }
-  };
+    row.value = MORE;
+  }
+  for (int i = 0; i < listCount(); ++i) rows[i].actionValue = static_cast<int16_t>(i);
 
-  // A tap picks the row it landed on; on a board with touch it takes a second tap on
-  // that same row to open it (components/TwoTapGate.h). The first tap only moves the
-  // selection under the outline the row is drawn with while it is armed.
-  int tappedItem = 0;
-  const auto rowTap = mappedInput.wasRowTapped(tappedItem);
-  if (rowTap != MappedInputManager::RowTap::None && tappedItem >= 0 && tappedItem < menuCount) {
-    selectorIndex = tappedItem;
-    if (rowTap == MappedInputManager::RowTap::Armed) {
-      requestUpdate();
-      return;
-    }
-    activateSelection();
+  fui::ListProps props{};
+  props.items = rows.data();
+  props.count = static_cast<uint16_t>(rows.size());
+  props.action = ACTION_ROW;
+  props.inputMask = fui::InputTouch;
+  syncListViewport(screen, props, /*hasSubtitle=*/bookCount() > 0);
+  screen.list(props);
+}
+
+void HomeActivity::activateIndex(const int index) {
+  if (isHeaderRow(index)) return;
+  if (index < firstMenuRow()) {
+    onSelectBook(recentBooks[index - firstBookRow()].path);
     return;
   }
-
-  const int bookCount = static_cast<int>(recentBooks.size());
-  // Keep the selected book within the list's visible window as it moves. drawList
-  // clamps and reports the true firstVisible each render, so this only nudges.
-  const auto moveTo = [this, bookCount](const int index) {
-    selectorIndex = index;
-    if (selectorIndex < bookCount) {
-      if (selectorIndex > lastVisibleBookIdx) scrollOffset += selectorIndex - lastVisibleBookIdx;
-      if (selectorIndex < firstVisibleBookIdx) scrollOffset = selectorIndex;
-      scrollOffset = std::max(0, std::min(scrollOffset, std::max(0, bookCount - 1)));
-    }
-    requestUpdate();
-  };
-  // A tap wraps; a hold stops at the ends, since a hold that wraps never ends.
-  buttonNavigator.onNextStep([&] { moveTo(ButtonNavigator::nextIndex(selectorIndex, menuCount)); });
-  buttonNavigator.onPreviousStep([&] { moveTo(ButtonNavigator::previousIndex(selectorIndex, menuCount)); });
-  buttonNavigator.onNextContinuous([&] { moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, 1)); });
-  buttonNavigator.onPreviousContinuous([&] { moveTo(ButtonNavigator::heldIndex(selectorIndex, menuCount, -1)); });
-
-  // Back is otherwise unused on the home menu, so it runs the user's configured
-  // action. A Back still held from the screen that was left is handled centrally
-  // by the input gate ActivityManager arms on every transition.
-  if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    switch (SETTINGS.homeBackAction) {
-      case CrossPointSettings::HOME_BACK_RESUME:
-        // recentBooks is most-recent-first and already pruned of files missing
-        // from the SD card.
-        if (!recentBooks.empty()) {
-          onSelectBook(recentBooks[0].path);
-          return;
-        }
-        break;
-      case CrossPointSettings::HOME_BACK_SORTES:
-        if (sortesResult == sortes::ScanResult::Found) {
-          BusyBanner banner(renderer, tr(STR_SORTES));
-          sortesResult = sortes::findBook(sortesBook, esp_random);
-          if (sortesResult == sortes::ScanResult::Found) {
-            activityManager.goToReader(sortesBook, false, false, true);
-          } else {
-            requestUpdate();
-          }
-          return;
-        }
-        break;
-      case CrossPointSettings::HOME_BACK_NONE:
-      default:
-        break;
-    }
-  }
-
-  if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    activateSelection();
+  switch (indexToMenuItem(index - firstMenuRow(), hasOpdsServers)) {
+    case HomeMenuItem::FILE_BROWSER:
+      onFileBrowserOpen();
+      break;
+    case HomeMenuItem::OPDS_BROWSER:
+      onOpdsBrowserOpen();
+      break;
+    case HomeMenuItem::FILE_TRANSFER:
+      onFileTransferOpen();
+      break;
+    case HomeMenuItem::SETTINGS_MENU:
+      onSettingsOpen();
+      break;
+    default:
+      break;
   }
 }
 
-void HomeActivity::render(RenderLock&&) {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const auto pageWidth = renderer.getScreenWidth();
-  const auto pageHeight = renderer.getScreenHeight();
+// Back is otherwise unused on the home menu, so it runs the user's configured action.
+void HomeActivity::onBackButton() {
+  switch (SETTINGS.homeBackAction) {
+    case CrossPointSettings::HOME_BACK_RESUME:
+      // recentBooks is most-recent-first and already pruned of files missing from the SD card.
+      if (!recentBooks.empty()) onSelectBook(recentBooks[0].path);
+      break;
+    case CrossPointSettings::HOME_BACK_SORTES:
+      if (sortesResult == sortes::ScanResult::Found) {
+        BusyBanner banner(renderer, tr(STR_SORTES));
+        sortesResult = sortes::findBook(sortesBook, esp_random);
+        if (sortesResult == sortes::ScanResult::Found) {
+          activityManager.goToReader(sortesBook, false, false, true);
+          break;
+        }
+      }
+      // Keys-only boards carry no hint band to say why Back did nothing, so the press says it.
+      GUI.drawPopup(renderer, sortesHint());
+      break;
+    default:
+      break;
+  }
+}
 
-  renderer.clearScreen();
+const char* HomeActivity::sortesHint() const {
+  return sortesResult == sortes::ScanResult::Found   ? tr(STR_SORTES)
+         : sortesResult == sortes::ScanResult::Empty ? tr(STR_SORTES_EMPTY)
+                                                     : tr(STR_SORTES_UNAVAILABLE);
+}
 
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding}, nullptr);
-  // The version, the clock and the skull that sit in the header band; the theme
-  // places all three, so a restyle reaches them like everything else.
+// The title page: the firmware's name and version, the clock and the battery at the foot.
+ListChrome HomeActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = tr(STR_LECTOR);
+  chrome.subHeader = CROSSPOINT_VERSION;
   char timeBuf[9];
   const bool hasClock =
       halClock.isAvailable() &&
       halClock.formatTime(timeBuf, sizeof(timeBuf), SETTINGS.clockUtcOffsetQ, SETTINGS.clockFormat == 1);
-  GUI.drawHomeHeaderExtras(renderer, CROSSPOINT_VERSION, hasClock ? timeBuf : nullptr);
-
-  // In-progress books as a list: each book's full title + its author wrapped over
-  // as many lines as it needs, with an inline [NN%] black-background badge, and
-  // "N more above/below" indicators when it scrolls. Replaces the single cover tile —
-  // no per-book cover generation, so the home stays fast. A menu selection passes -1
-  // so no book row is highlighted.
-  // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_NEARBY_SYNC), tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Transfer, Settings};
-
-  if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 1, Library);
+  char foot[32];
+  if (hasClock) {
+    snprintf(foot, sizeof(foot), "%s \xC2\xB7 %u%%", timeBuf, powerManager.getBatteryPercentage());
+  } else {
+    snprintf(foot, sizeof(foot), "%u%%", powerManager.getBatteryPercentage());
   }
-
-  // drawButtonMenu lays its rows out from the top of this rect and ignores the height,
-  // so any row the home screen does not draw leaves its gap at the BOTTOM — which is
-  // what dropping Recent Books produced: a hole between Settings and the button hints.
-  // Bottom-anchor the block instead, so the gap under the last row equals the gap
-  // between rows. std::max keeps the original top as a floor, so a long book list can
-  // still push the menu down but never up into itself.
-  const int menuCount = static_cast<int>(menuItems.size());
-  const int menuTopFloor = metrics.homeTopPadding + metrics.homeCoverTileHeight + metrics.homeMenuTopOffset;
-  const int lastRowBottomWanted = pageHeight - metrics.buttonHintsHeight - metrics.menuSpacing;
-  const int menuBlockHeight =
-      metrics.verticalSpacing + (menuCount - 1) * (metrics.menuRowHeight + metrics.menuSpacing) + metrics.menuRowHeight;
-  const int menuTop = std::max(menuTopFloor, lastRowBottomWanted - menuBlockHeight);
-
-  // The in-progress list gets every row between the header and the menu, rather than a
-  // fixed tile height: with the menu bottom-anchored, whatever the menu does not use is
-  // reading material. homeCoverTileHeight stays the floor so a theme that wants a short
-  // list still gets one.
-  const Rect bookRect{
-      0, metrics.homeTopPadding, pageWidth,
-      std::max(metrics.homeCoverTileHeight, menuTop - metrics.homeTopPadding - metrics.verticalSpacing)};
-  const int bookSelected = (selectorIndex < static_cast<int>(recentBooks.size())) ? selectorIndex : -1;
-  const ListVisibility vis = GUI.drawRecentBookList(renderer, bookRect, recentBooks, bookSelected, scrollOffset);
-  firstVisibleBookIdx = vis.firstVisible;
-  lastVisibleBookIdx = vis.lastVisible;
-  scrollOffset = vis.firstVisible;
-
-  GUI.drawButtonMenu(
-      renderer,
-      Rect{0, menuTop, pageWidth,
-           pageHeight - (metrics.headerHeight + metrics.homeTopPadding + metrics.verticalSpacing +
-                         metrics.homeMenuTopOffset + metrics.buttonHintsHeight)},
-      menuCount, selectorIndex - recentBooks.size(), [&menuItems](int index) { return std::string(menuItems[index]); },
-      [&menuIcons](int index) { return menuIcons[index]; },
-      // The books above own indices 0..N-1 of the same selection space the menu continues.
-      static_cast<int>(recentBooks.size()));
-
-  // Back's hint must match what it actually does. An empty label draws no
-  // button box at all, which is what HOME_BACK_NONE wants.
-  const char* backLabel = "";
+  folio = foot;
+  chrome.folio = folio.c_str();
+  // Back's hint says what it does; an empty label draws no box, which is what NONE wants.
   switch (SETTINGS.homeBackAction) {
     case CrossPointSettings::HOME_BACK_RESUME:
-      backLabel = recentBooks.empty() ? "" : tr(STR_RESUME);
+      chrome.backHint = recentBooks.empty() ? "" : tr(STR_RESUME);
       break;
     case CrossPointSettings::HOME_BACK_SORTES:
-      backLabel = sortesResult == sortes::ScanResult::Found   ? tr(STR_SORTES)
-                  : sortesResult == sortes::ScanResult::Empty ? tr(STR_SORTES_EMPTY)
-                                                              : tr(STR_SORTES_UNAVAILABLE);
+      chrome.backHint = sortesHint();
       break;
-    case CrossPointSettings::HOME_BACK_NONE:
     default:
+      chrome.backHint = "";
       break;
   }
+  return chrome;
+}
 
-  const auto labels = mappedInput.mapLabels(backLabel, tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-
-  if (cleanInitialRefresh) {
-    // Splashless wake with a custom sleep face and no saved frame: the panel still
-    // physically shows the sleep image, and a FAST_REFRESH would leave it under the menu.
-    // One HALF_REFRESH on this first paint clears it without a second refresh pass
-    // (upstream #3009). One-shot: later Home paints go back to the cheap path.
-    cleanInitialRefresh = false;
-    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
-  } else {
-    renderer.displayBuffer();
-  }
+// Splashless wake with a custom sleep face and no saved frame: the panel still physically
+// shows the sleep image, and a FAST_REFRESH would leave it under the menu. One HALF_REFRESH
+// on this first paint clears it (upstream #3009); later paints go back to the cheap path.
+HalDisplay::RefreshMode HomeActivity::refreshMode() {
+  if (!cleanInitialRefresh) return HalDisplay::FAST_REFRESH;
+  cleanInitialRefresh = false;
+  return HalDisplay::HALF_REFRESH;
 }
 
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }

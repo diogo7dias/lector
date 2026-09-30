@@ -51,8 +51,10 @@ class UiListActivity : public Activity, protected UiAppHost {
   // row, then long-press/activate.
   virtual void onRowAction(const freeink::ui::ActionEvent& event);
   // The button-navigation tail of loop(): release steps the selection, hold
-  // jumps by page. The reader menu replaces it with a heading-aware walk.
+  // jumps by page, and a step that lands on a heading row goes on past it.
   virtual void navigateButtons();
+  // A heading row: drawn, never selected.
+  virtual bool isHeaderRow(int index) const { return false; }
   // First hook in loop(); return true when the pass is consumed (popups, extra
   // buttons, gestures). Runs before the base button handling.
   virtual bool handleCustomInput() { return false; }

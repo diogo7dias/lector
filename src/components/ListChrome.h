@@ -44,6 +44,9 @@ struct ListChrome {
   bool hints = true;
   // Set by toContentsLook(): footnotes are set in italic, centred, over an 18px foot.
   bool contents = false;
+  // The contents look's folio: one small-caps line at the foot, under any footnotes, for
+  // what the device says about itself (the clock and the battery on Home).
+  const char* folio = nullptr;
   // Keeps the hint band in the contents look, for hints that say what the rows cannot
   // (Remap Front Buttons previews the mapping on the keys themselves).
   bool contentsKeepsHints = false;

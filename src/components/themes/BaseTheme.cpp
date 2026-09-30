@@ -15,7 +15,6 @@
 #include <vector>
 
 #include "I18n.h"
-#include "RecentBooksStore.h"
 #include "UiFont.h"
 #include "components/BannerStyle.h"
 #include "components/HeaderTitle.h"
@@ -26,7 +25,6 @@
 #include "components/TwoTapGate.h"
 #include "components/UITheme.h"
 #include "components/WrappedListWindow.h"
-#include "components/icons/skull12.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -789,42 +787,6 @@ ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rec
   return {firstVisible, lastVisible, itemCount};
 }
 
-void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                               const std::function<std::string(int index)>& buttonLabel,
-                               const std::function<UIIcon(int index)>& rowIcon, const int itemIndexBase) const {
-  const auto& menuMetrics = UITheme::getInstance().getMetrics();
-  row_hit::Rows& menuHitRows = row_hit::lastRows();
-  for (int i = 0; i < buttonCount; ++i) {
-    const int tileY = BaseMetrics::values.verticalSpacing + rect.y +
-                      static_cast<int>(i) * (menuMetrics.menuRowHeight + menuMetrics.menuSpacing);
-
-    const bool selected = selectedIndex == i;
-
-    std::string labelStr = buttonLabel(i);
-    const char* label = labelStr.c_str();
-    const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, label);
-    const int textX = rect.x + (rect.width - textWidth) / 2;
-    const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-    const int textY =
-        tileY + (menuMetrics.menuRowHeight - lineHeight) / 2;  // vertically centered assuming y is top of text
-
-    menuHitRows.add(itemIndexBase + i, rect.x + menuMetrics.contentSidePadding, tileY,
-                    rect.width - menuMetrics.contentSidePadding * 2, menuMetrics.menuRowHeight);
-
-    const Rect tile(rect.x + menuMetrics.contentSidePadding, tileY, rect.width - menuMetrics.contentSidePadding * 2,
-                    menuMetrics.menuRowHeight);
-    bool inverted = false;
-    if (selected) {
-      inverted = drawSelection(renderer, tile, itemIndexBase + i == two_tap::armedRow());
-      if (!inverted) renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
-    } else {
-      renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
-    }
-    // Invert text when the tile is selected, to contrast with the filled background
-    renderer.drawText(UI_10_FONT_ID, textX, textY, label, !inverted);
-  }
-}
-
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
   const int w = renderer.getScreenWidth();
   // Arabic and Hebrew draw it in their UI face, which Literata cannot stand in for.
@@ -1191,48 +1153,6 @@ int BaseTheme::helpTextLines(const GfxRenderer& renderer, const int rectWidth, c
   return static_cast<int>(wrapUiText(renderer, label, width, width).size());
 }
 
-void BaseTheme::drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int pageWidth = renderer.getScreenWidth();
-  // topPadding already carries the X4's physical top-edge crop, so anchoring to it
-  // keeps both of these on screen on either board without a per-site inset.
-  const int textY = metrics.topPadding + 5;
-
-  // Firmware version at the left edge, which is where the old Lector home carried it.
-  const int versionX = metrics.contentSidePadding;
-  const int versionWidth = version != nullptr ? renderer.getTextWidth(UI_10_FONT_ID, version) : 0;
-  if (version != nullptr) renderer.drawText(UI_10_FONT_ID, versionX, textY, version);
-
-  // Clock to the left of the battery cluster. Only boards with an RTC report
-  // available, so this simply does not draw where there is no clock to read.
-  // Placed against the same cluster width drawHeader reserves, so the gap stays put
-  // whatever the UI font measures.
-  int rightEdge = pageWidth - BaseTheme::batteryClusterWidth(renderer) - 12;
-  if (clock != nullptr) {
-    rightEdge -= renderer.getTextWidth(UI_10_FONT_ID, clock);
-    renderer.drawText(UI_10_FONT_ID, rightEdge, textY, clock);
-  }
-
-  // Skull on the screen's own centre line, NOT centred in the gap between the
-  // version and the clock. Centring in the gap moves the skull whenever the version
-  // string or the clock changes width, which reads as drift; the screen's midpoint
-  // does not move, so the skull sits in the same place on every build.
-  const int skullX = (pageWidth - Skull12Icon.w) / 2;
-  // Sit the skull's centre of mass on the text's own vertical middle, so it lines
-  // up with the version string rather than with the invisible line box.
-  const int textCenterY = textY + renderer.getTextHeight(UI_10_FONT_ID) / 2;
-  const int skullY = textCenterY - Skull12Icon.opticalCenterY;
-
-  // The only reason to skip it: a version string or clock long enough to reach the
-  // middle. Overlapping glyphs would be worse than no skull.
-  constexpr int skullMinAir = 4;
-  const bool clearOfText =
-      skullX - skullMinAir >= versionX + versionWidth && skullX + Skull12Icon.w + skullMinAir <= rightEdge;
-  if (clearOfText) {
-    renderer.drawIcon(Skull12Icon.bits, skullX, skullY, Skull12Icon.w);
-  }
-}
-
 void BaseTheme::drawPathBar(const GfxRenderer& renderer, const Rect rect, const char* path) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   renderer.drawLine(rect.x, rect.y, rect.x + rect.width - 1, rect.y, metrics.pathBarThickness, true);
@@ -1350,140 +1270,4 @@ void drawBadgeChip(const GfxRenderer& renderer, const int x, const int rowY, con
   const int chipY = rowY + 3 + (lineHeight - chipH) / 2;
   renderer.fillRect(x, chipY, chipW, chipH, !inverted);
   renderer.drawText(UI_10_FONT_ID, x + textDx, chipY + (chipH - lineHeight) / 2, text, inverted);
-}
-
-// full title + " by INITIALS" wraps across as many lines as it needs; a [NN%] badge
-// with a black background sits inline on line 0 (it flips to a white chip on the
-// selected/inverted row so it stays legible). "N more above/below" indicators show
-// when the list scrolls. Returns the visible index range for the caller's scroll state.
-ListVisibility BaseTheme::drawRecentBookList(GfxRenderer& renderer, Rect rect,
-                                             const std::vector<RecentBook>& recentBooks, int selectorIndex,
-                                             int scrollOffset) const {
-  constexpr int maxRowsCap = 30;
-  const int count = std::min(static_cast<int>(recentBooks.size()), maxRowsCap);
-  const int clampedOffset = std::max(0, std::min(scrollOffset, std::max(0, count - 1)));
-  constexpr int rowGap = 4;
-  const int rowLineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  constexpr int rowsTopInset = 10;
-  constexpr int rowsBottomInset = 6;
-  const int rowsTopMinY = rect.y + rowsTopInset;
-  const int rowsBottomY = rect.y + rect.height - rowsBottomInset;
-  const int rowsAvailableHeight = rowsBottomY - rowsTopMinY;
-  const int availableRowW = std::max(1, rect.width - BaseMetrics::values.contentSidePadding * 2);
-  constexpr int maxRowW = 520;
-  const int rowW = std::min(availableRowW, maxRowW);
-  const int rowX = rect.x + (rect.width - rowW) / 2;
-  const int contentX = rowX + 10;
-  const int contentW = std::max(1, rowW - 20);
-
-  const int indicatorH = list_scrollbar::kHeight + list_scrollbar::kGap * 2;
-  const bool reserveIndicators = count > 1;
-  const int effectiveTopY = rowsTopMinY + (reserveIndicators ? indicatorH : 0);
-  const int effectiveBottomY = rowsBottomY - (reserveIndicators ? indicatorH : 0);
-  const int contentHeight = effectiveBottomY - effectiveTopY;
-
-  if (rowsAvailableHeight <= 0 || contentHeight <= 0 || count == 0) {
-    return {0, 0, count};
-  }
-
-  struct BookEntry {
-    int bookIdx;
-    std::vector<std::string> lines;
-    int height;
-    int badgeW;       // 0 = no badge
-    int badgeTextDx;  // where the text sits inside the chip (see badgeChipMetrics)
-    std::string badgeText;
-  };
-  auto measureBook = [&](int idx) -> BookEntry {
-    int badgeW = 0;
-    int badgeTextDx = 0;
-    std::string badgeText;
-    if (recentBooks[idx].progressPercent >= 0) {
-      char pctBuf[8];
-      std::snprintf(pctBuf, sizeof(pctBuf), "[%d%%]", recentBooks[idx].progressPercent);
-      badgeText = pctBuf;
-      badgeChipMetrics(renderer, pctBuf, &badgeW, &badgeTextDx);
-    }
-    const int firstLineW = badgeW > 0 ? std::max(1, contentW - (badgeW + 6)) : contentW;
-    // Initials by default; the full name when the user has asked for it in Settings.
-    const std::string author = SETTINGS.authorDisplay == CrossPointSettings::AUTHOR_FULL_NAME
-                                   ? recentBooks[idx].author
-                                   : StringUtils::authorInitials(recentBooks[idx].author);
-    const std::string rowText = author.empty() ? recentBooks[idx].title : (recentBooks[idx].title + " by " + author);
-    // Every line gets the first line's width, because every line is drawn at the first
-    // line's x: continuation lines used to run back to the left margin, under the [NN%]
-    // chip, which left the block with a ragged left edge.
-    auto lines = wrapUiText(renderer, rowText, firstLineW, firstLineW);
-    const int h = static_cast<int>(lines.size()) * rowLineHeight + 6;
-    return {idx, std::move(lines), h, badgeW, badgeTextDx, std::move(badgeText)};
-  };
-
-  // Same window as every wrapped list: forward from the offset, walked back from a
-  // selection below it so the selected book lands at the bottom. A selection off the
-  // list (the menu below has focus) leaves the window where the offset puts it.
-  const int selectedBook = selectorIndex < count ? selectorIndex : -1;
-  const wrapped_list::Window win = wrapped_list::window(count, selectedBook, clampedOffset, contentHeight, rowGap,
-                                                        [&](const int i) { return measureBook(i).height; });
-  std::vector<BookEntry> visibleEntries;
-  visibleEntries.reserve(static_cast<size_t>(win.count));
-  for (int i = win.first; i < win.first + win.count; i++) visibleEntries.push_back(measureBook(i));
-
-  const int firstVisible = visibleEntries.front().bookIdx;
-  const int lastVisible = visibleEntries.back().bookIdx;
-  const bool hasMoreAbove = firstVisible > 0;
-  const bool hasMoreBelow = lastVisible < count - 1;
-
-  int totalVisibleHeight = 0;
-  for (size_t i = 0; i < visibleEntries.size(); i++) {
-    totalVisibleHeight += visibleEntries[i].height;
-    if (i > 0) totalVisibleHeight += rowGap;
-  }
-  // Centre the whole assembly — the "more above" chip, the rows, and the "more below"
-  // chip — as one block in the band. Pinning each chip to its band edge instead left
-  // the chip hard against the header while the rows floated in the middle, with the
-  // unused indicator band showing up as a hole at the other end. The row-fitting maths
-  // above still reserves both bands whenever the list can scroll, so the number of rows
-  // on screen does not change as the chips come and go.
-  const int aboveH = hasMoreAbove ? indicatorH : 0;
-  const int belowH = hasMoreBelow ? indicatorH : 0;
-  const int blockHeight = aboveH + totalVisibleHeight + belowH;
-  const int blockTop = rowsTopMinY + std::max(0, (rowsAvailableHeight - blockHeight) / 2);
-  int rowY = blockTop + aboveH;
-  row_hit::Rows& recentHitRows = row_hit::lastRows();
-
-  // Chevrons at the ends of the centred block: up at its top when rows sit above the
-  // window, down under the last row when rows sit below it.
-  drawScrollArrows(renderer, Rect(rowX, blockTop + list_scrollbar::kGap, rowW, blockHeight - list_scrollbar::kGap * 2),
-                   list_scrollbar::Arrows{hasMoreAbove, hasMoreBelow});
-
-  for (const auto& entry : visibleEntries) {
-    const bool selected = (selectorIndex == entry.bookIdx);
-    // The selection paints the whole row and forces white text.
-    bool inverted = false;
-    if (selected) {
-      inverted = drawSelection(renderer, Rect(rowX, rowY, rowW, entry.height), entry.bookIdx == two_tap::armedRow());
-    }
-
-    // [NN%] badge on line 0: an inverted chip that flips with row selection so it
-    // stays legible on both grounds (black chip on an unselected row, white on the
-    // selected/inverted row).
-    int firstLineX = contentX;
-    if (entry.badgeW > 0) {
-      drawBadgeChip(renderer, contentX, rowY, rowLineHeight, entry.badgeW, entry.badgeTextDx, entry.badgeText.c_str(),
-                    inverted);
-      firstLineX = contentX + entry.badgeW + 6;
-    }
-
-    int baselineY = rowY + 3;
-    for (size_t li = 0; li < entry.lines.size(); li++) {
-      // Wrapped lines line up under the first line's text, not under the chip.
-      renderer.drawText(UI_10_FONT_ID, firstLineX, baselineY, entry.lines[li].c_str(), !inverted);
-      baselineY += rowLineHeight;
-    }
-
-    recentHitRows.add(entry.bookIdx, rowX, rowY, rowW, entry.height);
-    rowY += entry.height + rowGap;
-  }
-
-  return {firstVisible, lastVisible, count};
 }

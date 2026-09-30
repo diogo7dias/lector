@@ -134,21 +134,21 @@ On a fresh card, Lector creates the folders it uses: `/read`, `/recents`, `/slee
 
 ## 3. Home screen
 
-The Home screen is the entry point. It lists the books you have been reading, and below them:
+The Home screen is the entry point, laid out like a book's contents page: the firmware's name
+and version at the top, the clock and battery at the foot. Under **Continue Reading** are the
+books you have been reading, each with its author and how far in you are. Under **Library**:
 
-- **Continue Reading** — reopen the most recent book. Present in themes that put it in the
-  menu, and only once something has been read.
 - **Browse Files** — the file browser.
 - **OPDS Browser** — shown once at least one catalog is configured, see
   [section 9](#9-getting-books-onto-the-device).
-- **File Transfer** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
+- **Nearby Sync** — Wi-Fi transfers, see [section 9](#9-getting-books-onto-the-device).
 - **Settings** — see [section 12](#12-settings-reference).
 
 **Settings > Controls > Home Back Button** decides what **Back** does here: nothing, resume
 the current book, or open **Sortes**.
 Resume remains the default. Sortes opens a randomly chosen finished EPUB at a random page:
 a book counts as finished when its saved library badge is 100% (Read), wherever it is filed.
-The footer says **No read books** and does nothing when none qualify.
+Back then shows **No read books** and does nothing when none qualify.
 
 Back or sleep ends the visit. Sortes leaves the saved reading position, Read status, filing
 and recents untouched. Quotes and bookmarks can still be saved deliberately, and the reader

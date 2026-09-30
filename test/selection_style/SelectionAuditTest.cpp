@@ -87,11 +87,12 @@ TEST(SelectionAudit, EverySelectionSurfaceCallsTheSharedPainter) {
     if (contains(line, "BaseTheme::")) continue;  // the definition itself
     if (contains(line, "drawSelection(")) calls++;
   }
-  // drawWrappedList, drawButtonMenu, the tab bar and the home list. Every hand-rolled
+  // drawWrappedList and the tab bar. The home list and its button menu went with Home's
+  // move to the contents look. Every hand-rolled
   // list outside BaseTheme is gone: the nearby peer list, the OPDS browser and the XTC
   // chapter list all moved onto a FreeInkUI base, where the SDK marks the selection.
   // drawList went with the flat-UI pass (its one caller, the end-of-book list, now
   // wraps through drawWrappedList), and drawOptionPopup's call was on a branch its
   // constexpr guard had already made dead.
-  EXPECT_GE(calls, 4);
+  EXPECT_GE(calls, 2);
 }
