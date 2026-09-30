@@ -217,6 +217,7 @@ void ButtonBindingsActivity::buildScreen(UiScreen& screen) {
     const size_t row = static_cast<size_t>(i);
     if (view == View::Buttons) {
       labels[row] = buttonLabel(buttons[row]);
+      rows[row].value = "\xE2\x80\xBA";  // › opens the key's bindings
     } else if (bindingRows[row].isHeader) {
       labels[row] = I18N.get(bindingRows[row].inBook ? StrId::STR_IN_BOOK : StrId::STR_OUTSIDE_BOOK);
       rows[row].isHeader = true;
