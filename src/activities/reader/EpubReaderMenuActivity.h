@@ -8,6 +8,7 @@
 #include "CrossPointSettings.h"
 #include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
+#include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderMenuActivity final : public UiListActivity {
@@ -89,7 +90,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   void onExit() override;
 
  protected:
-  int listCount() const override { return sections.visibleCount(rows.data(), static_cast<int>(rows.size())); }
+  int listCount() const override { return static_cast<int>(rows.size()); }
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onRowAction(const freeink::ui::ActionEvent& event) override { activateIndex(event.value); }
@@ -99,10 +100,10 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // Popup input, and the Confirm hold that runs the bound menu function. Both own the
   // pass before the base looks at Back, Confirm or the selection.
   bool handleCustomInput() override;
-  // Back collapses or closes on the press; Confirm activates on press or release depending on
+  // Back closes on the press; Confirm activates on press or release depending on
   // whether a menu hold function is bound. Neither matches the base defaults.
   bool handleButtons() override;
-  // A press walks visible rows; a hold jumps to the next section header.
+  // A press walks the rows, stepping over headings; a hold ramps.
   void navigateButtons() override;
   bool drawOverlay() override;
 
@@ -141,7 +142,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   static std::vector<MenuItem> flatten(const std::vector<TabPage>& pages);
   // Refresh borrowed labels/values in the storage reserved on entry.
   void updateRows();
-  void focusRow(int index);
+  void focusRow(int index, int direction);
   void closeCancelled();
   // The block's strings, held so the ListChrome can borrow them. Mutable because
   // chrome() is const: rebuilding the block changes nothing about the screen.
@@ -155,9 +156,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
 
   // Full menu data; the SDK maps visible indexes without rebuilding this list.
   std::vector<MenuItem> items;
-
-  // One transient index; never part of settings, MenuResult or web state.
-  freeink::ui::ListSections sections;
 
   OptionPopup optionPopup;
   std::string title = "Reader Menu";

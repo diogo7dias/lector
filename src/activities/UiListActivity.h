@@ -61,10 +61,11 @@ class UiListActivity : public Activity, protected UiAppHost {
   virtual bool handleButtons();
   virtual void onBackButton() { finish(); }
   // GfxRenderer font the list rows are drawn with, bound into the body slot on
-  // entry. -1 keeps the uiScale body font. Screens whose labels leave the UI
+  // entry. 0 (the reserved no-font id; real ids are hashes and can be negative)
+  // keeps the uiScale body font. Screens whose labels leave the UI
   // font's coverage (native language names span Arabic, Hebrew and Cyrillic)
   // name a full-coverage font here instead of boxing out.
-  virtual int listFontId() const { return -1; }
+  virtual int listFontId() const { return 0; }
   // What the base paints around the body: the title band and the hints by
   // default, plus whatever else the screen asks for (a counter, a sub-header, a
   // header block, a note, a footnote). Screens override this instead of the

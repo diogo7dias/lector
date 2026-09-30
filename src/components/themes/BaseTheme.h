@@ -138,7 +138,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .headerHeight = 45,
                                  .verticalSpacing = 10,
                                  .contentSidePadding = 20,
-                                 .listRowHeight = 30,
+                                 .listRowHeight = 37,  // the contents look's row: Literata's 30px line with air
                                  .listWithSubtitleRowHeight = 50,
                                  .menuRowHeight = 45,
                                  .menuSpacing = 8,

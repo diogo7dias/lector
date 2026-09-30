@@ -10,7 +10,7 @@ ThemeMetrics base() { return BaseMetrics::values; }
 // they are already a wide target, and matching the home screen's rows matters more than
 // the extra millimetre.
 TEST(TouchMetrics, ListRowsKeepTheirHeight) {
-  EXPECT_EQ(base().listRowHeight, 30);
+  EXPECT_EQ(base().listRowHeight, 37);
   EXPECT_EQ(touch_metrics::adjusted(base()).listRowHeight, base().listRowHeight);
   EXPECT_EQ(touch_metrics::adjusted(base()).listWithSubtitleRowHeight, base().listWithSubtitleRowHeight);
   EXPECT_EQ(touch_metrics::adjusted(base()).menuRowHeight, base().menuRowHeight);

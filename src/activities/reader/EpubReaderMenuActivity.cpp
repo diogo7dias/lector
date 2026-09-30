@@ -9,6 +9,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "UiFont.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HoldRepeat.h"
@@ -86,12 +87,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     return pages.back().items;
   };
 
-  // Appends a section: the heading, then its rows. A group whose rows all dropped out
-  // (a conditional row that does not apply to this book) contributes no heading, so a
-  // heading on screen always has something under it.
-  const auto group = [](std::vector<MenuItem>& items, const StrId heading, std::vector<MenuItem> members) {
-    if (members.empty()) return;
-    items.push_back(MenuItem::Header(heading));
+  // Appends a group's rows. Groups used to carry their own heading (POSITION, MARKS...);
+  // the contents look numbers only the tabs, so a group is just its place in the order.
+  const auto group = [](std::vector<MenuItem>& items, std::vector<MenuItem> members) {
     for (auto& member : members) items.push_back(member);
   };
 
@@ -131,7 +129,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
       position.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
     }
-    group(items, StrId::STR_GRP_POSITION, std::move(position));
+    group(items, std::move(position));
 
     std::vector<MenuItem> marks;
     if (hasBookmarks) {
@@ -141,17 +139,16 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     if (hasFootnotes) {
       marks.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
     }
-    group(items, StrId::STR_GRP_MARKS, std::move(marks));
+    group(items, std::move(marks));
   }
 
   // --- This Book: what the book says about itself, and what you take out of it ---
   {
     auto& items = page(Tab::ThisBook, StrId::STR_SEC_THIS_BOOK);
-    group(items, StrId::STR_GRP_READ,
-          {{MenuAction::DICTIONARY, StrId::STR_LOOKUP},
-           // Recall sits next to the lookup it records, because that is where a reader
-           // goes looking for a word they have already met.
-           {MenuAction::DICTIONARY_HISTORY, StrId::STR_LOOKUP_HISTORY}});
+    group(items, {{MenuAction::DICTIONARY, StrId::STR_LOOKUP},
+                  // Recall sits next to the lookup it records, because that is where a reader
+                  // goes looking for a word they have already met.
+                  {MenuAction::DICTIONARY_HISTORY, StrId::STR_LOOKUP_HISTORY}});
 
     std::vector<MenuItem> quotes{{MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE}};
     // Reading the quotes back only makes sense once this book has a sidecar to read;
@@ -159,15 +156,14 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     if (hasQuotes) {
       quotes.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
     }
-    group(items, StrId::STR_GRP_QUOTES, std::move(quotes));
+    group(items, std::move(quotes));
 
     // Undoing the open belongs with the book itself, not with the device tools, and both
     // rows sit last because they are the ones that leave the book. Deleting is the harder
     // version of removing: removing only unfiles the book, this erases the file. It asks
     // for confirmation before doing anything.
-    group(items, StrId::STR_GRP_REMOVE,
-          {{MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK},
-           {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}});
+    group(items, {{MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK},
+                  {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}});
   }
 
   // --- Sleep Screen: triage for the wallpaper the lock screen just showed -------
@@ -194,13 +190,12 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   // --- Device: everything that is not about this book ---------------------------
   {
     auto& items = page(Tab::Device, StrId::STR_SEC_DEVICE);
-    group(items, StrId::STR_GRP_TOOLS,
-          {{MenuAction::NEARBY_SYNC, StrId::STR_NEARBY_SYNC},
-           {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
-           {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
-           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-           {MenuAction::NEARBY_SEND_BOOK, StrId::STR_NEARBY_SEND_FILE}});
-    group(items, StrId::STR_GRP_STORAGE, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
+    group(items, {{MenuAction::NEARBY_SYNC, StrId::STR_NEARBY_SYNC},
+                  {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
+                  {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
+                  {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
+                  {MenuAction::NEARBY_SEND_BOOK, StrId::STR_NEARBY_SEND_FILE}});
+    group(items, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
   }
 
   return pages;
@@ -226,20 +221,26 @@ void EpubReaderMenuActivity::updateRows() {
     rows[i].label = I18N.get(items[i].labelId);
     rows[i].value = rowValue(static_cast<int>(i));
     rows[i].isHeader = items[i].isHeader;
+    rows[i].actionValue = static_cast<int16_t>(i);  // a touch reports the row's index
   }
 }
 
-void EpubReaderMenuActivity::focusRow(const int index) {
+// One flat list, headings included; only rows take the cursor. A step that lands on a
+// heading moves one further the same way (every heading has rows under it, and the last
+// item is always a row), wrapping from the top heading to the last row.
+void EpubReaderMenuActivity::focusRow(int index, const int direction) {
+  const int count = listCount();
+  if (index < 0 || index >= count) return;
+  if (items[index].isHeader) index = direction < 0 ? (index > 0 ? index - 1 : count - 1) : index + 1;
   {
     RenderLock lock(*this);
-    const int previousHeader = sections.expandedHeader;
-    const int selected = sections.focus(rows.data(), static_cast<int>(rows.size()), index);
-    if (selected < 0) return;
-    // Published touch indexes belong to the old layout until renderUi() rebuilds it.
-    if (previousHeader != sections.expandedHeader) closeRouting();
-    nav.selected = selected;
-    nav.drawnRows = 0;  // the old viewport may contain rows that just disappeared
-    nav.follow(listCount());
+    // A section's first row brings its heading into view with it.
+    if (index > 0 && items[index - 1].isHeader) {
+      nav.selected = index - 1;
+      nav.follow(count);
+    }
+    nav.selected = index;
+    nav.follow(count);
   }
   requestUpdate();
 }
@@ -249,7 +250,11 @@ void EpubReaderMenuActivity::onEnter() {
   // borrow it, including the one row Status Bar can insert during this visit.
   rows.reserve(items.size() + 1);
   updateRows();
-  sections.expandedHeader = -1;
+  // Heading and numeral faces; rows use the UI font (Literata, or Ubuntu for Arabic and
+  // Hebrew, where the headings fall back to it too).
+  const bool ubuntu = uiLanguageNeedsUbuntu();
+  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, ubuntu ? UI_10_FONT_ID : LITERATA_UI_26_FONT_ID);
+  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, ubuntu ? UI_10_FONT_ID : LITERATA_UI_16_FONT_ID);
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
@@ -274,7 +279,12 @@ void EpubReaderMenuActivity::onEnter() {
       first = 0;
       while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
     }
-    nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
+    // The section's first row, with its heading at the top of the list.
+    if (first + 1 < static_cast<int>(items.size())) {
+      nav.reset(first + 1);
+      nav.top = first;
+      nav.followOnBuild = false;
+    }
   }
   requestUpdate();
 }
@@ -329,23 +339,8 @@ bool EpubReaderMenuActivity::handleCustomInput() {
 }
 
 bool EpubReaderMenuActivity::handleButtons() {
-  // Back first collapses to the open header; a second Back leaves the menu.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    int header;
-    {
-      RenderLock lock(*this);
-      header = sections.collapse(rows.data(), static_cast<int>(rows.size()));
-      if (header >= 0) {
-        closeRouting();
-        nav.selected = header;
-        nav.drawnRows = 0;
-        nav.follow(listCount());
-      }
-    }
-    if (header >= 0)
-      requestUpdate();
-    else
-      closeCancelled();
+    closeCancelled();
     return true;
   }
 
@@ -362,28 +357,24 @@ bool EpubReaderMenuActivity::handleButtons() {
 }
 
 void EpubReaderMenuActivity::navigateButtons() {
-  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount())); });
-  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount())); });
+  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount()), 1); });
+  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount()), -1); });
   // A hold ramps through rows and stops at the ends, like every other list.
   buttonNavigator.onNextContinuous([this] {
-    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())));
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())), 1);
   });
   buttonNavigator.onPreviousContinuous([this] {
-    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())));
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())), -1);
   });
 }
 
-void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
-  const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visibleIndex);
-  if (index < 0) return;
+void EpubReaderMenuActivity::activateIndex(const int index) {
+  if (index < 0 || index >= listCount()) return;
   app.clearTapFlash();
-  if (items[index].isHeader) {
-    focusRow(visibleIndex);
-    return;
-  }
+  if (items[index].isHeader) return;  // headings are titles, not actions
   {
     RenderLock lock(*this);
-    nav.selected = visibleIndex;
+    nav.selected = index;
   }
   const auto selectedAction = items[index].action;
   if (selectedAction == MenuAction::ROTATE_SCREEN) {
@@ -468,35 +459,51 @@ const char* EpubReaderMenuActivity::rowValue(const int index) const {
       return I18N.get(selectedStatusBar ? StrId::STR_STATE_ON : StrId::STR_STATE_OFF);
     case MenuAction::TOGGLE_PROGRESS_BAR:
       return I18N.get(progressBarLabels[selectedProgressBar % progressBarLabels.size()]);
+    // Rows that open a screen (or a confirmation) end their leader on a chevron;
+    // rows that act at once carry nothing.
+    case MenuAction::SELECT_CHAPTER:
+    case MenuAction::FOOTNOTES:
+    case MenuAction::GO_TO_PERCENT:
+    case MenuAction::BOOKMARKS:
+    case MenuAction::DISPLAY_QR:
+    case MenuAction::SYNC:
+    case MenuAction::NEARBY_SYNC:
+    case MenuAction::NEARBY_SEND_BOOK:
+    case MenuAction::DICTIONARY:
+    case MenuAction::DICTIONARY_HISTORY:
+    case MenuAction::READER_SETTINGS:
+    case MenuAction::CUSTOMISE_STATUS_BAR:
+    case MenuAction::GO_TO_PARAGRAPH:
+    case MenuAction::GRAB_QUOTE:
+    case MenuAction::STEAL_LOOK:
+    case MenuAction::READING_THEMES:
+    case MenuAction::VIEW_QUOTES:
+    case MenuAction::DELETE_BOOK:
+    case MenuAction::WALLPAPER_DELETE:
+      return "\xE2\x80\xBA";  // U+203A
     default:
       return nullptr;
   }
 }
 
 ListChrome EpubReaderMenuActivity::chrome() const {
-  // The book block: title, "by author", chapter, progress. Each is one logical line
-  // that the chrome painter wraps over as many screen lines as it needs, in the one UI
-  // face, never cut. No title band above it: the block starts flush at the top of the
-  // menu, in the padding every screen keeps clear of the panel edge.
-  headerBlock.clear();
-  headerBlock.push_back(title);
-  if (!author.empty()) headerBlock.push_back(std::string(tr(STR_BY_PREFIX)) + author);
-  if (!chapterName.empty()) headerBlock.push_back(chapterName);
-  // Progress summary: "Pages: <page>/<pages>  |  Book: <pct>%". Both halves
-  // carry a label so neither reads as a bare number.
-  std::string progressLine;
+  // The contents look's title page: title, author, a rule, the chapter, and how far
+  // in. The strings live in headerBlock so the chrome can borrow them.
+  char progress[64];
   if (totalPages > 0) {
-    progressLine =
-        std::string(tr(STR_PAGES_PREFIX)) + std::to_string(currentPage) + "/" + std::to_string(totalPages) + "  |  ";
+    snprintf(progress, sizeof(progress), tr(STR_TITLE_PAGE_PROGRESS), currentPage, totalPages, bookProgressPercent);
+  } else {
+    snprintf(progress, sizeof(progress), tr(STR_TITLE_PAGE_BOOK_PERCENT), bookProgressPercent);
   }
-  progressLine += std::string(tr(STR_BOOK_PREFIX)) + std::to_string(bookProgressPercent) + "%";
-  headerBlock.push_back(progressLine);
+  headerBlock = {title, author, chapterName, progress};
 
   ListChrome chrome;
-  chrome.title = nullptr;
-  for (size_t i = 0; i < headerBlock.size() && i < ListChrome::MAX_HEADER_LINES; ++i) {
-    chrome.headerLines[i] = headerBlock[i].c_str();
-  }
+  chrome.titlePage.title = headerBlock[0].c_str();
+  chrome.titlePage.author = headerBlock[1].c_str();
+  chrome.titlePage.chapter = headerBlock[2].c_str();
+  chrome.titlePage.progress = headerBlock[3].c_str();
+  // The contents page has no hint band; the buttons do what they always did.
+  chrome.hints = false;
   return chrome;
 }
 
@@ -507,8 +514,12 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   fui::ListProps props{};
   props.items = rows.data();
   props.count = static_cast<uint16_t>(rows.size());
-  props.sections = &sections;
   props.action = ACTION_ROW;
+  props.contentsLook = true;
+  props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
+  props.valueText.font = fui::GfxRendererTarget::FONT_BODY;
+  props.headerText.font = fui::GfxRendererTarget::FONT_EXTRA_1;
+  props.headingNumeralText.font = fui::GfxRendererTarget::FONT_EXTRA_2;
   syncListViewport(screen, props);
   screen.list(props);
 }
