@@ -127,7 +127,7 @@ class ActivityManager {
   // wallpaperPath: see BootActivity — a .pxc wallpaper to unlock over, or empty for the
   // plain logo boot screen.
   void goToBoot(std::string wallpaperPath = {});
-  void goToFullScreenMessage(std::string message, EpdFontFamily::Style style = EpdFontFamily::REGULAR);
+  void goToFullScreenMessage(std::string message);
   void goToCrashReport();
   void goHome(HomeMenuItem initialMenuItem = HomeMenuItem::NONE, bool cleanInitialRefresh = false);
 

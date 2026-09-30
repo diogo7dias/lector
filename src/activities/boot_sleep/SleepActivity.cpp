@@ -21,9 +21,9 @@
 #include "SleepPreClear.h"
 #include "SleepTiming.h"
 #include "activities/reader/ReaderUtils.h"
+#include "components/ListChrome.h"
 #include "components/UITheme.h"
 #include "dev/LockLab.h"
-#include "fontIds.h"
 #include "sleep/DirSlotProbe.h"
 #include "sleep/SleepWallpaperIndexStore.h"
 #include "sleep/WallpaperNames.h"
@@ -543,7 +543,7 @@ void SleepActivity::renderCustomSleepScreen() const {
   renderCoverSleepScreen();
 }
 
-// The Lector fallback: a white page with the name centred, in the one UI face. Reached
+// The Lector fallback: a white page with the name as a title page, as boot draws it. Reached
 // only when no wallpaper and no cover could be shown (no files, no open book, a decode
 // that failed partway). Every face that fails lands here.
 //
@@ -552,8 +552,7 @@ void SleepActivity::renderCustomSleepScreen() const {
 // functions.
 void SleepActivity::renderDefaultSleepScreen() const {
   renderer.clearScreen();
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  renderer.drawCenteredText(UI_10_FONT_ID, (renderer.getScreenHeight() - lineHeight) / 2, tr(STR_LECTOR));
+  drawCentredTitlePage(renderer, tr(STR_LECTOR));
   const sleep_face::PaintPlan plan =
       sleep_face::planFor(sleep_face::Face::PlainLector, /*sourceHasGrayscale=*/false, display.profile());
   renderer.displayBuffer(plan.base);

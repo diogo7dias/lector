@@ -406,8 +406,8 @@ void ActivityManager::goToBoot(std::string wallpaperPath) {
   replaceActivity(std::make_unique<BootActivity>(renderer, mappedInput, std::move(wallpaperPath)));
 }
 
-void ActivityManager::goToFullScreenMessage(std::string message, EpdFontFamily::Style style) {
-  replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message), style));
+void ActivityManager::goToFullScreenMessage(std::string message) {
+  replaceActivity(std::make_unique<FullScreenMessageActivity>(renderer, mappedInput, std::move(message)));
 }
 
 void ActivityManager::goHome(HomeMenuItem initialMenuItem, bool cleanInitialRefresh) {

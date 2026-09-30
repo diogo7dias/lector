@@ -2,15 +2,11 @@
 
 #include <GfxRenderer.h>
 
-#include "fontIds.h"
+#include "components/ListChrome.h"
 
 void FullScreenMessageActivity::onEnter() {
   Activity::onEnter();
-
-  const auto height = renderer.getLineHeight(UI_10_FONT_ID);
-  const auto top = (renderer.getScreenHeight() - height) / 2;
-
   renderer.clearScreen();
-  renderer.drawCenteredText(UI_10_FONT_ID, top, text.c_str(), true, style);
+  drawCentredTitlePage(renderer, text.c_str());
   renderer.displayBuffer(refreshMode);
 }
