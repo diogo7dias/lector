@@ -97,6 +97,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // The book block above the list is chrome, not rows: title, author, chapter and
   // progress. The base reserves the band it paints, so the two cannot drift.
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
   // Popup input, and the Confirm hold that runs the bound menu function. Both own the
   // pass before the base looks at Back, Confirm or the selection.
   bool handleCustomInput() override;

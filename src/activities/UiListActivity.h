@@ -71,6 +71,11 @@ class UiListActivity : public Activity, protected UiAppHost {
   // header block, a note, a footnote). Screens override this instead of the
   // paint, so their chrome keeps coming from the theme.
   virtual ListChrome chrome() const;
+  // The contents look (Literata title page, flat rows with leaders, no hint band on
+  // keys-only boards). Screens opt in one at a time while the firmware moves over.
+  virtual bool contentsLook() const { return false; }
+  // chrome() as it is painted: in the contents look when the screen asked for it.
+  ListChrome shownChrome() const;
   // Shorthand for the common case: a title and nothing else.
   virtual const char* headerTitle() const { return nullptr; }
   // The paint itself. Overriding these is the exception now; chrome() is the

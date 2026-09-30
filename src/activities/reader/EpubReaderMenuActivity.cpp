@@ -250,11 +250,6 @@ void EpubReaderMenuActivity::onEnter() {
   // borrow it, including the one row Status Bar can insert during this visit.
   rows.reserve(items.size() + 1);
   updateRows();
-  // Heading and numeral faces; rows use the UI font (Literata, or Ubuntu for Arabic and
-  // Hebrew, where the headings fall back to it too).
-  const bool ubuntu = uiLanguageNeedsUbuntu();
-  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, ubuntu ? UI_10_FONT_ID : LITERATA_UI_26_FONT_ID);
-  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, ubuntu ? UI_10_FONT_ID : LITERATA_UI_16_FONT_ID);
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
@@ -502,8 +497,6 @@ ListChrome EpubReaderMenuActivity::chrome() const {
   chrome.titlePage.author = headerBlock[1].c_str();
   chrome.titlePage.chapter = headerBlock[2].c_str();
   chrome.titlePage.progress = headerBlock[3].c_str();
-  // The contents page has no hint band; the buttons do what they always did.
-  chrome.hints = false;
   return chrome;
 }
 
@@ -515,11 +508,6 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   props.items = rows.data();
   props.count = static_cast<uint16_t>(rows.size());
   props.action = ACTION_ROW;
-  props.contentsLook = true;
-  props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
-  props.valueText.font = fui::GfxRendererTarget::FONT_BODY;
-  props.headerText.font = fui::GfxRendererTarget::FONT_EXTRA_1;
-  props.headingNumeralText.font = fui::GfxRendererTarget::FONT_EXTRA_2;
   syncListViewport(screen, props);
   screen.list(props);
 }

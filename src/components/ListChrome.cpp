@@ -48,6 +48,9 @@ constexpr Face TITLE{LITERATA_UI_25_FONT_ID, 31.25f, 5.5f};
 constexpr Face AUTHOR{LITERATA_UI_19_IT_FONT_ID, 23.75f, 0};
 constexpr Face CHAPTER{LITERATA_UI_19_SC_FONT_ID, 23.75f, 2.66f};
 constexpr Face PROGRESS{LITERATA_UI_19_IT_FONT_ID, 23.75f, 0};
+constexpr Face FOOTNOTE{LITERATA_UI_19_IT_FONT_ID, 23.75f, 0};
+constexpr int FOOTNOTE_LINE = 24;  // the band reserves whole pixels
+constexpr int FOOT = 18;           // last footnote line to the panel's foot
 
 // Arabic and Hebrew UIs draw it all in their UI font, which Literata cannot stand in for.
 int fontOf(const Face& face) { return uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : face.fontId; }
@@ -147,6 +150,12 @@ int layout(const GfxRenderer& renderer, const ListChrome::TitlePage& page, const
   return static_cast<int>(std::lround(y + BOTTOM));
 }
 
+int footnoteLines(const GfxRenderer& renderer, const char* text) {
+  if (!present(text)) return 0;
+  return static_cast<int>(
+      wrap(renderer, FOOTNOTE, text, static_cast<float>(renderer.getScreenWidth()) - SIDE * 2).size());
+}
+
 }  // namespace title_page
 
 list_chrome::Content contentFor(const GfxRenderer& renderer, const ListChrome& chrome) {
@@ -157,7 +166,9 @@ list_chrome::Content contentFor(const GfxRenderer& renderer, const ListChrome& c
     content.titlePageHeight = title_page::layout(renderer, chrome.titlePage, false);
   for (const char* line : chrome.headerLines) content.headerLines += wrappedLines(renderer, line);
   content.noteLines = wrappedLines(renderer, chrome.note);
-  for (const char* line : chrome.footnotes) content.footnoteLines += wrappedLines(renderer, line);
+  for (const char* line : chrome.footnotes) {
+    content.footnoteLines += chrome.contents ? title_page::footnoteLines(renderer, line) : wrappedLines(renderer, line);
+  }
   return content;
 }
 
@@ -175,6 +186,11 @@ list_chrome::Metrics metricsFor(const GfxRenderer& renderer, const ListChrome& c
   metrics.lineHeight = renderer.getLineHeight(uiScaleSpec().smallFontId);
   metrics.spacing = themeMetrics.verticalSpacing;
   metrics.hintsHeight = chrome.hints ? themeMetrics.buttonHintsHeight : 0;
+  if (chrome.contents) {
+    // Only footnotes use the line height here: the rest went into the title page.
+    metrics.lineHeight = title_page::FOOTNOTE_LINE;
+    if (!chrome.hints && present(chrome.footnotes[0])) metrics.hintsHeight = title_page::FOOT;
+  }
   return metrics;
 }
 
@@ -190,6 +206,27 @@ int drawWrappedLine(const GfxRenderer& renderer, const int y, const char* line) 
 }
 
 }  // namespace
+
+void toContentsLook(ListChrome& chrome, const bool keepHints) {
+  chrome.contents = true;
+  chrome.hints = chrome.hints && keepHints;
+  if (chrome.titlePage.title == nullptr && chrome.title != nullptr) {
+    chrome.titlePage.title = chrome.title;
+    for (const char* line : {chrome.subHeader, chrome.headerRight, chrome.note}) {
+      if (present(line)) {
+        chrome.titlePage.author = line;
+        break;
+      }
+    }
+  }
+  chrome.title = nullptr;
+  chrome.headerRight = nullptr;
+  chrome.footerRight = nullptr;
+  chrome.subHeader = nullptr;
+  chrome.subHeaderRight = nullptr;
+  chrome.headerLines = {};
+  chrome.note = nullptr;
+}
 
 list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome& chrome) {
   return list_chrome::bandsFor(metricsFor(renderer, chrome), contentFor(renderer, chrome));
@@ -212,8 +249,15 @@ void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome) {
 
 void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput, const ListChrome& chrome) {
   const list_chrome::Bands bands = listChromeBands(renderer, chrome);
-  int y = bands.footnote.y;
-  for (const char* line : chrome.footnotes) y = drawWrappedLine(renderer, y, line);
+  if (chrome.contents) {
+    auto y = static_cast<float>(bands.footnote.y);
+    for (const char* line : chrome.footnotes) {
+      if (present(line)) y = title_page::block(renderer, title_page::FOOTNOTE, line, y, true);
+    }
+  } else {
+    int y = bands.footnote.y;
+    for (const char* line : chrome.footnotes) y = drawWrappedLine(renderer, y, line);
+  }
   if (!chrome.hints) return;
   const char* back = chrome.backHint != nullptr ? chrome.backHint : tr(STR_BACK);
   const char* confirm = chrome.confirmHint != nullptr ? chrome.confirmHint : tr(STR_SELECT);

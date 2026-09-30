@@ -14,9 +14,15 @@ namespace fui = freeink::ui;
 
 int EpubReaderChapterSelectionActivity::listCount() const { return epub.getTocItemsCount(); }
 
-const char* EpubReaderChapterSelectionActivity::headerTitle() const { return tr(STR_SELECT_CHAPTER); }
+ListChrome EpubReaderChapterSelectionActivity::chrome() const {
+  ListChrome chrome;
+  chrome.title = tr(STR_SELECT_CHAPTER);
+  chrome.subHeader = bookTitle.c_str();
+  return chrome;
+}
 
 void EpubReaderChapterSelectionActivity::onEnter() {
+  bookTitle = epub.getTitle();
   UiListActivity::onEnter();
 
   // The reader underneath still pins its page-render glyph arenas. clearCache() is
