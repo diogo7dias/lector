@@ -24,7 +24,6 @@
 #include "components/RowHitTest.h"
 #include "components/TwoTapGate.h"
 #include "components/UITheme.h"
-#include "components/WrappedListWindow.h"
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
@@ -652,141 +651,6 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
   return false;
 }
 
-// Defined below, next to the home list they were written for.
-void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx);
-void drawBadgeChip(const GfxRenderer& renderer, int x, int rowY, int lineHeight, int chipW, int textDx,
-                   const char* text, bool inverted);
-
-ListVisibility BaseTheme::drawWrappedList(const GfxRenderer& renderer, const Rect rect, const int itemCount,
-                                          const int selectedIndex, const int scrollOffset,
-                                          const std::function<std::string(int index)>& rowTitle,
-                                          const std::function<std::string(int index)>& rowValue,
-                                          const std::function<std::string(int index)>& rowBadge) const {
-  if (itemCount <= 0 || !rowTitle) {
-    return {0, 0, itemCount > 0 ? itemCount : 0};
-  }
-
-  const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
-  constexpr int rowGap = 2;
-  constexpr int rowPadY = 4;    // vertical breathing room inside a row
-  constexpr int valueGap = 10;  // gap between the wrapped title and the right-aligned value
-  const int contentX = rect.x + BaseMetrics::values.contentSidePadding;
-  const int contentW = rect.width - BaseMetrics::values.contentSidePadding * 2;
-
-  // Reserve a band at both ends for the scroll chevrons whenever the list could scroll,
-  // so rows never sit under one and the row count does not change as they come and go.
-  const int indicatorH = (itemCount > 1) ? list_scrollbar::kHeight + list_scrollbar::kGap * 2 : 0;
-  const int listTop = rect.y + indicatorH;
-  const int listHeight = rect.height - indicatorH * 2;
-  if (contentW <= 0 || listHeight < lineHeight) {
-    return {0, 0, itemCount};
-  }
-
-  constexpr int badgeGap = 6;  // blank between the chip and the first character of the title
-
-  struct Row {
-    int index;
-    std::vector<std::string> lines;
-    std::string value;
-    int valueW;
-    int height;
-    std::string badge;
-    int badgeW;       // 0 = no badge on this row
-    int badgeTextDx;  // where the text sits inside the chip (see badgeChipMetrics)
-  };
-
-  // Measuring wraps the title, so it is only ever done for rows near the window — never
-  // for a whole directory, which can hold thousands of entries.
-  auto measure = [&](const int index) {
-    Row row{index, {}, {}, 0, 0, {}, 0, 0};
-    if (rowValue) {
-      row.value = rowValue(index);
-      if (!row.value.empty()) {
-        row.valueW = renderer.getTextWidth(UI_10_FONT_ID, row.value.c_str()) + valueGap;
-      }
-    }
-    if (rowBadge) {
-      row.badge = rowBadge(index);
-      if (!row.badge.empty()) {
-        badgeChipMetrics(renderer, row.badge.c_str(), &row.badgeW, &row.badgeTextDx);
-        row.badgeW += badgeGap;
-      }
-    }
-    // The chip eats width from every line, because every line is drawn at the first
-    // line's x. Letting the continuation lines run back to the left margin, under the
-    // chip, leaves the text block with a ragged left edge.
-    const int textW = std::max(1, contentW - row.badgeW);
-    // Never let the value squeeze the first line to nothing: below a third of the width the
-    // title wraps under the value instead.
-    const int firstLineW = std::max(textW / 3, textW - row.valueW);
-    row.lines = wrapUiText(renderer, rowTitle(index), firstLineW, textW);
-    if (row.lines.empty()) row.lines.emplace_back("");
-    row.height = static_cast<int>(row.lines.size()) * lineHeight + rowPadY;
-    return row;
-  };
-
-  // Measuring wraps a title, so the same row is asked for its height more than once as the
-  // window is worked out. Cache the last few: the window walk only ever touches rows near
-  // the window, and re-wrapping each of them two or three times is the one cost here that
-  // is pure waste.
-  std::vector<std::pair<int, int>> heightCache;
-  auto heightOf = [&](const int index) {
-    for (const auto& entry : heightCache) {
-      if (entry.first == index) return entry.second;
-    }
-    const int h = measure(index).height;
-    if (heightCache.size() >= 32) heightCache.erase(heightCache.begin());
-    heightCache.emplace_back(index, h);
-    return h;
-  };
-
-  const wrapped_list::Window win =
-      wrapped_list::window(itemCount, selectedIndex, scrollOffset, listHeight, rowGap, heightOf);
-
-  std::vector<Row> rows;
-  rows.reserve(static_cast<size_t>(win.count));
-  for (int i = win.first; i < win.first + win.count && i < itemCount; i++) rows.push_back(measure(i));
-  if (rows.empty()) rows.push_back(measure(std::clamp(win.first, 0, itemCount - 1)));
-
-  const int firstVisible = rows.front().index;
-  const int lastVisible = rows.back().index;
-
-  drawScrollArrows(renderer,
-                   Rect(rect.x, rect.y + list_scrollbar::kGap, rect.width, rect.height - list_scrollbar::kGap * 2),
-                   list_scrollbar::forVisibleRange(itemCount, firstVisible, lastVisible));
-
-  int rowY = listTop;
-  row_hit::Rows& wrappedHitRows = row_hit::lastRows();
-  for (const Row& row : rows) {
-    const bool selected = row.index == selectedIndex;
-    const int valueX = contentX + contentW - (row.valueW - valueGap);
-    // One highlight over the whole measured height, so a row spanning several lines is
-    // marked as a single block.
-    bool inverted = false;
-    if (selected) {
-      inverted = drawSelection(renderer, Rect(rect.x, rowY, rect.width, row.height), row.index == two_tap::armedRow());
-    }
-    if (row.valueW > 0) {
-      renderer.drawText(UI_10_FONT_ID, valueX, rowY + 3, row.value.c_str(), !inverted);
-    }
-    int textX = contentX;
-    if (row.badgeW > 0) {
-      drawBadgeChip(renderer, contentX, rowY, lineHeight, row.badgeW - badgeGap, row.badgeTextDx, row.badge.c_str(),
-                    inverted);
-      textX = contentX + row.badgeW;
-    }
-    int baselineY = rowY + 3;
-    for (const std::string& line : row.lines) {
-      renderer.drawText(UI_10_FONT_ID, textX, baselineY, line.c_str(), !inverted);
-      baselineY += lineHeight;
-    }
-    wrappedHitRows.add(row.index, rect.x, rowY, rect.width, row.height);
-    rowY += row.height + rowGap;
-  }
-
-  return {firstVisible, lastVisible, itemCount};
-}
-
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
   const int w = renderer.getScreenWidth();
   // Arabic and Hebrew draw it in their UI face, which Literata cannot stand in for.
@@ -1153,28 +1017,6 @@ int BaseTheme::helpTextLines(const GfxRenderer& renderer, const int rectWidth, c
   return static_cast<int>(wrapUiText(renderer, label, width, width).size());
 }
 
-void BaseTheme::drawPathBar(const GfxRenderer& renderer, const Rect rect, const char* path) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  renderer.drawLine(rect.x, rect.y, rect.x + rect.width - 1, rect.y, metrics.pathBarThickness, true);
-  if (path == nullptr || path[0] == '\0') return;
-
-  // Wrapped, never cut: a deep path takes the lines it needs, and the caller reserved
-  // them from pathBarLines.
-  const int maxWidth = std::max(1, rect.width - metrics.contentSidePadding * 2);
-  int textY = rect.y + metrics.verticalSpacing / 2;
-  for (const std::string& line : wrapUiText(renderer, path, maxWidth, maxWidth)) {
-    renderer.drawText(UI_10_FONT_ID, rect.x + metrics.contentSidePadding, textY, line.c_str());
-    textY += renderer.getLineHeight(UI_10_FONT_ID);
-  }
-}
-
-int BaseTheme::pathBarLines(const GfxRenderer& renderer, const int rectWidth, const char* path) {
-  if (path == nullptr || path[0] == '\0') return 1;
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int maxWidth = std::max(1, rectWidth - metrics.contentSidePadding * 2);
-  return std::max(1, static_cast<int>(wrapUiText(renderer, path, maxWidth, maxWidth).size()));
-}
-
 void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode,
                               int contentStartX, int contentWidth) const {
   const auto& metrics = UITheme::getInstance().getMetrics();
@@ -1228,46 +1070,4 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
       rowBaseline += option_popup::ROW_LINE;
     }
   }
-}
-
-// Home in-progress list. Ported from the lector home's classic layout. Each book's
-// Width of a chip that hugs "[NN%]" evenly, and where the text sits inside it.
-//
-// Padding by the same number of pixels on each side draws visibly lopsided, because
-// getTextWidth measures the two ends differently. It returns an INK box, and its left
-// edge is clamped to the pen (getTextBounds seeds minX with startX), so the opening
-// bracket's own left side bearing — 4px of blank in Cozette 12 — is counted INSIDE the
-// width, while the right edge stops exactly on the closing bracket's last lit pixel
-// with no trailing blank at all. Equal padding therefore drew 4 + bearing on the left
-// against a bare 4 on the right.
-//
-// So the fix is to pull the text left by that bearing: the ink then starts one gap in
-// from the chip edge and ends one gap before the far edge. Read from the font rather
-// than hardcoded, since the UI font is rebound per language.
-void badgeChipMetrics(const GfxRenderer& renderer, const char* text, int* chipW, int* textDx) {
-  constexpr int kGap = 4;  // blank between the chip edge and the bracket, both sides
-  const int inkW = renderer.getTextWidth(UI_10_FONT_ID, text);
-
-  int leftBearing = 0;
-  const auto& fontMap = renderer.getFontMap();
-  const auto it = fontMap.find(UI_10_FONT_ID);
-  if (it != fontMap.end() && text[0] != '\0') {
-    if (const EpdGlyph* first = it->second.getGlyph(static_cast<uint32_t>(text[0]))) {
-      leftBearing = std::max(0, static_cast<int>(first->left));
-    }
-  }
-
-  *textDx = kGap - leftBearing;
-  *chipW = *textDx + inkW + kGap;
-}
-
-// The chip on a row's first line. It flips with the row so it stays legible on both
-// grounds: black chip with white text on an unselected row, white chip with black text
-// on the inverted one.
-void drawBadgeChip(const GfxRenderer& renderer, const int x, const int rowY, const int lineHeight, const int chipW,
-                   const int textDx, const char* text, const bool inverted) {
-  const int chipH = lineHeight + 2;
-  const int chipY = rowY + 3 + (lineHeight - chipH) / 2;
-  renderer.fillRect(x, chipY, chipW, chipH, !inverted);
-  renderer.drawText(UI_10_FONT_ID, x + textDx, chipY + (chipH - lineHeight) / 2, text, inverted);
 }
