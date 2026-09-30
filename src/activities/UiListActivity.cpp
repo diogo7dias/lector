@@ -130,7 +130,16 @@ void UiListActivity::loop() {
 
 void UiListActivity::navigateButtons() {
   auto& n = activeNav();
-  buttonNavigator.onListNav(n.selected, listCount(), n.pageRows(), [this](const int index) { moveSelectionTo(index); });
+  const int count = listCount();
+  const int from = n.selected;
+  buttonNavigator.onListNav(from, count, n.pageRows(), [this, from, count](int index) {
+    // The step's direction, wrap included: forward when the way round is shorter that way.
+    const bool forward = count > 0 && (index - from + count) % count <= count / 2;
+    for (int tries = 0; tries < count && isHeaderRow(index); ++tries) {
+      index = forward ? (index + 1) % count : (index - 1 + count) % count;
+    }
+    moveSelectionTo(index);
+  });
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {

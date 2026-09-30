@@ -13,10 +13,9 @@
 
 class GfxRenderer;
 struct StatusBarBlock;
-struct RecentBook;
 
 // Which item indices a variable-height list actually rendered this frame, so the caller
-// can keep the selected row on screen. Used by drawRecentBookList and drawWrappedList.
+// can keep the selected row on screen. Used by drawWrappedList.
 struct ListVisibility {
   int firstVisible;  // index of the first fully-rendered book
   int lastVisible;   // index of the last fully-rendered book (inclusive)
@@ -74,11 +73,6 @@ struct ThemeMetrics {
   int controlRadius;
   int sheetRadius;
   int capsuleRadius;
-
-  int homeTopPadding;
-  int homeCoverTileHeight;
-  int homeMenuTopOffset;
-
   int buttonHintsHeight;
   int sideButtonHintsWidth;
 
@@ -139,9 +133,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .controlRadius = 0,
                                  .sheetRadius = 0,
                                  .capsuleRadius = 0,
-                                 .homeTopPadding = 40,
-                                 .homeCoverTileHeight = 400,
-                                 .homeMenuTopOffset = 10,
                                  .buttonHintsHeight = 40,
                                  .sideButtonHintsWidth = 30,
                                  .progressBarHeight = 16,
@@ -226,12 +217,6 @@ class BaseTheme {
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, bool selected) const;
   bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
                          int& index) const;
-  // Home in-progress list: each book's full title + author initials wrapped across as
-  // many lines as it needs, with an inline [NN%] black-background badge, the selected
-  // row inverted, and "N more above/below" indicators when the list scrolls. Returns
-  // the visible index range so the caller can keep the selected book on screen.
-  ListVisibility drawRecentBookList(GfxRenderer& renderer, Rect rect, const std::vector<RecentBook>& recentBooks,
-                                    int selectorIndex, int scrollOffset) const;
   // Variable-height sibling of drawList: each row's title WRAPS over as many lines as it
   // needs instead of being ellipsised, so a long filename stays readable in full. rowValue
   // is optional and is drawn right-aligned on the row's first line, with its width reserved
@@ -241,17 +226,12 @@ class BaseTheme {
                                  int scrollOffset, const std::function<std::string(int index)>& rowTitle,
                                  const std::function<std::string(int index)>& rowValue = nullptr,
                                  // Drawn as a filled chip before the title on the row's first line, in
-                                 // the same style drawRecentBookList uses on the home screen: black on
+                                 // the style of a badge chip: black on
                                  // an unselected row, white on the inverted one. Return an empty
                                  // string for a row that has no badge. The title wraps to the right of
                                  // the chip and its continuation lines stay under the first line, not
                                  // back at the left margin, so the text block keeps a straight edge.
                                  const std::function<std::string(int index)>& rowBadge = nullptr) const;
-  // itemIndexBase is what a tapped tile reports as its item: the home screen's menu sits
-  // below its book list in one selection space, so its first tile is item N, not item 0.
-  void drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount, int selectedIndex,
-                      const std::function<std::string(int index)>& buttonLabel,
-                      const std::function<UIIcon(int index)>& rowIcon, int itemIndexBase = 0) const;
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
@@ -281,11 +261,6 @@ class BaseTheme {
   // needs (pathBarLines says how many, so the caller can reserve them).
   void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
   static int pathBarLines(const GfxRenderer& renderer, int rectWidth, const char* path);
-  // The home header band's own contents: the firmware version at the left edge,
-  // the clock against the battery cluster, and the skull on the screen's centre
-  // line. nullptr for either string leaves that part out, which is what a board
-  // with no RTC does with the clock.
-  void drawHomeHeaderExtras(const GfxRenderer& renderer, const char* version, const char* clock) const;
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                      int contentStartX = 0, int contentWidth = 0) const;
   bool showsFileIcons() const { return false; }

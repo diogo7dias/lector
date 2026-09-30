@@ -1,24 +1,15 @@
 #pragma once
-#include <functional>
+#include <string>
 #include <vector>
 
 #include "./FileBrowserActivity.h"
-#include "activities/Activity.h"
-#include "util/ButtonNavigator.h"
+#include "RecentBooksStore.h"
+#include "activities/UiListActivity.h"
 #include "util/Sortes.h"
 
-struct RecentBook;
-struct Rect;
-
-class HomeActivity final : public Activity {
-  ButtonNavigator buttonNavigator{ButtonNavigator::LIST_REPEAT_INTERVAL_MS, ButtonNavigator::LIST_REPEAT_START_MS};
-  int selectorIndex = 0;
-  // In-progress list scroll state: scrollOffset is the first index drawList starts
-  // from; firstVisible/lastVisible are the range it actually rendered this frame
-  // (variable row heights), used to keep the selected book on screen.
-  int scrollOffset = 0;
-  int firstVisibleBookIdx = 0;
-  int lastVisibleBookIdx = 0;
+// Home as a contents page: the in-progress books under one heading, the places to go
+// under another, the device's clock and battery at the foot.
+class HomeActivity final : public UiListActivity {
   bool hasOpdsServers = false;
   std::string sortesBook;
   sortes::ScanResult sortesResult = sortes::ScanResult::Empty;
@@ -27,6 +18,11 @@ class HomeActivity final : public Activity {
   // Cleared by the first render that consumes it, so only that paint pays for the
   // full-clear waveform.
   bool cleanInitialRefresh;
+  // What the rows borrow: the author line and the progress of each book, the folio.
+  std::vector<freeink::ui::ListItem> rows;
+  std::vector<std::string> authors;
+  std::vector<std::string> percents;
+  mutable std::string folio;
 
   // Convert HomeMenuItem to menu index (used in onEnter)
   static int menuItemToIndex(HomeMenuItem item, bool hasOpdsUrl) {
@@ -56,20 +52,32 @@ class HomeActivity final : public Activity {
   void onFileTransferOpen();
   void onOpdsBrowserOpen();
 
-  int getMenuItemCount() const;
-  // Menu rows only, excluding books.
   int menuRowCount() const;
+  // What Back does under Sortes, as its hint and as the toast when there is nothing to open.
+  const char* sortesHint() const;
   void loadRecentBooks(int maxBooks);
+  // Row layout: a heading over the books when there are any, then a heading over the menu.
+  int bookCount() const { return static_cast<int>(recentBooks.size()); }
+  int firstBookRow() const { return 1; }
+  int libraryHeadingRow() const { return bookCount() > 0 ? bookCount() + 1 : 0; }
+  int firstMenuRow() const { return libraryHeadingRow() + 1; }
 
  public:
   explicit HomeActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                         HomeMenuItem initialMenuItemValue = HomeMenuItem::NONE, bool cleanInitialRefresh = false)
-      : Activity(activity_name::kHome, renderer, mappedInput),
+      : UiListActivity(activity_name::kHome, renderer, mappedInput),
         initialMenuItem(initialMenuItemValue),
         cleanInitialRefresh(cleanInitialRefresh) {}
   void onEnter() override;
-  void onExit() override;
-  void loop() override;
-  void render(RenderLock&&) override;
   bool isHomeActivity() const override { return true; }
+
+ protected:
+  int listCount() const override { return firstMenuRow() + menuRowCount(); }
+  void buildScreen(UiScreen& screen) override;
+  void activateIndex(int index) override;
+  bool isHeaderRow(int index) const override { return index == libraryHeadingRow() || (bookCount() > 0 && index == 0); }
+  void onBackButton() override;
+  ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
+  HalDisplay::RefreshMode refreshMode() override;
 };

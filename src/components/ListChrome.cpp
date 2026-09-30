@@ -189,7 +189,8 @@ list_chrome::Metrics metricsFor(const GfxRenderer& renderer, const ListChrome& c
   if (chrome.contents) {
     // Only footnotes use the line height here: the rest went into the title page.
     metrics.lineHeight = title_page::FOOTNOTE_LINE;
-    if (!chrome.hints && present(chrome.footnotes[0])) metrics.hintsHeight = title_page::FOOT;
+    if (!chrome.hints && (present(chrome.footnotes[0]) || present(chrome.folio)))
+      metrics.hintsHeight = title_page::FOOT;
   }
   return metrics;
 }
@@ -254,6 +255,9 @@ void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappe
     for (const char* line : chrome.footnotes) {
       if (present(line)) y = title_page::block(renderer, title_page::FOOTNOTE, line, y, true);
     }
+    // Small capitals, like the title page's chapter line: lower case into the small-caps face.
+    if (present(chrome.folio))
+      title_page::block(renderer, title_page::CHAPTER, title_page::recase(chrome.folio, false), y, true);
   } else {
     int y = bands.footnote.y;
     for (const char* line : chrome.footnotes) y = drawWrappedLine(renderer, y, line);
