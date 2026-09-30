@@ -22,7 +22,8 @@ class StealLookActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   void onBackButton() override;
-  const char* headerTitle() const override;
+  ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
 
  private:
   struct Candidate {
