@@ -14,14 +14,6 @@
 class GfxRenderer;
 struct StatusBarBlock;
 
-// Which item indices a variable-height list actually rendered this frame, so the caller
-// can keep the selected row on screen. Used by drawWrappedList.
-struct ListVisibility {
-  int firstVisible;  // index of the first fully-rendered book
-  int lastVisible;   // index of the last fully-rendered book (inclusive)
-  int totalCount;
-};
-
 struct Rect {
   int x;
   int y;
@@ -93,9 +85,6 @@ struct ThemeMetrics {
   int textFieldNormalThickness;
   int textFieldCursorThickness;
   int textFieldLineEndOffset;
-
-  // Rule above the file browser's path line.
-  int pathBarThickness;
 };
 
 enum UIIcon { None = 0, Folder, Text, Image, Book, File, Recent, Settings, Transfer, Library, Wifi, Hotspot, Bookmark };
@@ -149,8 +138,7 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
-                                 .textFieldLineEndOffset = 0,
-                                 .pathBarThickness = 3};
+                                 .textFieldLineEndOffset = 0};
 }
 
 class BaseTheme {
@@ -217,21 +205,6 @@ class BaseTheme {
   void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, bool selected) const;
   bool tabIndexFromPoint(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs, int x, int y,
                          int& index) const;
-  // Variable-height sibling of drawList: each row's title WRAPS over as many lines as it
-  // needs instead of being ellipsised, so a long filename stays readable in full. rowValue
-  // is optional and is drawn right-aligned on the row's first line, with its width reserved
-  // there. Rows scroll rather than paginate, so the caller keeps a scrollOffset and feeds
-  // back the returned visible range (see FileBrowserActivity).
-  ListVisibility drawWrappedList(const GfxRenderer& renderer, Rect rect, int itemCount, int selectedIndex,
-                                 int scrollOffset, const std::function<std::string(int index)>& rowTitle,
-                                 const std::function<std::string(int index)>& rowValue = nullptr,
-                                 // Drawn as a filled chip before the title on the row's first line, in
-                                 // the style of a badge chip: black on
-                                 // an unselected row, white on the inverted one. Return an empty
-                                 // string for a row that has no badge. The title wraps to the right of
-                                 // the chip and its continuation lines stay under the first line, not
-                                 // back at the left margin, so the text block keeps a straight edge.
-                                 const std::function<std::string(int index)>& rowBadge = nullptr) const;
   // The one message surface: a full-width black strip below the top padding, with a
   // white inset border and white centered text. Paints only — the caller picks the
   // refresh, because the busy banner wants the cheap FAST waveform and popups do not.
@@ -257,13 +230,8 @@ class BaseTheme {
   // reserves helpTextLines() lines; every line is drawn.
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   static int helpTextLines(const GfxRenderer& renderer, int rectWidth, const char* label);
-  // Foot-of-screen path bar: a rule, then the path wrapped over as many lines as it
-  // needs (pathBarLines says how many, so the caller can reserve them).
-  void drawPathBar(const GfxRenderer& renderer, Rect rect, const char* path) const;
-  static int pathBarLines(const GfxRenderer& renderer, int rectWidth, const char* path);
   void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                      int contentStartX = 0, int contentWidth = 0) const;
-  bool showsFileIcons() const { return false; }
 
   // Shared constants and helpers for battery drawing
   static constexpr int batteryPercentSpacing = 4;
