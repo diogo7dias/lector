@@ -651,6 +651,28 @@ bool BaseTheme::tabIndexFromPoint(const GfxRenderer& renderer, const Rect rect, 
   return false;
 }
 
+void BaseTheme::drawHintStrip(const GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                              const char* btn4) const {
+  // The four labels in button order, the blank ones left out, as one italic line.
+  std::string line;
+  for (const char* label : {btn1, btn2, btn3, btn4}) {
+    if (label == nullptr || label[0] == '\0') continue;
+    if (!line.empty()) line += " \xC2\xB7 ";
+    line += label;
+  }
+  if (line.empty()) return;
+  const int fontId = uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID;
+  const int w = renderer.getScreenWidth();
+  int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
+  // The paper runs to the physical foot; the line sits above the bottom crop.
+  const int top = renderer.getScreenHeight() - viewBottom - banner::TOAST_PAD * 2 - banner::TOAST_LINE;
+  renderer.fillRect(0, top, w, renderer.getScreenHeight() - top, false);
+  renderer.fillRect(0, top, w, banner::TOAST_RULE, true);
+  renderer.drawCenteredText(fontId, top + banner::TOAST_PAD + (banner::TOAST_LINE - renderer.getLineHeight(fontId)) / 2,
+                            line.c_str(), true, EpdFontFamily::REGULAR);
+}
+
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
   const int w = renderer.getScreenWidth();
   // Arabic and Hebrew draw it in their UI face, which Literata cannot stand in for.

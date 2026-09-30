@@ -85,7 +85,7 @@ void BmpViewerActivity::drawHints() {
   const auto labels = triage ? mappedInput.mapLabels(tr(STR_BACK), favLabel, tr(STR_DELETE), pauseLabel)
                              : mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                                      (hasPrevious ? "<" : ""), (hasNext ? ">" : ""));
-  GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  GUI.drawHintStrip(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 }
 
 bool BmpViewerActivity::canSetSleepCover() const { return FsHelpers::hasBmpExtension(filePath); }
@@ -128,7 +128,7 @@ void BmpViewerActivity::onEnter() {
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                        tr(STR_FILE_OPEN_FAILED));
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawHintStrip(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
     return;
@@ -181,7 +181,7 @@ void BmpViewerActivity::onEnter() {
       GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                        tr(STR_INVALID_BMP_FILE));
       const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      GUI.drawHintStrip(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     }
 
@@ -192,7 +192,7 @@ void BmpViewerActivity::onEnter() {
     GUI.drawHelpText(renderer, Rect{0, pageHeight / 2, renderer.getScreenWidth(), lineHeightForHelp(renderer)},
                      tr(STR_FILE_OPEN_FAILED));
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
-    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    GUI.drawHintStrip(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
 }
