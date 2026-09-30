@@ -141,7 +141,7 @@ std::string KOReaderSettingsActivity::statusFor(const int index) const {
   }
   if (index == 6 || index == 7) {
     // Both need credentials; saying so on the row beats a press that does nothing.
-    return KOREADER_STORE.hasCredentials() ? std::string() : std::string("[") + tr(STR_SET_CREDENTIALS_FIRST) + "]";
+    return KOREADER_STORE.hasCredentials() ? std::string() : std::string(tr(STR_SET_CREDENTIALS_FIRST));
   }
   return std::string(tr(STR_NOT_SET));
 }

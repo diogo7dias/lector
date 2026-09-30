@@ -21,6 +21,7 @@ class KOReaderSettingsActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override;
+  bool contentsLook() const override { return true; }
 
  private:
   // The right-hand column for a row: what the setting currently is.
