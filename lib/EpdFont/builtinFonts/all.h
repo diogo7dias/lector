@@ -1,8 +1,6 @@
 #pragma once
 
 #include <builtinFonts/notosans_8_regular.h>
-#include <builtinFonts/spleen_6x12_2x_regular.h>
-#include <builtinFonts/spleen_6x12_regular.h>
 #include <builtinFonts/chareink_14_bold.h>
 #include <builtinFonts/chareink_14_bolditalic.h>
 #include <builtinFonts/chareink_14_italic.h>
