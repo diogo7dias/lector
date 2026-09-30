@@ -169,7 +169,9 @@ inline list_chrome::Bands listChromeBands(const GfxRenderer&, const ListChrome&)
   return bands;
 }
 inline void drawListChromeTop(const GfxRenderer&, const ListChrome&) {}
-inline void toContentsLook(ListChrome& chrome, bool keepHints) { chrome.hints = chrome.hints && keepHints; }
+inline void toContentsLook(ListChrome& chrome, bool keepHints) {
+  chrome.hints = chrome.hints && (keepHints || chrome.contentsKeepsHints);
+}
 inline bool uiLanguageNeedsUbuntu() { return false; }
 constexpr int UI_10_FONT_ID = 1;
 constexpr int LITERATA_UI_26_FONT_ID = 2;
