@@ -28,6 +28,7 @@ class ReaderPresetsActivity final : public UiListActivity {
   void onBackButton() override;
   const char* headerTitle() const override;
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
   // The theme actions popup owns the pass while it is up, and paints over the
   // finished list.
   bool handleCustomInput() override;
