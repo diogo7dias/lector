@@ -36,6 +36,7 @@ void NetworkModeSelectionActivity::buildScreen(UiScreen& screen) {
     rows[i].label = I18N.get(MENU_ITEMS[i]);
     rows[i].subtitle = I18N.get(MENU_DESCS[i]);
     rows[i].icon = listIconFor(MENU_ICONS[i], 32);
+    rows[i].value = "\xE2\x80\xBA";  // › each opens its own screen
     rows[i].actionValue = static_cast<int16_t>(i);
   }
 

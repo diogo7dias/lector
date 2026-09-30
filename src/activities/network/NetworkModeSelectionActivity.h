@@ -32,6 +32,7 @@ class NetworkModeSelectionActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override { onCancel(); }
   const char* headerTitle() const override;
+  bool contentsLook() const override { return true; }
 
  private:
   std::vector<freeink::ui::ListItem> rows;
