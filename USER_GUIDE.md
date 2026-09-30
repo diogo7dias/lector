@@ -300,9 +300,13 @@ Landscape CCW. The in-book menu can rotate the screen without leaving the book.
 
 ## 6. The in-book menu
 
-Press **Confirm** while reading. The menu opens in tabs; **Left** and **Right** move within a
-tab, and the tab strip runs across the top. Rows that do not apply to the open book are not
-shown at all.
+Press **Confirm** while reading. The menu is set like a book's contents page: the book's
+title, author, chapter and progress at the top, then the sections numbered **I**, **II**,
+**III**... Moving onto a section opens it under its heading and closes the one before; the
+closed ones stay listed as single lines. A small triangle marks the selection. Rows with a
+setting run a dotted line out to its value, and rows that open another screen end in **›**.
+The first **Back** closes the open section, the second leaves the menu. Rows that do not apply
+to the open book are not shown at all.
 
 The menu opens on **Sleep Screen**. **Settings > Reader > Book Menu Opens On** changes that to
 **Navigate**, **Book**, **Look** or **Device** instead, and that choice always wins. The

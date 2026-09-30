@@ -31,6 +31,17 @@ struct ListChrome {
   // it over as many screen lines as it needs and reserves them all.
   static constexpr int MAX_HEADER_LINES = 8;
   std::array<const char*, MAX_HEADER_LINES> headerLines{};
+  // The contents look's header: the book set like a title page (title in tracked
+  // capitals, author in italic, a short rule, the chapter in small capitals, the
+  // progress in italic), in place of headerLines. Starts at the top of the panel.
+  struct TitlePage {
+    const char* title = nullptr;
+    const char* author = nullptr;
+    const char* chapter = nullptr;
+    const char* progress = nullptr;
+  } titlePage;
+  // False drops the button-hint band, and the body runs to the panel's foot.
+  bool hints = true;
   // A centred note under everything above, wrapped like the header lines.
   const char* note = nullptr;
   // Lines above the button hints, for something true of the whole list rather

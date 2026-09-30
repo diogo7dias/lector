@@ -35,9 +35,10 @@ struct Metrics {
 struct Content {
   bool hasHeader = false;
   bool hasSubHeader = false;
-  int headerLines = 0;    // centred lines under the title band
-  int noteLines = 0;      // left-aligned lines under everything above
-  int footnoteLines = 0;  // lines between the body and the button hints
+  int titlePageHeight = 0;  // the contents look's title page, flush with the panel top
+  int headerLines = 0;      // centred lines under the title band
+  int noteLines = 0;        // left-aligned lines under everything above
+  int footnoteLines = 0;    // lines between the body and the button hints
 };
 
 struct Bands {
@@ -54,7 +55,7 @@ struct Bands {
 
 inline Bands bandsFor(const Metrics& metrics, const Content& content) {
   Bands bands;
-  int y = metrics.topPadding;
+  int y = content.titlePageHeight > 0 ? content.titlePageHeight : metrics.topPadding;
   if (content.hasHeader) {
     bands.header = Rect{0, y, metrics.screenWidth, metrics.headerHeight};
     y += metrics.headerHeight;
@@ -73,7 +74,8 @@ inline Bands bandsFor(const Metrics& metrics, const Content& content) {
     bands.note = Rect{0, y, metrics.screenWidth, height};
     y += height;
   }
-  bands.contentTop = y + metrics.spacing;
+  // The title page carries its own bottom margin; the rows start right under it.
+  bands.contentTop = y + (content.titlePageHeight > 0 ? 0 : metrics.spacing);
 
   int bottom = metrics.screenHeight - metrics.hintsHeight;
   if (content.footnoteLines > 0) {

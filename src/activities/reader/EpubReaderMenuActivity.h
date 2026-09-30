@@ -8,6 +8,7 @@
 #include "CrossPointSettings.h"
 #include "activities/UiListActivity.h"
 #include "components/OptionPopup.h"
+#include "fontIds.h"
 #include "util/ButtonNavigator.h"
 
 class EpubReaderMenuActivity final : public UiListActivity {
@@ -105,6 +106,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // A press walks visible rows; a hold jumps to the next section header.
   void navigateButtons() override;
   bool drawOverlay() override;
+  // The contents look's row face; the base binds it before deriving the theme.
+  int listFontId() const override { return LITERATA_UI_20_FONT_ID; }
 
  private:
   struct MenuItem {

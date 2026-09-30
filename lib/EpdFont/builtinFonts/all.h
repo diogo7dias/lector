@@ -13,3 +13,12 @@
 #include <builtinFonts/ubuntu_10_regular.h>
 #include <builtinFonts/ubuntu_12_regular.h>
 #include <builtinFonts/ubuntu_14_regular.h>
+#include <builtinFonts/literata_ui_20_regular.h>
+#include <builtinFonts/literata_ui_20_bold.h>
+#include <builtinFonts/literata_ui_26_semibold.h>
+#include <builtinFonts/literata_ui_25_semibold.h>
+#include <builtinFonts/literata_ui_16_semibold.h>
+#include <builtinFonts/literata_ui_15_regular.h>
+#include <builtinFonts/literata_ui_15_smallcaps.h>
+#include <builtinFonts/literata_ui_19_italic.h>
+#include <builtinFonts/literata_ui_15_italic.h>

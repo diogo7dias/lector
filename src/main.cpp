@@ -102,6 +102,27 @@ EpdFontFamily paragraphNumFontFamily(&paragraphNumFont, &paragraphNumFont);
 EpdFont paragraphNum2xFont(&spleen_6x12_2x_regular);
 EpdFontFamily paragraphNum2xFontFamily(&paragraphNum2xFont, &paragraphNum2xFont);
 
+// Contents look faces (lib/EpdFont/scripts/convert-literata-ui.py). One pixel size per
+// face, as the mockup draws them; only the row face has a second cut, the selected row's
+// bold. Each face fills its family's bold slot with itself otherwise, like the UI fonts.
+EpdFont literataUi20RegularFont(&literata_ui_20_regular);
+EpdFont literataUi20BoldFont(&literata_ui_20_bold);
+EpdFontFamily literataUi20FontFamily(&literataUi20RegularFont, &literataUi20BoldFont);
+EpdFont literataUi26Font(&literata_ui_26_semibold);
+EpdFontFamily literataUi26FontFamily(&literataUi26Font, &literataUi26Font);
+EpdFont literataUi25Font(&literata_ui_25_semibold);
+EpdFontFamily literataUi25FontFamily(&literataUi25Font, &literataUi25Font);
+EpdFont literataUi16Font(&literata_ui_16_semibold);
+EpdFontFamily literataUi16FontFamily(&literataUi16Font, &literataUi16Font);
+EpdFont literataUi15Font(&literata_ui_15_regular);
+EpdFontFamily literataUi15FontFamily(&literataUi15Font, &literataUi15Font);
+EpdFont literataUi15ScFont(&literata_ui_15_smallcaps);
+EpdFontFamily literataUi15ScFontFamily(&literataUi15ScFont, &literataUi15ScFont);
+EpdFont literataUi19ItFont(&literata_ui_19_italic);
+EpdFontFamily literataUi19ItFontFamily(&literataUi19ItFont, &literataUi19ItFont);
+EpdFont literataUi15ItFont(&literata_ui_15_italic);
+EpdFontFamily literataUi15ItFontFamily(&literataUi15ItFont, &literataUi15ItFont);
+
 // The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
 // so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
 // arrangement: menu weight hierarchy comes from SIZE, not from a second cut. Emphasis in
@@ -370,6 +391,14 @@ static void setupBuiltinFonts() {
   // language; the reader picks between them per book from ReaderPrefs.
   renderer.insertFont(PARA_NUM_FONT_ID, paragraphNumFontFamily);
   renderer.insertFont(PARA_NUM_2X_FONT_ID, paragraphNum2xFontFamily);
+  renderer.insertFont(LITERATA_UI_20_FONT_ID, literataUi20FontFamily);
+  renderer.insertFont(LITERATA_UI_26_FONT_ID, literataUi26FontFamily);
+  renderer.insertFont(LITERATA_UI_25_FONT_ID, literataUi25FontFamily);
+  renderer.insertFont(LITERATA_UI_16_FONT_ID, literataUi16FontFamily);
+  renderer.insertFont(LITERATA_UI_15_FONT_ID, literataUi15FontFamily);
+  renderer.insertFont(LITERATA_UI_15_SC_FONT_ID, literataUi15ScFontFamily);
+  renderer.insertFont(LITERATA_UI_19_IT_FONT_ID, literataUi19ItFontFamily);
+  renderer.insertFont(LITERATA_UI_15_IT_FONT_ID, literataUi15ItFontFamily);
   // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
   // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);

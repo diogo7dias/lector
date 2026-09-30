@@ -62,3 +62,52 @@ ruby -rdigest -e 'puts [
   "./spleen_6x12_2x_regular.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
+
+echo "#define LITERATA_UI_20_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_20_regular.h",
+  "./literata_ui_20_bold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_26_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_26_semibold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_25_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_25_semibold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_16_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_16_semibold.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_15_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_15_regular.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_15_SC_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_15_smallcaps.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_19_IT_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_19_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
+
+echo "#define LITERATA_UI_15_IT_FONT_ID ($(
+ruby -rdigest -e 'puts [
+  "./literata_ui_15_italic.h",
+].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
+))"
