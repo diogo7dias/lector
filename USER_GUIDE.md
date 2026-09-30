@@ -164,8 +164,8 @@ full name.
 
 ## 4. Browsing files
 
-The file browser shows the current folder path at the top, files with their extensions, and
-folders in brackets, for example `[folder-name]`.
+The file browser is titled with the current folder, with its full path at the foot. Files show
+their type on the right; folders show `›`.
 
 - **Move the cursor** — **Left** (or **Volume Up**) and **Right** (or **Volume Down**). Hold
   either one to move a whole page at a time.
@@ -179,9 +179,8 @@ folders in brackets, for example `[folder-name]`.
 Renaming and moving files is done from the web interface rather than on the device, see
 [section 9](#9-getting-books-onto-the-device).
 
-Each row shows its file type on the right, and a book you have opened before also shows how
-far in you are on the left, in front of the title: a percentage while you are reading it, or
-**Read** once you reach its last page, in the same style the home screen uses. The
+A book you have opened before also shows how far in you are, in italic under its title: a
+percentage while you are reading it, or **Read** once you reach its last page. The
 badge stays even after the book leaves the Recents list or is filed into `/read`. Books you
 have never opened show no badge, and comics (XTC) never carry one.
 

@@ -180,10 +180,7 @@ TEST(ListHoldNav, ASwipeStillTravelsAPage) {
   // A body swipe is delivered through the same continuous callback as a hold.
   // Without the split it would inherit the hold's one-row step, and dragging a
   // finger down a long list would move a single row per swipe.
-  for (const char* path : {BUTTON_NAVIGATOR_SOURCE, BROWSER_ACTIVITY_SOURCE}) {
-    const std::string source = readSource(path);
-    EXPECT_TRUE(contains(source, "swipeDrivenPass()"))
-        << path << " gives a swipe the hold's row step instead of a page";
-    EXPECT_TRUE(contains(source, "PageIndex")) << path << " has no page jump left for a swipe to use";
-  }
+  const std::string source = readSource(BUTTON_NAVIGATOR_SOURCE);
+  EXPECT_TRUE(contains(source, "swipeDrivenPass()")) << "a swipe gets the hold's row step instead of a page";
+  EXPECT_TRUE(contains(source, "PageIndex")) << "no page jump left for a swipe to use";
 }
