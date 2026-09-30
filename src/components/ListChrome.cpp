@@ -209,7 +209,7 @@ int drawWrappedLine(const GfxRenderer& renderer, const int y, const char* line) 
 
 void toContentsLook(ListChrome& chrome, const bool keepHints) {
   chrome.contents = true;
-  chrome.hints = chrome.hints && keepHints;
+  chrome.hints = chrome.hints && (keepHints || chrome.contentsKeepsHints);
   if (chrome.titlePage.title == nullptr && chrome.title != nullptr) {
     chrome.titlePage.title = chrome.title;
     for (const char* line : {chrome.subHeader, chrome.headerRight, chrome.note}) {

@@ -24,6 +24,7 @@ class ButtonRemapActivity final : public UiListActivity {
   void activateIndex(int index) override {}
   bool handleCustomInput() override;
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
 
  private:
   std::vector<freeink::ui::ListItem> rows;

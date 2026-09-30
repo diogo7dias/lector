@@ -44,6 +44,9 @@ struct ListChrome {
   bool hints = true;
   // Set by toContentsLook(): footnotes are set in italic, centred, over an 18px foot.
   bool contents = false;
+  // Keeps the hint band in the contents look, for hints that say what the rows cannot
+  // (Remap Front Buttons previews the mapping on the keys themselves).
+  bool contentsKeepsHints = false;
   // A centred note under everything above, wrapped like the header lines.
   const char* note = nullptr;
   // Lines above the button hints, for something true of the whole list rather
