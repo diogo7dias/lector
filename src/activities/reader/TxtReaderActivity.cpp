@@ -193,7 +193,7 @@ void TxtReaderActivity::initializeReader() {
   if (sb.textOn() && sb.titlePos != CrossPointSettings::SB_ANCHOR_OFF && sb.titleTruncate == 0) {
     // TXT resolves any title source to the book title (no chapters to fall back from).
     const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, txt->getTitle().c_str());
-    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(BaseTheme::statusBarTitleFontId());
   }
   const bool sbTitleTop =
       sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;

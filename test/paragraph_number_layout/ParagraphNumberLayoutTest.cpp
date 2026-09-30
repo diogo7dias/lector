@@ -119,6 +119,13 @@ TEST(ParagraphNumberLayout, FallsBackToLineBoxCentringWithoutInkMetrics) {
   EXPECT_EQ((46 - 26) / 2, paragraphNumberDrawY(m));
 }
 
+TEST(ParagraphNumberLayout, NumbersSitAtThePageEdgeOrNotAtAll) {
+  EXPECT_EQ(paragraphNumberX(3, 18, 40), 7);   // in the margin, flush left
+  EXPECT_EQ(paragraphNumberX(3, 18, 30), 7);   // 7 + 18 + 5 lands exactly on the letter
+  EXPECT_EQ(paragraphNumberX(3, 18, 29), -1);  // one pixel short: skipped, never clipped
+  EXPECT_EQ(paragraphNumberX(0, 27, 60), 4);   // an indent gives a wide number room
+}
+
 TEST(FullTextPageAlignment, BalancesRemainderWithoutChangingLineSpacing) {
   EXPECT_EQ(fullTextPageOffset(700, 0, 650, 50, 40), 5);
   EXPECT_EQ(fullTextPageOffset(701, 0, 650, 50, 40), 5);  // odd pixel stays below

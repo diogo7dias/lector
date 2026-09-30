@@ -2126,12 +2126,12 @@ ReaderPrefs EpubReaderActivity::applyReaderPrefsFrom(const ReaderPrefs& incoming
 void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int marginLeft, const int marginTop,
                                               const int fontId) {
   if (prefs_.paragraphNumbering == CrossPointSettings::PARA_NUM_OFF) return;
-  constexpr int kGap = 5;  // px between the number and the first letter
-  // Small and Double are two separate baked faces, not one face scaled: a bitmap font
-  // only stays exact on whole multiples of its own cell, so the size is a choice between
-  // pre-rendered grids rather than a scale factor applied here.
-  const int numFontId =
-      (prefs_.paragraphNumberSize == CrossPointSettings::PARA_NUM_SIZE_DOUBLE) ? PARA_NUM_2X_FONT_ID : PARA_NUM_FONT_ID;
+  // Literata, the contents look's numeral face: Small is its 16px cut, Double the 26px.
+  const int numFontId = (prefs_.paragraphNumberSize == CrossPointSettings::PARA_NUM_SIZE_DOUBLE)
+                            ? LITERATA_UI_26_FONT_ID
+                            : LITERATA_UI_16_FONT_ID;
+  int viewTop = 0, viewRight = 0, viewBottom = 0, pageLeft = 0;
+  renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &pageLeft);
   const int lineHeight = renderer.getLineHeight(fontId);
   const int numLineHeight = renderer.getLineHeight(numFontId);
   // Sit the number on the same optical line as the words, at any reading size. The rule
@@ -2157,11 +2157,10 @@ void EpubReaderActivity::drawParagraphNumbers(const Page& page, const int margin
     char buf[12];
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(ord));
     const int numWidth = renderer.getTextWidth(numFontId, buf);
-    // Right-align the number just left of the paragraph's first letter (wordXpos(0)
-    // is non-zero for centered/justified/RTL lines, so it is the correct anchor).
-    const int firstLetterX = marginLeft + line.xPos + block->wordXpos(0);
-    const int x = firstLetterX - kGap - numWidth;
-    if (x < 0) continue;  // no room in the margin — skip rather than clip into text
+    // wordXpos(0) is non-zero for indented, centred and RTL lines, so the room the
+    // number has runs to the first letter, not just to the text column.
+    const int x = paragraphNumberX(pageLeft, numWidth, marginLeft + line.xPos + block->wordXpos(0));
+    if (x < 0) continue;
     metrics.lineTop = marginTop + line.yPos;
     const int y = paragraphNumberDrawY(metrics);
     renderer.drawText(numFontId, x, y, buf, true);
@@ -2504,7 +2503,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       sbTitle = epub->getTitle();
     }
     const int lines = UITheme::getStatusBarV2TitleLines(sb, renderer, sbTitle.c_str());
-    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(UI_10_FONT_ID);
+    sbTitleExtraPx = (lines - 1) * renderer.getLineHeight(BaseTheme::statusBarTitleFontId());
   }
   const bool sbTitleTop =
       sb.titlePos >= CrossPointSettings::SB_ANCHOR_TL && sb.titlePos <= CrossPointSettings::SB_ANCHOR_TR;

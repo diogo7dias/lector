@@ -704,6 +704,10 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 
+int BaseTheme::statusBarFontId() { return uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID; }
+
+int BaseTheme::statusBarTitleFontId() { return uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_SC_FONT_ID; }
+
 void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data, const StatusBarBlock& sb) const {
   // Two independent halves. The text items need the status bar switched on; the edge
   // progress bars can also be kept alive on their own by sbOffBar, in which case this
@@ -711,7 +715,9 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   const bool drawText = sb.textOn();
   if (!drawText && !sb.progressBarsVisible()) return;
 
-  const int f = UI_10_FONT_ID;
+  // The contents look's faces: the title in small caps, the counters in italic.
+  const int f = statusBarFontId();
+  const int tf = statusBarTitleFontId();
   const auto& metrics = UITheme::getInstance().getMetrics();
   int mt, mr, mb, ml;
   renderer.getOrientedViewableTRBL(&mt, &mr, &mb, &ml);
@@ -839,6 +845,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   char chapPctBuf[10] = "";
   char chapNumBuf[24] = "";
   char sessionBuf[16] = "";
+  char titleBuf[160] = "";
 
   // Battery (icon + optional %)
   {
@@ -863,7 +870,16 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   {
     const bool chapterSrc = sb.titleSource == CrossPointSettings::SB_TITLE_CHAPTER;
     const char* title = (chapterSrc && data.hasChapters) ? data.chapterTitle.c_str() : data.bookTitle.c_str();
-    if (title[0] != '\0') set(statusbar::Title, title);
+    // Small capitals are the lower case set in the small-caps face; kept on the stack,
+    // since this render path allocates nothing.
+    // ponytail: a title past 159 bytes is cut here; the band clips or wraps it anyway.
+    snprintf(titleBuf, sizeof(titleBuf), "%s", title);
+    for (char* c = titleBuf; *c; ++c)
+      if (*c >= 'A' && *c <= 'Z') *c = static_cast<char>(*c - 'A' + 'a');
+    if (titleBuf[0] != '\0') {
+      text[statusbar::Title] = titleBuf;
+      width[statusbar::Title] = renderer.getTextWidth(tf, titleBuf);
+    }
   }
   // Page in chapter ("3/40" or "8 left")
   if (sb.pageFormat == CrossPointSettings::SB_PAGE_LEFT) {
@@ -929,6 +945,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   }
 
   auto clusterW = [&](int idx) { return statusbar::clusterWidth(L, idx, sepW); };
+  auto fontOf = [&](const char* t) { return t == titleBuf ? tf : f; };
 
   // --- Draw one anchor cluster (align: 0 left edge, 1 centered, 2 right edge) ---
   auto drawAnchor = [&](int idx, int align, int y) {
@@ -945,9 +962,10 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       if (avail > 0 && total > avail) {
         // Only reached by a truncate-ON title (the greedy truncate-OFF title is
         // drawn wrapped above and its bucket emptied) -> clip with an ellipsis.
-        std::string clipped = renderer.truncatedText(f, L.buckets[idx][0].text, avail);
-        const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(f, clipped.c_str())) / 2;
-        renderer.drawText(f, cx, y, clipped.c_str());
+        const int font = fontOf(L.buckets[idx][0].text);
+        std::string clipped = renderer.truncatedText(font, L.buckets[idx][0].text, avail);
+        const int cx = leftEdge + lw + (bandWidth - lw - rw - renderer.getTextWidth(font, clipped.c_str())) / 2;
+        renderer.drawText(font, cx, y, clipped.c_str());
         return;
       }
     }
@@ -964,7 +982,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       if (s.isBattery) {
         drawBatteryLeft(renderer, Rect{x, y, metrics.batteryWidth, metrics.batteryHeight}, showBattery, f);
       } else {
-        renderer.drawText(f, x, y, s.text);
+        renderer.drawText(fontOf(s.text), x, y, s.text);
       }
       x += s.width;
     }
@@ -978,13 +996,13 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   if (titleAnchorIdx >= 0 && sb.titleTruncate == 0 && L.counts[titleAnchorIdx] == 1) {
     const int col = titleAnchorIdx % 3;
     const bool top = titleAnchorIdx < 3;
-    const auto lines = renderer.wrappedText(f, L.buckets[titleAnchorIdx][0].text, bandWidth, 6);
+    const auto lines = renderer.wrappedText(tf, L.buckets[titleAnchorIdx][0].text, bandWidth, 6);
     const int n = static_cast<int>(lines.size());
     for (int i = 0; i < n; i++) {
-      const int lw = renderer.getTextWidth(f, lines[i].c_str());
+      const int lw = renderer.getTextWidth(tf, lines[i].c_str());
       const int x = (col == 0) ? leftEdge : (col == 2) ? (rightEdge - lw) : (leftEdge + (bandWidth - lw) / 2);
       const int y = top ? (topTextY + i * lineH) : (bottomTextY - (n - 1 - i) * lineH);
-      renderer.drawText(f, x, y, lines[i].c_str());
+      renderer.drawText(tf, x, y, lines[i].c_str());
     }
     L.counts[titleAnchorIdx] = 0;  // consumed; skip in the generic pass
   }

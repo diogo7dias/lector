@@ -226,6 +226,10 @@ class BaseTheme {
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the
   // book/chapter data. Draws top and/or bottom bands plus edge progress bars.
   void drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data, const StatusBarBlock& sb) const;
+  // The status bar's faces (Literata 19 italic, the title in its small caps), or the UI
+  // face where Literata cannot stand in. The band reservations measure with these too.
+  static int statusBarFontId();
+  static int statusBarTitleFontId();
   // Centred lines of help text, wrapped to the rect's width and never cut. The caller
   // reserves helpTextLines() lines; every line is drawn.
   void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;

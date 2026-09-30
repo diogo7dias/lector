@@ -25,6 +25,16 @@ struct ParagraphNumberMetrics {
   int numLineHeight = 0;   ///< number font advanceY, used only by the fallback
 };
 
+/// The number's x: flush with the page's left edge, a column at the edge of the book
+/// rather than tucked against each paragraph's first letter. -1 when the margin plus
+/// the indent leave no room for it before the first letter, so it is skipped, not clipped.
+inline int paragraphNumberX(const int pageLeft, const int numWidth, const int firstLetterX) {
+  constexpr int kInset = 4;  // px from the page edge
+  constexpr int kGap = 5;    // px the number keeps clear of the first letter
+  const int x = pageLeft + kInset;
+  return x + numWidth + kGap <= firstLetterX ? x : -1;
+}
+
 /// Returns the y to hand to GfxRenderer::drawText, which takes the TOP of the ascender
 /// box rather than the baseline. When either ink height is unknown (a face missing both
 /// 'x' and 'H', or a glyph that failed to load) this falls back to the old line-box
