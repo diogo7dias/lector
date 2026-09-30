@@ -281,11 +281,13 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
     renderer.fillRect(0, clearY, renderer.getScreenWidth(), clearHeight, false);
   }
 
-  // Self-contained bar: title on the left, "page/total  pct%" on the right.
+  // Self-contained bar: title on the left, "page/total  pct%" on the right, in the
+  // status bar's faces (the title in small caps, the counters in italic).
   const int pct = reading_percent::pagePercent(static_cast<int>(currentPage), static_cast<int>(xtc->getPageCount()));
   const auto info = getStatusBarInfo();
 
-  const int fontId = UI_10_FONT_ID;
+  const int fontId = BaseTheme::statusBarFontId();
+  const int titleFontId = BaseTheme::statusBarTitleFontId();
   const int textY = clearY + 2;
   const int leftX = orientedMarginLeft + metrics.statusBarHorizontalMargin + 1;
   const int rightEdge = renderer.getScreenWidth() - orientedMarginRight - metrics.statusBarHorizontalMargin;
@@ -298,8 +300,12 @@ void XtcReaderActivity::renderStatusBarOverlay(const StatusBarOverlayPosition po
   if (!info.title.empty()) {
     const int titleMax = (rightEdge - rightW - 8) - leftX;
     if (titleMax > 0) {
-      const std::string t = renderer.truncatedText(fontId, info.title.c_str(), titleMax);
-      renderer.drawText(fontId, leftX, textY, t.c_str(), true);
+      std::string title = info.title;
+      // Small capitals are the lower case set in the small-caps face.
+      for (char& c : title)
+        if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a');
+      const std::string t = renderer.truncatedText(titleFontId, title.c_str(), titleMax);
+      renderer.drawText(titleFontId, leftX, textY, t.c_str(), true);
     }
   }
 }
