@@ -98,6 +98,20 @@
   .bookblock { padding: 18px 22px 14px; font-size: 19px; line-height: 1.35; }
   .bookblock b { font-size: 23px; display: block; }
 
+
+  /* 0 today, from the code */
+  .fw, .fw * { font-weight: 400 !important; }
+  .bk { text-align: center; padding: 14px 20px 10px; font-size: 20px; line-height: 1.3; }
+  .hb { align-self: flex-start; margin-left: 12px; height: 46px; display: flex; align-items: center; padding: 0 8px; background: var(--ink); color: var(--paper); font-size: 20px; }
+  .pm { position: relative; width: 24px; height: 12px; display: inline-block; }
+  .pm::before { content: ""; position: absolute; left: 0; top: 5px; width: 12px; height: 1px; background: currentColor; }
+  .pm::after { content: ""; position: absolute; left: 6px; top: -1px; width: 1px; height: 12px; background: currentColor; }
+  .hb.open .pm::after { display: none; }
+  .hb.sel { outline: 2px dashed var(--ink); outline-offset: 3px; }
+  .rw { display: flex; justify-content: space-between; align-items: center; height: 46px; padding: 0 20px; font-size: 20px; }
+  .rw.sel { background: var(--ink); color: var(--paper); }
+  .more { text-align: center; font-size: 26px; line-height: 1; margin-top: 2px; }
+
   /* 1 tabs */
   .mini { display: flex; justify-content: space-between; padding: 12px 20px 8px; font-size: 17px; }
   .mini b { font-weight: 700; }
@@ -212,32 +226,57 @@
   <div class="kicker">lector · workshop · in-book menu</div>
   <h1>New looks for the in-book menu<span class="cursor"></span></h1>
   <p>Every panel shows the same moment: <b>Middlemarch, p.12/31, Look tab open</b>, drawn at the real 480×800 and scaled down. Tap a panel to fire a fake e-ink refresh.</p>
-  <p><b>0</b> is today. <b>1 to 8</b> are alternatives. They combine: pick a <b>structure</b>, a <b>row style</b> and a <b>Look contents</b> idea separately if you like.</p>
+  <p><b>0a/0b</b> are today, redrawn from the list code. <b>0</b> in the first version was wrong. <b>1 to 8</b> are alternatives. They combine: pick a <b>structure</b>, a <b>row style</b> and a <b>Look contents</b> idea separately if you like.</p>
   <div class="legend"><span class="s">structure: 1 3 6 8</span><span class="r">row style: 5 7</span><span class="c">Look contents: 2 4</span></div>
 </header>
 
 <main class="grid">
 
-<!-- 0 CURRENT -->
+<!-- 0 CURRENT, drawn from the code: list.h header branch + UIThemeTokens.h applyInvertedSectionHeaderStyle -->
 <section class="opt base">
-  <div class="dev"><div class="num">0</div><div class="scr">
-    <div class="bookblock"><b>Middlemarch</b>by George Eliot<br>Book II, Chapter 19<br>Pages: 12/31&nbsp;&nbsp;|&nbsp;&nbsp;Book: 23%</div>
-    <div class="band">Look</div>
-    <div class="row">Reader Settings</div>
-    <div class="row sel">Status Bar <span class="v">On</span></div>
-    <div class="row">Customise Status Bar</div>
-    <div class="row">Steal Look</div>
-    <div class="row">Reading Themes</div>
-    <div class="row">Paperback Look <span class="v">On</span></div>
-    <div class="row">Paperback Status Bar <span class="v">Off</span></div>
-    <div class="row">Paragraph Numbers <span class="v">Off</span></div>
-    <div class="row">Reading Orientation <span class="v">Portrait</span></div>
-    <div class="band">Navigate</div>
+  <div class="dev"><div class="num">0a</div><div class="scr fw">
+    <div class="bk"><div>Middlemarch</div><div>by George Eliot</div><div>Book II, Chapter 19</div><div>Pages: 12/31&nbsp;&nbsp;|&nbsp;&nbsp;Book: 23%</div></div>
+    <div class="hb"><span class="pm"></span>Look</div>
+    <div class="hb sel"><span class="pm"></span>Navigate</div>
+    <div class="hb"><span class="pm"></span>POSITION</div>
+    <div class="hb"><span class="pm"></span>MARKS</div>
+    <div class="hb"><span class="pm"></span>Book</div>
+    <div class="hb"><span class="pm"></span>READ</div>
+    <div class="hb"><span class="pm"></span>QUOTES</div>
+    <div class="hb"><span class="pm"></span>REMOVE</div>
+    <div class="hb"><span class="pm"></span>Device</div>
+    <div class="more">⌄</div>
+    <div class="hints"><span>« Back</span><span>Select</span><span>Up</span><span>Down</span></div>
   </div></div>
   <div class="cap">
-    <h2>Today <small>accordion list</small></h2>
-    <p>Book block, then black bands that expand in place. Values sit bare on the right.</p>
-    <ul><li>Look alone is 9 rows, so the other tabs fall below the fold.</li><li>Values give no hint of the other choices before you press.</li></ul>
+    <h2>Today, on open <small>everything collapsed</small></h2>
+    <p>Every heading is its own collapsed section with a +, the group headings (POSITION, MARKS…) included. The book block is centred and there is no bold anywhere.</p>
+    <ul><li class="warn">Which heading holds the cursor depends on Book Menu Opens On (default Sleep, falling back to Navigate). How a selected heading is marked is my best reading of the code, so check it against the photo.</li></ul>
+  </div>
+</section>
+
+<section class="opt base">
+  <div class="dev"><div class="num">0b</div><div class="scr fw">
+    <div class="bk"><div>Middlemarch</div><div>by George Eliot</div><div>Book II, Chapter 19</div><div>Pages: 12/31&nbsp;&nbsp;|&nbsp;&nbsp;Book: 23%</div></div>
+    <div class="hb open"><span class="pm"></span>Look</div>
+    <div class="rw">Reader Settings</div>
+    <div class="rw sel">Status Bar <span>On</span></div>
+    <div class="rw">Customise Status Bar</div>
+    <div class="rw">Steal Look</div>
+    <div class="rw">Reading Themes</div>
+    <div class="rw">Paperback Look <span>On</span></div>
+    <div class="rw">Paperback Status Bar <span>Off</span></div>
+    <div class="rw">Paragraph Numbers <span>Off</span></div>
+    <div class="rw">Reading Orientation <span>Portrait</span></div>
+    <div class="hb"><span class="pm"></span>Navigate</div>
+    <div class="hb"><span class="pm"></span>POSITION</div>
+    <div class="more">⌄</div>
+    <div class="hints"><span>« Back</span><span>Select</span><span>Up</span><span>Down</span></div>
+  </div></div>
+  <div class="cap">
+    <h2>Today, Look opened <small>+ becomes −</small></h2>
+    <p>Moving onto a section opens it and closes the one before. The first Back collapses it, the second leaves the menu.</p>
+    <ul><li>The selected row fills black edge to edge, square corners (InvertFill, radius 0).</li><li>The black heading band only covers its own label; it does not run the full width.</li></ul>
   </div>
 </section>
 
