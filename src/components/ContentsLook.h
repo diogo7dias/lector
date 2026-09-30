@@ -24,7 +24,11 @@ inline void applyListProps(freeink::ui::ListProps& props) {
   props.contentsLook = true;
   props.labelText.font = GfxRendererTarget::FONT_BODY;
   props.valueText.font = GfxRendererTarget::FONT_BODY;
+  // Whole styles, not just fonts: the list base themes headings for the classic look
+  // first (white on an inverted band), and a white heading on paper is invisible.
+  props.headerText = freeink::ui::TextStyle{};
   props.headerText.font = GfxRendererTarget::FONT_EXTRA_1;
+  props.headingNumeralText = freeink::ui::TextStyle{};
   props.headingNumeralText.font = GfxRendererTarget::FONT_EXTRA_2;
   props.subtitleText.font = GfxRendererTarget::FONT_EXTRA_3;
 }
