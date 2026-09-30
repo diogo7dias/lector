@@ -14,4 +14,5 @@ class CrashActivity final : public UiStatusActivity {
 
  protected:
   StatusView statusView() const override;
+  bool contentsLook() const override { return true; }
 };
