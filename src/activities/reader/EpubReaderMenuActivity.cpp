@@ -220,20 +220,26 @@ void EpubReaderMenuActivity::updateRows() {
     rows[i].label = I18N.get(items[i].labelId);
     rows[i].value = rowValue(static_cast<int>(i));
     rows[i].isHeader = items[i].isHeader;
+    rows[i].actionValue = static_cast<int16_t>(i);  // a touch reports the row's index
   }
 }
 
-void EpubReaderMenuActivity::focusRow(const int index) {
+// One flat list, headings included; only rows take the cursor. A step that lands on a
+// heading moves one further the same way (every heading has rows under it, and the last
+// item is always a row), wrapping from the top heading to the last row.
+void EpubReaderMenuActivity::focusRow(int index, const int direction) {
+  const int count = listCount();
+  if (index < 0 || index >= count) return;
+  if (items[index].isHeader) index = direction < 0 ? (index > 0 ? index - 1 : count - 1) : index + 1;
   {
     RenderLock lock(*this);
-    const int previousHeader = sections.expandedHeader;
-    const int selected = sections.focus(rows.data(), static_cast<int>(rows.size()), index);
-    if (selected < 0) return;
-    // Published touch indexes belong to the old layout until renderUi() rebuilds it.
-    if (previousHeader != sections.expandedHeader) closeRouting();
-    nav.selected = selected;
-    nav.drawnRows = 0;  // the old viewport may contain rows that just disappeared
-    nav.follow(listCount());
+    // A section's first row brings its heading into view with it.
+    if (index > 0 && items[index - 1].isHeader) {
+      nav.selected = index - 1;
+      nav.follow(count);
+    }
+    nav.selected = index;
+    nav.follow(count);
   }
   requestUpdate();
 }
@@ -245,8 +251,6 @@ void EpubReaderMenuActivity::onEnter() {
   updateRows();
   uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, LITERATA_UI_26_FONT_ID);
   uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, LITERATA_UI_16_FONT_ID);
-  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_3, LITERATA_UI_15_FONT_ID);
-  sections.expandedHeader = -1;
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
@@ -271,7 +275,12 @@ void EpubReaderMenuActivity::onEnter() {
       first = 0;
       while (first < static_cast<int>(items.size()) && !items[first].isHeader) ++first;
     }
-    nav.reset(first < static_cast<int>(items.size()) ? sections.visibleIndex(rows.data(), items.size(), first) : 0);
+    // The section's first row, with its heading at the top of the list.
+    if (first + 1 < static_cast<int>(items.size())) {
+      nav.reset(first + 1);
+      nav.top = first;
+      nav.followOnBuild = false;
+    }
   }
   requestUpdate();
 }
@@ -326,23 +335,8 @@ bool EpubReaderMenuActivity::handleCustomInput() {
 }
 
 bool EpubReaderMenuActivity::handleButtons() {
-  // Back first collapses to the open header; a second Back leaves the menu.
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
-    int header;
-    {
-      RenderLock lock(*this);
-      header = sections.collapse(rows.data(), static_cast<int>(rows.size()));
-      if (header >= 0) {
-        closeRouting();
-        nav.selected = header;
-        nav.drawnRows = 0;
-        nav.follow(listCount());
-      }
-    }
-    if (header >= 0)
-      requestUpdate();
-    else
-      closeCancelled();
+    closeCancelled();
     return true;
   }
 
@@ -359,28 +353,24 @@ bool EpubReaderMenuActivity::handleButtons() {
 }
 
 void EpubReaderMenuActivity::navigateButtons() {
-  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount())); });
-  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount())); });
+  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount()), 1); });
+  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount()), -1); });
   // A hold ramps through rows and stops at the ends, like every other list.
   buttonNavigator.onNextContinuous([this] {
-    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())));
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())), 1);
   });
   buttonNavigator.onPreviousContinuous([this] {
-    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())));
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())), -1);
   });
 }
 
-void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
-  const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visibleIndex);
-  if (index < 0) return;
+void EpubReaderMenuActivity::activateIndex(const int index) {
+  if (index < 0 || index >= listCount()) return;
   app.clearTapFlash();
-  if (items[index].isHeader) {
-    focusRow(visibleIndex);
-    return;
-  }
+  if (items[index].isHeader) return;  // headings are titles, not actions
   {
     RenderLock lock(*this);
-    nav.selected = visibleIndex;
+    nav.selected = index;
   }
   const auto selectedAction = items[index].action;
   if (selectedAction == MenuAction::ROTATE_SCREEN) {
@@ -520,14 +510,12 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   fui::ListProps props{};
   props.items = rows.data();
   props.count = static_cast<uint16_t>(rows.size());
-  props.sections = &sections;
   props.action = ACTION_ROW;
   props.contentsLook = true;
   props.labelText.font = fui::GfxRendererTarget::FONT_BODY;
   props.valueText.font = fui::GfxRendererTarget::FONT_BODY;
   props.headerText.font = fui::GfxRendererTarget::FONT_EXTRA_1;
   props.headingNumeralText.font = fui::GfxRendererTarget::FONT_EXTRA_2;
-  props.tocNumeralText.font = fui::GfxRendererTarget::FONT_EXTRA_3;
   syncListViewport(screen, props);
   screen.list(props);
 }

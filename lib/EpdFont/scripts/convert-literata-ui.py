@@ -28,12 +28,11 @@ ITALIC = SOURCE / "Literata-Italic[opsz,wght].ttf"
 
 # name, source, pixel size, weight, small caps
 FACES = [
-    ("literata_ui_20_regular", ROMAN, 20, 400, False),    # rows, contents lines
+    ("literata_ui_20_regular", ROMAN, 20, 400, False),    # rows
     ("literata_ui_20_bold", ROMAN, 20, 700, False),       # the selected row
-    ("literata_ui_26_semibold", ROMAN, 26, 600, False),   # the open section's heading
+    ("literata_ui_26_semibold", ROMAN, 26, 600, False),   # section headings
     ("literata_ui_25_semibold", ROMAN, 25, 600, False),   # the book title
     ("literata_ui_16_semibold", ROMAN, 16, 600, False),   # the heading's numeral
-    ("literata_ui_15_regular", ROMAN, 15, 400, False),    # the contents lines' numerals
     ("literata_ui_15_smallcaps", ROMAN, 15, 400, True),   # the chapter line
     ("literata_ui_19_italic", ITALIC, 19, 400, False),    # the author
     ("literata_ui_15_italic", ITALIC, 15, 400, False),    # the progress line

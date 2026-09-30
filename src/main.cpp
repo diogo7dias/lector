@@ -114,8 +114,6 @@ EpdFont literataUi25Font(&literata_ui_25_semibold);
 EpdFontFamily literataUi25FontFamily(&literataUi25Font, &literataUi25Font);
 EpdFont literataUi16Font(&literata_ui_16_semibold);
 EpdFontFamily literataUi16FontFamily(&literataUi16Font, &literataUi16Font);
-EpdFont literataUi15Font(&literata_ui_15_regular);
-EpdFontFamily literataUi15FontFamily(&literataUi15Font, &literataUi15Font);
 EpdFont literataUi15ScFont(&literata_ui_15_smallcaps);
 EpdFontFamily literataUi15ScFontFamily(&literataUi15ScFont, &literataUi15ScFont);
 EpdFont literataUi19ItFont(&literata_ui_19_italic);
@@ -395,7 +393,6 @@ static void setupBuiltinFonts() {
   renderer.insertFont(LITERATA_UI_26_FONT_ID, literataUi26FontFamily);
   renderer.insertFont(LITERATA_UI_25_FONT_ID, literataUi25FontFamily);
   renderer.insertFont(LITERATA_UI_16_FONT_ID, literataUi16FontFamily);
-  renderer.insertFont(LITERATA_UI_15_FONT_ID, literataUi15FontFamily);
   renderer.insertFont(LITERATA_UI_15_SC_FONT_ID, literataUi15ScFontFamily);
   renderer.insertFont(LITERATA_UI_19_IT_FONT_ID, literataUi19ItFontFamily);
   renderer.insertFont(LITERATA_UI_15_IT_FONT_ID, literataUi15ItFontFamily);
