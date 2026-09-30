@@ -496,10 +496,10 @@ void setup() {
     // recovery chord is held, keep asking for the card instead of giving up.
     sdRecoveryChord = earlyWakeupReason == HalGPIO::WakeupReason::PowerButton && recoveryChordHeld(inputStartedMs);
     if (!sdRecoveryChord) {
-      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
+      activityManager.goToFullScreenMessage("SD card error");
       return;
     }
-    activityManager.goToFullScreenMessage("Insert an SD card with firmware.bin", EpdFontFamily::REGULAR);
+    activityManager.goToFullScreenMessage("Insert an SD card with firmware.bin");
     // Five minutes of retries, not forever: a reader left in a drawer with the
     // chord stuck down should end up asleep rather than polling the card slot
     // until the battery is flat.
@@ -514,7 +514,7 @@ void setup() {
       }
     }
     if (!mounted) {
-      activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::REGULAR);
+      activityManager.goToFullScreenMessage("SD card error");
       return;
     }
     LOG_INF("MAIN", "SD card mounted on retry; entering recovery firmware mode");

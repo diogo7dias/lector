@@ -136,8 +136,8 @@ float block(const GfxRenderer& renderer, const Face& face, const std::string& te
 }
 
 // The whole page; returns its height, which is what the bands reserve.
-int layout(const GfxRenderer& renderer, const ListChrome::TitlePage& page, const bool draw) {
-  float y = TOP;
+int layout(const GfxRenderer& renderer, const ListChrome::TitlePage& page, const bool draw, const float top = TOP) {
+  float y = top;
   if (present(page.title)) y = block(renderer, TITLE, recase(page.title, true), y, draw);
   if (present(page.author)) y = block(renderer, AUTHOR, page.author, y + LINE_GAP, draw);
   y += RULE_MARGIN;
@@ -147,7 +147,7 @@ int layout(const GfxRenderer& renderer, const ListChrome::TitlePage& page, const
   y += RULE_H + RULE_MARGIN;
   if (present(page.chapter)) y = block(renderer, CHAPTER, recase(page.chapter, false), y, draw);
   if (present(page.progress)) y = block(renderer, PROGRESS, page.progress, y + LINE_GAP, draw);
-  return static_cast<int>(std::lround(y + BOTTOM));
+  return static_cast<int>(std::lround(y + BOTTOM - top + TOP));
 }
 
 int footnoteLines(const GfxRenderer& renderer, const char* text) {
@@ -269,4 +269,13 @@ void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappe
   const char* fourth = chrome.fourthHint != nullptr ? chrome.fourthHint : tr(STR_DIR_DOWN);
   const auto labels = mappedInput.mapLabels(back, confirm, third, fourth);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+void drawCentredTitlePage(const GfxRenderer& renderer, const char* title, const char* italic) {
+  ListChrome::TitlePage page;
+  page.title = title;
+  page.author = italic;
+  const int height = title_page::layout(renderer, page, false);
+  title_page::layout(renderer, page, true,
+                     static_cast<float>((renderer.getScreenHeight() - height) / 2) + title_page::TOP);
 }

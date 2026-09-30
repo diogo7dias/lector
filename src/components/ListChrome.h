@@ -80,5 +80,9 @@ list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome
 // Paints the bands that sit above the body. Called before the app renders.
 void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome);
 
+// A title page alone, centred on an empty sheet (boot, the sleep fallback, messages).
+// italic may be null.
+void drawCentredTitlePage(const GfxRenderer& renderer, const char* title, const char* italic = nullptr);
+
 // Paints the footnote and the button hints. Called after the app renders.
 void drawListChromeBottom(GfxRenderer& renderer, const MappedInputManager& mappedInput, const ListChrome& chrome);
