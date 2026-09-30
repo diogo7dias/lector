@@ -18,6 +18,7 @@ class EpubReaderPercentSelectionActivity final : public UiStatusActivity {
 
  protected:
   StatusView statusView() const override;
+  bool contentsLook() const override { return true; }
   bool handleCustomInput() override;
   void onBackButton() override;
   void onConfirmButton() override;
