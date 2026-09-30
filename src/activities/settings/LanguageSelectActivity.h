@@ -22,6 +22,7 @@ class LanguageSelectActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override;
+  bool contentsLook() const override { return true; }
   // Native language names span Arabic, Hebrew, Cyrillic and Latin, so the rows
   // MUST use the full-coverage Ubuntu font whatever the active UI font is.
   int listFontId() const override;
