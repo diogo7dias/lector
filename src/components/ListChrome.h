@@ -80,6 +80,10 @@ list_chrome::Bands listChromeBands(const GfxRenderer& renderer, const ListChrome
 // Paints the bands that sit above the body. Called before the app renders.
 void drawListChromeTop(const GfxRenderer& renderer, const ListChrome& chrome);
 
+// The title's first line box across the page, for a mark a screen sets beside it in the
+// side margin (the Wi-Fi signal, a feed's search glyph).
+list_chrome::Rect titleLineBox(const GfxRenderer& renderer);
+
 // A title page alone, centred on an empty sheet (boot, the sleep fallback, messages).
 // italic may be null.
 void drawCentredTitlePage(const GfxRenderer& renderer, const char* title, const char* italic = nullptr);

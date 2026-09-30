@@ -73,10 +73,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   // header block, a note, a footnote). Screens override this instead of the
   // paint, so their chrome keeps coming from the theme.
   virtual ListChrome chrome() const;
-  // The contents look (Literata title page, flat rows with leaders, no hint band on
-  // keys-only boards). Screens opt in one at a time while the firmware moves over.
-  virtual bool contentsLook() const { return false; }
-  // chrome() as it is painted: in the contents look when the screen asked for it.
+  // chrome() as it is painted: in the contents look (Literata title page, no hint band
+  // on keys-only boards).
   ListChrome shownChrome() const;
   // Shorthand for the common case: a title and nothing else.
   virtual const char* headerTitle() const { return nullptr; }
@@ -97,9 +95,8 @@ class UiListActivity : public Activity, protected UiAppHost {
   // Measure visibleRows for the screen band, apply follow-on-build, clamp the
   // viewport, and write selection/viewport into props. Call from buildScreen
   // right before screen.list(props).
-  // hasSubtitle: rows carry a second (subtitle) text line, so on non-touch
-  // hardware the denser override below uses the theme's *-with-subtitle row
-  // height instead of its single-line one (see syncListViewport()).
+  // hasSubtitle: rows carry the italic second line, so the page estimate uses the
+  // taller contents row.
   void syncListViewport(UiScreen& screen, freeink::ui::ListProps& props, bool hasSubtitle = false);
   // Move the selection to index and pull the viewport to it.
   void moveSelectionTo(int index);

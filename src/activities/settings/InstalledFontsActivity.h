@@ -34,7 +34,6 @@ class InstalledFontsActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
 
  private:
   /** One installed family, with the figures the list shows beside its name. */

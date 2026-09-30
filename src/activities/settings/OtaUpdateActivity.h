@@ -88,7 +88,6 @@ class OtaUpdateActivity : public UiStatusActivity {
 
  protected:
   StatusView statusView() const override;
-  bool contentsLook() const override { return true; }
   bool handleCustomInput() override;
   void onConfirmButton() override;
   void onBackButton() override;

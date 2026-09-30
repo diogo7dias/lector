@@ -26,7 +26,6 @@ class PopupItemsActivity final : public UiListActivity {
   // Header carries the "used / cap" counter, and the middle button ticks rather
   // than opens, so both bands are drawn here instead of by the base.
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
 
  private:
   // The counter beside the title, rebuilt on every chrome() call. Mutable

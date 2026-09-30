@@ -46,6 +46,5 @@ class EpubReaderBookmarksActivity final : public UiListActivity {
   bool handleButtons() override;
   void onBackButton() override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
   bool drawOverlay() override;
 };

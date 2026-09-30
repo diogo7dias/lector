@@ -25,7 +25,6 @@ class OpdsServerListActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   const char* headerTitle() const override;
-  bool contentsLook() const override { return true; }
 
  private:
   bool pickerMode = false;

@@ -24,7 +24,6 @@ class EpubReaderChapterSelectionActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
 
  private:
   Epub& epub;

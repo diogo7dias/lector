@@ -29,7 +29,6 @@ class DictionaryHistoryActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   const char* headerTitle() const override;
-  bool contentsLook() const override { return true; }
   // While a popup is up the screen owns the pass: it is either waiting on the
   // dictionary or counting a message out.
   bool handleCustomInput() override;
