@@ -57,7 +57,7 @@ void DictionaryDefinitionActivity::onExit() {
 
 // The headword as a title page, the page counter as its italic line. A counter is
 // always passed when laying out, so the pages fit whichever height the title page takes.
-ListChrome DictionaryDefinitionActivity::chrome(const char* counter) const {
+ListChrome DictionaryDefinitionActivity::titleChrome(const char* counter) const {
   ListChrome chrome;
   chrome.title = headword.c_str();
   if (counter != nullptr && counter[0] != '\0') chrome.headerRight = counter;
@@ -74,7 +74,7 @@ DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() 
   const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
                            orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
-  const list_chrome::Bands bands = listChromeBands(renderer, chrome("0/0"));
+  const list_chrome::Bands bands = listChromeBands(renderer, titleChrome("0/0"));
   return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING, bands.contentBottom - bands.contentTop};
 }
 
@@ -268,7 +268,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // chrome around it is the shared title page.
   char counter[16] = {};
   if (totalPages > 1) snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
-  const ListChrome chrome = this->chrome(counter);
+  const ListChrome chrome = titleChrome(counter);
   drawListChromeTop(renderer, chrome);
 
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's

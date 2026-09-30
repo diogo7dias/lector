@@ -47,7 +47,7 @@ class DictionaryDefinitionActivity final : public Activity {
   };
 
   BodyArea bodyArea() const;
-  ListChrome chrome(const char* counter) const;
+  ListChrome titleChrome(const char* counter) const;
   bool layoutHtmlPages();
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
