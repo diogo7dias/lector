@@ -28,6 +28,7 @@ class OpdsSettingsActivity final : public UiListActivity {
   void activateIndex(int index) override;
   // The header carries a hint line under it, which the base chrome does not offer.
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
   bool drawOverlay() override;
 
  private:
