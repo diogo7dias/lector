@@ -26,12 +26,11 @@ class PopupItemsActivity final : public UiListActivity {
   // Header carries the "used / cap" counter, and the middle button ticks rather
   // than opens, so both bands are drawn here instead of by the base.
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
 
  private:
   // The counter beside the title, rebuilt on every chrome() call. Mutable
   // because chrome() is const: nothing about the screen itself changes.
   mutable char counterText[16] = {};
-  // Row labels own their "[x] " prefix; the ListItems borrow these strings.
-  std::vector<std::string> labels;
   std::vector<freeink::ui::ListItem> rows;
 };
