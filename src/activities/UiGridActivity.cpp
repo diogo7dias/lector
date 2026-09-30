@@ -9,6 +9,7 @@
 
 #include "ListSwipeGesture.h"
 #include "MappedInputManager.h"
+#include "components/ContentsLook.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
@@ -22,10 +23,17 @@ UiGridActivity::UiGridActivity(const char* name, GfxRenderer& renderer, MappedIn
 
 void UiGridActivity::onEnter() {
   Activity::onEnter();
+  if (contentsLook()) contents_look::bindFonts(uiTarget);
   resetUi();
   app.on(ACTION_CELL, &UiGridActivity::cellTrampoline, this);
   app.setScreen(&UiGridActivity::screenTrampoline, this);
   requestUpdate();
+}
+
+ListChrome UiGridActivity::shownChrome() const {
+  ListChrome shown = chrome();
+  if (contentsLook()) toContentsLook(shown, mappedInput.hasTouch());
+  return shown;
 }
 
 ListChrome UiGridActivity::chrome() const {
@@ -35,7 +43,7 @@ ListChrome UiGridActivity::chrome() const {
 }
 
 Rect UiGridActivity::gridPane() const {
-  const list_chrome::Bands bands = listChromeBands(renderer, chrome());
+  const list_chrome::Bands bands = listChromeBands(renderer, shownChrome());
   const int top = bands.contentTop + reservedHeight();
   const int height = std::max(0, bands.contentBottom - top);
   return Rect{0, top, renderer.getScreenWidth(), height};
@@ -60,6 +68,7 @@ settings_grid::Shape UiGridActivity::gridShape() const {
 }
 
 bool UiGridActivity::usesWrappedRows() const {
+  if (contentsLook()) return true;  // one column on every board
   return settings_grid::usesWrappedRows(mappedInput.hasTouch(), display.profile().isX4Pro);
 }
 
@@ -84,6 +93,11 @@ fui::TextStyle wrappingStyle(const fui::ThemeTokens& theme) {
 }  // namespace
 
 int UiGridActivity::rowHeightFor(const int index) const {
+  if (contentsLook()) {
+    // A row, and the heading over it when it opens a group: the window then keeps a
+    // group's heading on screen with its first row.
+    return fui::contents::ROW_H + (cellHeading(index) != nullptr ? fui::contents::HEAD_H : 0);
+  }
   const auto& metrics = UITheme::getInstance().getMetrics();
   const fui::ThemeTokens* theme = sharedUiThemeCell().load(std::memory_order_acquire);
   if (theme == nullptr) return metrics.listRowHeight;
@@ -122,7 +136,8 @@ int UiGridActivity::tallestCellHeight() const {
 
 wrapped_list::Window UiGridActivity::keysOnlyWindow() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  return wrapped_list::window(cellCount(), selected_, scrollRow_, gridPane().height, metrics.listRowGap,
+  return wrapped_list::window(cellCount(), selected_, scrollRow_, gridPane().height,
+                              contentsLook() ? 0 : metrics.listRowGap,
                               [this](const int index) { return rowHeightFor(index); });
 }
 
@@ -170,7 +185,7 @@ void UiGridActivity::cellTrampoline(const fui::ActionEvent& event, void* user) {
 }
 
 void UiGridActivity::buildScreen(UiScreen& screen) {
-  const list_chrome::Bands bands = listChromeBands(renderer, chrome());
+  const list_chrome::Bands bands = listChromeBands(renderer, shownChrome());
   screen.setContentMargin(fui::Insets{static_cast<int16_t>(bands.contentTop), 0,
                                       static_cast<int16_t>(renderer.getScreenHeight() - bands.contentBottom), 0});
 
@@ -181,6 +196,10 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
     // screen and hands back where it starts, so a later press scrolls from there.
     const wrapped_list::Window win = keysOnlyWindow();
     scrollRow_ = win.first;
+    if (contentsLook()) {
+      buildContents(screen, pane, win);
+      return;
+    }
     const int gap = UITheme::getInstance().getMetrics().listRowGap;
     int y = pane.y;
     for (int i = win.first; i < win.first + win.count && i < count; ++i) {
@@ -201,6 +220,52 @@ void UiGridActivity::buildScreen(UiScreen& screen) {
   }
   scrollArrowBand_ = list_scrollbar::outsideBand(pane, UITheme::getInstance().getMetrics().verticalSpacing);
   scrollArrows_ = list_scrollbar::forWindow(layout.totalRows, layout.scrollRow, layout.visibleRows);
+}
+
+void UiGridActivity::buildContents(UiScreen& screen, const Rect& pane, const wrapped_list::Window& win) {
+  // Every cell with its heading, so the headings above the window still count toward
+  // the numerals; the list starts drawing at the window's first row. Three strings a
+  // cell (heading, name, value), sized once so the items can point into them: the
+  // subclass hands its name and value out of shared scratch.
+  const int count = cellCount();
+  contentsText_.assign(static_cast<size_t>(count) * 3, std::string());
+  contentsItems_.clear();
+  contentsItems_.reserve(static_cast<size_t>(count) * 2);
+  int topItem = 0;
+  int selectedItem = -1;
+  for (int i = 0; i < count; ++i) {
+    std::string* text = &contentsText_[static_cast<size_t>(i) * 3];
+    if (i == win.first) topItem = static_cast<int>(contentsItems_.size());
+    if (const char* heading = cellHeading(i)) {
+      text[0] = heading;
+      fui::ListItem item{};
+      item.isHeader = true;
+      item.label = text[0].c_str();
+      contentsItems_.push_back(item);
+    }
+    if (const char* name = cellName(i)) text[1] = name;
+    if (const char* value = cellValue(i)) text[2] = value;
+    fui::ListItem item{};
+    item.label = text[1].c_str();
+    item.value = text[2].empty() ? nullptr : text[2].c_str();
+    item.actionValue = static_cast<int16_t>(i);
+    if (i == selected_) selectedItem = static_cast<int>(contentsItems_.size());
+    contentsItems_.push_back(item);
+  }
+
+  fui::ListProps props{};
+  props.items = contentsItems_.data();
+  props.count = static_cast<uint16_t>(contentsItems_.size());
+  props.topIndex = static_cast<uint16_t>(topItem);
+  props.selectedIndex = static_cast<int16_t>(selectedItem);
+  props.action = ACTION_CELL;
+  contents_look::applyListProps(props);
+  // The body starts at the chrome; the pane starts under the reserved band (the preview).
+  if (pane.y > screen.body().y) screen.spacer(static_cast<int16_t>(pane.y - screen.body().y));
+  screen.list(props, static_cast<int16_t>(pane.height));
+
+  scrollArrowBand_ = list_scrollbar::outsideBand(pane, UITheme::getInstance().getMetrics().verticalSpacing);
+  scrollArrows_ = list_scrollbar::forWindow(count, win.first, win.count);
 }
 
 // One cell: a box that answers to a tap, its name in the small face over its
@@ -356,7 +421,7 @@ void UiGridActivity::loop() {
 
 void UiGridActivity::render(RenderLock&&) {
   renderer.clearScreen();
-  const ListChrome bands = chrome();
+  const ListChrome bands = shownChrome();
   drawListChromeTop(renderer, bands);
   renderUi();
   if (reservedHeight() > 0) {

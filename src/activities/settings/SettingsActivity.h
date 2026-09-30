@@ -18,6 +18,8 @@ class SettingsActivity final : public UiGridActivity {
 
   // The cells the grid is drawing: one category's settings, its group headings dropped.
   std::vector<SettingInfo> settings;
+  // The group heading over each row of `settings`, or no heading (StrId count as the mark).
+  std::vector<StrId> headingOf;
   // Per-category scratch, kept as members so a rebuild reuses their capacity rather
   // than allocating four vectors of SettingInfo on every toggle.
   std::vector<SettingInfo> displaySettings;
@@ -50,8 +52,7 @@ class SettingsActivity final : public UiGridActivity {
   void shareCredentials();
   void rebuildSettingsList();
   void startDownloadActivity(std::unique_ptr<Activity> activity);
-  // The active category's rows, with its group headings dropped: a cell names itself, and
-  // a heading band would cost a whole grid row to repeat what the order already says.
+  // The active category's rows; each group's heading moves onto its first row.
   void selectCategory(int index);
   std::vector<SettingInfo>& categoryRows(int index);
   StrId categoryName(int index) const;
@@ -69,6 +70,8 @@ class SettingsActivity final : public UiGridActivity {
   const char* cellValue(int index) const override;
   void activateCell(int index) override;
   ListChrome chrome() const override;
+  bool contentsLook() const override { return true; }
+  const char* cellHeading(int index) const override;
   bool handleCustomInput() override;
   void onBackButton() override;
   bool drawOverlay() override;
