@@ -94,24 +94,11 @@ struct ThemeMetrics {
   int keyboardWidthPercent;
 
   int popupMarginX;
-  int popupFrameThickness;
-  int popupCornerRadius;
   int popupProgressBarHeight;
   bool popupProgressDrawOutline;
   bool popupProgressClampPercent;
   bool popupProgressFillInverted;
   bool popupProgressOutlineInverted;
-
-  int optionPopupItemSpacing;
-  int optionPopupInnerPadding;
-  int optionPopupSelectionHPadding;
-  int optionPopupSelectionVPadding;
-  int optionPopupTitleGap;
-  int optionPopupSelectionRadius;
-  bool optionPopupSelectionLight;
-  bool optionPopupDrawAllRows;
-  int optionPopupDialogSideMargin;
-  bool optionPopupTitleSeparator;
 
   int textFieldHorizontalPadding;
   int textFieldNormalThickness;
@@ -173,24 +160,12 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 94,
                                  .popupMarginX = 15,
-                                 .popupFrameThickness = 2,
-                                 .popupCornerRadius = 0,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = false,
                                  .popupProgressClampPercent = false,
                                  // White on the strip's black backing.
                                  .popupProgressFillInverted = false,
                                  .popupProgressOutlineInverted = false,
-                                 .optionPopupItemSpacing = 6,
-                                 .optionPopupInnerPadding = 16,
-                                 .optionPopupSelectionHPadding = 8,
-                                 .optionPopupSelectionVPadding = 4,
-                                 .optionPopupTitleGap = 10,
-                                 .optionPopupSelectionRadius = 0,
-                                 .optionPopupSelectionLight = false,
-                                 .optionPopupDrawAllRows = false,
-                                 .optionPopupDialogSideMargin = 20,
-                                 .optionPopupTitleSeparator = true,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
@@ -300,13 +275,10 @@ class BaseTheme {
   // drawBannerStrip plus ONE panel submission at FAST. Paints and drives the panel — the
   // only draw* entry point on this class that does, which is why it is called out here.
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
-  // leftAlign left-aligns the rows instead of centring them, so a caller whose labels carry
-  // a status marker keeps that marker in a fixed column rather than letting it shunt each
-  // label sideways. Text is 1-bit on this panel, so an unavailable row is marked in the
-  // label the caller supplies, not by the painter. Defaults to the centred look every
-  // other caller in the firmware uses.
+  // The option pop-up as a card: the title as a heading over a rule, the rows under it with
+  // the cursor on the selected one. Rows flagged in `disabled` are set in italic.
   void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                       int selectedIndex, bool leftAlign = false) const;
+                       int selectedIndex, const std::vector<bool>& disabled) const;
   void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // v2 status bar: per-item, six-anchor layout with reflow (see StatusBar.h). Reads
   // the sb* settings and pulls battery/clock from the HAL; the reader supplies the

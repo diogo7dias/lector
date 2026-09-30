@@ -1292,83 +1292,40 @@ void BaseTheme::drawTextField(const GfxRenderer& renderer, Rect rect, const int 
 }
 
 void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                                int selectedIndex, bool leftAlign) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-
-  // One size and one weight for the whole popup, the same the menu rows behind it use.
-  constexpr int optionFontId = option_popup::FONT_ID;
-  constexpr EpdFontFamily::Style optionStyle = option_popup::FONT_STYLE;
-
+                                const int selectedIndex, const std::vector<bool>& disabled) const {
   // Shared with OptionPopup's hit-test layout, so a tap always resolves to the row it landed on.
-  const auto geometry = option_popup::compute(renderer, metrics, title, options);
-  const int innerPadding = geometry.innerPadding;
-  const int selectionHPadding = metrics.optionPopupSelectionHPadding;
-  const int lineHeight = geometry.lineHeight;
+  const auto g = option_popup::compute(renderer, title, options);
 
-  const int optionCount = static_cast<int>(options.size());
-  const int dialogW = geometry.dialogW;
-  const int dialogH = geometry.dialogH;
-  const int dialogX = geometry.dialogX;
-  const int dialogY = geometry.dialogY;
+  renderer.fillRect(g.dialogX, g.dialogY, g.dialogW, g.dialogH, true);
+  renderer.fillRect(g.dialogX + option_popup::FRAME, g.dialogY + option_popup::FRAME,
+                    g.dialogW - option_popup::FRAME * 2, g.dialogH - option_popup::FRAME * 2, false);
 
-  const int frameThickness = metrics.popupFrameThickness;
-  const int frameRadius = metrics.popupCornerRadius;
-
-  if (frameRadius > 0) {
-    renderer.fillRoundedRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
-                             dialogH + frameThickness * 2, frameRadius + frameThickness, Color::White);
-    renderer.fillRoundedRect(dialogX, dialogY, dialogW, dialogH, frameRadius, Color::Black);
-    renderer.fillRoundedRect(dialogX + frameThickness, dialogY + frameThickness, dialogW - frameThickness * 2,
-                             dialogH - frameThickness * 2,
-                             frameRadius - frameThickness > 0 ? frameRadius - frameThickness : 0, Color::White);
-  } else {
-    renderer.fillRect(dialogX - frameThickness, dialogY - frameThickness, dialogW + frameThickness * 2,
-                      dialogH + frameThickness * 2, true);
-    renderer.fillRect(dialogX, dialogY, dialogW, dialogH, false);
+  const int headFont = option_popup::headFont();
+  int baseline = g.headTop + option_popup::HEAD_BASELINE;
+  for (const std::string& line : g.titleLines) {
+    renderer.drawText(headFont, g.textX, baseline - renderer.getFontAscenderSize(headFont), line.c_str(), true,
+                      EpdFontFamily::REGULAR);
+    baseline += option_popup::HEAD_LINE;
   }
+  renderer.fillRect(g.textX, g.ruleY, g.textRight - g.textX, 1, true);
 
-  int y = dialogY + innerPadding;
-  for (const std::string& line : geometry.titleLines) {
-    renderer.drawCenteredText(optionFontId, y, line.c_str(), true, optionStyle);
-    y += lineHeight;
-  }
-
-  if (metrics.optionPopupTitleSeparator) {
-    const int sepY = y + metrics.optionPopupTitleGap / 2;
-    renderer.drawLine(dialogX + innerPadding, sepY, dialogX + dialogW - innerPadding, sepY, true);
-  }
-
-  const int itemRectX = geometry.itemRectX;
-  const int itemRectW = geometry.itemRectW;
-  const int selectionRadius = metrics.optionPopupSelectionRadius;
-
-  for (int i = 0; i < optionCount; i++) {
-    const int itemY = geometry.rowTop[i];
-    const int rowHeight = geometry.rowHeight[i];
-    const bool selected = (i == selectedIndex);
-    const auto& lines = geometry.optionLines[i];
-
-    // The selected row is always painted over; the theme decides whether that is a
-    // black fill or its light-grey rounded pill.
-    if (metrics.optionPopupDrawAllRows || selected) {
-      const Color rowColor =
-          selected ? (metrics.optionPopupSelectionLight ? Color::LightGray : Color::Black) : Color::White;
-      if (selectionRadius > 0) {
-        renderer.fillRoundedRect(itemRectX, itemY, itemRectW, rowHeight, selectionRadius, rowColor);
-      } else {
-        renderer.fillRect(itemRectX, itemY, itemRectW, rowHeight, rowColor == Color::Black);
-      }
+  for (int i = 0; i < static_cast<int>(options.size()); i++) {
+    const bool selected = i == selectedIndex;
+    const bool off = i < static_cast<int>(disabled.size()) && disabled[i];
+    // A row that cannot be chosen now is set in italic, where the old look wrote [X].
+    const int font = off ? option_popup::disabledFont() : option_popup::rowFont();
+    const auto style = selected && !off ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+    int rowBaseline = option_popup::rowBaseline(g, i);
+    if (selected) {
+      // The cursor: an 11x16 triangle, centred 6px above the first baseline.
+      const int cy = rowBaseline - 6;
+      const int xs[3] = {g.markerX, g.markerX, g.markerX + 11};
+      const int ys[3] = {cy - 8, cy + 8, cy};
+      renderer.fillPolygon(xs, ys, 3, true);
     }
-    // Unselected items: text is dark (invert=true means draw on white bg).
-    // Selected on dark bg: text must be white (invert=false).
-    // Selected on light bg: text stays dark (invert=true).
-    const bool invertText = selected ? metrics.optionPopupSelectionLight : true;
-    int textY = itemY + (rowHeight - static_cast<int>(lines.size()) * lineHeight) / 2;
-    for (const std::string& line : lines) {
-      const int textW = renderer.getTextWidth(optionFontId, line.c_str(), optionStyle);
-      const int textX = leftAlign ? itemRectX + selectionHPadding : itemRectX + (itemRectW - textW) / 2;
-      renderer.drawText(optionFontId, textX, textY, line.c_str(), invertText, optionStyle);
-      textY += lineHeight;
+    for (const std::string& line : g.optionLines[i]) {
+      renderer.drawText(font, g.textX, rowBaseline - renderer.getFontAscenderSize(font), line.c_str(), true, style);
+      rowBaseline += option_popup::ROW_LINE;
     }
   }
 }
