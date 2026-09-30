@@ -2,9 +2,7 @@
 
 #include "fontIds.h"
 
-// The one black banner look in the firmware.
-//
-// Message popups (BaseTheme::drawBannerStrip) and light panels share these metrics.
+// The light panel's band, and the toast every message popup draws.
 //
 // A banner is a full-width black band that reaches the screen's physical edge, with a
 // white rule on the edge that faces the page and white centered text inside. It is
@@ -24,5 +22,12 @@ constexpr int PAD = 6;
 // White rule on the page-facing edge. The band spans the screen and reaches its
 // physical edges, so a full frame would just box in a strip.
 constexpr int RULE = 2;
+
+// The contents look's toast (BaseTheme::drawBannerStrip): a paper strip at the top edge,
+// its message in italic over a 1px rule. A progress toast thickens the rule from the left.
+constexpr int TOAST_PAD = 12;   // above and below the message
+constexpr int TOAST_LINE = 24;  // one italic line
+constexpr int TOAST_RULE = 1;
+constexpr int TOAST_PROGRESS = 3;
 
 }  // namespace banner
