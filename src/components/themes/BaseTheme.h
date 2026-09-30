@@ -214,6 +214,10 @@ class BaseTheme {
   // example. drawPopup below is the convenience for the 42 callers that just want a
   // message on the glass.
   Rect drawBannerStrip(const GfxRenderer& renderer, const char* message) const;
+  // The image viewer's button hints as one italic line on a paper strip at the foot, the
+  // labels in button order: the image stays full-bleed above it.
+  void drawHintStrip(const GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
+                     const char* btn4) const;
   // drawBannerStrip plus ONE panel submission at FAST. Paints and drives the panel — the
   // only draw* entry point on this class that does, which is why it is called out here.
   Rect drawPopup(const GfxRenderer& renderer, const char* message) const;
