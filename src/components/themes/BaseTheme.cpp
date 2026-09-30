@@ -16,6 +16,7 @@
 
 #include "I18n.h"
 #include "RecentBooksStore.h"
+#include "UiFont.h"
 #include "components/BannerStyle.h"
 #include "components/HeaderTitle.h"
 #include "components/HintBandGeometry.h"
@@ -826,28 +827,27 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
 
 Rect BaseTheme::drawBannerStrip(const GfxRenderer& renderer, const char* message) const {
   const int w = renderer.getScreenWidth();
-  const int lineHeight = renderer.getLineHeight(banner::FONT_ID);
-  // The message wraps rather than being cut, and the band grows a line per line.
+  // Arabic and Hebrew draw it in their UI face, which Literata cannot stand in for.
+  const int fontId = uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : LITERATA_UI_19_IT_FONT_ID;
+  // The message wraps rather than being cut, and the strip grows a line per line.
   const int textWidth = std::max(1, w - UITheme::getInstance().getMetrics().popupMarginX * 2);
   const auto lines = wrapUiText(renderer, message != nullptr ? message : "", textWidth, textWidth);
   const int lineCount = std::max(1, static_cast<int>(lines.size()));
-  const int h = banner::PAD * 2 + lineHeight * lineCount;
+  const int h = banner::TOAST_PAD * 2 + banner::TOAST_LINE * lineCount;
 
   // Physical top crop (X4 crops ~9px, X3 crops 0) via the renderer's oriented viewable
-  // inset: the black backing starts at row
-  // 0 so nothing white shows above the band, while the text and the rule sit below the
-  // crop where they cannot be clipped. Starting the backing at the theme's topPadding
-  // instead left a white gap along the top edge.
+  // inset: the paper starts at row 0 so the page does not show above the strip, while the
+  // text sits below the crop where it cannot be clipped.
   int viewTop = 0, viewRight = 0, viewBottom = 0, viewLeft = 0;
   renderer.getOrientedViewableTRBL(&viewTop, &viewRight, &viewBottom, &viewLeft);
   const int y = viewTop;
 
-  renderer.fillRect(0, 0, w, y + h, true);                             // black to the physical edge
-  renderer.fillRect(0, y + h - banner::RULE, w, banner::RULE, false);  // rule on the page-facing edge
-  int lineY = y + banner::PAD;
+  renderer.fillRect(0, 0, w, y + h, false);
+  renderer.fillRect(0, y + h - banner::TOAST_RULE, w, banner::TOAST_RULE, true);
+  int lineY = y + banner::TOAST_PAD + (banner::TOAST_LINE - renderer.getLineHeight(fontId)) / 2;
   for (const std::string& line : lines) {
-    renderer.drawCenteredText(banner::FONT_ID, lineY, line.c_str(), false, EpdFontFamily::REGULAR);
-    lineY += lineHeight;
+    renderer.drawCenteredText(fontId, lineY, line.c_str(), true, EpdFontFamily::REGULAR);
+    lineY += banner::TOAST_LINE;
   }
   return Rect{0, y, w, h};
 }
@@ -869,32 +869,12 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
 }
 
 void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int barHeight = metrics.popupProgressBarHeight;
-  const int barWidth =
-      std::max(0, layout.width - metrics.popupMarginX * 2);  // twice the margin in drawPopup to match text width
-  const int barX = layout.x + (layout.width - barWidth) / 2;
-  // Centered in the blank between the text's line box and the rule, so the bar rides
-  // inside the band rather than pushing it taller. Derived from the band's own geometry
-  // so it follows banner::PAD instead of having to be retuned whenever the band changes.
-  const int gapBottom = layout.y + layout.height - banner::RULE;
-  const int gapTop = gapBottom - banner::PAD;
-  const int barY = gapTop + std::max(0, (gapBottom - gapTop - barHeight) / 2);
-  if (barWidth <= 0 || barHeight <= 0) {
-    renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-    return;
-  }
-
-  const int scaledProgress = metrics.popupProgressClampPercent ? std::clamp(progress, 0, 100) : progress;
-  const int fillWidth = barWidth * scaledProgress / 100;
-
-  if (metrics.popupProgressDrawOutline) {
-    renderer.drawRect(barX, barY, barWidth, barHeight, 1, metrics.popupProgressOutlineInverted);
-  }
+  // The toast's rule thickens from the left as the work goes.
+  const int fillWidth = layout.width * std::clamp(progress, 0, 100) / 100;
   if (fillWidth > 0) {
-    renderer.fillRect(barX, barY, fillWidth, barHeight, metrics.popupProgressFillInverted);
+    renderer.fillRect(layout.x, layout.y + layout.height - banner::TOAST_PROGRESS, fillWidth, banner::TOAST_PROGRESS,
+                      true);
   }
-
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
 

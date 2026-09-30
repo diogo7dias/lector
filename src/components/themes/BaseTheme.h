@@ -94,11 +94,6 @@ struct ThemeMetrics {
   int keyboardWidthPercent;
 
   int popupMarginX;
-  int popupProgressBarHeight;
-  bool popupProgressDrawOutline;
-  bool popupProgressClampPercent;
-  bool popupProgressFillInverted;
-  bool popupProgressOutlineInverted;
 
   int textFieldHorizontalPadding;
   int textFieldNormalThickness;
@@ -160,12 +155,6 @@ constexpr ThemeMetrics values = {.batteryWidth = 15,
                                  .keyboardTextFieldWidthPercent = 85,
                                  .keyboardWidthPercent = 94,
                                  .popupMarginX = 15,
-                                 .popupProgressBarHeight = 4,
-                                 .popupProgressDrawOutline = false,
-                                 .popupProgressClampPercent = false,
-                                 // White on the strip's black backing.
-                                 .popupProgressFillInverted = false,
-                                 .popupProgressOutlineInverted = false,
                                  .textFieldHorizontalPadding = 6,
                                  .textFieldNormalThickness = 1,
                                  .textFieldCursorThickness = 3,
