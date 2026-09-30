@@ -2,6 +2,9 @@
 
 #include <GfxRenderer.h>
 
+#include <string>
+#include <vector>
+
 #include "activities/Activity.h"
 #include "components/ListChrome.h"
 #include "components/SettingsGrid.h"
@@ -43,6 +46,13 @@ class UiGridActivity : public Activity, protected UiAppHost {
   virtual void activateCell(int index) = 0;
   // What the base paints around the grid. Default: the title from headerTitle().
   virtual ListChrome chrome() const;
+  // The contents look: one column of rows with leaders, numbered headings over their
+  // groups, the title page, no hint band on keys-only boards. Screens opt in one at a time.
+  virtual bool contentsLook() const { return false; }
+  // In the contents look, a heading drawn above this cell (nullptr for none).
+  virtual const char* cellHeading(int index) const { return nullptr; }
+  // chrome() as it is painted.
+  ListChrome shownChrome() const;
   virtual const char* headerTitle() const { return nullptr; }
   // First hook in loop(); return true when the pass is consumed.
   virtual bool handleCustomInput() { return false; }
@@ -87,6 +97,11 @@ class UiGridActivity : public Activity, protected UiAppHost {
   int tallestCellHeight() const;
   static void screenTrampoline(UiScreen& screen, void* user);
   static void cellTrampoline(const freeink::ui::ActionEvent& event, void* user);
+  // The contents look's rows, headings included, rebuilt each build; labels borrow
+  // the subclass's strings for the length of the build.
+  void buildContents(UiScreen& screen, const Rect& pane, const wrapped_list::Window& win);
+  std::vector<freeink::ui::ListItem> contentsItems_;
+  std::vector<std::string> contentsText_;
   int selected_ = 0;
   int scrollRow_ = 0;
   // What the last build laid out, for the chevrons render() paints after the app.
