@@ -286,6 +286,20 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
 // and their radius all come from the theme rather than from arithmetic here.
 void UiStatusActivity::buildSlider(UiScreen& screen, const StatusView& view, const fui::Rect& rect) {
   const auto& theme = screen.theme();
+  if (!mappedInput.hasTouch() && contentsLook()) {
+    // The number set large in the heading face, over a hairline whose done part is a
+    // 4px bar: the title already names what is being set.
+    auto& target = screen.frame().target();
+    fui::TextStyle big{};
+    big.font = fui::GfxRendererTarget::FONT_EXTRA_1;
+    big.align = fui::TextAlign::Center;
+    target.text(fui::Rect{rect.x, rect.y, rect.width, target.lineHeight(big.font)}, view.sliderValueText, big);
+    StatusView bar = view;
+    bar.progressValue = view.sliderValue - view.sliderMin;
+    bar.progressMax = view.sliderMax > view.sliderMin ? view.sliderMax - view.sliderMin : 1;
+    drawProgress(screen, bar, fui::Rect{rect.x, static_cast<int16_t>(rect.y + rect.height - 4), rect.width, 4});
+    return;
+  }
   if (!mappedInput.hasTouch()) {
     // Keys-only boards keep the plain bar; there is nothing to drag or tap.
     plain_slider_band::draw(screen, rect, view.sliderLabel, view.sliderValueText, view.sliderValue - view.sliderMin,
