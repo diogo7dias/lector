@@ -29,6 +29,7 @@ class StatusBarSettingsActivity final : public UiListActivity {
   void buildScreen(UiScreen& screen) override;
   void activateIndex(int index) override;
   const char* headerTitle() const override { return tr(STR_CUSTOMISE_STATUS_BAR); }
+  bool contentsLook() const override { return true; }
   // The anchor picker owns every button while it is up, so it runs before the base
   // touches Back, Confirm or the selection.
   bool handleCustomInput() override;
@@ -58,6 +59,6 @@ class StatusBarSettingsActivity final : public UiListActivity {
   std::string rowValue(int id) const;
 
   // Row text owns its strings; the ListItems borrow them.
-  std::vector<std::string> subtitles;
+  std::vector<std::string> values;
   std::vector<freeink::ui::ListItem> rows;
 };
