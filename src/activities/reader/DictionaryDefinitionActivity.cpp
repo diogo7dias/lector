@@ -55,17 +55,27 @@ void DictionaryDefinitionActivity::onExit() {
   }
 }
 
+// The headword as a title page, the page counter as its italic line. A counter is
+// always passed when laying out, so the pages fit whichever height the title page takes.
+ListChrome DictionaryDefinitionActivity::titleChrome(const char* counter) const {
+  ListChrome chrome;
+  chrome.title = headword.c_str();
+  if (counter != nullptr && counter[0] != '\0') chrome.headerRight = counter;
+  chrome.confirmHint = "";
+  chrome.thirdHint = currentPage > 0 ? "<" : "";
+  chrome.fourthHint = currentPage + 1 < totalPages ? ">" : "";
+  toContentsLook(chrome, mappedInput.hasTouch());
+  return chrome;
+}
+
 DictionaryDefinitionActivity::BodyArea DictionaryDefinitionActivity::bodyArea() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const auto orientation = renderer.getOrientation();
   const bool isLandscape = orientation == GfxRenderer::Orientation::LandscapeClockwise ||
                            orientation == GfxRenderer::Orientation::LandscapeCounterClockwise;
-  const bool isInverted = orientation == GfxRenderer::Orientation::PortraitInverted;
   const int hintGutterWidth = isLandscape ? metrics.sideButtonHintsWidth : 0;
-  const int topArea = (isInverted ? metrics.buttonHintsHeight : 0) + metrics.topPadding + metrics.headerHeight;
-  const int bottomArea = metrics.buttonHintsHeight + metrics.verticalSpacing;
-  return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING,
-          renderer.getScreenHeight() - topArea - bottomArea};
+  const list_chrome::Bands bands = listChromeBands(renderer, titleChrome("0/0"));
+  return {renderer.getScreenWidth() - hintGutterWidth - 2 * SIDE_PADDING, bands.contentBottom - bands.contentTop};
 }
 
 // Styled path: lay the HTML definition out through the EPUB chapter parser
@@ -254,17 +264,11 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
       (isLandscapeCw || isLandscapeCcw) ? UITheme::getInstance().getMetrics().sideButtonHintsWidth : 0;
   const int contentX = isLandscapeCw ? hintGutterWidth : 0;
 
-  // The definition itself is a page of laid-out text, so it stays a raw paint;
-  // the chrome around it is the shared one, headword in the band and the page
-  // counter beside it.
+  // The definition itself is a page of laid-out text, so it stays a raw paint; the
+  // chrome around it is the shared title page.
   char counter[16] = {};
   if (totalPages > 1) snprintf(counter, sizeof(counter), "%d/%d", currentPage + 1, totalPages);
-  ListChrome chrome;
-  chrome.title = headword.c_str();
-  if (counter[0] != '\0') chrome.headerRight = counter;
-  chrome.confirmHint = "";
-  chrome.thirdHint = currentPage > 0 ? "<" : "";
-  chrome.fourthHint = currentPage + 1 < totalPages ? ">" : "";
+  const ListChrome chrome = titleChrome(counter);
   drawListChromeTop(renderer, chrome);
 
   // Body: two-pass draw inside a prewarm scope (same pattern as the reader's

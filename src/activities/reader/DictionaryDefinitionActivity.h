@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "activities/Activity.h"
+#include "components/ListChrome.h"
 #include "util/ButtonNavigator.h"
 
 // Paged viewer for one dictionary definition. HTML definitions are laid out
@@ -46,6 +47,7 @@ class DictionaryDefinitionActivity final : public Activity {
   };
 
   BodyArea bodyArea() const;
+  ListChrome titleChrome(const char* counter) const;
   bool layoutHtmlPages();
   void wrapText();
   int measureSpan(int fontId, const char* text, size_t len) const;
