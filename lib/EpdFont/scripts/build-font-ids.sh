@@ -89,9 +89,9 @@ ruby -rdigest -e 'puts [
 ))"
 
 
-echo "#define LITERATA_UI_15_SC_FONT_ID ($(
+echo "#define LITERATA_UI_19_SC_FONT_ID ($(
 ruby -rdigest -e 'puts [
-  "./literata_ui_15_smallcaps.h",
+  "./literata_ui_19_smallcaps.h",
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
@@ -101,8 +101,3 @@ ruby -rdigest -e 'puts [
 ].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
 ))"
 
-echo "#define LITERATA_UI_15_IT_FONT_ID ($(
-ruby -rdigest -e 'puts [
-  "./literata_ui_15_italic.h",
-].map{|f| Digest::SHA256.hexdigest(File.read(f)).to_i(16) }.sum % (2 ** 32) - (2 ** 31)'
-))"

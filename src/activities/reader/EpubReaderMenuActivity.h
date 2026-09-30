@@ -106,8 +106,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // A press walks the rows, stepping over headings; a hold ramps.
   void navigateButtons() override;
   bool drawOverlay() override;
-  // The contents look's row face; the base binds it before deriving the theme.
-  int listFontId() const override { return LITERATA_UI_20_FONT_ID; }
 
  private:
   struct MenuItem {

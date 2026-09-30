@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "MappedInputManager.h"
+#include "UiFont.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
 #include "components/themes/BaseTheme.h"
@@ -25,13 +26,11 @@ int wrappedLines(const GfxRenderer& renderer, const char* text) {
 }
 
 // The contents look's title page. Every line is placed the way the mockup's browser
-// placed it: a CSS line box of `box` pixels with the baseline half-leading into it,
-// from Literata's hhea metrics (ascent 1177, descent 308 per 1000 units), so the
-// firmware lands each baseline on the same pixel row. Sizes are the faces' own.
+// placed it: a CSS line box of `box` pixels with the font's own line centred in it and
+// the text on that line's baseline. Sizes are the faces' own; the chapter and progress
+// lines are set at the author's size.
 namespace title_page {
 
-constexpr float ASCENT = 1.177f;
-constexpr float DESCENT = 0.308f;
 constexpr float TOP = 34;          // panel top to the title's line box
 constexpr float SIDE = 30;         // text inset from both edges
 constexpr float BOTTOM = 18;       // progress line to the first row
@@ -42,16 +41,16 @@ constexpr int RULE_H = 2;
 
 struct Face {
   int fontId;
-  float px;
   float box;       // CSS line box
   float tracking;  // CSS letter-spacing
 };
-constexpr Face TITLE{LITERATA_UI_25_FONT_ID, 25, 31.25f, 5.5f};
-constexpr Face AUTHOR{LITERATA_UI_19_IT_FONT_ID, 19, 23.75f, 0};
-constexpr Face CHAPTER{LITERATA_UI_15_SC_FONT_ID, 15, 18.75f, 2.1f};
-constexpr Face PROGRESS{LITERATA_UI_15_IT_FONT_ID, 15, 18.75f, 0};
+constexpr Face TITLE{LITERATA_UI_25_FONT_ID, 31.25f, 5.5f};
+constexpr Face AUTHOR{LITERATA_UI_19_IT_FONT_ID, 23.75f, 0};
+constexpr Face CHAPTER{LITERATA_UI_19_SC_FONT_ID, 23.75f, 2.66f};
+constexpr Face PROGRESS{LITERATA_UI_19_IT_FONT_ID, 23.75f, 0};
 
-float baselineIn(const Face& face) { return (face.box - (ASCENT + DESCENT) * face.px) / 2 + ASCENT * face.px; }
+// Arabic and Hebrew UIs draw it all in their UI font, which Literata cannot stand in for.
+int fontOf(const Face& face) { return uiLanguageNeedsUbuntu() ? UI_10_FONT_ID : face.fontId; }
 
 // ASCII case changes only: the title is set in capitals and the chapter in small
 // capitals (lower case into the small-caps face); other scripts pass through.
@@ -64,19 +63,27 @@ std::string recase(const char* text, const bool upper) {
   return out;
 }
 
-float trackedWidth(const GfxRenderer& renderer, const Face& face, const std::string& text) {
+// One codepoint's advance. A space has no glyph to measure, so it takes the font's space.
+int glyphWidth(const GfxRenderer& renderer, const int fontId, const uint32_t cp, const char* glyph) {
+  return cp == ' ' ? renderer.getSpaceWidth(fontId) : renderer.getTextWidth(fontId, glyph);
+}
+
+// A line's width with the face's letter-spacing after every character, as CSS adds it.
+// Untracked faces measure the whole line, kerning included.
+float lineWidth(const GfxRenderer& renderer, const Face& face, const std::string& text) {
+  const int fontId = fontOf(face);
+  if (face.tracking == 0) return static_cast<float>(renderer.getTextWidth(fontId, text.c_str()));
   float width = 0;
   char glyph[5];
   const auto* p = reinterpret_cast<const unsigned char*>(text.c_str());
   while (const uint32_t cp = utf8NextCodepoint(&p)) {
     *utf8EncodeCodepoint(cp, glyph) = '\0';
-    width += static_cast<float>(renderer.getTextWidth(face.fontId, glyph)) + face.tracking;
+    width += static_cast<float>(glyphWidth(renderer, fontId, cp, glyph)) + face.tracking;
   }
   return width;
 }
 
-// Greedy word wrap on the tracked width, never cutting: a word wider than the line
-// gets a line of its own.
+// Greedy word wrap, never cutting: a word wider than the line gets a line of its own.
 std::vector<std::string> wrap(const GfxRenderer& renderer, const Face& face, const std::string& text,
                               const float maxW) {
   std::vector<std::string> lines;
@@ -87,7 +94,7 @@ std::vector<std::string> wrap(const GfxRenderer& renderer, const Face& face, con
     if (end == std::string::npos) end = text.size();
     const std::string word = text.substr(start, end - start);
     const std::string candidate = line.empty() ? word : line + " " + word;
-    if (!line.empty() && trackedWidth(renderer, face, candidate) > maxW) {
+    if (!line.empty() && lineWidth(renderer, face, candidate) > maxW) {
       lines.push_back(line);
       line = word;
     } else {
@@ -102,17 +109,22 @@ std::vector<std::string> wrap(const GfxRenderer& renderer, const Face& face, con
 // Draws (or only measures) one block of centred lines from line-box top y; returns
 // the y under it.
 float block(const GfxRenderer& renderer, const Face& face, const std::string& text, float y, const bool draw) {
+  const int fontId = fontOf(face);
   const int width = renderer.getScreenWidth();
   for (const std::string& line : wrap(renderer, face, text, static_cast<float>(width) - SIDE * 2)) {
     if (draw) {
-      const int top = static_cast<int>(std::lround(y + baselineIn(face))) - renderer.getFontAscenderSize(face.fontId);
-      float x = (static_cast<float>(width) - trackedWidth(renderer, face, line)) / 2;
-      char glyph[5];
-      const auto* p = reinterpret_cast<const unsigned char*>(line.c_str());
-      while (const uint32_t cp = utf8NextCodepoint(&p)) {
-        *utf8EncodeCodepoint(cp, glyph) = '\0';
-        renderer.drawText(face.fontId, static_cast<int>(std::lround(x)), top, glyph);
-        x += static_cast<float>(renderer.getTextWidth(face.fontId, glyph)) + face.tracking;
+      const int top = static_cast<int>(std::lround(y + (face.box - renderer.getLineHeight(fontId)) / 2));
+      float x = (static_cast<float>(width) - lineWidth(renderer, face, line)) / 2;
+      if (face.tracking == 0) {
+        renderer.drawText(fontId, static_cast<int>(std::lround(x)), top, line.c_str());
+      } else {
+        char glyph[5];
+        const auto* p = reinterpret_cast<const unsigned char*>(line.c_str());
+        while (const uint32_t cp = utf8NextCodepoint(&p)) {
+          *utf8EncodeCodepoint(cp, glyph) = '\0';
+          if (cp != ' ') renderer.drawText(fontId, static_cast<int>(std::lround(x)), top, glyph);
+          x += static_cast<float>(glyphWidth(renderer, fontId, cp, glyph)) + face.tracking;
+        }
       }
     }
     y += face.box;

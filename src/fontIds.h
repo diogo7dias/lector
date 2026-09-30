@@ -26,9 +26,8 @@
 #define LITERATA_UI_26_FONT_ID (-1909874435)
 #define LITERATA_UI_25_FONT_ID (952529669)
 #define LITERATA_UI_16_FONT_ID (1786701152)
-#define LITERATA_UI_15_SC_FONT_ID (-486137933)
+#define LITERATA_UI_19_SC_FONT_ID (1582423704)
 #define LITERATA_UI_19_IT_FONT_ID (-1717519899)
-#define LITERATA_UI_15_IT_FONT_ID (-1947694540)
 
 // Font ID 0 is reserved as the "not found" sentinel.
 // Guard against any hash accidentally producing 0.
@@ -47,6 +46,5 @@ static_assert(LITERATA_UI_20_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(LITERATA_UI_26_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(LITERATA_UI_25_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(LITERATA_UI_16_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(LITERATA_UI_15_SC_FONT_ID != 0, "Font ID collision with sentinel");
+static_assert(LITERATA_UI_19_SC_FONT_ID != 0, "Font ID collision with sentinel");
 static_assert(LITERATA_UI_19_IT_FONT_ID != 0, "Font ID collision with sentinel");
-static_assert(LITERATA_UI_15_IT_FONT_ID != 0, "Font ID collision with sentinel");

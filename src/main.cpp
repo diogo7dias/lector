@@ -114,12 +114,10 @@ EpdFont literataUi25Font(&literata_ui_25_semibold);
 EpdFontFamily literataUi25FontFamily(&literataUi25Font, &literataUi25Font);
 EpdFont literataUi16Font(&literata_ui_16_semibold);
 EpdFontFamily literataUi16FontFamily(&literataUi16Font, &literataUi16Font);
-EpdFont literataUi15ScFont(&literata_ui_15_smallcaps);
-EpdFontFamily literataUi15ScFontFamily(&literataUi15ScFont, &literataUi15ScFont);
+EpdFont literataUi19ScFont(&literata_ui_19_smallcaps);
+EpdFontFamily literataUi19ScFontFamily(&literataUi19ScFont, &literataUi19ScFont);
 EpdFont literataUi19ItFont(&literata_ui_19_italic);
 EpdFontFamily literataUi19ItFontFamily(&literataUi19ItFont, &literataUi19ItFont);
-EpdFont literataUi15ItFont(&literata_ui_15_italic);
-EpdFontFamily literataUi15ItFontFamily(&literataUi15ItFont, &literataUi15ItFont);
 
 // The UI families ship REGULAR ONLY, and the regular face fills the family's bold slot
 // so a stray BOLD request resolves to regular instead of nullptr. This is the old-Lector
@@ -139,24 +137,11 @@ EpdFontFamily ubuntu12FontFamily(&ubuntu12RegularFont, &ubuntu12RegularFont);
 EpdFont ubuntu14RegularFont(&ubuntu_14_regular);
 EpdFontFamily ubuntu14FontFamily(&ubuntu14RegularFont, &ubuntu14RegularFont);
 
-// Cozette UI family — lector's default menu font (Latin + Cyrillic + Greek + Vietnamese;
-// no Arabic/Hebrew). Sizes match the previous mature Lector: 10 = SMALL_FONT_ID,
-// 12 = UI_10_FONT_ID (list rows), 14 = UI_12_FONT_ID (header title). Bound for every
-// language except Arabic/Hebrew (which use the Ubuntu family at the same sizes).
-EpdFont cozette10RegularFont(&cozette_10_regular);
-EpdFontFamily cozette10FontFamily(&cozette10RegularFont, &cozette10RegularFont);
-
-EpdFont cozette12RegularFont(&cozette_12_regular);
-EpdFontFamily cozette12FontFamily(&cozette12RegularFont, &cozette12RegularFont);
-
-EpdFont cozette14RegularFont(&cozette_14_regular);
-EpdFontFamily cozette14FontFamily(&cozette14RegularFont, &cozette14RegularFont);
-
-// Cozette cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
-// family. Every other language (incl. Cyrillic + Vietnamese, verified in Cozette's
-// cmap) uses Cozette. Called at boot and on every in-app language change (declared
-// in UiFont.h so LanguageSelectActivity can rebind after a change).
-static bool uiLanguageNeedsUbuntu() {
+// Literata cannot draw Arabic or Hebrew, so those two UI languages use the Ubuntu
+// family. Every other language uses Literata (Latin, Vietnamese and Cyrillic are baked
+// into the faces). Called at boot and on every in-app language change (declared in
+// UiFont.h so LanguageSelectActivity can rebind after a change).
+bool uiLanguageNeedsUbuntu() {
   const Language lang = I18n::getInstance().getLanguage();
   return lang == Language::AR || lang == Language::HE;
 }
@@ -164,15 +149,15 @@ static bool uiLanguageNeedsUbuntu() {
 void bindUiFontsForLanguage(GfxRenderer& renderer) {
   const bool useUbuntu = uiLanguageNeedsUbuntu();
   // insertFont() ignores an already-registered id, so drop the old binding first.
-  // Sizes mirror the previous mature Lector (2px larger than the CrossPoint base):
-  // SMALL = 10, UI_10 (list rows) = 12, UI_12 (header title) = 14. Arabic/Hebrew use the
-  // Ubuntu family at the same sizes so their small text renders too (Cozette lacks AR/HE).
+  // The contents look's one UI face, Literata 20px (the in-book menu's rows), for every
+  // slot: the UI draws everything at one size (UIScale.h). Arabic/Hebrew keep the Ubuntu
+  // family at the old sizes.
   renderer.removeFont(SMALL_FONT_ID);
   renderer.removeFont(UI_10_FONT_ID);
   renderer.removeFont(UI_12_FONT_ID);
-  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : cozette10FontFamily);
-  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : cozette12FontFamily);
-  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : cozette14FontFamily);
+  renderer.insertFont(SMALL_FONT_ID, useUbuntu ? ubuntu10FontFamily : literataUi20FontFamily);
+  renderer.insertFont(UI_10_FONT_ID, useUbuntu ? ubuntu12FontFamily : literataUi20FontFamily);
+  renderer.insertFont(UI_12_FONT_ID, useUbuntu ? ubuntu14FontFamily : literataUi20FontFamily);
 }
 
 // Definitions for SilentRestart.h. RTC_NOINIT survives ESP.restart() but not power loss.
@@ -393,9 +378,8 @@ static void setupBuiltinFonts() {
   renderer.insertFont(LITERATA_UI_26_FONT_ID, literataUi26FontFamily);
   renderer.insertFont(LITERATA_UI_25_FONT_ID, literataUi25FontFamily);
   renderer.insertFont(LITERATA_UI_16_FONT_ID, literataUi16FontFamily);
-  renderer.insertFont(LITERATA_UI_15_SC_FONT_ID, literataUi15ScFontFamily);
+  renderer.insertFont(LITERATA_UI_19_SC_FONT_ID, literataUi19ScFontFamily);
   renderer.insertFont(LITERATA_UI_19_IT_FONT_ID, literataUi19ItFontFamily);
-  renderer.insertFont(LITERATA_UI_15_IT_FONT_ID, literataUi15ItFontFamily);
   // Active UI ids (SMALL / UI_10 / UI_12): Cozette by default, Ubuntu for Arabic/Hebrew
   // (honors the persisted SETTINGS.language already loaded at this point).
   bindUiFontsForLanguage(renderer);

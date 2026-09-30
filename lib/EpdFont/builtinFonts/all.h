@@ -1,8 +1,5 @@
 #pragma once
 
-#include <builtinFonts/cozette_10_regular.h>
-#include <builtinFonts/cozette_12_regular.h>
-#include <builtinFonts/cozette_14_regular.h>
 #include <builtinFonts/notosans_8_regular.h>
 #include <builtinFonts/spleen_6x12_2x_regular.h>
 #include <builtinFonts/spleen_6x12_regular.h>
@@ -18,6 +15,5 @@
 #include <builtinFonts/literata_ui_26_semibold.h>
 #include <builtinFonts/literata_ui_25_semibold.h>
 #include <builtinFonts/literata_ui_16_semibold.h>
-#include <builtinFonts/literata_ui_15_smallcaps.h>
+#include <builtinFonts/literata_ui_19_smallcaps.h>
 #include <builtinFonts/literata_ui_19_italic.h>
-#include <builtinFonts/literata_ui_15_italic.h>

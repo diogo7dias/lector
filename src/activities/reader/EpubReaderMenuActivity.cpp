@@ -9,6 +9,7 @@
 #include "CrossPointState.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
+#include "UiFont.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "util/HoldRepeat.h"
@@ -249,8 +250,11 @@ void EpubReaderMenuActivity::onEnter() {
   // borrow it, including the one row Status Bar can insert during this visit.
   rows.reserve(items.size() + 1);
   updateRows();
-  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, LITERATA_UI_26_FONT_ID);
-  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, LITERATA_UI_16_FONT_ID);
+  // Heading and numeral faces; rows use the UI font (Literata, or Ubuntu for Arabic and
+  // Hebrew, where the headings fall back to it too).
+  const bool ubuntu = uiLanguageNeedsUbuntu();
+  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_1, ubuntu ? UI_10_FONT_ID : LITERATA_UI_26_FONT_ID);
+  uiTarget.setFont(fui::GfxRendererTarget::FONT_EXTRA_2, ubuntu ? UI_10_FONT_ID : LITERATA_UI_16_FONT_ID);
   UiListActivity::onEnter();
   {
     RenderLock lock(*this);
