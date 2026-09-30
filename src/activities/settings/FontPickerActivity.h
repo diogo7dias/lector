@@ -27,6 +27,7 @@ class FontPickerActivity final : public UiListActivity {
   void activateIndex(int index) override;
   void onBackButton() override;
   const char* headerTitle() const override { return tr(STR_FONT); }
+  bool contentsLook() const override { return true; }
   int listFontId() const override;
 
  private:
