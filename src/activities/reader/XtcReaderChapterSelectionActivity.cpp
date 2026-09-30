@@ -17,6 +17,7 @@ int XtcReaderChapterSelectionActivity::findChapterIndexForPage(const uint32_t pa
 }
 
 void XtcReaderChapterSelectionActivity::onEnter() {
+  bookTitle = xtc.getTitle();
   UiListActivity::onEnter();
   // Opens on the chapter being read, not at the top.
   moveSelectionTo(findChapterIndexForPage(currentPage));
