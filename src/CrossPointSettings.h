@@ -751,6 +751,14 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // rows are filtered out of Settings on a board without one, but the values
   // still persist so moving an SD card between devices keeps them.
   uint8_t frontlightBrightness = 60;
+  // The top of the brightness range, wherever brightness is set (the light panel's
+  // track runs 0 to this). 30 by default: past it the light is too bright to read by.
+  uint8_t frontlightMaxBrightness = 30;
+  // Brings a stored brightness within the maximum. Called on boot and whenever either
+  // value changes, so every place that applies the light sees a capped value.
+  void clampFrontlightBrightness() {
+    if (frontlightBrightness > frontlightMaxBrightness) frontlightBrightness = frontlightMaxBrightness;
+  }
   uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm; ignored without warm/cold LEDs
   uint8_t frontlightOn = 0;
   // Bring the light back by itself on wake. Off by default: a light that

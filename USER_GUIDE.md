@@ -816,6 +816,12 @@ belongs to, so the rows here appear in the same order as on the device.
   drawn over the wallpaper.
 - **Shuffle Wallpapers** — reshuffle the rotation now.
 
+**Frontlight** (boards with a frontlight)
+
+- **Frontlight**, **Brightness**, **Warmth**, **Restore on Wake**.
+- **Max Brightness** — the top of the brightness range, 10 to 100 (default 30). The light
+  panel's brightness track runs from 0 to this, and a brightness above it is brought down.
+
 **Screen**
 
 - **Refresh Frequency** — a full refresh every 1, 5, 10, 15 or 30 pages, or **Never**. Never
