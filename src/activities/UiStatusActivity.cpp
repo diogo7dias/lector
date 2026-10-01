@@ -556,7 +556,7 @@ void UiStatusActivity::drawProgress(UiScreen& screen, const StatusView& view, co
   bar.value = view.progressValue;
   bar.max = view.progressMax > 0 ? view.progressMax : 100;
   bar.border = fui::Paint::solid(fui::Color::Black);
-  bar.borderWidth = 1;
+  bar.borderWidth = 2;
   bar.radius = static_cast<uint8_t>(screen.theme().controlRadius);
   fui::progressBar(screen.frame(), rect, bar);
 }

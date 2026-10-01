@@ -29,6 +29,10 @@
 #include "fontIds.h"
 #include "util/StringUtils.h"
 
+// Every line the theme draws (frames, dividers, rules) is this thick, matching the
+// rules between the in-book menu's headings.
+constexpr int kLine = 2;
+
 // Internal constants
 namespace {
 constexpr int homeMenuMargin = 20;
@@ -273,16 +277,15 @@ void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const c
       if (band.touch) {
         // The touch band tiles the full width, so neighbouring slots share an edge and
         // a per-slot drawRect() painted that edge twice: the dividers between the
-        // buttons came out two pixels wide against the one-pixel line along the top.
-        // Draw the outline by hand and let each slot own only its right-hand divider;
-        // the leftmost slot draws the outer left edge, and the rightmost one's divider
-        // is the outer right edge.
-        renderer.fillRect(slot.x, slot.y, slot.width, 1);                    // top
-        renderer.fillRect(slot.x, slot.y + slot.height - 1, slot.width, 1);  // bottom
-        renderer.fillRect(slot.x + slot.width - 1, slot.y, 1, slot.height);  // divider / right edge
-        if (i == 0) renderer.fillRect(slot.x, slot.y, 1, slot.height);       // outer left edge
+        // buttons came out twice as wide as the line along the top. Draw the outline by
+        // hand and let each slot own only its right-hand divider; the leftmost slot draws
+        // the outer left edge, and the rightmost one's divider is the outer right edge.
+        renderer.fillRect(slot.x, slot.y, slot.width, kLine);                        // top
+        renderer.fillRect(slot.x, slot.y + slot.height - kLine, slot.width, kLine);  // bottom
+        renderer.fillRect(slot.x + slot.width - kLine, slot.y, kLine, slot.height);  // divider / right edge
+        if (i == 0) renderer.fillRect(slot.x, slot.y, kLine, slot.height);           // outer left edge
       } else {
-        renderer.drawRect(slot.x, slot.y, slot.width, slot.height);
+        renderer.drawRect(slot.x, slot.y, slot.width, slot.height, kLine, true);
       }
       drawHintLabel(renderer, UI_10_FONT_ID, labels[i], slot.x, slot.width, slot.y, slot.height, textYOffset);
     }
@@ -310,7 +313,7 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 
     if (topBtn != nullptr && topBtn[0] != '\0') {
       const int leftX = buttonMargin;
-      renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight);
+      renderer.drawRect(leftX, x3ButtonY, buttonWidth, buttonHeight, kLine, true);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, topBtn);
       const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
       const int textX = leftX + (buttonWidth - textHeight) / 2;
@@ -320,7 +323,7 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
       const int rightX = screenWidth - buttonMargin - buttonWidth;
-      renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight);
+      renderer.drawRect(rightX, x3ButtonY, buttonWidth, buttonHeight, kLine, true);
       const int textWidth = renderer.getTextWidth(UI_10_FONT_ID, bottomBtn);
       const int textHeight = renderer.getTextHeight(UI_10_FONT_ID);
       const int textX = rightX + (buttonWidth - textHeight) / 2;
@@ -333,21 +336,12 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
     const char* labels[] = {topBtn, bottomBtn};
     const int x = screenWidth - buttonMargin - buttonWidth;
 
+    // Two stacked boxes; where both show, they share one line between them.
     if (topBtn != nullptr && topBtn[0] != '\0') {
-      renderer.drawLine(x, topButtonY, x + buttonWidth - 1, topButtonY);
-      renderer.drawLine(x, topButtonY, x, topButtonY + buttonHeight - 1);
-      renderer.drawLine(x + buttonWidth - 1, topButtonY, x + buttonWidth - 1, topButtonY + buttonHeight - 1);
+      renderer.drawRect(x, topButtonY, buttonWidth, buttonHeight, kLine, true);
     }
-
-    if ((topBtn != nullptr && topBtn[0] != '\0') || (bottomBtn != nullptr && bottomBtn[0] != '\0')) {
-      renderer.drawLine(x, topButtonY + buttonHeight, x + buttonWidth - 1, topButtonY + buttonHeight);
-    }
-
     if (bottomBtn != nullptr && bottomBtn[0] != '\0') {
-      renderer.drawLine(x, topButtonY + buttonHeight, x, topButtonY + 2 * buttonHeight - 1);
-      renderer.drawLine(x + buttonWidth - 1, topButtonY + buttonHeight, x + buttonWidth - 1,
-                        topButtonY + 2 * buttonHeight - 1);
-      renderer.drawLine(x, topButtonY + 2 * buttonHeight - 1, x + buttonWidth - 1, topButtonY + 2 * buttonHeight - 1);
+      renderer.drawRect(x, topButtonY + buttonHeight - kLine, buttonWidth, buttonHeight + kLine, kLine, true);
     }
 
     for (int i = 0; i < 2; i++) {
@@ -366,10 +360,16 @@ void BaseTheme::drawSideButtonHints(const GfxRenderer& renderer, const char* top
 bool BaseTheme::drawSelection(const GfxRenderer& renderer, const Rect rect, const bool armed) const {
   // One highlight: the row filled, its text knocked out white.
   if (armed) {
-    // Two-tap confirmation: a row waiting for its confirming tap wears a 1px outline,
-    // never the filled band, so "armed" can never be misread as "already opened". Same
-    // rule and same shape as the FreeInkUI screens (components/UIThemeTokens.h).
-    renderer.drawRect(rect.x, rect.y, rect.width, rect.height);
+    // Two-tap confirmation: a row waiting for its confirming tap wears dashed 2px lines
+    // above and below, never the filled band, so "armed" can never be misread as
+    // "already opened". Same shape and dashes as the FreeInkUI screens
+    // (components/UIThemeTokens.h, freeink fillDashed: 6px dash, 4px gap).
+    constexpr int kRule = 2, kDash = 6, kGap = 4;
+    for (int at = 0; at < rect.width; at += kDash + kGap) {
+      const int run = std::min(kDash, rect.width - at);
+      renderer.fillRect(rect.x + at, rect.y, run, kRule);
+      renderer.fillRect(rect.x + at, rect.y + rect.height - kRule, run, kRule);
+    }
     return false;
   }
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height);
@@ -815,9 +815,8 @@ void BaseTheme::drawButtonMenu(GfxRenderer& renderer, Rect rect, int buttonCount
     bool inverted = false;
     if (selected) {
       inverted = drawSelection(renderer, tile, itemIndexBase + i == two_tap::armedRow());
-      if (!inverted) renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
     } else {
-      renderer.drawRect(tile.x, tile.y, tile.width, tile.height);
+      renderer.drawRect(tile.x, tile.y, tile.width, tile.height, kLine, true);
     }
     // Invert text when the tile is selected, to contrast with the filled background
     renderer.drawText(UI_10_FONT_ID, textX, textY, label, !inverted);
@@ -889,7 +888,7 @@ void BaseTheme::fillPopupProgress(const GfxRenderer& renderer, const Rect& layou
   const int fillWidth = barWidth * scaledProgress / 100;
 
   if (metrics.popupProgressDrawOutline) {
-    renderer.drawRect(barX, barY, barWidth, barHeight, 1, metrics.popupProgressOutlineInverted);
+    renderer.drawRect(barX, barY, barWidth, barHeight, kLine, metrics.popupProgressOutlineInverted);
   }
   if (fillWidth > 0) {
     renderer.fillRect(barX, barY, fillWidth, barHeight, metrics.popupProgressFillInverted);
@@ -953,14 +952,14 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       if (w > 0) renderer.fillRect(barLeft, top, w, height, true);
       return;
     }
-    // Outlined: a 1px frame over the whole track, the fill inset inside it so the
-    // empty remainder stays readable as a track.
-    renderer.drawRect(barLeft, top, barMaxW, height, 1, true);
-    const int innerW = barMaxW - 2;
-    const int innerH = height - 2;
+    // Outlined: a frame over the whole track, the fill inset inside it so the empty
+    // remainder stays readable as a track.
+    renderer.drawRect(barLeft, top, barMaxW, height, kLine, true);
+    const int innerW = barMaxW - 2 * kLine;
+    const int innerH = height - 2 * kLine;
     if (innerW <= 0 || innerH <= 0) return;
     const int w = innerW * clampPct(pct) / 100;
-    if (w > 0) renderer.fillRect(barLeft + 1, top + 1, w, innerH, true);
+    if (w > 0) renderer.fillRect(barLeft + kLine, top + kLine, w, innerH, true);
   };
 
   const bool anyTopBar = sb.bookBar == CrossPointSettings::SB_EDGE_TOP ||
@@ -1002,8 +1001,8 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
   // Separator between co-anchored items: a drawn vertical bar with equal gaps on
   // each side. A " | " string looked lopsided because the '|' glyph sits
   // off-centre in its monospace cell (wide gap before, tight after).
-  const int sepGap = 4;   // even gap each side of the bar
-  const int sepBarW = 1;  // bar thickness
+  const int sepGap = 4;       // even gap each side of the bar
+  const int sepBarW = kLine;  // bar thickness
   const int sepW = sepGap + sepBarW + sepGap;
   // Always shown — see the note on showBatteryPercentage in drawHeader().
   constexpr bool showBattery = true;
@@ -1151,7 +1150,7 @@ void BaseTheme::drawStatusBarV2(GfxRenderer& renderer, const StatusBarData& data
       if (i > 0) {
         // Vertical bar centred in the separator advance, equal gap each side.
         x += sepGap;
-        renderer.drawLine(x, y + 2, x, y + lineH - 3, true);
+        renderer.fillRect(x, y + 2, sepBarW, lineH - 4, true);
         x += sepBarW + sepGap;
       }
       const Seg& s = L.buckets[idx][i];
@@ -1335,7 +1334,7 @@ void BaseTheme::drawOptionPopup(const GfxRenderer& renderer, const char* title, 
 
   if (metrics.optionPopupTitleSeparator) {
     const int sepY = y + metrics.optionPopupTitleGap / 2;
-    renderer.drawLine(dialogX + innerPadding, sepY, dialogX + dialogW - innerPadding, sepY, true);
+    renderer.fillRect(dialogX + innerPadding, sepY, dialogW - 2 * innerPadding + 1, kLine, true);
   }
 
   const int itemRectX = geometry.itemRectX;

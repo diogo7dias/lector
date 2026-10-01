@@ -86,12 +86,9 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     return pages.back().items;
   };
 
-  // Appends a group: its label, then its rows. A group whose rows all dropped out
-  // (a conditional row that does not apply to this book) contributes no label, so a
-  // label on screen always has something under it.
-  const auto group = [](std::vector<MenuItem>& items, const StrId heading, std::vector<MenuItem> members) {
-    if (members.empty()) return;
-    items.push_back(MenuItem::Subheader(heading));
+  // Appends a group of rows. Groups have no labels on screen; they only keep related
+  // rows together in the code.
+  const auto group = [](std::vector<MenuItem>& items, std::vector<MenuItem> members) {
     for (auto& member : members) items.push_back(member);
   };
 
@@ -131,7 +128,7 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     if (paragraphNumbering != CrossPointSettings::PARA_NUM_OFF) {
       position.push_back({MenuAction::GO_TO_PARAGRAPH, StrId::STR_GO_TO_PARAGRAPH});
     }
-    group(items, StrId::STR_GRP_POSITION, std::move(position));
+    group(items, std::move(position));
 
     std::vector<MenuItem> marks;
     if (hasBookmarks) {
@@ -141,17 +138,16 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     if (hasFootnotes) {
       marks.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
     }
-    group(items, StrId::STR_GRP_MARKS, std::move(marks));
+    group(items, std::move(marks));
   }
 
   // --- This Book: what the book says about itself, and what you take out of it ---
   {
     auto& items = page(Tab::ThisBook, StrId::STR_SEC_THIS_BOOK);
-    group(items, StrId::STR_GRP_READ,
-          {{MenuAction::DICTIONARY, StrId::STR_LOOKUP},
-           // Recall sits next to the lookup it records, because that is where a reader
-           // goes looking for a word they have already met.
-           {MenuAction::DICTIONARY_HISTORY, StrId::STR_LOOKUP_HISTORY}});
+    group(items, {{MenuAction::DICTIONARY, StrId::STR_LOOKUP},
+                  // Recall sits next to the lookup it records, because that is where a reader
+                  // goes looking for a word they have already met.
+                  {MenuAction::DICTIONARY_HISTORY, StrId::STR_LOOKUP_HISTORY}});
 
     std::vector<MenuItem> quotes{{MenuAction::GRAB_QUOTE, StrId::STR_GRAB_QUOTE}};
     // Reading the quotes back only makes sense once this book has a sidecar to read;
@@ -159,15 +155,14 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     if (hasQuotes) {
       quotes.push_back({MenuAction::VIEW_QUOTES, StrId::STR_VIEW_QUOTES});
     }
-    group(items, StrId::STR_GRP_QUOTES, std::move(quotes));
+    group(items, std::move(quotes));
 
     // Undoing the open belongs with the book itself, not with the device tools, and both
     // rows sit last because they are the ones that leave the book. Deleting is the harder
     // version of removing: removing only unfiles the book, this erases the file. It asks
     // for confirmation before doing anything.
-    group(items, StrId::STR_GRP_REMOVE,
-          {{MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK},
-           {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}});
+    group(items, {{MenuAction::REMOVE_FROM_RECENTS, StrId::STR_REMOVE_THIS_BOOK},
+                  {MenuAction::DELETE_BOOK, StrId::STR_DELETE_BOOK}});
   }
 
   // --- Sleep Screen: triage for the wallpaper the lock screen just showed -------
@@ -194,13 +189,12 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
   // --- Device: everything that is not about this book ---------------------------
   {
     auto& items = page(Tab::Device, StrId::STR_SEC_DEVICE);
-    group(items, StrId::STR_GRP_TOOLS,
-          {{MenuAction::NEARBY_SYNC, StrId::STR_NEARBY_SYNC},
-           {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
-           {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
-           {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
-           {MenuAction::NEARBY_SEND_BOOK, StrId::STR_NEARBY_SEND_FILE}});
-    group(items, StrId::STR_GRP_STORAGE, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
+    group(items, {{MenuAction::NEARBY_SYNC, StrId::STR_NEARBY_SYNC},
+                  {MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON},
+                  {MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR},
+                  {MenuAction::SYNC, StrId::STR_SYNC_PROGRESS},
+                  {MenuAction::NEARBY_SEND_BOOK, StrId::STR_NEARBY_SEND_FILE}});
+    group(items, {{MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE}});
   }
 
   return pages;
@@ -226,7 +220,6 @@ void EpubReaderMenuActivity::updateRows() {
     rows[i].label = I18N.get(items[i].labelId);
     rows[i].value = rowValue(static_cast<int>(i));
     rows[i].isHeader = items[i].isHeader;
-    rows[i].isSubheader = items[i].isSubheader;
   }
 }
 
@@ -362,35 +355,21 @@ bool EpubReaderMenuActivity::handleButtons() {
   return false;
 }
 
-int EpubReaderMenuActivity::pastGroupLabels(int visible, const int step) const {
-  const int count = listCount();
-  for (int tries = 0; tries < count; ++tries) {
-    const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visible);
-    if (index < 0 || !rows[index].isSubheader) break;
-    visible = (visible + step + count) % count;
-  }
-  return visible;
-}
-
 void EpubReaderMenuActivity::navigateButtons() {
-  buttonNavigator.onNextStep(
-      [this] { focusRow(pastGroupLabels(ButtonNavigator::nextIndex(nav.selected, listCount()), 1)); });
-  buttonNavigator.onPreviousStep(
-      [this] { focusRow(pastGroupLabels(ButtonNavigator::previousIndex(nav.selected, listCount()), -1)); });
+  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount())); });
+  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount())); });
   // A hold ramps through rows and stops at the ends, like every other list.
   buttonNavigator.onNextContinuous([this] {
-    focusRow(pastGroupLabels(
-        ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())), 1));
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())));
   });
   buttonNavigator.onPreviousContinuous([this] {
-    focusRow(pastGroupLabels(
-        ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())), -1));
+    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())));
   });
 }
 
 void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visibleIndex);
-  if (index < 0 || items[index].isSubheader) return;
+  if (index < 0) return;
   app.clearTapFlash();
   if (items[index].isHeader) {
     focusRow(visibleIndex);
@@ -524,7 +503,6 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rows.size());
   props.sections = &sections;
   props.action = ACTION_ROW;
-  props.subheaderText = screen.theme().smallText;
   syncListViewport(screen, props);
   screen.list(props);
 }

@@ -233,31 +233,11 @@ TEST(CollapsibleSections, PlusOnEveryClosedHeadingMinusOnTheOpenOne) {
   EXPECT_EQ(view.target.labels[0], "First");  // open: no count before the label
 }
 
-TEST(CollapsibleSections, GroupLabelsShowWithTheirTabButAreNotCountedOrTappable) {
-  const ListItem group = [] {
-    ListItem item;
-    item.label = "GROUP";
-    item.isSubheader = true;
-    return item;
-  }();
-  const std::array<ListItem, 4> items = {header("Tab"), group, ListItem{"Row"}, header("Next")};
+TEST(CollapsibleSections, CountIsTheRowsUpToTheNextHeading) {
   ListSections sections;
-  EXPECT_EQ(sections.rowsUnder(items.data(), items.size(), 0), 1);
-  EXPECT_EQ(visible(sections, items.data(), items.size()), (std::vector<int>{0, 3}));
-  sections.focus(items.data(), items.size(), 0);
-  EXPECT_EQ(visible(sections, items.data(), items.size()), (std::vector<int>{0, 1, 2, 3}));
-
-  RenderMenu view;
-  view.props.items = items.data();
-  view.props.count = items.size();
-  view.sections = sections;
-  view.nav.syncToProps(view.device.screen(), 40, 0, 4, view.props);
-  Frame<16> frame(view.target, view.device, view.input, view.hits);
-  list(frame, view.device.screen(), view.props);
-  EXPECT_EQ(view.hits.count(), 3u);  // Tab, Row, Next: the label takes no touch
-  EXPECT_NE(std::find_if(view.target.labels.begin(), view.target.labels.end(),
-                         [](const std::string& l) { return l == "GROUP"; }),
-            view.target.labels.end());
+  EXPECT_EQ(sections.rowsUnder(menu.data(), menu.size(), 0), 2);
+  EXPECT_EQ(sections.rowsUnder(menu.data(), menu.size(), 3), 1);
+  EXPECT_EQ(sections.rowsUnder(menu.data(), menu.size(), 5), 0);
 }
 
 TEST(CollapsibleSections, DefaultOffKeepsLegacyHeadersNonInteractiveAndUnadorned) {

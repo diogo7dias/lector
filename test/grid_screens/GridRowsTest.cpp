@@ -99,13 +99,21 @@ void swipe(Screen& screen, MappedInputManager& input, MappedInputManager::SwipeD
 
 void expectOutlined(const Grid& grid, int index) {
   const auto& target = grid.uiTarget;
-  ASSERT_EQ(target.fills.size(), 3u);
   EXPECT_EQ(target.fills[index].paint.kind, fui::PaintKind::Solid);
   EXPECT_EQ(target.fills[index].paint.color, fui::Color::White) << "armed row must never carry the selected fill";
-  ASSERT_EQ(target.strokes.size(), 1u);
-  EXPECT_EQ(target.strokes[0].rect.y, target.fills[index].rect.y);
-  EXPECT_EQ(target.strokes[0].width, 1);
-  EXPECT_EQ(target.strokes[0].paint.color, fui::Color::Black);
+  EXPECT_TRUE(target.strokes.empty());
+  // Dashed 2px lines above and below the armed row: short black fills right after its
+  // background, on its top and bottom edges.
+  const auto row = target.fills[index].rect;
+  int top = 0, bottom = 0;
+  for (size_t i = index + 1; i < target.fills.size(); ++i) {
+    const auto& f = target.fills[i];
+    if (f.paint.color != fui::Color::Black || f.rect.height != 2 || f.rect.width >= row.width) break;
+    top += f.rect.y == row.y;
+    bottom += f.rect.y == row.y + row.height - 2;
+  }
+  EXPECT_GT(top, 1);
+  EXPECT_EQ(top, bottom);
   ASSERT_EQ(target.texts.size(), 6u);
   EXPECT_FALSE(target.texts[index * 2].inverted);
   EXPECT_FALSE(target.texts[index * 2 + 1].inverted);
