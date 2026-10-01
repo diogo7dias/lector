@@ -419,7 +419,7 @@ void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   }
 
   if (selectedAction == MenuAction::TOGGLE_PARAGRAPH_NUM_SIZE) {
-    // Cycle Small / Double in place; applied by the reader on exit, like the row above.
+    // Cycle 35% / 65% / 100% in place; applied by the reader on exit, like the row above.
     selectedParagraphNumberSize = (selectedParagraphNumberSize + 1) % CrossPointSettings::PARAGRAPH_NUMBER_SIZE_COUNT;
     requestUpdate();
     return;

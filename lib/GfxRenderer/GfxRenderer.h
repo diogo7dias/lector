@@ -288,6 +288,10 @@ class GfxRenderer {
   void drawCenteredText(int fontId, int y, const char* text, bool black = true,
                         EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                         BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;
+  // text at percent (1..100) of the font's size, in the font's own shapes: each glyph is
+  // averaged down from its bitmap. Plain runs only (digits, Latin): no BiDi, combining
+  // marks or SD fallback. 100 is drawText(). y is the top of the scaled ascender box.
+  void drawTextScaled(int fontId, int x, int y, const char* text, int percent, bool black = true) const;
   void drawText(int fontId, int x, int y, const char* text, bool black = true,
                 EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                 BidiUtils::BidiBaseDir baseDir = BidiUtils::BidiBaseDir::AUTO) const;

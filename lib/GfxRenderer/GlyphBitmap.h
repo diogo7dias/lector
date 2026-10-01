@@ -152,4 +152,38 @@ inline void draw(const uint8_t* bitmap, int width, int height, bool twoBit, Plan
   }
 }
 
+// Size of a glyph axis drawn at percent (1..100) of its own size; never 0 for a
+// non-empty axis, so a thin stroke always keeps a pixel.
+inline int scaledExtent(int extent, int percent) { return extent > 0 ? std::max(1, (extent * percent + 99) / 100) : 0; }
+
+// Shrink a packed glyph to percent (1..100) of its size by averaging each
+// destination pixel's block of source pixels: the face keeps its own shapes at
+// any ratio, and the edges come out as the 2bpp grays the font itself uses.
+// 1bpp ink counts as black. dst receives dstW x dstH (scaledExtent of each axis)
+// packed 2bpp, MSB first, rows bit-contiguous like the fonts' own bitmaps.
+inline void downscale(const uint8_t* src, int width, int height, bool twoBit, int percent, uint8_t* dst) {
+  const int dstW = scaledExtent(width, percent);
+  const int dstH = scaledExtent(height, percent);
+  std::fill(dst, dst + (dstW * dstH + 3) / 4, uint8_t{0});
+  const auto value = [&](int x, int y) -> int {
+    const int pos = y * width + x;
+    return twoBit ? (src[pos >> 2] >> (6 - (pos & 3) * 2)) & 3 : ((src[pos >> 3] >> (7 - (pos & 7))) & 1) * 3;
+  };
+  for (int dy = 0; dy < dstH; ++dy) {
+    const int y0 = dy * height / dstH;
+    const int y1 = std::max(y0 + 1, (dy + 1) * height / dstH);
+    for (int dx = 0; dx < dstW; ++dx) {
+      const int x0 = dx * width / dstW;
+      const int x1 = std::max(x0 + 1, (dx + 1) * width / dstW);
+      int sum = 0;
+      for (int y = y0; y < y1; ++y)
+        for (int x = x0; x < x1; ++x) sum += value(x, y);
+      const int area = (x1 - x0) * (y1 - y0);
+      const int level = (sum * 2 + area) / (area * 2);  // rounded mean, 0..3
+      const int pos = dy * dstW + dx;
+      dst[pos >> 2] |= static_cast<uint8_t>(level << (6 - (pos & 3) * 2));
+    }
+  }
+}
+
 }  // namespace glyphBitmap

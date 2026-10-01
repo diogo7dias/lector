@@ -224,7 +224,7 @@ TEST(ReaderPrefs, EmptyRejected) {
 
 TEST(ReaderPrefs, ParagraphNumberSizeDefaultsToDouble) {
   const ReaderPrefs p;
-  EXPECT_EQ(1, p.paragraphNumberSize);  // PARA_NUM_SIZE_DOUBLE
+  EXPECT_EQ(1, p.paragraphNumberSize);  // PARA_NUM_SIZE_65
 }
 
 TEST(ReaderPrefs, EachOlderRecordIsAStrictPrefixOfTheCurrentOne) {

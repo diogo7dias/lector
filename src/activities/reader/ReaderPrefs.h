@@ -52,7 +52,7 @@ inline constexpr uint8_t FIRST_LINE_INDENT_PERCENT = 20;  // % of the column wid
 inline constexpr uint8_t FIRST_LINE_INDENT_MODE = 1;      // CrossPointSettings::FIRST_LINE_INDENT_PERCENT
 inline constexpr uint8_t PARAGRAPH_NUMBERING = 1;         // CrossPointSettings::PARA_NUM_CHAPTER
 inline constexpr uint8_t PARAGRAPH_NUMBERING_COUNT = 2;   // CrossPointSettings::PARAGRAPH_NUMBERING_COUNT
-inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
+inline constexpr uint8_t PARAGRAPH_NUMBER_SIZE = 1;       // CrossPointSettings::PARA_NUM_SIZE_65
 // Ranges the render spec clamps to, shared with the settings rows that edit them.
 inline constexpr uint8_t MIN_LINE_SPACING_PERCENT = 35;
 inline constexpr uint8_t MAX_LINE_SPACING_PERCENT = 150;
@@ -126,15 +126,15 @@ struct ReaderPrefs {
   uint8_t firstLineIndentPercent = 0;
   // SD card font family name (empty = built-in fontFamily). Fixed width keeps the struct POD.
   char sdFontFamilyName[32] = "";
-  // Size of the paragraph numbers: 0 = Small (Spleen's native 12px cell, 8px digits),
-  // 1 = Double (that cell at exactly 2x, 16px digits). Per-book in-menu choice like
+  // Size of the paragraph numbers as a share of the reading font: 0 = 35%, 1 = 65%,
+  // 2 = 100% (once Small and Double, hence the order). Per-book in-menu choice like
   // paragraphNumbering, seeded from the global default.
   //
   // APPENDED ON PURPOSE. Every field above it keeps its offset, so a v5-v8 sidecar
   // is exactly this struct up to here and can be read straight into the front of it
   // (see READER_PREFS_V8_SIZE below). Any future field must also go last, for the
   // same reason.
-  uint8_t paragraphNumberSize = 1;  // CrossPointSettings::PARA_NUM_SIZE_DOUBLE
+  uint8_t paragraphNumberSize = 1;  // CrossPointSettings::PARA_NUM_SIZE_65
   // Status bar on/off for this book, seeded from the global SETTINGS.sbEnabled.
   // Turning it off frees the reserved top/bottom bands, which changes the viewport and
   // therefore repaginates this book's cache like any margin change.
