@@ -1,8 +1,10 @@
 #include <components/lists/list.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstring>
+#include <string>
 #include <vector>
 
 using namespace freeink::ui;
@@ -32,7 +34,7 @@ class RecordingTarget : public DrawTarget {
     Color color;
   };
   std::vector<Fill> fills;
-  std::vector<const char*> labels;
+  std::vector<std::string> labels;  // copies: a count label lives on the painter's stack
   Size measureText(FontId, const char* text, TextStyle) const override {
     return {static_cast<int16_t>(std::strlen(text) * 6), 12};
   }
@@ -83,8 +85,10 @@ TEST(CollapsibleSections, EntryIsAllClosedWithCursorOnFirstHeader) {
   EXPECT_EQ(view.sections.expandedHeader, -1);
   EXPECT_EQ(view.nav.selected, 0);
   EXPECT_EQ(visible(view.sections), (std::vector<int>{0, 3, 5}));
-  ASSERT_EQ(view.target.labels.size(), 3u);
-  EXPECT_STREQ(view.target.labels[0], "First");
+  // Each closed heading draws its row count, then its label.
+  ASSERT_EQ(view.target.labels.size(), 6u);
+  EXPECT_EQ(view.target.labels[0], "2");
+  EXPECT_EQ(view.target.labels[1], "First");
 }
 
 TEST(CollapsibleSections, FocusBetweenHeadersOpensOnlyTheDestination) {
@@ -189,7 +193,7 @@ TEST(CollapsibleSections, TapHeaderRoutesVisibleIndexAndOpensSection) {
   EXPECT_EQ(view.sections.expandedHeader, 3);
   ASSERT_EQ(view.hits.count(), 4u);
   EXPECT_EQ(view.hits.data()[2].value, 2);
-  EXPECT_STREQ(view.target.labels[2], "Three");
+  EXPECT_EQ(view.target.labels[3], "Three");  // "2", "First", "Second" (open: no count)
 }
 
 TEST(CollapsibleSections, HeaderFeedbackFinishesFollowWithoutRebuild) {
@@ -201,23 +205,59 @@ TEST(CollapsibleSections, HeaderFeedbackFinishesFollowWithoutRebuild) {
   EXPECT_EQ(view.nav.drawnRows, 3);
 }
 
-TEST(CollapsibleSections, BandStillHugsLabelAndIndicatorShowsClosedVersusOpen) {
+namespace {
+// The plus's vertical stroke: 1px wide, 9px tall at a 12px heading line.
+int verticalStrokes(const RecordingTarget& target) {
+  int strokes = 0;
+  for (const auto& f : target.fills) strokes += f.rect.width == 1 && f.rect.height == 9;
+  return strokes;
+}
+}  // namespace
+
+TEST(CollapsibleSections, SelectedHeadingFillsTheFullWidthInBlack) {
   RenderMenu view;
   view.draw();
-  ASSERT_GE(view.target.fills.size(), 3u);
-  const auto band = view.target.fills[0];
-  EXPECT_EQ(band.color, Color::Black);
-  EXPECT_EQ(band.rect.width, 5 * 6 + 12 + 2 * view.props.headerFillPadX);
-  EXPECT_LT(band.rect.width, view.device.width);
-  // Closed plus has a horizontal and vertical stroke in white.
-  EXPECT_EQ(view.target.fills[1].color, Color::White);
-  EXPECT_EQ(view.target.fills[1].rect.height, 1);
-  EXPECT_EQ(view.target.fills[2].rect.width, 1);
+  ASSERT_FALSE(view.target.fills.empty());
+  EXPECT_EQ(view.target.fills[0].color, Color::Black);
+  EXPECT_EQ(view.target.fills[0].rect.x, 0);
+  EXPECT_EQ(view.target.fills[0].rect.width, view.device.width);
+}
+
+TEST(CollapsibleSections, PlusOnEveryClosedHeadingMinusOnTheOpenOne) {
+  RenderMenu view;
+  view.draw();
+  EXPECT_EQ(verticalStrokes(view.target), 3);
   view.sections.focus(menu.data(), menu.size(), 0);
   view.draw();
-  EXPECT_EQ(view.target.fills[1].rect.height, 1);
-  // Open minus is followed by the first child row's background, not a vertical stroke.
-  EXPECT_GT(view.target.fills[2].rect.width, 1);
+  EXPECT_EQ(verticalStrokes(view.target), 2);
+  EXPECT_EQ(view.target.labels[0], "First");  // open: no count before the label
+}
+
+TEST(CollapsibleSections, GroupLabelsShowWithTheirTabButAreNotCountedOrTappable) {
+  const ListItem group = [] {
+    ListItem item;
+    item.label = "GROUP";
+    item.isSubheader = true;
+    return item;
+  }();
+  const std::array<ListItem, 4> items = {header("Tab"), group, ListItem{"Row"}, header("Next")};
+  ListSections sections;
+  EXPECT_EQ(sections.rowsUnder(items.data(), items.size(), 0), 1);
+  EXPECT_EQ(visible(sections, items.data(), items.size()), (std::vector<int>{0, 3}));
+  sections.focus(items.data(), items.size(), 0);
+  EXPECT_EQ(visible(sections, items.data(), items.size()), (std::vector<int>{0, 1, 2, 3}));
+
+  RenderMenu view;
+  view.props.items = items.data();
+  view.props.count = items.size();
+  view.sections = sections;
+  view.nav.syncToProps(view.device.screen(), 40, 0, 4, view.props);
+  Frame<16> frame(view.target, view.device, view.input, view.hits);
+  list(frame, view.device.screen(), view.props);
+  EXPECT_EQ(view.hits.count(), 3u);  // Tab, Row, Next: the label takes no touch
+  EXPECT_NE(std::find_if(view.target.labels.begin(), view.target.labels.end(),
+                         [](const std::string& l) { return l == "GROUP"; }),
+            view.target.labels.end());
 }
 
 TEST(CollapsibleSections, DefaultOffKeepsLegacyHeadersNonInteractiveAndUnadorned) {
