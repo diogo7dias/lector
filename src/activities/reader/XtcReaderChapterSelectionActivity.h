@@ -37,5 +37,4 @@ class XtcReaderChapterSelectionActivity final : public UiListActivity {
     chrome.subHeader = bookTitle.c_str();
     return chrome;
   }
-  bool contentsLook() const override { return true; }
 };

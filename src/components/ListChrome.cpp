@@ -279,3 +279,8 @@ void drawCentredTitlePage(const GfxRenderer& renderer, const char* title, const 
   title_page::layout(renderer, page, true,
                      static_cast<float>((renderer.getScreenHeight() - height) / 2) + title_page::TOP);
 }
+
+list_chrome::Rect titleLineBox(const GfxRenderer& renderer) {
+  return list_chrome::Rect{0, static_cast<int>(title_page::TOP), renderer.getScreenWidth(),
+                           static_cast<int>(std::lround(title_page::TITLE.box))};
+}

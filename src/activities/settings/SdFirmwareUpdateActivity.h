@@ -40,7 +40,6 @@ class SdFirmwareUpdateActivity : public UiStatusActivity {
 
  protected:
   StatusView statusView() const override;
-  bool contentsLook() const override { return true; }
   void onBackButton() override;
   void onConfirmButton() override;
 

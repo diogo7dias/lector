@@ -37,7 +37,6 @@ class TextSettingsActivity final : public UiGridActivity {
   const char* cellValue(int index) const override;
   void activateCell(int index) override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
   bool handleCustomInput() override;
   void onBackButton() override;
   bool drawOverlay() override;

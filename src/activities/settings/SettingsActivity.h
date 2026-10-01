@@ -70,7 +70,6 @@ class SettingsActivity final : public UiGridActivity {
   const char* cellValue(int index) const override;
   void activateCell(int index) override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
   const char* cellHeading(int index) const override;
   bool handleCustomInput() override;
   void onBackButton() override;

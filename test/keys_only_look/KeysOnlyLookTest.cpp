@@ -92,20 +92,18 @@ TEST(FlatLook, TheSettingValueTakesTheSameStyleAsItsName) {
 }
 
 TEST(FlatLook, EveryListScreenGetsTheSharedRowStylesWithoutAskingForIt) {
-  // Applied in the shared viewport sync, so a new list screen cannot forget them.
+  // Applied in the shared viewport sync, so a new list screen cannot forget them: the
+  // wrapping rows, then the contents faces over them.
   const std::string source = readSource(LIST_ACTIVITY_SOURCE);
   const std::size_t sync = source.find("void UiListActivity::syncListViewport");
   ASSERT_NE(sync, std::string::npos);
-  for (const char* call :
-       {"applyKeysOnlyValueStyle(props, screen.theme())", "applyWrappingRowStyle(props, screen.theme())",
-        "applyInvertedSectionHeaderStyle(props, screen.theme())"}) {
-    const std::size_t apply = source.find(call);
-    EXPECT_NE(apply, std::string::npos) << call;
-    EXPECT_GT(apply, sync) << call << " must be applied inside syncListViewport, which every list calls";
-  }
+  const std::size_t wrap = source.find("applyWrappingRowStyle(props, screen.theme())");
+  const std::size_t faces = source.find("contents_look::applyListProps(props)");
+  EXPECT_GT(wrap, sync);
+  EXPECT_GT(faces, wrap) << "the contents faces must land after the wrapping style, or it overwrites them";
   const std::string status = readSource(STATUS_ACTIVITY_SOURCE);
   EXPECT_TRUE(contains(status, "applyWrappingRowStyle(props, theme)"));
-  EXPECT_TRUE(contains(status, "applyInvertedSectionHeaderStyle(props, theme)"));
+  EXPECT_TRUE(contains(status, "contents_look::applyListProps(props)"));
 }
 
 // --- labels wrap, never truncate --------------------------------------------

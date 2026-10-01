@@ -23,7 +23,7 @@ void UiListActivity::onEnter() {
   // fonts, so a screen-specific body font has to be bound first.
   const int fontId = listFontId();
   if (fontId != 0) uiTarget.setFont(fui::GfxRendererTarget::FONT_BODY, fontId);
-  if (contentsLook()) contents_look::bindFonts(uiTarget);
+  contents_look::bindFonts(uiTarget);
   activeNav().reset();
   resetUi();
   app.on(ACTION_ROW, &UiListActivity::rowActionTrampoline, this);
@@ -143,38 +143,17 @@ void UiListActivity::navigateButtons() {
 }
 
 void UiListActivity::syncListViewport(UiScreen& screen, fui::ListProps& props, const bool hasSubtitle) {
-  int16_t rowHeight = screen.theme().rowHeight;
-  // Setting name and value at the same size and weight on the keys-only boards.
-  // Done here rather than in each screen: every list goes through this call, so
-  // one place cannot be forgotten by a new one.
-  applyKeysOnlyValueStyle(props, screen.theme());
-  if (!mappedInput.hasTouch()) {
-    // Non-touch hardware (X3/X4) keeps the original, denser per-theme row
-    // height instead of FreeInkUI's touch-target-sized default, so lists fit
-    // as many rows per screen as they did before the FreeInkUI migration.
-    // props.rowHeight must be set explicitly: screen.list() otherwise falls
-    // back to the (touch-friendly) theme token, not this local value.
-    // A label that must wrap (labelText.maxLines > 1) grows only its own row:
-    // list() sizes wrapped items per-row, so the dense height stays.
-    const auto& metrics = UITheme::getInstance().getMetrics();
-    rowHeight = static_cast<int16_t>(hasSubtitle ? metrics.listWithSubtitleRowHeight : metrics.listRowHeight);
-    props.rowHeight = rowHeight;
-  }
+  // Labels and subtitles wrap rather than truncate; the contents props then set the
+  // faces. Fixed geometry on every board: the painter ignores the theme's row tokens.
   applyWrappingRowStyle(props, screen.theme());
-  applyInvertedSectionHeaderStyle(props, screen.theme());
-  int16_t rowGap = screen.theme().listRowGap;
-  if (contentsLook()) {
-    // Fixed geometry on every board: the painter ignores the theme's row tokens.
-    rowHeight = contents_look::rowHeight(hasSubtitle);
-    rowGap = 0;
-    props.rowHeight = rowHeight;
-    contents_look::applyListProps(props);
-  }
+  const int16_t rowHeight = contents_look::rowHeight(hasSubtitle);
+  props.rowHeight = rowHeight;
+  contents_look::applyListProps(props);
   // Remembered for the chevrons render() draws once the list has reported what it
   // actually laid out.
   const fui::Rect body = screen.body();
   listBand = Rect{body.x, body.y, body.width, body.height};
-  activeNav().syncToProps(body, rowHeight, rowGap, listCount(), props);
+  activeNav().syncToProps(body, rowHeight, 0, listCount(), props);
 }
 
 void UiListActivity::drawScrollArrows() {
@@ -191,7 +170,7 @@ void UiListActivity::drawScrollArrows() {
 
 ListChrome UiListActivity::shownChrome() const {
   ListChrome shown = chrome();
-  if (contentsLook()) toContentsLook(shown, mappedInput.hasTouch());
+  toContentsLook(shown, mappedInput.hasTouch());
   return shown;
 }
 

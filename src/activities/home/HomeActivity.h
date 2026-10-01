@@ -78,6 +78,5 @@ class HomeActivity final : public UiListActivity {
   bool isHeaderRow(int index) const override { return index == libraryHeadingRow() || (bookCount() > 0 && index == 0); }
   void onBackButton() override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
   HalDisplay::RefreshMode refreshMode() override;
 };

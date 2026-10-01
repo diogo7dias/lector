@@ -13,10 +13,9 @@
 #include "components/themes/BaseTheme.h"
 #include "util/ButtonNavigator.h"
 
-// Base for settings rows (X4 Pro/keys-only) and grids (other touch boards). UiAppHost owns the app-hosting
-// protocol; this base layers the grid protocol on top: the selection and scroll
-// model over settings_grid, the cell painting (a name over its value, one
-// truncation rule), the touch dispatch, and the chrome. A numeric cell opens the
+// Base for the settings screens: one column of name-and-value rows in the contents look,
+// under numbered headings. UiAppHost owns the app-hosting protocol; this base layers the
+// selection and scroll model, the touch dispatch, and the chrome on top. A numeric cell opens the
 // shared slider dialog (IntervalSelectionActivity) rather than editing in place.
 //
 // Both grid screens used to do all of that themselves, including a hand-rolled
@@ -46,10 +45,7 @@ class UiGridActivity : public Activity, protected UiAppHost {
   virtual void activateCell(int index) = 0;
   // What the base paints around the grid. Default: the title from headerTitle().
   virtual ListChrome chrome() const;
-  // The contents look: one column of rows with leaders, numbered headings over their
-  // groups, the title page, no hint band on keys-only boards. Screens opt in one at a time.
-  virtual bool contentsLook() const { return false; }
-  // In the contents look, a heading drawn above this cell (nullptr for none).
+  // A numbered heading drawn above this cell (nullptr for none).
   virtual const char* cellHeading(int index) const { return nullptr; }
   // chrome() as it is painted.
   ListChrome shownChrome() const;
@@ -69,19 +65,14 @@ class UiGridActivity : public Activity, protected UiAppHost {
   // The band the grid itself gets: the body minus whatever reservedHeight asked
   // for. Shared by the paint and the layout so the two cannot disagree.
   Rect gridPane() const;
-  settings_grid::Shape gridShape() const;
-  settings_grid::Layout gridLayout() const;
-  // X4 Pro and keys-only boards: one column of rows as tall as their wrapped text, so the
-  // layout is a window over variable heights (WrappedListWindow) rather than a
-  // grid of equal cells. rowHeightFor measures one row; keysOnlyWindow says
-  // which rows the pane shows from scrollRow_ with the selection kept visible.
-  bool usesWrappedRows() const;
+  // One column of contents rows on every board, a window over their heights
+  // (WrappedListWindow): rowHeightFor measures one row; keysOnlyWindow says which rows
+  // the pane shows from scrollRow_ with the selection kept visible.
   int rowHeightFor(int index) const;
   wrapped_list::Window keysOnlyWindow() const;
   int selected() const { return selected_; }
   void setSelected(int index);
-  // Up and Down move a whole grid row so the column is kept; Left and Right move
-  // one cell.
+  // Up and Down move by rows; Left and Right by one cell, which in one column is a row.
   void moveSelection(int deltaRows, int deltaCells);
   // Puts the cursor back inside the grid after a rebuild changed its size.
   void clampSelection();
@@ -90,11 +81,6 @@ class UiGridActivity : public Activity, protected UiAppHost {
 
  private:
   void buildScreen(UiScreen& screen);
-  void buildCell(UiScreen& screen, int index, const settings_grid::Rect& rect);
-  void buildRow(UiScreen& screen, int index, const freeink::ui::Rect& box);
-  // The two-column touch grid's cells share one height: the tallest any cell
-  // needs for its wrapped name over its wrapped value, so none is cut.
-  int tallestCellHeight() const;
   static void screenTrampoline(UiScreen& screen, void* user);
   static void cellTrampoline(const freeink::ui::ActionEvent& event, void* user);
   // The contents look's rows, headings included, rebuilt each build; labels borrow

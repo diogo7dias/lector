@@ -144,7 +144,6 @@ class FileBrowserActivity final : public UiListActivity {
   bool handleCustomInput() override;
   bool handleButtons() override;
   ListChrome chrome() const override;
-  bool contentsLook() const override { return true; }
   HalDisplay::RefreshMode refreshMode() override;
   bool drawOverlay() override;
 };
