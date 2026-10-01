@@ -86,12 +86,12 @@ std::vector<EpubReaderMenuActivity::TabPage> EpubReaderMenuActivity::buildTabs(c
     return pages.back().items;
   };
 
-  // Appends a section: the heading, then its rows. A group whose rows all dropped out
-  // (a conditional row that does not apply to this book) contributes no heading, so a
-  // heading on screen always has something under it.
+  // Appends a group: its label, then its rows. A group whose rows all dropped out
+  // (a conditional row that does not apply to this book) contributes no label, so a
+  // label on screen always has something under it.
   const auto group = [](std::vector<MenuItem>& items, const StrId heading, std::vector<MenuItem> members) {
     if (members.empty()) return;
-    items.push_back(MenuItem::Header(heading));
+    items.push_back(MenuItem::Subheader(heading));
     for (auto& member : members) items.push_back(member);
   };
 
@@ -226,6 +226,7 @@ void EpubReaderMenuActivity::updateRows() {
     rows[i].label = I18N.get(items[i].labelId);
     rows[i].value = rowValue(static_cast<int>(i));
     rows[i].isHeader = items[i].isHeader;
+    rows[i].isSubheader = items[i].isSubheader;
   }
 }
 
@@ -361,21 +362,35 @@ bool EpubReaderMenuActivity::handleButtons() {
   return false;
 }
 
+int EpubReaderMenuActivity::pastGroupLabels(int visible, const int step) const {
+  const int count = listCount();
+  for (int tries = 0; tries < count; ++tries) {
+    const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visible);
+    if (index < 0 || !rows[index].isSubheader) break;
+    visible = (visible + step + count) % count;
+  }
+  return visible;
+}
+
 void EpubReaderMenuActivity::navigateButtons() {
-  buttonNavigator.onNextStep([this] { focusRow(ButtonNavigator::nextIndex(nav.selected, listCount())); });
-  buttonNavigator.onPreviousStep([this] { focusRow(ButtonNavigator::previousIndex(nav.selected, listCount())); });
+  buttonNavigator.onNextStep(
+      [this] { focusRow(pastGroupLabels(ButtonNavigator::nextIndex(nav.selected, listCount()), 1)); });
+  buttonNavigator.onPreviousStep(
+      [this] { focusRow(pastGroupLabels(ButtonNavigator::previousIndex(nav.selected, listCount()), -1)); });
   // A hold ramps through rows and stops at the ends, like every other list.
   buttonNavigator.onNextContinuous([this] {
-    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())));
+    focusRow(pastGroupLabels(
+        ButtonNavigator::heldIndex(nav.selected, listCount(), holdRepeatStep(buttonNavigator.repeats())), 1));
   });
   buttonNavigator.onPreviousContinuous([this] {
-    focusRow(ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())));
+    focusRow(pastGroupLabels(
+        ButtonNavigator::heldIndex(nav.selected, listCount(), -holdRepeatStep(buttonNavigator.repeats())), -1));
   });
 }
 
 void EpubReaderMenuActivity::activateIndex(const int visibleIndex) {
   const int index = sections.itemIndex(rows.data(), static_cast<int>(rows.size()), visibleIndex);
-  if (index < 0) return;
+  if (index < 0 || items[index].isSubheader) return;
   app.clearTapFlash();
   if (items[index].isHeader) {
     focusRow(visibleIndex);
@@ -509,6 +524,7 @@ void EpubReaderMenuActivity::buildScreen(UiScreen& screen) {
   props.count = static_cast<uint16_t>(rows.size());
   props.sections = &sections;
   props.action = ACTION_ROW;
+  props.subheaderText = screen.theme().smallText;
   syncListViewport(screen, props);
   screen.list(props);
 }
