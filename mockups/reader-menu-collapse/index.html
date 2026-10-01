@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lector menu plus minus</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0e0d0c; --line: #2b2926; --fg: #e6e1d5; --dim: #8d877b;
+    --cyan: #5fd4e0; --amber: #e3a948; --green: #7fc87a;
+    --paper: #f3f1ea; --ink: #111;
+    --s: .6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.5 "JetBrains Mono", ui-monospace, monospace; padding: 28px 16px 64px; }
+  header, footer, main { max-width: 1100px; margin: 0 auto; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 18px; margin-bottom: 30px; }
+  .kicker { font-size: 10px; letter-spacing: .3em; text-transform: uppercase; color: var(--cyan); }
+  h1 { font-size: 22px; font-weight: 600; margin: 6px 0 10px; }
+  h1 .cursor { display: inline-block; width: .55em; height: 1em; background: var(--cyan); vertical-align: -2px; animation: blink 1s steps(1) infinite; }
+  header p { margin: 4px 0; color: var(--dim); max-width: 820px; }
+  header p b, .cap b { color: var(--fg); font-weight: 600; }
+
+  .opt { display: grid; grid-template-columns: auto auto 1fr; gap: 18px 22px; align-items: start; padding: 26px 0; border-bottom: 1px solid var(--line);
+         opacity: 0; transform: translateY(22px); animation: rise .7s cubic-bezier(.2,.8,.2,1) forwards; }
+  .opt:nth-child(2){animation-delay:.08s}.opt:nth-child(3){animation-delay:.16s}.opt:nth-child(4){animation-delay:.24s}.opt:nth-child(5){animation-delay:.32s}.opt:nth-child(6){animation-delay:.40s}
+  @media (max-width: 760px) { .opt { grid-template-columns: 1fr 1fr; } .cap { grid-column: 1 / -1; } :root { --s: .38; } }
+
+  .dev { width: calc(480px * var(--s) + 12px); height: calc(800px * var(--s) + 12px); padding: 6px; background: #1c1b19; border: 1px solid var(--line); border-radius: 10px; position: relative; cursor: pointer; }
+  .dev::after { content: ""; position: absolute; inset: 6px; pointer-events: none; background: linear-gradient(180deg, transparent 0 46%, rgba(95,212,224,.55) 50%, transparent 54% 100%); background-size: 100% 220%; background-position: 0 120%; opacity: 0; }
+  .dev.flash::after { animation: sweep .8s ease-in-out; }
+  .dev.flash .scr { animation: eink .8s steps(1); }
+  .dev .lbl { position: absolute; bottom: -20px; left: 0; right: 0; text-align: center; font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+  .num { position: absolute; top: -12px; left: -10px; z-index: 3; width: 34px; height: 34px; border-radius: 50%; background: var(--bg); border: 1px solid var(--cyan); color: var(--cyan); display: grid; place-items: center; font-weight: 600; font-size: 15px; }
+  .base .num { border-color: var(--amber); color: var(--amber); }
+  .cap h2 { font-size: 15px; margin: 0 0 4px; font-weight: 600; }
+  .cap h2 i { font-style: normal; color: var(--cyan); margin-right: 6px; }
+  .base .cap h2 i { color: var(--amber); }
+  .cap p { margin: 0 0 8px; color: var(--dim); }
+  .cap ul { margin: 0; padding: 0; list-style: none; font-size: 12px; }
+  .cap li { padding: 4px 0 4px 14px; position: relative; border-top: 1px solid var(--line); }
+  .cap li::before { content: "›"; position: absolute; left: 2px; color: var(--cyan); }
+  .cap li.warn::before { content: "!"; color: var(--amber); }
+  .cap li.good::before { content: "+"; color: var(--green); }
+  footer { margin-top: 36px; color: var(--dim); }
+  footer b { color: var(--fg); }
+
+  @keyframes rise { to { opacity: 1; transform: none; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes eink { 0% { filter: invert(1); } 25% { filter: brightness(0); } 50% { filter: brightness(4); } 75% { filter: invert(1); } 100% { filter: none; } }
+  @keyframes sweep { 0% { opacity: 1; background-position: 0 120%; } 100% { opacity: 1; background-position: 0 -20%; } }
+
+  /* ===== screen: native 480 x 800, scaled ===== */
+  .scr { width: 480px; height: 800px; transform: scale(var(--s)); transform-origin: 0 0; background: var(--paper); color: var(--ink); overflow: hidden; position: relative;
+         font: 400 20px/1.25 "DejaVu Sans", Verdana, sans-serif; display: flex; flex-direction: column; }
+  .bk { text-align: center; padding: 14px 20px 12px; font-size: 20px; line-height: 1.3; }
+  .rw { display: flex; justify-content: space-between; align-items: center; height: 46px; padding: 0 20px; flex: none; }
+  .rw.sel { background: var(--ink); color: var(--paper); }
+  .body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+  .hints { margin-top: auto; flex: none; display: flex; gap: 8px; padding: 8px 12px 10px; }
+  .hints span { flex: 1; border: 2px solid var(--ink); border-radius: 6px; text-align: center; font-size: 15px; padding: 5px 0; }
+  .sub { height: 30px; flex: none; display: flex; align-items: flex-end; padding: 0 20px 4px; font-size: 13px; letter-spacing: .18em; }
+  .h { flex: none; display: flex; align-items: center; height: 46px; position: relative; }
+  .h .lab { flex: none; }
+  .h .meta { margin-left: auto; font-size: 16px; }
+  /* geometric sign, like list.h draws it: one bar, plus a second bar when closed */
+  .sg { position: relative; width: var(--sz); height: var(--sz); flex: none; }
+  .sg::before, .sg::after { content: ""; position: absolute; background: currentColor; }
+  .sg::before { left: 0; right: 0; top: calc(50% - var(--w) / 2); height: var(--w); }
+  .sg::after { top: 0; bottom: 0; left: calc(50% - var(--w) / 2); width: var(--w); }
+  .open .sg::after { display: none; }
+
+  /* 0 today: list.h header branch + applyInvertedSectionHeaderStyle */
+  .o0 .h { align-self: flex-start; margin-left: 12px; padding: 0 8px; background: var(--ink); color: var(--paper); --sz: 12px; --w: 1px; }
+  .o0 .h .sg { margin-right: 12px; }
+  .o0 .h.sel { outline: 2px dashed var(--ink); outline-offset: 3px; }
+  .o0 .more { text-align: center; font-size: 26px; line-height: 1; }
+
+  /* 1 sign at the edge */
+  .o1 .h { padding: 0 20px; border-top: 2px solid var(--ink); --sz: 18px; --w: 3px; }
+  .o1 .h .sg { outline: 2px solid currentColor; outline-offset: 5px; }
+  .o1 .h .meta { margin-right: 22px; }
+  .o1 .h.sel { background: var(--ink); color: var(--paper); }
+  .o1 .h.open { border-bottom: 2px solid var(--ink); }
+  .o1 .h.last { border-bottom: 2px solid var(--ink); }
+
+  /* 2 today's band, as a two-part tab */
+  .o2 .h { margin: 3px 0 3px 12px; height: 40px; --sz: 16px; --w: 3px; }
+  .o2 .h .key { height: 100%; width: 40px; display: grid; place-items: center; background: var(--ink); color: var(--paper); }
+  .o2 .h .lab { height: 100%; display: flex; align-items: center; padding: 0 12px; border: 2px solid var(--ink); border-left: 0; }
+  .o2 .h.open .lab, .o2 .h.sel .lab { background: var(--ink); color: var(--paper); border-left: 2px solid var(--paper); }
+  .o2 .h.sel { width: calc(100% - 24px); }
+  .o2 .h.sel .lab { flex: 1; }
+
+  /* 3 triangles + binding rule */
+  .o3 .h { padding: 0 20px; font-weight: 700; }
+  .o3 .h .tri { width: 0; height: 0; margin-right: 14px; border: 8px solid transparent; border-left: 12px solid currentColor; border-right: 0; transform: translateY(0); }
+  .o3 .h.open .tri { border: 8px solid transparent; border-top: 12px solid currentColor; border-bottom: 0; margin-top: 4px; }
+  .o3 .h.sel { background: var(--ink); color: var(--paper); }
+  .o3 .h .meta { font-weight: 400; }
+  .o3 .in { margin-left: 26px; border-left: 3px solid var(--ink); }
+  .o3 .in .rw { padding-left: 16px; }
+  .o3 .in .sub { padding-left: 16px; }
+
+  /* 4 cards */
+  .o4 .h { margin: 4px 12px; height: 42px; padding: 0 14px; border: 2px solid var(--ink); border-radius: 8px; --sz: 14px; --w: 3px; }
+  .o4 .h .meta { display: flex; align-items: center; gap: 8px; }
+  .o4 .h.sel { background: var(--ink); color: var(--paper); }
+  .o4 .card { margin: 4px 12px; border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; flex: none; }
+  .o4 .card .h { margin: 0; border: 0; border-radius: 0; background: var(--ink); color: var(--paper); }
+  .o4 .card .rw { padding: 0 14px; height: 44px; }
+
+  /* 5 contents preview */
+  .o5 .h { height: auto; min-height: 46px; padding: 8px 20px; align-items: flex-start; --sz: 12px; --w: 3px; }
+  .o5 .h .ring { width: 28px; height: 28px; border-radius: 50%; border: 2px solid currentColor; display: grid; place-items: center; margin-right: 14px; flex: none; }
+  .o5 .h.open .ring { background: currentColor; }
+  .o5 .h.open .ring .sg { color: var(--paper); }
+  .o5 .h.sel.open .ring .sg { color: var(--ink); }
+  .o5 .h .txt { display: flex; flex-direction: column; line-height: 1.4; }
+  .o5 .h .pv { font-size: 15px; font-style: italic; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 380px; }
+  .o5 .h.sel { background: var(--ink); color: var(--paper); }
+  .o5 .rw { padding-left: 62px; }
+  .o5 .sub { padding-left: 62px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="kicker">lector · workshop · in-book menu</div>
+  <h1>Plus and minus for the in-book menu<span class="cursor"></span></h1>
+  <p>Same look as 0.35.0 (UI font, black selection, hint buttons). Only the open and close control changes. Each option shows <b>everything closed</b> next to <b>Navigate open</b>, drawn at the real 480×800. Tap a screen to fire a fake e-ink refresh.</p>
+  <p><b>1 to 5</b> also fix one thing: only the five tabs open and close. POSITION, MARKS and the other groups become small labels inside the tab. Today they are sections of their own, so opening <b>Navigate</b> shows nothing (it owns no rows).</p>
+</header>
+
+<main id="opts"></main>
+
+<footer>Pick by number, mix freely (e.g. "4, with 5's preview line"). Sizes are in device pixels.</footer>
+
+<script>
+const BOOK = '<div class="bk"><div>Middlemarch</div><div>by George Eliot</div><div>Book II, Chapter 19</div><div>Pages: 12/31&nbsp;&nbsp;|&nbsp;&nbsp;Book: 23%</div></div>';
+const HINTS = '<div class="hints"><span>« Back</span><span>Select</span><span>Up</span><span>Down</span></div>';
+const TABS = [
+  { n: 'Look', c: 9, pv: 'Reader Settings · Status Bar · Steal Look · Themes' },
+  { n: 'Navigate', c: 7, pv: 'Chapters · Go to % · Return · Bookmarks' },
+  { n: 'Book', c: 6, pv: 'Lookup · Grab Quote · View Quotes · Remove' },
+  { n: 'Sleep Screen', c: 4, pv: 'Favorite · Pause · Hold · Delete Wallpaper' },
+  { n: 'Device', c: 6, pv: 'Nearby Sync · Screenshot · QR · Delete Cache' },
+];
+const NAV = [['POSITION', ['Select Chapter', 'Go to %', 'Return', 'Go to Paragraph']], ['MARKS', ['Bookmarks', 'Toggle Bookmark', 'Footnotes']]];
+const SEL_ROW = 'Go to %';
+
+function sign() { return '<span class="sg"></span>'; }
+function head(o, t, open, sel, last) {
+  const cls = 'h' + (open ? ' open' : '') + (sel ? ' sel' : '') + (last ? ' last' : '');
+  const count = open ? '' : t.c;
+  switch (o) {
+    case 1: return `<div class="${cls}"><span class="lab">${t.n}</span><span class="meta">${count}</span>${sign()}</div>`;
+    case 2: return `<div class="${cls}"><span class="key">${sign()}</span><span class="lab">${t.n}</span></div>`;
+    case 3: return `<div class="${cls}"><span class="tri"></span><span class="lab">${t.n}</span><span class="meta">${count}</span></div>`;
+    case 4: return `<div class="${cls}"><span class="lab">${t.n}</span><span class="meta">${open ? '' : t.c}${sign()}</span></div>`;
+    case 5: return `<div class="${cls}"><span class="ring">${sign()}</span><span class="txt"><span class="lab">${t.n}</span>${open ? '' : `<span class="pv">${t.pv}</span>`}</span></div>`;
+  }
+}
+function rows() {
+  return NAV.map(([g, items]) => `<div class="sub">${g}</div>` + items.map(r => `<div class="rw${r === SEL_ROW ? ' sel' : ''}">${r}</div>`).join('')).join('');
+}
+function screen(o, openNav) {
+  let body = '';
+  TABS.forEach((t, i) => {
+    const open = openNav && t.n === 'Navigate';
+    const sel = !openNav && t.n === 'Navigate';
+    const h = head(o, t, open, sel, i === TABS.length - 1);
+    if (!open) { body += h; return; }
+    if (o === 4) body += `<div class="card">${h}${rows()}</div>`;
+    else if (o === 3) body += h + `<div class="in">${rows()}</div>`;
+    else body += h + rows();
+  });
+  return BOOK + `<div class="body">${body}</div>` + HINTS;
+}
+// 0: today, as list.h paints it. Every heading is a section; Navigate owns nothing.
+function today(openNav) {
+  const hb = (n, open, sel) => `<div class="h${open ? ' open' : ''}${sel ? ' sel' : ''}">${sign()}<span class="lab">${n}</span></div>`;
+  const names = ['Look', 'Navigate', 'POSITION', 'MARKS', 'Book', 'READ', 'QUOTES', 'REMOVE', 'Sleep Screen'];
+  let body = '';
+  names.forEach(n => {
+    if (openNav && n === 'POSITION') {
+      body += hb(n, true, false) + NAV[0][1].map(r => `<div class="rw${r === SEL_ROW ? ' sel' : ''}">${r}</div>`).join('');
+    } else body += hb(n, false, !openNav && n === 'Navigate');
+  });
+  return BOOK + `<div class="body">${body}<div class="more">⌄</div></div>` + HINTS;
+}
+
+const OPTS = [
+  { k: 0, base: true, t: 'Today', p: 'A 1px plus, 12px wide, inside a black band that hugs the label. Every heading is a section, the group labels included.',
+    li: ['<li class="warn">Opening Navigate shows nothing. Its rows live under POSITION and MARKS, so the open screen here is POSITION.</li>', '<li class="warn">The sign is a hairline and hard to read on e-ink. A selected heading has no clear mark (the dashed outline is my best reading of the code).</li>'] },
+  { k: 1, t: 'Sign at the edge', p: 'Full-width heading rows between rules. A bold 18px plus (3px strokes) in a small square at the right edge, like an accordion. The count of hidden rows sits beside it.',
+    li: ['<li>A selected heading fills black edge to edge, exactly like a selected row.</li>', '<li class="good">Simplest code change: move the sign right and thicken it.</li>'] },
+  { k: 2, t: 'Two-part tab', p: 'Closest to today. The black band stays, but the sign gets its own black key with a 3px plus. The label sits in an outlined box beside it. Open or selected, the box fills black.',
+    li: ['<li>Keeps the left-aligned band you know. A selected heading stretches to the full width.</li>'] },
+  { k: 3, t: 'Triangles', p: 'Solid triangles: ▸ closed, ▾ open. Headings in bold, no band. The open tab\'s rows hang off a 3px rule, so you can see what belongs to what.',
+    li: ['<li>The triangle is the usual sign for "this opens" on a computer. No plus or minus at all.</li>', '<li>Bold headings are the only bold on screen, so they read as headings without a band.</li>'] },
+  { k: 4, t: 'Cards', p: 'Each closed tab is an outlined card with its count and a plus. The open tab becomes one card: a black title bar with a minus, its rows inside the frame.',
+    li: ['<li>The most "button-like". You see at a glance where the open tab ends.</li>', '<li class="warn">Uses about 10px more height per tab than 1 or 3.</li>'] },
+  { k: 5, t: 'Contents preview', p: 'Under each closed heading, one italic line says what is inside. The sign sits in a ring. Open, the ring fills black and shows a minus.',
+    li: ['<li>You know what is behind a tab before opening it.</li>', '<li class="warn">Tallest closed list (two lines per tab). Still fits five tabs with room left.</li>'] },
+];
+
+document.getElementById('opts').innerHTML = OPTS.map(o => {
+  const a = o.k === 0 ? today(false) : screen(o.k, false);
+  const b = o.k === 0 ? today(true) : screen(o.k, true);
+  return `<section class="opt${o.base ? ' base' : ''}">
+    <div class="dev"><div class="num">${o.k}</div><div class="scr o${o.k}">${a}</div><div class="lbl">all closed</div></div>
+    <div class="dev"><div class="scr o${o.k}">${b}</div><div class="lbl">${o.k === 0 ? 'position open' : 'navigate open'}</div></div>
+    <div class="cap"><h2><i>${o.k}</i>${o.t}</h2><p>${o.p}</p><ul>${o.li.join('')}</ul></div>
+  </section>`;
+}).join('');
+
+document.querySelectorAll('.dev').forEach(d => d.addEventListener('click', () => {
+  d.classList.remove('flash'); void d.offsetWidth; d.classList.add('flash');
+}));
+</script>
+</body>
+</html>
