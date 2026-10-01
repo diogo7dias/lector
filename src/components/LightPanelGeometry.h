@@ -205,7 +205,11 @@ inline Hit hitTest(const Layout& layout, const int x, const int y) {
     if (row->height == 0) continue;
     if (insideRect(row->minus, x, y)) return Hit{Hit::Kind::Step, row->row, -1, -1};
     if (insideRect(row->plus, x, y)) return Hit{Hit::Kind::Step, row->row, 1, -1};
-    if (insideRect(row->bar, x, y)) return Hit{Hit::Kind::Track, row->row, 0, -1};
+    // The whole row height takes the touch, not just the 22px track: a tap a little above
+    // or below the bar still jumps to that point along it.
+    if (insideRect(Rect{row->bar.x, row->y, row->bar.width, row->height}, x, y)) {
+      return Hit{Hit::Kind::Track, row->row, 0, -1};
+    }
   }
 
   for (int i = 0; i < layout.actionCount; ++i) {

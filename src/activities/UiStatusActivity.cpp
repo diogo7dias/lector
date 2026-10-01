@@ -7,9 +7,10 @@
 
 #include "MappedInputManager.h"
 #include "components/ComparisonLayout.h"
-#include "components/PlainSliderBand.h"
+#include "components/LightPanelGeometry.h"
 #include "components/SignalMeter.h"
 #include "components/SliderField.h"
+#include "components/SliderLook.h"
 #include "components/StatusStack.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -264,29 +265,58 @@ void UiStatusActivity::buildCentredLines(UiScreen& screen, const StatusView& vie
   }
 }
 
-// The band itself: the SDK's slider row, so the capsule, the two step buttons
-// and their radius all come from the theme rather than from arithmetic here.
+// The band itself, in the one slider look (components/SliderLook.h): the name above,
+// then the track, the number and the boxed minus and plus laid out like a light-panel
+// row, so every slider in the firmware is the same control.
 void UiStatusActivity::buildSlider(UiScreen& screen, const StatusView& view, const fui::Rect& rect) {
   const auto& theme = screen.theme();
-  if (!mappedInput.hasTouch()) {
-    // Keys-only boards keep the plain bar; there is nothing to drag or tap.
-    plain_slider_band::draw(screen, rect, view.sliderLabel, view.sliderValueText, view.sliderValue - view.sliderMin,
-                            view.sliderMax > view.sliderMin ? view.sliderMax - view.sliderMin : 1,
-                            /*inverted=*/false);
-    return;
+  auto& target = screen.frame().target();
+  const int16_t lineH = target.lineHeight(theme.bodyText.font);
+  if (view.sliderLabel) target.text(fui::Rect{rect.x, rect.y, rect.width, lineH}, view.sliderLabel, theme.bodyText);
+
+  const int bandY = rect.y + lineH + theme.spaceMd;
+  const int bandH = rect.y + rect.height - bandY;
+  if (bandH <= 0) return;
+  // The number takes what it needs, never less than the panel's column, so "3 min"
+  // fits as well as "7".
+  const int valueW = std::max(
+      light_panel::kValueWidth,
+      view.sliderValueText ? target.measureText(theme.bodyText.font, view.sliderValueText, theme.bodyText).width : 0);
+  const int plusX = rect.x + rect.width - light_panel::kStepWidth;
+  const int minusX = plusX - light_panel::kStepGap - light_panel::kStepWidth;
+  const int valueX = minusX - light_panel::kStepsGap - valueW;
+  const int trackW = valueX - light_panel::kValueGap - rect.x;
+  const int trackY = bandY + (bandH - slider_look::kTrackHeight) / 2;
+  const int range = view.sliderMax > view.sliderMin ? view.sliderMax - view.sliderMin : 1;
+
+  if (trackW > 0) {
+    slider_look::drawTrack(renderer, rect.x, trackY, trackW, slider_look::kTrackHeight,
+                           view.sliderValue - view.sliderMin, range, true);
   }
-  fui::SliderRowProps props;
-  props.label = view.sliderLabel;
-  props.value = view.sliderValueText;
-  props.sliderValue = view.sliderValue - view.sliderMin;
-  props.max = view.sliderMax > view.sliderMin ? view.sliderMax - view.sliderMin : 1;
-  props.sliderAction = ACTION_SLIDER;
-  props.decrement = ACTION_SLIDER;
-  props.increment = ACTION_SLIDER;
-  props.decrementValue = static_cast<int16_t>(-sliderStep());
-  props.incrementValue = static_cast<int16_t>(sliderStep());
-  props.buttonRadius = static_cast<uint8_t>(theme.controlRadius);
-  fui::sliderRow(screen.frame(), rect, props);
+  if (view.sliderValueText) {
+    target.text(fui::Rect{static_cast<int16_t>(valueX), static_cast<int16_t>(bandY), static_cast<int16_t>(valueW),
+                          static_cast<int16_t>(bandH)},
+                view.sliderValueText, theme.bodyText);
+  }
+  slider_look::drawStepper(renderer, minusX, bandY, light_panel::kStepWidth, bandH, /*plus=*/false, true);
+  slider_look::drawStepper(renderer, plusX, bandY, light_panel::kStepWidth, bandH, /*plus=*/true, true);
+
+  // Keys-only boards draw the same control and step it with the side buttons.
+  if (!mappedInput.hasTouch()) return;
+  auto& frame = screen.frame();
+  const auto box = [](const int x, const int y, const int w, const int h) {
+    return fui::Rect{static_cast<int16_t>(x), static_cast<int16_t>(y), static_cast<int16_t>(w),
+                     static_cast<int16_t>(h)};
+  };
+  // The whole band height takes the touch, so the track is a finger-sized target; a tap
+  // anywhere along it jumps there, and a drag follows the finger.
+  if (trackW > 0) {
+    frame.hit(box(rect.x, bandY, trackW, bandH), ACTION_SLIDER, 0, fui::InputTouch | fui::InputDrag);
+  }
+  frame.hit(box(minusX, bandY, light_panel::kStepWidth, bandH), ACTION_SLIDER, static_cast<int16_t>(-sliderStep()),
+            fui::InputTouch);
+  frame.hit(box(plusX, bandY, light_panel::kStepWidth, bandH), ACTION_SLIDER, static_cast<int16_t>(sliderStep()),
+            fui::InputTouch);
 }
 
 void UiStatusActivity::buildSections(UiScreen& screen, const StatusView& view) {

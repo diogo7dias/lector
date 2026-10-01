@@ -15,6 +15,7 @@
 #include "CrossPointSettings.h"
 #include "LightPanelGeometry.h"
 #include "MappedInputManager.h"
+#include "SliderLook.h"
 #include "fontIds.h"
 #include "icons/sun24.h"
 #include "icons/thermometer24.h"
@@ -153,12 +154,16 @@ class LightPanel {
       if (!down) return true;  // a hold that started on nothing stays on nothing
 
       switch (hit.kind) {
+        // A step or a toggle acts once per press: wasScreenTouchDown stays true for as long
+        // as the finger rests, so the contact is spent here or a held finger repeats it.
         case light_panel::Hit::Kind::Toggle:
+          input.spendTouchContact();
           on_ = !on_;
           applyLight();
           requestUpdate();
           break;
         case light_panel::Hit::Kind::Step:
+          input.spendTouchContact();
           selected_ = hit.row;
           step(hit.row, hit.delta, requestUpdate);
           break;
@@ -186,10 +191,9 @@ class LightPanel {
                               [this, &requestUpdate] { moveSelection(-1, requestUpdate); });
     nav_.onPressAndContinuous({MappedInputManager::Button::Down},
                               [this, &requestUpdate] { moveSelection(1, requestUpdate); });
-    nav_.onPressAndContinuous({MappedInputManager::Button::Left},
-                              [this, &requestUpdate] { step(selected_, -1, requestUpdate); });
-    nav_.onPressAndContinuous({MappedInputManager::Button::Right},
-                              [this, &requestUpdate] { step(selected_, 1, requestUpdate); });
+    // One step per press, held or not, like the steppers on screen.
+    nav_.onPress({MappedInputManager::Button::Left}, [this, &requestUpdate] { step(selected_, -1, requestUpdate); });
+    nav_.onPress({MappedInputManager::Button::Right}, [this, &requestUpdate] { step(selected_, 1, requestUpdate); });
     return true;
   }
 
@@ -305,10 +309,8 @@ class LightPanel {
     const int rowCenter = row.y + topInset_ + row.height / 2;
     renderer.drawIcon(icon.bits, row.icon.x, rowCenter - icon.opticalCenterY, icon.w, ink);
 
-    const int barY = row.bar.y + topInset_;
-    renderer.drawRect(row.bar.x, barY, row.bar.width, row.bar.height, light_panel::kRule, ink);
-    const int fill = row.bar.width * std::min<int>(value, maxFor(row.row)) / maxFor(row.row);
-    if (fill > 0) renderer.fillRect(row.bar.x, barY, fill, row.bar.height, ink);
+    slider_look::drawTrack(renderer, row.bar.x, row.bar.y + topInset_, row.bar.width, row.bar.height, value,
+                           maxFor(row.row), ink);
 
     char number[8];
     snprintf(number, sizeof(number), "%d", static_cast<int>(value));
@@ -323,20 +325,11 @@ class LightPanel {
     drawCentered(renderer, row.value, label, /*center=*/true, ink);
   }
 
-  // The in-book menu's boxed minus and plus (freeink drawAccordionHeader): an 18px sign
-  // with 3px strokes in a 2px square, centred in the stepper's touch area.
   void drawSteppers(const GfxRenderer& renderer, const light_panel::StepRow& row, const bool ink) const {
-    constexpr int kSign = 18, kStroke = 3, kPad = 5;
-    constexpr int kBox = kSign + (kPad + light_panel::kRule) * 2;
-    for (const auto* rect : {&row.minus, &row.plus}) {
-      const int x = rect->x + (rect->width - kBox) / 2;
-      const int y = rect->y + topInset_ + (rect->height - kBox) / 2;
-      renderer.drawRect(x, y, kBox, kBox, light_panel::kRule, ink);
-      const int signX = x + light_panel::kRule + kPad;
-      const int signY = y + light_panel::kRule + kPad;
-      renderer.fillRect(signX, signY + (kSign - kStroke) / 2, kSign, kStroke, ink);
-      if (rect == &row.plus) renderer.fillRect(signX + (kSign - kStroke) / 2, signY, kStroke, kSign, ink);
-    }
+    slider_look::drawStepper(renderer, row.minus.x, row.minus.y + topInset_, row.minus.width, row.minus.height,
+                             /*plus=*/false, ink);
+    slider_look::drawStepper(renderer, row.plus.x, row.plus.y + topInset_, row.plus.width, row.plus.height,
+                             /*plus=*/true, ink);
   }
 
   // Vertically centred in `rect` either way; `center` picks horizontal centring over
