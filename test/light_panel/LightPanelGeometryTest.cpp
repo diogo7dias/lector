@@ -171,9 +171,18 @@ TEST(LightPanelGeometry, ATouchOnTheTrackIsATrackTouch) {
 // everything left of the bar to 0 — so touching the word "Brightness" drove the light out.
 TEST(LightPanelGeometry, TouchingTheRowBesideTheTrackDoesNotMoveTheValue) {
   const auto layout = inBook();
-  const int aboveTrack = layout.brightness.y + 1;
-  const auto hit = light_panel::hitTest(layout, centerX(layout.brightness.bar), aboveTrack);
+  const int leftOfTrack = layout.brightness.bar.x - 1;
+  const auto hit = light_panel::hitTest(layout, leftOfTrack, centerY(layout.brightness.bar));
   EXPECT_NE(hit.kind, Hit::Kind::Track);
+}
+
+// Above or below the 22px track, within its span, is still the track: the whole row
+// height is the target, so a tap need not land on the bar itself.
+TEST(LightPanelGeometry, ATouchAboveTheTrackStillJumpsAlongIt) {
+  const auto layout = inBook();
+  const auto hit = light_panel::hitTest(layout, centerX(layout.brightness.bar), layout.brightness.y + 1);
+  EXPECT_EQ(hit.kind, Hit::Kind::Track);
+  EXPECT_EQ(hit.row, Row::Brightness);
 }
 
 TEST(LightPanelGeometry, ATouchOnAnActionReportsWhichOne) {
