@@ -187,7 +187,8 @@ class EpubReaderMenuActivity final : public UiListActivity {
   const std::vector<StrId> orientationLabels = {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_INVERTED,
                                                 StrId::STR_LANDSCAPE_CCW};
   const std::vector<StrId> paragraphNumLabels = {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER};
-  const std::vector<StrId> paragraphNumSizeLabels = {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE};
+  const std::vector<StrId> paragraphNumSizeLabels = {StrId::STR_PARA_NUM_SIZE_35, StrId::STR_PARA_NUM_SIZE_65,
+                                                     StrId::STR_PARA_NUM_SIZE_100};
   // Same four labels the Customise Status Bar screen uses for this setting.
   const std::vector<StrId> progressBarLabels = {StrId::STR_STATE_OFF, StrId::STR_SLIM, StrId::STR_PROGRESS_BAR_MEDIUM,
                                                 StrId::STR_FAT};

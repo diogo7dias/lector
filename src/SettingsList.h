@@ -456,9 +456,10 @@ inline SettingInfo buildDictionarySetting(const std::vector<DictionaryEntry>& di
                                   {StrId::STR_PARA_NUM_OFF, StrId::STR_PARA_NUM_CHAPTER}, "paragraphNumbering",
                                   StrId::STR_CAT_READER));
 
-    v.push_back(SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
-                                  {StrId::STR_PARA_NUM_SIZE_SMALL, StrId::STR_PARA_NUM_SIZE_DOUBLE},
-                                  "paragraphNumberSize", StrId::STR_CAT_READER));
+    v.push_back(
+        SettingInfo::Enum(StrId::STR_PARAGRAPH_NUMBER_SIZE, &CrossPointSettings::paragraphNumberSize,
+                          {StrId::STR_PARA_NUM_SIZE_35, StrId::STR_PARA_NUM_SIZE_65, StrId::STR_PARA_NUM_SIZE_100},
+                          "paragraphNumberSize", StrId::STR_CAT_READER));
 
     v.push_back(SettingInfo::Toggle(StrId::STR_PAPERBACK_STATUS, &CrossPointSettings::paperbackLookStatus,
                                     "paperbackLookStatus", StrId::STR_CAT_READER));

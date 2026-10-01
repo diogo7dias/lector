@@ -137,3 +137,10 @@ TEST(FullTextPageAlignment, BalancesRemainderWithoutChangingLineSpacing) {
   EXPECT_EQ(fullTextPageOffset(700, 0, -50, 50, 40), 0);
   EXPECT_EQ(fullTextPageOffset(700, 0, 650, 0, 40), 0);
 }
+
+TEST(ParagraphNumberLayout, NumberSizeIsAShareOfTheReadingFont) {
+  EXPECT_EQ(paragraphNumberPercent(0), 35);   // was Small
+  EXPECT_EQ(paragraphNumberPercent(1), 65);   // was Double
+  EXPECT_EQ(paragraphNumberPercent(2), 100);  // the text's own size
+  EXPECT_EQ(paragraphNumberPercent(7), 65);   // a corrupt value reads as the default
+}

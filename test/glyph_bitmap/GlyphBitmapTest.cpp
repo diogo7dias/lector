@@ -202,3 +202,33 @@ TEST(GlyphBitmap, EmptyAndOffPanelGlyphsDoNotWrite) {
       compare({orientation, rotated, false, BW, true, true, 11, 9, -100, -100, 0, 0, 0, 0}, 0x1b);
     }
 }
+
+namespace {
+int pixel2(const std::vector<uint8_t>& packed, const int width, const int x, const int y) {
+  const int pos = y * width + x;
+  return (packed[pos >> 2] >> (6 - (pos & 3) * 2)) & 3;
+}
+}  // namespace
+
+TEST(GlyphBitmapDownscale, AveragesBlocksIntoTheFontsOwnGrays) {
+  // 4x4, 1bpp: a solid left half (2px stroke) and a lone ink pixel bottom right.
+  const std::vector<uint8_t> src = {0xcc, 0xcd};  // rows 1100 1100 1100 1101, two to a byte
+  std::vector<uint8_t> dst(1);
+  glyphBitmap::downscale(src.data(), 4, 4, false, 50, dst.data());
+  EXPECT_EQ(glyphBitmap::scaledExtent(4, 50), 2);
+  EXPECT_EQ(pixel2(dst, 2, 0, 0), 3);  // fully inked block: black
+  EXPECT_EQ(pixel2(dst, 2, 1, 0), 0);  // empty block: white
+  EXPECT_EQ(pixel2(dst, 2, 0, 1), 3);
+  EXPECT_EQ(pixel2(dst, 2, 1, 1), 1);  // one ink pixel in four: light gray, not lost
+}
+
+TEST(GlyphBitmapDownscale, NeverDropsAnAxisToZero) {
+  EXPECT_EQ(glyphBitmap::scaledExtent(1, 35), 1);
+  EXPECT_EQ(glyphBitmap::scaledExtent(0, 35), 0);
+  EXPECT_EQ(glyphBitmap::scaledExtent(30, 35), 11);  // rounds up: 10.5 -> 11
+  // A 2bpp black 3x3 square at 35% is one black pixel.
+  const std::vector<uint8_t> src = {0xff, 0xff, 0xc0};
+  std::vector<uint8_t> dst(1);
+  glyphBitmap::downscale(src.data(), 3, 3, true, 35, dst.data());
+  EXPECT_EQ(pixel2(dst, 1, 0, 0), 3);
+}

@@ -752,6 +752,51 @@ void GfxRenderer::drawText(const int fontId, const int x, const int y, const cha
   }
 }
 
+void GfxRenderer::drawTextScaled(const int fontId, const int x, const int y, const char* text, const int percent,
+                                 const bool black) const {
+  if (percent >= 100) {
+    drawText(fontId, x, y, text, black);
+    return;
+  }
+  if (text == nullptr || *text == '\0' || percent <= 0) return;
+  if (!hasFrameBuffer() && !_stripActive) return;
+  if (fontCacheManager_ && fontCacheManager_->isScanning()) {
+    fontCacheManager_->recordText(text, fontId, EpdFontFamily::REGULAR);
+    return;
+  }
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) {
+    LOG_ERR("GFX", "Font %d not found", fontId);
+    return;
+  }
+  const EpdFontFamily& font = fontIt->second;
+  const EpdFontData* fontData = font.getData(EpdFontFamily::REGULAR);
+  // ponytail: one static scratch, as only the render task draws text; glyphs that would
+  // shrink past 64x64 are skipped (the reading sizes stay far below that).
+  static constexpr int kMaxScaledPixels = 64 * 64;
+  static uint8_t scratch[kMaxScaledPixels / 4];
+  const int baseline = y + getFontAscenderSize(fontId) * percent / 100;
+  int32_t penFP = 0;  // 12.4 fixed-point, like drawText's advances
+  const char* cursor = text;
+  uint32_t cp;
+  while ((cp = utf8NextCodepoint(reinterpret_cast<const uint8_t**>(&cursor)))) {
+    const EpdGlyph* glyph = font.getGlyph(cp, EpdFontFamily::REGULAR);
+    if (!glyph) continue;
+    const int penX = x + fp4::toPixel(penFP);
+    penFP += glyph->advanceX * percent / 100;
+    const int w = glyphBitmap::scaledExtent(glyph->width, percent);
+    const int h = glyphBitmap::scaledExtent(glyph->height, percent);
+    if (w == 0 || h == 0 || w * h > kMaxScaledPixels) continue;
+    const int gx = penX + glyph->left * percent / 100;
+    const int gy = baseline - glyph->top * percent / 100;
+    if (!glyphIntersectsStrip(gx, gy, gx + w - 1, gy + h - 1)) continue;
+    const uint8_t* bitmap = getGlyphBitmap(fontData, glyph);
+    if (!bitmap) continue;
+    glyphBitmap::downscale(bitmap, glyph->width, glyph->height, fontData->is2Bit, percent, scratch);
+    drawGlyphBitmap(scratch, w, h, {gx, gy, 1, 0, 0, 1}, true, renderMode, black);
+  }
+}
+
 namespace {
 const char* resolveVisualText(const char* text, std::string& visualBuffer, const BidiUtils::BidiBaseDir baseDir) {
   if (!text || *text == '\0') return text;
